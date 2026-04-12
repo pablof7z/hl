@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Evening Salon — Highlighter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #fafafa;
+      --card-bg: #ffffff;
+      --border: #e4e4e7;
+      --heading: #09090b;
+      --body: #3f3f46;
+      --muted: #71717a;
+      --subtle: #a1a1aa;
+      --amber-bg: #fef9ef;
+      --amber-border: #d97706;
+      --primary-bg: #18181b;
+      --primary-text: #ffffff;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--heading);
+      min-height: 100vh;
+      padding-bottom: 80px;
+      overflow-x: hidden;
+    }
+
+    /* ── Top nav ── */
+    .topnav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(250,250,250,0.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      gap: 16px;
+    }
+
+    .back-link {
+      font-size: 0.875rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+    .back-link:hover { color: var(--heading); }
+
+    .topnav-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--heading);
+      white-space: nowrap;
+    }
+
+    /* ── Segmented toggle ── */
+    .view-toggle {
+      display: flex;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .toggle-btn {
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      padding: 6px 14px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .toggle-btn.active {
+      background: var(--card-bg);
+      color: var(--heading);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      background: var(--primary-bg);
+      color: var(--primary-text);
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary:hover { opacity: 0.82; }
+
+    .btn-outline {
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      background: transparent;
+      color: var(--body);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn-outline:hover { background: #f4f4f5; }
+
+    /* ── Preview banner ── */
+    .preview-banner {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: #fef9ef;
+      border-bottom: 1px solid #fde68a;
+      padding: 12px 24px;
+      font-size: 0.875rem;
+      color: #92400e;
+    }
+
+    /* ── Page header ── */
+    .page-header {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 24px 32px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .header-left { flex: 1; }
+
+    .community-name {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--heading);
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+
+    .community-tagline {
+      font-size: 0.9375rem;
+      font-style: italic;
+      color: var(--muted);
+      margin-bottom: 0;
+    }
+
+    .community-meta-nm {
+      display: none;
+      font-size: 0.875rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      padding-top: 4px;
+    }
+
+    /* ── Watermark ── */
+    .watermark {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-28deg);
+      font-size: 5rem;
+      font-weight: 800;
+      color: rgba(0,0,0,0.04);
+      pointer-events: none;
+      z-index: 0;
+      white-space: nowrap;
+      letter-spacing: 0.04em;
+      user-select: none;
+    }
+
+    /* ── Masonry grid ── */
+    .masonry-wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px 48px;
+    }
+
+    .masonry-grid {
+      column-count: 3;
+      column-gap: 20px;
+    }
+
+    @media (max-width: 900px) { .masonry-grid { column-count: 2; } }
+    @media (max-width: 560px) { .masonry-grid { column-count: 1; } }
+
+    /* ── Salon card (masonry frame) ── */
+    .frame-card {
+      break-inside: avoid;
+      margin-bottom: 20px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      cursor: default;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .frame-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+
+    /* ── Cover ── */
+    .frame-cover {
+      width: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Tall variant for visual variety */
+    .frame-cover.tall { padding-top: 75%; }  /* 4:3 */
+    .frame-cover.short { padding-top: 56.25%; } /* 16:9 */
+    .frame-cover.square { padding-top: 100%; }
+
+    .frame-cover-inner {
+      position: absolute;
+      inset: 0;
+    }
+
+    .cover-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.92);
+      border-radius: 4px;
+      padding: 3px 8px;
+    }
+
+    /* ── Frame body ── */
+    .frame-body {
+      padding: 16px;
+    }
+
+    .frame-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--heading);
+      line-height: 1.3;
+      margin-bottom: 3px;
+    }
+
+    .frame-source {
+      font-size: 0.8125rem;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    /* ── Highlights callout ── */
+    .highlights-callout {
+      background: var(--amber-bg);
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+    }
+
+    .callout-label {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #92400e;
+      margin-bottom: 6px;
+    }
+
+    .callout-quote {
+      font-size: 0.8125rem;
+      font-style: italic;
+      color: #78350f;
+      line-height: 1.55;
+      border-left: 2px solid var(--amber-border);
+      padding-left: 10px;
+      margin-bottom: 6px;
+    }
+
+    .callout-quote:last-child { margin-bottom: 0; }
+
+    /* ── Comment snippets ── */
+    .snippets {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+
+    .snippet {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .snippet-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.5625rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .snippet-text {
+      font-size: 0.8125rem;
+      color: var(--body);
+      line-height: 1.45;
+    }
+
+    .snippet-name {
+      font-weight: 600;
+      color: var(--heading);
+    }
+
+    /* Fade on last comment in non-member mode */
+    .snippets-fade {
+      position: relative;
+    }
+
+    [data-view="nonmember"] .snippets-fade::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 36px;
+      background: linear-gradient(transparent, var(--card-bg));
+      pointer-events: none;
+    }
+
+    /* ── AI summary pill ── */
+    .ai-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #f4f4f5;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .ai-pill-label {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--subtle);
+      flex-shrink: 0;
+    }
+
+    /* ── Quick actions (hover) ── */
+    .card-actions {
+      display: flex;
+      gap: 6px;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      margin-top: 8px;
+    }
+
+    .frame-card:hover .card-actions { opacity: 1; }
+
+    .action-btn {
+      font-family: inherit;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      cursor: pointer;
+      color: var(--body);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s;
+    }
+    .action-btn:hover { background: #f4f4f5; }
+
+    /* ── Ask to join button (non-member) ── */
+    .ask-join-btn {
+      display: none;
+      width: 100%;
+      margin-top: 10px;
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      cursor: pointer;
+      color: var(--body);
+      transition: background 0.15s;
+      text-align: center;
+    }
+    .ask-join-btn:hover { background: #f4f4f5; }
+
+    /* ── Sticky bottom bar ── */
+    .sticky-bar {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--card-bg);
+      border-top: 1px solid var(--border);
+      padding: 14px 24px;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 100;
+    }
+
+    .sticky-bar-text {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--body);
+    }
+
+    /* ── View state management ── */
+    [data-view="nonmember"] .preview-banner         { display: flex; }
+    [data-view="nonmember"] .community-meta-nm      { display: block; }
+    [data-view="nonmember"] .member-only            { display: none !important; }
+    [data-view="nonmember"] .watermark              { display: block; }
+    [data-view="nonmember"] .ask-join-btn           { display: block; }
+    [data-view="nonmember"] .sticky-bar             { display: flex; }
+    [data-view="nonmember"] .card-actions           { display: none !important; }
+
+    @media (max-width: 600px) {
+      .topnav { padding: 10px 16px; flex-wrap: wrap; gap: 10px; }
+      .topnav-title { display: none; }
+      .toggle-btn { padding: 5px 10px; font-size: 0.75rem; }
+      .page-header { padding: 24px 16px 20px; }
+      .masonry-wrap { padding: 0 16px 48px; }
+    }
+  </style>
+</head>
+<body data-view="member">
+
+  <!-- Watermark — non-member only -->
+  <div class="watermark">Private Salon Preview</div>
+
+  <!-- Top nav -->
+  <nav class="topnav">
+    <a href="index.html" class="back-link">← Back</a>
+    <span class="topnav-title">The Evening Salon</span>
+    <div class="view-toggle">
+      <button class="toggle-btn active" id="btn-member" onclick="setView('member')">Member View</button>
+      <button class="toggle-btn" id="btn-nonmember" onclick="setView('nonmember')">Non-Member View</button>
+    </div>
+  </nav>
+
+  <!-- Preview banner — non-member only -->
+  <div class="preview-banner">
+    <span>See what 12 members are discussing — request access</span>
+    <button class="btn-primary">Request Access</button>
+  </div>
+
+  <!-- Page header -->
+  <header class="page-header">
+    <div class="header-left">
+      <h1 class="community-name">The Evening Salon</h1>
+      <p class="community-tagline">Where ideas get better through conversation</p>
+      <p class="community-meta-nm">Private · Preview only · 12 members</p>
+    </div>
+    <div class="header-right member-only">
+      <button class="btn-primary">Invite to the Salon</button>
+    </div>
+  </header>
+
+  <!-- Masonry grid -->
+  <div class="masonry-wrap">
+    <div class="masonry-grid">
+
+      <!-- Card 1 — Why Greatness Cannot Be Planned (tall) -->
+      <div class="frame-card">
+        <div class="frame-cover tall">
+          <div class="frame-cover-inner" style="background:linear-gradient(160deg,#1e3a5f 0%,#1e40af 100%);">
+            <span class="cover-badge">via Kindle</span>
+          </div>
+        </div>
+        <div class="frame-body">
+          <div class="frame-title">Why Greatness Cannot Be Planned</div>
+          <div class="frame-source">Stanley &amp; Lehman · Book</div>
+          <div class="highlights-callout">
+            <div class="callout-label">Highlights that started the conversation</div>
+            <div class="callout-quote">"Those who tried to pursue objectives were often less successful than those who simply tried interesting things."</div>
+          </div>
+          <div class="ai-pill">
+            <span class="ai-pill-label">AI</span>
+            Emerging consensus: PG's advice applies beyond startups — it's about any creative work
+          </div>
+          <div class="snippets snippets-fade">
+            <div class="snippet">
+              <div class="snippet-avatar" style="background:#4f46e5">SK</div>
+              <div class="snippet-text"><span class="snippet-name">Sarah K.</span> — This completely reframed how I think about research direction.</div>
+            </div>
+            <div class="snippet">
+              <div class="snippet-avatar" style="background:#7c3aed">ER</div>
+              <div class="snippet-text"><span class="snippet-name">Elena R.</span> — Disagree with the premise here — sometimes you DO need a clear objective.</div>
+            </div>
+          </div>
+          <div class="card-actions member-only">
+            <button class="action-btn">💬 Add thoughts</button>
+            <button class="action-btn">🔗 Cross-post</button>
+          </div>
+          <button class="ask-join-btn">Ask to Join →</button>
+        </div>
+      </div>
+
+      <!-- Card 2 — Lex Fridman Podcast (short) -->
+      <div class="frame-card">
+        <div class="frame-cover short">
+          <div class="frame-cover-inner" style="background:linear-gradient(160deg,#1a1a2e 0%,#16213e 100%);">
+            <span class="cover-badge">via Spotify</span>
+          </div>
+        </div>
+        <div class="frame-body">
+          <div class="frame-title">Lex Fridman #428: On the Nature of Intelligence</div>
+          <div class="frame-source">Lex Fridman · Podcast</div>
+          <div class="highlights-callout">
+            <div class="callout-label">Highlights that started the conversation</div>
+            <div class="callout-quote">"AI is the most important advance in technology since the graphical user interface."</div>
+          </div>
+          <div class="snippets snippets-fade">
+            <div class="snippet">
+              <div class="snippet-avatar" style="background:#0891b2">MW</div>
+              <div class="snippet-text"><span class="snippet-name">Marcus W.</span> — The first hour alone was worth it. Lex at his best.</div>
+            </div>
+            <div class="snippet">
+              <div class="snippet-avatar" style="background:#be185d">PN</div>
+              <div class="snippet-text"><span class="snippet-name">Priya N.</span> — Cross-posting from our AI group — the parallels are wild.</div>
+            </div>
+          </div>
+          <div class="card-actions member-only">
+            <button class="action-btn">💬 Add thoughts</button>
+            <button class="action-btn">🔗 Cross-post</button>
+          </div>
+          <button class="ask-join-btn">Ask to Join →</button>
+        </div>
+      </div>
+
+      <!-- Card 3 — The Age of AI Has Begun (square) -->
+      <div class="frame-card">
+        <div class="frame-cover square">
+          <div class="frame-cover-inner" style="background:linear-gradient(160deg,#064e3b 0%,#065f46 100%);">
+            <span class="cover-badge">via Web</span>
+          </div>
+        </div>
+        <div class="frame-body">
+          <div class="frame-title">The Age of AI Has Begun</div>
+          <div class="frame-source">Bill Gates · Article</div>
+          <div class="highlights-callout">
+            <div class="callout-label">Highlights that started the conversation</div>
+            <div class="callout-quote">"AI is the most transformative technology since the microprocessor."</div>
+            <div class="callout-quote">"The development of AI is as fundamental as the creation of the microprocessor, the personal computer, the Internet, and the mobile phone."</div>
+          </div>
+          <div class="ai-pill">
+            <span class="ai-pill-label">AI</span>
+            The group is converging on: systematic thinking beats individual willpower
+          </div>
+          <div class="snippets snippets-fade">
+            <div class="snippet">
+              <div class="snippet-avatar" style="background:#059669">DL</div>
+              <div class="snippet-text"><span class="snippet-name">David L.</span> — Gates has skin in the game now, but his framing is still sharp.</div>
+            </div>
+          </div>
+          <div class="card-actions member-only">
+            <button class="action-btn">💬 Add thoughts</button>
+            <button class="action-btn">🔗 Cross-post</button>
+          </div>
+          <button class="ask-join-btn">Ask to Join →</button>
+        </div>
+      </div>
+
+      <!-- Card 4 — Thinking, Fast and Slow (tall) -->
+      <div class="frame-card">
+        <div class="frame-cover tall">
+          <div class="frame-cover-inner" style="background:linear-gradient(160deg,#1e293b 0%,#334155 100%);">
+            <span class="cover-badge">via Kindle</span>
+          </div>
+        </div>
+        <div class="frame-body">
+          <div class="frame-title">Thinking, Fast and Slow</div>
+          <div class="frame-source">Daniel Kahneman · Book</div>
+          <div class="highlights-callout">
+            <div class="callout-label">Highlights that started the conversation</div>
+            <div class="callout-quote">"People tend to assess the relative importance of issues by the ease with which they are retrieved from memory."</div>
+          </div>
+          <div class="ai-pill">
+            <span class="ai-pill-label">AI</span>
+            Key themes: decision-making under uncertainty, cognitive bias in leadership
+          </div>
+          <div class="snippets snippets-fade">
+            <div class="snippet">
+              <div class="snippet-avatar" style="background:#4f46e5">SK</div>
+              <div class="snippet-text"><span class="snippet-name">Sarah K.</span> — The availability heuristic section hit me hard. I've been making this mistake in hiring decisions.</div>
+            </div>
+            <div class="snippet">
+              <div class="snippet-avatar" style="background:#b45309">JT</div>
+              <div class="snippet-text"><span class="snippet-name">James T.</span> — Kahneman's insight about substitution is underrated.</div>
+            </div>
+          </div>
+          <div class="card-actions member-only">
+            <button class="action-btn">💬 Add thoughts</button>
+            <button class="action-btn">🔗 Cross-post</button>
+          </div>
+          <button class="ask-join-btn">Ask to Join →</button>
+        </div>
+      </div>
+
+      <!-- Card 5 — Atomic Habits (short) -->
+      <div class="frame-card">
+        <div class="frame-cover short">
+          <div class="frame-cover-inner" style="background:linear-gradient(160deg,#292524 0%,#57534e 100%);">
+            <span class="cover-badge">via Kindle</span>
+          </div>
+        </div>
+        <div class="frame-body">
+          <div class="frame-title">Atomic Habits</div>
+          <div class="frame-source">James Clear · Book</div>
+          <div class="highlights-callout">
+            <div class="callout-label">Highlights that started the conversation</div>
+            <div class="callout-quote">"You do not rise to the level of your goals. You fall to the level of your systems."</div>
+          </div>
+          <div class="snippets snippets-fade">
+            <div class="snippet">
+              <div class="snippet-avatar" style="background:#0891b2">MW</div>
+              <div class="snippet-text"><span class="snippet-name">Marcus W.</span> — This completely changed how I think about habit formation. The identity-based approach is 🔑</div>
+            </div>
+            <div class="snippet">
+              <div class="snippet-avatar" style="background:#7c3aed">ER</div>
+              <div class="snippet-text"><span class="snippet-name">Elena R.</span> — Disagree. Sometimes you DO need a clear objective.</div>
+            </div>
+          </div>
+          <div class="card-actions member-only">
+            <button class="action-btn">💬 Add thoughts</button>
+            <button class="action-btn">🔗 Cross-post</button>
+          </div>
+          <button class="ask-join-btn">Ask to Join →</button>
+        </div>
+      </div>
+
+      <!-- Card 6 — Do Things That Don't Scale (square) -->
+      <div class="frame-card">
+        <div class="frame-cover square">
+          <div class="frame-cover-inner" style="background:linear-gradient(160deg,#1c1917 0%,#292524 100%);">
+            <span class="cover-badge">via Web</span>
+          </div>
+        </div>
+        <div class="frame-body">
+          <div class="frame-title">Do Things That Don't Scale</div>
+          <div class="frame-source">Paul Graham · Essay</div>
+          <div class="highlights-callout">
+            <div class="callout-label">Highlights that started the conversation</div>
+            <div class="callout-quote">"The most successful startups seem to have begun by trying to solve a problem the founders themselves had."</div>
+          </div>
+          <div class="ai-pill">
+            <span class="ai-pill-label">AI</span>
+            Emerging consensus: PG's advice applies beyond startups — it's about any creative work
+          </div>
+          <div class="snippets snippets-fade">
+            <div class="snippet">
+              <div class="snippet-avatar" style="background:#059669">DL</div>
+              <div class="snippet-text"><span class="snippet-name">David L.</span> — This is why I keep coming back to PG's essays. Simple but cuts deep.</div>
+            </div>
+            <div class="snippet">
+              <div class="snippet-avatar" style="background:#0e7490">AC</div>
+              <div class="snippet-text"><span class="snippet-name">Alex C.</span> — Cross-posting from our startup group — the Airbnb example is gold.</div>
+            </div>
+          </div>
+          <div class="card-actions member-only">
+            <button class="action-btn">💬 Add thoughts</button>
+            <button class="action-btn">🔗 Cross-post</button>
+          </div>
+          <button class="ask-join-btn">Ask to Join →</button>
+        </div>
+      </div>
+
+    </div><!-- /masonry-grid -->
+  </div><!-- /masonry-wrap -->
+
+  <!-- Sticky bottom bar — non-member only -->
+  <div class="sticky-bar">
+    <span class="sticky-bar-text">Join The Evening Salon — Request an Invite</span>
+    <button class="btn-primary">Request an Invite</button>
+  </div>
+
+  <script>
+    function setView(view) {
+      document.body.dataset.view = view;
+      document.getElementById('btn-member').classList.toggle('active', view === 'member');
+      document.getElementById('btn-nonmember').classList.toggle('active', view === 'nonmember');
+    }
+  </script>
+</body>
+</html>

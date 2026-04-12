@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Deep Work Circle — Highlighter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #fafafa;
+      --card-bg: #ffffff;
+      --border: #e4e4e7;
+      --heading: #09090b;
+      --body: #3f3f46;
+      --muted: #71717a;
+      --subtle: #a1a1aa;
+      --amber-bg: #fef9ef;
+      --amber-border: #d97706;
+      --primary-bg: #18181b;
+      --primary-text: #ffffff;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--heading);
+      min-height: 100vh;
+      padding-bottom: 80px;
+    }
+
+    /* ── Top nav ── */
+    .topnav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(250,250,250,0.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      gap: 16px;
+    }
+
+    .back-link {
+      font-size: 0.875rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+    .back-link:hover { color: var(--heading); }
+
+    .topnav-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--heading);
+      white-space: nowrap;
+    }
+
+    /* ── Segmented toggle ── */
+    .view-toggle {
+      display: flex;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .toggle-btn {
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      padding: 6px 14px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .toggle-btn.active {
+      background: var(--card-bg);
+      color: var(--heading);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      background: var(--primary-bg);
+      color: var(--primary-text);
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary:hover { opacity: 0.82; }
+
+    .btn-outline {
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      background: rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.92);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 6px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+      backdrop-filter: blur(4px);
+    }
+    .btn-outline:hover { background: rgba(255,255,255,0.22); }
+
+    /* ── Hero section ── */
+    .hero {
+      width: 100%;
+      min-height: 50vh;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(160deg, #064e3b 0%, #065f46 50%, #0f172a 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.22) 0%, rgba(0,0,0,0.65) 100%);
+      pointer-events: none;
+    }
+
+    /* Invite Friends — top right, member only */
+    .hero-invite {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      z-index: 10;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 5;
+      padding: 40px;
+      max-width: 860px;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.14);
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(255,255,255,0.22);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: rgba(255,255,255,0.9);
+      margin-bottom: 16px;
+    }
+
+    .hero-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #4ade80;
+    }
+
+    .hero-title {
+      font-size: 2.25rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.2;
+      margin-bottom: 24px;
+    }
+
+    .hero-author {
+      font-size: 0.9375rem;
+      color: rgba(255,255,255,0.7);
+      margin-top: -18px;
+      margin-bottom: 24px;
+    }
+
+    /* Pull quotes on the hero image */
+    .hero-pulls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .hero-pull {
+      font-size: 0.9375rem;
+      font-style: italic;
+      color: rgba(255,255,255,0.92);
+      width: fit-content;
+      max-width: 560px;
+      line-height: 1.55;
+      border-bottom: 2px solid rgba(217,119,6,0.75);
+      padding-bottom: 3px;
+    }
+
+    /* ── Discussion section below hero ── */
+    .discussion-section {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 32px 24px 0;
+    }
+
+    .discussion-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .discussion-title-text {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    /* ── AI summary pill ── */
+    .ai-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #f4f4f5;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 0.8125rem;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .ai-pill-label {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--subtle);
+      flex-shrink: 0;
+    }
+
+    /* ── Comments ── */
+    .comments-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .comment {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .comment-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.625rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .comment-bubble {
+      background: #f4f4f5;
+      border-radius: 0 8px 8px 8px;
+      padding: 10px 14px;
+      flex: 1;
+    }
+
+    .comment-name {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--heading);
+      margin-bottom: 3px;
+    }
+
+    .comment-text {
+      font-size: 0.875rem;
+      color: var(--body);
+      line-height: 1.5;
+    }
+
+    .view-thread {
+      font-size: 0.875rem;
+      color: var(--muted);
+      text-decoration: none;
+      margin-top: 4px;
+      display: inline-block;
+    }
+    .view-thread:hover { color: var(--heading); }
+
+    /* ── Content grid section ── */
+    .content-grid-section {
+      max-width: 1100px;
+      margin: 40px auto 0;
+      padding: 0 24px 64px;
+    }
+
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--subtle);
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    @media (max-width: 900px) { .cards-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .cards-grid { grid-template-columns: 1fr; } }
+
+    /* ── Grid card ── */
+    .grid-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: box-shadow 0.2s ease;
+    }
+
+    .grid-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.07); }
+
+    .grid-cover {
+      width: 100%;
+      aspect-ratio: 4/3;
+      position: relative;
+    }
+
+    .grid-source-tag {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 0.625rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.92);
+      border-radius: 4px;
+      padding: 2px 7px;
+    }
+
+    .grid-card-body {
+      padding: 14px;
+    }
+
+    .grid-title {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      color: var(--heading);
+      line-height: 1.3;
+      margin-bottom: 2px;
+    }
+
+    .grid-source {
+      font-size: 0.8125rem;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    /* Grid highlight teaser */
+    .grid-highlight {
+      border-left: 2px solid var(--amber-border);
+      background: var(--amber-bg);
+      padding: 8px 10px;
+      border-radius: 0 5px 5px 0;
+      margin-bottom: 10px;
+    }
+
+    .grid-highlight p {
+      font-size: 0.8125rem;
+      font-style: italic;
+      color: #78350f;
+      line-height: 1.5;
+    }
+
+    /* Grid discussion strip */
+    .grid-discussion {
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      position: relative;
+    }
+
+    .grid-comment-count {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 5px;
+      font-weight: 500;
+    }
+
+    .grid-comment-snippet {
+      font-size: 0.8125rem;
+      color: var(--body);
+      line-height: 1.45;
+      margin-bottom: 8px;
+    }
+
+    .grid-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .grid-action-link {
+      font-size: 0.75rem;
+      color: var(--muted);
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: inherit;
+      padding: 0;
+      font-weight: 500;
+    }
+    .grid-action-link:hover { color: var(--heading); }
+
+    /* Non-member: blur discussion in grid cards */
+    [data-view="nonmember"] .grid-discussion-blur {
+      filter: blur(4px);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* In-grid banner (non-member) */
+    .grid-banner {
+      display: none;
+      grid-column: 1 / -1;
+      background: #fef9ef;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      padding: 16px 20px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .grid-banner-text {
+      font-size: 0.875rem;
+      color: #92400e;
+      font-weight: 500;
+    }
+
+    /* ── Sticky bottom bar ── */
+    .sticky-bar {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--card-bg);
+      border-top: 1px solid var(--border);
+      padding: 14px 24px;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 100;
+    }
+
+    .sticky-bar-text {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--body);
+    }
+
+    /* ── View state management ── */
+    [data-view="nonmember"] .member-only   { display: none !important; }
+    [data-view="nonmember"] .sticky-bar    { display: flex; }
+    [data-view="nonmember"] .grid-banner   { display: flex; }
+
+    @media (max-width: 600px) {
+      .topnav { padding: 10px 16px; flex-wrap: wrap; gap: 10px; }
+      .topnav-title { display: none; }
+      .toggle-btn { padding: 5px 10px; font-size: 0.75rem; }
+      .hero-content { padding: 24px 20px 28px; }
+      .hero-title { font-size: 1.625rem; }
+      .discussion-section { padding: 24px 16px 0; }
+      .content-grid-section { padding: 0 16px 64px; }
+    }
+  </style>
+</head>
+<body data-view="member">
+
+  <!-- Top nav -->
+  <nav class="topnav">
+    <a href="index.html" class="back-link">← Back</a>
+    <span class="topnav-title">The Deep Work Circle</span>
+    <div class="view-toggle">
+      <button class="toggle-btn active" id="btn-member" onclick="setView('member')">Member View</button>
+      <button class="toggle-btn" id="btn-nonmember" onclick="setView('nonmember')">Non-Member View</button>
+    </div>
+  </nav>
+
+  <!-- ── Hero ── -->
+  <section class="hero">
+    <div class="hero-overlay"></div>
+
+    <!-- Invite Friends — member only, top right -->
+    <div class="hero-invite member-only">
+      <button class="btn-outline">Invite Friends</button>
+    </div>
+
+    <div class="hero-content">
+      <div class="hero-badge">Currently buzzing in the group</div>
+      <h1 class="hero-title">The Age of AI Has Begun</h1>
+      <p class="hero-author">Bill Gates · Article · via Web</p>
+      <div class="hero-pulls">
+        <p class="hero-pull">"AI is the most important advance in technology since the graphical user interface."</p>
+        <p class="hero-pull">"The development of AI is as fundamental as the creation of the microprocessor."</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Discussion thread ── -->
+  <section class="discussion-section">
+    <div class="ai-pill">
+      <span class="ai-pill-label">AI</span>
+      Key themes: decision-making under uncertainty, cognitive bias in leadership
+    </div>
+    <div class="comments-list">
+      <div class="comment">
+        <div class="comment-avatar" style="background:#059669">DL</div>
+        <div class="comment-bubble">
+          <div class="comment-name">David L.</div>
+          <div class="comment-text">Gates has skin in the game now, but his framing is still sharp. The microprocessor comparison is apt.</div>
+        </div>
+      </div>
+      <div class="comment">
+        <div class="comment-avatar" style="background:#4f46e5">SK</div>
+        <div class="comment-bubble">
+          <div class="comment-name">Sarah K.</div>
+          <div class="comment-text">Connecting this to Sutton's Bitter Lesson — the computation point is even more relevant now with LLMs.</div>
+        </div>
+      </div>
+      <div class="comment">
+        <div class="comment-avatar" style="background:#0891b2">MW</div>
+        <div class="comment-bubble">
+          <div class="comment-name">Marcus W.</div>
+          <div class="comment-text">The part about healthcare access is underrated. Most commentary focuses on productivity, not equity.</div>
+        </div>
+      </div>
+      <div class="comment">
+        <div class="comment-avatar" style="background:#7c3aed">ER</div>
+        <div class="comment-bubble">
+          <div class="comment-name">Elena R.</div>
+          <div class="comment-text">Cross-posting from our AI group — the parallels between what Gates predicts and what's already happening are wild.</div>
+        </div>
+      </div>
+    </div>
+    <a href="#" class="view-thread">View full thread · 24 replies →</a>
+  </section>
+
+  <!-- ── More in the collection ── -->
+  <section class="content-grid-section">
+    <div class="section-label">More in the collection</div>
+    <div class="cards-grid">
+
+      <!-- Card 1 — Thinking, Fast and Slow -->
+      <div class="grid-card">
+        <div class="grid-cover" style="background:linear-gradient(160deg,#1e293b 0%,#334155 100%);">
+          <span class="grid-source-tag">via Kindle</span>
+        </div>
+        <div class="grid-card-body">
+          <div class="grid-title">Thinking, Fast and Slow</div>
+          <div class="grid-source">Daniel Kahneman · Book</div>
+          <div class="grid-highlight">
+            <p>"People tend to assess the relative importance of issues by the ease with which they are retrieved from memory."</p>
+          </div>
+          <div class="grid-discussion">
+            <div class="grid-discussion-blur">
+              <div class="grid-comment-count">18 replies · 6 members</div>
+              <div class="grid-comment-snippet">"The availability heuristic section hit me hard. I've been making this mistake in hiring decisions for years."</div>
+            </div>
+            <div class="grid-actions member-only">
+              <button class="grid-action-link">Add your thoughts</button>
+              <button class="grid-action-link">Cross-post</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2 — Atomic Habits -->
+      <div class="grid-card">
+        <div class="grid-cover" style="background:linear-gradient(160deg,#292524 0%,#57534e 100%);">
+          <span class="grid-source-tag">via Kindle</span>
+        </div>
+        <div class="grid-card-body">
+          <div class="grid-title">Atomic Habits</div>
+          <div class="grid-source">James Clear · Book</div>
+          <div class="grid-highlight">
+            <p>"You do not rise to the level of your goals. You fall to the level of your systems."</p>
+          </div>
+          <div class="grid-discussion">
+            <div class="grid-discussion-blur">
+              <div class="grid-comment-count">11 replies · 5 members</div>
+              <div class="grid-comment-snippet">"This completely changed how I think about habit formation. The identity-based approach is 🔑"</div>
+            </div>
+            <div class="grid-actions member-only">
+              <button class="grid-action-link">Add your thoughts</button>
+              <button class="grid-action-link">Cross-post</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- In-grid banner after card 2 (non-member) -->
+      <div class="grid-banner">
+        <span class="grid-banner-text">This group is discussing <strong>Atomic Habits</strong> right now — request an invite to join the conversation.</span>
+        <button class="btn-primary">Request Invite</button>
+      </div>
+
+      <!-- Card 3 — Do Things That Don't Scale -->
+      <div class="grid-card">
+        <div class="grid-cover" style="background:linear-gradient(160deg,#1c1917 0%,#292524 100%);">
+          <span class="grid-source-tag">via Web</span>
+        </div>
+        <div class="grid-card-body">
+          <div class="grid-title">Do Things That Don't Scale</div>
+          <div class="grid-source">Paul Graham · Essay</div>
+          <div class="grid-highlight">
+            <p>"The most successful startups seem to have begun by trying to solve a problem the founders themselves had."</p>
+          </div>
+          <div class="grid-discussion">
+            <div class="grid-discussion-blur">
+              <div class="grid-comment-count">9 replies · 4 members</div>
+              <div class="grid-comment-snippet">"This is why I keep coming back to PG's essays. Simple but cuts deep."</div>
+            </div>
+            <div class="grid-actions member-only">
+              <button class="grid-action-link">Add your thoughts</button>
+              <button class="grid-action-link">Cross-post</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 4 — The Bitter Lesson -->
+      <div class="grid-card">
+        <div class="grid-cover" style="background:linear-gradient(160deg,#0f172a 0%,#1e2d4a 100%);">
+          <span class="grid-source-tag">via Web</span>
+        </div>
+        <div class="grid-card-body">
+          <div class="grid-title">The Bitter Lesson</div>
+          <div class="grid-source">Rich Sutton · Essay</div>
+          <div class="grid-highlight">
+            <p>"The biggest lesson from 70 years of AI research is that general methods leveraging computation are ultimately the most effective."</p>
+          </div>
+          <div class="grid-discussion">
+            <div class="grid-discussion-blur">
+              <div class="grid-comment-count">7 replies · 4 members</div>
+              <div class="grid-comment-snippet">"Connecting this to the Gates article — the computation point is even more relevant now with LLMs."</div>
+            </div>
+            <div class="grid-actions member-only">
+              <button class="grid-action-link">Add your thoughts</button>
+              <button class="grid-action-link">Cross-post</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 5 — Why Greatness Cannot Be Planned -->
+      <div class="grid-card">
+        <div class="grid-cover" style="background:linear-gradient(160deg,#1e3a5f 0%,#1e40af 100%);">
+          <span class="grid-source-tag">via Kindle</span>
+        </div>
+        <div class="grid-card-body">
+          <div class="grid-title">Why Greatness Cannot Be Planned</div>
+          <div class="grid-source">Stanley &amp; Lehman · Book</div>
+          <div class="grid-highlight">
+            <p>"Those who tried to pursue objectives were often less successful than those who simply tried interesting things."</p>
+          </div>
+          <div class="grid-discussion">
+            <div class="grid-discussion-blur">
+              <div class="grid-comment-count">13 replies · 6 members</div>
+              <div class="grid-comment-snippet">"This completely reframed how I think about research direction. Serendipity is a system."</div>
+            </div>
+            <div class="grid-actions member-only">
+              <button class="grid-action-link">Add your thoughts</button>
+              <button class="grid-action-link">Cross-post</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- In-grid banner after card 5 (non-member) -->
+      <div class="grid-banner">
+        <span class="grid-banner-text">This group is discussing <strong>Why Greatness Cannot Be Planned</strong> right now — join the conversation.</span>
+        <button class="btn-primary">Request Invite</button>
+      </div>
+
+      <!-- Card 6 — Lex Fridman Podcast -->
+      <div class="grid-card">
+        <div class="grid-cover" style="background:linear-gradient(160deg,#1a1a2e 0%,#16213e 100%);">
+          <span class="grid-source-tag">via Spotify</span>
+        </div>
+        <div class="grid-card-body">
+          <div class="grid-title">Lex Fridman #428: On the Nature of Intelligence</div>
+          <div class="grid-source">Lex Fridman · Podcast</div>
+          <div class="grid-highlight">
+            <p>"AI is the most important advance in technology since the graphical user interface."</p>
+          </div>
+          <div class="grid-discussion">
+            <div class="grid-discussion-blur">
+              <div class="grid-comment-count">5 replies · 3 members</div>
+              <div class="grid-comment-snippet">"The first hour alone was worth it. Lex at his best — letting the ideas breathe."</div>
+            </div>
+            <div class="grid-actions member-only">
+              <button class="grid-action-link">Add your thoughts</button>
+              <button class="grid-action-link">Cross-post</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /cards-grid -->
+  </section>
+
+  <!-- Sticky bottom bar — non-member only -->
+  <div class="sticky-bar">
+    <span class="sticky-bar-text">Join The Deep Work Circle — Request an Invite</span>
+    <button class="btn-primary">Request an Invite</button>
+  </div>
+
+  <script>
+    function setView(view) {
+      document.body.dataset.view = view;
+      document.getElementById('btn-member').classList.toggle('active', view === 'member');
+      document.getElementById('btn-nonmember').classList.toggle('active', view === 'nonmember');
+    }
+  </script>
+</body>
+</html>

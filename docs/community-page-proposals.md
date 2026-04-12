@@ -1,8 +1,9 @@
+> ⚠️ **ARCHIVED** — Superseded by [`community-page-proposals-v1.4.md`](community-page-proposals-v1.4.md). Retained for historical reference.
+
 # Highlighter Community Front Page Proposals
 
 **Content-Centric Model | Version 1.3 (2026)**
-**Author: Grok (AI-generated draft)**
-**Status: Under Review**
+**Status: Archived**
 
 We've pivoted the entire community experience: the **main artifact** is now the full piece of content (book, article, podcast episode, YouTube video, research paper, etc.).
 

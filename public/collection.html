@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Curious Readers — Highlighter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #fafafa;
+      --card-bg: #ffffff;
+      --border: #e4e4e7;
+      --heading: #09090b;
+      --body: #3f3f46;
+      --muted: #71717a;
+      --subtle: #a1a1aa;
+      --amber-bg: #fef9ef;
+      --amber-border: #d97706;
+      --primary-bg: #18181b;
+      --primary-text: #ffffff;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--heading);
+      min-height: 100vh;
+      padding-bottom: 80px;
+    }
+
+    /* ── Top nav ── */
+    .topnav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(250,250,250,0.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      gap: 16px;
+    }
+
+    .back-link {
+      font-size: 0.875rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 500;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .back-link:hover { color: var(--heading); }
+
+    .topnav-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--heading);
+      white-space: nowrap;
+    }
+
+    /* ── Segmented toggle ── */
+    .view-toggle {
+      display: flex;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .toggle-btn {
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      padding: 6px 14px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .toggle-btn.active {
+      background: var(--card-bg);
+      color: var(--heading);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      background: var(--primary-bg);
+      color: var(--primary-text);
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary:hover { opacity: 0.82; }
+
+    /* ── Preview banner (nonmember) ── */
+    .preview-banner {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: #fef9ef;
+      border-bottom: 1px solid #fde68a;
+      padding: 12px 24px;
+      font-size: 0.875rem;
+      color: #92400e;
+    }
+
+    /* ── Page header ── */
+    .page-header {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 24px 32px;
+    }
+
+    .community-name {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--heading);
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+
+    .community-meta {
+      display: none;
+      font-size: 0.875rem;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .avatars-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    /* ── Content feed ── */
+    .feed {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    /* ── Content card ── */
+    .content-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .cover-img {
+      width: 100%;
+      aspect-ratio: 16/9;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cover-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 20px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.72));
+    }
+
+    .source-tag {
+      display: inline-block;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.92);
+      border-radius: 4px;
+      padding: 3px 8px;
+      margin-bottom: 8px;
+    }
+
+    .cover-title {
+      font-size: 1.1875rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.3;
+    }
+
+    .cover-author {
+      font-size: 0.8125rem;
+      color: rgba(255,255,255,0.72);
+      margin-top: 4px;
+    }
+
+    /* ── Card body ── */
+    .card-body {
+      padding: 20px;
+    }
+
+    .shared-by {
+      font-size: 0.8125rem;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .shared-by strong {
+      color: var(--body);
+      font-weight: 600;
+    }
+
+    .highlights-label {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--subtle);
+      margin-bottom: 10px;
+    }
+
+    .highlight-quote {
+      border-left: 3px solid var(--amber-border);
+      background: var(--amber-bg);
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      border-radius: 0 6px 6px 0;
+    }
+
+    .highlight-quote p {
+      font-size: 0.875rem;
+      font-style: italic;
+      color: #78350f;
+      line-height: 1.6;
+    }
+
+    /* ── Discussion ── */
+    .discussion-sep {
+      height: 1px;
+      background: var(--border);
+      margin: 20px 0;
+    }
+
+    .discussion-label {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .comments-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .comment {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      transition: filter 0.2s;
+    }
+
+    .comment-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.625rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .comment-bubble {
+      background: #f4f4f5;
+      border-radius: 0 8px 8px 8px;
+      padding: 8px 12px;
+      flex: 1;
+    }
+
+    .comment-name {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--heading);
+      margin-bottom: 3px;
+    }
+
+    .comment-text {
+      font-size: 0.8125rem;
+      color: var(--body);
+      line-height: 1.5;
+    }
+
+    .view-convo {
+      font-size: 0.8125rem;
+      color: var(--muted);
+      text-decoration: none;
+      margin-top: 12px;
+      display: inline-block;
+    }
+    .view-convo:hover { color: var(--heading); }
+
+    /* ── Non-member: restricted card overlay ── */
+    .card-restricted-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(250,250,250,0) 0%, rgba(250,250,250,0.88) 45%, rgba(250,250,250,0.98) 100%);
+      z-index: 10;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 28px;
+    }
+
+    .members-only-label {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Collection shelf ── */
+    .collection-shelf {
+      max-width: 720px;
+      margin: 40px auto 0;
+      padding: 0 24px;
+    }
+
+    .shelf-title {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    .shelf-scroll {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .shelf-item {
+      flex-shrink: 0;
+      width: 80px;
+    }
+
+    .shelf-thumb {
+      width: 80px;
+      height: 60px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .shelf-item-title {
+      font-size: 0.6875rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    /* ── FAB ── */
+    .fab {
+      position: fixed;
+      bottom: 32px;
+      right: 32px;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--primary-bg);
+      color: #fff;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+      transition: opacity 0.15s;
+      z-index: 50;
+      line-height: 1;
+    }
+    .fab:hover { opacity: 0.82; }
+
+    /* ── Sticky bottom bar ── */
+    .sticky-bar {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--card-bg);
+      border-top: 1px solid var(--border);
+      padding: 14px 24px;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 100;
+    }
+
+    .sticky-bar-text {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--body);
+    }
+
+    /* ── View state management ── */
+    [data-view="nonmember"] .preview-banner       { display: flex; }
+    [data-view="nonmember"] .community-meta       { display: block; }
+    [data-view="nonmember"] .avatars-row          { display: none !important; }
+    [data-view="nonmember"] .member-only          { display: none !important; }
+    [data-view="nonmember"] .sticky-bar           { display: flex; }
+    [data-view="nonmember"] .fab                  { display: none; }
+    [data-view="nonmember"] .card-restricted .card-restricted-overlay { display: flex; }
+    [data-view="nonmember"] .comment-blurred      { filter: blur(3.5px); pointer-events: none; user-select: none; }
+
+    @media (max-width: 600px) {
+      .topnav { padding: 10px 16px; flex-wrap: wrap; gap: 10px; }
+      .topnav-title { display: none; }
+      .toggle-btn { padding: 5px 10px; font-size: 0.75rem; }
+      .page-header { padding: 24px 16px 20px; }
+      .community-name { font-size: 1.4rem; }
+      .feed { padding: 0 16px; }
+      .collection-shelf { padding: 0 16px; }
+      .fab { bottom: 24px; right: 20px; }
+    }
+  </style>
+</head>
+<body data-view="member">
+
+  <!-- Top nav -->
+  <nav class="topnav">
+    <a href="index.html" class="back-link">← Back</a>
+    <span class="topnav-title">The Curious Readers</span>
+    <div class="view-toggle">
+      <button class="toggle-btn active" id="btn-member" onclick="setView('member')">Member View</button>
+      <button class="toggle-btn" id="btn-nonmember" onclick="setView('nonmember')">Non-Member View</button>
+    </div>
+  </nav>
+
+  <!-- Preview banner — non-member only -->
+  <div class="preview-banner">
+    <span>You're previewing this collection</span>
+    <button class="btn-primary">Request Invite</button>
+  </div>
+
+  <!-- Page header -->
+  <header class="page-header">
+    <h1 class="community-name">The Curious Readers</h1>
+    <p class="community-meta">Private collection · 14 members</p>
+    <div class="avatars-row">
+      <div class="avatar" style="background:#4f46e5" title="Sarah K.">SK</div>
+      <div class="avatar" style="background:#0891b2" title="Marcus W.">MW</div>
+      <div class="avatar" style="background:#059669" title="David L.">DL</div>
+      <div class="avatar" style="background:#7c3aed" title="Elena R.">ER</div>
+      <div class="avatar" style="background:#b45309" title="James T.">JT</div>
+      <div class="avatar" style="background:#be185d" title="Priya N.">PN</div>
+      <div class="avatar" style="background:#0e7490" title="Alex C.">AC</div>
+      <div class="avatar" style="background:#4338ca" title="Maya S.">MS</div>
+    </div>
+    <div class="member-only">
+      <button class="btn-primary">Invite Friends</button>
+    </div>
+  </header>
+
+  <!-- Feed -->
+  <main class="feed">
+
+    <!-- Card 1 — Thinking, Fast and Slow -->
+    <article class="content-card">
+      <div class="cover-img" style="background: linear-gradient(160deg, #1e293b 0%, #334155 100%);">
+        <div class="cover-overlay">
+          <div class="source-tag">via Kindle</div>
+          <div class="cover-title">Thinking, Fast and Slow</div>
+          <div class="cover-author">Daniel Kahneman</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="shared-by">Shared by <strong>Sarah K.</strong> · 3 hours ago</p>
+
+        <div class="highlights-label">What caught our eye</div>
+        <div class="highlight-quote">
+          <p>"People tend to assess the relative importance of issues by the ease with which they are retrieved from memory."</p>
+        </div>
+        <div class="highlight-quote">
+          <p>"What we see and how we see it is not only a function of what there is to see."</p>
+        </div>
+
+        <div class="discussion-sep"></div>
+        <div class="discussion-label">Discussion</div>
+        <div class="comments-list">
+          <div class="comment">
+            <div class="comment-avatar" style="background:#4f46e5">SK</div>
+            <div class="comment-bubble">
+              <div class="comment-name">Sarah K.</div>
+              <div class="comment-text">The availability heuristic section hit me hard. I've been making this mistake in hiring decisions for years.</div>
+            </div>
+          </div>
+          <div class="comment comment-blurred">
+            <div class="comment-avatar" style="background:#0891b2">MW</div>
+            <div class="comment-bubble">
+              <div class="comment-name">Marcus W.</div>
+              <div class="comment-text">Kahneman's insight about substitution of questions is underrated. We don't answer the hard question — we answer an easier one.</div>
+            </div>
+          </div>
+          <div class="comment comment-blurred">
+            <div class="comment-avatar" style="background:#059669">DL</div>
+            <div class="comment-bubble">
+              <div class="comment-name">David L.</div>
+              <div class="comment-text">Chapter 3 was the turning point for me. Anyone else feel like the first two chapters were just setup?</div>
+            </div>
+          </div>
+        </div>
+        <a href="#" class="view-convo">View full conversation · 18 replies →</a>
+      </div>
+    </article>
+
+    <!-- Card 2 — Atomic Habits -->
+    <article class="content-card">
+      <div class="cover-img" style="background: linear-gradient(160deg, #292524 0%, #57534e 100%);">
+        <div class="cover-overlay">
+          <div class="source-tag">via Kindle</div>
+          <div class="cover-title">Atomic Habits</div>
+          <div class="cover-author">James Clear</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="shared-by">Shared by <strong>Marcus W.</strong> · 1 day ago</p>
+
+        <div class="highlights-label">What caught our eye</div>
+        <div class="highlight-quote">
+          <p>"You do not rise to the level of your goals. You fall to the level of your systems."</p>
+        </div>
+
+        <div class="discussion-sep"></div>
+        <div class="discussion-label">Discussion</div>
+        <div class="comments-list">
+          <div class="comment">
+            <div class="comment-avatar" style="background:#0891b2">MW</div>
+            <div class="comment-bubble">
+              <div class="comment-name">Marcus W.</div>
+              <div class="comment-text">This completely changed how I think about habit formation. The identity-based approach is 🔑</div>
+            </div>
+          </div>
+          <div class="comment comment-blurred">
+            <div class="comment-avatar" style="background:#7c3aed">ER</div>
+            <div class="comment-bubble">
+              <div class="comment-name">Elena R.</div>
+              <div class="comment-text">Disagree with the premise here — sometimes you DO need a clear objective. But the point about serendipity is well taken.</div>
+            </div>
+          </div>
+          <div class="comment comment-blurred">
+            <div class="comment-avatar" style="background:#b45309">JT</div>
+            <div class="comment-bubble">
+              <div class="comment-name">James T.</div>
+              <div class="comment-text">Connecting this to the Gates article — the computation point is even more relevant now with LLMs.</div>
+            </div>
+          </div>
+        </div>
+        <a href="#" class="view-convo">View full conversation · 11 replies →</a>
+      </div>
+    </article>
+
+    <!-- Card 3 — Do Things That Don't Scale (restricted in non-member) -->
+    <article class="content-card card-restricted">
+      <div class="card-restricted-overlay">
+        <span class="members-only-label">Members only</span>
+      </div>
+      <div class="cover-img" style="background: linear-gradient(160deg, #1c1917 0%, #292524 100%);">
+        <div class="cover-overlay">
+          <div class="source-tag">via Web</div>
+          <div class="cover-title">Do Things That Don't Scale</div>
+          <div class="cover-author">Paul Graham</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="shared-by">Shared by <strong>David L.</strong> · 2 days ago</p>
+
+        <div class="highlights-label">What caught our eye</div>
+        <div class="highlight-quote">
+          <p>"The most successful startups seem to have begun by trying to solve a problem the founders themselves had."</p>
+        </div>
+
+        <div class="discussion-sep"></div>
+        <div class="discussion-label">Discussion</div>
+        <div class="comments-list">
+          <div class="comment">
+            <div class="comment-avatar" style="background:#059669">DL</div>
+            <div class="comment-bubble">
+              <div class="comment-name">David L.</div>
+              <div class="comment-text">This is why I keep coming back to PG's essays. Simple but cuts deep.</div>
+            </div>
+          </div>
+          <div class="comment">
+            <div class="comment-avatar" style="background:#b45309">JT</div>
+            <div class="comment-bubble">
+              <div class="comment-name">James T.</div>
+              <div class="comment-text">Cross-posting from our AI group — the parallels between Sutton's argument and current LLM scaling are wild.</div>
+            </div>
+          </div>
+        </div>
+        <a href="#" class="view-convo">View full conversation · 9 replies →</a>
+      </div>
+    </article>
+
+    <!-- Card 4 — The Bitter Lesson (restricted in non-member) -->
+    <article class="content-card card-restricted">
+      <div class="card-restricted-overlay">
+        <span class="members-only-label">Members only</span>
+      </div>
+      <div class="cover-img" style="background: linear-gradient(160deg, #0f172a 0%, #1e2d4a 100%);">
+        <div class="cover-overlay">
+          <div class="source-tag">via Web</div>
+          <div class="cover-title">The Bitter Lesson</div>
+          <div class="cover-author">Rich Sutton</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="shared-by">Shared by <strong>Elena R.</strong> · 3 days ago</p>
+
+        <div class="highlights-label">What caught our eye</div>
+        <div class="highlight-quote">
+          <p>"The biggest lesson that can be read from 70 years of AI research is that general methods that leverage computation are ultimately the most effective."</p>
+        </div>
+
+        <div class="discussion-sep"></div>
+        <div class="discussion-label">Discussion</div>
+        <div class="comments-list">
+          <div class="comment">
+            <div class="comment-avatar" style="background:#7c3aed">ER</div>
+            <div class="comment-bubble">
+              <div class="comment-name">Elena R.</div>
+              <div class="comment-text">Connecting this to the Gates article — the computation point is even more relevant now with LLMs.</div>
+            </div>
+          </div>
+          <div class="comment">
+            <div class="comment-avatar" style="background:#be185d">PN</div>
+            <div class="comment-bubble">
+              <div class="comment-name">Priya N.</div>
+              <div class="comment-text">This is the essay I keep sending to skeptical friends. Sutton just cuts through the noise.</div>
+            </div>
+          </div>
+        </div>
+        <a href="#" class="view-convo">View full conversation · 7 replies →</a>
+      </div>
+    </article>
+
+  </main>
+
+  <!-- Currently in the collection -->
+  <section class="collection-shelf">
+    <div class="shelf-title">Currently in the collection</div>
+    <div class="shelf-scroll">
+      <div class="shelf-item">
+        <div class="shelf-thumb" style="background:linear-gradient(135deg,#1e293b,#334155);"></div>
+        <div class="shelf-item-title">Thinking, Fast and Slow</div>
+      </div>
+      <div class="shelf-item">
+        <div class="shelf-thumb" style="background:linear-gradient(135deg,#292524,#57534e);"></div>
+        <div class="shelf-item-title">Atomic Habits</div>
+      </div>
+      <div class="shelf-item">
+        <div class="shelf-thumb" style="background:linear-gradient(135deg,#1c1917,#292524);"></div>
+        <div class="shelf-item-title">Do Things That Don't Scale</div>
+      </div>
+      <div class="shelf-item">
+        <div class="shelf-thumb" style="background:linear-gradient(135deg,#0f172a,#1e2d4a);"></div>
+        <div class="shelf-item-title">The Bitter Lesson</div>
+      </div>
+      <div class="shelf-item">
+        <div class="shelf-thumb" style="background:linear-gradient(135deg,#1e3a5f,#1e40af);"></div>
+        <div class="shelf-item-title">Why Greatness Cannot Be Planned</div>
+      </div>
+      <div class="shelf-item">
+        <div class="shelf-thumb" style="background:linear-gradient(135deg,#1a1a2e,#16213e);"></div>
+        <div class="shelf-item-title">Lex Fridman #428</div>
+      </div>
+      <div class="shelf-item">
+        <div class="shelf-thumb" style="background:linear-gradient(135deg,#064e3b,#065f46);"></div>
+        <div class="shelf-item-title">The Age of AI Has Begun</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAB — member only -->
+  <button class="fab member-only" title="Share new content">+</button>
+
+  <!-- Sticky bottom bar — non-member only -->
+  <div class="sticky-bar">
+    <span class="sticky-bar-text">Join The Curious Readers — Request an Invite</span>
+    <button class="btn-primary">Request an Invite</button>
+  </div>
+
+  <script>
+    function setView(view) {
+      document.body.dataset.view = view;
+      document.getElementById('btn-member').classList.toggle('active', view === 'member');
+      document.getElementById('btn-nonmember').classList.toggle('active', view === 'nonmember');
+    }
+  </script>
+</body>
+</html>

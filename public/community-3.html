@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Highlighter — Community: Featured Content Hub</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream: #faf8f4;
+      --warm-white: #fff9f0;
+      --amber: #f5c842;
+      --amber-dark: #c8922a;
+      --amber-soft: #fef3cd;
+      --text-dark: #2e2820;
+      --text-mid: #5a524a;
+      --text-light: #9a8e84;
+      --border: #ede8e0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--cream);
+      color: var(--text-dark);
+      overflow-x: hidden;
+    }
+
+    /* NAV */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: rgba(250, 248, 244, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--text-dark);
+      text-decoration: none;
+    }
+
+    .nav-logo-mark {
+      width: 28px; height: 28px;
+      background: var(--amber);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+    }
+
+    .nav-back {
+      font-size: 0.85rem;
+      color: var(--text-light);
+      text-decoration: none;
+    }
+    .nav-back:hover { color: var(--amber-dark); }
+
+    /* VIEW TOGGLE */
+    .view-toggle-bar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: var(--text-light);
+    }
+
+    .toggle-wrap {
+      display: inline-flex;
+      background: var(--cream);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .toggle-btn {
+      padding: 6px 16px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--text-light);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .toggle-btn.active {
+      background: var(--amber);
+      color: var(--text-dark);
+    }
+
+    /* COMMUNITY TOPBAR */
+    .community-topbar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .community-topbar h1 {
+      font-size: 1.35rem;
+      font-weight: 800;
+    }
+
+    .community-topbar .sub {
+      font-size: 0.8rem;
+      color: var(--text-light);
+      margin-top: 2px;
+    }
+
+    .topbar-btns {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: var(--amber);
+      color: var(--text-dark);
+      font-size: 0.88rem;
+      font-weight: 700;
+      padding: 8px 18px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-primary:hover { background: #f0bc30; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-mid);
+      font-size: 0.88rem;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .btn-ghost:hover { border-color: var(--amber); }
+
+    .btn-invite {
+      background: var(--amber);
+      color: var(--text-dark);
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 8px 18px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-invite:hover { background: #f0bc30; }
+
+    /* NON-MEMBER BANNER */
+    .preview-banner {
+      background: var(--amber-soft);
+      border-bottom: 1px solid #f5c84250;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .preview-banner span {
+      font-size: 0.88rem;
+      color: var(--text-mid);
+      font-weight: 500;
+    }
+
+    /* PAGE CONTENT */
+    .page-content {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 24px 120px;
+    }
+
+    /* HERO FEATURED CARD */
+    .hero-featured {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-bottom: 32px;
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    @media (min-width: 680px) {
+      .hero-featured { grid-template-columns: 340px 1fr; min-height: 280px; }
+    }
+
+    .hero-cover {
+      background: linear-gradient(145deg, #4a90d9, #2a6ab5);
+      display: flex;
+      align-items: flex-end;
+      padding: 24px;
+      min-height: 220px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-cover::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.45));
+    }
+
+    .hero-cover-title {
+      position: relative;
+      z-index: 1;
+      color: #fff;
+      font-size: 1.5rem;
+      font-weight: 800;
+      line-height: 1.25;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    .hero-cover-title small {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      opacity: 0.85;
+      margin-bottom: 4px;
+    }
+
+    .hero-body {
+      padding: 22px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .buzzing-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--amber-soft);
+      color: var(--amber-dark);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 20px;
+      width: fit-content;
+    }
+
+    .hero-body h2 {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: var(--text-dark);
+      line-height: 1.3;
+    }
+
+    .hero-highlight {
+      background: var(--amber-soft);
+      border-left: 3px solid var(--amber);
+      padding: 9px 12px;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.86rem;
+      line-height: 1.55;
+      color: var(--text-dark);
+      font-style: italic;
+    }
+
+    .hero-highlight::before {
+      content: '"';
+      font-size: 1.2rem;
+      color: var(--amber);
+      font-style: normal;
+      margin-right: 3px;
+    }
+
+    .hero-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.78rem;
+      color: var(--text-light);
+    }
+
+    .hero-meta strong { color: var(--amber-dark); font-weight: 700; }
+
+    .hero-action-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+      flex-wrap: wrap;
+    }
+
+    /* SECTION LABEL */
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-light);
+      margin-bottom: 16px;
+    }
+
+    /* MASONRY GRID */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 560px) {
+      .content-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (min-width: 900px) {
+      .content-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    /* CONTENT CARD */
+    .content-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+      transition: box-shadow 0.2s, transform 0.2s;
+      display: flex;
+      flex-direction: column;
+    }
+    .content-card:hover { box-shadow: 0 6px 28px rgba(0,0,0,0.09); transform: translateY(-2px); }
+
+    .card-cover-img {
+      height: 130px;
+      display: flex;
+      align-items: flex-end;
+      padding: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card-cover-img::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, transparent 30%, rgba(0,0,0,0.5));
+    }
+
+    .card-cover-img .cover-title {
+      position: relative;
+      z-index: 1;
+      color: #fff;
+      font-size: 0.82rem;
+      font-weight: 700;
+      line-height: 1.25;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    }
+
+    .card-cover-img .cover-title small {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 500;
+      opacity: 0.85;
+    }
+
+    .bg-1 { background: linear-gradient(135deg, #7b68c8, #5a4db0); }
+    .bg-2 { background: linear-gradient(135deg, #3aaa6e, #2a8a56); }
+    .bg-3 { background: linear-gradient(135deg, #d45f3c, #b04020); }
+    .bg-4 { background: linear-gradient(135deg, #4abab4, #2a9a96); }
+    .bg-5 { background: linear-gradient(135deg, #c26dd0, #a04ab0); }
+    .bg-6 { background: linear-gradient(135deg, #d4a03c, #b08020); }
+    .bg-7 { background: linear-gradient(135deg, #4a90d9, #2a6ab5); }
+
+    .card-body {
+      padding: 12px 14px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .card-highlight-teaser {
+      background: var(--amber-soft);
+      border-left: 3px solid var(--amber);
+      padding: 7px 10px;
+      border-radius: 0 5px 5px 0;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      color: var(--text-dark);
+      font-style: italic;
+    }
+
+    .card-discussion-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: var(--text-light);
+      margin-top: 2px;
+    }
+
+    .comment-count {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--cream);
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 0.72rem;
+      color: var(--text-mid);
+    }
+
+    .latest-snippet {
+      font-size: 0.75rem;
+      color: var(--text-light);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin-top: 2px;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: auto;
+      padding-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-card-action {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-mid);
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-card-action:hover { border-color: var(--amber); color: var(--amber-dark); }
+
+    /* WOVEN BANNER (non-member) */
+    .woven-banner {
+      background: linear-gradient(135deg, var(--amber-soft), #fff9e8);
+      border: 1px solid #f5c84260;
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 10px;
+      min-height: 140px;
+    }
+
+    .woven-banner p {
+      font-size: 0.88rem;
+      color: var(--text-mid);
+      line-height: 1.5;
+    }
+
+    .woven-banner p strong { color: var(--text-dark); }
+
+    /* BLUR on card discussion */
+    .discussion-blur {
+      filter: blur(4px);
+      user-select: none;
+      pointer-events: none;
+    }
+
+    /* STICKY BOTTOM CTA */
+    .sticky-cta {
+      position: fixed;
+      bottom: 0;
+      left: 0; right: 0;
+      z-index: 150;
+      background: #fff;
+      border-top: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.08);
+    }
+
+    .sticky-cta p {
+      font-size: 0.9rem;
+      color: var(--text-mid);
+      font-weight: 500;
+    }
+
+    .sticky-cta .btn-invite {
+      font-size: 0.92rem;
+      padding: 11px 24px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a href="/" class="nav-logo">
+      <span class="nav-logo-mark">✦</span>
+      Highlighter
+    </a>
+    <a href="index.html" class="nav-back">← All Proposals</a>
+  </nav>
+
+  <!-- VIEW TOGGLE -->
+  <div class="view-toggle-bar">
+    <span>Viewing as:</span>
+    <div class="toggle-wrap">
+      <button class="toggle-btn active" id="btn-member" onclick="setView('member')">Member View</button>
+      <button class="toggle-btn" id="btn-nonmember" onclick="setView('nonmember')">Non-Member View</button>
+    </div>
+  </div>
+
+  <!-- NON-MEMBER BANNER -->
+  <div class="preview-banner" id="preview-banner" style="display:none;">
+    <span>✨ You're previewing <strong>The Long Read Club</strong> — a curated community of 18 members surfacing the best ideas worth your attention</span>
+    <button class="btn-invite">Request Invite</button>
+  </div>
+
+  <!-- COMMUNITY TOPBAR -->
+  <div class="community-topbar">
+    <div>
+      <h1>📰 The Long Read Club</h1>
+      <div class="sub" id="comm-sub">Private community · 18 members · Featured Content Hub</div>
+    </div>
+    <div class="topbar-btns" id="topbar-btns">
+      <button class="btn-ghost member-only" id="crosspost-btn">↗ Cross-post</button>
+      <button class="btn-primary member-only" id="invite-btn">+ Invite</button>
+      <button class="btn-invite" id="join-btn" style="display:none;">Request Invite</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+
+    <!-- HERO FEATURED CARD -->
+    <div class="hero-featured">
+      <div class="hero-cover">
+        <div class="hero-cover-title">
+          <small>Daniel Kahneman</small>
+          Thinking, Fast and Slow
+        </div>
+      </div>
+      <div class="hero-body">
+        <div class="buzzing-badge">🔥 Currently buzzing in the group</div>
+        <h2>Thinking, Fast and Slow — Group Deep Dive</h2>
+        <div class="hero-highlight">People tend to assess the relative importance of issues by the ease with which they are retrieved from memory.</div>
+        <div class="hero-highlight">Nothing in life is as important as you think it is, while you are thinking about it.</div>
+        <div class="hero-meta">
+          <span>💬 <strong>34 comments</strong></span>
+          <span>👥 11 members reading</span>
+          <span>Shared by <strong>Sarah K.</strong></span>
+        </div>
+        <div class="hero-action-row member-only" id="hero-actions">
+          <button class="btn-primary">Add Your Thoughts</button>
+          <button class="btn-ghost">↗ Cross-post</button>
+        </div>
+        <div class="hero-action-row" id="hero-join-action" style="display:none;">
+          <button class="btn-invite">Request Invite to Join →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRID SECTION -->
+    <div class="section-label" id="grid-label">More from the community</div>
+
+    <div class="content-grid" id="content-grid">
+
+      <!-- CARD 1 -->
+      <div class="content-card">
+        <div class="card-cover-img bg-2">
+          <div class="cover-title">
+            <small>James Clear</small>
+            Atomic Habits
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-highlight-teaser">You do not rise to the level of your goals. You fall to the level of your systems.</div>
+          <div class="card-discussion-row">
+            <span class="comment-count">💬 23</span>
+            <span>8 members</span>
+          </div>
+          <div class="latest-snippet" id="snip1">Elena R.: "Chapter 3 was the turning point for me. Anyone else feel like the first two chapters were just setup?"</div>
+          <div class="card-actions member-only" id="actions1">
+            <button class="btn-card-action">Add your thoughts</button>
+            <button class="btn-card-action">↗ Cross-post</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 2 -->
+      <div class="content-card">
+        <div class="card-cover-img bg-3">
+          <div class="cover-title">
+            <small>Paul Graham</small>
+            Do Things That Don't Scale
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-highlight-teaser">The most successful startups seem to have begun by trying to solve a problem the founders themselves had.</div>
+          <div class="card-discussion-row">
+            <span class="comment-count">💬 17</span>
+            <span>6 members</span>
+          </div>
+          <div class="latest-snippet" id="snip2">Marcus W.: "This is why I keep coming back to PG's essays. Simple but cuts deep."</div>
+          <div class="card-actions member-only" id="actions2">
+            <button class="btn-card-action">Add your thoughts</button>
+            <button class="btn-card-action">↗ Cross-post</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 3 -->
+      <div class="content-card">
+        <div class="card-cover-img bg-4">
+          <div class="cover-title">
+            <small>Rich Sutton</small>
+            The Bitter Lesson
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-highlight-teaser">General methods that leverage computation are ultimately the most effective.</div>
+          <div class="card-discussion-row">
+            <span class="comment-count">💬 34</span>
+            <span>10 members</span>
+          </div>
+          <div class="latest-snippet" id="snip3">Alex C.: "Cross-posting from our AI group — the parallels between Sutton's argument and current LLM scaling are wild"</div>
+          <div class="card-actions member-only" id="actions3">
+            <button class="btn-card-action">Add your thoughts</button>
+            <button class="btn-card-action">↗ Cross-post</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- WOVEN BANNER — non-member only, shown in slot 4 position -->
+      <div class="woven-banner" id="woven-banner" style="display:none;">
+        <p>This group is discussing <strong>Atomic Habits</strong> right now — request an invite to join the conversation</p>
+        <button class="btn-invite">Request an Invite</button>
+      </div>
+
+      <!-- CARD 4 -->
+      <div class="content-card">
+        <div class="card-cover-img bg-5">
+          <div class="cover-title">
+            <small>Stanley &amp; Lehman</small>
+            Why Greatness Cannot Be Planned
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-highlight-teaser">Those who tried to pursue objectives were often less successful than those who simply tried interesting things.</div>
+          <div class="card-discussion-row">
+            <span class="comment-count">💬 11</span>
+            <span>5 members</span>
+          </div>
+          <div class="latest-snippet" id="snip4">James T.: "Disagree with the premise here — sometimes you DO need a clear objective. But serendipity is real."</div>
+          <div class="card-actions member-only" id="actions4">
+            <button class="btn-card-action">Add your thoughts</button>
+            <button class="btn-card-action">↗ Cross-post</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 5 -->
+      <div class="content-card">
+        <div class="card-cover-img bg-6">
+          <div class="cover-title">
+            <small>Lex Fridman · Podcast</small>
+            Lex Fridman #428
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-highlight-teaser">Compounding applies not just to money, but to knowledge, relationships, and habits built over decades.</div>
+          <div class="card-discussion-row">
+            <span class="comment-count">💬 9</span>
+            <span>4 members</span>
+          </div>
+          <div class="latest-snippet" id="snip5">Priya N.: "The first hour is slow but the last 45 mins are worth it — skip to 1:12:00 if you're short on time."</div>
+          <div class="card-actions member-only" id="actions5">
+            <button class="btn-card-action">Add your thoughts</button>
+            <button class="btn-card-action">↗ Cross-post</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 6 (member only — hidden for non-members to limit to 6 slots with banner) -->
+      <div class="content-card" id="card6">
+        <div class="card-cover-img bg-7">
+          <div class="cover-title">
+            <small>Naval Ravikant</small>
+            How to Get Rich (without getting lucky)
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-highlight-teaser">Specific knowledge is found by pursuing your genuine curiosity and passion rather than following a hot trend.</div>
+          <div class="card-discussion-row">
+            <span class="comment-count">💬 22</span>
+            <span>7 members</span>
+          </div>
+          <div class="latest-snippet">Maya S.: "The leverage section is what changed things for me. Time leverage → code &amp; media, not just capital."</div>
+          <div class="card-actions member-only" id="actions6">
+            <button class="btn-card-action">Add your thoughts</button>
+            <button class="btn-card-action">↗ Cross-post</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECOND WOVEN BANNER — non-member only -->
+      <div class="woven-banner" id="woven-banner2" style="display:none;">
+        <p>This group is discussing <strong>The Bitter Lesson</strong> right now — 10 members are sharing AI perspectives</p>
+        <button class="btn-invite">Request an Invite</button>
+      </div>
+
+      <!-- CARD 7 — member only -->
+      <div class="content-card member-only" id="card7">
+        <div class="card-cover-img bg-1">
+          <div class="cover-title">
+            <small>David Deutsch</small>
+            The Beginning of Infinity
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-highlight-teaser">Problems are inevitable. Problems are soluble. And each problem that is solved creates new problems.</div>
+          <div class="card-discussion-row">
+            <span class="comment-count">💬 15</span>
+            <span>6 members</span>
+          </div>
+          <div class="latest-snippet">David L.: "Chapter 2 completely reframed how I think about knowledge creation. Worth the slow start."</div>
+          <div class="card-actions">
+            <button class="btn-card-action">Add your thoughts</button>
+            <button class="btn-card-action">↗ Cross-post</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 8 — member only -->
+      <div class="content-card member-only" id="card8">
+        <div class="card-cover-img bg-3">
+          <div class="cover-title">
+            <small>Ben Thompson</small>
+            Stratechery: The AI Era
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-highlight-teaser">The question is not whether AI will transform industries — the question is what transformation looks like in each vertical.</div>
+          <div class="card-discussion-row">
+            <span class="comment-count">💬 8</span>
+            <span>5 members</span>
+          </div>
+          <div class="latest-snippet">Marcus W.: "Ben's take on commoditized AI models is interesting — but I think he underestimates the UX moat."</div>
+          <div class="card-actions">
+            <button class="btn-card-action">Add your thoughts</button>
+            <button class="btn-card-action">↗ Cross-post</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- STICKY CTA (non-member) -->
+  <div class="sticky-cta" id="sticky-cta" style="display:none;">
+    <p>📰 Join <strong>The Long Read Club</strong> — request an invite to see all discussions</p>
+    <button class="btn-invite">Request an Invite</button>
+  </div>
+
+  <script>
+    function setView(view) {
+      const isMember = view === 'member';
+
+      document.getElementById('btn-member').classList.toggle('active', isMember);
+      document.getElementById('btn-nonmember').classList.toggle('active', !isMember);
+
+      document.getElementById('preview-banner').style.display = isMember ? 'none' : 'flex';
+      document.getElementById('sticky-cta').style.display = isMember ? 'none' : 'flex';
+
+      document.getElementById('invite-btn').style.display = isMember ? '' : 'none';
+      document.getElementById('crosspost-btn').style.display = isMember ? '' : 'none';
+      document.getElementById('join-btn').style.display = isMember ? 'none' : '';
+
+      document.getElementById('hero-actions').style.display = isMember ? 'flex' : 'none';
+      document.getElementById('hero-join-action').style.display = isMember ? 'none' : 'flex';
+
+      // Card action buttons
+      for (let i = 1; i <= 6; i++) {
+        const el = document.getElementById('actions' + i);
+        if (el) el.style.display = isMember ? 'flex' : 'none';
+      }
+
+      // Blur snippets for non-members
+      for (let i = 1; i <= 5; i++) {
+        const snip = document.getElementById('snip' + i);
+        if (snip) snip.classList.toggle('discussion-blur', !isMember);
+      }
+
+      // Woven banners (non-member)
+      document.getElementById('woven-banner').style.display = isMember ? 'none' : 'flex';
+      document.getElementById('woven-banner2').style.display = isMember ? 'none' : 'flex';
+
+      // Member-only cards
+      document.getElementById('card7').style.display = isMember ? '' : 'none';
+      document.getElementById('card8').style.display = isMember ? '' : 'none';
+
+      document.getElementById('comm-sub').textContent = isMember
+        ? 'Private community · 18 members · Featured Content Hub'
+        : 'Preview only — join to participate · 18 members';
+
+      document.getElementById('grid-label').textContent = isMember
+        ? 'More from the community'
+        : 'Preview — join to see full discussions';
+    }
+
+    setView('member');
+  </script>
+
+</body>
+</html>
