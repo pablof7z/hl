@@ -1,15 +1,21 @@
 <script lang="ts">
   import { NDKEvent, NDKHighlight } from '@nostr-dev-kit/ndk';
-  import { ndk } from '$lib/ndk/client';
+  import type { ArtifactRecord } from '$lib/ndk/artifacts';
+  import { ensureClientNdk, ndk } from '$lib/ndk/client';
+  import { publishAndShareHighlight } from '$lib/ndk/highlights';
 
   interface Props {
     /** The article event to reference in highlights */
     articleEvent: NDKEvent;
     /** The container element to listen for selections in */
     containerEl?: HTMLElement | null;
+    /** Community id to share into after creating the highlight */
+    groupId?: string;
+    /** Artifact metadata used to create a canonical highlight */
+    artifact?: ArtifactRecord;
   }
 
-  let { articleEvent, containerEl = null }: Props = $props();
+  let { articleEvent, containerEl = null, groupId = '', artifact = undefined }: Props = $props();
 
   const currentUser = $derived(ndk.$currentUser);
 
@@ -21,6 +27,7 @@
   let showNoteInput = $state(false);
   let noteText = $state('');
   let publishing = $state(false);
+  let errorMessage = $state('');
 
   function getContext(selection: Selection): string {
     const range = selection.getRangeAt(0);
@@ -42,6 +49,7 @@
 
     selectedText = selection.toString().trim();
     contextText = getContext(selection);
+    errorMessage = '';
 
     const rect = range.getBoundingClientRect();
     popoverX = rect.left + rect.width / 2;
@@ -60,6 +68,7 @@
     visible = false;
     showNoteInput = false;
     noteText = '';
+    errorMessage = '';
   }
 
   $effect(() => {
@@ -75,21 +84,36 @@
     if (!currentUser || !selectedText || publishing) return;
 
     publishing = true;
+    errorMessage = '';
     try {
-      const highlight = new NDKHighlight(ndk);
-      highlight.content = selectedText;
-      highlight.article = articleEvent;
-      highlight.context = contextText && contextText !== selectedText ? contextText : undefined;
-      highlight.removeTag('comment');
-      if (noteText.trim()) highlight.tags.push(['comment', noteText.trim()]);
+      await ensureClientNdk();
 
-      await highlight.publish();
+      if (groupId && artifact) {
+        await publishAndShareHighlight(ndk, {
+          groupId,
+          artifact,
+          quote: selectedText,
+          context: contextText,
+          note: noteText
+        });
+      } else {
+        const highlight = new NDKHighlight(ndk);
+        highlight.content = selectedText;
+        highlight.article = articleEvent;
+        highlight.context = contextText && contextText !== selectedText ? contextText : undefined;
+        highlight.removeTag('comment');
+        if (noteText.trim()) highlight.tags.push(['comment', noteText.trim()]);
+
+        await highlight.publish();
+      }
 
       visible = false;
       showNoteInput = false;
       noteText = '';
       selectedText = '';
       window.getSelection()?.removeAllRanges();
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : 'Could not save the highlight.';
     } finally {
       publishing = false;
     }
@@ -122,6 +146,9 @@
             {publishing ? 'Saving…' : 'Save'}
           </button>
         </div>
+        {#if errorMessage}
+          <p class="highlight-error">{errorMessage}</p>
+        {/if}
       </div>
     {:else}
       <button
@@ -147,6 +174,9 @@
         </svg>
         <span>Note</span>
       </button>
+      {#if errorMessage}
+        <p class="highlight-error">{errorMessage}</p>
+      {/if}
     {/if}
   </div>
 {/if}
@@ -164,6 +194,8 @@
     align-items: center;
     gap: 0;
     animation: highlight-popover-in 120ms ease-out;
+    flex-wrap: wrap;
+    max-width: min(24rem, calc(100vw - 1.5rem));
   }
 
   @keyframes highlight-popover-in {
@@ -278,5 +310,14 @@
   .highlight-save-btn:disabled {
     opacity: 0.5;
     cursor: default;
+  }
+
+  .highlight-error {
+    width: 100%;
+    margin: 0;
+    padding: 0 0.75rem 0.65rem;
+    color: rgba(255, 225, 225, 0.95);
+    font-size: 0.75rem;
+    line-height: 1.4;
   }
 </style>

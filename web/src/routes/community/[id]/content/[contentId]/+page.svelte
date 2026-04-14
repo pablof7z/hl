@@ -200,13 +200,13 @@
 </script>
 
 <svelte:head>
-  <title>{data.artifact ? `${data.artifact.title} — Highlighter` : 'Artifact — Highlighter'}</title>
+  <title>{data.artifact ? `${data.artifact.title} — Highlighter` : 'Source — Highlighter'}</title>
 </svelte:head>
 
 {#if data.missing || !data.community || !data.artifact}
   <section class="artifact-missing">
-    <p class="eyebrow">Artifact</p>
-    <h1>Artifact not found.</h1>
+    <p class="eyebrow">Source</p>
+    <h1>Source not found.</h1>
     <p>
       Nothing currently resolves to <span>/community/{data.groupId}/content/{data.contentId}</span>.
       Share the URL into this community first, then come back here.
@@ -230,7 +230,7 @@
       </div>
 
       <div class="artifact-hero-copy">
-        <p class="eyebrow">Artifact</p>
+        <p class="eyebrow">Source</p>
         <h1>{data.artifact.title}</h1>
         <div class="artifact-badges">
           <span>{data.artifact.source}</span>
@@ -356,7 +356,12 @@
     </section>
 
     {#if articleEvent}
-      <HighlightPopover articleEvent={articleEvent} containerEl={articleContentEl} />
+      <HighlightPopover
+        articleEvent={articleEvent}
+        containerEl={articleContentEl}
+        groupId={data.community.id}
+        artifact={data.artifact}
+      />
     {/if}
   </article>
 {/if}
