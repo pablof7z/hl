@@ -16,9 +16,9 @@
   <header class="community-index-header">
     <div class="community-index-copy">
       <p class="eyebrow">Communities</p>
-      <h1>Public reading groups live on the relay now.</h1>
+      <h1>Public reading groups are live now.</h1>
       <p class="lede">
-        Browse the public NIP-29 communities already indexed on Highlighter and jump into the one
+        Browse the public reading communities already indexed on Highlighter and jump into the one
         you want to build around.
       </p>
     </div>
@@ -33,7 +33,7 @@
     showVisibilityFilter={false}
     searchPlaceholder="Search public communities by name, URL, or description"
     emptyLabel="No public communities have been indexed yet."
-    emptyCopy="The creation flow is live. Publish the first public group and it will appear here as soon as the relay emits its `kind:39000` metadata."
+    emptyCopy="The creation flow is live. Publish the first public group and it will appear here as soon as its details propagate."
     emptyCtaHref="/community/create"
     emptyCtaLabel="Create the first community"
   />

@@ -122,8 +122,8 @@
     <p class="eyebrow">Share To Community</p>
     <h2>Bring this article into one of your groups.</h2>
     <p>
-      This publishes a `kind:11` thread pointing at the article’s `a` coordinate, so highlights can
-      be queried directly from the source.
+      This shares the article into your community in a way that keeps highlights tied directly to
+      the source.
     </p>
   </div>
 

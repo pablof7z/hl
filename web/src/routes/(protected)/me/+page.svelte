@@ -41,7 +41,7 @@
   <div class="me-intro-grid">
     <a class="me-intro-card" href="/me/highlights">
       <span>Highlights</span>
-      <p>Canonical kind:9802 events you authored, regardless of which communities they were shared into.</p>
+      <p>Highlights you authored, regardless of which communities you shared them into.</p>
     </a>
     <a class="me-intro-card" href="/me/communities">
       <span>Communities</span>

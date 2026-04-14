@@ -1,9 +1,8 @@
 <script lang="ts">
   import { browser } from '$app/environment';
-  import { NDKKind, type NDKEvent } from '@nostr-dev-kit/ndk';
   import type { PageProps } from './$types';
   import { ndk } from '$lib/ndk/client';
-  import { DEFAULT_RELAYS, GROUP_RELAY_URLS } from '$lib/ndk/config';
+  import { GROUP_RELAY_URLS } from '$lib/ndk/config';
   import {
     HIGHLIGHTER_ARTIFACT_SHARE_KIND,
     artifactFromEvent,
@@ -16,8 +15,8 @@
   import HighlightSourceGroup from '$lib/features/highlights/HighlightSourceGroup.svelte';
   import { groupHighlightsBySource } from '$lib/features/highlights/grouping';
   import {
-    buildArtifactHighlightFilters,
-    hydrateStandaloneHighlights,
+    HIGHLIGHTER_HIGHLIGHT_REPOST_KIND,
+    fetchHighlightsForShares,
     highlightCountsByArtifact,
     type HydratedHighlight
   } from '$lib/ndk/highlights';
@@ -35,34 +34,6 @@
     };
   });
 
-  const groupAdminFeed = ndk.$subscribe(() => {
-    if (!browser || !data.community) return undefined;
-
-    return {
-      filters: [{ kinds: [NDKKind.GroupAdmins], '#d': [data.community.id], limit: 1 }],
-      relayUrls: GROUP_RELAY_URLS,
-      closeOnEose: true
-    };
-  });
-
-  const groupMemberFeed = ndk.$subscribe(() => {
-    if (!browser || !data.community) return undefined;
-
-    return {
-      filters: [{ kinds: [NDKKind.GroupMembers], '#d': [data.community.id], limit: 1 }],
-      relayUrls: GROUP_RELAY_URLS,
-      closeOnEose: true
-    };
-  });
-
-  function latestEvent(events: NDKEvent[]): NDKEvent | undefined {
-    return [...events].sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0))[0];
-  }
-
-  function uniquePubkeys(event: NDKEvent | undefined): string[] {
-    return [...new Set((event?.getMatchingTags('p').map((tag) => tag[1]).filter(Boolean) ?? []).map((value) => value.trim()))];
-  }
-
   const artifacts = $derived.by(() => {
     const latestById = new Map<string, ReturnType<typeof artifactFromEvent>>();
 
@@ -77,29 +48,41 @@
   const artifactsByReference = $derived(
     new Map(artifacts.map((artifact) => [artifactHighlightReferenceKey(artifact), artifact] as const))
   );
-  const memberPubkeys = $derived.by(() => {
-    const groupAdmins = uniquePubkeys(latestEvent(groupAdminFeed.events));
-    const groupMembers = uniquePubkeys(latestEvent(groupMemberFeed.events));
-    const adminPubkeys = data.community?.adminPubkeys ?? [];
-
-    return [...new Set([...adminPubkeys, ...groupAdmins, ...groupMembers])];
-  });
-  const highlightFeed = ndk.$subscribe(() => {
+  const highlightShareFeed = ndk.$subscribe(() => {
     if (!browser || !data.community) return undefined;
 
-    const filters = buildArtifactHighlightFilters(artifacts, memberPubkeys, 180);
-    if (filters.length === 0) return undefined;
-
     return {
-      filters,
-      relayUrls: DEFAULT_RELAYS,
+      filters: [{ kinds: [HIGHLIGHTER_HIGHLIGHT_REPOST_KIND], '#h': [data.community.id], limit: 256 }],
+      relayUrls: GROUP_RELAY_URLS,
       closeOnEose: true
     };
   });
+  let communityHighlights = $state<HydratedHighlight[]>([]);
 
-  const communityHighlights = $derived<HydratedHighlight[]>(
-    hydrateStandaloneHighlights([...highlightFeed.events])
-  );
+  $effect(() => {
+    if (!browser) {
+      communityHighlights = [];
+      return;
+    }
+
+    const shareEvents = [...highlightShareFeed.events];
+    if (shareEvents.length === 0) {
+      communityHighlights = [];
+      return;
+    }
+
+    let cancelled = false;
+
+    void fetchHighlightsForShares(ndk, shareEvents).then((highlights) => {
+      if (!cancelled) {
+        communityHighlights = highlights;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  });
   const recentHighlightGroups = $derived(
     groupHighlightsBySource(communityHighlights, artifactsByReference).slice(0, 4)
   );
@@ -229,8 +212,8 @@
 
         <section class="summary-card">
           <p class="panel-label">Highlights</p>
-          <strong>{itemLabel(communityHighlights.length, 'shared highlight')}</strong>
-          <span>Portable `kind:9802` highlights reposted here.</span>
+          <strong>{itemLabel(communityHighlights.length, 'highlight')}</strong>
+          <span>Shared into this community from the reading shelf below.</span>
         </section>
 
         <section class="summary-card">
@@ -380,10 +363,10 @@
 
       {#if recentHighlightGroups.length === 0}
         <div class="artifact-empty">
-          <p>No member highlights yet.</p>
+          <p>No highlights shared here yet.</p>
           <p>
-            Once members start saving highlights against the sources shared in this community, they
-            will surface here.
+            Once people start saving passages from the items shared in this community, they will
+            show up here.
           </p>
         </div>
       {:else}

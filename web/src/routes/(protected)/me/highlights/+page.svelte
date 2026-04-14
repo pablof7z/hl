@@ -148,8 +148,7 @@
     <p class="eyebrow">Me</p>
     <h1>My Highlights</h1>
     <p>
-      Canonical `kind:9802` events you authored live here, regardless of which communities you
-      reposted them into.
+      Everything you highlight lives here, even after you share it across different communities.
     </p>
   </header>
 
@@ -163,9 +162,9 @@
 
   <section class="me-summary">
     <div class="summary-card">
-      <p class="summary-label">Canonical highlights</p>
+      <p class="summary-label">Saved highlights</p>
       <strong>{highlights.length}</strong>
-      <span>Portable across communities via `kind:16` reposts.</span>
+      <span>You can share the same highlight into more than one community.</span>
     </div>
     <div class="summary-card">
       <p class="summary-label">Loaded communities</p>
@@ -173,9 +172,9 @@
       <span>Available as share-again targets on each card.</span>
     </div>
     <div class="summary-card">
-      <p class="summary-label">Highlight relays</p>
+      <p class="summary-label">Sources checked</p>
       <strong>{highlightRelayUrls.length}</strong>
-      <span>Checked from your relay list plus the Highlighter fallback relay.</span>
+      <span>Loaded from the places where your highlights are stored, plus Highlighter’s fallback.</span>
     </div>
   </section>
 
@@ -184,11 +183,10 @@
       <p>{resolvingRelayList ? 'Looking for your highlights…' : 'No highlights found yet.'}</p>
       <p>
         {#if resolvingRelayList}
-          Highlighter is resolving your relay list and checking where your canonical `kind:9802`
-          events live.
+          Highlighter is checking the places where your highlights live.
         {:else}
           Share an artifact into a community, save an excerpt, and it will appear here as your
-          canonical vault entry.
+          permanent entry in your vault.
         {/if}
       </p>
     </section>

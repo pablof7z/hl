@@ -69,8 +69,7 @@
     <p class="eyebrow">Create Highlight</p>
     <h2>Save the line that mattered.</h2>
     <p>
-      Canonical `kind:9802` goes to your relay set, then Highlighter reposts it into this
-      community with `kind:16`.
+      This saves the highlight to your account, then shares it into this community.
     </p>
   </div>
 

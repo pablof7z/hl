@@ -121,8 +121,7 @@
     <p class="eyebrow">Share Artifact</p>
     <h2>Share something worth reading, watching, or hearing.</h2>
     <p>
-      Choose the type first, preview the metadata, then publish a `kind:11` share thread into this
-      community.
+      Choose the type first, preview the metadata, then share it into this community.
     </p>
   </div>
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { browser } from '$app/environment';
-  import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
+  import { NDKEvent } from '@nostr-dev-kit/ndk';
   import type { PageProps } from './$types';
   import ArticleMarkdown from '$lib/components/ArticleMarkdown.svelte';
   import HighlightPopover from '$lib/components/HighlightPopover.svelte';
@@ -16,12 +16,13 @@
     formatDisplayDate
   } from '$lib/ndk/format';
   import {
-    buildArtifactHighlightFilters,
+    fetchHighlightEventsForShares,
     highlightReferenceKey,
-    hydrateStandaloneHighlights,
+    HIGHLIGHTER_HIGHLIGHT_REPOST_KIND,
+    hydrateHighlights,
     type HydratedHighlight
   } from '$lib/ndk/highlights';
-  import { DEFAULT_RELAYS, GROUP_RELAY_URLS } from '$lib/ndk/config';
+  import { GROUP_RELAY_URLS } from '$lib/ndk/config';
   import { artifactHighlightReferenceKey } from '$lib/ndk/artifacts';
   import { User } from '$lib/ndk/ui/user';
 
@@ -44,54 +45,43 @@
     return nip05 && nip05 !== articleAuthorName ? nip05 : '';
   });
 
-  const groupAdminFeed = ndk.$subscribe(() => {
+  const highlightShareFeed = ndk.$subscribe(() => {
     if (!browser || !data.community) return undefined;
 
     return {
-      filters: [{ kinds: [NDKKind.GroupAdmins], '#d': [data.community.id], limit: 1 }],
+      filters: [{ kinds: [HIGHLIGHTER_HIGHLIGHT_REPOST_KIND], '#h': [data.community.id], limit: 256 }],
       relayUrls: GROUP_RELAY_URLS,
       closeOnEose: true
     };
   });
+  let fetchedHighlightEvents = $state<NDKEvent[]>([]);
 
-  const groupMemberFeed = ndk.$subscribe(() => {
-    if (!browser || !data.community) return undefined;
+  $effect(() => {
+    if (!browser) {
+      fetchedHighlightEvents = [];
+      return;
+    }
 
-    return {
-      filters: [{ kinds: [NDKKind.GroupMembers], '#d': [data.community.id], limit: 1 }],
-      relayUrls: GROUP_RELAY_URLS,
-      closeOnEose: true
-    };
-  });
+    const shareEvents = [...highlightShareFeed.events];
+    if (shareEvents.length === 0) {
+      fetchedHighlightEvents = [];
+      return;
+    }
 
-  function latestEvent(events: NDKEvent[]): NDKEvent | undefined {
-    return [...events].sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0))[0];
-  }
+    let cancelled = false;
 
-  function uniquePubkeys(event: NDKEvent | undefined): string[] {
-    return [...new Set((event?.getMatchingTags('p').map((tag) => tag[1]).filter(Boolean) ?? []).map((value) => value.trim()))];
-  }
+    void fetchHighlightEventsForShares(ndk, shareEvents).then((events) => {
+      if (!cancelled) {
+        fetchedHighlightEvents = events as NDKEvent[];
+      }
+    });
 
-  const memberPubkeys = $derived.by(() => {
-    const groupAdmins = uniquePubkeys(latestEvent(groupAdminFeed.events));
-    const groupMembers = uniquePubkeys(latestEvent(groupMemberFeed.events));
-
-    return [...new Set([...(data.community?.adminPubkeys ?? []), ...groupAdmins, ...groupMembers])];
-  });
-  const highlightFeed = ndk.$subscribe(() => {
-    if (!browser || !data.community || !data.artifact) return undefined;
-
-    const filters = buildArtifactHighlightFilters([data.artifact], memberPubkeys, 120);
-    if (filters.length === 0) return undefined;
-
-    return {
-      filters,
-      relayUrls: DEFAULT_RELAYS,
-      closeOnEose: true
+    return () => {
+      cancelled = true;
     };
   });
   const communityHighlights = $derived<HydratedHighlight[]>(
-    hydrateStandaloneHighlights([...highlightFeed.events])
+    hydrateHighlights(fetchedHighlightEvents, [...highlightShareFeed.events])
   );
   const artifactReferenceKey = $derived(
     data.artifact ? artifactHighlightReferenceKey(data.artifact) : ''
@@ -103,7 +93,7 @@
   );
   const artifactHighlightEvents = $derived(
     data.artifact
-      ? highlightFeed.events.filter(
+      ? fetchedHighlightEvents.filter(
           (highlight) =>
             highlightReferenceKey({
               artifactAddress: highlight.tagValue('a'),
@@ -170,49 +160,8 @@
       </div>
     </header>
 
-    <section class="artifact-panels">
-      <div class="artifact-panel">
-        <p class="panel-label">Route</p>
-        <p class="panel-value">/community/{data.community.id}/content/{data.artifact.id}</p>
-      </div>
-
-      <div class="artifact-panel">
-        <p class="panel-label">Artifact ID</p>
-        <p class="panel-value mono">{data.artifact.id}</p>
-      </div>
-
-      <div class="artifact-panel">
-        <p class="panel-label">Source Reference</p>
-        <p class="panel-value mono">{data.artifact.referenceKey}</p>
-      </div>
-    </section>
-
-    <section class="artifact-next">
-      <p class="panel-label">{articleEvent ? 'Reading Surface' : 'What lands here next'}</p>
-      <p>
-        {#if articleEvent}
-          This route now renders the underlying Nostr article in full, and group members can select
-          text directly from the source to create highlights.
-        {:else}
-          Artifact-level discussion hangs off this same coordinate on the discussion route, while
-          canonical highlights resolve back here through their `a` tag.
-        {/if}
-      </p>
-    </section>
-
     {#if articleEvent}
       <section class="artifact-reader">
-        <div class="artifact-reader-header">
-          <p class="panel-label">Article</p>
-          <p class="artifact-reader-hint">
-            {#if currentUser}
-              Select text in the article to create a highlight.
-            {:else}
-              Sign in, then select text in the article to create a highlight.
-            {/if}
-          </p>
-        </div>
-
         <article class="article-container artifact-reader-article">
           <div class="article-byline">
             <User.Root {ndk} pubkey={articleAuthorPubkey} profile={data.articleProfile}>
@@ -254,7 +203,7 @@
     {:else}
       <section class="artifact-next">
         <p class="panel-label">Create Highlight</p>
-        <p>Sign in to save a canonical highlight and repost it into this community.</p>
+        <p>Sign in to save a highlight and share it into this community.</p>
       </section>
     {/if}
 
@@ -269,10 +218,10 @@
 
       {#if artifactHighlights.length === 0}
         <div class="artifact-empty">
-          <p>No member highlights yet.</p>
+          <p>No highlights shared here yet.</p>
           <p>
-            Save the first excerpt from this source and it will appear here once a group member
-            publishes the highlight.
+            Save the first excerpt from this source and it will appear here once someone shares it
+            into this community.
           </p>
         </div>
       {:else}
@@ -396,13 +345,6 @@
     line-height: 1.65;
   }
 
-  .artifact-panels {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 0.85rem;
-  }
-
-  .artifact-panel,
   .artifact-next,
   .artifact-empty {
     padding: 1rem 1.1rem;
@@ -411,8 +353,6 @@
     background: var(--surface);
   }
 
-  .panel-value,
-  .mono,
   .artifact-missing span {
     margin: 0.55rem 0 0;
     color: var(--text-strong);
@@ -429,20 +369,6 @@
   .artifact-reader {
     display: grid;
     gap: 0.85rem;
-  }
-
-  .artifact-reader-header {
-    display: flex;
-    align-items: end;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-  }
-
-  .artifact-reader-hint {
-    margin: 0;
-    color: var(--muted);
-    line-height: 1.6;
   }
 
   .artifact-reader-article {

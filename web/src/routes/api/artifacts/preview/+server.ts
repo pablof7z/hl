@@ -149,7 +149,7 @@ async function previewNostrArticle(identifier: string, origin: string) {
   }
 
   if (event.kind !== 30023) {
-    throw new Error('Only kind:30023 long-form articles can be shared from Nostr references right now.');
+    throw new Error('Only long-form Nostr articles can be shared from Nostr references right now.');
   }
 
   return buildNostrArticleArtifactPreview({

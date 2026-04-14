@@ -89,10 +89,10 @@
   <header class="community-create-header">
     <div>
       <p class="eyebrow">Create Community</p>
-      <h1>Publish a new NIP-29 reading group.</h1>
+      <h1>Create a new reading group.</h1>
       <p class="lede">
-        This flow sends `kind:9007` plus the first `kind:9002` metadata update to the Highlighter
-        relay so the community is immediately visible at its permanent route.
+        This sends the community setup to Highlighter so the page is immediately visible at its
+        permanent route.
       </p>
     </div>
 
@@ -199,7 +199,7 @@
 
       {#if isReadOnly}
         <p class="read-only-note">
-          This signer is read-only. Switch to a writable signer to publish `kind:9007` events.
+          This signer is read-only. Switch to a writable signer to create a community.
         </p>
       {/if}
 

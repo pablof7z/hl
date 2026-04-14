@@ -226,6 +226,14 @@ export async function fetchHighlightsForShares(
   ndk: NDK,
   shareEvents: NDKEventType[]
 ): Promise<HydratedHighlight[]> {
+  const highlightEvents = await fetchHighlightEventsForShares(ndk, shareEvents);
+  return hydrateHighlights(highlightEvents, shareEvents);
+}
+
+export async function fetchHighlightEventsForShares(
+  ndk: NDK,
+  shareEvents: NDKEventType[]
+): Promise<NDKEventType[]> {
   const shares = shareEvents
     .map((event) => highlightShareFromEvent(event))
     .filter((share): share is HighlightShareRecord => Boolean(share));
@@ -235,11 +243,12 @@ export async function fetchHighlightsForShares(
     return [];
   }
 
+  const relayUrls = await resolveHighlightFetchRelayUrls(ndk, shares);
   const relaySet = NDKRelaySet.fromRelayUrls(
-    uniqueValues([...DEFAULT_RELAYS, HIGHLIGHTER_RELAY_URL, ...shares.map((share) => share.relayHint).filter(Boolean)]),
+    relayUrls,
     ndk
   );
-  const highlightEvents = Array.from(
+  return Array.from(
     (await ndk.fetchEvents(
       {
         kinds: [HIGHLIGHTER_HIGHLIGHT_KIND],
@@ -250,8 +259,6 @@ export async function fetchHighlightsForShares(
       relaySet
     )) ?? []
   );
-
-  return hydrateHighlights(highlightEvents, shareEvents);
 }
 
 export function highlightCountsByArtifact(
@@ -417,6 +424,27 @@ export async function resolveUserHighlightRelayUrls(ndk: NDK, pubkey: string): P
 
 async function buildUserHighlightRelaySet(ndk: NDK, pubkey: string): Promise<NDKRelaySet> {
   return NDKRelaySet.fromRelayUrls(await resolveUserHighlightRelayUrls(ndk, pubkey), ndk);
+}
+
+async function resolveHighlightFetchRelayUrls(
+  ndk: NDK,
+  shares: HighlightShareRecord[]
+): Promise<string[]> {
+  const authorPubkeys = uniqueValues(shares.map((share) => share.highlightAuthorPubkey).filter(Boolean));
+  const relayLists = authorPubkeys.length > 0 ? await getRelayListForUsers(authorPubkeys, ndk, false, 1500) : new Map();
+  const authorRelayUrls = authorPubkeys.flatMap((pubkey) => {
+    const relayList = relayLists.get(pubkey);
+    return relayList?.writeRelayUrls.length
+      ? relayList.writeRelayUrls
+      : (relayList?.relays ?? []);
+  });
+
+  return uniqueValues([
+    HIGHLIGHTER_RELAY_URL,
+    ...DEFAULT_RELAYS,
+    ...shares.map((share) => share.relayHint).filter(Boolean),
+    ...authorRelayUrls
+  ]);
 }
 
 export function artifactReferenceKey(artifact: Pick<ArtifactRecord, 'highlightTagName' | 'highlightTagValue'>): string {
