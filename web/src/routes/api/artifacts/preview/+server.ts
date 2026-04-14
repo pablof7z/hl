@@ -55,7 +55,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
     const response = await fetch(normalizedUrl, {
       headers: {
         accept: 'text/html,application/xhtml+xml',
-        'user-agent': 'HighlighterBot/0.2 (+https://highlighter.f7z.io)'
+        'user-agent': 'HighlighterBot/0.2 (+https://beta.highlighter.com)'
       },
       redirect: 'follow',
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)

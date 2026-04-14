@@ -55,13 +55,14 @@ highlighter/
 | NIP-55 | Android signer integration |
 | NIP-96 | File/media storage |
 
-## Custom Event Kinds
+## Content Event Model
 
-Highlighter defines custom event kinds within NIP-29 groups:
+Highlighter does not define a made-up artifact kind like `30403`.
 
-- **Artifact event** (kind TBD) — shared content item with title, author, source, URL, image
-- **Highlight event** (kind TBD) — excerpt from an artifact, with context tag
-- Standard kinds used within groups: `kind:1` (text notes), `kind:1111` (NIP-22 comments)
+- **Artifact shares** use `kind:11` threads inside NIP-29 groups
+- **Artifacts** are identified by source references and metadata tags, not a dedicated custom event kind
+- **Highlights** use `kind:9802`
+- **Discussion replies** use `kind:1111`
 
 ## Getting Started
 
@@ -73,8 +74,9 @@ The repo is in early specification phase. No build commands exist yet. When code
 
 ## Deployment
 
-- **Manual deployment**: deploy the web app from the repo root with the Vercel CLI.
-- Run `vercel deploy --prod` after verifying the static build output in `public/`.
+- **Manual deployment**: deploy the web app from the repo root with the Vercel CLI, but make sure the repo root is linked to the Vercel `web` project.
+- Run `vercel deploy --prod` from the repo root after verifying the `web/` build.
+- Validate the result on `beta.highlighter.com`. `highlighter.f7z.io` may alias the same deployment, but beta is the intended check target.
 - Do **not** rely on Git-based auto deployment for the current web app setup.
 
 ## Documentation

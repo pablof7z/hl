@@ -483,8 +483,8 @@ export async function publishArtifact(
 
 export function buildFallbackNostrUrl(address: string): string {
   const naddr = naddrFromAddress(address);
-  if (!naddr) return 'https://highlighter.f7z.io/';
-  return `https://highlighter.f7z.io/note/${naddr}`;
+  if (!naddr) return 'https://beta.highlighter.com/';
+  return `https://beta.highlighter.com/note/${naddr}`;
 }
 
 export function naddrFromAddress(address: string): string | undefined {
@@ -753,7 +753,7 @@ function domainLabel(url: string): string {
 function buildFallbackUrl(value: string): string {
   const normalized = normalizeArtifactUrl(value);
   if (normalized) return normalized;
-  return 'https://highlighter.f7z.io/';
+  return 'https://beta.highlighter.com/';
 }
 
 function titleCase(value: string): string {

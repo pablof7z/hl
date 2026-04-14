@@ -10,7 +10,7 @@ const FALLBACK_PUBLIC_RELAYS = [
 
 export const HIGHLIGHTER_RELAY_URL = parseRelayUrl(
   import.meta.env.PUBLIC_HIGHLIGHTER_RELAY_URL as string | undefined,
-  'wss://relay-highlighter.f7z.io'
+  'wss://relay.highlighter.com'
 );
 
 export const DEFAULT_RELAYS = uniqueRelayList([
