@@ -465,7 +465,7 @@ export function buildFallbackNostrUrl(address: string): string {
 }
 
 export function naddrFromAddress(address: string): string | undefined {
-  const parsed = parseAddress(address);
+  const parsed = parseNostrAddress(address);
   if (!parsed) return undefined;
 
   return nip19.naddrEncode({
@@ -473,6 +473,10 @@ export function naddrFromAddress(address: string): string | undefined {
     pubkey: parsed.pubkey,
     identifier: parsed.identifier
   });
+}
+
+export function parseNostrAddress(address: string): { kind: number; pubkey: string; identifier: string } | undefined {
+  return parseAddress(address);
 }
 
 function firstTagValue(event: NDKEventType, tagName: string): string {
