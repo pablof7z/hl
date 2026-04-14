@@ -10,7 +10,6 @@ export type SurfaceSection = {
 };
 
 export type SurfaceSpec = {
-  eyebrow: string;
   title: string;
   description: string;
   status: string;
@@ -70,7 +69,6 @@ export const memberActions: SurfaceAction[] = [
 ];
 
 export const communityIndexSpec: SurfaceSpec = {
-  eyebrow: 'Communities',
   title: 'Your group index starts here.',
   description:
     'This surface becomes the working home for memberships, group creation, and the reading communities you return to daily.',
@@ -108,7 +106,6 @@ export const communityIndexSpec: SurfaceSpec = {
 };
 
 export const communitySpec: SurfaceSpec = {
-  eyebrow: 'Community',
   title: 'A community front page will live here.',
   description:
     'This route will combine public-safe SSR metadata with client-side subscriptions for sources, highlights, and membership-aware actions.',
@@ -140,7 +137,6 @@ export const communitySpec: SurfaceSpec = {
 };
 
 export const communityCreateSpec: SurfaceSpec = {
-  eyebrow: 'Create Community',
   title: 'Community creation starts with structure, not noise.',
   description:
     'This route will become the multi-step flow for name, cover, access mode, visibility, and invite setup before publishing the NIP-29 create-group event.',
@@ -170,7 +166,6 @@ export const communityCreateSpec: SurfaceSpec = {
 };
 
 export const artifactSpec: SurfaceSpec = {
-  eyebrow: 'Source',
   title: 'Source detail is the reading room.',
   description:
     'This route will become the place where metadata, highlights, discussion, and saving flows converge around one shared source.',
@@ -200,7 +195,6 @@ export const artifactSpec: SurfaceSpec = {
 };
 
 export const discussionSpec: SurfaceSpec = {
-  eyebrow: 'Discussion',
   title: 'Threaded conversation lands here.',
   description:
     'Artifact and highlight discussion both resolve to NIP-22 comment threads, with root scope and parent scope kept separate.',
@@ -230,7 +224,6 @@ export const discussionSpec: SurfaceSpec = {
 };
 
 export const discoverSpec: SurfaceSpec = {
-  eyebrow: 'Discover',
   title: 'Public community discovery starts here.',
   description:
     'This route is the guest-friendly entrance to Highlighter and the future seed for recommendations, search, and public community growth loops.',
@@ -260,7 +253,6 @@ export const discoverSpec: SurfaceSpec = {
 };
 
 export const shareCommunitySpec: SurfaceSpec = {
-  eyebrow: 'Public Community',
   title: 'This route becomes the shareable group landing page.',
   description:
     'It should render without JavaScript, surface only public-safe metadata, and make community joins legible to someone seeing Highlighter for the first time.',
@@ -290,7 +282,6 @@ export const shareCommunitySpec: SurfaceSpec = {
 };
 
 export const shareHighlightSpec: SurfaceSpec = {
-  eyebrow: 'Public Highlight',
   title: 'Highlight sharing now uses group context in the URL.',
   description:
     'The share route is `/g/[group-id]/e/[highlight-id]`, which keeps a canonical highlight event tied to the community context it was shared into.',
@@ -320,7 +311,6 @@ export const shareHighlightSpec: SurfaceSpec = {
 };
 
 export const meHighlightsSpec: SurfaceSpec = {
-  eyebrow: 'My Highlights',
   title: 'Your personal highlight vault will live here.',
   description:
     'This view becomes the canonical list of highlights you authored, independent of which communities they were shared into.',
@@ -342,7 +332,6 @@ export const meHighlightsSpec: SurfaceSpec = {
 };
 
 export const meCommunitiesSpec: SurfaceSpec = {
-  eyebrow: 'My Communities',
   title: 'Your memberships will be summarized here.',
   description:
     'This page will give signed-in members a clean list of the communities they belong to and quick jumps back into active reading spaces.',
@@ -364,7 +353,6 @@ export const meCommunitiesSpec: SurfaceSpec = {
 };
 
 export const meForLaterSpec: SurfaceSpec = {
-  eyebrow: 'For Later',
   title: 'Private saves will start here.',
   description:
     'For MVP this queue is intentionally local-first so saving a source does not depend on relay writes or cross-device sync.',
@@ -386,7 +374,6 @@ export const meForLaterSpec: SurfaceSpec = {
 };
 
 export const meRecommendedSpec: SurfaceSpec = {
-  eyebrow: 'Recommended',
   title: 'Recommendations are reserved for a later milestone.',
   description:
     'This route exists now so navigation is stable before recommendation logic and community discovery ranking arrive.',
@@ -408,7 +395,6 @@ export const meRecommendedSpec: SurfaceSpec = {
 };
 
 export const meSynthesisSpec: SurfaceSpec = {
-  eyebrow: 'Synthesis',
   title: 'Reading synthesis is intentionally a placeholder.',
   description:
     'The route is live now so the information architecture is stable before any AI-assisted synthesis work starts.',
