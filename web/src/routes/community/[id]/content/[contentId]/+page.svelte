@@ -1,5 +1,6 @@
 <script lang="ts">
   import { browser } from '$app/environment';
+  import { createFetchEvent, createFetchUser } from '@nostr-dev-kit/svelte';
   import { NDKEvent } from '@nostr-dev-kit/ndk';
   import type { PageProps } from './$types';
   import ArticleMarkdown from '$lib/components/ArticleMarkdown.svelte';
@@ -18,7 +19,8 @@
     articleSummary,
     displayNip05,
     displayName,
-    formatDisplayDate
+    formatDisplayDate,
+    profileIdentifier
   } from '$lib/ndk/format';
   import {
     fetchHighlightEventsForShares,
@@ -28,25 +30,50 @@
     type HydratedHighlight
   } from '$lib/ndk/highlights';
   import { GROUP_RELAY_URLS } from '$lib/ndk/config';
-  import { artifactHighlightReferenceKey } from '$lib/ndk/artifacts';
+  import { artifactHighlightReferenceKey, naddrFromAddress } from '$lib/ndk/artifacts';
+  import { safeUserIdentifier } from '$lib/ndk/user';
   import { User } from '$lib/ndk/ui/user';
 
   let { data }: PageProps = $props();
   let articleContentEl = $state<HTMLElement | null>(null);
   const currentUser = $derived(ndk.$currentUser);
-  const articleEvent = $derived(data.articleEvent ? new NDKEvent(ndk, data.articleEvent) : undefined);
-  const articleAuthorPubkey = $derived(data.articleAuthorPubkey || articleEvent?.pubkey || '');
+  const seedArticleEvent = $derived(data.articleEvent ? new NDKEvent(ndk, data.articleEvent) : undefined);
+  const articleBech32 = $derived(
+    data.artifact?.referenceTagName === 'a' && data.artifact.referenceKind === '30023'
+      ? naddrFromAddress(data.artifact.referenceTagValue) ?? ''
+      : ''
+  );
+  const fetchedArticleEvent = createFetchEvent(ndk, () =>
+    articleBech32
+      ? { bech32: articleBech32, opts: { closeOnEose: true } }
+      : { ids: ['0000000000000000000000000000000000000000000000000000000000000000'], opts: { closeOnEose: true } }
+  );
+  const articleEvent = $derived(fetchedArticleEvent.event ?? seedArticleEvent);
+  const isNostrArticleArtifact = $derived(Boolean(articleBech32));
+  const articlePending = $derived(
+    isNostrArticleArtifact && !articleEvent && (browser ? fetchedArticleEvent.loading : true)
+  );
+  const articleUnavailable = $derived(
+    isNostrArticleArtifact && !articleEvent && browser && !fetchedArticleEvent.loading
+  );
+  const articleAuthorPubkey = $derived(articleEvent?.pubkey || data.articleAuthorPubkey || '');
+  const articleAuthor = createFetchUser(ndk, () => articleAuthorPubkey || data.articleAuthorNpub || '');
+  const articleProfile = $derived(articleAuthor.profile ?? data.articleProfile);
   const articleAuthorIdentifier = $derived(
-    data.articleAuthorIdentifier || data.articleAuthorNpub || articleAuthorPubkey || 'author'
+    profileIdentifier(
+      articleProfile,
+      data.articleAuthorIdentifier ||
+        safeUserIdentifier(articleAuthor, data.articleAuthorNpub || articleAuthorPubkey || 'author')
+    )
   );
   const articleAuthorName = $derived(
     displayName(
-      data.articleProfile,
+      articleProfile,
       articleAuthorPubkey ? `${articleAuthorPubkey.slice(0, 8)}...` : 'Author'
     )
   );
   const articleAuthorIdentity = $derived.by(() => {
-    const nip05 = displayNip05(data.articleProfile);
+    const nip05 = displayNip05(articleProfile);
     return nip05 && nip05 !== articleAuthorName ? nip05 : '';
   });
 
@@ -246,7 +273,7 @@
       <section class="artifact-reader">
         <article class="article-container artifact-reader-article">
           <div class="article-byline">
-            <User.Root {ndk} pubkey={articleAuthorPubkey} profile={data.articleProfile}>
+            <User.Root {ndk} pubkey={articleAuthorPubkey} profile={articleProfile}>
               <a class="article-author-link" href={`/profile/${articleAuthorIdentifier}`}>
                 <User.Avatar class="article-author-avatar" />
               </a>
@@ -279,6 +306,19 @@
             />
           </div>
         </article>
+      </section>
+    {:else if articlePending}
+      <section class="artifact-next">
+        <p class="panel-label">Loading Article</p>
+        <p>Resolving the original Nostr article so you can read and highlight it here.</p>
+      </section>
+    {:else if articleUnavailable}
+      <section class="artifact-next">
+        <p class="panel-label">Article Unavailable</p>
+        <p>
+          This share points to a Nostr article, but the event could not be loaded right now. Use
+          the source link above and refresh in a moment.
+        </p>
       </section>
     {:else if currentUser}
       <HighlightForm artifact={data.artifact} groupId={data.community.id} />
