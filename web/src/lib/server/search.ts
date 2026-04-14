@@ -12,7 +12,6 @@ import {
 } from '$lib/ndk/format';
 import { GROUP_RELAY_URLS } from '$lib/ndk/config';
 import { buildCommunitySummariesFromMetadataEvents } from '$lib/server/communities';
-import { fetchCommunities } from '$lib/server/communities';
 import { fetchProfilesByPubkeys, getServerNdk } from '$lib/server/nostr';
 import {
   DEFAULT_SEARCH_SECTION_LIMIT,
@@ -66,10 +65,6 @@ export async function searchRelayContent(
   const communities = (await buildCommunitySummariesFromMetadataEvents(Array.from(communityEvents ?? [])))
     .filter((community) => community.visibility === 'public')
     .slice(0, communityLimit);
-  const resolvedCommunities =
-    communities.length > 0
-      ? communities
-      : (await searchCommunitiesFallback(normalizedQuery, communityLimit)).slice(0, communityLimit);
 
   const articleList = Array.from(articleEvents ?? []);
   const profilesByPubkey = await fetchProfilesByPubkeys(articleList.map((event) => event.pubkey));
@@ -79,7 +74,7 @@ export async function searchRelayContent(
 
   return {
     query: normalizedQuery,
-    communities: resolvedCommunities,
+    communities,
     articles
   };
 }
@@ -120,21 +115,4 @@ function normalizeLimit(value: number | undefined): number {
     MAX_SEARCH_SECTION_LIMIT,
     Math.max(MIN_SEARCH_QUERY_LENGTH, Math.trunc(value ?? DEFAULT_SEARCH_SECTION_LIMIT))
   );
-}
-
-async function searchCommunitiesFallback(
-  query: string,
-  limit: number
-) {
-  const communities = await fetchCommunities({
-    limit: Math.max(limit * 8, 128),
-    visibility: 'public'
-  });
-  const normalizedQuery = query.toLowerCase();
-
-  return communities
-    .filter((community) =>
-      `${community.name} ${community.about} ${community.id}`.toLowerCase().includes(normalizedQuery)
-    )
-    .slice(0, limit);
 }
