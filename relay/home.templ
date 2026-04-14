@@ -1,0 +1,337 @@
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"strings"
+
+	"fiatjaf.com/croissant/global"
+)
+
+func homeHandler(w http.ResponseWriter, r *http.Request) {
+	if err := home().Render(r.Context(), w); err != nil {
+		L.Error().Err(err).Msg("failed to render home")
+	}
+}
+
+templ home() {
+	@layout("") {
+		{{ loggedUser := global.LoggedUserFromContext(ctx) }}
+		{{ clients, listeners := global.R.Stats() }}
+		<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+			<div class="bg-white rounded-xl shadow-sm border border-stone-200 p-4 text-center">
+				<div class="text-2xl font-bold text-amber-600">{ fmt.Sprintf("%d", State.Groups.Size()) }</div>
+				<div class="text-sm text-stone-500">Groups</div>
+			</div>
+			<div class="bg-white rounded-xl shadow-sm border border-stone-200 p-4 text-center">
+				<div class="text-2xl font-bold text-amber-600">{ fmt.Sprintf("%d", clients) }</div>
+				<div class="text-sm text-stone-500">Connected Clients</div>
+			</div>
+			<div class="bg-white rounded-xl shadow-sm border border-stone-200 p-4 text-center">
+				<div class="text-2xl font-bold text-amber-600">{ fmt.Sprintf("%d", listeners) }</div>
+				<div class="text-sm text-stone-500">Active Subscriptions</div>
+			</div>
+		</div>
+		if loggedUser == global.S.OwnerPubKey {
+			<form method="POST" action="/settings" class="bg-white rounded-xl shadow-sm border border-stone-200 p-6 space-y-6">
+				<h2 class="text-lg font-semibold text-stone-800 mb-6">Relay Settings</h2>
+				<div>
+					<label class="block text-sm font-medium text-stone-700 mb-1.5">Relay Name</label>
+					<input
+						type="text"
+						name="relay_name"
+						value={ global.S.RelayName }
+						class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+					/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-stone-700 mb-1.5">Relay Description</label>
+					<textarea
+						name="relay_description"
+						rows="3"
+						class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150 resize-none"
+					>{ global.S.RelayDescription }</textarea>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-stone-700 mb-1.5">Relay Contact</label>
+					<input
+						type="text"
+						name="relay_contact"
+						value={ global.S.RelayContact }
+						class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+					/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-stone-700 mb-1.5">Relay Icon URL</label>
+					<input
+						type="text"
+						name="relay_icon"
+						value={ global.S.RelayIcon }
+						placeholder="https://example.com/icon.png"
+						class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+					/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-stone-700 mb-1.5">Owner Pubkey</label>
+					<input
+						type="text"
+						name="owner_pubkey"
+						value={ global.S.OwnerPubKey.Hex() }
+						readonly
+						class="w-full px-4 py-2.5 border border-stone-200 rounded-lg font-mono text-xs text-stone-500 bg-stone-50 cursor-not-allowed"
+					/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-stone-700 mb-1.5">Group Creation Rate Limit (IP-based)</label>
+					<p class="text-xs text-stone-500 mb-3">Applies to group creation events. Set any value to 0 to disable.</p>
+					<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+						<div>
+							<label class="block text-xs font-medium text-stone-600 mb-1">Tokens per interval</label>
+							<input
+								type="number"
+								min="0"
+								name="group_create_rate_tokens_per_interval"
+								value={ fmt.Sprintf("%d", global.S.Groups.CreateGroupRateLimit.TokensPerInterval) }
+								class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+							/>
+						</div>
+						<div>
+							<label class="block text-xs font-medium text-stone-600 mb-1">Interval (seconds)</label>
+							<input
+								type="number"
+								min="0"
+								name="group_create_rate_interval_seconds"
+								value={ fmt.Sprintf("%d", global.S.Groups.CreateGroupRateLimit.IntervalSeconds) }
+								class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+							/>
+						</div>
+						<div>
+							<label class="block text-xs font-medium text-stone-600 mb-1">Max burst tokens</label>
+							<input
+								type="number"
+								min="0"
+								name="group_create_rate_max_tokens"
+								value={ fmt.Sprintf("%d", global.S.Groups.CreateGroupRateLimit.MaxTokens) }
+								class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+							/>
+						</div>
+					</div>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-stone-700 mb-1.5">Create Group Presence Relays</label>
+					<p class="text-xs text-stone-500 mb-3">Restrict group creation to users that can be found on these (comma-separated). Leave empty to accept anyone.</p>
+					<input
+						type="text"
+						name="create_group_presence_relays"
+						value={ strings.Join(global.S.Groups.CreateGroupPresenceRelays, ", ") }
+						placeholder="nostr.wine, nostrarchives.com"
+						class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+					/>
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-stone-700 mb-1.5">Free Transit Presence Relays</label>
+					<p class="text-xs text-stone-500 mb-3">Unrestricted groups and automatic join will be restricted to users in these (comma-separated). Leave empty to accept anyone.</p>
+					<input
+						type="text"
+						name="free_transit_presence_relays"
+						value={ strings.Join(global.S.Groups.FreeTransitPresenceRelays, ", ") }
+						placeholder="pow.relays.land, relay.certifiedhuman.com"
+						class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+					/>
+				</div>
+				<div x-data={ fmt.Sprintf("{ blossomEnabled: %t }", global.S.Blossom.Enabled) }>
+					<label class="block text-sm font-medium text-stone-700 mb-1.5">Blossom Storage</label>
+					<p class="text-xs text-stone-500 mb-3">File upload functionality will be available for all members of all groups.</p>
+					<div class="flex items-center gap-2 mb-4">
+						<input
+							type="checkbox"
+							name="blossom_enabled"
+							id="blossom_enabled"
+							value="true"
+							if global.S.Blossom.Enabled {
+								checked
+							}
+							x-model="blossomEnabled"
+							class="w-4 h-4 text-amber-500 border-stone-300 rounded focus:ring-amber-500"
+						/>
+						<label for="blossom_enabled" class="text-sm text-stone-700">Enable Blossom file uploads</label>
+					</div>
+					<div x-show="blossomEnabled" x-transition class="space-y-4">
+						<div>
+							<label class="block text-xs font-medium text-stone-600 mb-1">Local Path (for filesystem storage)</label>
+							<input
+								type="text"
+								name="blossom_local_path"
+								value={ global.S.Blossom.LocalPath }
+								placeholder="blossom-files"
+								class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+							/>
+							<p class="text-xs text-stone-500 mt-1">This will be used unless S3 is set up. Can't be blank.</p>
+						</div>
+						<div class="border-t border-stone-200 pt-4">
+							<label class="block text-xs font-medium text-stone-600 mb-2">S3 Configuration</label>
+							<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+								<div>
+									<label class="block text-xs text-stone-500 mb-1">Endpoint</label>
+									<input
+										type="text"
+										name="blossom_s3_endpoint"
+										value={ global.S.Blossom.S3Endpoint }
+										placeholder="s3.us-west-001.backblazeb2.com"
+										class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+									/>
+								</div>
+								<div>
+									<label class="block text-xs text-stone-500 mb-1">Bucket</label>
+									<input
+										type="text"
+										name="blossom_s3_bucket"
+										value={ global.S.Blossom.S3Bucket }
+										placeholder="my-bucket"
+										class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+									/>
+								</div>
+							</div>
+							<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+								<div>
+									<label class="block text-xs text-stone-500 mb-1">Access Key ID</label>
+									<input
+										type="text"
+										name="blossom_s3_key_id"
+										value={ global.S.Blossom.S3KeyID }
+										placeholder="AKIA..."
+										class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+									/>
+								</div>
+								<div>
+									<label class="block text-xs text-stone-500 mb-1">Secret Access Key</label>
+									<input
+										type="password"
+										name="blossom_s3_secret"
+										value={ global.S.Blossom.S3Secret }
+										placeholder="••••••••"
+										class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+									/>
+								</div>
+							</div>
+							<div class="mt-4">
+								<label class="block text-xs text-stone-500 mb-1">Redirect Base URL (optional)</label>
+								<input
+									type="text"
+									name="blossom_s3_redirect_base_url"
+									value={ global.S.Blossom.S3RedirectBaseURL }
+									placeholder="https://blossom-bucket.s3.us-east-1.amazonaws.com"
+									class="w-full px-4 py-2.5 border border-stone-300 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all duration-150"
+								/>
+								<p class="text-xs text-stone-500 mt-1">/&lt;sha256&gt;.&lt;ext&gt will be appended to it. See <a href="https://github.com/hzrd149/blossom/blob/master/buds/01.md#proxying-and-redirection-optional" target="_blank" class="font-semibold hover:underline">Header requirements</a>. If this is not set the server will proxy all blob access through itself.</p>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="pt-4">
+					<button type="submit" class="cursor-pointer w-full sm:w-auto px-6 py-2.5 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors duration-150 shadow-sm">
+						Save Changes
+					</button>
+				</div>
+			</form>
+		} else if global.S.RelayDescription != "" {
+			<div class="bg-white rounded-xl shadow-sm border border-stone-200 p-4 mb-8">
+				<nostr-text content={ global.S.RelayDescription }></nostr-text>
+			</div>
+		}
+		<div class="bg-white rounded-xl shadow-sm border border-stone-200 overflow-hidden mt-8">
+			<div class="px-6 py-4 border-b border-stone-100">
+				<h2 class="text-lg font-semibold text-stone-800">Groups</h2>
+			</div>
+			<div class="overflow-x-auto">
+				<table class="w-full">
+					<thead class="bg-stone-50">
+						<tr>
+							<th class="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Name</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Owner</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-wider">Status</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-stone-100">
+						for _, group := range State.Groups.Range {
+							if !group.Hidden || loggedUser == global.S.OwnerPubKey {
+								<tr class="hover:bg-stone-50 transition-colors">
+									<td class="px-6 py-4">
+										<a href={ "/group/" + group.Address.ID } class="text-stone-800 font-medium cursor-pointer">{ group.Name }</a>
+										<br/>
+										<a href={ "/group/" + group.Address.ID } class="text-xs text-stone-400 font-mono cursor-pointer">{ group.Address.ID }</a>
+									</td>
+									<td class="px-6 py-4">
+										<div class="flex flex-wrap gap-1">
+											for admin, role := range group.Members {
+												if role != nil {
+													<a href={ "https://njump.me/" + admin.Hex() } target="_blank" class="text-xs text-stone-400 hover:text-stone-600 transition-colors" onclick="event.stopPropagation()">
+														<nostr-name pubkey={ admin.Hex() }></nostr-name>
+													</a>
+												}
+											}
+										</div>
+									</td>
+									<td class="px-6 py-4 gap-2">
+										<div class="flex flex-wrap gap-1">
+											if group.Private {
+												<span title="messages are only shown to authenticated members" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">private</span>
+											} else {
+												<span title="all messages can be read by anyone" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600">public</span>
+											}
+											if group.Restricted {
+												<span title="only members can send messages" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">restricted</span>
+											} else {
+												<span title="anyone can send messages to the group even without joining" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600">unrestricted</span>
+											}
+											if group.Closed {
+												<span title="people need an invite to join, or have to be manually approved" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">closed</span>
+											} else {
+												<span title="anyone can join" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600">open</span>
+											}
+											if group.LiveKit {
+												<span title="audio/video room" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-stone-100 text-stone-600">livekit</span>
+											}
+										</div>
+									</td>
+								</tr>
+							}
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+		<script>
+			function authButton() {
+				return {
+					setCookie(name, value) {
+						document.cookie = `${name}=${value}; path=/; max-age=34560000`;
+					},
+					clearCookie(name) {
+						document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+					},
+					async handleAuth(event) {
+						const isLogin = event.target.innerText.toLowerCase() === 'login';
+						if (isLogin) {
+							try {
+								const signed = await window.nostr.signEvent({
+									created_at: Math.round(Date.now() / 1000),
+									kind: 27235,
+									tags: [['domain', location.host]],
+									content: ''
+								});
+								this.setCookie('nip98', btoa(JSON.stringify(signed)));
+							} catch (e) {
+								console.error('login failed:', e);
+								return;
+							}
+						} else {
+							this.clearCookie('nip98');
+						}
+						location.reload();
+					}
+				}
+			}
+		</script>
+	}
+}

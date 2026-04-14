@@ -1,0 +1,18 @@
+{
+  "identifier": "croissant",
+  "name": "croissant",
+  "description": "NIP-29 groups relay for the everybody",
+  "web": [
+    "https://viewsource.win/npub1ll43sr8lqlfahvy6zdehmlllx2m07avnfsl07mny69c0l5hlwpsqlaczkr/croissant"
+  ],
+  "owner": "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
+  "grasp-servers": [
+    "gitnostr.com",
+    "relay.ngit.dev",
+    "pyramid.fiatjaf.com",
+    "basspistol.org",
+    "spatia-arcana.com"
+  ],
+  "earliest-unique-commit": "a6c7f6d21f4bff604eb38c5aec1b2d3537062086",
+  "maintainers": []
+}
