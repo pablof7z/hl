@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { NDKKind, type NDKEvent } from '@nostr-dev-kit/ndk';
+  import * as Dialog from '$lib/components/ui/dialog';
   import { ensureClientNdk, ndk } from '$lib/ndk/client';
   import {
     artifactPath,
@@ -19,6 +20,7 @@
     authorName?: string;
   } = $props();
 
+  let open = $state(false);
   let selectedGroupId = $state('');
   let note = $state('');
   let publishing = $state(false);
@@ -76,6 +78,13 @@
     }
   });
 
+  $effect(() => {
+    if (!open) {
+      errorMessage = '';
+      statusMessage = '';
+    }
+  });
+
   async function handleShare() {
     if (!currentUser) {
       errorMessage = 'Sign in before sharing articles into a community.';
@@ -117,78 +126,153 @@
   }
 </script>
 
-<section class="share-article-panel">
-  <div class="panel-copy">
-    <p class="eyebrow">Share To Community</p>
-    <h2>Bring this article into one of your groups.</h2>
-    <p>
-      This shares the article into your community in a way that keeps highlights tied directly to
-      the source.
-    </p>
-  </div>
+<Dialog.Root bind:open>
+  <Dialog.Trigger
+    class="community-share-trigger"
+    title="Share into a community"
+    aria-label="Share this article into a community"
+  >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  </Dialog.Trigger>
 
-  {#if !currentUser}
-    <p class="panel-message">Sign in to share this article into one of your communities.</p>
-  {:else if communities.length === 0}
-    <div class="panel-empty">
-      <p class="panel-message">No memberships loaded yet. Join or create a community first.</p>
-      <div class="panel-empty-actions">
-        <a href="/discover">Browse public communities</a>
-        <a href="/community/create">Create a community</a>
-      </div>
+  <Dialog.Content class="share-community-dialog">
+    <div class="share-community-chrome">
+      <div class="share-community-handle" aria-hidden="true"></div>
+
+      <Dialog.Header class="share-community-header">
+        <p class="eyebrow">Share To Community</p>
+        <Dialog.Title>Share this article into a community.</Dialog.Title>
+        <Dialog.Description>
+          Bring the source into one of your groups so highlights and discussion stay attached to it.
+        </Dialog.Description>
+      </Dialog.Header>
+
+      <Dialog.Close class="dialog-close" aria-label="Close community share dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </Dialog.Close>
     </div>
-  {:else}
-    <div class="panel-fields">
-      <label class="field">
-        <span>Community</span>
-        <select bind:value={selectedGroupId}>
-          {#each communities as community (community.id)}
-            <option value={community.id}>{community.name}</option>
-          {/each}
-        </select>
-      </label>
 
-      <label class="field">
-        <span>Why share it?</span>
-        <textarea
-          bind:value={note}
-          rows="3"
-          maxlength="280"
-          placeholder="Optional framing for this community."
-        ></textarea>
-      </label>
+    <div class="share-community-body">
+      {#if !currentUser}
+        <p class="panel-message">Sign in to share this article into one of your communities.</p>
+      {:else if communities.length === 0}
+        <div class="panel-empty">
+          <p class="panel-message">No memberships loaded yet. Join or create a community first.</p>
+          <div class="panel-empty-actions">
+            <a href="/discover">Browse public communities</a>
+            <a href="/community/create">Create a community</a>
+          </div>
+        </div>
+      {:else}
+        <div class="panel-fields">
+          <label class="field">
+            <span>Community</span>
+            <select bind:value={selectedGroupId}>
+              {#each communities as community (community.id)}
+                <option value={community.id}>{community.name}</option>
+              {/each}
+            </select>
+          </label>
 
-      <div class="preview-strip">
-        <span>{preview.source}</span>
-        <span>{preview.domain}</span>
-        <span>{preview.title}</span>
-      </div>
+          <label class="field">
+            <span>Why share it?</span>
+            <textarea
+              bind:value={note}
+              rows="3"
+              maxlength="280"
+              placeholder="Optional framing for this community."
+            ></textarea>
+          </label>
 
-      <button type="button" disabled={!canShare} onclick={handleShare}>
-        {publishing ? 'Sharing…' : 'Share Into Community'}
-      </button>
+          <div class="preview-strip">
+            <span>{preview.source}</span>
+            <span>{preview.domain}</span>
+            <span>{preview.title}</span>
+          </div>
 
-      {#if errorMessage}
-        <p class="error">{errorMessage}</p>
-      {/if}
+          <button
+            type="button"
+            class="share-submit-button"
+            disabled={!canShare}
+            onclick={handleShare}
+          >
+            {publishing ? 'Sharing…' : 'Share Into Community'}
+          </button>
 
-      {#if statusMessage}
-        <p class="status">{statusMessage}</p>
+          {#if errorMessage}
+            <p class="error">{errorMessage}</p>
+          {/if}
+
+          {#if statusMessage}
+            <p class="status">{statusMessage}</p>
+          {/if}
+        </div>
       {/if}
     </div>
-  {/if}
-</section>
+  </Dialog.Content>
+</Dialog.Root>
 
 <style>
-  .share-article-panel {
-    display: grid;
-    gap: 1rem;
-    padding: 1.15rem;
+  :global(.community-share-trigger) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
     border: 1px solid var(--border);
-    border-radius: 1.2rem;
+    border-radius: 9999px;
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      color 160ms ease,
+      border-color 160ms ease,
+      background 160ms ease,
+      transform 160ms ease;
+  }
+
+  :global(.community-share-trigger:hover) {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(255, 103, 25, 0.06);
+  }
+
+  :global(.community-share-trigger:active) {
+    transform: scale(0.92);
+  }
+
+  :global(.share-community-dialog) {
+    padding: 1.15rem;
     background:
       radial-gradient(circle at top left, rgba(255, 103, 25, 0.08), transparent 36%),
-      var(--surface);
+      #ffffff;
+  }
+
+  .share-community-chrome {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    gap: 0.9rem;
+  }
+
+  .share-community-handle {
+    grid-column: 1 / -1;
+    width: 3rem;
+    height: 0.3rem;
+    border-radius: 999px;
+    background: rgba(17, 17, 17, 0.08);
+    margin: 0 auto 0.15rem;
+  }
+
+  :global(.share-community-header) {
+    gap: 0.35rem;
   }
 
   .eyebrow {
@@ -200,20 +284,16 @@
     text-transform: uppercase;
   }
 
-  .panel-copy h2 {
-    margin: 0.3rem 0 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 1.45rem;
-    line-height: 1.12;
-    letter-spacing: -0.02em;
+  .share-community-body {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1rem;
   }
 
-  .panel-copy p:last-child,
   .panel-message,
   .error,
   .status {
-    margin: 0.55rem 0 0;
+    margin: 0;
     color: var(--muted);
     line-height: 1.6;
   }
@@ -240,6 +320,7 @@
     color: var(--text);
     font-size: 0.88rem;
     font-weight: 600;
+    text-decoration: none;
   }
 
   .panel-fields {
@@ -266,6 +347,8 @@
     background: white;
     color: var(--text);
     padding: 0.85rem 0.95rem;
+    box-sizing: border-box;
+    font: inherit;
   }
 
   .field textarea {
@@ -290,7 +373,7 @@
     font-weight: 600;
   }
 
-  button {
+  .share-submit-button {
     width: fit-content;
     min-height: 2.7rem;
     padding: 0 1rem;
@@ -299,10 +382,12 @@
     background: var(--accent);
     color: white;
     font-weight: 700;
+    cursor: pointer;
   }
 
-  button:disabled {
+  .share-submit-button:disabled {
     opacity: 0.55;
+    cursor: default;
   }
 
   .error {
@@ -311,5 +396,12 @@
 
   .status {
     color: #0f766e;
+  }
+
+  @media (max-width: 640px) {
+    :global(.share-community-dialog) {
+      width: min(32rem, calc(100vw - 1rem));
+      padding: 1rem;
+    }
   }
 </style>

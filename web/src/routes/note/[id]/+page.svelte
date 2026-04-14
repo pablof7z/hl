@@ -320,6 +320,7 @@
               url={shareUrl}
               title={isArticle ? articleTitle(event.rawEvent()) : noteTitle(event.rawEvent())}
             />
+            <ShareNostrArticleToCommunity {event} authorName={authorName} />
           {/if}
           {#if currentUser && isArticle}
             <button
@@ -340,8 +341,6 @@
       </p>
 
       {#if isArticle}
-        <ShareNostrArticleToCommunity {event} authorName={authorName} />
-
         <Tabs.Root bind:value={activeTab} activationMode="manual">
           <Tabs.List class="article-tabs-list" aria-label="Article views">
             <Tabs.Trigger value="article">Article</Tabs.Trigger>
