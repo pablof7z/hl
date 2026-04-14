@@ -1,11 +1,16 @@
 <script lang="ts">
   import { browser } from '$app/environment';
   import { page } from '$app/state';
-  import { NDKEvent } from '@nostr-dev-kit/ndk';
   import { createRelayInfo } from '@nostr-dev-kit/svelte';
   import ArticleCard from '$lib/components/ArticleCard.svelte';
   import BookmarkIcon from '$lib/components/BookmarkIcon.svelte';
   import { ndk } from '$lib/ndk/client';
+  import {
+    RELAY_FEED_LIST_KIND,
+    latestListEvent,
+    relayFeedHasUrl,
+    setRelayFeedUrlPresence
+  } from '$lib/ndk/lists';
 
   const currentUser = $derived(ndk.$currentUser);
 
@@ -15,33 +20,22 @@
   // ── NIP-11 metadata ──────────────────────────────────────────
   const relayInfo = createRelayInfo(() => ({ relayUrl }), ndk);
 
-  // ── Bookmark state (kind 10012) ──────────────────────────────
+  // ── Bookmark state (NDK relay feed list) ─────────────────────
   const myRelaySet = ndk.$subscribe(() => {
     if (!browser || !currentUser) return undefined;
     return {
-      filters: [{ kinds: [10012 as number], authors: [currentUser.pubkey], limit: 1 }]
+      filters: [{ kinds: [RELAY_FEED_LIST_KIND], authors: [currentUser.pubkey], limit: 20 }]
     };
   });
+  const myRelayEvent = $derived(latestListEvent(myRelaySet.events));
 
   const isBookmarked = $derived.by(() => {
-    const event = myRelaySet.events[0];
-    if (!event) return false;
-    return event.tags.some((tag) => tag[0] === 'relay' && tag[1] === relayUrl);
+    return relayFeedHasUrl(myRelayEvent, relayUrl);
   });
 
   async function toggleBookmark() {
     if (!currentUser) return;
-    const existing = myRelaySet.events[0];
-    const updated = new NDKEvent(ndk);
-    updated.kind = 10012;
-    if (isBookmarked) {
-      updated.tags = existing
-        ? existing.tags.filter((tag) => !(tag[0] === 'relay' && tag[1] === relayUrl))
-        : [];
-    } else {
-      updated.tags = existing ? [...existing.tags, ['relay', relayUrl]] : [['relay', relayUrl]];
-    }
-    await updated.publish();
+    await setRelayFeedUrlPresence(ndk, myRelayEvent, relayUrl, !isBookmarked);
   }
 
   // ── Articles from this relay ─────────────────────────────────

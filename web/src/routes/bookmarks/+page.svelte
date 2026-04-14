@@ -10,41 +10,38 @@
     articleSummary,
     articleTitle
   } from '$lib/ndk/format';
+  import {
+    BOOKMARK_LIST_KIND,
+    bookmarkAddressFilters,
+    bookmarkAddressesFromEvent,
+    latestListEvent,
+    setBookmarkAddressPresence
+  } from '$lib/ndk/lists';
 
   const currentUser = $derived(ndk.$currentUser);
 
   const myBookmarkList = ndk.$subscribe(() => {
     if (!browser || !currentUser) return undefined;
     return {
-      filters: [{ kinds: [10003], authors: [currentUser.pubkey], limit: 1 }]
+      filters: [{ kinds: [BOOKMARK_LIST_KIND], authors: [currentUser.pubkey], limit: 20 }]
     };
   });
+  const myBookmarkListEvent = $derived(latestListEvent(myBookmarkList.events));
 
   const myBookmarkedAddresses = $derived.by(() => {
-    const bookmarkEvent = myBookmarkList.events[0];
-    if (!bookmarkEvent) return [];
-    return bookmarkEvent.tags
-      .filter((tag) => tag[0] === 'a' && tag[1]?.startsWith('30023:'))
-      .map((tag) => tag[1]);
+    return bookmarkAddressesFromEvent(myBookmarkListEvent, '30023:');
   });
+  const myBookmarkFilters = $derived(bookmarkAddressFilters(myBookmarkedAddresses));
 
   const myArticles = ndk.$subscribe(() => {
-    if (!browser || myBookmarkedAddresses.length === 0) return undefined;
-    const filters = myBookmarkedAddresses.map((addr) => {
-      const [kind, pubkey, identifier] = addr.split(':');
-      return {
-        kinds: [Number(kind)],
-        authors: [pubkey],
-        '#d': [identifier]
-      } as import('@nostr-dev-kit/ndk').NDKFilter;
-    });
-    return { filters };
+    if (!browser || myBookmarkFilters.length === 0) return undefined;
+    return { filters: myBookmarkFilters };
   });
 
   const networkBookmarks = ndk.$subscribe(() => {
     if (!browser) return undefined;
     return {
-      filters: [{ kinds: [10003], limit: 100 }]
+      filters: [{ kinds: [BOOKMARK_LIST_KIND], limit: 100 }]
     };
   });
 
@@ -52,16 +49,13 @@
     const counts = new Map<string, { count: number; pubkeys: Set<string> }>();
     for (const bookmarkEvent of networkBookmarks.events) {
       if (currentUser && bookmarkEvent.pubkey === currentUser.pubkey) continue;
-      for (const tag of bookmarkEvent.tags) {
-        if (tag[0] === 'a' && tag[1]?.startsWith('30023:')) {
-          const addr = tag[1];
-          const existing = counts.get(addr);
-          if (existing) {
-            existing.count++;
-            existing.pubkeys.add(bookmarkEvent.pubkey);
-          } else {
-            counts.set(addr, { count: 1, pubkeys: new Set([bookmarkEvent.pubkey]) });
-          }
+      for (const addr of bookmarkAddressesFromEvent(bookmarkEvent, '30023:')) {
+        const existing = counts.get(addr);
+        if (existing) {
+          existing.count++;
+          existing.pubkeys.add(bookmarkEvent.pubkey);
+        } else {
+          counts.set(addr, { count: 1, pubkeys: new Set([bookmarkEvent.pubkey]) });
         }
       }
     }
@@ -116,14 +110,7 @@
 
   async function removeBookmark(articleAddress: string) {
     if (!currentUser) return;
-    const bookmarkEvent = myBookmarkList.events[0];
-    if (!bookmarkEvent) return;
-    const updated = new NDKEvent(ndk);
-    updated.kind = 10003;
-    updated.tags = bookmarkEvent.tags.filter(
-      (tag) => !(tag[0] === 'a' && tag[1] === articleAddress)
-    );
-    await updated.publish();
+    await setBookmarkAddressPresence(ndk, myBookmarkListEvent, articleAddress, false);
   }
 </script>
 

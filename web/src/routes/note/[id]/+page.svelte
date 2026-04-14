@@ -20,6 +20,12 @@
     profileIdentifier
   } from '$lib/ndk/format';
   import { ndk } from '$lib/ndk/client';
+  import {
+    BOOKMARK_LIST_KIND,
+    bookmarkListHasAddress,
+    latestListEvent,
+    setBookmarkAddressPresence
+  } from '$lib/ndk/lists';
   import { safeUserIdentifier } from '$lib/ndk/user';
   import { MarkdownEventContent } from '$lib/ndk/ui/markdown-event-content';
   import '$lib/ndk/components/mention';
@@ -45,14 +51,15 @@
   const bookmarkList = ndk.$subscribe(() => {
     if (!browser || !currentUser) return undefined;
     return {
-      filters: [{ kinds: [10003], authors: [currentUser.pubkey], limit: 1 }]
+      filters: [{ kinds: [BOOKMARK_LIST_KIND], authors: [currentUser.pubkey], limit: 20 }]
     };
   });
+  const bookmarkListEvent = $derived(latestListEvent(bookmarkList.events));
 
   const isBookmarked = $derived.by(() => {
-    if (!event || !bookmarkList.events[0]) return false;
+    if (!event) return false;
     const addr = event.tagId();
-    return bookmarkList.events[0].tags.some((tag) => tag[0] === 'a' && tag[1] === addr);
+    return bookmarkListHasAddress(bookmarkListEvent, addr);
   });
 
   async function toggleBookmark() {
@@ -60,17 +67,7 @@
     bookmarking = true;
     try {
       const addr = event.tagId();
-      const existing = bookmarkList.events[0];
-      const updated = new NDKEvent(ndk);
-      updated.kind = 10003;
-
-      if (existing && isBookmarked) {
-        updated.tags = existing.tags.filter((tag) => !(tag[0] === 'a' && tag[1] === addr));
-      } else {
-        updated.tags = [...(existing?.tags ?? []), ['a', addr]];
-      }
-
-      await updated.publish();
+      await setBookmarkAddressPresence(ndk, bookmarkListEvent, addr, !isBookmarked);
     } finally {
       bookmarking = false;
     }

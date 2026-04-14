@@ -1,18 +1,20 @@
 import NDK, {
   NDKEvent,
+  NDKHighlight,
+  NDKKind,
   NDKRelaySet,
   getRelayListForUsers,
   type NDKFilter,
   type NDKEvent as NDKEventType,
-  type NDKKind
+  type NDKKind as NDKKindType
 } from '@nostr-dev-kit/ndk';
 import type { ArtifactRecord } from '$lib/ndk/artifacts';
 import { artifactHighlightReferenceKey } from '$lib/ndk/artifacts';
 import { DEFAULT_RELAYS, HIGHLIGHTER_RELAY_URL } from '$lib/ndk/config';
 import { buildCommunityRelaySet } from '$lib/ndk/groups';
 
-export const HIGHLIGHTER_HIGHLIGHT_KIND = 9802 as NDKKind;
-export const HIGHLIGHTER_HIGHLIGHT_REPOST_KIND = 16 as NDKKind;
+export const HIGHLIGHTER_HIGHLIGHT_KIND = NDKKind.Highlight as NDKKindType;
+export const HIGHLIGHTER_HIGHLIGHT_REPOST_KIND = NDKKind.GenericRepost as NDKKindType;
 
 export type HighlightRecord = {
   eventId: string;
@@ -48,16 +50,17 @@ export function highlightPath(groupId: string, highlightId: string): string {
 }
 
 export function highlightFromEvent(event: NDKEventType): HighlightRecord {
-  const artifactAddress = cleanText(event.tagValue('a'));
-  const eventReference = cleanText(event.tagValue('e'));
-  const sourceUrl = cleanText(event.tagValue('r'));
+  const highlight = NDKHighlight.from(event);
+  const artifactAddress = cleanText(highlight.tagValue('a'));
+  const eventReference = cleanText(highlight.tagValue('e'));
+  const sourceUrl = cleanText(highlight.url);
 
   return {
-    eventId: event.id,
-    pubkey: event.pubkey,
-    quote: cleanText(event.content),
-    context: cleanText(event.tagValue('context')),
-    note: cleanText(event.tagValue('comment')),
+    eventId: highlight.id,
+    pubkey: highlight.pubkey,
+    quote: cleanText(highlight.content),
+    context: cleanText(highlight.context),
+    note: cleanText(highlight.tagValue('comment')),
     artifactAddress,
     eventReference,
     sourceUrl,
@@ -66,7 +69,7 @@ export function highlightFromEvent(event: NDKEventType): HighlightRecord {
       eventReference,
       sourceUrl
     }),
-    createdAt: event.created_at ?? null
+    createdAt: highlight.created_at ?? null
   };
 }
 
@@ -359,24 +362,24 @@ async function publishCanonicalHighlight(
 
   const currentUser = ndk.activeUser ?? (await ndk.signer.user());
   const relaySet = await buildUserHighlightRelaySet(ndk, currentUser.pubkey);
-  const event = new NDKEvent(ndk);
+  const event = new NDKHighlight(ndk);
 
-  event.kind = HIGHLIGHTER_HIGHLIGHT_KIND;
   event.content = quote;
-  event.tags = [[input.artifact.highlightTagName, input.artifact.highlightTagValue]];
+  event.tags = [];
+
+  if (input.artifact.highlightTagName === 'r' && input.artifact.url) {
+    event.article = input.artifact.url;
+  } else {
+    event.tags = [[input.artifact.highlightTagName, input.artifact.highlightTagValue]];
+  }
 
   const context = cleanText(input.context);
-  if (context && context !== quote) {
-    event.tags.push(['context', context]);
-  }
+  event.context = context && context !== quote ? context : undefined;
 
   const note = cleanText(input.note);
   if (note) {
+    event.removeTag('comment');
     event.tags.push(['comment', note]);
-  }
-
-  if (input.artifact.highlightTagName === 'r' && input.artifact.url) {
-    event.tags = [['r', input.artifact.url], ...event.tags.filter((tag) => !(tag[0] === 'r' && tag[1] === input.artifact.url))];
   }
 
   await event.sign();

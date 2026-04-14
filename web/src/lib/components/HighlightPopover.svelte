@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { NDKEvent } from '@nostr-dev-kit/ndk';
+  import { NDKEvent, NDKHighlight } from '@nostr-dev-kit/ndk';
   import { ndk } from '$lib/ndk/client';
 
   interface Props {
@@ -76,33 +76,12 @@
 
     publishing = true;
     try {
-      const highlight = new NDKEvent(ndk);
-      highlight.kind = 9802;
+      const highlight = new NDKHighlight(ndk);
       highlight.content = selectedText;
-
-      // Tag the article per NIP-84
-      const articleAddress = articleEvent.tagId();
-      if (articleAddress.includes(':')) {
-        highlight.tags.push(['a', articleAddress]);
-      }
-      if (articleEvent.id) {
-        highlight.tags.push(['e', articleEvent.id]);
-      }
-
-      // Tag the author
-      if (articleEvent.pubkey) {
-        highlight.tags.push(['p', articleEvent.pubkey, '', 'author']);
-      }
-
-      // Add context if available
-      if (contextText && contextText !== selectedText) {
-        highlight.tags.push(['context', contextText]);
-      }
-
-      // Add note/comment if provided
-      if (noteText.trim()) {
-        highlight.tags.push(['comment', noteText.trim()]);
-      }
+      highlight.article = articleEvent;
+      highlight.context = contextText && contextText !== selectedText ? contextText : undefined;
+      highlight.removeTag('comment');
+      if (noteText.trim()) highlight.tags.push(['comment', noteText.trim()]);
 
       await highlight.publish();
 

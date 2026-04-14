@@ -1,46 +1,40 @@
 <script lang="ts">
   import { browser } from '$app/environment';
-  import { NDKEvent } from '@nostr-dev-kit/ndk';
   import RelayCard from '$lib/components/RelayCard.svelte';
   import { ndk } from '$lib/ndk/client';
+  import {
+    RELAY_FEED_LIST_KIND,
+    latestListEvent,
+    relayFeedHasUrl,
+    relayUrlsFromEvent,
+    setRelayFeedUrlPresence
+  } from '$lib/ndk/lists';
 
   const currentUser = $derived(ndk.$currentUser);
 
-  // ── My Relays (kind 10012) ────────────────────────────────────
+  // ── My Relays (NDK relay feed list) ───────────────────────────
   const myRelaySet = ndk.$subscribe(() => {
     if (!browser || !currentUser) return undefined;
     return {
-      filters: [{ kinds: [10012 as number], authors: [currentUser.pubkey], limit: 1 }]
+      filters: [{ kinds: [RELAY_FEED_LIST_KIND], authors: [currentUser.pubkey], limit: 20 }]
     };
   });
+  const myRelayEvent = $derived(latestListEvent(myRelaySet.events));
 
-  const myRelayUrls = $derived.by(() => {
-    const event = myRelaySet.events[0];
-    if (!event) return [];
-    return event.tags.filter((tag) => tag[0] === 'relay' && tag[1]).map((tag) => tag[1]);
-  });
+  const myRelayUrls = $derived(relayUrlsFromEvent(myRelayEvent));
 
   async function removeRelay(relayUrl: string) {
     if (!currentUser) return;
-    const existing = myRelaySet.events[0];
-    if (!existing) return;
-    const updated = new NDKEvent(ndk);
-    updated.kind = 10012;
-    updated.tags = existing.tags.filter((tag) => !(tag[0] === 'relay' && tag[1] === relayUrl));
-    await updated.publish();
+    await setRelayFeedUrlPresence(ndk, myRelayEvent, relayUrl, false);
   }
 
   async function addRelay(relayUrl: string) {
     if (!currentUser) return;
-    const existing = myRelaySet.events[0];
-    const updated = new NDKEvent(ndk);
-    updated.kind = 10012;
-    updated.tags = existing ? [...existing.tags, ['relay', relayUrl]] : [['relay', relayUrl]];
-    await updated.publish();
+    await setRelayFeedUrlPresence(ndk, myRelayEvent, relayUrl, true);
   }
 
   function isBookmarked(relayUrl: string): boolean {
-    return myRelayUrls.includes(relayUrl);
+    return relayFeedHasUrl(myRelayEvent, relayUrl);
   }
 
   async function toggleBookmark(relayUrl: string) {
@@ -51,11 +45,11 @@
     }
   }
 
-  // ── Network relay discovery (kind 10012) ──────────────────────
+  // ── Network relay discovery (NDK relay feed list) ─────────────
   const networkRelaySets = ndk.$subscribe(() => {
     if (!browser) return undefined;
     return {
-      filters: [{ kinds: [10012 as number], limit: 100 }]
+      filters: [{ kinds: [RELAY_FEED_LIST_KIND], limit: 100 }]
     };
   });
 
@@ -63,15 +57,12 @@
     const counts = new Map<string, Set<string>>();
     for (const event of networkRelaySets.events) {
       if (currentUser && event.pubkey === currentUser.pubkey) continue;
-      for (const tag of event.tags) {
-        if (tag[0] === 'relay' && tag[1]) {
-          const url = tag[1];
-          const existing = counts.get(url);
-          if (existing) {
-            existing.add(event.pubkey);
-          } else {
-            counts.set(url, new Set([event.pubkey]));
-          }
+      for (const url of relayUrlsFromEvent(event)) {
+        const existing = counts.get(url);
+        if (existing) {
+          existing.add(event.pubkey);
+        } else {
+          counts.set(url, new Set([event.pubkey]));
         }
       }
     }

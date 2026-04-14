@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { browser } from '$app/environment';
   import { createFetchUser } from '@nostr-dev-kit/svelte';
-  import { NDKEvent, NDKKind, type NostrEvent, type NDKFilter, nip19 } from '@nostr-dev-kit/ndk';
+  import { NDKEvent, NDKKind, type NostrEvent, nip19 } from '@nostr-dev-kit/ndk';
   import { User } from '$lib/ndk/ui/user';
   import {
     articlePublishedAt,
@@ -15,6 +15,12 @@
   } from '$lib/ndk/format';
   import ArticleCard from '$lib/components/ArticleCard.svelte';
   import { ndk } from '$lib/ndk/client';
+  import {
+    BOOKMARK_LIST_KIND,
+    bookmarkAddressFilters,
+    bookmarkAddressesFromEvent,
+    latestListEvent
+  } from '$lib/ndk/lists';
   import { safeUserPubkey } from '$lib/ndk/user';
 
   type Tab = 'writing' | 'highlights' | 'bookmarks';
@@ -80,24 +86,18 @@
   // ── bookmarks subscription ──────────────────────────────────
   const userBookmarkList = ndk.$subscribe(() => {
     if (!browser || !pubkey || activeTab !== 'bookmarks') return undefined;
-    return { filters: [{ kinds: [10003], authors: [pubkey], limit: 1 }] };
+    return { filters: [{ kinds: [BOOKMARK_LIST_KIND], authors: [pubkey], limit: 20 }] };
   });
+  const userBookmarkListEvent = $derived(latestListEvent(userBookmarkList.events));
 
   const bookmarkedAddresses = $derived.by(() => {
-    const bookmarkEvent = userBookmarkList.events[0];
-    if (!bookmarkEvent) return [];
-    return bookmarkEvent.tags
-      .filter((tag) => tag[0] === 'a' && tag[1]?.startsWith('30023:'))
-      .map((tag) => tag[1]);
+    return bookmarkAddressesFromEvent(userBookmarkListEvent, '30023:');
   });
+  const bookmarkFilters = $derived(bookmarkAddressFilters(bookmarkedAddresses));
 
   const bookmarkedArticles = ndk.$subscribe(() => {
-    if (!browser || bookmarkedAddresses.length === 0) return undefined;
-    const filters = bookmarkedAddresses.map((addr) => {
-      const [kind, pubkey, identifier] = addr.split(':');
-      return { kinds: [Number(kind)], authors: [pubkey], '#d': [identifier] } as NDKFilter;
-    });
-    return { filters };
+    if (!browser || bookmarkFilters.length === 0) return undefined;
+    return { filters: bookmarkFilters };
   });
 
   const bookmarkedArticleLookup = $derived.by(() => {
