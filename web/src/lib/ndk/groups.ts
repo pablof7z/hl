@@ -95,6 +95,53 @@ export function buildCommunitySummary(
   };
 }
 
+export function groupIdFromEvent(event: Pick<NDKEventType, 'tagValue'>): string {
+  return event.tagValue('d')?.trim() || event.tagValue('h')?.trim() || '';
+}
+
+export function buildJoinedCommunities(
+  currentPubkey: string,
+  metadataEvents: NDKEventType[],
+  membershipEvents: NDKEventType[]
+): CommunitySummary[] {
+  if (!currentPubkey.trim()) {
+    return [];
+  }
+
+  const metadataByGroupId = latestEventsByGroupId(metadataEvents);
+  const adminByGroupId = latestEventsByGroupId(
+    membershipEvents.filter((event) => event.kind === NDKKind.GroupAdmins)
+  );
+  const memberByGroupId = latestEventsByGroupId(
+    membershipEvents.filter((event) => event.kind === NDKKind.GroupMembers)
+  );
+  const joined: CommunitySummary[] = [];
+
+  for (const [groupId, metadataEvent] of metadataByGroupId) {
+    const adminEvent = adminByGroupId.get(groupId);
+    const memberEvent = memberByGroupId.get(groupId);
+    const isAdmin = includesPubkey(adminEvent, currentPubkey);
+    const isMember = includesPubkey(memberEvent, currentPubkey);
+
+    if (!isAdmin && !isMember) {
+      continue;
+    }
+
+    try {
+      joined.push(
+        buildCommunitySummary(metadataEvent, {
+          adminEvent,
+          memberEvent
+        })
+      );
+    } catch {
+      continue;
+    }
+  }
+
+  return joined.toSorted((left, right) => left.name.localeCompare(right.name));
+}
+
 export async function createCommunity(
   ndk: NDK,
   input: CreateCommunityInput
@@ -172,6 +219,30 @@ function cleanText(value: string | undefined): string {
 
 function uniqueValues(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+function latestEventsByGroupId(events: NDKEventType[]): Map<string, NDKEventType> {
+  const latest = new Map<string, NDKEventType>();
+
+  for (const event of events) {
+    const groupId = groupIdFromEvent(event);
+    if (!groupId) continue;
+
+    const existing = latest.get(groupId);
+    if (!existing || (event.created_at ?? 0) > (existing.created_at ?? 0)) {
+      latest.set(groupId, event);
+    }
+  }
+
+  return latest;
+}
+
+function includesPubkey(event: NDKEventType | undefined, pubkey: string): boolean {
+  if (!event || !pubkey) {
+    return false;
+  }
+
+  return event.getMatchingTags('p').some((tag) => tag[1] === pubkey);
 }
 
 function describePublishError(error: unknown, fallback: string): string {

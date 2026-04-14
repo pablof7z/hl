@@ -9,7 +9,7 @@
     publishArtifact
   } from '$lib/ndk/artifacts';
   import { GROUP_RELAY_URLS } from '$lib/ndk/config';
-  import { buildCommunitySummary } from '$lib/ndk/groups';
+  import { buildJoinedCommunities, groupIdFromEvent } from '$lib/ndk/groups';
 
   let {
     event,
@@ -63,60 +63,10 @@
     })
   );
 
-  function latestByGroupId(events: NDKEvent[], kind: number): Map<string, NDKEvent> {
-    const latest = new Map<string, NDKEvent>();
-
-    for (const event of events.filter((candidate) => candidate.kind === kind)) {
-      const groupId = groupIdFromEvent(event);
-      if (!groupId) continue;
-
-      const existing = latest.get(groupId);
-      if (!existing || (event.created_at ?? 0) > (existing.created_at ?? 0)) {
-        latest.set(groupId, event);
-      }
-    }
-
-    return latest;
-  }
-
-  function groupIdFromEvent(event: NDKEvent): string {
-    return event.tagValue('d')?.trim() || event.tagValue('h')?.trim() || '';
-  }
-
-  function includesPubkey(event: NDKEvent | undefined, pubkey: string): boolean {
-    if (!event || !pubkey) return false;
-    return event.getMatchingTags('p').some((tag) => tag[1] === pubkey);
-  }
-
   const communities = $derived.by(() => {
     if (!currentUser) return [];
 
-    const metadataByGroupId = latestByGroupId(metadataFeed.events, NDKKind.GroupMetadata);
-    const adminByGroupId = latestByGroupId(membershipFeed.events, NDKKind.GroupAdmins);
-    const memberByGroupId = latestByGroupId(membershipFeed.events, NDKKind.GroupMembers);
-    const joined = [];
-
-    for (const [groupId, metadataEvent] of metadataByGroupId) {
-      const adminEvent = adminByGroupId.get(groupId);
-      const memberEvent = memberByGroupId.get(groupId);
-      const isAdmin = includesPubkey(adminEvent, currentUser.pubkey);
-      const isMember = includesPubkey(memberEvent, currentUser.pubkey);
-
-      if (!isAdmin && !isMember) continue;
-
-      try {
-        joined.push(
-          buildCommunitySummary(metadataEvent, {
-            adminEvent,
-            memberEvent
-          })
-        );
-      } catch {
-        continue;
-      }
-    }
-
-    return joined.toSorted((left, right) => left.name.localeCompare(right.name));
+    return buildJoinedCommunities(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events]);
   });
   const canShare = $derived(Boolean(currentUser && selectedGroupId && !publishing && !isReadOnly));
 
@@ -180,7 +130,13 @@
   {#if !currentUser}
     <p class="panel-message">Sign in to share this article into one of your communities.</p>
   {:else if communities.length === 0}
-    <p class="panel-message">No memberships loaded yet. Join or create a community first.</p>
+    <div class="panel-empty">
+      <p class="panel-message">No memberships loaded yet. Join or create a community first.</p>
+      <div class="panel-empty-actions">
+        <a href="/discover">Browse public communities</a>
+        <a href="/community/create">Create a community</a>
+      </div>
+    </div>
   {:else}
     <div class="panel-fields">
       <label class="field">
@@ -260,6 +216,30 @@
     margin: 0.55rem 0 0;
     color: var(--muted);
     line-height: 1.6;
+  }
+
+  .panel-empty {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .panel-empty-actions {
+    display: flex;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+  }
+
+  .panel-empty-actions a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.5rem;
+    padding: 0 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text);
+    font-size: 0.88rem;
+    font-weight: 600;
   }
 
   .panel-fields {

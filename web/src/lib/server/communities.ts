@@ -1,15 +1,34 @@
 import { NDKKind, type NDKEvent } from '@nostr-dev-kit/ndk';
 import { GROUP_RELAY_URLS } from '$lib/ndk/config';
-import { buildCommunitySummary, type CommunitySummary } from '$lib/ndk/groups';
+import {
+  buildCommunitySummary,
+  type CommunitySummary,
+  type CommunityVisibility
+} from '$lib/ndk/groups';
 import { getServerNdk } from '$lib/server/nostr';
 
-export async function fetchCommunities(limit = 32): Promise<CommunitySummary[]> {
+type FetchCommunitiesOptions = {
+  limit?: number;
+  visibility?: CommunityVisibility | 'all';
+};
+
+export async function fetchCommunities(
+  options: number | FetchCommunitiesOptions = 32
+): Promise<CommunitySummary[]> {
+  const {
+    limit,
+    visibility
+  } = typeof options === 'number' ? { limit: options, visibility: 'all' as const } : {
+    limit: options.limit ?? 32,
+    visibility: options.visibility ?? 'all'
+  };
   const ndk = await getServerNdk(GROUP_RELAY_URLS);
+  const fetchLimit = visibility === 'all' ? limit : Math.max(limit * 4, 96);
   const metadataEvents = Array.from(
     (await ndk.fetchEvents(
       {
         kinds: [NDKKind.GroupMetadata],
-        limit
+        limit: fetchLimit
       },
       { closeOnEose: true }
     )) ?? []
@@ -40,6 +59,7 @@ export async function fetchCommunities(limit = 32): Promise<CommunitySummary[]> 
       }
     })
     .filter((community): community is CommunitySummary => Boolean(community))
+    .filter((community) => visibility === 'all' || community.visibility === visibility)
     .slice(0, limit);
 }
 
