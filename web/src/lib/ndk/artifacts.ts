@@ -1,9 +1,18 @@
-import NDK, { NDKEvent, type NDKEvent as NDKEventType, type NDKKind } from '@nostr-dev-kit/ndk';
+import NDK, {
+  NDKEvent,
+  NDKKind,
+  nip19,
+  type NDKEvent as NDKEventType,
+  type NostrEvent
+} from '@nostr-dev-kit/ndk';
+import { articleImageUrl, articleSummary, articleTitle, displayName, shortPubkey } from '$lib/ndk/format';
 import { buildCommunityRelaySet } from '$lib/ndk/groups';
 
-export const HIGHLIGHTER_ARTIFACT_KIND = 30403 as NDKKind;
+export const HIGHLIGHTER_ARTIFACT_SHARE_KIND = NDKKind.Thread as NDKKind;
 
 export type ArtifactSource = 'article' | 'book' | 'podcast' | 'video' | 'paper' | 'web';
+export type ArtifactReferenceTagName = 'a' | 'e' | 'i';
+export type ArtifactHighlightTagName = 'a' | 'e' | 'r';
 
 export type ArtifactPreview = {
   id: string;
@@ -14,12 +23,20 @@ export type ArtifactPreview = {
   description: string;
   source: ArtifactSource;
   domain: string;
+  catalogId: string;
+  catalogKind: string;
+  referenceTagName: ArtifactReferenceTagName;
+  referenceTagValue: string;
+  referenceKind: string;
+  referenceKey: string;
+  highlightTagName: ArtifactHighlightTagName;
+  highlightTagValue: string;
+  highlightReferenceKey: string;
 };
 
 export type ArtifactRecord = ArtifactPreview & {
   groupId: string;
-  address: string;
-  eventId: string;
+  shareEventId: string;
   pubkey: string;
   createdAt: number | null;
   note: string;
@@ -72,13 +89,25 @@ export function normalizeArtifactUrl(value: string): string | null {
   }
 }
 
-export function artifactIdFromUrl(url: string): string {
-  const normalized = normalizeArtifactUrl(url);
+export function artifactIdFromReferenceKey(referenceKey: string): string {
+  const normalized = cleanText(referenceKey);
   if (!normalized) {
-    throw new Error('Enter a valid URL.');
+    throw new Error('Artifact references need a stable key.');
   }
 
-  return `u${fnv1a(normalized).toString(36)}`;
+  return `c${fnv1a(normalized).toString(36)}`;
+}
+
+export function artifactPath(groupId: string, artifactId: string): string {
+  return `/community/${encodeURIComponent(groupId)}/content/${encodeURIComponent(artifactId)}`;
+}
+
+export function artifactHighlightReferenceKey(
+  artifact:
+    | Pick<ArtifactPreview, 'highlightTagName' | 'highlightTagValue'>
+    | Pick<ArtifactRecord, 'highlightTagName' | 'highlightTagValue'>
+): string {
+  return referenceKeyForTag(artifact.highlightTagName, artifact.highlightTagValue);
 }
 
 export function detectArtifactSource(url: string, hint?: string): ArtifactSource {
@@ -100,6 +129,7 @@ export function detectArtifactSource(url: string, hint?: string): ArtifactSource
 
   if (
     lowerHint.includes('audio') ||
+    lowerHint.includes('podcast') ||
     hostname.includes('spotify.com') ||
     hostname.includes('podcasts.apple.com') ||
     hostname.includes('overcast.fm')
@@ -134,90 +164,211 @@ export function buildArtifactPreview(input: {
   image?: string;
   description?: string;
   source?: ArtifactSource;
+  domain?: string;
+  catalogId?: string;
+  catalogKind?: string;
+  referenceTagName?: ArtifactReferenceTagName;
+  referenceTagValue?: string;
+  referenceKind?: string;
+  highlightTagName?: ArtifactHighlightTagName;
+  highlightTagValue?: string;
 }): ArtifactPreview {
   const normalizedUrl = normalizeArtifactUrl(input.url);
   if (!normalizedUrl) {
     throw new Error('Enter a valid URL.');
   }
 
-  const domain = domainLabel(normalizedUrl);
+  const referenceTagName = input.referenceTagName ?? 'i';
+  const referenceTagValue = cleanText(input.referenceTagValue) || cleanText(input.catalogId) || normalizedUrl;
+  const referenceKind = cleanText(input.referenceKind) || cleanText(input.catalogKind) || 'web';
+  const referenceKey = referenceKeyForTag(referenceTagName, referenceTagValue);
+  const highlightTagName = input.highlightTagName ?? 'r';
+  const highlightTagValue = cleanText(input.highlightTagValue) || normalizedUrl;
+  const highlightReferenceKey = referenceKeyForTag(highlightTagName, highlightTagValue);
+  const domain = cleanText(input.domain) || domainLabel(normalizedUrl);
   const title = cleanText(input.title) || fallbackTitle(normalizedUrl);
 
   return {
-    id: artifactIdFromUrl(normalizedUrl),
+    id: artifactIdFromReferenceKey(referenceKey),
     url: normalizedUrl,
     title,
     author: cleanText(input.author),
     image: cleanText(input.image),
     description: cleanText(input.description),
     source: input.source ?? detectArtifactSource(normalizedUrl),
-    domain
+    domain,
+    catalogId: cleanText(input.catalogId) || referenceTagValue,
+    catalogKind: cleanText(input.catalogKind) || referenceKind,
+    referenceTagName,
+    referenceTagValue,
+    referenceKind,
+    referenceKey,
+    highlightTagName,
+    highlightTagValue,
+    highlightReferenceKey
+  };
+}
+
+export function buildNostrArticleArtifactPreview(input: {
+  event: NostrEvent;
+  canonicalUrl: string;
+  authorName?: string;
+}): ArtifactPreview {
+  const address = eventAddress(input.event);
+  if (!address) {
+    throw new Error('Only addressable Nostr articles can be shared into communities right now.');
+  }
+
+  const normalizedUrl = normalizeArtifactUrl(input.canonicalUrl);
+  if (!normalizedUrl) {
+    throw new Error('Nostr article preview requires a valid canonical URL.');
+  }
+
+  const referenceKey = referenceKeyForTag('a', address);
+  const kindLabel = String(input.event.kind ?? 30023);
+
+  return {
+    id: artifactIdFromReferenceKey(referenceKey),
+    url: normalizedUrl,
+    title: articleTitle(input.event),
+    author: cleanText(input.authorName),
+    image: cleanText(articleImageUrl(input.event)),
+    description: articleSummary(input.event),
+    source: 'article',
+    domain: 'nostr',
+    catalogId: address,
+    catalogKind: `nostr:${kindLabel}`,
+    referenceTagName: 'a',
+    referenceTagValue: address,
+    referenceKind: kindLabel,
+    referenceKey,
+    highlightTagName: 'a',
+    highlightTagValue: address,
+    highlightReferenceKey: referenceKey
   };
 }
 
 export function artifactFromEvent(event: NDKEventType): ArtifactRecord {
-  const url = cleanText(event.tagValue('url'));
-  const normalizedUrl = normalizeArtifactUrl(url) ?? url;
-  const preview = buildArtifactPreview({
-    url: normalizedUrl,
-    title: event.tagValue('title'),
-    author: event.tagValue('author'),
-    image: event.tagValue('image'),
-    description: event.content,
-    source: parseSource(event.tagValue('source'))
+  const aTag = firstTagValue(event, 'a');
+  const eTag = firstTagValue(event, 'e');
+  const iTag = event.getMatchingTags('i')[0];
+  const rTag = firstTagValue(event, 'r');
+  const url = normalizeArtifactUrl(rTag || iTag?.[2] || '') ?? '';
+  const primaryReference = resolvePrimaryReference({
+    aTag,
+    eTag,
+    iTagValue: cleanText(iTag?.[1]),
+    kTag: cleanText(event.tagValue('k')),
+    url
   });
+  const preview =
+    primaryReference.mode === 'nostr-article'
+      ? buildArtifactPreview({
+          url: url || buildFallbackNostrUrl(primaryReference.value),
+          title: event.tagValue('title'),
+          author: event.tagValue('author'),
+          image: event.tagValue('image'),
+          description: event.tagValue('summary'),
+          source: parseSource(event.tagValue('source')) ?? 'article',
+          domain: 'nostr',
+          catalogId: primaryReference.value,
+          catalogKind: `nostr:${primaryReference.kind}`,
+          referenceTagName: 'a',
+          referenceTagValue: primaryReference.value,
+          referenceKind: primaryReference.kind,
+          highlightTagName: 'a',
+          highlightTagValue: primaryReference.value
+        })
+      : buildArtifactPreview({
+          url: url || normalizeArtifactUrl(primaryReference.value) || buildFallbackUrl(primaryReference.value),
+          title: event.tagValue('title'),
+          author: event.tagValue('author'),
+          image: event.tagValue('image'),
+          description: event.tagValue('summary'),
+          source: parseSource(event.tagValue('source')),
+          catalogId: primaryReference.catalogId,
+          catalogKind: primaryReference.catalogKind,
+          referenceTagName: primaryReference.referenceTagName,
+          referenceTagValue: primaryReference.value,
+          referenceKind: primaryReference.referenceKind,
+          highlightTagName: primaryReference.highlightTagName,
+          highlightTagValue: primaryReference.highlightTagValue
+        });
 
   return {
     ...preview,
     id: cleanText(event.tagValue('d')) || preview.id,
     groupId: cleanText(event.tagValue('h')),
-    address: event.tagId(),
-    eventId: event.id,
+    shareEventId: event.id,
     pubkey: event.pubkey,
     createdAt: event.created_at ?? null,
     note: cleanText(event.content)
   };
 }
 
-export function artifactPath(groupId: string, artifactId: string): string {
-  return `/community/${encodeURIComponent(groupId)}/content/${encodeURIComponent(artifactId)}`;
-}
-
-export async function fetchArtifactsByAddresses(
+export async function fetchArtifactsByHighlightReferenceKeys(
   ndk: NDK,
-  addresses: string[]
+  referenceKeys: string[]
 ): Promise<Map<string, ArtifactRecord>> {
-  const parsedAddresses = uniqueValues(addresses)
-    .map((address) => parseAddress(address))
-    .filter((address): address is { kind: number; pubkey: string; identifier: string } => Boolean(address));
+  const parsed = uniqueValues(referenceKeys)
+    .map(parseReferenceKey)
+    .filter((candidate): candidate is { tagName: 'a' | 'e' | 'r'; value: string } => Boolean(candidate));
 
-  if (parsedAddresses.length === 0) {
+  if (parsed.length === 0) {
+    return new Map();
+  }
+
+  const filters = buildShareLookupFilters(parsed, Math.max(parsed.length * 4, 32));
+  if (filters.length === 0) {
     return new Map();
   }
 
   const relaySet = buildCommunityRelaySet(ndk);
+  const events = Array.from((await ndk.fetchEvents(filters, { closeOnEose: true }, relaySet)) ?? []).sort(
+    (left, right) => (right.created_at ?? 0) - (left.created_at ?? 0)
+  );
+
+  const artifacts = new Map<string, ArtifactRecord>();
+
+  for (const event of events) {
+    const artifact = artifactFromEvent(event);
+    if (!artifact.highlightReferenceKey || artifacts.has(artifact.highlightReferenceKey)) {
+      continue;
+    }
+
+    artifacts.set(artifact.highlightReferenceKey, artifact);
+  }
+
+  return artifacts;
+}
+
+export async function fetchArtifactSharesForGroup(
+  ndk: NDK,
+  groupId: string,
+  limit = 32
+): Promise<ArtifactRecord[]> {
+  const relaySet = buildCommunityRelaySet(ndk);
   const events = Array.from(
     (await ndk.fetchEvents(
       {
-        kinds: [HIGHLIGHTER_ARTIFACT_KIND],
-        authors: uniqueValues(parsedAddresses.map((address) => address.pubkey)),
-        '#d': uniqueValues(parsedAddresses.map((address) => address.identifier)),
-        limit: Math.max(parsedAddresses.length * 4, 32)
+        kinds: [HIGHLIGHTER_ARTIFACT_SHARE_KIND],
+        '#h': [groupId],
+        limit
       },
       { closeOnEose: true },
       relaySet
     )) ?? []
-  );
-  const requestedAddresses = new Set(parsedAddresses.map((address) => `${address.kind}:${address.pubkey}:${address.identifier}`));
+  ).sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
 
-  return new Map(
-    events
-      .filter((event) => requestedAddresses.has(event.tagId()))
-      .map((event) => {
-        const artifact = artifactFromEvent(event);
-        return [artifact.address, artifact] as const;
-      })
-  );
+  const latestById = new Map<string, ArtifactRecord>();
+
+  for (const event of events) {
+    const artifact = artifactFromEvent(event);
+    if (!artifact.id || latestById.has(artifact.id)) continue;
+    latestById.set(artifact.id, artifact);
+  }
+
+  return [...latestById.values()];
 }
 
 export async function findExistingArtifact(
@@ -229,7 +380,7 @@ export async function findExistingArtifact(
   const events = Array.from(
     (await ndk.fetchEvents(
       {
-        kinds: [HIGHLIGHTER_ARTIFACT_KIND],
+        kinds: [HIGHLIGHTER_ARTIFACT_SHARE_KIND],
         '#h': [groupId],
         '#d': [artifactId],
         limit: 10
@@ -252,7 +403,7 @@ export async function publishArtifact(
   }
 ): Promise<{ artifact: ArtifactRecord; existing: boolean }> {
   if (!ndk.signer) {
-    throw new Error('Connect a signer before sharing artifacts.');
+    throw new Error('Connect a signer before sharing content.');
   }
 
   const existing = await findExistingArtifact(ndk, input.groupId, input.preview.id);
@@ -262,15 +413,32 @@ export async function publishArtifact(
 
   const relaySet = buildCommunityRelaySet(ndk);
   const event = new NDKEvent(ndk);
-  event.kind = HIGHLIGHTER_ARTIFACT_KIND;
+  event.kind = HIGHLIGHTER_ARTIFACT_SHARE_KIND;
   event.content = cleanText(input.note);
   event.tags = [
     ['h', input.groupId],
     ['d', input.preview.id],
     ['title', input.preview.title],
-    ['source', input.preview.source],
-    ['url', input.preview.url]
+    ['source', input.preview.source]
   ];
+
+  if (input.preview.referenceTagName === 'i') {
+    if (input.preview.url) {
+      event.tags.push(['i', input.preview.referenceTagValue, input.preview.url]);
+    } else {
+      event.tags.push(['i', input.preview.referenceTagValue]);
+    }
+
+    if (input.preview.referenceKind) {
+      event.tags.push(['k', input.preview.referenceKind]);
+    }
+  } else {
+    event.tags.push([input.preview.referenceTagName, input.preview.referenceTagValue]);
+  }
+
+  if (input.preview.url) {
+    event.tags.push(['r', input.preview.url]);
+  }
 
   if (input.preview.author) {
     event.tags.push(['author', input.preview.author]);
@@ -280,10 +448,143 @@ export async function publishArtifact(
     event.tags.push(['image', input.preview.image]);
   }
 
+  if (input.preview.description) {
+    event.tags.push(['summary', input.preview.description]);
+  }
+
   await event.sign();
   await event.publish(relaySet);
 
   return { artifact: artifactFromEvent(event), existing: false };
+}
+
+export function buildFallbackNostrUrl(address: string): string {
+  const parsed = parseAddress(address);
+  if (!parsed) return 'https://highlighter.f7z.io/';
+
+  const naddr = nip19.naddrEncode({
+    kind: parsed.kind,
+    pubkey: parsed.pubkey,
+    identifier: parsed.identifier
+  });
+
+  return `https://highlighter.f7z.io/note/${naddr}`;
+}
+
+function firstTagValue(event: NDKEventType, tagName: string): string {
+  return cleanText(event.getMatchingTags(tagName)[0]?.[1] ?? event.tagValue(tagName));
+}
+
+function resolvePrimaryReference(input: {
+  aTag: string;
+  eTag: string;
+  iTagValue: string;
+  kTag: string;
+  url: string;
+}):
+  | {
+      mode: 'nostr-article';
+      value: string;
+      kind: string;
+    }
+  | {
+      mode: 'generic';
+      value: string;
+      catalogId: string;
+      catalogKind: string;
+      referenceTagName: ArtifactReferenceTagName;
+      referenceKind: string;
+      highlightTagName: ArtifactHighlightTagName;
+      highlightTagValue: string;
+    } {
+  if (input.aTag) {
+    const parsed = parseAddress(input.aTag);
+    if (parsed?.kind === 30023) {
+      return {
+        mode: 'nostr-article',
+        value: input.aTag,
+        kind: String(parsed.kind)
+      };
+    }
+
+    return {
+      mode: 'generic',
+      value: input.aTag,
+      catalogId: input.aTag,
+      catalogKind: parsed ? `nostr:${parsed.kind}` : 'nostr',
+      referenceTagName: 'a',
+      referenceKind: parsed ? String(parsed.kind) : '',
+      highlightTagName: 'a',
+      highlightTagValue: input.aTag
+    };
+  }
+
+  if (input.eTag) {
+    return {
+      mode: 'generic',
+      value: input.eTag,
+      catalogId: input.eTag,
+      catalogKind: 'nostr:event',
+      referenceTagName: 'e',
+      referenceKind: cleanText(input.kTag),
+      highlightTagName: 'e',
+      highlightTagValue: input.eTag
+    };
+  }
+
+  if (input.iTagValue) {
+    return {
+      mode: 'generic',
+      value: input.iTagValue,
+      catalogId: input.iTagValue,
+      catalogKind: cleanText(input.kTag) || inferCatalogKindFromValue(input.iTagValue),
+      referenceTagName: 'i',
+      referenceKind: cleanText(input.kTag) || inferCatalogKindFromValue(input.iTagValue),
+      highlightTagName: 'r',
+      highlightTagValue: input.url || normalizeArtifactUrl(input.iTagValue) || ''
+    };
+  }
+
+  return {
+    mode: 'generic',
+    value: input.url,
+    catalogId: input.url,
+    catalogKind: 'web',
+    referenceTagName: 'i',
+    referenceKind: 'web',
+    highlightTagName: 'r',
+    highlightTagValue: input.url
+  };
+}
+
+function buildShareLookupFilters(
+  references: Array<{ tagName: 'a' | 'e' | 'r'; value: string }>,
+  limit: number
+): Array<Record<`#${string}`, string[]> & { kinds: number[]; limit: number }> {
+  const addresses = uniqueValues(
+    references.filter((reference) => reference.tagName === 'a').map((reference) => reference.value)
+  );
+  const eventIds = uniqueValues(
+    references.filter((reference) => reference.tagName === 'e').map((reference) => reference.value)
+  );
+  const urls = uniqueValues(
+    references.filter((reference) => reference.tagName === 'r').map((reference) => reference.value)
+  );
+  const filters: Array<Record<`#${string}`, string[]> & { kinds: number[]; limit: number }> = [];
+
+  if (addresses.length > 0) {
+    filters.push({ kinds: [HIGHLIGHTER_ARTIFACT_SHARE_KIND], '#a': addresses, limit });
+  }
+
+  if (eventIds.length > 0) {
+    filters.push({ kinds: [HIGHLIGHTER_ARTIFACT_SHARE_KIND], '#e': eventIds, limit });
+  }
+
+  if (urls.length > 0) {
+    filters.push({ kinds: [HIGHLIGHTER_ARTIFACT_SHARE_KIND], '#r': urls, limit });
+  }
+
+  return filters;
 }
 
 function parseSource(value: string | undefined): ArtifactSource | undefined {
@@ -299,6 +600,15 @@ function parseSource(value: string | undefined): ArtifactSource | undefined {
   }
 
   return undefined;
+}
+
+function inferCatalogKindFromValue(value: string): string {
+  if (value.startsWith('isbn:')) return 'isbn';
+  if (value.startsWith('doi:')) return 'doi';
+  if (value.startsWith('podcast:guid:')) return 'podcast:guid';
+  if (value.startsWith('podcast:item:guid:')) return 'podcast:item:guid';
+  if (value.startsWith('podcast:publisher:guid:')) return 'podcast:publisher:guid';
+  return 'web';
 }
 
 function fallbackTitle(url: string): string {
@@ -323,6 +633,12 @@ function domainLabel(url: string): string {
   } catch {
     return url;
   }
+}
+
+function buildFallbackUrl(value: string): string {
+  const normalized = normalizeArtifactUrl(value);
+  if (normalized) return normalized;
+  return 'https://highlighter.f7z.io/';
 }
 
 function titleCase(value: string): string {
@@ -357,13 +673,51 @@ function parseAddress(address: string): { kind: number; pubkey: string; identifi
   };
 }
 
+function eventAddress(event: Pick<NostrEvent, 'kind' | 'pubkey' | 'tags'>): string | undefined {
+  const identifier = cleanText(event.tags.find((tag) => tag[0] === 'd')?.[1]);
+  const kind = Number(event.kind ?? 0);
+
+  if (!Number.isInteger(kind) || !event.pubkey || !identifier) {
+    return undefined;
+  }
+
+  return `${kind}:${event.pubkey}:${identifier}`;
+}
+
+function parseReferenceKey(referenceKey: string): { tagName: 'a' | 'e' | 'r'; value: string } | undefined {
+  const trimmed = referenceKey.trim();
+  const separator = trimmed.indexOf(':');
+  if (separator <= 0) return undefined;
+
+  const tagName = trimmed.slice(0, separator);
+  const value = trimmed.slice(separator + 1).trim();
+
+  if ((tagName === 'a' || tagName === 'e' || tagName === 'r') && value) {
+    return { tagName, value };
+  }
+
+  return undefined;
+}
+
+function referenceKeyForTag(tagName: string, value: string): string {
+  const normalizedValue = cleanText(value);
+  return normalizedValue ? `${tagName}:${normalizedValue}` : '';
+}
+
 function fnv1a(value: string): number {
   let hash = 0x811c9dc5;
 
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
+    hash = Math.imul(hash, 0x01000193);
   }
 
   return hash >>> 0;
+}
+
+export function authorLabel(
+  profile: { displayName?: string; display_name?: string; name?: string; username?: string } | undefined,
+  pubkey: string
+): string {
+  return displayName(profile, shortPubkey(pubkey));
 }

@@ -1,17 +1,22 @@
 <script lang="ts">
   import { browser } from '$app/environment';
+  import { NDKKind, type NDKEvent } from '@nostr-dev-kit/ndk';
   import type { PageProps } from './$types';
   import { ndk } from '$lib/ndk/client';
-  import { GROUP_RELAY_URLS } from '$lib/ndk/config';
-  import { HIGHLIGHTER_ARTIFACT_KIND, artifactFromEvent } from '$lib/ndk/artifacts';
+  import { DEFAULT_RELAYS, GROUP_RELAY_URLS } from '$lib/ndk/config';
+  import {
+    HIGHLIGHTER_ARTIFACT_SHARE_KIND,
+    artifactFromEvent,
+    artifactHighlightReferenceKey
+  } from '$lib/ndk/artifacts';
   import ArtifactCard from '$lib/features/artifacts/ArtifactCard.svelte';
   import ArtifactForm from '$lib/features/artifacts/ArtifactForm.svelte';
   import ArtifactMiniCard from '$lib/features/groups/ArtifactMiniCard.svelte';
   import FeaturedArtifactPanel from '$lib/features/groups/FeaturedArtifactPanel.svelte';
   import HighlightCard from '$lib/features/highlights/HighlightCard.svelte';
   import {
-    HIGHLIGHTER_HIGHLIGHT_REPOST_KIND,
-    fetchHighlightsForShares,
+    buildArtifactHighlightFilters,
+    hydrateStandaloneHighlights,
     highlightCountsByArtifact,
     type HydratedHighlight
   } from '$lib/ndk/highlights';
@@ -23,70 +28,84 @@
     if (!browser || !data.community) return undefined;
 
     return {
-      filters: [{ kinds: [HIGHLIGHTER_ARTIFACT_KIND], '#h': [data.community.id], limit: 32 }],
+      filters: [{ kinds: [HIGHLIGHTER_ARTIFACT_SHARE_KIND], '#h': [data.community.id], limit: 64 }],
       relayUrls: GROUP_RELAY_URLS,
       closeOnEose: true
     };
   });
 
-  const artifacts = $derived(
-    artifactFeed.events
-      .toSorted((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0))
-      .map((event) => artifactFromEvent(event))
-  );
-  const artifactsByAddress = $derived(new Map(artifacts.map((artifact) => [artifact.address, artifact] as const)));
-
-  const highlightShareFeed = ndk.$subscribe(() => {
+  const groupAdminFeed = ndk.$subscribe(() => {
     if (!browser || !data.community) return undefined;
 
     return {
-      filters: [{ kinds: [HIGHLIGHTER_HIGHLIGHT_REPOST_KIND], '#h': [data.community.id], limit: 128 }],
+      filters: [{ kinds: [NDKKind.GroupAdmins], '#d': [data.community.id], limit: 1 }],
       relayUrls: GROUP_RELAY_URLS,
       closeOnEose: true
     };
   });
 
-  let communityHighlights = $state<HydratedHighlight[]>([]);
-  let resolvingHighlights = $state(false);
+  const groupMemberFeed = ndk.$subscribe(() => {
+    if (!browser || !data.community) return undefined;
 
-  $effect(() => {
-    if (!browser || !data.community) {
-      communityHighlights = [];
-      return;
-    }
-
-    const shareEvents = [...highlightShareFeed.events];
-    if (shareEvents.length === 0) {
-      communityHighlights = [];
-      return;
-    }
-
-    let cancelled = false;
-    resolvingHighlights = true;
-
-    void fetchHighlightsForShares(ndk, shareEvents)
-      .then((highlights) => {
-        if (cancelled) return;
-        communityHighlights = highlights;
-      })
-      .finally(() => {
-        if (!cancelled) {
-          resolvingHighlights = false;
-        }
-      });
-
-    return () => {
-      cancelled = true;
+    return {
+      filters: [{ kinds: [NDKKind.GroupMembers], '#d': [data.community.id], limit: 1 }],
+      relayUrls: GROUP_RELAY_URLS,
+      closeOnEose: true
     };
   });
 
+  function latestEvent(events: NDKEvent[]): NDKEvent | undefined {
+    return [...events].sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0))[0];
+  }
+
+  function uniquePubkeys(event: NDKEvent | undefined): string[] {
+    return [...new Set((event?.getMatchingTags('p').map((tag) => tag[1]).filter(Boolean) ?? []).map((value) => value.trim()))];
+  }
+
+  const artifacts = $derived.by(() => {
+    const latestById = new Map<string, ReturnType<typeof artifactFromEvent>>();
+
+    for (const event of [...artifactFeed.events].toSorted((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0))) {
+      const artifact = artifactFromEvent(event);
+      if (!artifact.id || latestById.has(artifact.id)) continue;
+      latestById.set(artifact.id, artifact);
+    }
+
+    return [...latestById.values()];
+  });
+  const artifactsByReference = $derived(
+    new Map(artifacts.map((artifact) => [artifactHighlightReferenceKey(artifact), artifact] as const))
+  );
+  const memberPubkeys = $derived.by(() => {
+    const groupAdmins = uniquePubkeys(latestEvent(groupAdminFeed.events));
+    const groupMembers = uniquePubkeys(latestEvent(groupMemberFeed.events));
+    const adminPubkeys = data.community?.adminPubkeys ?? [];
+
+    return [...new Set([...adminPubkeys, ...groupAdmins, ...groupMembers])];
+  });
+  const highlightFeed = ndk.$subscribe(() => {
+    if (!browser || !data.community) return undefined;
+
+    const filters = buildArtifactHighlightFilters(artifacts, memberPubkeys, 180);
+    if (filters.length === 0) return undefined;
+
+    return {
+      filters,
+      relayUrls: DEFAULT_RELAYS,
+      closeOnEose: true
+    };
+  });
+
+  const communityHighlights = $derived<HydratedHighlight[]>(
+    hydrateStandaloneHighlights([...highlightFeed.events])
+  );
   const recentHighlights = $derived(communityHighlights.slice(0, 6));
   const highlightCounts = $derived(highlightCountsByArtifact(communityHighlights));
   const featuredArtifact = $derived(
     artifacts
       .toSorted((left, right) => {
-        const leftCount = highlightCounts.get(left.address) ?? 0;
-        const rightCount = highlightCounts.get(right.address) ?? 0;
+        const leftCount = highlightCounts.get(artifactHighlightReferenceKey(left)) ?? 0;
+        const rightCount = highlightCounts.get(artifactHighlightReferenceKey(right)) ?? 0;
 
         if (rightCount !== leftCount) {
           return rightCount - leftCount;
@@ -98,7 +117,9 @@
   );
   const featuredHighlight = $derived(
     featuredArtifact
-      ? communityHighlights.find((highlight) => highlight.artifactAddress === featuredArtifact.address)
+      ? communityHighlights.find(
+          (highlight) => highlight.sourceReferenceKey === artifactHighlightReferenceKey(featuredArtifact)
+        )
       : undefined
   );
   const newlySharedArtifacts = $derived(artifacts.slice(0, 4));
@@ -106,12 +127,13 @@
     artifacts
       .filter(
         (artifact) =>
-          (highlightCounts.get(artifact.address) ?? 0) > 0 &&
-          artifact.address !== featuredArtifact?.address
+          (highlightCounts.get(artifactHighlightReferenceKey(artifact)) ?? 0) > 0 &&
+          artifactHighlightReferenceKey(artifact) !==
+            (featuredArtifact ? artifactHighlightReferenceKey(featuredArtifact) : '')
       )
       .toSorted((left, right) => {
-        const leftCount = highlightCounts.get(left.address) ?? 0;
-        const rightCount = highlightCounts.get(right.address) ?? 0;
+        const leftCount = highlightCounts.get(artifactHighlightReferenceKey(left)) ?? 0;
+        const rightCount = highlightCounts.get(artifactHighlightReferenceKey(right)) ?? 0;
 
         if (rightCount !== leftCount) {
           return rightCount - leftCount;
@@ -123,7 +145,9 @@
   );
   const archiveArtifacts = $derived(
     featuredArtifact
-      ? artifacts.filter((artifact) => artifact.address !== featuredArtifact.address)
+      ? artifacts.filter(
+          (artifact) => artifactHighlightReferenceKey(artifact) !== artifactHighlightReferenceKey(featuredArtifact)
+        )
       : artifacts
   );
 
@@ -240,13 +264,13 @@
     {:else}
       <section class="featured-stage">
         {#if featuredArtifact}
-          <FeaturedArtifactPanel
-            artifact={featuredArtifact}
-            highlight={featuredHighlight}
-            communityName={data.community.name}
-            highlightCount={highlightCounts.get(featuredArtifact.address) ?? 0}
-          />
-        {/if}
+            <FeaturedArtifactPanel
+              artifact={featuredArtifact}
+              highlight={featuredHighlight}
+              communityName={data.community.name}
+              highlightCount={highlightCounts.get(artifactHighlightReferenceKey(featuredArtifact)) ?? 0}
+            />
+          {/if}
 
         <aside class="featured-rail">
           <section class="side-card">
@@ -259,8 +283,11 @@
             </div>
 
             <div class="mini-card-stack">
-              {#each newlySharedArtifacts as artifact (artifact.address)}
-                <ArtifactMiniCard artifact={artifact} highlightCount={highlightCounts.get(artifact.address) ?? 0} />
+              {#each newlySharedArtifacts as artifact (artifact.id)}
+                <ArtifactMiniCard
+                  artifact={artifact}
+                  highlightCount={highlightCounts.get(artifactHighlightReferenceKey(artifact)) ?? 0}
+                />
               {/each}
             </div>
           </section>
@@ -279,8 +306,11 @@
               </p>
             {:else}
               <div class="mini-card-stack">
-                {#each conversationArtifacts as artifact (artifact.address)}
-                  <ArtifactMiniCard artifact={artifact} highlightCount={highlightCounts.get(artifact.address) ?? 0} />
+                {#each conversationArtifacts as artifact (artifact.id)}
+                  <ArtifactMiniCard
+                    artifact={artifact}
+                    highlightCount={highlightCounts.get(artifactHighlightReferenceKey(artifact)) ?? 0}
+                  />
                 {/each}
               </div>
             {/if}
@@ -326,8 +356,11 @@
           </div>
 
           <div class="artifact-grid">
-            {#each archiveArtifacts as artifact (artifact.address)}
-              <ArtifactCard {artifact} highlightCount={highlightCounts.get(artifact.address) ?? 0} />
+            {#each archiveArtifacts as artifact (artifact.id)}
+              <ArtifactCard
+                {artifact}
+                highlightCount={highlightCounts.get(artifactHighlightReferenceKey(artifact)) ?? 0}
+              />
             {/each}
           </div>
         </section>
@@ -335,32 +368,31 @@
     {/if}
 
     <section class="highlight-feed">
-      <div class="artifact-feed-header">
-        <div>
-          <p class="panel-label">What Caught Our Eye</p>
-          <h2>Recent community highlights</h2>
-        </div>
-        <span>{itemLabel(recentHighlights.length, 'share')}</span>
+        <div class="artifact-feed-header">
+          <div>
+            <p class="panel-label">What Caught Our Eye</p>
+            <h2>Recent community highlights</h2>
+          </div>
+        <span>{itemLabel(recentHighlights.length, 'highlight')}</span>
       </div>
 
       {#if recentHighlights.length === 0}
         <div class="artifact-empty">
-          <p>No highlight reposts yet.</p>
+          <p>No member highlights yet.</p>
           <p>
-            Save a highlight on any artifact in this community and it will show up here after the
-            repost lands.
+            Once members start saving highlights against the sources shared in this community, they
+            will surface here.
           </p>
         </div>
       {:else}
         <div class="highlight-grid">
           {#each recentHighlights as highlight (highlight.eventId)}
-            <HighlightCard highlight={highlight} artifact={artifactsByAddress.get(highlight.artifactAddress)} />
+            <HighlightCard
+              highlight={highlight}
+              artifact={artifactsByReference.get(highlight.sourceReferenceKey)}
+            />
           {/each}
         </div>
-      {/if}
-
-      {#if resolvingHighlights}
-        <p class="highlight-loading">Refreshing highlight reposts…</p>
       {/if}
     </section>
   </section>
@@ -518,8 +550,7 @@
   .summary-card span,
   .empty-collection p,
   .side-card p,
-  .side-card-empty,
-  .highlight-loading {
+  .side-card-empty {
     margin: 0;
     color: var(--muted);
     line-height: 1.6;
@@ -643,10 +674,6 @@
     color: var(--text-strong);
     font-weight: 700;
     margin-bottom: 0.35rem;
-  }
-
-  .highlight-loading {
-    font-size: 0.88rem;
   }
 
   @media (max-width: 720px) {

@@ -3,7 +3,7 @@
   import type { PageProps } from './$types';
   import type { ArtifactRecord } from '$lib/ndk/artifacts';
   import HighlightCard from '$lib/features/highlights/HighlightCard.svelte';
-  import { fetchArtifactsByAddresses } from '$lib/ndk/artifacts';
+  import { fetchArtifactsByHighlightReferenceKeys } from '$lib/ndk/artifacts';
   import { ndk } from '$lib/ndk/client';
   import { DEFAULT_RELAYS, GROUP_RELAY_URLS } from '$lib/ndk/config';
   import {
@@ -39,28 +39,28 @@
     hydrateHighlights([...authoredHighlightFeed.events], [...authoredShareFeed.events])
   );
 
-  let artifactsByAddress = $state<Map<string, ArtifactRecord>>(new Map());
+  let artifactsByReference = $state<Map<string, ArtifactRecord>>(new Map());
   let resolvingArtifacts = $state(false);
 
   $effect(() => {
     if (!browser) {
-      artifactsByAddress = new Map();
+      artifactsByReference = new Map();
       return;
     }
 
-    const addresses = [...new Set(highlights.map((highlight) => highlight.artifactAddress).filter(Boolean))];
-    if (addresses.length === 0) {
-      artifactsByAddress = new Map();
+    const referenceKeys = [...new Set(highlights.map((highlight) => highlight.sourceReferenceKey).filter(Boolean))];
+    if (referenceKeys.length === 0) {
+      artifactsByReference = new Map();
       return;
     }
 
     let cancelled = false;
     resolvingArtifacts = true;
 
-    void fetchArtifactsByAddresses(ndk, addresses)
+    void fetchArtifactsByHighlightReferenceKeys(ndk, referenceKeys)
       .then((artifacts) => {
         if (cancelled) return;
-        artifactsByAddress = artifacts;
+        artifactsByReference = artifacts;
       })
       .finally(() => {
         if (!cancelled) {
@@ -122,7 +122,7 @@
       {#each highlights as highlight (highlight.eventId)}
         <HighlightCard
           {highlight}
-          artifact={artifactsByAddress.get(highlight.artifactAddress)}
+          artifact={artifactsByReference.get(highlight.sourceReferenceKey)}
           communities={data.communities}
           showShareControl={true}
         />

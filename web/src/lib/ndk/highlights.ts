@@ -2,10 +2,12 @@ import NDK, {
   NDKEvent,
   NDKRelaySet,
   getRelayListForUsers,
+  type NDKFilter,
   type NDKEvent as NDKEventType,
   type NDKKind
 } from '@nostr-dev-kit/ndk';
 import type { ArtifactRecord } from '$lib/ndk/artifacts';
+import { artifactHighlightReferenceKey } from '$lib/ndk/artifacts';
 import { DEFAULT_RELAYS, HIGHLIGHTER_RELAY_URL } from '$lib/ndk/config';
 import { buildCommunityRelaySet } from '$lib/ndk/groups';
 
@@ -19,7 +21,9 @@ export type HighlightRecord = {
   context: string;
   note: string;
   artifactAddress: string;
+  eventReference: string;
   sourceUrl: string;
+  sourceReferenceKey: string;
   createdAt: number | null;
 };
 
@@ -44,16 +48,100 @@ export function highlightPath(groupId: string, highlightId: string): string {
 }
 
 export function highlightFromEvent(event: NDKEventType): HighlightRecord {
+  const artifactAddress = cleanText(event.tagValue('a'));
+  const eventReference = cleanText(event.tagValue('e'));
+  const sourceUrl = cleanText(event.tagValue('r'));
+
   return {
     eventId: event.id,
     pubkey: event.pubkey,
     quote: cleanText(event.content),
     context: cleanText(event.tagValue('context')),
     note: cleanText(event.tagValue('comment')),
-    artifactAddress: cleanText(event.tagValue('a')),
-    sourceUrl: cleanText(event.tagValue('r')),
+    artifactAddress,
+    eventReference,
+    sourceUrl,
+    sourceReferenceKey: highlightReferenceKey({
+      artifactAddress,
+      eventReference,
+      sourceUrl
+    }),
     createdAt: event.created_at ?? null
   };
+}
+
+export function highlightReferenceKey(input: {
+  artifactAddress?: string;
+  eventReference?: string;
+  sourceUrl?: string;
+}): string {
+  const artifactAddress = cleanText(input.artifactAddress);
+  if (artifactAddress) return `a:${artifactAddress}`;
+
+  const eventReference = cleanText(input.eventReference);
+  if (eventReference) return `e:${eventReference}`;
+
+  const sourceUrl = cleanText(input.sourceUrl);
+  if (sourceUrl) return `r:${sourceUrl}`;
+
+  return '';
+}
+
+export function buildArtifactHighlightFilters(
+  artifacts: Array<Pick<ArtifactRecord, 'highlightTagName' | 'highlightTagValue'>>,
+  authors: string[],
+  limit = 160
+): NDKFilter[] {
+  const normalizedAuthors = uniqueValues(authors);
+  if (normalizedAuthors.length === 0 || artifacts.length === 0) {
+    return [];
+  }
+
+  const aValues = uniqueValues(
+    artifacts
+      .filter((artifact) => artifact.highlightTagName === 'a')
+      .map((artifact) => artifact.highlightTagValue)
+  );
+  const eValues = uniqueValues(
+    artifacts
+      .filter((artifact) => artifact.highlightTagName === 'e')
+      .map((artifact) => artifact.highlightTagValue)
+  );
+  const rValues = uniqueValues(
+    artifacts
+      .filter((artifact) => artifact.highlightTagName === 'r')
+      .map((artifact) => artifact.highlightTagValue)
+  );
+  const filters: NDKFilter[] = [];
+
+  if (aValues.length > 0) {
+    filters.push({
+      kinds: [HIGHLIGHTER_HIGHLIGHT_KIND],
+      authors: normalizedAuthors,
+      '#a': aValues,
+      limit
+    } as NDKFilter);
+  }
+
+  if (eValues.length > 0) {
+    filters.push({
+      kinds: [HIGHLIGHTER_HIGHLIGHT_KIND],
+      authors: normalizedAuthors,
+      '#e': eValues,
+      limit
+    } as NDKFilter);
+  }
+
+  if (rValues.length > 0) {
+    filters.push({
+      kinds: [HIGHLIGHTER_HIGHLIGHT_KIND],
+      authors: normalizedAuthors,
+      '#r': rValues,
+      limit
+    } as NDKFilter);
+  }
+
+  return filters;
 }
 
 export function highlightShareFromEvent(event: NDKEventType): HighlightShareRecord | undefined {
@@ -119,6 +207,21 @@ export function hydrateHighlights(
     );
 }
 
+export function hydrateStandaloneHighlights(highlightEvents: NDKEventType[]): HydratedHighlight[] {
+  return highlightEvents
+    .map((event) => {
+      const highlight = highlightFromEvent(event);
+
+      return {
+        ...highlight,
+        shares: [],
+        shareCount: 0,
+        latestSharedAt: null
+      };
+    })
+    .toSorted((left, right) => (right.createdAt ?? 0) - (left.createdAt ?? 0));
+}
+
 export async function fetchHighlightsForShares(
   ndk: NDK,
   shareEvents: NDKEventType[]
@@ -151,12 +254,14 @@ export async function fetchHighlightsForShares(
   return hydrateHighlights(highlightEvents, shareEvents);
 }
 
-export function highlightCountsByArtifact(highlights: HydratedHighlight[]): Map<string, number> {
+export function highlightCountsByArtifact(
+  highlights: HydratedHighlight[] | HighlightRecord[]
+): Map<string, number> {
   const counts = new Map<string, number>();
 
   for (const highlight of highlights) {
-    if (!highlight.artifactAddress) continue;
-    counts.set(highlight.artifactAddress, (counts.get(highlight.artifactAddress) ?? 0) + 1);
+    if (!highlight.sourceReferenceKey) continue;
+    counts.set(highlight.sourceReferenceKey, (counts.get(highlight.sourceReferenceKey) ?? 0) + 1);
   }
 
   return counts;
@@ -251,10 +356,7 @@ async function publishCanonicalHighlight(
 
   event.kind = HIGHLIGHTER_HIGHLIGHT_KIND;
   event.content = quote;
-  event.tags = [
-    ['a', input.artifact.address],
-    ['r', input.artifact.url]
-  ];
+  event.tags = [[input.artifact.highlightTagName, input.artifact.highlightTagValue]];
 
   const context = cleanText(input.context);
   if (context && context !== quote) {
@@ -264,6 +366,10 @@ async function publishCanonicalHighlight(
   const note = cleanText(input.note);
   if (note) {
     event.tags.push(['comment', note]);
+  }
+
+  if (input.artifact.highlightTagName === 'r' && input.artifact.url) {
+    event.tags = [['r', input.artifact.url], ...event.tags.filter((tag) => !(tag[0] === 'r' && tag[1] === input.artifact.url))];
   }
 
   await event.sign();
@@ -308,6 +414,10 @@ async function buildUserHighlightRelaySet(ndk: NDK, pubkey: string): Promise<NDK
   );
 
   return NDKRelaySet.fromRelayUrls(relayUrls, ndk);
+}
+
+export function artifactReferenceKey(artifact: Pick<ArtifactRecord, 'highlightTagName' | 'highlightTagValue'>): string {
+  return artifactHighlightReferenceKey(artifact);
 }
 
 function cleanText(value: string | undefined): string {

@@ -29,6 +29,7 @@
   import BookmarkIcon from '$lib/components/BookmarkIcon.svelte';
   import HighlightPopover from '$lib/components/HighlightPopover.svelte';
   import SharePopover from '$lib/components/SharePopover.svelte';
+  import ShareNostrArticleToCommunity from '$lib/features/artifacts/ShareNostrArticleToCommunity.svelte';
   import { mergeUniqueEvents } from '$lib/ndk/events';
 
   let { data }: PageProps = $props();
@@ -342,6 +343,8 @@
       </p>
 
       {#if isArticle}
+        <ShareNostrArticleToCommunity {event} authorName={authorName} />
+
         <Tabs.Root bind:value={activeTab} activationMode="manual">
           <Tabs.List class="article-tabs-list" aria-label="Article views">
             <Tabs.Trigger value="article">Article</Tabs.Trigger>

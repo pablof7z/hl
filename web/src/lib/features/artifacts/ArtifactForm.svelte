@@ -13,7 +13,8 @@
     groupId: string;
   } = $props();
 
-  let url = $state('');
+  let reference = $state('');
+  let source = $state<'article' | 'book' | 'podcast' | 'video' | 'paper' | 'web'>('article');
   let note = $state('');
   let preview = $state<ArtifactPreview | null>(null);
   let previewing = $state(false);
@@ -23,12 +24,12 @@
 
   const currentUser = $derived(ndk.$currentUser);
   const isReadOnly = $derived(Boolean(ndk.$sessions?.isReadOnly()));
-  const canPreview = $derived(Boolean(url.trim()) && !previewing);
+  const canPreview = $derived(Boolean(reference.trim()) && !previewing);
   const canPublish = $derived(Boolean(preview) && !publishing && !isReadOnly);
 
   async function loadPreview() {
-    if (!url.trim()) {
-      errorMessage = 'Paste a URL to preview the artifact.';
+    if (!reference.trim()) {
+      errorMessage = 'Paste a URL or Nostr article reference to preview it.';
       return null;
     }
 
@@ -42,7 +43,7 @@
         headers: {
           'content-type': 'application/json'
         },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ reference, source })
       });
 
       const body = (await response.json()) as ArtifactPreview | { error?: string };
@@ -51,10 +52,11 @@
       }
 
       preview = body as ArtifactPreview;
-      url = preview.url;
+      preview = { ...preview, source };
+      reference = preview.url;
       return preview;
     } catch (error) {
-      errorMessage = error instanceof Error ? error.message : 'Could not preview that URL.';
+      errorMessage = error instanceof Error ? error.message : 'Could not preview that reference.';
       preview = null;
       return null;
     } finally {
@@ -95,14 +97,21 @@
       });
 
       statusMessage = result.existing
-        ? 'That artifact already exists in this community. Opening the existing entry.'
-        : 'Artifact shared. Opening the detail page.';
+        ? 'That source is already shared in this community. Opening the existing entry.'
+        : 'Content shared. Opening the detail page.';
 
       await goto(artifactPath(groupId, result.artifact.id), { invalidateAll: true });
     } catch (error) {
-      errorMessage = error instanceof Error ? error.message : 'Could not share the artifact.';
+      errorMessage = error instanceof Error ? error.message : 'Could not share that content.';
     } finally {
       publishing = false;
+    }
+  }
+
+  function handleSourceChange(nextSource: typeof source) {
+    source = nextSource;
+    if (preview) {
+      preview = { ...preview, source: nextSource };
     }
   }
 </script>
@@ -110,21 +119,33 @@
 <section class="artifact-form-shell">
   <div class="artifact-form-copy">
     <p class="eyebrow">Share Artifact</p>
-    <h2>Drop a link into this community.</h2>
+    <h2>Share something worth reading, watching, or hearing.</h2>
     <p>
-      Preview metadata on the server first, then publish the addressable artifact event to the
-      group relay.
+      Choose the type first, preview the metadata, then publish a `kind:11` share thread into this
+      community.
     </p>
   </div>
 
   <form class="artifact-form" onsubmit={handlePreview}>
     <label class="field">
-      <span>Source URL</span>
+      <span>Type</span>
+      <select bind:value={source} onchange={(event) => handleSourceChange((event.currentTarget as HTMLSelectElement).value as typeof source)}>
+        <option value="article">Article</option>
+        <option value="book">Book</option>
+        <option value="podcast">Podcast</option>
+        <option value="video">Video</option>
+        <option value="paper">Paper</option>
+        <option value="web">Web page</option>
+      </select>
+    </label>
+
+    <label class="field">
+      <span>URL or Nostr article</span>
       <input
-        bind:value={url}
-        type="url"
+        bind:value={reference}
+        type="text"
         inputmode="url"
-        placeholder="https://example.com/article"
+        placeholder="https://example.com/article or naddr1..."
         autocomplete="off"
       />
     </label>
@@ -144,7 +165,7 @@
         {previewing ? 'Previewing…' : 'Preview'}
       </button>
       <button class="primary" type="button" disabled={!canPublish} onclick={handlePublish}>
-        {publishing ? 'Sharing…' : 'Share artifact'}
+        {publishing ? 'Sharing…' : 'Share with community'}
       </button>
     </div>
 
@@ -166,6 +187,9 @@
           <div class="preview-topline">
             <span>{preview.source}</span>
             <span>{preview.domain}</span>
+            {#if preview.catalogKind && preview.catalogKind !== 'web' && preview.catalogKind !== 'nostr:30023'}
+              <span>{preview.catalogKind}</span>
+            {/if}
           </div>
           <strong>{preview.title}</strong>
           {#if preview.author}
@@ -173,6 +197,9 @@
           {/if}
           {#if preview.description}
             <p>{preview.description}</p>
+          {/if}
+          {#if preview.catalogId && preview.catalogKind !== 'web' && preview.catalogId !== preview.url}
+            <code>{preview.catalogId}</code>
           {/if}
           <code>/community/{groupId}/content/{preview.id}</code>
         </div>
@@ -235,7 +262,8 @@
   }
 
   .field input,
-  .field textarea {
+  .field textarea,
+  .field select {
     width: 100%;
     border: 1px solid var(--border);
     border-radius: 0.95rem;

@@ -1,66 +1,76 @@
 <script lang="ts">
   import { browser } from '$app/environment';
+  import { NDKKind, type NDKEvent } from '@nostr-dev-kit/ndk';
   import type { PageProps } from './$types';
   import HighlightCard from '$lib/features/highlights/HighlightCard.svelte';
   import HighlightForm from '$lib/features/highlights/HighlightForm.svelte';
   import { ndk } from '$lib/ndk/client';
   import {
-    HIGHLIGHTER_HIGHLIGHT_REPOST_KIND,
-    fetchHighlightsForShares,
+    buildArtifactHighlightFilters,
+    hydrateStandaloneHighlights,
     type HydratedHighlight
   } from '$lib/ndk/highlights';
-  import { GROUP_RELAY_URLS } from '$lib/ndk/config';
+  import { DEFAULT_RELAYS, GROUP_RELAY_URLS } from '$lib/ndk/config';
+  import { artifactHighlightReferenceKey } from '$lib/ndk/artifacts';
 
   let { data }: PageProps = $props();
   const currentUser = $derived(ndk.$currentUser);
 
-  const highlightShareFeed = ndk.$subscribe(() => {
+  const groupAdminFeed = ndk.$subscribe(() => {
     if (!browser || !data.community) return undefined;
 
     return {
-      filters: [{ kinds: [HIGHLIGHTER_HIGHLIGHT_REPOST_KIND], '#h': [data.community.id], limit: 128 }],
+      filters: [{ kinds: [NDKKind.GroupAdmins], '#d': [data.community.id], limit: 1 }],
       relayUrls: GROUP_RELAY_URLS,
       closeOnEose: true
     };
   });
 
-  let communityHighlights = $state<HydratedHighlight[]>([]);
-  let resolvingHighlights = $state(false);
+  const groupMemberFeed = ndk.$subscribe(() => {
+    if (!browser || !data.community) return undefined;
 
-  $effect(() => {
-    if (!browser || !data.community) {
-      communityHighlights = [];
-      return;
-    }
-
-    const shareEvents = [...highlightShareFeed.events];
-    if (shareEvents.length === 0) {
-      communityHighlights = [];
-      return;
-    }
-
-    let cancelled = false;
-    resolvingHighlights = true;
-
-    void fetchHighlightsForShares(ndk, shareEvents)
-      .then((highlights) => {
-        if (cancelled) return;
-        communityHighlights = highlights;
-      })
-      .finally(() => {
-        if (!cancelled) {
-          resolvingHighlights = false;
-        }
-      });
-
-    return () => {
-      cancelled = true;
+    return {
+      filters: [{ kinds: [NDKKind.GroupMembers], '#d': [data.community.id], limit: 1 }],
+      relayUrls: GROUP_RELAY_URLS,
+      closeOnEose: true
     };
   });
 
+  function latestEvent(events: NDKEvent[]): NDKEvent | undefined {
+    return [...events].sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0))[0];
+  }
+
+  function uniquePubkeys(event: NDKEvent | undefined): string[] {
+    return [...new Set((event?.getMatchingTags('p').map((tag) => tag[1]).filter(Boolean) ?? []).map((value) => value.trim()))];
+  }
+
+  const memberPubkeys = $derived.by(() => {
+    const groupAdmins = uniquePubkeys(latestEvent(groupAdminFeed.events));
+    const groupMembers = uniquePubkeys(latestEvent(groupMemberFeed.events));
+
+    return [...new Set([...(data.community?.adminPubkeys ?? []), ...groupAdmins, ...groupMembers])];
+  });
+  const highlightFeed = ndk.$subscribe(() => {
+    if (!browser || !data.community || !data.artifact) return undefined;
+
+    const filters = buildArtifactHighlightFilters([data.artifact], memberPubkeys, 120);
+    if (filters.length === 0) return undefined;
+
+    return {
+      filters,
+      relayUrls: DEFAULT_RELAYS,
+      closeOnEose: true
+    };
+  });
+  const communityHighlights = $derived<HydratedHighlight[]>(
+    hydrateStandaloneHighlights([...highlightFeed.events])
+  );
+  const artifactReferenceKey = $derived(
+    data.artifact ? artifactHighlightReferenceKey(data.artifact) : ''
+  );
   const artifactHighlights = $derived(
     data.artifact
-      ? communityHighlights.filter((highlight) => highlight.artifactAddress === data.artifact?.address)
+      ? communityHighlights.filter((highlight) => highlight.sourceReferenceKey === artifactReferenceKey)
       : []
   );
 </script>
@@ -132,8 +142,8 @@
       </div>
 
       <div class="artifact-panel">
-        <p class="panel-label">Artifact Coordinate</p>
-        <p class="panel-value mono">{data.artifact.address}</p>
+        <p class="panel-label">Source Reference</p>
+        <p class="panel-value mono">{data.artifact.referenceKey}</p>
       </div>
     </section>
 
@@ -165,10 +175,10 @@
 
       {#if artifactHighlights.length === 0}
         <div class="artifact-empty">
-          <p>No shared highlights yet.</p>
+          <p>No member highlights yet.</p>
           <p>
-            Save the first excerpt from this artifact and it will appear here after the repost hits
-            the group relay.
+            Save the first excerpt from this source and it will appear here once a group member
+            publishes the highlight.
           </p>
         </div>
       {:else}
@@ -177,10 +187,6 @@
             <HighlightCard {highlight} artifact={data.artifact} />
           {/each}
         </div>
-      {/if}
-
-      {#if resolvingHighlights}
-        <p class="artifact-loading">Refreshing highlight shares…</p>
       {/if}
     </section>
   </article>
@@ -356,15 +362,10 @@
     gap: 0.85rem;
   }
 
-  .artifact-empty p,
-  .artifact-loading {
+  .artifact-empty p {
     margin: 0;
     color: var(--muted);
     line-height: 1.6;
-  }
-
-  .artifact-loading {
-    font-size: 0.88rem;
   }
 
   @media (max-width: 760px) {

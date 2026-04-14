@@ -1,4 +1,8 @@
-import { HIGHLIGHTER_ARTIFACT_KIND, artifactFromEvent, type ArtifactRecord } from '$lib/ndk/artifacts';
+import {
+  HIGHLIGHTER_ARTIFACT_SHARE_KIND,
+  artifactFromEvent,
+  type ArtifactRecord
+} from '$lib/ndk/artifacts';
 import { GROUP_RELAY_URLS } from '$lib/ndk/config';
 import { getServerNdk } from '$lib/server/nostr';
 
@@ -14,7 +18,7 @@ export async function fetchArtifactForGroup(
   const events = Array.from(
     (await ndk.fetchEvents(
       {
-        kinds: [HIGHLIGHTER_ARTIFACT_KIND],
+        kinds: [HIGHLIGHTER_ARTIFACT_SHARE_KIND],
         '#h': [trimmedGroupId],
         '#d': [trimmedArtifactId],
         limit: 10
