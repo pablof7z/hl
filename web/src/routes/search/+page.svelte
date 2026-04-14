@@ -5,6 +5,9 @@
 
   let { data }: PageProps = $props();
 
+  const communityCount = $derived(data.results.communities.length);
+  const articleCount = $derived(data.results.articles.length);
+  const totalCount = $derived(communityCount + articleCount);
   const hasResults = $derived(data.results.communities.length > 0 || data.results.articles.length > 0);
 </script>
 
@@ -13,15 +16,17 @@
 </svelte:head>
 
 <section class="search-page">
-  <header class="search-hero">
-    <div class="search-copy">
-      <p class="eyebrow">Search</p>
-      <h1>Search communities and articles from the Highlighter relay.</h1>
-      <p class="lede">
-        Find public reading rooms by name or route, then jump straight into long-form Nostr pieces
-        already indexed on the relay.
+  <header class="search-header">
+    {#if data.results.query.length < MIN_SEARCH_QUERY_LENGTH}
+      <h1>Search</h1>
+    {:else}
+      <h1>Results for "{data.results.query}"</h1>
+      <p class="search-summary">
+        {totalCount} result{totalCount === 1 ? '' : 's'} · {communityCount} communit{communityCount === 1
+          ? 'y'
+          : 'ies'} · {articleCount} article{articleCount === 1 ? '' : 's'}
       </p>
-    </div>
+    {/if}
   </header>
 
   {#if data.results.query.length < MIN_SEARCH_QUERY_LENGTH}
@@ -92,17 +97,13 @@
 <style>
   .search-page {
     display: grid;
-    gap: 2rem;
-    padding: 1.75rem 0 3rem;
+    gap: 1.5rem;
+    padding: 1.25rem 0 3rem;
   }
 
-  .search-hero {
+  .search-header {
     display: grid;
-    gap: 1rem;
-  }
-
-  .search-copy {
-    max-width: 46rem;
+    gap: 0.35rem;
   }
 
   .eyebrow {
@@ -122,11 +123,9 @@
   }
 
   h1 {
-    font-family: var(--font-serif);
-    font-size: clamp(2rem, 4vw, 3.3rem);
-    line-height: 1.03;
-    letter-spacing: -0.04em;
-    max-width: 16ch;
+    font-size: clamp(1.8rem, 3vw, 2.5rem);
+    line-height: 1.08;
+    letter-spacing: -0.03em;
   }
 
   h2 {
@@ -139,11 +138,11 @@
     line-height: 1.3;
   }
 
-  .lede,
+  .search-summary,
   .message-copy {
-    margin: 0.85rem 0 0;
+    margin: 0;
     color: var(--muted);
-    line-height: 1.65;
+    line-height: 1.55;
   }
 
   .search-message {
