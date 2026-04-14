@@ -15,12 +15,7 @@
 <section class="community-index">
   <header class="community-index-header">
     <div class="community-index-copy">
-      <p class="eyebrow">Circles</p>
-      <h1>Public reading circles are live now.</h1>
-      <p class="lede">
-        Browse the public reading circles already on Highlighter and jump into the one
-        you want to build around.
-      </p>
+      <h1>Public reading circles</h1>
     </div>
 
     <a class="create-link" href="/community/create">
@@ -58,15 +53,6 @@
     max-width: 42rem;
   }
 
-  .eyebrow {
-    margin: 0 0 0.5rem;
-    color: var(--accent);
-    font-size: 0.82rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
   h1 {
     margin: 0;
     color: var(--text-strong);
@@ -74,13 +60,6 @@
     font-size: clamp(2rem, 4vw, 3rem);
     line-height: 1.05;
     letter-spacing: -0.03em;
-  }
-
-  .lede {
-    margin: 0.9rem 0 0;
-    max-width: 36rem;
-    color: var(--muted);
-    font-size: 1rem;
   }
 
   .create-link {

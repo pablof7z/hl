@@ -54,9 +54,7 @@
 
 <section class="me-communities-page">
   <header class="page-copy">
-    <p class="eyebrow">Communities</p>
-    <h2>Everything your pubkey currently belongs to.</h2>
-    <p>Everything your pubkey currently belongs to, across public and private relay-backed groups.</p>
+    <h2>Your communities</h2>
   </header>
 
   <section class="me-summary">
@@ -83,7 +81,7 @@
     defaultSort="name"
     searchPlaceholder="Search the communities you belong to"
     emptyLabel="No memberships loaded yet."
-    emptyCopy="Browse public communities to join one, or create a new community and it will appear here once the relay emits your membership state."
+    emptyCopy="Join a public community or create your own."
     emptyCtaHref="/discover"
     emptyCtaLabel="Browse public communities"
   />
@@ -100,7 +98,6 @@
     gap: 0.35rem;
   }
 
-  .eyebrow,
   .summary-label {
     margin: 0;
     color: var(--accent);
@@ -119,7 +116,6 @@
     letter-spacing: -0.02em;
   }
 
-  .page-copy p:last-child,
   .summary-card span {
     margin: 0;
     color: var(--muted);

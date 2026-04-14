@@ -107,12 +107,8 @@
 
 <section class="for-later-page">
   <header class="page-copy">
-    <p class="eyebrow">For Later</p>
-    <h2>Keep sources local until you know what to do with them.</h2>
-    <p>
-      Save articles, books, podcasts, and other sources privately. Add a teaser now or later,
-      then move them into a community when the timing is right.
-    </p>
+    <h2>Your reading queue</h2>
+    <p>Saved privately in this browser until you're ready to share.</p>
   </header>
 
   <section class="me-summary">
@@ -142,7 +138,7 @@
 
   {#if communities.length === 0}
     <div class="community-note">
-      <p>Join or create a community to unlock the “Move to community” action for saved items.</p>
+      <p>Join or create a community to move saved items out of this queue.</p>
       <div class="community-actions">
         <a href="/discover">Browse communities</a>
         <a href="/community/create">Create a community</a>
@@ -159,7 +155,7 @@
   {:else if items.length === 0}
     <section class="empty-state">
       <p>No saved items yet.</p>
-      <p>Preview a source above or save something from a source page to start your queue.</p>
+      <p>Add a source above to start your queue.</p>
     </section>
   {:else}
     <section class="for-later-list">
@@ -181,7 +177,6 @@
     gap: 0.35rem;
   }
 
-  .eyebrow,
   .summary-label {
     margin: 0;
     color: var(--accent);

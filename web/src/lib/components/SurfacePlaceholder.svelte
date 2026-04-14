@@ -7,7 +7,6 @@
 <section class="surface-shell">
   <header class="surface-header">
     <div class="surface-header-copy">
-      <p class="surface-eyebrow">{spec.eyebrow}</p>
       <h1 class="surface-title">{spec.title}</h1>
       <p class="surface-description">{spec.description}</p>
     </div>
@@ -15,9 +14,6 @@
     <div class="surface-status-card">
       <span class="surface-status-label">Status</span>
       <strong class="surface-status-value">{spec.status}</strong>
-      <p class="surface-status-note">
-        Route is live and ready for deeper feature work in the next milestone.
-      </p>
     </div>
   </header>
 
@@ -71,15 +67,6 @@
     gap: 0.75rem;
   }
 
-  .surface-eyebrow {
-    margin: 0;
-    color: var(--accent);
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-
   .surface-title {
     margin: 0;
     color: var(--text-strong);
@@ -116,12 +103,6 @@
   .surface-status-value {
     color: var(--text-strong);
     font-size: 1rem;
-  }
-
-  .surface-status-note {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.88rem;
   }
 
   .surface-actions {

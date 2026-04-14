@@ -88,12 +88,7 @@
 <section class="community-create">
   <header class="community-create-header">
     <div>
-      <p class="eyebrow">Create Community</p>
-      <h1>Create a new reading group.</h1>
-      <p class="lede">
-        This sends the community setup to Highlighter so the page is immediately visible at its
-        permanent route.
-      </p>
+      <h1>Create a community</h1>
     </div>
 
     <div class="relay-note">
@@ -189,7 +184,7 @@
         <p class="preview-label">Preview</p>
         <p class="preview-route">/community/{normalizedCommunityId || 'your-community'}</p>
         <p class="preview-copy">
-          {about || 'Your relay-backed community page will load here as soon as the create event and metadata event settle.'}
+          {about || 'Add a short description so people know what belongs here.'}
         </p>
       </div>
 
@@ -225,7 +220,6 @@
     flex-wrap: wrap;
   }
 
-  .eyebrow,
   .preview-label,
   .relay-note span {
     margin: 0 0 0.45rem;
@@ -243,13 +237,6 @@
     font-size: clamp(2rem, 4vw, 3rem);
     line-height: 1.05;
     letter-spacing: -0.03em;
-  }
-
-  .lede {
-    margin: 0.9rem 0 0;
-    max-width: 40rem;
-    color: var(--muted);
-    line-height: 1.65;
   }
 
   .relay-note {

@@ -100,9 +100,7 @@
 
 <section class="save-form-shell">
   <div class="save-form-copy">
-    <p class="eyebrow">For Later</p>
-    <h2>Save something privately before you decide where it belongs.</h2>
-    <p>Preview the source, add a teaser if you want one, and keep it local until you are ready.</p>
+    <h2>Save a source</h2>
   </div>
 
   <form class="save-form" onsubmit={handlePreview}>
@@ -193,7 +191,7 @@
   }
 
   .save-form-copy h2 {
-    margin: 0.3rem 0 0;
+    margin: 0;
     color: var(--text-strong);
     font-family: var(--font-serif);
     font-size: 1.5rem;
@@ -201,20 +199,10 @@
     letter-spacing: -0.02em;
   }
 
-  .save-form-copy p:last-child,
   .preview-copy p {
     margin: 0.55rem 0 0;
     color: var(--muted);
     line-height: 1.6;
-  }
-
-  .eyebrow {
-    margin: 0;
-    color: var(--accent);
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
   }
 
   .save-form {

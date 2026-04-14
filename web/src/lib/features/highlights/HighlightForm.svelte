@@ -66,11 +66,7 @@
 
 <section class="highlight-form-shell">
   <div class="highlight-form-copy">
-    <p class="eyebrow">Create Highlight</p>
-    <h2>Save the line that mattered.</h2>
-    <p>
-      This saves the highlight to your account, then shares it into this community.
-    </p>
+    <h2>Save a highlight</h2>
   </div>
 
   <form class="highlight-form" onsubmit={handlePublish}>
@@ -134,27 +130,12 @@
   }
 
   .highlight-form-copy h2 {
-    margin: 0.3rem 0 0;
+    margin: 0;
     color: var(--text-strong);
     font-family: var(--font-serif);
     font-size: 1.5rem;
     line-height: 1.15;
     letter-spacing: -0.02em;
-  }
-
-  .highlight-form-copy p:last-child {
-    margin: 0.55rem 0 0;
-    color: var(--muted);
-    line-height: 1.6;
-  }
-
-  .eyebrow {
-    margin: 0;
-    color: var(--accent);
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
   }
 
   .highlight-form {

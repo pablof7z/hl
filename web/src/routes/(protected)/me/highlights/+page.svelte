@@ -145,11 +145,7 @@
 
 <section class="me-highlights-page">
   <header class="page-copy">
-    <p class="eyebrow">Highlights</p>
-    <h2>Everything you highlight lives here.</h2>
-    <p>
-      Everything you highlight lives here, even after you share it across different communities.
-    </p>
+    <h2>Your highlights</h2>
   </header>
 
   <section class="me-summary">
@@ -175,10 +171,9 @@
       <p>{resolvingRelayList ? 'Looking for your highlights…' : 'No highlights found yet.'}</p>
       <p>
         {#if resolvingRelayList}
-          Highlighter is checking the places where your highlights live.
+          Checking the relays where your highlights live.
         {:else}
-          Share something into a community, save an excerpt, and it will appear here as your
-          permanent entry in your vault.
+          Save a highlight from any source and it will show up here.
         {/if}
       </p>
     </section>
@@ -206,7 +201,6 @@
     gap: 0.35rem;
   }
 
-  .eyebrow,
   .summary-label {
     margin: 0;
     color: var(--accent);
@@ -225,7 +219,6 @@
     letter-spacing: -0.02em;
   }
 
-  .page-copy p:last-child,
   .summary-card span,
   .empty-state p,
   .loading {

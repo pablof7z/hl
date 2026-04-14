@@ -244,7 +244,6 @@
 
 {#if data.missing || !data.community}
   <section class="community-missing">
-    <p class="eyebrow">Community</p>
     <h1>Community not found.</h1>
     <p>
       Nothing on the Highlighter relay currently resolves to <span>/community/{data.groupId}</span>.
@@ -296,7 +295,6 @@
             </div>
 
             <div class="community-copy">
-              <p class="eyebrow">Community</p>
               <h1>{data.community.name}</h1>
               <p class="community-about">
                 {data.community.about || 'A reading room for pieces people want to keep passing around.'}
@@ -714,7 +712,6 @@
     object-fit: cover;
   }
 
-  .eyebrow,
   .panel-label {
     margin: 0;
     color: var(--accent);
@@ -725,7 +722,7 @@
   }
 
   h1 {
-    margin: 0.35rem 0 0;
+    margin: 0;
     color: var(--text-strong);
     font-family: var(--font-serif);
     font-size: clamp(2rem, 4vw, 3.1rem);

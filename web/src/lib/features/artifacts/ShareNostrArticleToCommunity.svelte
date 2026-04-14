@@ -143,11 +143,7 @@
       <div class="share-community-handle" aria-hidden="true"></div>
 
       <Dialog.Header class="share-community-header">
-        <p class="eyebrow">Share To Community</p>
-        <Dialog.Title>Share this article into a community.</Dialog.Title>
-        <Dialog.Description>
-          Bring the source into one of your groups so highlights and discussion stay attached to it.
-        </Dialog.Description>
+        <Dialog.Title>Share to a community</Dialog.Title>
       </Dialog.Header>
 
       <Dialog.Close class="dialog-close" aria-label="Close community share dialog">
@@ -273,15 +269,6 @@
 
   :global(.share-community-header) {
     gap: 0.35rem;
-  }
-
-  .eyebrow {
-    margin: 0;
-    color: var(--accent);
-    font-size: 0.76rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
   }
 
   .share-community-body {

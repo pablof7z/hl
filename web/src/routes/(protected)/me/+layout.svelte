@@ -112,7 +112,6 @@
         {/if}
 
         <div class="vault-copy">
-          <p class="eyebrow">Me</p>
           <h1>{displayLabel}</h1>
           <div class="vault-meta">
             {#if profileNip05}
@@ -123,8 +122,7 @@
             {/if}
           </div>
           <p class="vault-bio">
-            {profileBio ||
-              'Your highlights, saved items, and community movement all collect here.'}
+            {profileBio || 'Highlights, saved items, and communities in one place.'}
           </p>
         </div>
       </div>
@@ -212,15 +210,6 @@
     display: grid;
     gap: 0.45rem;
     max-width: 42rem;
-  }
-
-  .eyebrow {
-    margin: 0;
-    color: var(--accent);
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
   }
 
   h1 {

@@ -205,7 +205,6 @@
 
 {#if data.missing || !data.community || !data.artifact}
   <section class="artifact-missing">
-    <p class="eyebrow">Source</p>
     <h1>Source not found.</h1>
     <p>
       Nothing currently resolves to <span>/community/{data.groupId}/content/{data.contentId}</span>.
@@ -230,7 +229,6 @@
       </div>
 
       <div class="artifact-hero-copy">
-        <p class="eyebrow">Source</p>
         <h1>{data.artifact.title}</h1>
         <div class="artifact-badges">
           <span>{data.artifact.source}</span>
@@ -417,7 +415,6 @@
     gap: 0.8rem;
   }
 
-  .eyebrow,
   .panel-label {
     margin: 0;
     color: var(--accent);

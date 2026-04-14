@@ -48,7 +48,6 @@
       <section class="result-section">
         <div class="result-section-head">
           <div>
-            <p class="eyebrow">Communities</p>
             <h2>{data.results.communities.length} public communit{data.results.communities.length === 1 ? 'y' : 'ies'}</h2>
           </div>
         </div>
@@ -65,7 +64,6 @@
       <section class="result-section">
         <div class="result-section-head">
           <div>
-            <p class="eyebrow">Articles</p>
             <h2>{data.results.articles.length} Nostr article{data.results.articles.length === 1 ? '' : 's'}</h2>
           </div>
         </div>
@@ -104,15 +102,6 @@
   .search-header {
     display: grid;
     gap: 0.35rem;
-  }
-
-  .eyebrow {
-    margin: 0 0 0.4rem;
-    color: var(--accent);
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
   }
 
   h1,

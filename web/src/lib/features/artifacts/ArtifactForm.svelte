@@ -118,11 +118,7 @@
 
 <section class="artifact-form-shell">
   <div class="artifact-form-copy">
-    <p class="eyebrow">Share Source</p>
-    <h2>Share something worth reading, watching, or hearing.</h2>
-    <p>
-      Choose the type first, preview the metadata, then share it into this community.
-    </p>
+    <h2>Share a source</h2>
   </div>
 
   <form class="artifact-form" onsubmit={handlePreview}>
@@ -220,7 +216,7 @@
   }
 
   .artifact-form-copy h2 {
-    margin: 0.3rem 0 0;
+    margin: 0;
     color: var(--text-strong);
     font-family: var(--font-serif);
     font-size: 1.5rem;
@@ -228,20 +224,10 @@
     letter-spacing: -0.02em;
   }
 
-  .artifact-form-copy p:last-child,
   .preview-copy p {
     margin: 0.55rem 0 0;
     color: var(--muted);
     line-height: 1.6;
-  }
-
-  .eyebrow {
-    margin: 0;
-    color: var(--accent);
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
   }
 
   .artifact-form {
