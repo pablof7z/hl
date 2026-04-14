@@ -54,6 +54,9 @@
         }).format(new Date(highlight.createdAt * 1000))
       : ''
   );
+  const artifactPageHref = $derived(
+    artifact?.groupId && artifact.id ? artifactPath(artifact.groupId, artifact.id) : ''
+  );
   const sourceTitle = $derived.by(() => {
     if (artifact?.title) return artifact.title;
     if (highlight.sourceUrl) return highlight.sourceUrl.replace(/^https?:\/\//, '');
@@ -202,8 +205,8 @@
 
   <div class="highlight-footer">
     <div class="highlight-source">
-      {#if artifact}
-        <a class="artifact-link" href={artifactPath(artifact.groupId, artifact.id)}>{sourceTitle}</a>
+      {#if artifactPageHref}
+        <a class="artifact-link" href={artifactPageHref}>{sourceTitle}</a>
       {:else if sourceHref}
         <a class="artifact-link" href={sourceHref} target="_blank" rel="noreferrer">{sourceTitle}</a>
       {:else}

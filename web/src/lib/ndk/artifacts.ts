@@ -1,11 +1,13 @@
 import NDK, {
   NDKEvent,
   NDKKind,
+  NDKRelaySet,
   nip19,
   type NDKEvent as NDKEventType,
   type NostrEvent
 } from '@nostr-dev-kit/ndk';
 import { articleImageUrl, articleSummary, articleTitle, displayName, shortPubkey } from '$lib/ndk/format';
+import { DEFAULT_RELAYS } from '$lib/ndk/config';
 import { buildCommunityRelaySet } from '$lib/ndk/groups';
 
 export const HIGHLIGHTER_ARTIFACT_SHARE_KIND = NDKKind.Thread as NDKKind;
@@ -339,6 +341,27 @@ export async function fetchArtifactsByHighlightReferenceKeys(
     artifacts.set(artifact.highlightReferenceKey, artifact);
   }
 
+  const unresolvedNostrArticleAddresses = uniqueValues(
+    parsed
+      .filter(({ tagName, value }) => {
+        if (tagName !== 'a') return false;
+
+        const parsedAddress = parseAddress(value);
+        return parsedAddress?.kind === 30023 && !artifacts.has(referenceKeyForTag('a', value));
+      })
+      .map(({ value }) => value)
+  );
+
+  if (unresolvedNostrArticleAddresses.length > 0) {
+    const resolvedArticles = await fetchNostrArticleArtifacts(ndk, unresolvedNostrArticleAddresses);
+
+    for (const [referenceKey, artifact] of resolvedArticles) {
+      if (!artifacts.has(referenceKey)) {
+        artifacts.set(referenceKey, artifact);
+      }
+    }
+  }
+
   return artifacts;
 }
 
@@ -617,6 +640,90 @@ function inferCatalogKindFromValue(value: string): string {
   if (value.startsWith('podcast:item:guid:')) return 'podcast:item:guid';
   if (value.startsWith('podcast:publisher:guid:')) return 'podcast:publisher:guid';
   return 'web';
+}
+
+async function fetchNostrArticleArtifacts(
+  ndk: NDK,
+  addresses: string[]
+): Promise<Map<string, ArtifactRecord>> {
+  const parsedAddresses = uniqueValues(addresses)
+    .map((address) => {
+      const parsed = parseAddress(address);
+      if (!parsed || parsed.kind !== 30023) return undefined;
+
+      return { address, ...parsed };
+    })
+    .filter(
+      (
+        candidate
+      ): candidate is {
+        address: string;
+        kind: number;
+        pubkey: string;
+        identifier: string;
+      } => Boolean(candidate)
+    );
+
+  if (parsedAddresses.length === 0) {
+    return new Map();
+  }
+
+  const identifiersByPubkey = new Map<string, Set<string>>();
+
+  for (const { pubkey, identifier } of parsedAddresses) {
+    const identifiers = identifiersByPubkey.get(pubkey) ?? new Set<string>();
+    identifiers.add(identifier);
+    identifiersByPubkey.set(pubkey, identifiers);
+  }
+
+  const filters = [...identifiersByPubkey.entries()].map(([pubkey, identifiers]) => ({
+    kinds: [30023],
+    authors: [pubkey],
+    '#d': [...identifiers],
+    limit: Math.max(identifiers.size * 2, 8)
+  }));
+
+  if (filters.length === 0) {
+    return new Map();
+  }
+
+  const relaySet = NDKRelaySet.fromRelayUrls(DEFAULT_RELAYS, ndk);
+  const articleEvents = Array.from(
+    (await ndk.fetchEvents(filters, { closeOnEose: true }, relaySet)) ?? []
+  ).sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
+
+  const expectedAddresses = new Set(parsedAddresses.map(({ address }) => address));
+  const artifacts = new Map<string, ArtifactRecord>();
+
+  for (const event of articleEvents) {
+    const rawEvent = event.rawEvent();
+    const address = eventAddress(rawEvent);
+
+    if (!address || !expectedAddresses.has(address)) {
+      continue;
+    }
+
+    const referenceKey = referenceKeyForTag('a', address);
+    if (artifacts.has(referenceKey)) {
+      continue;
+    }
+
+    const preview = buildNostrArticleArtifactPreview({
+      event: rawEvent,
+      canonicalUrl: buildFallbackNostrUrl(address)
+    });
+
+    artifacts.set(referenceKey, {
+      ...preview,
+      groupId: '',
+      shareEventId: '',
+      pubkey: event.pubkey,
+      createdAt: event.created_at ?? null,
+      note: ''
+    });
+  }
+
+  return artifacts;
 }
 
 function fallbackTitle(url: string): string {

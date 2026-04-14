@@ -19,6 +19,9 @@
   const groupCountLabel = $derived(
     `${group.highlights.length} highlight${group.highlights.length === 1 ? '' : 's'}`
   );
+  const artifactPageHref = $derived(
+    artifact?.groupId && artifact.id ? artifactPath(artifact.groupId, artifact.id) : ''
+  );
   const sourceTitle = $derived.by(() => {
     if (artifact?.title) return artifact.title;
     if (leadHighlight?.sourceUrl) return leadHighlight.sourceUrl.replace(/^https?:\/\//, '');
@@ -50,8 +53,8 @@
   <header class="group-header">
     <div class="group-copy">
       <div class="group-title-row">
-        {#if artifact}
-          <a class="group-title" href={artifactPath(artifact.groupId, artifact.id)}>{sourceTitle}</a>
+        {#if artifactPageHref}
+          <a class="group-title" href={artifactPageHref}>{sourceTitle}</a>
         {:else if sourceHref}
           <a class="group-title" href={sourceHref} target="_blank" rel="noreferrer">{sourceTitle}</a>
         {:else}
@@ -70,8 +73,8 @@
     </div>
 
     <div class="group-actions">
-      {#if artifact}
-        <a href={artifactPath(artifact.groupId, artifact.id)}>Artifact page</a>
+      {#if artifactPageHref}
+        <a href={artifactPageHref}>Artifact page</a>
       {/if}
       {#if sourceHref}
         <a href={sourceHref} target="_blank" rel="noreferrer">Open source</a>
