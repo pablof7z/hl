@@ -1,0 +1,2937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Highlighter — Artifact Views</title>
+<style>
+  /* ============================================
+     LOW-FIDELITY WIREFRAME STYLES
+     ============================================ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    background: #fff;
+    color: #111;
+    line-height: 1.6;
+  }
+
+  /* --- TOP NAV (Artifact Type Switcher) --- */
+  .top-bar {
+    border-bottom: 2px solid #000;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 100;
+  }
+
+  .top-bar .logo {
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -0.5px;
+  }
+
+  .top-bar .logo span { color: #666; font-weight: 400; }
+
+  .artifact-tabs {
+    display: flex;
+    gap: 0;
+  }
+
+  .artifact-tabs button {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 18px;
+    border: 2px solid #000;
+    border-left: none;
+    background: #fff;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .artifact-tabs button:first-child { border-left: 2px solid #000; }
+  .artifact-tabs button:hover { background: #eee; }
+  .artifact-tabs button.active { background: #000; color: #fff; }
+
+  .back-link {
+    font-size: 12px;
+    color: #666;
+    text-decoration: none;
+    border: 1px solid #ccc;
+    padding: 4px 10px;
+  }
+  .back-link:hover { background: #eee; }
+
+  /* --- SHARED LAYOUT --- */
+  .artifact-view { display: none; }
+  .artifact-view.active { display: block; }
+
+  .artifact-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 32px 24px;
+  }
+
+  .artifact-container.wide {
+    max-width: 1100px;
+  }
+
+  /* --- ARTIFACT HEADER --- */
+  .artifact-header {
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .artifact-meta {
+    font-size: 12px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  .artifact-title {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+
+  .artifact-author {
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 12px;
+  }
+
+  .artifact-author strong { color: #111; }
+
+  .highlight-stats {
+    display: flex;
+    gap: 24px;
+    font-size: 13px;
+    color: #666;
+    padding: 10px 14px;
+    border: 2px solid #000;
+    background: #fafafa;
+    display: inline-flex;
+  }
+
+  .highlight-stats .stat-val {
+    font-weight: 700;
+    color: #000;
+  }
+
+  /* --- SOCIAL PROOF BAR --- */
+  .social-proof {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: #888;
+  }
+
+  .avatar-stack {
+    display: flex;
+  }
+
+  .avatar-stack .avatar {
+    width: 22px;
+    height: 22px;
+    border: 2px solid #fff;
+    background: #ccc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: -6px;
+  }
+  .avatar-stack .avatar:first-child { margin-left: 0; }
+
+  /* ============================================
+     ARTICLE VIEW
+     ============================================ */
+  .article-body {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 18px;
+    line-height: 1.8;
+    color: #222;
+  }
+
+  .article-body p {
+    margin-bottom: 20px;
+  }
+
+  .article-body h2 {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 20px;
+    margin: 40px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+  }
+
+  /* THE CORE — inline highlight marks */
+  .hl-mark {
+    background: #ffe066;
+    padding: 2px 0;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.15s;
+  }
+
+  .hl-mark:hover {
+    background: #ffd000;
+  }
+
+  .hl-mark .hl-count {
+    position: absolute;
+    top: -8px;
+    right: -6px;
+    background: #000;
+    color: #fff;
+    font-family: 'SF Mono', monospace;
+    font-size: 9px;
+    padding: 1px 4px;
+    line-height: 1.2;
+    pointer-events: none;
+  }
+
+  /* Highlight tooltip/popover */
+  .hl-popover {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #000;
+    color: #fff;
+    padding: 12px 16px;
+    font-family: 'SF Mono', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    width: 280px;
+    z-index: 50;
+    border: 2px solid #000;
+  }
+
+  .hl-popover.visible { display: block; }
+
+  .hl-popover .hl-popover-title {
+    font-weight: 700;
+    margin-bottom: 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #ffe066;
+  }
+
+  .hl-popover .hl-person {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .hl-popover .hl-person .mini-avatar {
+    width: 18px;
+    height: 18px;
+    background: #444;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    flex-shrink: 0;
+  }
+
+  .hl-popover .hl-person .name { color: #ffe066; }
+  .hl-popover .hl-person .comment { color: #aaa; font-size: 11px; }
+
+  /* Article sidebar — highlight density */
+  .article-layout {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 40px;
+  }
+
+  .article-sidebar {
+    position: sticky;
+    top: 80px;
+    align-self: start;
+  }
+
+  .sidebar-section {
+    margin-bottom: 24px;
+  }
+
+  .sidebar-section h4 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #888;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .top-highlighter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+
+  .top-highlighter .avatar {
+    width: 24px;
+    height: 24px;
+    background: #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .top-highlighter .count {
+    margin-left: auto;
+    color: #888;
+    font-size: 11px;
+  }
+
+  /* Density meter */
+  .density-bar {
+    height: 200px;
+    width: 20px;
+    background: #eee;
+    position: relative;
+    border: 1px solid #ccc;
+  }
+
+  .density-bar .hot-zone {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    background: #ffe066;
+    border: 1px solid #e6c200;
+  }
+
+  .density-bar .hot-zone.intense {
+    background: #ffcc00;
+  }
+
+  /* ============================================
+     PODCAST VIEW
+     ============================================ */
+  .podcast-player {
+    background: #f5f5f5;
+    border: 2px solid #000;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+  }
+
+  .podcast-player-top {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .podcast-cover {
+    width: 80px;
+    height: 80px;
+    background: #ddd;
+    border: 2px solid #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+
+  .podcast-info { flex: 1; }
+  .podcast-info .ep-title { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+  .podcast-info .ep-show { font-size: 12px; color: #666; }
+  .podcast-info .ep-duration { font-size: 11px; color: #999; margin-top: 4px; }
+
+  .play-btn {
+    width: 48px;
+    height: 48px;
+    background: #000;
+    color: #fff;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .play-btn:hover { background: #333; }
+
+  /* Waveform / Timeline */
+  .waveform-container {
+    position: relative;
+    height: 60px;
+    background: #e8e8e8;
+    border: 1px solid #ccc;
+    margin-bottom: 8px;
+    cursor: pointer;
+    overflow: hidden;
+  }
+
+  .waveform-bar {
+    position: absolute;
+    bottom: 0;
+    width: 3px;
+    background: #999;
+  }
+
+  .waveform-bar.highlighted {
+    background: #ffe066;
+    z-index: 2;
+  }
+
+  .waveform-bar.highlighted.intense {
+    background: #ffcc00;
+  }
+
+  .waveform-playhead {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background: #000;
+    z-index: 5;
+    left: 15%;
+  }
+
+  .waveform-times {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #999;
+  }
+
+  /* Highlight clips timeline */
+  .clips-section {
+    margin-top: 32px;
+  }
+
+  .clips-section h3 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #000;
+  }
+
+  .clip-card {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .clip-card:hover { background: #fafafa; }
+
+  .clip-timestamp {
+    font-size: 13px;
+    font-weight: 700;
+    background: #ffe066;
+    padding: 4px 8px;
+    text-align: center;
+    height: fit-content;
+    border: 1px solid #e6c200;
+  }
+
+  .clip-content {}
+  .clip-content .clip-transcript {
+    font-family: Georgia, serif;
+    font-size: 15px;
+    font-style: italic;
+    color: #333;
+    margin-bottom: 6px;
+    line-height: 1.5;
+  }
+
+  .clip-content .clip-meta {
+    font-size: 11px;
+    color: #888;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .clip-content .clip-meta .clip-author { color: #555; font-weight: 600; }
+
+  /* ============================================
+     BOOK VIEW
+     ============================================ */
+  .book-header-layout {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 28px;
+    margin-bottom: 32px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .book-cover {
+    width: 160px;
+    height: 240px;
+    background: #e8e8e8;
+    border: 2px solid #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .book-cover .book-icon { font-size: 36px; margin-bottom: 8px; }
+  .book-cover .book-cover-title { font-size: 12px; font-weight: 700; line-height: 1.3; }
+  .book-cover .book-cover-author { font-size: 10px; color: #888; margin-top: 4px; }
+
+  .book-info .book-title { font-size: 26px; font-weight: 700; margin-bottom: 4px; }
+  .book-info .book-author { font-size: 14px; color: #555; margin-bottom: 12px; }
+  .book-info .book-description {
+    font-family: Georgia, serif;
+    font-size: 14px;
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+
+  /* Chapter list */
+  .chapter-list { margin-top: 8px; }
+
+  .chapter-item {
+    border: 2px solid #eee;
+    margin-bottom: 12px;
+    transition: border-color 0.15s;
+  }
+
+  .chapter-item:hover { border-color: #000; }
+
+  .chapter-head {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    cursor: pointer;
+    gap: 12px;
+  }
+
+  .chapter-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: #888;
+    width: 32px;
+    flex-shrink: 0;
+  }
+
+  .chapter-name {
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+  }
+
+  .chapter-heat {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    margin-left: auto;
+  }
+
+  .chapter-heat .heat-block {
+    width: 8px;
+    height: 16px;
+    background: #eee;
+  }
+
+  .chapter-heat .heat-block.on { background: #ffe066; }
+  .chapter-heat .heat-block.hot { background: #ffcc00; }
+
+  .chapter-hl-count {
+    font-size: 11px;
+    color: #888;
+    margin-left: 8px;
+    white-space: nowrap;
+  }
+
+  .chapter-toggle {
+    font-size: 16px;
+    color: #888;
+    transition: transform 0.2s;
+  }
+
+  .chapter-item.open .chapter-toggle {
+    transform: rotate(90deg);
+  }
+
+  .chapter-body {
+    display: none;
+    padding: 0 16px 16px 60px;
+    border-top: 1px solid #eee;
+  }
+
+  .chapter-item.open .chapter-body { display: block; }
+
+  .book-highlight {
+    padding: 14px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .book-highlight:last-child { border-bottom: none; }
+
+  .book-highlight .bh-quote {
+    font-family: Georgia, serif;
+    font-size: 15px;
+    line-height: 1.6;
+    color: #222;
+    border-left: 3px solid #ffe066;
+    padding-left: 14px;
+    margin-bottom: 8px;
+  }
+
+  .book-highlight .bh-meta {
+    font-size: 11px;
+    color: #888;
+    padding-left: 17px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .book-highlight .bh-meta .bh-count {
+    background: #ffe066;
+    color: #000;
+    padding: 1px 6px;
+    font-weight: 700;
+    font-size: 10px;
+  }
+
+  /* ============================================
+     VIDEO VIEW
+     ============================================ */
+  .video-player-placeholder {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #111;
+    border: 2px solid #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    position: relative;
+    margin-bottom: 0;
+  }
+
+  .video-player-placeholder .play-icon {
+    font-size: 48px;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+
+  .video-player-placeholder .vid-label {
+    font-size: 12px;
+    color: #888;
+  }
+
+  /* Video scrubber with highlight markers */
+  .video-scrubber {
+    background: #222;
+    padding: 8px 16px 12px;
+    border: 2px solid #000;
+    border-top: none;
+    margin-bottom: 24px;
+  }
+
+  .scrubber-track {
+    position: relative;
+    height: 8px;
+    background: #444;
+    margin-bottom: 8px;
+    cursor: pointer;
+  }
+
+  .scrubber-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 18%;
+    background: #888;
+  }
+
+  .scrubber-marker {
+    position: absolute;
+    top: -6px;
+    width: 4px;
+    height: 20px;
+    background: #ffe066;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+
+  .scrubber-marker:hover {
+    transform: scaleX(2);
+    background: #ffcc00;
+  }
+
+  .scrubber-marker.hot {
+    background: #ffcc00;
+    width: 6px;
+  }
+
+  .scrubber-times {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #888;
+  }
+
+  /* Video moments */
+  .moments-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .moment-card {
+    border: 2px solid #eee;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+
+  .moment-card:hover { border-color: #000; }
+
+  .moment-thumb {
+    background: #e8e8e8;
+    aspect-ratio: 16/9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #888;
+    position: relative;
+  }
+
+  .moment-thumb .moment-ts {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    background: #000;
+    color: #ffe066;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+  }
+
+  .moment-body {
+    padding: 10px 12px;
+  }
+
+  .moment-body .moment-transcript {
+    font-family: Georgia, serif;
+    font-size: 13px;
+    color: #333;
+    line-height: 1.5;
+    margin-bottom: 6px;
+  }
+
+  .moment-body .moment-meta {
+    font-size: 10px;
+    color: #888;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* ============================================
+     WEBSITE VIEW
+     ============================================ */
+  .website-preview {
+    border: 2px solid #000;
+    margin-bottom: 24px;
+    position: relative;
+  }
+
+  .website-chrome {
+    background: #f0f0f0;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 2px solid #000;
+  }
+
+  .chrome-dots {
+    display: flex;
+    gap: 4px;
+  }
+
+  .chrome-dots span {
+    width: 10px;
+    height: 10px;
+    border: 1px solid #aaa;
+    background: #ddd;
+  }
+
+  .chrome-url {
+    flex: 1;
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: #666;
+  }
+
+  .website-screenshot {
+    background: #f8f8f8;
+    min-height: 280px;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    font-size: 13px;
+    text-align: center;
+    position: relative;
+  }
+
+  .website-screenshot .site-icon { font-size: 36px; margin-bottom: 8px; }
+
+  .website-screenshot .hl-overlay-markers {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .website-screenshot .hl-overlay-markers .marker-dot {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    background: #ffe066;
+    border: 2px solid #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+
+  /* Website extracts */
+  .website-extracts { margin-top: 8px; }
+
+  .website-extracts h3 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #000;
+  }
+
+  .extract-card {
+    padding: 16px;
+    border: 2px solid #eee;
+    margin-bottom: 12px;
+    transition: border-color 0.15s;
+    cursor: pointer;
+  }
+
+  .extract-card:hover { border-color: #000; }
+
+  .extract-section-tag {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #888;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .extract-section-tag .tag {
+    background: #f0f0f0;
+    padding: 2px 8px;
+    border: 1px solid #ddd;
+  }
+
+  .extract-text {
+    font-family: Georgia, serif;
+    font-size: 15px;
+    line-height: 1.6;
+    color: #222;
+    border-left: 3px solid #ffe066;
+    padding-left: 14px;
+    margin-bottom: 8px;
+  }
+
+  .extract-meta {
+    font-size: 11px;
+    color: #888;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-left: 17px;
+  }
+
+  .extract-meta .extract-count {
+    background: #ffe066;
+    color: #000;
+    padding: 1px 6px;
+    font-weight: 700;
+    font-size: 10px;
+  }
+
+  /* ============================================
+     SHARED: SECTION HEADERS
+     ============================================ */
+  .section-head {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .section-head .sort-toggle {
+    font-size: 11px;
+    text-transform: none;
+    letter-spacing: 0;
+    color: #888;
+    border: 1px solid #ccc;
+    padding: 2px 10px;
+    background: #fff;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .section-head .sort-toggle:hover { background: #f0f0f0; }
+
+  /* ============================================
+     MODAL / DETAIL OVERLAY
+     ============================================ */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.6);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.visible {
+    display: flex;
+  }
+
+  .modal-box {
+    background: #fff;
+    border: 2px solid #000;
+    padding: 32px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    font-size: 20px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-family: inherit;
+  }
+
+  .modal-close:hover { color: #888; }
+
+  .modal-title {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #ddd;
+    color: #888;
+  }
+
+  .modal-quote {
+    font-family: Georgia, serif;
+    font-size: 17px;
+    line-height: 1.7;
+    color: #222;
+    border-left: 3px solid #ffe066;
+    padding-left: 16px;
+    margin-bottom: 20px;
+  }
+
+  .modal-highlighters { margin-top: 16px; }
+
+  .modal-hl-person {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .modal-hl-person:last-child { border-bottom: none; }
+
+  .modal-hl-person .m-avatar {
+    width: 28px;
+    height: 28px;
+    background: #eee;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+    border: 1px solid #ccc;
+  }
+
+  .modal-hl-person .m-name { font-size: 13px; font-weight: 600; }
+  .modal-hl-person .m-time { font-size: 11px; color: #999; }
+  .modal-hl-person .m-comment {
+    font-size: 12px;
+    color: #555;
+    margin-top: 4px;
+    font-family: Georgia, serif;
+    font-style: italic;
+  }
+
+  /* ============================================
+     RESPONSIVE
+     ============================================ */
+  @media (max-width: 768px) {
+    .article-layout { grid-template-columns: 1fr; }
+    .article-sidebar { display: none; }
+    .moments-grid { grid-template-columns: 1fr; }
+    .book-header-layout { grid-template-columns: 100px 1fr; }
+    .artifact-tabs { flex-wrap: wrap; }
+    .artifact-tabs button { font-size: 11px; padding: 6px 10px; }
+  }
+
+  /* ============================================
+     TOP BAR ACTIONS
+     ============================================ */
+  .top-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .bookmark-btn {
+    background: none;
+    border: 2px solid #333;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+  .bookmark-btn:hover { background: #eee; }
+  .bookmark-btn.bookmarked {
+    background: #ffe066;
+    border-color: #333;
+  }
+  .my-highlights-toggle {
+    background: none;
+    border: 2px solid #333;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 6px 12px;
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .my-highlights-toggle:hover { background: #eee; }
+
+  /* ============================================
+     MY HIGHLIGHTS DRAWER
+     ============================================ */
+  .my-highlights-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: 999;
+  }
+  .my-highlights-overlay.visible { display: block; }
+  .my-highlights-drawer {
+    position: fixed;
+    top: 0;
+    right: -420px;
+    width: 400px;
+    height: 100vh;
+    background: #fff;
+    border-left: 2px solid #000;
+    z-index: 1000;
+    overflow-y: auto;
+    transition: right 0.25s ease;
+    padding: 20px;
+    font-family: 'Courier New', monospace;
+  }
+  .my-highlights-drawer.open { right: 0; }
+  .drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #000;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+  .drawer-header h3 {
+    margin: 0;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .drawer-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+  .drawer-close:hover { background: #eee; }
+  .drawer-tabs {
+    display: flex;
+    gap: 0;
+    border: 2px solid #000;
+    margin-bottom: 16px;
+  }
+  .drawer-tab {
+    flex: 1;
+    padding: 8px;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    background: #f5f5f5;
+    cursor: pointer;
+    border-right: 2px solid #000;
+    font-weight: 700;
+  }
+  .drawer-tab:last-child { border-right: none; }
+  .drawer-tab.active { background: #000; color: #fff; }
+  .drawer-highlight-item {
+    border: 2px solid #ccc;
+    padding: 12px;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .drawer-highlight-item:hover { border-color: #000; }
+  .drawer-hl-text {
+    font-size: 13px;
+    line-height: 1.5;
+    border-left: 3px solid #ffe066;
+    padding-left: 10px;
+    margin-bottom: 8px;
+    color: #222;
+  }
+  .drawer-hl-meta {
+    font-size: 10px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .drawer-hl-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .drawer-hl-action {
+    background: none;
+    border: 1px solid #ccc;
+    padding: 3px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+  }
+  .drawer-hl-action:hover { background: #eee; border-color: #000; }
+  .drawer-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #999;
+    font-size: 12px;
+  }
+
+  /* ============================================
+     DISCUSSION SECTION
+     ============================================ */
+  .discussion-section {
+    border-top: 2px solid #000;
+    margin-top: 24px;
+    padding-top: 16px;
+  }
+  .new-thread-form {
+    margin-bottom: 20px;
+  }
+  .new-thread-form textarea {
+    width: 100%;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    padding: 10px;
+    border: 2px solid #ccc;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  .new-thread-form textarea:focus {
+    outline: none;
+    border-color: #000;
+  }
+  .reply-submit {
+    margin-top: 6px;
+    padding: 6px 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #000;
+    color: #fff;
+    border: 2px solid #000;
+    cursor: pointer;
+  }
+  .reply-submit:hover { background: #333; }
+  .disc-threads {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .disc-thread {
+    border: 2px solid #ddd;
+    padding: 14px;
+  }
+  .disc-comment, .disc-reply {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .disc-avatar {
+    width: 32px;
+    height: 32px;
+    background: #ddd;
+    border: 2px solid #999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+    font-family: 'Courier New', monospace;
+  }
+  .disc-content { flex: 1; }
+  .disc-author {
+    font-size: 12px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    margin-bottom: 4px;
+  }
+  .disc-time {
+    font-weight: 400;
+    color: #999;
+    font-size: 11px;
+  }
+  .disc-text {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #333;
+  }
+  .disc-actions {
+    margin-top: 6px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .disc-action-btn {
+    background: none;
+    border: none;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    color: #666;
+    padding: 2px 4px;
+  }
+  .disc-action-btn:hover { color: #000; text-decoration: underline; }
+  .disc-zap-count {
+    font-size: 10px;
+    color: #888;
+    font-family: 'Courier New', monospace;
+  }
+  .thread-replies {
+    margin-left: 42px;
+    border-left: 2px solid #eee;
+    padding-left: 14px;
+  }
+  .reply-form {
+    display: none;
+    margin-left: 42px;
+    margin-top: 10px;
+  }
+  .reply-form.visible { display: block; }
+  .reply-form textarea {
+    width: 100%;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    padding: 8px;
+    border: 2px solid #ccc;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  .reply-form textarea:focus {
+    outline: none;
+    border-color: #000;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================
+     TOP BAR — Artifact Type Switcher
+     ============================================ -->
+<div class="top-bar">
+  <div class="logo">HIGHLIGHTER <span>/ artifact views</span></div>
+  <div class="artifact-tabs">
+    <button class="active" data-view="article">📄 Article</button>
+    <button data-view="podcast">🎙 Podcast</button>
+    <button data-view="book">📖 Book</button>
+    <button data-view="video">🎬 Video</button>
+    <button data-view="website">🌐 Website</button>
+  </div>
+  <div class="top-bar-actions">
+    <button class="bookmark-btn" onclick="toggleBookmark(this)" title="Bookmark this artifact">☆</button>
+    <button class="my-highlights-toggle" onclick="toggleMyHighlightsDrawer()" title="My Highlights">📑 My Highlights</button>
+    <a href="community-view-v2.html" class="back-link">← Community</a>
+  </div>
+</div>
+
+<!-- ============================================
+     ARTICLE VIEW
+     ============================================ -->
+<div class="artifact-view active" id="view-article">
+  <div class="artifact-container wide">
+    <div class="artifact-header">
+      <div class="artifact-meta">Article · 12 min read</div>
+      <div class="artifact-title">The Age of Curation: Why What You Choose to Highlight Defines You</div>
+      <div class="artifact-author">by <strong>Maria Chen</strong> · Published in <strong>The Atlantic</strong> · June 2024</div>
+      <div class="highlight-stats">
+        <span><span class="stat-val">47</span> highlights</span>
+        <span><span class="stat-val">23</span> people</span>
+        <span><span class="stat-val">8</span> comments</span>
+      </div>
+      <div class="social-proof">
+        <div class="avatar-stack">
+          <div class="avatar">PA</div>
+          <div class="avatar">JD</div>
+          <div class="avatar">KL</div>
+          <div class="avatar">+</div>
+        </div>
+        <span>Pablo, Jack, Kira and 20 others highlighted this</span>
+      </div>
+    </div>
+
+    <div class="article-layout">
+      <div class="article-body">
+        <p>There's a quiet revolution happening in how we consume information. Not in the writing — there's always been plenty of that — but in the <span class="hl-mark" data-hl="hl1">act of choosing what matters. Every time you drag your cursor across a sentence, you're making a statement about what you value.<span class="hl-count">12</span></span></p>
+
+        <p>For centuries, marginalia was a private act. Readers scribbled in the margins of books they owned, creating a shadow text that lived alongside the author's words. These notes were intimate, conversational, sometimes combative. <span class="hl-mark" data-hl="hl2">Fermat's last theorem began as a margin note — a private aside that became one of mathematics' greatest challenges.<span class="hl-count">8</span></span></p>
+
+        <h2>The Social Margin</h2>
+
+        <p>What happens when those margins become public? When your highlights aren't just for you, but for everyone?</p>
+
+        <p><span class="hl-mark" data-hl="hl3">The answer is that curation becomes a form of expression. Your highlights are a fingerprint — a unique pattern that says as much about you as the words you choose to write yourself. We are entering an age where the curator is as important as the creator.<span class="hl-count">23</span></span></p>
+
+        <p>Consider how you already do this informally. When you share an article, you're curating. When you quote-tweet a passage, you're highlighting. When you tell a friend "you have to read this part," you're directing attention — the scarcest resource of our time.</p>
+
+        <p><span class="hl-mark" data-hl="hl4">The difference now is that these acts of curation can be persistent, layered, and collective. A single passage might be highlighted by a physicist, a poet, and a programmer — each for entirely different reasons.<span class="hl-count">15</span></span> And in seeing those overlapping highlights, we glimpse something rare: the same words refracted through different minds.</p>
+
+        <h2>Collective Intelligence</h2>
+
+        <p>There's a deeper implication here. <span class="hl-mark" data-hl="hl5">When thousands of people read the same text and independently highlight the same passage, that convergence creates a signal. It's a form of collective intelligence — not about what's true, but about what resonates.<span class="hl-count">31</span></span></p>
+
+        <p>This isn't the wisdom of crowds in the prediction-market sense. It's something more subtle. It's the <span class="hl-mark" data-hl="hl6">emergence of shared meaning from individual acts of attention. Every highlight is a tiny vote for "this matters," and the aggregate of those votes draws a map of what a community finds important, beautiful, or provocative.<span class="hl-count">19</span></span></p>
+
+        <p>Traditional metrics tell us what was consumed. Highlights tell us what was felt. The difference is everything.</p>
+
+        <p>We are moving from an economy of content to an economy of attention — and the people who help us direct that attention well are becoming the most valuable contributors in any intellectual community. Not the loudest voices, but the most discerning eyes.</p>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="article-sidebar">
+        <div class="sidebar-section">
+          <h4>Highlight Density</h4>
+          <div class="density-bar">
+            <div class="hot-zone" style="top: 0%; height: 12%;"></div>
+            <div class="hot-zone" style="top: 22%; height: 8%;"></div>
+            <div class="hot-zone intense" style="top: 40%; height: 18%;"></div>
+            <div class="hot-zone" style="top: 65%; height: 10%;"></div>
+            <div class="hot-zone intense" style="top: 78%; height: 14%;"></div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <h4>Top Highlighters</h4>
+          <div class="top-highlighter">
+            <div class="avatar">PA</div>
+            <span>Pablo</span>
+            <span class="count">7 hl</span>
+          </div>
+          <div class="top-highlighter">
+            <div class="avatar">JD</div>
+            <span>Jack D.</span>
+            <span class="count">5 hl</span>
+          </div>
+          <div class="top-highlighter">
+            <div class="avatar">KL</div>
+            <span>Kira L.</span>
+            <span class="count">4 hl</span>
+          </div>
+          <div class="top-highlighter">
+            <div class="avatar">MR</div>
+            <span>Marcus R.</span>
+            <span class="count">3 hl</span>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <h4>Jump to Hot Spots</h4>
+          <div style="font-size: 11px; color: #555; line-height: 1.8;">
+            <a href="#" style="color: #111; text-decoration: none; border-bottom: 1px solid #ffe066;" onclick="event.preventDefault()">¶ "act of choosing..." <span style="color:#888">(12)</span></a><br>
+            <a href="#" style="color: #111; text-decoration: none; border-bottom: 1px solid #ffe066;" onclick="event.preventDefault()">¶ "curation becomes..." <span style="color:#888">(23)</span></a><br>
+            <a href="#" style="color: #111; text-decoration: none; border-bottom: 1px solid #ffe066;" onclick="event.preventDefault()">¶ "collective intelligence..." <span style="color:#888">(31)</span></a><br>
+            <a href="#" style="color: #111; text-decoration: none; border-bottom: 1px solid #ffe066;" onclick="event.preventDefault()">¶ "emergence of shared..." <span style="color:#888">(19)</span></a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Discussion Section -->
+    <div class="discussion-section">
+      <div class="section-head" style="margin-top: 32px;">
+        <span>Discussion (8)</span>
+      </div>
+      <div class="new-thread-form">
+        <textarea rows="2" placeholder="Start a discussion about this article..."></textarea>
+        <button class="reply-submit" onclick="submitNewThread(this)">Post</button>
+      </div>
+      <div class="disc-threads">
+        <div class="disc-thread">
+          <div class="disc-comment">
+            <div class="disc-avatar">JK</div>
+            <div class="disc-content">
+              <div class="disc-author">James K. <span class="disc-time">· 1d ago</span></div>
+              <div class="disc-text">The paragraph about "collective intelligence emerging from individual curation" might be the most-highlighted line I've ever seen on this platform. 31 people all flagged the same sentence. That itself is a form of collective intelligence in action.</div>
+              <div class="disc-actions">
+                <button class="disc-action-btn" onclick="toggleReply(this)">↩ Reply</button>
+                <button class="disc-action-btn">⚡ Zap</button>
+                <span class="disc-zap-count">2.1k sats</span>
+              </div>
+            </div>
+          </div>
+          <div class="thread-replies">
+            <div class="disc-reply">
+              <div class="disc-avatar">SR</div>
+              <div class="disc-content">
+                <div class="disc-author">Sarah R. <span class="disc-time">· 1d ago</span></div>
+                <div class="disc-text">That's the beauty of social highlighting — you don't just see what the author thought was important, you see what the readers collectively decided matters. It's a second layer of authorship.</div>
+              </div>
+            </div>
+            <div class="disc-reply">
+              <div class="disc-avatar">PA</div>
+              <div class="disc-content">
+                <div class="disc-author">Pablo <span class="disc-time">· 23h ago</span></div>
+                <div class="disc-text">I'd argue it's a third layer — author → highlighters → discussion. Each layer adds meaning.</div>
+              </div>
+            </div>
+          </div>
+          <div class="reply-form">
+            <textarea rows="2" placeholder="Reply..."></textarea>
+            <button class="reply-submit" onclick="submitReply(this)">Reply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     PODCAST VIEW
+     ============================================ -->
+<div class="artifact-view" id="view-podcast">
+  <div class="artifact-container">
+    <div class="podcast-player">
+      <div class="podcast-player-top">
+        <div class="podcast-cover">🎙</div>
+        <div class="podcast-info">
+          <div class="ep-title">#247: The Future of Reading with Maria Chen</div>
+          <div class="ep-show">The Knowledge Project with Shane Parrish</div>
+          <div class="ep-duration">1h 23m · Released Aug 12, 2024</div>
+        </div>
+        <button class="play-btn" id="podcast-play-btn">▶</button>
+      </div>
+
+      <!-- Waveform with highlight markers -->
+      <div class="waveform-container" id="waveform">
+        <div class="waveform-playhead" id="playhead"></div>
+      </div>
+      <div class="waveform-times">
+        <span>0:00</span>
+        <span id="podcast-current-time">12:34</span>
+        <span>1:23:00</span>
+      </div>
+    </div>
+
+    <div class="highlight-stats" style="margin-bottom: 12px;">
+      <span><span class="stat-val">31</span> clipped moments</span>
+      <span><span class="stat-val">18</span> people</span>
+    </div>
+    <div class="social-proof" style="margin-bottom: 0;">
+      <div class="avatar-stack">
+        <div class="avatar">PA</div>
+        <div class="avatar">SR</div>
+        <div class="avatar">TB</div>
+      </div>
+      <span>Pablo, Sarah, Tom and 15 others clipped moments</span>
+    </div>
+
+    <!-- Clipped moments -->
+    <div class="clips-section">
+      <div class="section-head">
+        <span>Clipped Moments (31)</span>
+        <button class="sort-toggle" id="clip-sort">Sort: Most Clipped</button>
+      </div>
+
+      <div class="clip-card" onclick="showModal('clip1')">
+        <div class="clip-timestamp">04:22</div>
+        <div class="clip-content">
+          <div class="clip-transcript">"The problem isn't that we don't read enough. The problem is that we read and forget. Highlighting is really about creating a dialogue with your future self."</div>
+          <div class="clip-meta">
+            <span class="clip-author">Maria Chen</span>
+            <span>🔖 14 clips</span>
+            <span>💬 3 comments</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="clip-card" onclick="showModal('clip2')">
+        <div class="clip-timestamp">18:45</div>
+        <div class="clip-content">
+          <div class="clip-transcript">"When I see what passages other people highlight in a book I've read, I feel like I'm having a conversation across time and space. It's the closest thing to telepathy we have."</div>
+          <div class="clip-meta">
+            <span class="clip-author">Maria Chen</span>
+            <span>🔖 22 clips</span>
+            <span>💬 7 comments</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="clip-card" onclick="showModal('clip3')">
+        <div class="clip-timestamp">32:10</div>
+        <div class="clip-content">
+          <div class="clip-transcript">"Shane, think about it — every great thinker in history was essentially a curator. They read voraciously, then selected and recombined ideas. The highlight is the atomic unit of that process."</div>
+          <div class="clip-meta">
+            <span class="clip-author">Maria Chen</span>
+            <span>🔖 18 clips</span>
+            <span>💬 5 comments</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="clip-card" onclick="showModal('clip4')">
+        <div class="clip-timestamp">47:33</div>
+        <div class="clip-content">
+          <div class="clip-transcript">"Social media optimized for reactions. What if we optimized for resonance instead? Not 'what makes you angry' but 'what makes you stop and think.' That's the highlight."</div>
+          <div class="clip-meta">
+            <span class="clip-author">Shane Parrish</span>
+            <span>🔖 9 clips</span>
+            <span>💬 2 comments</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="clip-card" onclick="showModal('clip5')">
+        <div class="clip-timestamp">1:02:15</div>
+        <div class="clip-content">
+          <div class="clip-transcript">"I don't think the future of the internet is more content. I think it's better attention. And the people who help us pay attention to the right things — the curators, the highlighters — they're the real heroes of the next era."</div>
+          <div class="clip-meta">
+            <span class="clip-author">Maria Chen</span>
+            <span>🔖 27 clips</span>
+            <span>💬 11 comments</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="clip-card" onclick="showModal('clip6')">
+        <div class="clip-timestamp">1:14:08</div>
+        <div class="clip-content">
+          <div class="clip-transcript">"A community that highlights together develops a shared vocabulary, a shared set of references. It's like a book club that never ends."</div>
+          <div class="clip-meta">
+            <span class="clip-author">Maria Chen</span>
+            <span>🔖 11 clips</span>
+            <span>💬 4 comments</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Discussion Section -->
+    <div class="discussion-section">
+      <div class="section-head" style="margin-top: 32px;">
+        <span>Discussion (6)</span>
+      </div>
+      <div class="new-thread-form">
+        <textarea rows="2" placeholder="Start a discussion about this episode..."></textarea>
+        <button class="reply-submit" onclick="submitNewThread(this)">Post</button>
+      </div>
+      <div class="disc-threads">
+        <div class="disc-thread">
+          <div class="disc-comment">
+            <div class="disc-avatar">MR</div>
+            <div class="disc-content">
+              <div class="disc-author">Marcus R. <span class="disc-time">· 2d ago</span></div>
+              <div class="disc-text">The clip at 04:22 about "creating a dialogue with your future self" — that's exactly why I keep coming back to this platform. My highlights are bookmarks in my own thinking evolution.</div>
+              <div class="disc-actions">
+                <button class="disc-action-btn" onclick="toggleReply(this)">↩ Reply</button>
+                <button class="disc-action-btn">⚡ Zap</button>
+                <span class="disc-zap-count">1.8k sats</span>
+              </div>
+            </div>
+          </div>
+          <div class="thread-replies">
+            <div class="disc-reply">
+              <div class="disc-avatar">LK</div>
+              <div class="disc-content">
+                <div class="disc-author">Lily K. <span class="disc-time">· 1d ago</span></div>
+                <div class="disc-text">Same here. I go back and re-listen to my clips and discover I've changed my mind on things. The highlight becomes a conversation anchor.</div>
+              </div>
+            </div>
+          </div>
+          <div class="reply-form">
+            <textarea rows="2" placeholder="Reply..."></textarea>
+            <button class="reply-submit" onclick="submitReply(this)">Reply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     BOOK VIEW
+     ============================================ -->
+<div class="artifact-view" id="view-book">
+  <div class="artifact-container">
+    <div class="book-header-layout">
+      <div class="book-cover">
+        <div class="book-icon">📖</div>
+        <div class="book-cover-title">How to Read a Book</div>
+        <div class="book-cover-author">Mortimer Adler</div>
+      </div>
+      <div class="book-info">
+        <div class="artifact-meta">Book · 426 pages · 14 chapters</div>
+        <div class="book-title">How to Read a Book</div>
+        <div class="book-author">by <strong>Mortimer J. Adler</strong> & Charles Van Doren · 1972</div>
+        <div class="book-description">
+          A living guide to reading and understanding great books. Originally published in 1940, this revised edition remains the definitive guide to reading — a systematic approach to increasing understanding.
+        </div>
+        <div class="highlight-stats">
+          <span><span class="stat-val">183</span> highlights</span>
+          <span><span class="stat-val">42</span> readers</span>
+          <span><span class="stat-val">14</span> chapters</span>
+        </div>
+        <div class="social-proof">
+          <div class="avatar-stack">
+            <div class="avatar">PA</div>
+            <div class="avatar">EW</div>
+            <div class="avatar">NS</div>
+            <div class="avatar">+</div>
+          </div>
+          <span>Pablo, Erin, Naveen and 39 others highlighted this book</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chapter list -->
+    <div class="section-head">
+      <span>Chapters & Highlights</span>
+      <button class="sort-toggle" onclick="toggleBookSort()">Sort: By Chapter</button>
+    </div>
+
+    <div class="chapter-list">
+      <!-- Chapter 1 -->
+      <div class="chapter-item open">
+        <div class="chapter-head" onclick="toggleChapter(this)">
+          <div class="chapter-num">Ch. 1</div>
+          <div class="chapter-name">The Activity and Art of Reading</div>
+          <div class="chapter-heat">
+            <div class="heat-block on"></div>
+            <div class="heat-block on"></div>
+            <div class="heat-block hot"></div>
+            <div class="heat-block hot"></div>
+            <div class="heat-block on"></div>
+          </div>
+          <div class="chapter-hl-count">28 highlights</div>
+          <div class="chapter-toggle">▸</div>
+        </div>
+        <div class="chapter-body">
+          <div class="book-highlight" onclick="showModal('bh1')">
+            <div class="bh-quote">"Reading is a complex activity, just as writing is. It consists of a large number of separate acts, all of which must be performed in a good reading."</div>
+            <div class="bh-meta">
+              <span class="bh-count">18</span>
+              <span>Page 7 · Most highlighted in chapter</span>
+            </div>
+          </div>
+          <div class="book-highlight" onclick="showModal('bh2')">
+            <div class="bh-quote">"The one caution is to keep in mind that the goal a reader seeks determines the way he reads. The effectiveness of his reading is determined by the amount of effort and skill he puts into it."</div>
+            <div class="bh-meta">
+              <span class="bh-count">12</span>
+              <span>Page 11</span>
+            </div>
+          </div>
+          <div class="book-highlight" onclick="showModal('bh3')">
+            <div class="bh-quote">"Given the same thing to read, one person reads it better than another, first, by reading it more actively, and second, by performing each of the acts involved more skillfully."</div>
+            <div class="bh-meta">
+              <span class="bh-count">9</span>
+              <span>Page 15</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 2 -->
+      <div class="chapter-item">
+        <div class="chapter-head" onclick="toggleChapter(this)">
+          <div class="chapter-num">Ch. 2</div>
+          <div class="chapter-name">The Levels of Reading</div>
+          <div class="chapter-heat">
+            <div class="heat-block on"></div>
+            <div class="heat-block hot"></div>
+            <div class="heat-block hot"></div>
+            <div class="heat-block on"></div>
+            <div class="heat-block"></div>
+          </div>
+          <div class="chapter-hl-count">21 highlights</div>
+          <div class="chapter-toggle">▸</div>
+        </div>
+        <div class="chapter-body">
+          <div class="book-highlight" onclick="showModal('bh4')">
+            <div class="bh-quote">"There are four levels of reading. We call them Elementary, Inspectional, Analytical, and Syntopical. The higher levels include the lower — analytical reading contains inspectional reading."</div>
+            <div class="bh-meta">
+              <span class="bh-count">21</span>
+              <span>Page 18 · Most highlighted in chapter</span>
+            </div>
+          </div>
+          <div class="book-highlight" onclick="showModal('bh5')">
+            <div class="bh-quote">"Most people do not know that there are different levels of reading. They think of reading as a single, unified activity, with no shades of skill or engagement."</div>
+            <div class="bh-meta">
+              <span class="bh-count">14</span>
+              <span>Page 20</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 5 -->
+      <div class="chapter-item">
+        <div class="chapter-head" onclick="toggleChapter(this)">
+          <div class="chapter-num">Ch. 5</div>
+          <div class="chapter-name">How to Be a Demanding Reader</div>
+          <div class="chapter-heat">
+            <div class="heat-block hot"></div>
+            <div class="heat-block hot"></div>
+            <div class="heat-block hot"></div>
+            <div class="heat-block hot"></div>
+            <div class="heat-block hot"></div>
+          </div>
+          <div class="chapter-hl-count">38 highlights</div>
+          <div class="chapter-toggle">▸</div>
+        </div>
+        <div class="chapter-body">
+          <div class="book-highlight" onclick="showModal('bh6')">
+            <div class="bh-quote">"The art of reading, in short, includes all of the same skills that are involved in the art of unaided discovery: keenness of observation, readily available memory, range of imagination, and an intellect trained in analysis and reflection."</div>
+            <div class="bh-meta">
+              <span class="bh-count">31</span>
+              <span>Page 48 · 🔥 Most highlighted passage in book</span>
+            </div>
+          </div>
+          <div class="book-highlight" onclick="showModal('bh7')">
+            <div class="bh-quote">"Marking a book is literally an expression of your differences, or your agreements, with the author. It is the highest respect you can pay him."</div>
+            <div class="bh-meta">
+              <span class="bh-count">26</span>
+              <span>Page 51</span>
+            </div>
+          </div>
+          <div class="book-highlight" onclick="showModal('bh8')">
+            <div class="bh-quote">"There are four questions you must ask about any book: What is the book about as a whole? What is being said in detail, and how? Is the book true, in whole or part? What of it?"</div>
+            <div class="bh-meta">
+              <span class="bh-count">22</span>
+              <span>Page 54</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 8 -->
+      <div class="chapter-item">
+        <div class="chapter-head" onclick="toggleChapter(this)">
+          <div class="chapter-num">Ch. 8</div>
+          <div class="chapter-name">Coming to Terms with an Author</div>
+          <div class="chapter-heat">
+            <div class="heat-block on"></div>
+            <div class="heat-block on"></div>
+            <div class="heat-block"></div>
+            <div class="heat-block on"></div>
+            <div class="heat-block"></div>
+          </div>
+          <div class="chapter-hl-count">14 highlights</div>
+          <div class="chapter-toggle">▸</div>
+        </div>
+        <div class="chapter-body">
+          <div class="book-highlight" onclick="showModal('bh9')">
+            <div class="bh-quote">"A term is the basic element of communicable knowledge. Unless the reader comes to terms with the author, communication of knowledge is impossible."</div>
+            <div class="bh-meta">
+              <span class="bh-count">14</span>
+              <span>Page 98 · Most highlighted in chapter</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 12 -->
+      <div class="chapter-item">
+        <div class="chapter-head" onclick="toggleChapter(this)">
+          <div class="chapter-num">Ch. 12</div>
+          <div class="chapter-name">Aids to Reading</div>
+          <div class="chapter-heat">
+            <div class="heat-block on"></div>
+            <div class="heat-block on"></div>
+            <div class="heat-block on"></div>
+            <div class="heat-block"></div>
+            <div class="heat-block"></div>
+          </div>
+          <div class="chapter-hl-count">16 highlights</div>
+          <div class="chapter-toggle">▸</div>
+        </div>
+        <div class="chapter-body">
+          <div class="book-highlight" onclick="showModal('bh10')">
+            <div class="bh-quote">"One reader is better than another in proportion as he is capable of a greater range of activity in reading and exerts more effort. He is better if he demands more of himself and of the text before him."</div>
+            <div class="bh-meta">
+              <span class="bh-count">11</span>
+              <span>Page 156</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Discussion Section -->
+    <div class="discussion-section">
+      <div class="section-head" style="margin-top: 32px;">
+        <span>Discussion (15)</span>
+      </div>
+      <div class="new-thread-form">
+        <textarea rows="2" placeholder="Start a discussion about this book..."></textarea>
+        <button class="reply-submit" onclick="submitNewThread(this)">Post</button>
+      </div>
+      <div class="disc-threads">
+        <div class="disc-thread">
+          <div class="disc-comment">
+            <div class="disc-avatar">EW</div>
+            <div class="disc-content">
+              <div class="disc-author">Erin W. <span class="disc-time">· 5d ago</span></div>
+              <div class="disc-text">Chapter 5 is easily the most highlighted — "The art of reading" passage has 31 highlights. I think Adler would've loved this platform. "Marking a book is the highest respect you can pay." We're literally doing what he preached, but digitally and socially.</div>
+              <div class="disc-actions">
+                <button class="disc-action-btn" onclick="toggleReply(this)">↩ Reply</button>
+                <button class="disc-action-btn">⚡ Zap</button>
+                <span class="disc-zap-count">4.5k sats</span>
+              </div>
+            </div>
+          </div>
+          <div class="thread-replies">
+            <div class="disc-reply">
+              <div class="disc-avatar">PA</div>
+              <div class="disc-content">
+                <div class="disc-author">Pablo <span class="disc-time">· 5d ago</span></div>
+                <div class="disc-text">The "four questions" framework on page 54 has changed how I read everything. Simple but powerful.</div>
+              </div>
+            </div>
+            <div class="disc-reply">
+              <div class="disc-avatar">NS</div>
+              <div class="disc-content">
+                <div class="disc-author">Naveen S. <span class="disc-time">· 4d ago</span></div>
+                <div class="disc-text">What strikes me is how the heat map shows Chapter 5 is uniformly highlighted — not just one passage, the whole chapter resonates. That's rare.</div>
+              </div>
+            </div>
+          </div>
+          <div class="reply-form">
+            <textarea rows="2" placeholder="Reply..."></textarea>
+            <button class="reply-submit" onclick="submitReply(this)">Reply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     VIDEO VIEW
+     ============================================ -->
+<div class="artifact-view" id="view-video">
+  <div class="artifact-container wide">
+    <div class="artifact-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 16px;">
+      <div class="artifact-meta">Video · 22 min · YouTube</div>
+      <div class="artifact-title" style="font-size: 22px;">How the Internet Changed Reading Forever | Maria Chen | TEDxSF</div>
+      <div class="artifact-author">by <strong>Maria Chen</strong> · TEDxSF · 1.2M views</div>
+    </div>
+
+    <!-- Video player -->
+    <div class="video-player-placeholder">
+      <div class="play-icon">▶</div>
+      <div class="vid-label">VIDEO PLAYER · 1920×1080</div>
+    </div>
+
+    <!-- Scrubber with highlight markers -->
+    <div class="video-scrubber">
+      <div class="scrubber-track">
+        <div class="scrubber-progress"></div>
+        <div class="scrubber-marker" style="left: 12%;" title="2:38"></div>
+        <div class="scrubber-marker hot" style="left: 24%;" title="5:17"></div>
+        <div class="scrubber-marker" style="left: 35%;" title="7:42"></div>
+        <div class="scrubber-marker hot" style="left: 48%;" title="10:34"></div>
+        <div class="scrubber-marker" style="left: 56%;" title="12:19"></div>
+        <div class="scrubber-marker hot" style="left: 68%;" title="14:58"></div>
+        <div class="scrubber-marker" style="left: 75%;" title="16:30"></div>
+        <div class="scrubber-marker hot" style="left: 88%;" title="19:22"></div>
+      </div>
+      <div class="scrubber-times">
+        <span>0:00</span>
+        <span style="color: #ffe066;">8 highlighted moments</span>
+        <span>22:00</span>
+      </div>
+    </div>
+
+    <div class="highlight-stats" style="margin-bottom: 12px;">
+      <span><span class="stat-val">8</span> highlighted moments</span>
+      <span><span class="stat-val">34</span> people</span>
+      <span><span class="stat-val">12</span> comments</span>
+    </div>
+
+    <!-- Highlighted moments grid -->
+    <div class="section-head" style="margin-top: 24px;">
+      <span>Highlighted Moments</span>
+      <button class="sort-toggle">Sort: Most Highlighted</button>
+    </div>
+
+    <div class="moments-grid">
+      <div class="moment-card" onclick="showModal('vm1')">
+        <div class="moment-thumb">
+          ▶ thumbnail frame
+          <div class="moment-ts">2:38</div>
+        </div>
+        <div class="moment-body">
+          <div class="moment-transcript">"We used to underline in books. Then we bookmarked web pages. Now we highlight across every medium. The instinct has always been there."</div>
+          <div class="moment-meta">
+            <span>🔖 8 people</span>
+            <span>💬 2</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="moment-card" onclick="showModal('vm2')">
+        <div class="moment-thumb">
+          ▶ thumbnail frame
+          <div class="moment-ts">5:17</div>
+        </div>
+        <div class="moment-body">
+          <div class="moment-transcript">"Here's what nobody talks about: the highlight is the smallest unit of intellectual labor. Smaller than a tweet. More honest than a like. It says 'this specific thing moved me.'"</div>
+          <div class="moment-meta">
+            <span>🔖 22 people</span>
+            <span>💬 5</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="moment-card" onclick="showModal('vm3')">
+        <div class="moment-thumb">
+          ▶ thumbnail frame
+          <div class="moment-ts">10:34</div>
+        </div>
+        <div class="moment-body">
+          <div class="moment-transcript">"Imagine if you could see what Einstein highlighted in his copy of Newton's Principia. That map of attention would be worth more than most biographies."</div>
+          <div class="moment-meta">
+            <span>🔖 28 people</span>
+            <span>💬 8</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="moment-card" onclick="showModal('vm4')">
+        <div class="moment-thumb">
+          ▶ thumbnail frame
+          <div class="moment-ts">14:58</div>
+        </div>
+        <div class="moment-body">
+          <div class="moment-transcript">"The future isn't about who publishes the most. It's about who curates the best. The highlighters, the collectors, the people who say 'pay attention to THIS.'"</div>
+          <div class="moment-meta">
+            <span>🔖 19 people</span>
+            <span>💬 4</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="moment-card" onclick="showModal('vm5')">
+        <div class="moment-thumb">
+          ▶ thumbnail frame
+          <div class="moment-ts">19:22</div>
+        </div>
+        <div class="moment-body">
+          <div class="moment-transcript">"So here's my challenge to you: the next thing you read, don't just consume it. Mark it. Highlight it. Share what resonated. Because your attention is the most valuable gift you can give another mind."</div>
+          <div class="moment-meta">
+            <span>🔖 31 people</span>
+            <span>💬 9</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="moment-card" onclick="showModal('vm6')">
+        <div class="moment-thumb">
+          ▶ thumbnail frame
+          <div class="moment-ts">7:42</div>
+        </div>
+        <div class="moment-body">
+          <div class="moment-transcript">"A book that nobody highlights is a book that had no impact. But a passage highlighted by thousands? That's a cultural artifact."</div>
+          <div class="moment-meta">
+            <span>🔖 14 people</span>
+            <span>💬 1</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Discussion Section -->
+    <div class="discussion-section">
+      <div class="section-head" style="margin-top: 32px;">
+        <span>Discussion (12)</span>
+      </div>
+      <div class="new-thread-form">
+        <textarea rows="2" placeholder="Start a discussion about this video..."></textarea>
+        <button class="reply-submit" onclick="submitNewThread(this)">Post</button>
+      </div>
+      <div class="disc-threads">
+        <div class="disc-thread">
+          <div class="disc-comment">
+            <div class="disc-avatar">SR</div>
+            <div class="disc-content">
+              <div class="disc-author">Sarah R. <span class="disc-time">· 3d ago</span></div>
+              <div class="disc-text">The moment at 10:34 about Einstein highlighting Newton — I've never heard anyone frame it that way before. A "map of attention" being worth more than a biography is such a powerful idea.</div>
+              <div class="disc-actions">
+                <button class="disc-action-btn" onclick="toggleReply(this)">↩ Reply</button>
+                <button class="disc-action-btn">⚡ Zap</button>
+                <span class="disc-zap-count">3.2k sats</span>
+              </div>
+            </div>
+          </div>
+          <div class="thread-replies">
+            <div class="disc-reply">
+              <div class="disc-avatar">MR</div>
+              <div class="disc-content">
+                <div class="disc-author">Marcus R. <span class="disc-time">· 3d ago</span></div>
+                <div class="disc-text">That's why this platform exists, right? We're all creating those maps of attention for each other.</div>
+              </div>
+            </div>
+            <div class="disc-reply">
+              <div class="disc-avatar">EW</div>
+              <div class="disc-content">
+                <div class="disc-author">Erin W. <span class="disc-time">· 2d ago</span></div>
+                <div class="disc-text">I went and looked up Einstein's actual marginalia after watching this. Fascinating rabbit hole.</div>
+              </div>
+            </div>
+          </div>
+          <div class="reply-form">
+            <textarea rows="2" placeholder="Reply..."></textarea>
+            <button class="reply-submit" onclick="submitReply(this)">Reply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     WEBSITE VIEW
+     ============================================ -->
+<div class="artifact-view" id="view-website">
+  <div class="artifact-container">
+    <div class="artifact-header" style="border-bottom: none; padding-bottom: 0; margin-bottom: 16px;">
+      <div class="artifact-meta">Website · paulgraham.com</div>
+      <div class="artifact-title" style="font-size: 22px;">How to Do Great Work</div>
+      <div class="artifact-author">by <strong>Paul Graham</strong> · July 2023</div>
+    </div>
+
+    <!-- Browser chrome preview -->
+    <div class="website-preview">
+      <div class="website-chrome">
+        <div class="chrome-dots">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="chrome-url">paulgraham.com/greatwork.html</div>
+      </div>
+      <div class="website-screenshot">
+        <div class="site-icon">🌐</div>
+        <div>Website preview / snapshot</div>
+        <div style="font-size: 11px; margin-top: 4px; color: #bbb;">Rendered page content would appear here</div>
+
+        <!-- Overlay markers showing where highlights are -->
+        <div class="hl-overlay-markers">
+          <div class="marker-dot" style="top: 15%; left: 20%;" title="Section: Introduction">4</div>
+          <div class="marker-dot" style="top: 30%; left: 35%;" title="Section: Choosing Work">7</div>
+          <div class="marker-dot" style="top: 48%; left: 25%;" title="Section: Doing the Work">11</div>
+          <div class="marker-dot" style="top: 62%; left: 40%;" title="Section: Morale">5</div>
+          <div class="marker-dot" style="top: 78%; left: 30%;" title="Section: Audience">3</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="highlight-stats" style="margin-bottom: 12px;">
+      <span><span class="stat-val">30</span> highlights</span>
+      <span><span class="stat-val">56</span> people</span>
+      <span><span class="stat-val">14</span> comments</span>
+    </div>
+    <div class="social-proof" style="margin-bottom: 0;">
+      <div class="avatar-stack">
+        <div class="avatar">PA</div>
+        <div class="avatar">JD</div>
+        <div class="avatar">AS</div>
+        <div class="avatar">+</div>
+      </div>
+      <span>Pablo, Jack, Ana and 53 others highlighted this essay</span>
+    </div>
+
+    <!-- Extracted highlights -->
+    <div class="website-extracts">
+      <div class="section-head" style="margin-top: 24px;">
+        <span>Highlighted Passages (30)</span>
+        <button class="sort-toggle">Sort: Most Highlighted</button>
+      </div>
+
+      <div class="extract-card" onclick="showModal('we1')">
+        <div class="extract-section-tag">
+          <span class="tag">§ Doing the Work</span>
+        </div>
+        <div class="extract-text">"The way to figure out what to work on is by working. If you're not sure what to work on, guess. But pick something and get going. You'll probably guess wrong some of the time, but that's fine. It's good to know about multiple things; some of the biggest discoveries come from noticing connections between different fields."</div>
+        <div class="extract-meta">
+          <span class="extract-count">34</span>
+          <span>Highlighted by 34 people · 6 comments</span>
+        </div>
+      </div>
+
+      <div class="extract-card" onclick="showModal('we2')">
+        <div class="extract-section-tag">
+          <span class="tag">§ Introduction</span>
+        </div>
+        <div class="extract-text">"Four steps: choose a field, learn enough to get to the frontier, notice gaps, explore promising ones. This is how practically everyone who's done great work has done it."</div>
+        <div class="extract-meta">
+          <span class="extract-count">28</span>
+          <span>Highlighted by 28 people · 4 comments</span>
+        </div>
+      </div>
+
+      <div class="extract-card" onclick="showModal('we3')">
+        <div class="extract-section-tag">
+          <span class="tag">§ Choosing Work</span>
+        </div>
+        <div class="extract-text">"The work you choose needs to have three qualities: it has to be something you have a natural aptitude for, that you have a deep interest in, and that offers scope to do great work."</div>
+        <div class="extract-meta">
+          <span class="extract-count">22</span>
+          <span>Highlighted by 22 people · 3 comments</span>
+        </div>
+      </div>
+
+      <div class="extract-card" onclick="showModal('we4')">
+        <div class="extract-section-tag">
+          <span class="tag">§ Morale</span>
+        </div>
+        <div class="extract-text">"Morale is everything in ambitious projects. You have to nurture and protect it like a living organism. The key to maintaining morale is to ensure you have a clear view of how you're doing."</div>
+        <div class="extract-meta">
+          <span class="extract-count">19</span>
+          <span>Highlighted by 19 people · 2 comments</span>
+        </div>
+      </div>
+
+      <div class="extract-card" onclick="showModal('we5')">
+        <div class="extract-section-tag">
+          <span class="tag">§ Doing the Work</span>
+        </div>
+        <div class="extract-text">"Great work usually entails spending what would seem to most people an unreasonable amount of time on a problem. You can't think of this time as a cost, or it will seem too high. You have to find the work so interesting that it stops feeling like work."</div>
+        <div class="extract-meta">
+          <span class="extract-count">16</span>
+          <span>Highlighted by 16 people · 5 comments</span>
+        </div>
+      </div>
+
+      <div class="extract-card" onclick="showModal('we6')">
+        <div class="extract-section-tag">
+          <span class="tag">§ Audience</span>
+        </div>
+        <div class="extract-text">"Don't try to write for a specific audience. Write for yourself, and if you're sufficiently interesting, your audience will find you."</div>
+        <div class="extract-meta">
+          <span class="extract-count">12</span>
+          <span>Highlighted by 12 people · 1 comment</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Discussion Section -->
+    <div class="discussion-section">
+      <div class="section-head" style="margin-top: 32px;">
+        <span>Discussion (8)</span>
+      </div>
+      <div class="new-thread-form">
+        <textarea rows="2" placeholder="Start a discussion about this essay..."></textarea>
+        <button class="reply-submit" onclick="submitNewThread(this)">Post</button>
+      </div>
+      <div class="disc-threads">
+        <div class="disc-thread">
+          <div class="disc-comment">
+            <div class="disc-avatar">NS</div>
+            <div class="disc-content">
+              <div class="disc-author">Naveen S. <span class="disc-time">· 1w ago</span></div>
+              <div class="disc-text">This might be the most highlighted PG essay on Highlighter. The "four steps" passage alone has 28 highlights. What is it about PG's writing that makes people highlight so much?</div>
+              <div class="disc-actions">
+                <button class="disc-action-btn" onclick="toggleReply(this)">↩ Reply</button>
+                <button class="disc-action-btn">⚡ Zap</button>
+                <span class="disc-zap-count">2.1k sats</span>
+              </div>
+            </div>
+          </div>
+          <div class="thread-replies">
+            <div class="disc-reply">
+              <div class="disc-avatar">PA</div>
+              <div class="disc-content">
+                <div class="disc-author">Pablo <span class="disc-time">· 1w ago</span></div>
+                <div class="disc-text">Density of insight per sentence. PG doesn't waste words, so every sentence feels highlight-worthy.</div>
+              </div>
+            </div>
+          </div>
+          <div class="reply-form">
+            <textarea rows="2" placeholder="Reply..."></textarea>
+            <button class="reply-submit" onclick="submitReply(this)">Reply</button>
+          </div>
+        </div>
+        <div class="disc-thread">
+          <div class="disc-comment">
+            <div class="disc-avatar">TB</div>
+            <div class="disc-content">
+              <div class="disc-author">Tom B. <span class="disc-time">· 2w ago</span></div>
+              <div class="disc-text">The "Morale" section hit me hardest. As someone building a startup, "you have to nurture and protect it like a living organism" is something I need tattooed on my arm.</div>
+              <div class="disc-actions">
+                <button class="disc-action-btn" onclick="toggleReply(this)">↩ Reply</button>
+                <button class="disc-action-btn">⚡ Zap</button>
+                <span class="disc-zap-count">850 sats</span>
+              </div>
+            </div>
+          </div>
+          <div class="thread-replies"></div>
+          <div class="reply-form">
+            <textarea rows="2" placeholder="Reply..."></textarea>
+            <button class="reply-submit" onclick="submitReply(this)">Reply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     MY HIGHLIGHTS DRAWER
+     ============================================ -->
+<div class="drawer-overlay" id="my-highlights-drawer" onclick="closeMyHighlights(event)">
+  <div class="drawer-box">
+    <button class="drawer-close" onclick="closeMyHighlights(event, true)">✕</button>
+    <div class="drawer-title">My Highlights</div>
+    <div class="drawer-subtitle">Your highlights across all artifacts</div>
+
+    <div class="my-hl-section">
+      <div class="my-hl-section-head">📄 The Age of Curation — Article</div>
+      <div class="my-hl-item">
+        <div class="my-hl-quote">"act of choosing what matters. Every time you drag your cursor across a sentence..."</div>
+        <div class="my-hl-meta">12 others also highlighted · 2d ago</div>
+      </div>
+      <div class="my-hl-item">
+        <div class="my-hl-quote">"curation becomes a form of expression. Your highlights are a fingerprint..."</div>
+        <div class="my-hl-meta">23 others also highlighted · 2d ago</div>
+      </div>
+      <div class="my-hl-item">
+        <div class="my-hl-quote">"emergence of shared meaning from individual acts of attention..."</div>
+        <div class="my-hl-meta">19 others also highlighted · 3d ago</div>
+      </div>
+    </div>
+
+    <div class="my-hl-section">
+      <div class="my-hl-section-head">🎙 The Knowledge Project #247 — Podcast</div>
+      <div class="my-hl-item">
+        <div class="my-hl-quote">"Highlighting is really about creating a dialogue with your future self." <span class="my-hl-ts">04:22</span></div>
+        <div class="my-hl-meta">14 others clipped · 1d ago</div>
+      </div>
+      <div class="my-hl-item">
+        <div class="my-hl-quote">"I don't think the future of the internet is more content..." <span class="my-hl-ts">1:02:15</span></div>
+        <div class="my-hl-meta">27 others clipped · 1d ago</div>
+      </div>
+    </div>
+
+    <div class="my-hl-section">
+      <div class="my-hl-section-head">📖 How to Read a Book — Book</div>
+      <div class="my-hl-item">
+        <div class="my-hl-quote">"The art of reading, in short, includes all of the same skills that are involved in the art of unaided discovery..."</div>
+        <div class="my-hl-meta">31 others highlighted · 5d ago</div>
+      </div>
+      <div class="my-hl-item">
+        <div class="my-hl-quote">"Marking a book is literally an expression of your differences, or your agreements, with the author."</div>
+        <div class="my-hl-meta">26 others highlighted · 5d ago</div>
+      </div>
+    </div>
+
+    <div class="my-hl-section">
+      <div class="my-hl-section-head">🎬 TEDxSF — Video</div>
+      <div class="my-hl-item">
+        <div class="my-hl-quote">"Imagine if you could see what Einstein highlighted..." <span class="my-hl-ts">10:34</span></div>
+        <div class="my-hl-meta">28 others highlighted · 1d ago</div>
+      </div>
+    </div>
+
+    <div class="my-hl-section">
+      <div class="my-hl-section-head">🌐 How to Do Great Work — Website</div>
+      <div class="my-hl-item">
+        <div class="my-hl-quote">"The way to figure out what to work on is by working."</div>
+        <div class="my-hl-meta">34 others highlighted · 1w ago</div>
+      </div>
+    </div>
+
+    <div class="drawer-footer">
+      <div>Total: <strong>9 highlights</strong> across 5 artifacts</div>
+      <div style="font-size: 11px; color: #888; margin-top: 4px;">Export as Markdown · Share</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     MY HIGHLIGHTS DRAWER
+     ============================================ -->
+<div class="my-highlights-overlay" id="hl-overlay" onclick="closeMyHighlightsDrawer()"></div>
+<div class="my-highlights-drawer" id="hl-drawer">
+  <div class="drawer-header">
+    <h3>📑 My Highlights</h3>
+    <button class="drawer-close" onclick="closeMyHighlightsDrawer()">✕</button>
+  </div>
+  <div class="drawer-tabs">
+    <button class="drawer-tab active" onclick="switchDrawerTab(this, 'highlights')">Highlights</button>
+    <button class="drawer-tab" onclick="switchDrawerTab(this, 'notes')">Notes</button>
+    <button class="drawer-tab" onclick="switchDrawerTab(this, 'tags')">Tags</button>
+  </div>
+
+  <div class="drawer-panel" id="drawer-highlights">
+    <div class="drawer-highlight-item">
+      <div class="drawer-hl-text">"The act of choosing what to highlight is itself an act of creation — a declaration of what matters."</div>
+      <div class="drawer-hl-meta">Highlighted 2 days ago · ¶3</div>
+      <div class="drawer-hl-actions">
+        <button class="drawer-hl-action">📋 Copy</button>
+        <button class="drawer-hl-action">🏷 Tag</button>
+        <button class="drawer-hl-action">💬 Note</button>
+        <button class="drawer-hl-action" style="color: #c00;">✕ Remove</button>
+      </div>
+    </div>
+    <div class="drawer-highlight-item">
+      <div class="drawer-hl-text">"Curation becomes collaboration when we share our maps of meaning."</div>
+      <div class="drawer-hl-meta">Highlighted 2 days ago · ¶7</div>
+      <div class="drawer-hl-actions">
+        <button class="drawer-hl-action">📋 Copy</button>
+        <button class="drawer-hl-action">🏷 Tag</button>
+        <button class="drawer-hl-action">💬 Note</button>
+        <button class="drawer-hl-action" style="color: #c00;">✕ Remove</button>
+      </div>
+    </div>
+    <div class="drawer-highlight-item">
+      <div class="drawer-hl-text">"The emergence of shared understanding through individual acts of attention."</div>
+      <div class="drawer-hl-meta">Highlighted 1 day ago · ¶12</div>
+      <div class="drawer-hl-actions">
+        <button class="drawer-hl-action">📋 Copy</button>
+        <button class="drawer-hl-action">🏷 Tag</button>
+        <button class="drawer-hl-action">💬 Note</button>
+        <button class="drawer-hl-action" style="color: #c00;">✕ Remove</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="drawer-panel" id="drawer-notes" style="display:none">
+    <div class="drawer-highlight-item">
+      <div class="drawer-hl-text" style="border-left-color: #4a90d9;">"The act of choosing what to highlight is itself an act of creation..."</div>
+      <div style="background: #f5f5f5; padding: 8px; margin: 8px 0; font-size: 12px; border: 1px solid #ddd;">
+        <strong>My note:</strong> This connects to Vannevar Bush's "memex" idea — trails through information as personal expression. Need to find that essay.
+      </div>
+      <div class="drawer-hl-meta">Note added 1 day ago</div>
+    </div>
+    <div class="drawer-highlight-item">
+      <div class="drawer-hl-text" style="border-left-color: #4a90d9;">"Curation becomes collaboration when we share our maps of meaning."</div>
+      <div style="background: #f5f5f5; padding: 8px; margin: 8px 0; font-size: 12px; border: 1px solid #ddd;">
+        <strong>My note:</strong> Could be a tagline for the platform. "Share your maps of meaning."
+      </div>
+      <div class="drawer-hl-meta">Note added 1 day ago</div>
+    </div>
+  </div>
+
+  <div class="drawer-panel" id="drawer-tags" style="display:none">
+    <div style="border: 2px solid #ccc; padding: 12px; margin-bottom: 10px;">
+      <div style="font-size: 12px; font-weight: 700; margin-bottom: 8px;"># collective-intelligence</div>
+      <div style="font-size: 11px; color: #666;">2 highlights tagged</div>
+    </div>
+    <div style="border: 2px solid #ccc; padding: 12px; margin-bottom: 10px;">
+      <div style="font-size: 12px; font-weight: 700; margin-bottom: 8px;"># curation-philosophy</div>
+      <div style="font-size: 11px; color: #666;">3 highlights tagged</div>
+    </div>
+    <div style="border: 2px solid #ccc; padding: 12px; margin-bottom: 10px;">
+      <div style="font-size: 12px; font-weight: 700; margin-bottom: 8px;"># quotable</div>
+      <div style="font-size: 11px; color: #666;">1 highlight tagged</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     MODAL (shared)
+     ============================================ -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal-box" id="modal-box">
+    <button class="modal-close" onclick="closeModal(event, true)">✕</button>
+    <div class="modal-title" id="modal-title">Highlighted Passage</div>
+    <div class="modal-quote" id="modal-quote"></div>
+    <div class="modal-highlighters" id="modal-highlighters"></div>
+  </div>
+</div>
+
+<!-- ============================================
+     JAVASCRIPT
+     ============================================ -->
+<script>
+  // ---- Tab switching ----
+  const tabs = document.querySelectorAll('.artifact-tabs button');
+  const views = document.querySelectorAll('.artifact-view');
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const viewId = 'view-' + tab.dataset.view;
+      tabs.forEach(t => t.classList.remove('active'));
+      views.forEach(v => v.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(viewId).classList.add('active');
+    });
+  });
+
+  // ---- Article: highlight popovers ----
+  const hlMarks = document.querySelectorAll('.hl-mark');
+  let activePopover = null;
+
+  const hlData = {
+    hl1: {
+      people: [
+        { name: 'Pablo', time: '2d ago', comment: 'This is the thesis of the whole piece.' },
+        { name: 'Kira L.', time: '3d ago', comment: '' },
+        { name: 'Jack D.', time: '5d ago', comment: 'Beautifully put.' },
+      ]
+    },
+    hl2: {
+      people: [
+        { name: 'Marcus R.', time: '1d ago', comment: 'Love the Fermat connection' },
+        { name: 'Erin W.', time: '4d ago', comment: '' },
+      ]
+    },
+    hl3: {
+      people: [
+        { name: 'Pablo', time: '2d ago', comment: 'THE core insight. Curators = creators.' },
+        { name: 'Jack D.', time: '3d ago', comment: '' },
+        { name: 'Sarah M.', time: '3d ago', comment: 'This changes how I think about sharing' },
+        { name: 'Tom B.', time: '4d ago', comment: '' },
+      ]
+    },
+    hl4: {
+      people: [
+        { name: 'Kira L.', time: '3d ago', comment: 'physicist, poet, programmer — what a trio' },
+        { name: 'Pablo', time: '3d ago', comment: '' },
+      ]
+    },
+    hl5: {
+      people: [
+        { name: 'Pablo', time: '1d ago', comment: 'This is what Highlighter is building.' },
+        { name: 'Naveen S.', time: '2d ago', comment: 'Convergence as signal — YES' },
+        { name: 'Jack D.', time: '3d ago', comment: '' },
+        { name: 'Erin W.', time: '4d ago', comment: 'Resonance over reaction.' },
+      ]
+    },
+    hl6: {
+      people: [
+        { name: 'Marcus R.', time: '1d ago', comment: '' },
+        { name: 'Sarah M.', time: '2d ago', comment: 'Economy of attention > economy of content' },
+        { name: 'Pablo', time: '3d ago', comment: 'This is our north star.' },
+      ]
+    },
+  };
+
+  hlMarks.forEach(mark => {
+    mark.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Close existing
+      if (activePopover) {
+        activePopover.remove();
+        activePopover = null;
+      }
+
+      const hlId = mark.dataset.hl;
+      const data = hlData[hlId];
+      if (!data) return;
+
+      const pop = document.createElement('div');
+      pop.className = 'hl-popover visible';
+      pop.innerHTML = `
+        <div class="hl-popover-title">${data.people.length} people highlighted this</div>
+        ${data.people.map(p => `
+          <div class="hl-person">
+            <div class="mini-avatar">${p.name.split(' ').map(n=>n[0]).join('')}</div>
+            <div>
+              <span class="name">${p.name}</span> <span style="color:#666">· ${p.time}</span>
+              ${p.comment ? `<div class="comment">"${p.comment}"</div>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      `;
+      mark.style.position = 'relative';
+      mark.appendChild(pop);
+      activePopover = pop;
+    });
+  });
+
+  document.addEventListener('click', () => {
+    if (activePopover) {
+      activePopover.remove();
+      activePopover = null;
+    }
+  });
+
+  // ---- Podcast: generate waveform bars ----
+  const waveformEl = document.getElementById('waveform');
+  if (waveformEl) {
+    const barCount = 200;
+    // Highlighted regions (as fraction of total)
+    const hlRegions = [
+      { start: 0.04, end: 0.07 },
+      { start: 0.14, end: 0.18, intense: true },
+      { start: 0.25, end: 0.28 },
+      { start: 0.37, end: 0.41, intense: true },
+      { start: 0.54, end: 0.57 },
+      { start: 0.73, end: 0.78, intense: true },
+      { start: 0.82, end: 0.85 },
+      { start: 0.90, end: 0.93 },
+    ];
+
+    for (let i = 0; i < barCount; i++) {
+      const frac = i / barCount;
+      const bar = document.createElement('div');
+      bar.className = 'waveform-bar';
+      const height = 15 + Math.random() * 40 + Math.sin(i * 0.15) * 10;
+      bar.style.height = height + '%';
+      bar.style.left = (frac * 100) + '%';
+
+      // Check if in highlight region
+      for (const r of hlRegions) {
+        if (frac >= r.start && frac <= r.end) {
+          bar.classList.add('highlighted');
+          if (r.intense) bar.classList.add('intense');
+          break;
+        }
+      }
+
+      waveformEl.appendChild(bar);
+    }
+  }
+
+  // ---- Podcast: play button toggle ----
+  const playBtn = document.getElementById('podcast-play-btn');
+  if (playBtn) {
+    let playing = false;
+    playBtn.addEventListener('click', () => {
+      playing = !playing;
+      playBtn.textContent = playing ? '⏸' : '▶';
+    });
+  }
+
+  // ---- Book: chapter toggle ----
+  function toggleChapter(el) {
+    const item = el.closest('.chapter-item');
+    item.classList.toggle('open');
+  }
+
+  function toggleBookSort() {
+    // Placeholder for sort toggle
+  }
+
+  // ---- Modal system ----
+  const modalData = {
+    // Podcast clips
+    clip1: {
+      title: 'Clipped Moment · 04:22',
+      quote: '"The problem isn\'t that we don\'t read enough. The problem is that we read and forget. Highlighting is really about creating a dialogue with your future self."',
+      people: [
+        { name: 'Pablo', time: '1d ago', comment: 'This is why we built Highlighter.' },
+        { name: 'Sarah R.', time: '2d ago', comment: '' },
+        { name: 'Tom B.', time: '3d ago', comment: 'Dialogue with future self — great framing' },
+      ]
+    },
+    clip2: {
+      title: 'Clipped Moment · 18:45',
+      quote: '"When I see what passages other people highlight in a book I\'ve read, I feel like I\'m having a conversation across time and space. It\'s the closest thing to telepathy we have."',
+      people: [
+        { name: 'Pablo', time: '1d ago', comment: 'Telepathy through highlights ✨' },
+        { name: 'Jack D.', time: '2d ago', comment: '' },
+        { name: 'Kira L.', time: '2d ago', comment: 'This gave me chills' },
+        { name: 'Marcus R.', time: '3d ago', comment: '' },
+      ]
+    },
+    clip3: {
+      title: 'Clipped Moment · 32:10',
+      quote: '"Shane, think about it — every great thinker in history was essentially a curator. They read voraciously, then selected and recombined ideas. The highlight is the atomic unit of that process."',
+      people: [
+        { name: 'Naveen S.', time: '1d ago', comment: '"Atomic unit" — using this in our pitch deck' },
+        { name: 'Pablo', time: '2d ago', comment: '' },
+        { name: 'Erin W.', time: '3d ago', comment: 'Newton stood on shoulders of giants... and their highlights' },
+      ]
+    },
+    clip4: {
+      title: 'Clipped Moment · 47:33',
+      quote: '"Social media optimized for reactions. What if we optimized for resonance instead? Not \'what makes you angry\' but \'what makes you stop and think.\' That\'s the highlight."',
+      people: [
+        { name: 'Pablo', time: '1d ago', comment: 'Resonance > Reactions. Our motto.' },
+        { name: 'Sarah R.', time: '4d ago', comment: '' },
+      ]
+    },
+    clip5: {
+      title: 'Clipped Moment · 1:02:15',
+      quote: '"I don\'t think the future of the internet is more content. I think it\'s better attention. And the people who help us pay attention to the right things — the curators, the highlighters — they\'re the real heroes of the next era."',
+      people: [
+        { name: 'Pablo', time: '1d ago', comment: 'This is the whole vision in one quote.' },
+        { name: 'Tom B.', time: '1d ago', comment: 'Better attention, not more content.' },
+        { name: 'Jack D.', time: '2d ago', comment: '' },
+        { name: 'Kira L.', time: '3d ago', comment: '' },
+      ]
+    },
+    clip6: {
+      title: 'Clipped Moment · 1:14:08',
+      quote: '"A community that highlights together develops a shared vocabulary, a shared set of references. It\'s like a book club that never ends."',
+      people: [
+        { name: 'Erin W.', time: '2d ago', comment: 'This is exactly what our community groups do!' },
+        { name: 'Pablo', time: '3d ago', comment: '' },
+      ]
+    },
+    // Book highlights
+    bh1: {
+      title: 'Book Highlight · Chapter 1, Page 7',
+      quote: '"Reading is a complex activity, just as writing is. It consists of a large number of separate acts, all of which must be performed in a good reading."',
+      people: [
+        { name: 'Pablo', time: '1w ago', comment: 'This sets the tone for the whole book.' },
+        { name: 'Erin W.', time: '2w ago', comment: '' },
+        { name: 'Naveen S.', time: '2w ago', comment: 'Active reading = active thinking' },
+      ]
+    },
+    bh4: {
+      title: 'Book Highlight · Chapter 2, Page 18',
+      quote: '"There are four levels of reading. We call them Elementary, Inspectional, Analytical, and Syntopical."',
+      people: [
+        { name: 'Pablo', time: '1w ago', comment: 'The 4-level framework is genius' },
+        { name: 'Jack D.', time: '1w ago', comment: '' },
+        { name: 'Marcus R.', time: '2w ago', comment: 'Most people never get past level 2' },
+      ]
+    },
+    bh6: {
+      title: 'Book Highlight · Chapter 5, Page 48 · 🔥 Most highlighted',
+      quote: '"The art of reading, in short, includes all of the same skills that are involved in the art of unaided discovery: keenness of observation, readily available memory, range of imagination, and an intellect trained in analysis and reflection."',
+      people: [
+        { name: 'Pablo', time: '5d ago', comment: 'The most highlighted passage in the entire book — for good reason.' },
+        { name: 'Jack D.', time: '1w ago', comment: 'Reading as discovery. Beautiful.' },
+        { name: 'Kira L.', time: '1w ago', comment: '' },
+        { name: 'Sarah M.', time: '2w ago', comment: '' },
+      ]
+    },
+    bh7: {
+      title: 'Book Highlight · Chapter 5, Page 51',
+      quote: '"Marking a book is literally an expression of your differences, or your agreements, with the author. It is the highest respect you can pay him."',
+      people: [
+        { name: 'Pablo', time: '5d ago', comment: 'This is why highlighting isn\'t vandalism — it\'s respect.' },
+        { name: 'Naveen S.', time: '1w ago', comment: '' },
+        { name: 'Tom B.', time: '2w ago', comment: 'Marking = conversation with author' },
+      ]
+    },
+    // Video moments
+    vm1: {
+      title: 'Highlighted Moment · 2:38',
+      quote: '"We used to underline in books. Then we bookmarked web pages. Now we highlight across every medium. The instinct has always been there."',
+      people: [
+        { name: 'Pablo', time: '3d ago', comment: '' },
+        { name: 'Sarah M.', time: '4d ago', comment: 'From underlines to digital highlights — same instinct' },
+      ]
+    },
+    vm2: {
+      title: 'Highlighted Moment · 5:17',
+      quote: '"The highlight is the smallest unit of intellectual labor. Smaller than a tweet. More honest than a like. It says \'this specific thing moved me.\'"',
+      people: [
+        { name: 'Pablo', time: '2d ago', comment: 'Smallest unit of intellectual labor. Chef\'s kiss.' },
+        { name: 'Jack D.', time: '3d ago', comment: 'More honest than a like — so true' },
+        { name: 'Kira L.', time: '3d ago', comment: '' },
+      ]
+    },
+    vm3: {
+      title: 'Highlighted Moment · 10:34',
+      quote: '"Imagine if you could see what Einstein highlighted in his copy of Newton\'s Principia. That map of attention would be worth more than most biographies."',
+      people: [
+        { name: 'Pablo', time: '1d ago', comment: 'Map of attention — this is literally what we\'re building.' },
+        { name: 'Naveen S.', time: '2d ago', comment: 'Einstein\'s highlights > Einstein\'s biography. What a claim.' },
+        { name: 'Tom B.', time: '3d ago', comment: '' },
+        { name: 'Erin W.', time: '4d ago', comment: '' },
+      ]
+    },
+    vm4: {
+      title: 'Highlighted Moment · 14:58',
+      quote: '"The future isn\'t about who publishes the most. It\'s about who curates the best."',
+      people: [
+        { name: 'Pablo', time: '2d ago', comment: '' },
+        { name: 'Marcus R.', time: '3d ago', comment: 'Curation > creation. Provocative but I think she\'s right.' },
+      ]
+    },
+    vm5: {
+      title: 'Highlighted Moment · 19:22 · 🔥 Most highlighted',
+      quote: '"Your attention is the most valuable gift you can give another mind."',
+      people: [
+        { name: 'Pablo', time: '1d ago', comment: 'Standing ovation moment.' },
+        { name: 'Jack D.', time: '1d ago', comment: 'This is the closing line and it hit different.' },
+        { name: 'Sarah M.', time: '2d ago', comment: '' },
+        { name: 'Kira L.', time: '2d ago', comment: 'I\'m highlighting a talk about highlighting. Very meta.' },
+      ]
+    },
+    // Website extracts
+    we1: {
+      title: 'Highlighted Passage · § Doing the Work',
+      quote: '"The way to figure out what to work on is by working. If you\'re not sure what to work on, guess. But pick something and get going."',
+      people: [
+        { name: 'Pablo', time: '1w ago', comment: 'Classic PG. Just start.' },
+        { name: 'Jack D.', time: '1w ago', comment: '' },
+        { name: 'Naveen S.', time: '2w ago', comment: 'This is the most pg-esque advice in the whole essay' },
+      ]
+    },
+    we2: {
+      title: 'Highlighted Passage · § Introduction',
+      quote: '"Four steps: choose a field, learn enough to get to the frontier, notice gaps, explore promising ones."',
+      people: [
+        { name: 'Pablo', time: '1w ago', comment: 'The whole essay in four steps' },
+        { name: 'Marcus R.', time: '1w ago', comment: '' },
+        { name: 'Tom B.', time: '2w ago', comment: 'Deceptively simple' },
+      ]
+    },
+    we3: {
+      title: 'Highlighted Passage · § Choosing Work',
+      quote: '"The work you choose needs to have three qualities: it has to be something you have a natural aptitude for, that you have a deep interest in, and that offers scope to do great work."',
+      people: [
+        { name: 'Erin W.', time: '1w ago', comment: 'Aptitude × Interest × Scope. The formula.' },
+        { name: 'Pablo', time: '2w ago', comment: '' },
+      ]
+    },
+  };
+
+  // Fill in remaining with generic data
+  ['bh2','bh3','bh5','bh8','bh9','bh10','vm6','we4','we5','we6'].forEach(id => {
+    if (!modalData[id]) {
+      modalData[id] = {
+        title: 'Highlighted Passage',
+        quote: document.querySelector(`[onclick="showModal('${id}')"]`)?.querySelector('.bh-quote, .moment-transcript, .extract-text, .clip-transcript')?.textContent || '',
+        people: [
+          { name: 'Pablo', time: '3d ago', comment: '' },
+          { name: 'Reader', time: '5d ago', comment: '' },
+        ]
+      };
+    }
+  });
+
+  function showModal(id) {
+    const data = modalData[id];
+    if (!data) return;
+
+    document.getElementById('modal-title').textContent = data.title;
+    document.getElementById('modal-quote').textContent = data.quote;
+
+    const hlContainer = document.getElementById('modal-highlighters');
+    hlContainer.innerHTML = `
+      <div style="font-size: 12px; color: #888; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">
+        ${data.people.length} people highlighted this
+      </div>
+      ${data.people.map(p => `
+        <div class="modal-hl-person">
+          <div class="m-avatar">${p.name.split(' ').map(n=>n[0]).join('')}</div>
+          <div>
+            <div class="m-name">${p.name} <span class="m-time">· ${p.time}</span></div>
+            ${p.comment ? `<div class="m-comment">"${p.comment}"</div>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    `;
+
+    document.getElementById('modal-overlay').classList.add('visible');
+  }
+
+  function closeModal(e, force) {
+    if (force || e.target === document.getElementById('modal-overlay')) {
+      document.getElementById('modal-overlay').classList.remove('visible');
+    }
+  }
+
+  // Close modal on Escape
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      document.getElementById('modal-overlay').classList.remove('visible');
+      document.getElementById('my-highlights-drawer').classList.remove('visible');
+      if (activePopover) {
+        activePopover.remove();
+        activePopover = null;
+      }
+    }
+  });
+
+  // ---- Bookmark toggle ----
+  function toggleBookmark(btn) {
+    btn.classList.toggle('bookmarked');
+    if (btn.classList.contains('bookmarked')) {
+      btn.textContent = '★';
+      btn.title = 'Bookmarked!';
+      btn.style.color = '#e6a800';
+    } else {
+      btn.textContent = '☆';
+      btn.title = 'Bookmark this artifact';
+      btn.style.color = '';
+    }
+  }
+
+  // ---- My Highlights drawer ----
+  function toggleMyHighlightsDrawer() {
+    document.getElementById('hl-drawer').classList.toggle('open');
+    document.getElementById('hl-overlay').classList.toggle('visible');
+  }
+
+  function closeMyHighlightsDrawer() {
+    document.getElementById('hl-drawer').classList.remove('open');
+    document.getElementById('hl-overlay').classList.remove('visible');
+  }
+
+  function switchDrawerTab(btn, panel) {
+    // Toggle active tab
+    btn.parentElement.querySelectorAll('.drawer-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    // Show selected panel
+    document.querySelectorAll('.drawer-panel').forEach(p => p.style.display = 'none');
+    document.getElementById('drawer-' + panel).style.display = 'block';
+  }
+
+  // ---- Discussion: reply toggle ----
+  function toggleReply(btn) {
+    const form = btn.closest('.disc-thread').querySelector('.reply-form');
+    if (form) {
+      form.classList.toggle('visible');
+      if (form.classList.contains('visible')) {
+        form.querySelector('textarea').focus();
+      }
+    }
+  }
+
+  function submitReply(btn) {
+    const form = btn.closest('.reply-form');
+    const textarea = form.querySelector('textarea');
+    const text = textarea.value.trim();
+    if (!text) return;
+    const thread = btn.closest('.disc-thread');
+    const replies = thread.querySelector('.thread-replies');
+    const newReply = document.createElement('div');
+    newReply.className = 'disc-reply';
+    newReply.innerHTML = `
+      <div class="disc-avatar">Y</div>
+      <div class="disc-content">
+        <div class="disc-author">You <span class="disc-time">· just now</span></div>
+        <div class="disc-text">${text}</div>
+      </div>
+    `;
+    replies.appendChild(newReply);
+    textarea.value = '';
+    form.classList.remove('visible');
+  }
+
+  function submitNewThread(btn) {
+    const section = btn.closest('.discussion-section');
+    const textarea = section.querySelector('.new-thread-form textarea');
+    const text = textarea.value.trim();
+    if (!text) return;
+    const threads = section.querySelector('.disc-threads');
+    const newThread = document.createElement('div');
+    newThread.className = 'disc-thread';
+    newThread.innerHTML = `
+      <div class="disc-comment">
+        <div class="disc-avatar">Y</div>
+        <div class="disc-content">
+          <div class="disc-author">You <span class="disc-time">· just now</span></div>
+          <div class="disc-text">${text}</div>
+          <div class="disc-actions">
+            <button class="disc-action-btn" onclick="toggleReply(this)">↩ Reply</button>
+            <button class="disc-action-btn">⚡ Zap</button>
+          </div>
+        </div>
+      </div>
+      <div class="thread-replies"></div>
+      <div class="reply-form">
+        <textarea rows="2" placeholder="Reply..."></textarea>
+        <button class="reply-submit" onclick="submitReply(this)">Reply</button>
+      </div>
+    `;
+    threads.prepend(newThread);
+    textarea.value = '';
+  }
+</script>
+</body>
+</html>

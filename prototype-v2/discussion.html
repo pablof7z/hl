@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discussion — Highlighter</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+
+    <aside class="sidebar">
+      <div class="sidebar-logo"><a href="index.html">☲ Highlighter</a></div>
+      <nav class="sidebar-nav">
+        <a href="index.html"><span class="nav-icon">⌂</span> Home</a>
+        <a href="discover.html"><span class="nav-icon">◎</span> Discover</a>
+        <a href="capture.html"><span class="nav-icon">+</span> Capture</a>
+        <div class="sidebar-section-label">Your Communities</div>
+        <div class="sidebar-community-list">
+          <a href="community.html" class="active"><span class="community-dot"></span> Deep Work Readers</a>
+          <a href="community.html#philosophy"><span class="community-dot"></span> Philosophy Circle</a>
+          <a href="community.html#indie"><span class="community-dot"></span> Indie Hackers Book Club</a>
+          <a href="community.html#design"><span class="community-dot"></span> Design Thinkers</a>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="profile.html"><div class="avatar-sm">A</div><span>Alice</span></a>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="topbar-title">
+          <a href="community.html" style="color:var(--gray-500);text-decoration:none;">Deep Work Readers</a> / Discussion
+        </div>
+        <div class="topbar-actions"></div>
+      </header>
+
+      <div class="content content-narrow content-centered">
+
+        <!-- Discussion topic -->
+        <div class="section">
+          <div class="card" style="border-width:3px;">
+            <div class="flex items-center gap-12 mb-12">
+              <div class="avatar">D</div>
+              <div>
+                <span class="comment-author">Diana</span>
+                <span class="comment-time" style="margin-left:8px;">Started 2 days ago</span>
+              </div>
+            </div>
+            <h2>How do you apply "System 2" thinking in daily life?</h2>
+            <p class="mt-12">After reading Part I, I'm curious how others are consciously engaging System 2. Kahneman makes it clear that we default to System 1 most of the time. What strategies have you found for deliberately engaging the slower, more analytical mode?</p>
+            <div class="flex items-center gap-16 mt-16">
+              <span class="text-xs text-muted">💬 8 replies</span>
+              <span class="text-xs text-muted">♡ 6 likes</span>
+              <a href="content-detail.html" class="text-xs">📖 Thinking, Fast and Slow</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reply box -->
+        <div class="section">
+          <div class="form-group">
+            <textarea placeholder="Share your thoughts..." rows="3"></textarea>
+            <div class="flex justify-between items-center mt-8">
+              <span class="text-xs text-muted">Replying as Alice</span>
+              <button class="btn btn-sm btn-primary">Reply</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Thread -->
+        <div class="section">
+          <div class="comment">
+            <div class="avatar">B</div>
+            <div class="comment-body">
+              <div class="comment-meta">
+                <span class="comment-author">Bob</span>
+                <span class="comment-time">2 days ago</span>
+              </div>
+              <div class="comment-text">I've been using a simple rule: whenever I feel certain about something, I pause and ask "what would change my mind?" It's basically forcing System 2 to audit System 1's snap judgment. Surprisingly effective for everything from code reviews to hiring decisions.</div>
+              <div class="comment-actions">
+                <button>↩ Reply</button>
+                <button>♡ 4</button>
+              </div>
+
+              <div class="replies">
+                <div class="comment">
+                  <div class="avatar avatar-sm">D</div>
+                  <div class="comment-body">
+                    <div class="comment-meta">
+                      <span class="comment-author">Diana</span>
+                      <span class="comment-time">2 days ago</span>
+                    </div>
+                    <div class="comment-text">Love this. It's like a manual override switch. I'm going to try it this week.</div>
+                    <div class="comment-actions">
+                      <button>↩ Reply</button>
+                      <button>♡ 1</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="comment">
+                  <div class="avatar avatar-sm">C</div>
+                  <div class="comment-body">
+                    <div class="comment-meta">
+                      <span class="comment-author">Charlie</span>
+                      <span class="comment-time">1 day ago</span>
+                    </div>
+                    <div class="comment-text">This is essentially Bayesian reasoning in a one-liner. Kahneman would approve.</div>
+                    <div class="comment-actions">
+                      <button>↩ Reply</button>
+                      <button>♡ 2</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="comment">
+            <div class="avatar">E</div>
+            <div class="comment-body">
+              <div class="comment-meta">
+                <span class="comment-author">Elena</span>
+                <span class="comment-time">1 day ago</span>
+              </div>
+              <div class="comment-text">I journal before making big decisions. Writing forces System 2 to engage — you can't handwave on paper the way you can in your head. The act of putting reasons into sentences reveals how thin they actually are.</div>
+              <div class="comment-actions">
+                <button>↩ Reply</button>
+                <button>♡ 6</button>
+              </div>
+
+              <div class="replies">
+                <div class="comment">
+                  <div class="avatar avatar-sm">A</div>
+                  <div class="comment-body">
+                    <div class="comment-meta">
+                      <span class="comment-author">Alice</span>
+                      <span class="comment-time">1 day ago</span>
+                    </div>
+                    <div class="comment-text">This is why I love highlights — extracting a quote is a form of System 2 processing. You're forced to decide what actually matters.</div>
+                    <div class="comment-actions">
+                      <button>↩ Reply</button>
+                      <button>♡ 3</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="comment">
+            <div class="avatar">C</div>
+            <div class="comment-body">
+              <div class="comment-meta">
+                <span class="comment-author">Charlie</span>
+                <span class="comment-time">Yesterday</span>
+              </div>
+              <div class="comment-text">Hot take: most productivity systems are just System 2 scaffolding. GTD, time-blocking, decision journals — they're all ways to externalize the thinking that System 2 is too lazy to do on its own. The real question is: which scaffolding matches your failure modes?</div>
+              <div class="comment-actions">
+                <button>↩ Reply</button>
+                <button>♡ 5</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="comment">
+            <div class="avatar">A</div>
+            <div class="comment-body">
+              <div class="comment-meta">
+                <span class="comment-author">Alice</span>
+                <span class="comment-time">3 hours ago</span>
+              </div>
+              <div class="comment-text">Circling back after trying Bob's method for a few days. It works, but I noticed something — the question "what would change my mind?" only helps when I can actually generate alternatives. When I'm deeply embedded in a perspective, I can't even imagine what the contrary evidence looks like. That's when talking to someone from a different community is gold.</div>
+              <div class="comment-actions">
+                <button>↩ Reply</button>
+                <button>♡ 2</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

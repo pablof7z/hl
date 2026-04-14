@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discover — Highlighter</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+
+    <aside class="sidebar">
+      <div class="sidebar-logo"><a href="index.html">☲ Highlighter</a></div>
+      <nav class="sidebar-nav">
+        <a href="index.html"><span class="nav-icon">⌂</span> Home</a>
+        <a href="discover.html" class="active"><span class="nav-icon">◎</span> Discover</a>
+        <a href="capture.html"><span class="nav-icon">+</span> Capture</a>
+        <div class="sidebar-section-label">Your Communities</div>
+        <div class="sidebar-community-list">
+          <a href="community.html"><span class="community-dot"></span> Deep Work Readers</a>
+          <a href="community.html#philosophy"><span class="community-dot"></span> Philosophy Circle</a>
+          <a href="community.html#indie"><span class="community-dot"></span> Indie Hackers Book Club</a>
+          <a href="community.html#design"><span class="community-dot"></span> Design Thinkers</a>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="profile.html"><div class="avatar-sm">A</div><span>Alice</span></a>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="topbar-title">Discover</div>
+        <div class="topbar-actions">
+          <a href="create-community.html" class="btn btn-sm btn-primary">+ New Community</a>
+        </div>
+      </header>
+
+      <div class="content content-wide">
+
+        <!-- Search -->
+        <div class="section">
+          <div class="search-bar">
+            <span class="search-icon">⌕</span>
+            <input type="search" placeholder="Search communities, content, highlights...">
+          </div>
+        </div>
+
+        <!-- Tabs for discover sections -->
+        <div id="discover-tabs">
+          <div class="tabs">
+            <button class="tab active" data-tab="disc-communities">Communities</button>
+            <button class="tab" data-tab="disc-highlights">Trending Highlights</button>
+            <button class="tab" data-tab="disc-content">Popular Content</button>
+          </div>
+
+          <!-- COMMUNITIES TAB -->
+          <div class="tab-content active" id="disc-communities">
+            <div class="section">
+              <div class="section-header">
+                <h3>Public Communities</h3>
+                <span class="text-sm text-muted">Open for anyone to join</span>
+              </div>
+
+              <div class="grid grid-3">
+
+                <div class="card card-hover">
+                  <div class="img-placeholder cover-sm mb-12">cover</div>
+                  <h3>Deep Work Readers</h3>
+                  <p class="text-sm text-muted mt-4">Exploring focus, productivity, and the craft of deep work.</p>
+                  <div class="flex items-center gap-8 mt-12">
+                    <div class="avatar-row">
+                      <div class="avatar avatar-xs">A</div>
+                      <div class="avatar avatar-xs">B</div>
+                      <div class="avatar avatar-xs">C</div>
+                    </div>
+                    <span class="text-xs text-muted">5 members · 4 books</span>
+                  </div>
+                  <div class="flex gap-8 mt-12">
+                    <span class="badge">Already joined</span>
+                  </div>
+                </div>
+
+                <div class="card card-hover">
+                  <div class="img-placeholder cover-sm mb-12">cover</div>
+                  <h3>Stoicism Daily</h3>
+                  <p class="text-sm text-muted mt-4">Ancient wisdom for modern life. Seneca, Epictetus, Marcus Aurelius.</p>
+                  <div class="flex items-center gap-8 mt-12">
+                    <span class="text-xs text-muted">42 members · 12 books</span>
+                  </div>
+                  <div class="flex gap-8 mt-12">
+                    <a href="invite.html" class="btn btn-sm btn-primary">Join</a>
+                  </div>
+                </div>
+
+                <div class="card card-hover">
+                  <div class="img-placeholder cover-sm mb-12">cover</div>
+                  <h3>Tech Ethics Lab</h3>
+                  <p class="text-sm text-muted mt-4">Reading and discussing the moral implications of technology.</p>
+                  <div class="flex items-center gap-8 mt-12">
+                    <span class="text-xs text-muted">28 members · 8 books</span>
+                  </div>
+                  <div class="flex gap-8 mt-12">
+                    <a href="invite.html" class="btn btn-sm btn-primary">Join</a>
+                  </div>
+                </div>
+
+                <div class="card card-hover">
+                  <div class="img-placeholder cover-sm mb-12">cover</div>
+                  <h3>Philosophy Circle</h3>
+                  <p class="text-sm text-muted mt-4">Timeless questions, modern readings. Socrates meets Substack.</p>
+                  <div class="flex items-center gap-8 mt-12">
+                    <div class="avatar-row">
+                      <div class="avatar avatar-xs">D</div>
+                      <div class="avatar avatar-xs">E</div>
+                    </div>
+                    <span class="text-xs text-muted">8 members · 6 books</span>
+                  </div>
+                  <div class="flex gap-8 mt-12">
+                    <span class="badge">Already joined</span>
+                  </div>
+                </div>
+
+                <div class="card card-hover">
+                  <div class="img-placeholder cover-sm mb-12">cover</div>
+                  <h3>Sci-Fi Explorers</h3>
+                  <p class="text-sm text-muted mt-4">Hard science fiction, speculative futures, and the books that predicted today.</p>
+                  <div class="flex items-center gap-8 mt-12">
+                    <span class="text-xs text-muted">67 members · 23 books</span>
+                  </div>
+                  <div class="flex gap-8 mt-12">
+                    <a href="invite.html" class="btn btn-sm btn-primary">Join</a>
+                  </div>
+                </div>
+
+                <div class="card card-hover">
+                  <div class="img-placeholder cover-sm mb-12">cover</div>
+                  <h3>Founders Library</h3>
+                  <p class="text-sm text-muted mt-4">Essential reads for people building companies. No fluff.</p>
+                  <div class="flex items-center gap-8 mt-12">
+                    <span class="text-xs text-muted">153 members · 31 books</span>
+                  </div>
+                  <div class="flex gap-8 mt-12">
+                    <a href="invite.html" class="btn btn-sm btn-primary">Join</a>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- TRENDING HIGHLIGHTS TAB -->
+          <div class="tab-content" id="disc-highlights">
+            <div class="section">
+              <div class="section-header">
+                <h3>Trending Highlights</h3>
+                <span class="text-sm text-muted">Most discussed this week</span>
+              </div>
+
+              <div class="flex flex-col gap-16">
+
+                <a href="highlight-detail.html" style="text-decoration:none;color:inherit;">
+                  <div class="card card-hover">
+                    <div class="highlight-quote">
+                      "The best way to predict the future is to create it."
+                    </div>
+                    <div class="flex items-center justify-between mt-12">
+                      <div class="flex items-center gap-8">
+                        <div class="avatar avatar-xs">B</div>
+                        <span class="text-xs"><strong>Bob</strong> in <strong>Deep Work Readers</strong></span>
+                      </div>
+                      <span class="text-xs text-muted">5 replies · 12 ♡</span>
+                    </div>
+                  </div>
+                </a>
+
+                <a href="highlight-detail.html" style="text-decoration:none;color:inherit;">
+                  <div class="card card-hover">
+                    <div class="highlight-quote">
+                      "People don't want quarter-inch drills, they want quarter-inch holes."
+                    </div>
+                    <div class="flex items-center justify-between mt-12">
+                      <div class="flex items-center gap-8">
+                        <div class="avatar avatar-xs">D</div>
+                        <span class="text-xs"><strong>Diana</strong> in <strong>Indie Hackers Book Club</strong></span>
+                      </div>
+                      <span class="text-xs text-muted">3 replies · 8 ♡</span>
+                    </div>
+                  </div>
+                </a>
+
+                <a href="highlight-detail.html" style="text-decoration:none;color:inherit;">
+                  <div class="card card-hover">
+                    <div class="highlight-quote">
+                      "We are what we repeatedly do. Excellence, then, is not an act, but a habit."
+                    </div>
+                    <div class="flex items-center justify-between mt-12">
+                      <div class="flex items-center gap-8">
+                        <div class="avatar avatar-xs">E</div>
+                        <span class="text-xs"><strong>Elena</strong> in <strong>Philosophy Circle</strong></span>
+                      </div>
+                      <span class="text-xs text-muted">7 replies · 15 ♡</span>
+                    </div>
+                  </div>
+                </a>
+
+                <a href="highlight-detail.html" style="text-decoration:none;color:inherit;">
+                  <div class="card card-hover">
+                    <div class="highlight-quote">
+                      "Design is not just what it looks like and feels like. Design is how it works."
+                    </div>
+                    <div class="flex items-center justify-between mt-12">
+                      <div class="flex items-center gap-8">
+                        <div class="avatar avatar-xs">A</div>
+                        <span class="text-xs"><strong>Alice</strong> in <strong>Design Thinkers</strong></span>
+                      </div>
+                      <span class="text-xs text-muted">4 replies · 9 ♡</span>
+                    </div>
+                  </div>
+                </a>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- POPULAR CONTENT TAB -->
+          <div class="tab-content" id="disc-content">
+            <div class="section">
+              <div class="section-header">
+                <h3>Popular Content</h3>
+                <span class="text-sm text-muted">Most highlighted across all communities</span>
+              </div>
+
+              <div class="flex flex-col gap-16">
+
+                <a href="content-detail.html" style="text-decoration:none;color:inherit;">
+                  <div class="card card-hover flex items-start gap-20">
+                    <div class="img-placeholder cover-book-sm">cover</div>
+                    <div style="flex:1;">
+                      <h3>Thinking, Fast and Slow</h3>
+                      <p class="text-sm text-muted">Daniel Kahneman</p>
+                      <div class="flex items-center gap-16 mt-8">
+                        <span class="text-xs text-muted">📌 47 highlights across 6 communities</span>
+                      </div>
+                    </div>
+                  </div>
+                </a>
+
+                <a href="content-detail.html" style="text-decoration:none;color:inherit;">
+                  <div class="card card-hover flex items-start gap-20">
+                    <div class="img-placeholder cover-book-sm">cover</div>
+                    <div style="flex:1;">
+                      <h3>Sapiens</h3>
+                      <p class="text-sm text-muted">Yuval Noah Harari</p>
+                      <div class="flex items-center gap-16 mt-8">
+                        <span class="text-xs text-muted">📌 38 highlights across 4 communities</span>
+                      </div>
+                    </div>
+                  </div>
+                </a>
+
+                <a href="content-detail.html" style="text-decoration:none;color:inherit;">
+                  <div class="card card-hover flex items-start gap-20">
+                    <div class="img-placeholder cover-book-sm">cover</div>
+                    <div style="flex:1;">
+                      <h3>The Mom Test</h3>
+                      <p class="text-sm text-muted">Rob Fitzpatrick</p>
+                      <div class="flex items-center gap-16 mt-8">
+                        <span class="text-xs text-muted">📌 29 highlights across 3 communities</span>
+                      </div>
+                    </div>
+                  </div>
+                </a>
+
+                <a href="content-detail.html" style="text-decoration:none;color:inherit;">
+                  <div class="card card-hover flex items-start gap-20">
+                    <div class="img-placeholder cover-book-sm">cover</div>
+                    <div style="flex:1;">
+                      <h3>The Design of Everyday Things</h3>
+                      <p class="text-sm text-muted">Don Norman</p>
+                      <div class="flex items-center gap-16 mt-8">
+                        <span class="text-xs text-muted">📌 22 highlights across 2 communities</span>
+                      </div>
+                    </div>
+                  </div>
+                </a>
+
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "highlighter",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-static-app.mjs && npx @tailwindcss/cli -i ./app.css -o ./public/output.css --minify",
+    "dev": "node scripts/build-static-app.mjs && npx @tailwindcss/cli -i ./app.css -o ./public/output.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.4",
+    "daisyui": "5.5",
+    "tailwindcss": "^4.1.4"
+  }
+}

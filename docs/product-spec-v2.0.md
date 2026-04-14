@@ -62,18 +62,28 @@ Each artifact has: title, author/creator, source, cover image/thumbnail, and a c
 Highlights are excerpts pulled from artifacts by community members. They are the unique layer Highlighter adds — what people found compelling, surprising, or discussion-worthy in a piece of content.
 
 Highlights are:
-- Created by members from artifacts shared to their groups
+- **Created by selecting text** (or clipping a timestamp for audio/video) — there is no "Add Highlight" button. The action is triggered by the natural gesture of selection, not a separate UI affordance.
 - Attributed to the member who highlighted them
 - The spark that drives discussion (comments attach to highlights or to the artifact directly)
 - Shareable individually as cards (for virality — see Growth section)
+- **Bookmarkable by other members** — any member can save someone else's highlight to their own vault ("My Highlights") without needing to re-create it
 
 ### Discussions
 
 Every artifact in a group has a discussion thread. Discussions can happen at two levels:
-- **Artifact-level**: General discussion about the content
+- **Artifact-level**: General discussion about the content itself — threaded, intentional, debate-ready. Someone creates a discussion when they want to go deep or spark a structured conversation.
 - **Highlight-level**: Conversation sparked by a specific excerpt
 
 **Cross-community union**: When the same artifact is shared to multiple groups, discussions remain per-group (respecting group privacy boundaries). However, users who belong to multiple groups can see and cross-reference discussions they have access to.
+
+### Notes
+
+Notes are a lighter-weight annotation type at the artifact level — distinct from discussions in intent and weight.
+
+- **Notes are off-the-cuff remarks**: "This book reminded me of X", "Interesting parallel to Y", a passing thought or tangential connection
+- **Not debate-starters**: Notes don't carry the social weight of opening a discussion thread. They're more like margin scribbles.
+- **Commentable, but not the point**: Other members can reply to notes, but the expectation is light — a quick "+1" or one-liner, not a full thread
+- **Separate tab on the artifact page**: Notes live in their own tab alongside Highlights, Discussions, etc. — they don't clutter the main discussion space
 
 ---
 
@@ -140,15 +150,16 @@ Highlighter operates a **khatru-based Nostr relay** as part of the project:
 - Universal capture: browser extension, mobile share sheet, Kindle integration, manual paste
 - Each highlight attributed to the member who created it
 
-#### Discussion
-- Threaded comments on artifacts and individual highlights
+#### Discussion & Notes
+- Threaded discussions on artifacts (artifact-level) and individual highlights (highlight-level)
+- **Notes**: lightweight off-the-cuff annotations at the artifact level — separate from discussions, lighter social weight, their own tab on the artifact page
 - Reactions and replies
 - @mentions of group members
 
 #### Discovery & Browsing
-- Group home page: featured artifacts, highlight spotlight, full library, activity feed (see wireframes)
-- Artifact detail page: highlights + discussion (see wireframes)
-- Personal vault: all your highlights across all groups, searchable
+- **Group home page**: Featured section uses a **carousel** — the active artifact and its highlights/discussions are visible, and members can swipe to see other featured artifacts. Below the featured carousel, the rest of the group's library is presented with **varied visual representations** (not a uniform card grid) — sections switch up layout and density, like the Apple TV app does, so the page feels alive and curated rather than a wall of identical cards.
+- **Artifact detail page**: tabs for Highlights, Notes, Discussions — plus artifact-specific rendering per content type (see wireframes)
+- **Personal vault**: all your highlights across all groups, searchable. Also includes highlights you've bookmarked from others.
 
 #### Public Pages (for public groups)
 - SEO-optimized public views of group content

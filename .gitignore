@@ -1,1 +1,10 @@
 .vercel
+
+# Git worktrees
+.worktrees/
+
+# Node dependencies
+node_modules/
+
+# Build output
+public/output.css

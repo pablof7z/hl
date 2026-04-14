@@ -1,0 +1,2207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Highlighter — Wireframe Prototype</title>
+<style>
+/* ===================== RESET & BASE ===================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  background: #e8e8e8;
+  color: #222;
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ===================== APP SHELL (SIDEBAR + MAIN) ===================== */
+#app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ===================== SIDEBAR ===================== */
+#sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #fff;
+  border-right: 1px solid #ccc;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+#sidebar-logo {
+  padding: 20px 18px 14px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  border-bottom: 1px solid #eee;
+  color: #111;
+}
+
+#sidebar-nav {
+  flex: 1;
+  padding: 12px 0;
+  overflow-y: auto;
+}
+
+.nav-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #999;
+  padding: 10px 18px 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 18px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #444;
+  border-radius: 0;
+  user-select: none;
+  transition: background 0.1s;
+}
+.nav-item:hover { background: #f5f5f5; }
+.nav-item.active { background: #f0f0f0; color: #111; font-weight: 600; }
+.nav-item .nav-icon { font-size: 15px; flex-shrink: 0; opacity: 0.7; }
+.nav-item .nav-badge {
+  margin-left: auto;
+  background: #333;
+  color: #fff;
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.nav-item .nav-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%; background: #aaa;
+  flex-shrink: 0;
+}
+.nav-item .nav-dot.live { background: #555; }
+
+.nav-community-icon {
+  width: 22px; height: 22px;
+  background: #ddd; border: 1px solid #bbb;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; color: #888;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.nav-divider { height: 1px; background: #eee; margin: 8px 0; }
+
+.nav-create-link {
+  display: block;
+  padding: 6px 18px;
+  font-size: 12px;
+  color: #888;
+  cursor: pointer;
+}
+.nav-create-link:hover { color: #333; }
+
+#sidebar-bottom {
+  padding: 14px 18px;
+  border-top: 1px solid #eee;
+}
+
+#capture-btn {
+  width: 100%;
+  background: #222;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+}
+#capture-btn:hover { background: #333; }
+#capture-btn .plus { font-size: 18px; font-weight: 400; }
+
+/* ===================== MAIN CONTENT ===================== */
+#main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: #f0f0f0;
+}
+
+/* ===================== SCREENS ===================== */
+.screen { display: none; }
+.screen.active { display: block; }
+
+/* ===================== TOP BAR (desktop) ===================== */
+.topbar {
+  background: #fff;
+  border-bottom: 1px solid #ccc;
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.topbar h1 { font-size: 18px; font-weight: 700; flex: 1; }
+.topbar-actions { display: flex; gap: 8px; }
+.back-btn {
+  cursor: pointer;
+  font-size: 13px;
+  color: #444;
+  border: 1px solid #ccc;
+  padding: 5px 12px;
+  border-radius: 5px;
+  white-space: nowrap;
+  background: #fff;
+}
+.back-btn:hover { background: #f5f5f5; }
+.action-btn {
+  cursor: pointer;
+  border: 1px solid #ccc;
+  padding: 5px 14px;
+  border-radius: 5px;
+  font-size: 13px;
+  background: #fff;
+}
+.action-btn:hover { background: #f5f5f5; }
+.action-btn.primary { background: #222; color: #fff; border-color: #222; }
+.action-btn.primary:hover { background: #333; }
+
+/* ===================== PAGE BODY ===================== */
+.page-body { padding: 28px; }
+.page-body-wide { padding: 28px; }
+
+/* ===================== CONTENT GRID (communities list, discover) ===================== */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.card-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.card-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+/* ===================== CARDS ===================== */
+.card {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  padding: 16px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.card:hover { border-color: #aaa; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+
+/* Community card */
+.community-card-cover {
+  background: #ddd;
+  border: 1px solid #bbb;
+  border-radius: 5px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+.community-card-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.community-card-meta { font-size: 12px; color: #777; margin-bottom: 8px; }
+.community-card-footer { display: flex; align-items: center; gap: 8px; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eee;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  padding: 2px 9px;
+  font-size: 11px;
+  color: #555;
+}
+.badge.unread { background: #222; color: #fff; border-color: #222; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #bbb; flex-shrink: 0; }
+.dot.live { background: #555; }
+
+/* Content/artifact card */
+.content-card {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.content-card:hover { border-color: #aaa; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.content-card-cover {
+  background: #ddd;
+  border-bottom: 1px solid #ccc;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.content-card-body { padding: 14px; }
+.content-card-title { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+.content-card-author { font-size: 12px; color: #777; margin-bottom: 8px; }
+.content-card-quote {
+  font-size: 12px;
+  font-style: italic;
+  color: #555;
+  border-left: 2px solid #ccc;
+  padding-left: 8px;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.content-card-stats { font-size: 11px; color: #999; }
+
+/* ===================== SECTION HEADERS ===================== */
+.section-hdr {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #777;
+  margin-bottom: 14px;
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-hdr:first-child { margin-top: 0; }
+.section-hdr a {
+  margin-left: auto;
+  font-size: 11px;
+  color: #888;
+  text-transform: none;
+  font-weight: 400;
+  cursor: pointer;
+  letter-spacing: 0;
+}
+.section-hdr a:hover { color: #333; }
+
+/* ===================== COMMUNITY FRONT PAGE LAYOUT ===================== */
+.community-layout {
+  display: flex;
+  gap: 24px;
+  padding: 28px;
+  align-items: flex-start;
+}
+.community-main { flex: 1; min-width: 0; }
+.community-aside {
+  width: 260px;
+  flex-shrink: 0;
+}
+
+/* Community header hero */
+.community-hero {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.community-hero-cover {
+  background: #ddd;
+  border-bottom: 1px solid #ccc;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.community-hero-body {
+  padding: 18px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.community-hero-info { flex: 1; }
+.community-hero-name { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+.community-hero-desc { font-size: 13px; color: #666; line-height: 1.5; margin-bottom: 8px; }
+.community-hero-stats { font-size: 12px; color: #999; }
+.community-hero-actions { display: flex; gap: 8px; flex-shrink: 0; margin-top: 2px; }
+
+/* Spotlight */
+.spotlight {
+  background: #fff;
+  border: 2px solid #333;
+  border-radius: 7px;
+  padding: 18px 20px;
+  margin-bottom: 0;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.spotlight:hover { background: #fafafa; }
+.spotlight-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #888;
+  margin-bottom: 6px;
+}
+.spotlight-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.spotlight-quote {
+  font-style: italic;
+  font-size: 14px;
+  color: #444;
+  border-left: 3px solid #bbb;
+  padding-left: 10px;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.spotlight-footer { font-size: 11px; color: #888; }
+
+/* ===================== HIGHLIGHT ITEMS ===================== */
+.highlight-item {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  padding: 16px;
+  margin-bottom: 10px;
+}
+.hl-quote {
+  font-style: italic;
+  font-size: 14px;
+  color: #333;
+  border-left: 3px solid #aaa;
+  padding-left: 10px;
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+.hl-meta { font-size: 11px; color: #888; }
+.hl-note {
+  font-size: 12px;
+  color: #555;
+  margin-top: 10px;
+  background: #f8f8f8;
+  border: 1px solid #e8e8e8;
+  padding: 8px 10px;
+  border-radius: 5px;
+  line-height: 1.5;
+}
+
+/* ===================== ACTIVITY FEED ===================== */
+.activity-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+  color: #555;
+  line-height: 1.4;
+}
+.activity-item:last-child { border-bottom: none; }
+.activity-avatar {
+  width: 28px; height: 28px;
+  background: #ddd;
+  border: 1px solid #ccc;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: #888;
+  flex-shrink: 0;
+}
+
+/* ===================== MEMBERS (aside) ===================== */
+.aside-card {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.aside-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: #888;
+  margin-bottom: 12px;
+}
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.member-row:last-child { border-bottom: none; }
+.avatar {
+  width: 32px; height: 32px;
+  background: #ddd;
+  border: 1px solid #bbb;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: #888;
+  flex-shrink: 0;
+}
+.member-name { font-size: 13px; font-weight: 600; }
+.member-role { font-size: 11px; color: #999; }
+
+/* ===================== CONTENT DETAIL PAGE ===================== */
+.content-hero {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.content-hero-inner {
+  display: flex;
+  gap: 24px;
+  padding: 24px;
+  align-items: flex-start;
+}
+.content-hero-cover {
+  width: 130px;
+  height: 170px;
+  background: #ddd;
+  border: 1px solid #bbb;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.content-hero-info { flex: 1; }
+.content-hero-title { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+.content-hero-author { font-size: 14px; color: #777; margin-bottom: 6px; }
+.content-hero-type {
+  display: inline-block;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 2px 9px;
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 12px;
+}
+.content-hero-desc { font-size: 13px; color: #555; line-height: 1.6; margin-bottom: 14px; }
+.content-hero-actions { display: flex; gap: 8px; }
+
+/* ===================== DISCUSSION ===================== */
+.discussion-layout {
+  padding: 28px;
+  max-width: 800px;
+}
+.comment {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 7px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.comment-hdr { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.comment-name { font-weight: 700; font-size: 13px; }
+.comment-time { font-size: 11px; color: #999; }
+.comment-body { font-size: 13px; color: #333; line-height: 1.6; }
+.comment-actions { margin-top: 8px; display: flex; gap: 16px; }
+.comment-action { font-size: 11px; color: #888; cursor: pointer; }
+.comment-action:hover { color: #333; }
+.comment.nested { margin-left: 36px; border-left: 2px solid #e0e0e0; border-radius: 0 7px 7px 0; }
+.comment.deep { margin-left: 72px; }
+.reply-box { display: flex; gap: 10px; margin-top: 16px; }
+.reply-box textarea {
+  flex: 1;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 10px;
+  font-size: 13px;
+  resize: none;
+  height: 80px;
+  font-family: inherit;
+  background: #fff;
+}
+.reply-box textarea:focus { outline: none; border-color: #888; }
+.reply-box button {
+  background: #222;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 13px;
+  align-self: flex-end;
+  font-family: inherit;
+}
+.reply-box button:hover { background: #333; }
+
+/* ===================== FORMS ===================== */
+.form-body { max-width: 640px; }
+.form-group { margin-bottom: 20px; }
+.form-label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px; }
+.form-sub { font-size: 12px; color: #888; margin-bottom: 6px; }
+.form-input {
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fff;
+}
+.form-input:focus { outline: none; border-color: #888; }
+textarea.form-input { resize: vertical; min-height: 90px; }
+.upload-area {
+  border: 2px dashed #bbb;
+  border-radius: 7px;
+  padding: 36px 20px;
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+  cursor: pointer;
+  background: #fafafa;
+}
+.upload-area:hover { border-color: #999; background: #f5f5f5; }
+.upload-area-icon { font-size: 32px; margin-bottom: 8px; }
+.toggle-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid #eee;
+  gap: 24px;
+}
+.toggle-row:first-child { border-top: 1px solid #eee; }
+.toggle-label { font-size: 14px; font-weight: 600; }
+.toggle-sub { font-size: 12px; color: #888; margin-top: 3px; }
+.toggle {
+  width: 42px; height: 24px;
+  background: #ccc;
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.toggle.on { background: #444; }
+.toggle::after {
+  content: '';
+  position: absolute;
+  width: 20px; height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  top: 2px; left: 2px;
+  transition: left 0.15s;
+}
+.toggle.on::after { left: 20px; }
+
+/* ===================== BUTTONS ===================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  color: #333;
+  text-align: center;
+  white-space: nowrap;
+}
+.btn:hover { background: #f5f5f5; }
+.btn-primary { background: #222; color: #fff; border-color: #222; }
+.btn-primary:hover { background: #333; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-full { width: 100%; justify-content: center; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ===================== PROFILE ===================== */
+.profile-hero {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  padding: 24px;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.profile-avatar-lg {
+  width: 80px; height: 80px;
+  background: #ddd;
+  border: 1px solid #bbb;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: #888;
+  flex-shrink: 0;
+}
+.profile-name { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+.profile-bio { font-size: 13px; color: #666; line-height: 1.5; margin-bottom: 12px; }
+.profile-stats { display: flex; gap: 24px; }
+.stat-val { font-weight: 700; font-size: 18px; }
+.stat-lbl { font-size: 11px; color: #999; margin-top: 2px; }
+
+/* Sub-tabs */
+.subtabs {
+  display: flex;
+  border-bottom: 1px solid #ccc;
+  background: #fff;
+  margin-bottom: 20px;
+  border-radius: 7px 7px 0 0;
+  overflow: hidden;
+}
+.subtab {
+  padding: 12px 18px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: #777;
+  user-select: none;
+  white-space: nowrap;
+}
+.subtab:hover { color: #333; }
+.subtab.active { border-bottom-color: #333; color: #111; font-weight: 600; }
+.subtab-pane { display: none; }
+.subtab-pane.active { display: block; }
+
+/* Sort bar */
+.sort-bar { display: flex; gap: 6px; margin-bottom: 14px; align-items: center; }
+.sort-bar-label { font-size: 12px; color: #888; margin-right: 4px; }
+.sort-opt {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #fff;
+}
+.sort-opt:hover { background: #f5f5f5; }
+.sort-opt.active { background: #333; color: #fff; border-color: #333; }
+
+/* Status pills */
+.pill {
+  display: inline-block;
+  border: 1px solid #bbb;
+  border-radius: 12px;
+  padding: 2px 9px;
+  font-size: 11px;
+}
+.pill-ready { background: #eee; border-color: #999; color: #444; }
+.pill-needs { background: #f5f5f5; border-color: #ccc; color: #777; }
+
+/* ===================== DISCOVER ===================== */
+.search-bar {
+  width: 100%;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-family: inherit;
+  margin-bottom: 20px;
+}
+.search-bar:focus { outline: none; border-color: #888; }
+.topic-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.chip {
+  border: 1px solid #bbb;
+  border-radius: 16px;
+  padding: 5px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #fff;
+  user-select: none;
+}
+.chip:hover { background: #f5f5f5; }
+.chip.active { background: #222; color: #fff; border-color: #222; }
+
+/* Trending highlight */
+.trending-hl {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.trending-hl:hover { border-color: #aaa; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+.trending-hl-quote {
+  font-style: italic;
+  font-size: 14px;
+  color: #333;
+  border-left: 3px solid #ccc;
+  padding-left: 10px;
+  margin-bottom: 6px;
+  line-height: 1.6;
+}
+.trending-hl-meta { font-size: 11px; color: #999; }
+
+/* ===================== FOR LATER LIST ===================== */
+.for-later-item {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+.for-later-item:hover { border-color: #aaa; }
+.for-later-thumb {
+  width: 50px; height: 65px;
+  background: #ddd;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; color: #999;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.for-later-info { flex: 1; }
+.for-later-title { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+.for-later-author { font-size: 12px; color: #888; margin-bottom: 6px; }
+
+/* ===================== CAPTURE OVERLAY ===================== */
+#capture-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 500;
+  align-items: center;
+  justify-content: center;
+}
+#capture-overlay.open { display: flex; }
+#capture-modal {
+  background: #fff;
+  border-radius: 10px;
+  width: 520px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 28px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.capture-step { display: none; }
+.capture-step.active { display: block; }
+.capture-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.capture-title { font-size: 17px; font-weight: 700; }
+.capture-close { cursor: pointer; font-size: 22px; color: #888; padding: 2px; line-height: 1; }
+.capture-close:hover { color: #333; }
+.capture-option {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: background 0.1s, border-color 0.1s;
+}
+.capture-option:hover { background: #f5f5f5; border-color: #aaa; }
+.capture-opt-icon { font-size: 26px; flex-shrink: 0; }
+.capture-opt-title { font-size: 15px; font-weight: 700; }
+.capture-opt-sub { font-size: 12px; color: #888; margin-top: 2px; }
+.capture-steps-nav { display: flex; gap: 6px; margin-bottom: 20px; }
+.capture-step-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #ddd;
+}
+.capture-step-dot.done { background: #333; }
+.ai-box {
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: #fafafa;
+}
+.ai-label {
+  font-size: 10px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 6px;
+}
+.ai-text { font-size: 14px; font-style: italic; color: #333; line-height: 1.6; }
+.ai-actions { display: flex; gap: 8px; margin-top: 10px; }
+.small-btn {
+  padding: 5px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #fff;
+  font-family: inherit;
+}
+.small-btn:hover { background: #f5f5f5; }
+.small-btn.primary { background: #222; color: #fff; border-color: #222; }
+.small-btn.primary:hover { background: #333; }
+.import-source {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+.import-source-label { font-size: 11px; color: #999; }
+.import-source-val { font-size: 14px; font-weight: 600; margin-top: 2px; }
+
+/* ===================== IMG PLACEHOLDERS ===================== */
+.img-ph {
+  background: #ddd;
+  border: 1px solid #bbb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ===================== EMPTY STATE ===================== */
+.empty-state { text-align: center; padding: 60px 24px; color: #aaa; }
+.empty-icon { font-size: 48px; margin-bottom: 14px; }
+.empty-title { font-size: 16px; font-weight: 600; color: #888; }
+.empty-sub { font-size: 13px; margin-top: 6px; line-height: 1.5; }
+
+/* ===================== SYNTHESIS PLACEHOLDER ===================== */
+.synthesis-placeholder {
+  border: 2px dashed #ccc;
+  border-radius: 10px;
+  padding: 60px 40px;
+  text-align: center;
+  color: #aaa;
+}
+.synthesis-placeholder h3 { font-size: 16px; color: #888; margin-bottom: 6px; }
+.synthesis-placeholder p { font-size: 13px; line-height: 1.5; }
+
+/* ===================== RESPONSIVE: collapse sidebar ===================== */
+#hamburger {
+  display: none;
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 16px;
+  font-family: inherit;
+}
+
+@media (max-width: 768px) {
+  #hamburger { display: block; }
+  #sidebar {
+    position: fixed;
+    left: -260px;
+    top: 0;
+    z-index: 200;
+    transition: left 0.2s;
+    box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+  }
+  #sidebar.open { left: 0; }
+  #sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: 199;
+  }
+  #sidebar-overlay.open { display: block; }
+  .community-layout { flex-direction: column; }
+  .community-aside { width: 100%; }
+  .card-grid, .card-grid-3 { grid-template-columns: 1fr; }
+  .card-grid-2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════
+     APP SHELL
+══════════════════════════════════════════════════ -->
+<div id="app-shell">
+
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<nav id="sidebar">
+  <div id="sidebar-logo">✦ Highlighter</div>
+
+  <div id="sidebar-nav">
+    <div class="nav-section-label">Communities</div>
+
+    <div class="nav-item" onclick="navigate('screen-communities')">
+      <div class="nav-community-icon">DW</div>
+      Deep Work Readers
+      <span class="nav-dot live" style="margin-left:auto;"></span>
+    </div>
+    <div class="nav-item" onclick="navigate('screen-community', {name:'Philosophy Circle'})">
+      <div class="nav-community-icon">PC</div>
+      Philosophy Circle
+    </div>
+    <div class="nav-item" onclick="navigate('screen-community', {name:'Indie Hackers Book Club'})">
+      <div class="nav-community-icon">IH</div>
+      Indie Hackers Book Club
+      <span class="nav-dot live" style="margin-left:auto;"></span>
+    </div>
+    <div class="nav-item" onclick="navigate('screen-community', {name:'Design Thinkers'})">
+      <div class="nav-community-icon">DT</div>
+      Design Thinkers
+    </div>
+
+    <div class="nav-create-link" onclick="navigate('screen-create-community')">+ Create Community</div>
+
+    <div class="nav-divider"></div>
+
+    <div class="nav-item" onclick="navigate('screen-discover')">
+      <span class="nav-icon">🔭</span> Discover
+    </div>
+    <div class="nav-item" onclick="navigate('screen-me')">
+      <span class="nav-icon">👤</span> Me
+    </div>
+  </div>
+
+  <div id="sidebar-bottom">
+    <button id="capture-btn" onclick="openCapture()">
+      <span class="plus">+</span> Capture
+    </button>
+  </div>
+</nav>
+
+<!-- ═══════════ SIDEBAR OVERLAY (mobile) ═══════════ -->
+<div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<!-- ═══════════ MAIN CONTENT ═══════════ -->
+<main id="main">
+
+<!-- ══════════════════════════════════════════════════
+     SCREEN 1: Communities List (default)
+══════════════════════════════════════════════════ -->
+<div class="screen active" id="screen-communities">
+  <div class="topbar">
+    <button id="hamburger" onclick="toggleSidebar()">☰</button>
+    <h1>Communities</h1>
+    <div class="topbar-actions">
+      <span class="action-btn" onclick="toggleEmptyState()" id="empty-state-toggle" title="Toggle empty/populated for demo">Demo: empty state</span>
+      <span class="action-btn primary" onclick="navigate('screen-create-community')">+ New Community</span>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <!-- Populated state -->
+    <div id="communities-populated">
+      <div class="section-hdr">Your Communities</div>
+      <div class="card-grid">
+
+        <div class="card" onclick="navigate('screen-community', {name:'Deep Work Readers'})">
+          <div class="community-card-cover">IMAGE</div>
+          <div class="community-card-name">Deep Work Readers</div>
+          <div class="community-card-meta">142 members · Last active 2h ago</div>
+          <div class="community-card-footer">
+            <span class="dot live"></span>
+            <span class="badge">47 highlights</span>
+          </div>
+        </div>
+
+        <div class="card" onclick="navigate('screen-community', {name:'Philosophy Circle'})">
+          <div class="community-card-cover">IMAGE</div>
+          <div class="community-card-name">Philosophy Circle</div>
+          <div class="community-card-meta">89 members · Last active 1d ago</div>
+          <div class="community-card-footer">
+            <span class="dot"></span>
+            <span class="badge">7 highlights</span>
+          </div>
+        </div>
+
+        <div class="card" onclick="navigate('screen-community', {name:'Indie Hackers Book Club'})">
+          <div class="community-card-cover">IMAGE</div>
+          <div class="community-card-name">Indie Hackers Book Club</div>
+          <div class="community-card-meta">211 members · Last active 3h ago</div>
+          <div class="community-card-footer">
+            <span class="dot live"></span>
+            <span class="badge">83 highlights</span>
+          </div>
+        </div>
+
+        <div class="card" onclick="navigate('screen-community', {name:'Design Thinkers'})">
+          <div class="community-card-cover">IMAGE</div>
+          <div class="community-card-name">Design Thinkers</div>
+          <div class="community-card-meta">56 members · Last active 5d ago</div>
+          <div class="community-card-footer">
+            <span class="dot"></span>
+            <span class="badge">22 highlights</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="section-hdr" style="margin-top:32px;">Recommended <a onclick="navigate('screen-discover')">Browse all →</a></div>
+      <div class="card-grid">
+        <div class="card" onclick="navigate('screen-discover')">
+          <div class="community-card-cover">IMAGE</div>
+          <div class="community-card-name">The Long Game</div>
+          <div class="community-card-meta">317 members · Books &amp; Longevity</div>
+          <div class="community-card-footer"><span class="badge">Join</span></div>
+        </div>
+        <div class="card" onclick="navigate('screen-discover')">
+          <div class="community-card-cover">IMAGE</div>
+          <div class="community-card-name">Product Craft</div>
+          <div class="community-card-meta">204 members · Product &amp; UX</div>
+          <div class="community-card-footer"><span class="badge">Join</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty state — shown when user has zero communities -->
+    <div id="communities-empty" style="display:none;">
+      <div style="max-width:480px;margin:80px auto;padding:0 24px;text-align:center;">
+        <div style="font-size:36px;margin-bottom:20px;opacity:0.6;">✦</div>
+        <h2 style="font-size:26px;font-weight:800;letter-spacing:-0.5px;margin-bottom:10px;color:#222;">Welcome to Highlighter</h2>
+        <p style="font-size:15px;color:#777;line-height:1.7;margin-bottom:36px;">A place where the things you read become conversations worth having.</p>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px;">
+          <button class="btn btn-primary" style="padding:12px 32px;font-size:14px;border-radius:6px;" onclick="navigate('screen-create-community')">Create your first community</button>
+          <a style="font-size:13px;color:#888;cursor:pointer;text-decoration:underline;text-underline-offset:3px;" onclick="navigate('screen-discover')">Browse what's here →</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     SCREEN 2: Community Front Page
+══════════════════════════════════════════════════ -->
+<div class="screen" id="screen-community">
+  <div class="topbar">
+    <button id="hamburger2" class="hamburger-btn" style="display:none;background:none;border:1px solid #ccc;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:16px;" onclick="toggleSidebar()">☰</button>
+    <span class="back-btn" onclick="goBack()">← Back</span>
+    <h1 id="comm-header-name">Deep Work Readers</h1>
+    <div class="topbar-actions">
+      <span class="action-btn">Share</span>
+      <span class="action-btn primary">Joined ✓</span>
+    </div>
+  </div>
+
+  <div class="community-layout">
+    <!-- MAIN COLUMN -->
+    <div class="community-main">
+
+      <!-- Community hero -->
+      <div class="community-hero">
+        <div class="community-hero-cover">IMAGE</div>
+        <div class="community-hero-body">
+          <div class="community-hero-info">
+            <div class="community-hero-name" id="comm-detail-name">Deep Work Readers</div>
+            <div class="community-hero-desc">A community dedicated to focused work, deep reading, and meaningful highlights from books and essays on productivity, attention, and craft.</div>
+            <div class="community-hero-stats">142 members · 8 curators · 312 highlights shared</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- What Caught Our Eye -->
+      <div class="section-hdr">✦ What Caught Our Eye</div>
+      <div class="spotlight" onclick="navigate('screen-content', {title:'Thinking, Fast and Slow'})">
+        <div class="spotlight-label">Featured Highlight</div>
+        <div class="spotlight-title">Thinking, Fast and Slow — Daniel Kahneman</div>
+        <div class="spotlight-quote">"A reliable way to make people believe in falsehoods is frequent repetition, because familiarity is not easily distinguished from truth."</div>
+        <div class="spotlight-footer">Curated by @sarahk · 14 members saved this · 5 discussions</div>
+      </div>
+
+      <!-- What We're Reading (above fold) -->
+      <div class="section-hdr" style="margin-top:28px;">What We're Reading <a onclick="navigate('screen-content', {title:'All Content'})">See all →</a></div>
+      <div class="card-grid-2">
+
+        <div class="content-card" onclick="navigate('screen-content', {title:'Thinking, Fast and Slow'})">
+          <div class="content-card-cover">COVER IMAGE</div>
+          <div class="content-card-body">
+            <div class="content-card-title">Thinking, Fast and Slow</div>
+            <div class="content-card-author">Daniel Kahneman · Book</div>
+            <div class="content-card-quote">"We are prone to overestimate how much we understand about the world and underestimate the role of chance in events."</div>
+            <div class="content-card-stats">23 highlights · 8 discussions</div>
+          </div>
+        </div>
+
+        <div class="content-card" onclick="navigate('screen-content', {title:'The Mom Test'})">
+          <div class="content-card-cover">COVER IMAGE</div>
+          <div class="content-card-body">
+            <div class="content-card-title">The Mom Test</div>
+            <div class="content-card-author">Rob Fitzpatrick · Book</div>
+            <div class="content-card-quote">"The measure of usefulness of an early customer conversation is whether it gives us concrete facts about our customers' lives and worldviews."</div>
+            <div class="content-card-stats">11 highlights · 3 discussions</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Scroll indicator — content continues below -->
+      <div style="text-align:center;padding:20px 0 4px;color:#bbb;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">↓ More below</div>
+
+      <!-- The Collection (below fold) -->
+      <div class="section-hdr" style="margin-top:16px;">The Collection</div>
+      <div class="card" style="margin-bottom:10px;" onclick="navigate('screen-content', {title:'Deep Work'})">
+        <div style="display:flex;gap:14px;align-items:center;">
+          <div class="img-ph" style="width:50px;height:65px;border-radius:4px;flex-shrink:0;">COVER</div>
+          <div>
+            <div style="font-weight:700;font-size:14px;">Deep Work</div>
+            <div style="font-size:12px;color:#888;margin:2px 0 6px;">Cal Newport · Book</div>
+            <div style="font-size:11px;color:#aaa;">18 highlights · 4 discussions</div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:10px;" onclick="navigate('screen-content', {title:'Sapiens'})">
+        <div style="display:flex;gap:14px;align-items:center;">
+          <div class="img-ph" style="width:50px;height:65px;border-radius:4px;flex-shrink:0;">COVER</div>
+          <div>
+            <div style="font-weight:700;font-size:14px;">Sapiens</div>
+            <div style="font-size:12px;color:#888;margin:2px 0 6px;">Yuval Noah Harari · Book</div>
+            <div style="font-size:11px;color:#aaa;">31 highlights · 9 discussions</div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:10px;" onclick="navigate('screen-content', {title:'Makers'})">
+        <div style="display:flex;gap:14px;align-items:center;">
+          <div class="img-ph" style="width:50px;height:65px;border-radius:4px;flex-shrink:0;">COVER</div>
+          <div>
+            <div style="font-weight:700;font-size:14px;">Make: Bootstrapper's Handbook</div>
+            <div style="font-size:12px;color:#888;margin:2px 0 6px;">Pieter Levels · Article</div>
+            <div style="font-size:11px;color:#aaa;">7 highlights · 2 discussions</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Feed (below fold) -->
+      <div class="section-hdr" style="margin-top:28px;">Recent Activity</div>
+      <div class="card">
+        <div class="activity-item">
+          <div class="activity-avatar">AL</div>
+          <div><strong>Alice</strong> shared a highlight from <strong>Thinking, Fast and Slow</strong> · 2h ago</div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-avatar">BO</div>
+          <div><strong>Bob</strong> added <strong>The Mom Test</strong> to The Collection · 5h ago</div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-avatar">CH</div>
+          <div><strong>Charlie</strong> replied to a discussion on <strong>Deep Work</strong> · 1d ago</div>
+        </div>
+        <div class="activity-item">
+          <div class="activity-avatar">DI</div>
+          <div><strong>Diana</strong> joined the community · 2d ago</div>
+        </div>
+      </div>
+
+      <!-- Members (below fold, moved from aside) -->
+      <div class="section-hdr" style="margin-top:28px;">Members (142)</div>
+      <div class="card">
+        <div class="member-row">
+          <div class="avatar">AL</div>
+          <div>
+            <div class="member-name">Alice</div>
+            <div class="member-role">Curator</div>
+          </div>
+        </div>
+        <div class="member-row">
+          <div class="avatar">BO</div>
+          <div>
+            <div class="member-name">Bob</div>
+            <div class="member-role">Member</div>
+          </div>
+        </div>
+        <div class="member-row">
+          <div class="avatar">CH</div>
+          <div>
+            <div class="member-name">Charlie</div>
+            <div class="member-role">Curator</div>
+          </div>
+        </div>
+        <div class="member-row">
+          <div class="avatar">DI</div>
+          <div>
+            <div class="member-name">Diana</div>
+            <div class="member-role">Member</div>
+          </div>
+        </div>
+        <div style="padding:10px 0 4px;">
+          <span class="btn btn-sm">View all members →</span>
+        </div>
+      </div>
+
+    </div><!-- /community-main -->
+
+    <!-- ASIDE COLUMN (slim: About + Top Highlights only) -->
+    <div class="community-aside">
+
+      <div class="aside-card">
+        <div class="aside-card-title">About</div>
+        <div style="font-size:12px;color:#666;line-height:1.6;margin-bottom:10px;">Active since January 2024. Open membership. Public highlights.</div>
+        <div style="font-size:12px;color:#999;">Founded by @sarahk</div>
+      </div>
+
+      <div class="aside-card">
+        <div class="aside-card-title">Top Highlights This Week</div>
+        <div style="font-style:italic;font-size:13px;color:#444;border-left:2px solid #ddd;padding-left:8px;margin-bottom:8px;line-height:1.5;">"The best way to predict the future is to create it."</div>
+        <div style="font-size:11px;color:#aaa;margin-bottom:12px;">— via Deep Work · 8 saves</div>
+        <div style="font-style:italic;font-size:13px;color:#444;border-left:2px solid #ddd;padding-left:8px;margin-bottom:8px;line-height:1.5;">"People don't want quarter-inch drills, they want quarter-inch holes."</div>
+        <div style="font-size:11px;color:#aaa;">— via The Mom Test · 6 saves</div>
+      </div>
+
+    </div><!-- /community-aside -->
+  </div><!-- /community-layout -->
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     SCREEN 3: Content Preview
+══════════════════════════════════════════════════ -->
+<div class="screen" id="screen-content">
+  <div class="topbar">
+    <span class="back-btn" onclick="goBack()">← Back</span>
+    <h1 id="content-header-title">Thinking, Fast and Slow</h1>
+    <div class="topbar-actions">
+      <span class="action-btn" onclick="navigate('screen-discussion')">Discussion (8)</span>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <div class="content-hero">
+      <div class="content-hero-inner">
+        <div class="content-hero-cover">COVER IMAGE</div>
+        <div class="content-hero-info">
+          <div class="content-hero-title" id="content-detail-title">Thinking, Fast and Slow</div>
+          <div class="content-hero-author">Daniel Kahneman</div>
+          <span class="content-hero-type">📖 Book</span>
+          <div class="content-hero-desc">In the international bestseller, Thinking, Fast and Slow, Daniel Kahneman, the renowned psychologist and winner of the Nobel Prize in Economics, takes us on a groundbreaking tour of the mind and explains the two systems that drive the way we think.</div>
+          <div class="btn-row">
+            <span class="btn btn-primary">+ Save to For Later</span>
+            <span class="btn" onclick="openCapture()">↗ Share to Community</span>
+            <span class="btn" onclick="alert('Posting to your Nostr feed — not wired in prototype')">📡 Share to My Feed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-hdr">Community Highlights (23)</div>
+
+    <div class="highlight-item" style="cursor:pointer;" onclick="navigate('screen-highlight-detail')">
+      <div class="hl-quote">"A reliable way to make people believe in falsehoods is frequent repetition, because familiarity is not easily distinguished from truth."</div>
+      <div class="hl-meta">Shared by @sarahk · 14 saves · 5 discussions</div>
+      <div class="hl-note">This ties into the availability heuristic — we mistake ease of recall for truth. Critical for media literacy.</div>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
+        <span class="btn btn-sm" onclick="event.stopPropagation();navigate('screen-highlight-detail')">💬 5 discussions</span>
+        <span class="btn btn-sm" onclick="event.stopPropagation();alert('Posting to your Nostr feed')">📡 Share to My Feed</span>
+        <span class="btn btn-sm" onclick="event.stopPropagation();openCapture()">↗ Share to Community</span>
+      </div>
+    </div>
+
+    <div class="highlight-item" style="cursor:pointer;" onclick="navigate('screen-highlight-detail')">
+      <div class="hl-quote">"We are prone to overestimate how much we understand about the world and to underestimate the role of chance in events."</div>
+      <div class="hl-meta">Shared by @bob · 9 saves · 2 discussions</div>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
+        <span class="btn btn-sm" onclick="event.stopPropagation();navigate('screen-highlight-detail')">💬 2 discussions</span>
+        <span class="btn btn-sm" onclick="event.stopPropagation();alert('Posting to your Nostr feed')">📡 Share to My Feed</span>
+        <span class="btn btn-sm" onclick="event.stopPropagation();openCapture()">↗ Share to Community</span>
+      </div>
+    </div>
+
+    <div class="highlight-item" style="cursor:pointer;" onclick="navigate('screen-highlight-detail')">
+      <div class="hl-quote">"Nothing in life is as important as you think it is, while you are thinking about it."</div>
+      <div class="hl-meta">Shared by @alice · 11 saves · 3 discussions</div>
+      <div class="hl-note">The focusing illusion. So relevant to how we set goals and priorities.</div>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
+        <span class="btn btn-sm" onclick="event.stopPropagation();navigate('screen-highlight-detail')">💬 3 discussions</span>
+        <span class="btn btn-sm" onclick="event.stopPropagation();alert('Posting to your Nostr feed')">📡 Share to My Feed</span>
+        <span class="btn btn-sm" onclick="event.stopPropagation();openCapture()">↗ Share to Community</span>
+      </div>
+    </div>
+
+    <div class="highlight-item" style="cursor:pointer;" onclick="navigate('screen-highlight-detail')">
+      <div class="hl-quote">"The best way to predict the future is to create it."</div>
+      <div class="hl-meta">Shared by @charlie · 8 saves · 1 discussion</div>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
+        <span class="btn btn-sm" onclick="event.stopPropagation();navigate('screen-highlight-detail')">💬 1 discussion</span>
+        <span class="btn btn-sm" onclick="event.stopPropagation();alert('Posting to your Nostr feed')">📡 Share to My Feed</span>
+        <span class="btn btn-sm" onclick="event.stopPropagation();openCapture()">↗ Share to Community</span>
+      </div>
+    </div>
+
+    <div class="highlight-item" style="cursor:pointer;" onclick="navigate('screen-highlight-detail')">
+      <div class="hl-quote">"People don't want quarter-inch drills, they want quarter-inch holes."</div>
+      <div class="hl-meta">Shared by @diana · 6 saves · 2 discussions</div>
+      <div class="hl-note">Classic jobs-to-be-done framing. Kahneman references this in context of System 1 goal substitution.</div>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
+        <span class="btn btn-sm" onclick="event.stopPropagation();navigate('screen-highlight-detail')">💬 2 discussions</span>
+        <span class="btn btn-sm" onclick="event.stopPropagation();alert('Posting to your Nostr feed')">📡 Share to My Feed</span>
+        <span class="btn btn-sm" onclick="event.stopPropagation();openCapture()">↗ Share to Community</span>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <span class="btn" onclick="navigate('screen-discussion')">→ View full discussion thread</span>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     SCREEN 3b: Highlight Detail View
+══════════════════════════════════════════════════ -->
+<div class="screen" id="screen-highlight-detail">
+  <div class="topbar">
+    <span class="back-btn" onclick="goBack()">← Back</span>
+    <h1>Highlight</h1>
+    <div class="topbar-actions">
+      <span class="action-btn" onclick="navigate('screen-discussion')">Full Discussion →</span>
+    </div>
+  </div>
+  <div class="discussion-layout">
+
+    <!-- The highlight, prominent -->
+    <div style="background:#fff;border:2px solid #333;border-radius:9px;padding:28px 24px;margin-bottom:24px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#aaa;margin-bottom:12px;">Highlight</div>
+      <div style="font-style:italic;font-size:18px;color:#222;line-height:1.7;border-left:4px solid #aaa;padding-left:16px;margin-bottom:16px;">"A reliable way to make people believe in falsehoods is frequent repetition, because familiarity is not easily distinguished from truth."</div>
+      <div style="font-size:12px;color:#888;margin-bottom:18px;">From <strong>Thinking, Fast and Slow</strong> — Daniel Kahneman · Shared by @sarahk</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span class="btn btn-primary" onclick="alert('Posting to your Nostr feed')">📡 Share to My Feed</span>
+        <span class="btn" onclick="openCapture()">↗ Share to Community</span>
+        <span class="btn">+ Save</span>
+      </div>
+    </div>
+
+    <!-- Source artifact context -->
+    <div style="background:#f8f8f8;border:1px solid #e0e0e0;border-radius:7px;padding:16px;margin-bottom:24px;display:flex;gap:14px;align-items:center;">
+      <div class="img-ph" style="width:44px;height:58px;border-radius:4px;flex-shrink:0;font-size:8px;">COVER</div>
+      <div>
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;">Source</div>
+        <div style="font-size:14px;font-weight:700;cursor:pointer;" onclick="navigate('screen-content', {title:'Thinking, Fast and Slow'})">Thinking, Fast and Slow</div>
+        <div style="font-size:12px;color:#888;">Daniel Kahneman · Book · 23 community highlights</div>
+      </div>
+    </div>
+
+    <!-- Shared by context -->
+    <div style="background:#fff;border:1px solid #e0e0e0;border-radius:7px;padding:14px 16px;margin-bottom:24px;display:flex;align-items:center;gap:12px;">
+      <div class="avatar" style="flex-shrink:0;">SK</div>
+      <div>
+        <div style="font-size:13px;font-weight:700;">@sarahk</div>
+        <div style="font-size:12px;color:#888;">This ties into the availability heuristic — we mistake ease of recall for truth. Critical for media literacy.</div>
+      </div>
+      <span class="badge" style="margin-left:auto;white-space:nowrap;">Curator</span>
+    </div>
+
+    <!-- Discussion thread specific to THIS highlight -->
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px;color:#555;text-transform:uppercase;letter-spacing:0.5px;font-size:11px;">Discussion on this highlight (5)</div>
+
+    <div class="comment">
+      <div class="comment-hdr">
+        <div class="avatar">AL</div>
+        <span class="comment-name">Alice</span>
+        <span class="comment-time">2 hours ago</span>
+      </div>
+      <div class="comment-body">This is one of those passages that completely rewires how you see news and social media. The repetition-as-truth mechanism is weaponized constantly in modern discourse.</div>
+      <div class="comment-actions">
+        <span class="comment-action">↩ Reply</span>
+        <span class="comment-action">♡ 7</span>
+      </div>
+    </div>
+
+    <div class="comment nested">
+      <div class="comment-hdr">
+        <div class="avatar">BO</div>
+        <span class="comment-name">Bob</span>
+        <span class="comment-time">1 hour ago</span>
+      </div>
+      <div class="comment-body">And it's not just media — the stories we tell ourselves repeatedly become "truths" even when they started as interpretations.</div>
+      <div class="comment-actions">
+        <span class="comment-action">↩ Reply</span>
+        <span class="comment-action">♡ 4</span>
+      </div>
+    </div>
+
+    <div class="comment">
+      <div class="comment-hdr">
+        <div class="avatar">CH</div>
+        <span class="comment-name">Charlie</span>
+        <span class="comment-time">3 hours ago</span>
+      </div>
+      <div class="comment-body">Connects to the "mere exposure effect" — Zajonc's research showing that repeated exposure increases preference. Kahneman synthesizes a ton of this into one elegant observation.</div>
+      <div class="comment-actions">
+        <span class="comment-action">↩ Reply</span>
+        <span class="comment-action">♡ 5</span>
+      </div>
+    </div>
+
+    <div class="reply-box">
+      <div class="avatar" style="margin-top:2px;">ME</div>
+      <textarea placeholder="Add your thought on this highlight..."></textarea>
+      <button>Post</button>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     SCREEN 4: Discussion
+══════════════════════════════════════════════════ -->
+<div class="screen" id="screen-discussion">
+  <div class="topbar">
+    <span class="back-btn" onclick="goBack()">← Back</span>
+    <h1>Discussion — Thinking, Fast and Slow</h1>
+  </div>
+  <div class="discussion-layout">
+
+    <!-- Highlight context -->
+    <div style="background:#fff;border:1px solid #ccc;border-radius:7px;padding:16px;margin-bottom:24px;">
+      <div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">Discussing highlight</div>
+      <div class="hl-quote">"A reliable way to make people believe in falsehoods is frequent repetition, because familiarity is not easily distinguished from truth."</div>
+      <div style="font-size:11px;color:#aaa;margin-top:4px;">From Thinking, Fast and Slow · Shared by @sarahk</div>
+    </div>
+
+    <!-- Comments -->
+    <div class="comment">
+      <div class="comment-hdr">
+        <div class="avatar">AL</div>
+        <span class="comment-name">Alice</span>
+        <span class="comment-time">2 hours ago</span>
+      </div>
+      <div class="comment-body">This is one of those passages that completely rewires how you see news and social media. The repetition-as-truth mechanism is weaponized constantly in modern discourse. Really makes me think about what we repeatedly expose ourselves to.</div>
+      <div class="comment-actions">
+        <span class="comment-action">↩ Reply</span>
+        <span class="comment-action">♡ 7</span>
+      </div>
+    </div>
+
+    <div class="comment nested">
+      <div class="comment-hdr">
+        <div class="avatar">BO</div>
+        <span class="comment-name">Bob</span>
+        <span class="comment-time">1 hour ago</span>
+      </div>
+      <div class="comment-body">Exactly — and it's not just media. Think about internal narratives. The stories we tell ourselves repeatedly become "truths" even when they started as interpretations.</div>
+      <div class="comment-actions">
+        <span class="comment-action">↩ Reply</span>
+        <span class="comment-action">♡ 4</span>
+      </div>
+    </div>
+
+    <div class="comment deep">
+      <div class="comment-hdr">
+        <div class="avatar">AL</div>
+        <span class="comment-name">Alice</span>
+        <span class="comment-time">45 min ago</span>
+      </div>
+      <div class="comment-body">Yes — cognitive behavioral therapy is essentially a practice of replacing repeated false narratives with examined ones. Kahneman basically gives you the theoretical grounding for why that works.</div>
+      <div class="comment-actions">
+        <span class="comment-action">↩ Reply</span>
+        <span class="comment-action">♡ 3</span>
+      </div>
+    </div>
+
+    <div class="comment">
+      <div class="comment-hdr">
+        <div class="avatar">CH</div>
+        <span class="comment-name">Charlie</span>
+        <span class="comment-time">3 hours ago</span>
+      </div>
+      <div class="comment-body">This connects so well to the "mere exposure effect" — Zajonc's research showing that simple repeated exposure increases preference. Kahneman synthesizes a ton of this into one elegant observation.</div>
+      <div class="comment-actions">
+        <span class="comment-action">↩ Reply</span>
+        <span class="comment-action">♡ 5</span>
+      </div>
+    </div>
+
+    <div class="comment nested">
+      <div class="comment-hdr">
+        <div class="avatar">DI</div>
+        <span class="comment-name">Diana</span>
+        <span class="comment-time">2 hours ago</span>
+      </div>
+      <div class="comment-body">Worth noting this also explains why advertising works even when people claim to be "immune" to it. Familiarity breeds preference, whether you're aware of it or not.</div>
+      <div class="comment-actions">
+        <span class="comment-action">↩ Reply</span>
+        <span class="comment-action">♡ 6</span>
+      </div>
+    </div>
+
+    <div class="reply-box">
+      <div class="avatar" style="margin-top:2px;">ME</div>
+      <textarea placeholder="Add to the discussion..."></textarea>
+      <button>Post</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     SCREEN 5: Create Community
+══════════════════════════════════════════════════ -->
+<div class="screen" id="screen-create-community">
+  <div class="topbar">
+    <span class="back-btn" onclick="goBack()">← Back</span>
+    <h1>Create a Community</h1>
+    <div class="topbar-actions">
+      <span class="action-btn primary">Create Community</span>
+    </div>
+  </div>
+  <div class="page-body">
+    <div class="form-body">
+
+      <div class="form-group">
+        <label class="form-label">Community Name</label>
+        <div class="form-sub">Choose something clear and inviting.</div>
+        <input class="form-input" type="text" placeholder="e.g. Future of Work Readers">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <div class="form-sub">What does this community read, share, and discuss?</div>
+        <textarea class="form-input" placeholder="A community for people who..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cover Image</label>
+        <div class="upload-area" onclick="alert('File upload — not wired in prototype')">
+          <div class="upload-area-icon">🖼️</div>
+          <div>Drop an image here or <strong>click to browse</strong></div>
+          <div style="font-size:11px;color:#bbb;margin-top:5px;">PNG, JPG up to 5MB · Recommended: 1200×400px</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Access &amp; Visibility</label>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Open Membership</div>
+            <div class="toggle-sub">Anyone can join without approval.</div>
+          </div>
+          <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Public Community</div>
+            <div class="toggle-sub">Highlights are visible to non-members and discoverable on Discover.</div>
+          </div>
+          <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Allow Member Invites</div>
+            <div class="toggle-sub">Members can invite others directly.</div>
+          </div>
+          <div class="toggle" onclick="this.classList.toggle('on')"></div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <span class="btn btn-primary" style="padding:10px 28px;">Create Community</span>
+        <span class="btn" onclick="goBack()">Cancel</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     SCREEN 6: Discover
+══════════════════════════════════════════════════ -->
+<div class="screen" id="screen-discover">
+  <div class="topbar">
+    <button class="hamburger-btn" style="display:none;background:none;border:1px solid #ccc;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:16px;" onclick="toggleSidebar()">☰</button>
+    <h1>Discover</h1>
+  </div>
+  <div class="page-body">
+
+    <input class="search-bar" type="text" placeholder="🔍  Search communities, highlights, or people...">
+
+    <div class="section-hdr">Browse by Topic</div>
+    <div class="topic-chips">
+      <span class="chip active" onclick="toggleChip(this)">All</span>
+      <span class="chip" onclick="toggleChip(this)">Productivity</span>
+      <span class="chip" onclick="toggleChip(this)">Philosophy</span>
+      <span class="chip" onclick="toggleChip(this)">Startups</span>
+      <span class="chip" onclick="toggleChip(this)">Design</span>
+      <span class="chip" onclick="toggleChip(this)">Science</span>
+      <span class="chip" onclick="toggleChip(this)">History</span>
+      <span class="chip" onclick="toggleChip(this)">Psychology</span>
+      <span class="chip" onclick="toggleChip(this)">Fiction</span>
+      <span class="chip" onclick="toggleChip(this)">Technology</span>
+    </div>
+
+    <div class="section-hdr" style="margin-top:28px;">Trending Highlights</div>
+    <div class="card-grid-2" style="margin-bottom:0;">
+      <div class="trending-hl">
+        <div class="trending-hl-quote">"The best way to predict the future is to create it."</div>
+        <div class="trending-hl-meta">Deep Work Readers · from Deep Work · 32 saves this week</div>
+      </div>
+      <div class="trending-hl">
+        <div class="trending-hl-quote">"People don't want quarter-inch drills, they want quarter-inch holes."</div>
+        <div class="trending-hl-meta">Indie Hackers Book Club · from The Mom Test · 28 saves this week</div>
+      </div>
+      <div class="trending-hl">
+        <div class="trending-hl-quote">"Homo sapiens conquered this planet thanks above all to the unique human ability to believe in things that exist purely in the imagination."</div>
+        <div class="trending-hl-meta">Philosophy Circle · from Sapiens · 19 saves this week</div>
+      </div>
+      <div class="trending-hl">
+        <div class="trending-hl-quote">"The secret of getting ahead is getting started."</div>
+        <div class="trending-hl-meta">Design Thinkers · from Various · 15 saves this week</div>
+      </div>
+    </div>
+
+    <div class="section-hdr" style="margin-top:28px;">Featured Communities</div>
+    <div class="card-grid">
+      <div class="card" onclick="navigate('screen-community', {name:'Deep Work Readers'})">
+        <div class="community-card-cover">IMAGE</div>
+        <div class="community-card-name">Deep Work Readers</div>
+        <div class="community-card-meta">142 members · Productivity &amp; Attention</div>
+        <div class="community-card-footer"><span class="badge">Joined</span></div>
+      </div>
+      <div class="card" onclick="navigate('screen-community', {name:'Philosophy Circle'})">
+        <div class="community-card-cover">IMAGE</div>
+        <div class="community-card-name">Philosophy Circle</div>
+        <div class="community-card-meta">89 members · Philosophy &amp; Ethics</div>
+        <div class="community-card-footer"><span class="badge">Join</span></div>
+      </div>
+      <div class="card">
+        <div class="community-card-cover">IMAGE</div>
+        <div class="community-card-name">The Long Game</div>
+        <div class="community-card-meta">317 members · Longevity &amp; Health</div>
+        <div class="community-card-footer"><span class="badge">Join</span></div>
+      </div>
+      <div class="card">
+        <div class="community-card-cover">IMAGE</div>
+        <div class="community-card-name">Founder's Library</div>
+        <div class="community-card-meta">512 members · Startups &amp; Entrepreneurship</div>
+        <div class="community-card-footer"><span class="badge">Join</span></div>
+      </div>
+      <div class="card">
+        <div class="community-card-cover">IMAGE</div>
+        <div class="community-card-name">Product Craft</div>
+        <div class="community-card-meta">204 members · Product &amp; UX</div>
+        <div class="community-card-footer"><span class="badge">Join</span></div>
+      </div>
+      <div class="card">
+        <div class="community-card-cover">IMAGE</div>
+        <div class="community-card-name">Science Reading Group</div>
+        <div class="community-card-meta">178 members · Science &amp; Research</div>
+        <div class="community-card-footer"><span class="badge">Join</span></div>
+      </div>
+    </div>
+
+    <div class="section-hdr" style="margin-top:28px;">Recommended for You</div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="community-card-cover">IMAGE</div>
+        <div class="community-card-name">Stoic Shelf</div>
+        <div class="community-card-meta">93 members · Philosophy &amp; Classics</div>
+        <div class="community-card-footer"><span class="badge">Join</span></div>
+      </div>
+      <div class="card">
+        <div class="community-card-cover">IMAGE</div>
+        <div class="community-card-name">Mental Models</div>
+        <div class="community-card-meta">261 members · Decision-making</div>
+        <div class="community-card-footer"><span class="badge">Join</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     SCREEN 7: Me / Profile
+══════════════════════════════════════════════════ -->
+<div class="screen" id="screen-me">
+  <div class="topbar">
+    <button class="hamburger-btn" style="display:none;background:none;border:1px solid #ccc;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:16px;" onclick="toggleSidebar()">☰</button>
+    <h1>Me</h1>
+    <div class="topbar-actions">
+      <span class="action-btn">Edit Profile</span>
+    </div>
+  </div>
+  <div class="page-body">
+
+    <div class="profile-hero">
+      <div class="profile-avatar-lg">ME</div>
+      <div>
+        <div class="profile-name">Jordan Park</div>
+        <div class="profile-bio">Product designer &amp; avid reader. I collect ideas at the intersection of psychology, design, and technology.</div>
+        <div class="profile-stats">
+          <div>
+            <div class="stat-val">147</div>
+            <div class="stat-lbl">Highlights</div>
+          </div>
+          <div>
+            <div class="stat-val">4</div>
+            <div class="stat-lbl">Communities</div>
+          </div>
+          <div>
+            <div class="stat-val">23</div>
+            <div class="stat-lbl">For Later</div>
+          </div>
+          <div>
+            <div class="stat-val">312</div>
+            <div class="stat-lbl">Saves by others</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="subtabs" id="me-subtabs">
+      <div class="subtab active" onclick="showSubtab('me', 'highlights', this)">My Highlights</div>
+      <div class="subtab" onclick="showSubtab('me', 'for-later', this)">For Later (23)</div>
+      <div class="subtab" onclick="showSubtab('me', 'synthesis', this)">Synthesis</div>
+    </div>
+
+    <!-- My Highlights -->
+    <div class="subtab-pane active" id="me-pane-highlights">
+      <div class="highlight-item">
+        <div class="hl-quote">"A reliable way to make people believe in falsehoods is frequent repetition, because familiarity is not easily distinguished from truth."</div>
+        <div class="hl-meta">Thinking, Fast and Slow · Shared to Deep Work Readers · 14 saves</div>
+      </div>
+      <div class="highlight-item">
+        <div class="hl-quote">"The best way to predict the future is to create it."</div>
+        <div class="hl-meta">Deep Work · Shared to Deep Work Readers · 8 saves</div>
+        <div class="hl-note">This resonates with how Cal Newport frames deliberate practice as agency over your future self.</div>
+      </div>
+      <div class="highlight-item">
+        <div class="hl-quote">"Homo sapiens conquered this planet thanks above all to the unique human ability to believe in things that exist purely in the imagination."</div>
+        <div class="hl-meta">Sapiens · Shared to Philosophy Circle · 19 saves</div>
+      </div>
+      <div class="highlight-item">
+        <div class="hl-quote">"The measure of usefulness of an early customer conversation is whether it gives us concrete facts about our customers' lives."</div>
+        <div class="hl-meta">The Mom Test · Shared to Indie Hackers Book Club · 11 saves</div>
+      </div>
+    </div>
+
+    <!-- For Later -->
+    <div class="subtab-pane" id="me-pane-for-later">
+      <div class="sort-bar">
+        <span class="sort-bar-label">Sort:</span>
+        <span class="sort-opt active" onclick="setSort(this)">Newest</span>
+        <span class="sort-opt" onclick="setSort(this)">Oldest</span>
+        <span class="sort-opt" onclick="setSort(this)">By type</span>
+      </div>
+
+      <div class="for-later-item" onclick="navigate('screen-content', {title:'Thinking, Fast and Slow'})">
+        <div class="for-later-thumb img-ph">COVER</div>
+        <div class="for-later-info">
+          <div class="for-later-title">Thinking, Fast and Slow</div>
+          <div class="for-later-author">Daniel Kahneman · Book</div>
+          <span class="pill pill-ready">Ready to share</span>
+        </div>
+      </div>
+
+      <div class="for-later-item" onclick="navigate('screen-content', {title:'The Mom Test'})">
+        <div class="for-later-thumb img-ph">COVER</div>
+        <div class="for-later-info">
+          <div class="for-later-title">The Mom Test</div>
+          <div class="for-later-author">Rob Fitzpatrick · Book</div>
+          <span class="pill pill-needs">Needs teaser</span>
+        </div>
+      </div>
+
+      <div class="for-later-item">
+        <div class="for-later-thumb img-ph">COVER</div>
+        <div class="for-later-info">
+          <div class="for-later-title">Why Greatness Cannot Be Planned</div>
+          <div class="for-later-author">Stanley &amp; Lehman · Book</div>
+          <span class="pill pill-ready">Ready to share</span>
+        </div>
+      </div>
+
+      <div class="for-later-item">
+        <div class="for-later-thumb img-ph">COVER</div>
+        <div class="for-later-info">
+          <div class="for-later-title">The Courage to Be Disliked</div>
+          <div class="for-later-author">Kishimi &amp; Koga · Book</div>
+          <span class="pill pill-needs">Needs teaser</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Synthesis -->
+    <div class="subtab-pane" id="me-pane-synthesis">
+      <div class="synthesis-placeholder">
+        <div class="empty-icon">🧠</div>
+        <h3>Synthesis — Coming Soon</h3>
+        <p>We're working on AI-powered connections across your highlights.<br>It will surface themes, contradictions, and ideas you didn't know you had.</p>
+        <div style="margin-top:20px;">
+          <span class="btn">Notify me when it's ready</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+</main><!-- /main -->
+</div><!-- /app-shell -->
+
+
+<!-- ══════════════════════════════════════════════════
+     CAPTURE OVERLAY
+══════════════════════════════════════════════════ -->
+<div id="capture-overlay" onclick="overlayClickClose(event)">
+  <div id="capture-modal">
+
+    <!-- Step 1: Choose method -->
+    <div class="capture-step active" id="capture-step-1">
+      <div class="capture-hdr">
+        <div>
+          <div class="capture-title">Capture a Highlight</div>
+          <div class="capture-steps-nav">
+            <div class="capture-step-dot done"></div>
+            <div class="capture-step-dot"></div>
+            <div class="capture-step-dot"></div>
+          </div>
+        </div>
+        <span class="capture-close" onclick="closeCapture()">×</span>
+      </div>
+      <p style="font-size:13px;color:#888;margin-bottom:18px;">How would you like to import this content?</p>
+
+      <div class="capture-option" onclick="nextCaptureStep()">
+        <span class="capture-opt-icon">🔗</span>
+        <div>
+          <div class="capture-opt-title">Paste URL / Import Link</div>
+          <div class="capture-opt-sub">Paste a link to a book, article, podcast, or any web page.</div>
+        </div>
+      </div>
+
+      <div class="capture-option" onclick="nextCaptureStep()">
+        <span class="capture-opt-icon">📤</span>
+        <div>
+          <div class="capture-opt-title">Share-sheet Import</div>
+          <div class="capture-opt-sub">Shared directly from another app via the OS share sheet.</div>
+        </div>
+      </div>
+
+      <div class="capture-option" onclick="nextCaptureStep()">
+        <span class="capture-opt-icon">🧩</span>
+        <div>
+          <div class="capture-opt-title">Browser Extension Trigger</div>
+          <div class="capture-opt-sub">Highlight text in your browser and send it here instantly.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: AI teaser -->
+    <div class="capture-step" id="capture-step-2">
+      <div class="capture-hdr">
+        <div>
+          <div class="capture-title">AI Teaser Suggestions</div>
+          <div class="capture-steps-nav">
+            <div class="capture-step-dot done"></div>
+            <div class="capture-step-dot done"></div>
+            <div class="capture-step-dot"></div>
+          </div>
+        </div>
+        <span class="capture-close" onclick="closeCapture()">×</span>
+      </div>
+
+      <div class="import-source">
+        <div class="import-source-label">Imported from</div>
+        <div class="import-source-val">Thinking, Fast and Slow — Daniel Kahneman</div>
+      </div>
+
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px;">Your highlight:</div>
+      <div class="hl-quote" style="margin-bottom:16px;">"A reliable way to make people believe in falsehoods is frequent repetition, because familiarity is not easily distinguished from truth."</div>
+
+      <div style="font-size:12px;color:#888;margin-bottom:10px;">✦ AI suggested teasers — pick one or edit:</div>
+
+      <div class="ai-box">
+        <div class="ai-label">Option 1 — The Hook</div>
+        <div class="ai-text">Repetition shapes belief more than evidence does. Kahneman shows us how familiarity hijacks our sense of truth — and why that matters now more than ever.</div>
+        <div class="ai-actions">
+          <button class="small-btn primary" onclick="nextCaptureStep()">Use this</button>
+          <button class="small-btn">Edit</button>
+        </div>
+      </div>
+
+      <div class="ai-box">
+        <div class="ai-label">Option 2 — The Question</div>
+        <div class="ai-text">How do we distinguish truth from familiarity? Kahneman has a disturbing answer — and it starts with how often we hear something.</div>
+        <div class="ai-actions">
+          <button class="small-btn primary" onclick="nextCaptureStep()">Use this</button>
+          <button class="small-btn">Edit</button>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <button class="small-btn" onclick="nextCaptureStep()">Skip teaser →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Save or share -->
+    <div class="capture-step" id="capture-step-3">
+      <div class="capture-hdr">
+        <div>
+          <div class="capture-title">Save or Share</div>
+          <div class="capture-steps-nav">
+            <div class="capture-step-dot done"></div>
+            <div class="capture-step-dot done"></div>
+            <div class="capture-step-dot done"></div>
+          </div>
+        </div>
+        <span class="capture-close" onclick="closeCapture()">×</span>
+      </div>
+
+      <div class="capture-option" onclick="alert('Saved to For Later!'); closeCapture();">
+        <span class="capture-opt-icon">🗂️</span>
+        <div>
+          <div class="capture-opt-title">Save to For Later</div>
+          <div class="capture-opt-sub">Keep it in your private queue. Share when you're ready.</div>
+        </div>
+      </div>
+
+      <div style="font-size:12px;color:#999;margin:14px 0 10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Share to a community</div>
+
+      <div class="capture-option" onclick="alert('Shared to Deep Work Readers!'); closeCapture();">
+        <div class="nav-community-icon" style="width:28px;height:28px;font-size:10px;">DW</div>
+        <div>
+          <div class="capture-opt-title">Deep Work Readers</div>
+          <div class="capture-opt-sub">142 members</div>
+        </div>
+      </div>
+      <div class="capture-option" onclick="alert('Shared to Philosophy Circle!'); closeCapture();">
+        <div class="nav-community-icon" style="width:28px;height:28px;font-size:10px;">PC</div>
+        <div>
+          <div class="capture-opt-title">Philosophy Circle</div>
+          <div class="capture-opt-sub">89 members</div>
+        </div>
+      </div>
+      <div class="capture-option" onclick="alert('Shared!'); closeCapture();">
+        <div class="nav-community-icon" style="width:28px;height:28px;font-size:10px;">IH</div>
+        <div>
+          <div class="capture-opt-title">Indie Hackers Book Club</div>
+          <div class="capture-opt-sub">211 members</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════════ -->
+<script>
+// ─── History stack ───
+const history = [];
+let currentScreen = 'screen-communities';
+
+// ─── Navigation ───
+function navigate(screenId, params) {
+  params = params || {};
+
+  // Update content based on params
+  if (screenId === 'screen-community') {
+    const name = params.name || 'Deep Work Readers';
+    const el = document.getElementById('comm-header-name');
+    const el2 = document.getElementById('comm-detail-name');
+    const el3 = document.getElementById('comm-detail-desc');
+    if (el) el.textContent = name;
+    if (el2) el2.textContent = name;
+  }
+  if (screenId === 'screen-content') {
+    const title = params.title || 'Thinking, Fast and Slow';
+    const el = document.getElementById('content-header-title');
+    const el2 = document.getElementById('content-detail-title');
+    if (el) el.textContent = title;
+    if (el2) el2.textContent = title;
+  }
+
+  // Push current to history
+  history.push(currentScreen);
+
+  // Switch screens
+  showScreen(screenId);
+
+  // Update sidebar active state
+  updateSidebarActive(screenId);
+
+  // Scroll to top
+  document.getElementById('main').scrollTo(0, 0);
+}
+
+function goBack() {
+  if (history.length > 0) {
+    const prev = history.pop();
+    showScreen(prev);
+    updateSidebarActive(prev);
+    document.getElementById('main').scrollTo(0, 0);
+  } else {
+    showScreen('screen-communities');
+  }
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const target = document.getElementById(id);
+  if (target) {
+    target.classList.add('active');
+    currentScreen = id;
+  }
+}
+
+function updateSidebarActive(screenId) {
+  document.querySelectorAll('#sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
+  const map = {
+    'screen-communities': 0,
+    'screen-discover': 4,
+    'screen-me': 5
+  };
+  // Simple highlight — communities list highlights first item
+  if (screenId === 'screen-communities') {
+    // no single item to highlight
+  }
+}
+
+// ─── Sub-tabs ───
+function showSubtab(group, pane, el) {
+  // Deactivate all tabs in this group
+  el.closest('.subtabs').querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+
+  // Deactivate all panes
+  document.querySelectorAll('[id^="' + group + '-pane-"]').forEach(p => p.classList.remove('active'));
+
+  // Activate target pane
+  const target = document.getElementById(group + '-pane-' + pane);
+  if (target) target.classList.add('active');
+}
+
+// ─── Sort options ───
+function setSort(el) {
+  el.closest('.sort-bar').querySelectorAll('.sort-opt').forEach(o => o.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ─── Topic chips ───
+function toggleChip(el) {
+  el.classList.toggle('active');
+}
+
+// ─── Toggle switches ───
+// Already handled inline with onclick
+
+// ─── Capture overlay ───
+function openCapture() {
+  // Reset to step 1
+  document.querySelectorAll('.capture-step').forEach(s => s.classList.remove('active'));
+  document.getElementById('capture-step-1').classList.add('active');
+  document.getElementById('capture-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeCapture() {
+  document.getElementById('capture-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function overlayClickClose(e) {
+  if (e.target === document.getElementById('capture-overlay')) {
+    closeCapture();
+  }
+}
+
+function nextCaptureStep() {
+  const steps = document.querySelectorAll('.capture-step');
+  let currentIdx = -1;
+  steps.forEach((s, i) => { if (s.classList.contains('active')) currentIdx = i; });
+  steps.forEach(s => s.classList.remove('active'));
+  if (currentIdx < steps.length - 1) {
+    steps[currentIdx + 1].classList.add('active');
+  }
+}
+
+// ─── Mobile sidebar ───
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('open');
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
+
+// ─── Show hamburgers on mobile ───
+function checkMobile() {
+  const isMobile = window.innerWidth < 768;
+  document.querySelectorAll('.hamburger-btn').forEach(b => {
+    b.style.display = isMobile ? 'block' : 'none';
+  });
+  const h1 = document.getElementById('hamburger');
+  if (h1) h1.style.display = isMobile ? 'block' : 'none';
+}
+window.addEventListener('resize', checkMobile);
+checkMobile();
+
+// ─── Empty state demo toggle ───
+function toggleEmptyState() {
+  const pop = document.getElementById('communities-populated');
+  const empty = document.getElementById('communities-empty');
+  const btn = document.getElementById('empty-state-toggle');
+  if (!pop || !empty) return;
+  if (pop.style.display === 'none') {
+    pop.style.display = '';
+    empty.style.display = 'none';
+    btn.textContent = 'Demo: empty state';
+  } else {
+    pop.style.display = 'none';
+    empty.style.display = '';
+    btn.textContent = 'Demo: populated';
+  }
+}
+
+// ─── Keyboard ───
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCapture();
+});
+</script>
+
+</body>
+</html>

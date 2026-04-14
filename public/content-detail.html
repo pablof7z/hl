@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thinking, Fast and Slow — Highlighter</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+
+    <aside class="sidebar">
+      <div class="sidebar-logo"><a href="index.html">☲ Highlighter</a></div>
+      <nav class="sidebar-nav">
+        <a href="index.html"><span class="nav-icon">⌂</span> Home</a>
+        <a href="discover.html"><span class="nav-icon">◎</span> Discover</a>
+        <a href="capture.html"><span class="nav-icon">+</span> Capture</a>
+        <div class="sidebar-section-label">Your Communities</div>
+        <div class="sidebar-community-list">
+          <a href="community.html" class="active"><span class="community-dot"></span> Deep Work Readers</a>
+          <a href="community.html#philosophy"><span class="community-dot"></span> Philosophy Circle</a>
+          <a href="community.html#indie"><span class="community-dot"></span> Indie Hackers Book Club</a>
+          <a href="community.html#design"><span class="community-dot"></span> Design Thinkers</a>
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <a href="profile.html"><div class="avatar-sm">A</div><span>Alice</span></a>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="topbar-title">
+          <a href="community.html" style="color:var(--gray-500);text-decoration:none;">Deep Work Readers</a> / Content
+        </div>
+        <div class="topbar-actions">
+          <a href="capture.html" class="btn btn-sm btn-primary">+ Add Highlight</a>
+        </div>
+      </header>
+
+      <div class="content">
+
+        <!-- Book Header -->
+        <div class="section">
+          <div class="flex items-start gap-32">
+            <div class="img-placeholder cover-book">cover</div>
+            <div style="flex:1;">
+              <span class="badge mb-8">Book</span>
+              <h1>Thinking, Fast and Slow</h1>
+              <p class="text-muted mt-4" style="font-size:1.05rem;">Daniel Kahneman</p>
+              <p class="mt-16" style="max-width:560px;">A groundbreaking tour of the mind that explains the two systems that drive the way we think. System 1 is fast, intuitive, and emotional; System 2 is slower, more deliberative, and more logical. Kahneman exposes the extraordinary capabilities — and also the faults and biases — of fast thinking.</p>
+              <div class="stats-row mt-16">
+                <div class="stat">
+                  <div class="stat-value">8</div>
+                  <div class="stat-label">Highlights</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-value">12</div>
+                  <div class="stat-label">Comments</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-value">3</div>
+                  <div class="stat-label">Communities</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-8 mt-16">
+                <span class="text-xs text-muted">Shared in:</span>
+                <a href="community.html" class="badge">Deep Work Readers</a>
+                <a href="community.html#philosophy" class="badge">Philosophy Circle</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Tabs -->
+        <div id="content-tabs">
+          <div class="tabs">
+            <button class="tab active" data-tab="ct-highlights">Highlights (8)</button>
+            <button class="tab" data-tab="ct-discussion">Discussion (12)</button>
+          </div>
+
+          <!-- HIGHLIGHTS TAB -->
+          <div class="tab-content active" id="ct-highlights">
+            <div class="flex flex-col gap-16">
+
+              <a href="highlight-detail.html" style="text-decoration:none;color:inherit;">
+                <div class="card card-hover">
+                  <div class="highlight-quote">
+                    "The best way to predict the future is to create it."
+                  </div>
+                  <div class="flex items-center justify-between mt-12">
+                    <div class="flex items-center gap-8">
+                      <div class="avatar avatar-sm">B</div>
+                      <span class="text-sm"><strong>Bob</strong></span>
+                      <span class="text-xs text-muted">2 hours ago</span>
+                    </div>
+                    <span class="text-xs text-muted">5 replies</span>
+                  </div>
+                </div>
+              </a>
+
+              <a href="highlight-detail.html" style="text-decoration:none;color:inherit;">
+                <div class="card card-hover">
+                  <div class="highlight-quote">
+                    "The key to good decision making is not knowledge. It is understanding."
+                  </div>
+                  <div class="flex items-center justify-between mt-12">
+                    <div class="flex items-center gap-8">
+                      <div class="avatar avatar-sm">C</div>
+                      <span class="text-sm"><strong>Charlie</strong></span>
+                      <span class="text-xs text-muted">3 days ago</span>
+                    </div>
+                    <span class="text-xs text-muted">2 replies</span>
+                  </div>
+                </div>
+              </a>
+
+              <a href="highlight-detail.html" style="text-decoration:none;color:inherit;">
+                <div class="card card-hover">
+                  <div class="highlight-quote">
+                    "Your mind is for having ideas, not holding them."
+                  </div>
+                  <div class="flex items-center justify-between mt-12">
+                    <div class="flex items-center gap-8">
+                      <div class="avatar avatar-sm">A</div>
+                      <span class="text-sm"><strong>Alice</strong></span>
+                      <span class="text-xs text-muted">2 days ago</span>
+                    </div>
+                    <span class="text-xs text-muted">No replies</span>
+                  </div>
+                </div>
+              </a>
+
+              <a href="highlight-detail.html" style="text-decoration:none;color:inherit;">
+                <div class="card card-hover">
+                  <div class="highlight-quote">
+                    "Nothing in life is as important as you think it is, while you are thinking about it."
+                  </div>
+                  <div class="flex items-center justify-between mt-12">
+                    <div class="flex items-center gap-8">
+                      <div class="avatar avatar-sm">E</div>
+                      <span class="text-sm"><strong>Elena</strong></span>
+                      <span class="text-xs text-muted">Last week</span>
+                    </div>
+                    <span class="text-xs text-muted">4 replies</span>
+                  </div>
+                </div>
+              </a>
+
+              <a href="highlight-detail.html" style="text-decoration:none;color:inherit;">
+                <div class="card card-hover">
+                  <div class="highlight-quote">
+                    "A reliable way to make people believe in falsehoods is frequent repetition, because familiarity is not easily distinguished from truth."
+                  </div>
+                  <div class="flex items-center justify-between mt-12">
+                    <div class="flex items-center gap-8">
+                      <div class="avatar avatar-sm">D</div>
+                      <span class="text-sm"><strong>Diana</strong></span>
+                      <span class="text-xs text-muted">Last week</span>
+                    </div>
+                    <span class="text-xs text-muted">1 reply</span>
+                  </div>
+                </div>
+              </a>
+
+            </div>
+          </div>
+
+          <!-- DISCUSSION TAB -->
+          <div class="tab-content" id="ct-discussion">
+            <div class="section">
+              <div class="form-group">
+                <textarea placeholder="Share your thoughts on this book..."></textarea>
+                <div class="flex justify-between items-center mt-8">
+                  <span class="text-xs text-muted">Visible to Deep Work Readers</span>
+                  <button class="btn btn-sm btn-primary">Post</button>
+                </div>
+              </div>
+
+              <div class="comment">
+                <div class="avatar">D</div>
+                <div class="comment-body">
+                  <div class="comment-meta">
+                    <span class="comment-author">Diana</span>
+                    <span class="comment-time">5 hours ago</span>
+                  </div>
+                  <div class="comment-text">Has anyone else noticed how Kahneman's concept of anchoring applies directly to how we estimate project timelines? I keep catching myself doing it at work now.</div>
+                  <div class="comment-actions">
+                    <button>↩ Reply</button>
+                    <button>♡ 3</button>
+                  </div>
+
+                  <div class="replies">
+                    <div class="comment">
+                      <div class="avatar avatar-sm">B</div>
+                      <div class="comment-body">
+                        <div class="comment-meta">
+                          <span class="comment-author">Bob</span>
+                          <span class="comment-time">4 hours ago</span>
+                        </div>
+                        <div class="comment-text">Totally. I started asking for estimates before revealing my own. The difference is wild.</div>
+                        <div class="comment-actions">
+                          <button>↩ Reply</button>
+                          <button>♡ 1</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <div class="comment">
+                <div class="avatar">A</div>
+                <div class="comment-body">
+                  <div class="comment-meta">
+                    <span class="comment-author">Alice</span>
+                    <span class="comment-time">Yesterday</span>
+                  </div>
+                  <div class="comment-text">Chapter 22 on expert intuition is incredible. The idea that true expertise requires "a regular world" — one that's predictable enough to learn from — really challenged my assumptions.</div>
+                  <div class="comment-actions">
+                    <button>↩ Reply</button>
+                    <button>♡ 5</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="comment">
+                <div class="avatar">C</div>
+                <div class="comment-body">
+                  <div class="comment-meta">
+                    <span class="comment-author">Charlie</span>
+                    <span class="comment-time">3 days ago</span>
+                  </div>
+                  <div class="comment-text">I'd love to pair this with "Noise" which Kahneman wrote later. It's like the sequel that takes variability in judgment even further. Anyone read it?</div>
+                  <div class="comment-actions">
+                    <button>↩ Reply</button>
+                    <button>♡ 2</button>
+                  </div>
+
+                  <div class="replies">
+                    <div class="comment">
+                      <div class="avatar avatar-sm">E</div>
+                      <div class="comment-body">
+                        <div class="comment-meta">
+                          <span class="comment-author">Elena</span>
+                          <span class="comment-time">2 days ago</span>
+                        </div>
+                        <div class="comment-text">Yes! Should we add it to the collection? It pairs perfectly.</div>
+                        <div class="comment-actions">
+                          <button>↩ Reply</button>
+                          <button>♡ 1</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="comment">
+                      <div class="avatar avatar-sm">C</div>
+                      <div class="comment-body">
+                        <div class="comment-meta">
+                          <span class="comment-author">Charlie</span>
+                          <span class="comment-time">2 days ago</span>
+                        </div>
+                        <div class="comment-text">Let's do it. I'll add it this week.</div>
+                        <div class="comment-actions">
+                          <button>↩ Reply</button>
+                          <button>♡ 0</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+@import "tailwindcss" source(none);
+
+@source "./*.{html,js}";
+@source "./landing-1/**/*.{html,js}";
+@source "./landing-2/**/*.{html,js}";
+@source "./landing-3/**/*.{html,js}";
+@source "./prototype/**/*.{html,js}";
+@source "./prototype-v2/**/*.{html,js}";
+@source "./wireframes/**/*.{html,js}";
+
+@plugin "daisyui";

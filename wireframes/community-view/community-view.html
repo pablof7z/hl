@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Community View — Wireframe</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #fff;
+    color: #111;
+    line-height: 1.5;
+  }
+
+  /* ── NAV SWITCHER ── */
+  .view-switcher {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: #111;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    border-bottom: 2px solid #000;
+    height: 48px;
+  }
+  .view-switcher span {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-right: 24px;
+    opacity: 0.5;
+  }
+  .view-switcher button {
+    background: none;
+    border: none;
+    color: #888;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 14px 20px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .view-switcher button:hover { color: #fff; }
+  .view-switcher button.active {
+    color: #fff;
+    border-bottom-color: #0066FF;
+  }
+
+  /* ── LAYOUT ── */
+  .view { display: none; padding-top: 48px; }
+  .view.active { display: block; }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ── GROUP HEADER ── */
+  .group-header {
+    padding: 32px 0 24px;
+    border-bottom: 2px solid #000;
+  }
+  .group-header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+  .group-meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 8px;
+    font-size: 13px;
+    color: #666;
+  }
+  .group-meta .tag {
+    background: #eee;
+    padding: 2px 8px;
+    border: 1px solid #ccc;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .group-description {
+    margin-top: 12px;
+    font-size: 14px;
+    color: #444;
+    max-width: 600px;
+  }
+
+  /* ── SECTION TITLES ── */
+  .section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #999;
+    padding: 32px 0 16px;
+    border-bottom: 1px solid #ddd;
+    margin-bottom: 20px;
+  }
+
+  /* ── HERO ARTIFACT ── */
+  .hero-artifact {
+    border: 2px solid #000;
+    margin-top: 32px;
+    display: flex;
+    min-height: 360px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-artifact .cover {
+    width: 260px;
+    min-height: 360px;
+    background: #e8e8e8;
+    border-right: 2px solid #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .hero-artifact .cover .placeholder {
+    font-size: 48px;
+    color: #bbb;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .hero-artifact .cover .placeholder span {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #999;
+  }
+  .hero-artifact .info {
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    flex: 1;
+  }
+  .hero-artifact .info .badge {
+    display: inline-block;
+    background: #111;
+    color: #fff;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 4px 10px;
+    margin-bottom: 16px;
+    align-self: flex-start;
+  }
+  .hero-artifact .info h2 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+  }
+  .hero-artifact .info .author {
+    font-size: 14px;
+    color: #666;
+    margin-top: 8px;
+  }
+  .hero-artifact .info .excerpt {
+    font-size: 14px;
+    color: #555;
+    margin-top: 16px;
+    line-height: 1.6;
+    max-width: 480px;
+  }
+  .hero-artifact .info .stats {
+    display: flex;
+    gap: 24px;
+    margin-top: 24px;
+    font-size: 13px;
+    color: #888;
+  }
+  .hero-artifact .info .stats strong {
+    color: #333;
+  }
+  .hero-bottom {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 24px;
+  }
+  .btn {
+    display: inline-block;
+    padding: 10px 20px;
+    border: 2px solid #000;
+    background: #fff;
+    color: #111;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: background 0.12s, color 0.12s;
+  }
+  .btn:hover { background: #111; color: #fff; }
+  .btn-primary {
+    background: #0066FF;
+    color: #fff;
+    border-color: #0066FF;
+  }
+  .btn-primary:hover { background: #0052cc; border-color: #0052cc; }
+
+  /* ── SECONDARY ARTIFACTS ── */
+  .artifacts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .artifact-card {
+    border: 2px solid #000;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .artifact-card:hover { background: #f5f5f5; }
+  .artifact-card .thumb {
+    height: 140px;
+    background: #eee;
+    border-bottom: 2px solid #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    color: #ccc;
+  }
+  .artifact-card .card-body {
+    padding: 12px;
+  }
+  .artifact-card .card-body h4 {
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  .artifact-card .card-body .card-meta {
+    font-size: 11px;
+    color: #888;
+    margin-top: 6px;
+  }
+  .artifact-card .card-type {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #999;
+    padding: 4px 8px;
+    background: #f5f5f5;
+    display: inline-block;
+    margin: 8px 0 0;
+  }
+
+  /* ── HIGHLIGHTS ── */
+  .highlights-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .highlight-card {
+    border: 2px solid #000;
+    padding: 24px;
+    position: relative;
+  }
+  .highlight-card::before {
+    content: '❝';
+    position: absolute;
+    top: 12px;
+    left: 16px;
+    font-size: 28px;
+    color: #ddd;
+    line-height: 1;
+  }
+  .highlight-card blockquote {
+    font-size: 16px;
+    font-style: italic;
+    line-height: 1.6;
+    color: #333;
+    padding-left: 24px;
+    border-left: 3px solid #ddd;
+    margin-left: 0;
+  }
+  .highlight-card .hl-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 16px;
+    font-size: 12px;
+    color: #888;
+  }
+  .highlight-card .hl-meta .hl-source {
+    color: #0066FF;
+    text-decoration: none;
+  }
+  .highlight-card .hl-meta .hl-source:hover {
+    text-decoration: underline;
+  }
+
+  /* ── DISCUSSIONS ── */
+  .discussions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .discussion-card {
+    border: 2px solid #000;
+    padding: 16px 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .discussion-card:hover { background: #f5f5f5; }
+  .discussion-card .avatar {
+    width: 36px;
+    height: 36px;
+    background: #ddd;
+    border: 1px solid #bbb;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #888;
+  }
+  .discussion-card .disc-body { flex: 1; }
+  .discussion-card .disc-body h4 {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .discussion-card .disc-body p {
+    font-size: 13px;
+    color: #666;
+    margin-top: 4px;
+  }
+  .discussion-card .disc-meta {
+    font-size: 11px;
+    color: #999;
+    margin-top: 8px;
+    display: flex;
+    gap: 16px;
+  }
+
+  /* ── LOCKED OVERLAY ── */
+  .locked-section {
+    position: relative;
+  }
+  .locked-section .lock-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.85) 40%, rgba(255,255,255,0.97) 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: 80px;
+    z-index: 10;
+  }
+  .locked-section .lock-overlay .lock-icon {
+    font-size: 32px;
+    margin-bottom: 12px;
+    color: #999;
+  }
+  .locked-section .lock-overlay p {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 16px;
+  }
+
+  /* ── PRIVATE VIEW ── */
+  .private-gate {
+    min-height: calc(100vh - 48px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .private-gate-card {
+    border: 2px solid #000;
+    padding: 48px 56px;
+    text-align: center;
+    max-width: 480px;
+    width: 100%;
+  }
+  .private-gate-card .lock-big {
+    font-size: 48px;
+    margin-bottom: 24px;
+    color: #999;
+  }
+  .private-gate-card h2 {
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .private-gate-card .pg-desc {
+    font-size: 14px;
+    color: #555;
+    margin-top: 12px;
+    line-height: 1.6;
+  }
+  .private-gate-card .pg-stats {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    margin-top: 24px;
+    font-size: 13px;
+    color: #888;
+  }
+  .private-gate-card .pg-stats strong {
+    display: block;
+    font-size: 20px;
+    color: #111;
+  }
+  .private-gate-card .btn {
+    margin-top: 32px;
+    width: 100%;
+  }
+
+  /* ── SHARE MODAL ── */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-backdrop.active { display: flex; }
+  .modal {
+    background: #fff;
+    border: 2px solid #000;
+    padding: 32px;
+    width: 480px;
+    max-width: 90vw;
+  }
+  .modal h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 20px;
+  }
+  .modal label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #888;
+    margin-bottom: 6px;
+    margin-top: 16px;
+  }
+  .modal label:first-of-type { margin-top: 0; }
+  .modal input, .modal select, .modal textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid #000;
+    font-family: inherit;
+    font-size: 13px;
+    background: #fff;
+  }
+  .modal textarea { min-height: 80px; resize: vertical; }
+  .modal .modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    justify-content: flex-end;
+  }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #111;
+    color: #fff;
+    padding: 12px 20px;
+    font-size: 13px;
+    z-index: 300;
+    display: none;
+    border: 2px solid #000;
+  }
+  .toast.show { display: block; animation: fadeIn 0.2s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 700px) {
+    .hero-artifact { flex-direction: column; }
+    .hero-artifact .cover { width: 100%; min-height: 240px; border-right: none; border-bottom: 2px solid #000; }
+    .artifacts-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 480px) {
+    .artifacts-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── FOOTER ── */
+  .wf-footer {
+    border-top: 2px solid #000;
+    margin-top: 64px;
+    padding: 24px 0;
+    text-align: center;
+    font-size: 11px;
+    color: #bbb;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  /* ── FAB ── */
+  .fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    background: #0066FF;
+    color: #fff;
+    border: 2px solid #000;
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    transition: background 0.12s;
+  }
+  .fab:hover { background: #0052cc; }
+
+  /* ── TABS ── */
+  .tab-bar {
+    display: flex;
+    border-bottom: 2px solid #000;
+    margin-top: 32px;
+  }
+  .tab-bar button {
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 12px 20px;
+    cursor: pointer;
+    color: #888;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .tab-bar button:hover { color: #333; }
+  .tab-bar button.active {
+    color: #111;
+    border-bottom-color: #0066FF;
+  }
+  .tab-panel { display: none; padding-top: 24px; }
+  .tab-panel.active { display: block; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- VIEW SWITCHER                               -->
+<!-- ═══════════════════════════════════════════ -->
+<nav class="view-switcher">
+  <span>View as:</span>
+  <button class="active" onclick="switchView('member')">Member</button>
+  <button onclick="switchView('public')">Non-Member (Public)</button>
+  <button onclick="switchView('private')">Non-Member (Private)</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 1. MEMBER VIEW                              -->
+<!-- ═══════════════════════════════════════════ -->
+<div id="view-member" class="view active">
+  <div class="container">
+
+    <!-- Group Header -->
+    <div class="group-header">
+      <h1>◈ The Sovereign Readers Club</h1>
+      <div class="group-meta">
+        <span class="tag">Open</span>
+        <span class="tag">Public</span>
+        <span>42 members</span>
+        <span>·</span>
+        <span>Est. Jan 2026</span>
+      </div>
+      <p class="group-description">A community exploring the intersection of technology, freedom, and self-sovereignty through shared reading and discussion.</p>
+    </div>
+
+    <!-- Hero: Active Artifact -->
+    <div class="hero-artifact">
+      <div class="cover">
+        <div class="placeholder">
+          📖
+          <span>Book Cover</span>
+        </div>
+      </div>
+      <div class="info">
+        <div>
+          <div class="badge">⚡ Now Reading</div>
+          <h2>The Sovereign Individual</h2>
+          <div class="author">by James Dale Davidson & Lord William Rees-Mogg</div>
+          <p class="excerpt">Mastering the transition to the information age — a prophetic analysis of how the digital revolution will reshape the relationship between individual and state.</p>
+          <div class="stats">
+            <span><strong>18</strong> highlights</span>
+            <span><strong>7</strong> discussions</span>
+            <span><strong>34</strong> readers</span>
+          </div>
+        </div>
+        <div class="hero-bottom">
+          <button class="btn btn-primary" onclick="showToast('Opening artifact…')">Open Book →</button>
+          <button class="btn" onclick="showToast('Highlight added')">+ Add Highlight</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs: Highlights / Discussions / Artifacts -->
+    <div class="tab-bar" id="member-tabs">
+      <button class="active" onclick="switchTab('member-tabs', 'member-highlights')">Highlights (18)</button>
+      <button onclick="switchTab('member-tabs', 'member-discussions')">Discussions (7)</button>
+      <button onclick="switchTab('member-tabs', 'member-artifacts')">More Artifacts (5)</button>
+    </div>
+
+    <!-- Highlights Panel -->
+    <div id="member-highlights" class="tab-panel active">
+      <div class="highlights-list">
+
+        <div class="highlight-card">
+          <blockquote>"The capacity to earn a living by working exclusively with the mind, rather than the body, is the most important single marker of the coming age."</blockquote>
+          <div class="hl-meta">
+            <span>★ alex_k · 2 hours ago</span>
+            <a href="#" class="hl-source" onclick="event.preventDefault(); showToast('Navigating to page 47…')">Chapter 3, p. 47</a>
+          </div>
+        </div>
+
+        <div class="highlight-card">
+          <blockquote>"When technology is mobile, and transactions occur in cyberspace, governments will no longer be able to charge more for their services than they are worth."</blockquote>
+          <div class="hl-meta">
+            <span>★ satoshi_fan · 5 hours ago</span>
+            <a href="#" class="hl-source" onclick="event.preventDefault(); showToast('Navigating to page 112…')">Chapter 6, p. 112</a>
+          </div>
+        </div>
+
+        <div class="highlight-card">
+          <blockquote>"Information technology promises to be the most radical of all technological revolutions — because it will subvert and destroy the nation-state."</blockquote>
+          <div class="hl-meta">
+            <span>★ maria_v · Yesterday</span>
+            <a href="#" class="hl-source" onclick="event.preventDefault(); showToast('Navigating to page 23…')">Chapter 1, p. 23</a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Discussions Panel -->
+    <div id="member-discussions" class="tab-panel">
+      <div class="discussions-list">
+
+        <div class="discussion-card" onclick="showToast('Opening thread…')">
+          <div class="avatar">A</div>
+          <div class="disc-body">
+            <h4>Was Chapter 6's prediction about digital money right?</h4>
+            <p>The authors predicted a form of "cybercash" that would undermine government monetary control. Sound familiar?</p>
+            <div class="disc-meta">
+              <span>alex_k</span>
+              <span>12 replies</span>
+              <span>Last reply 1h ago</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="discussion-card" onclick="showToast('Opening thread…')">
+          <div class="avatar">S</div>
+          <div class="disc-body">
+            <h4>The "cognitive elite" framing feels uncomfortably elitist</h4>
+            <p>Anyone else troubled by the implicit classism in their predictions about who thrives in the information age?</p>
+            <div class="disc-meta">
+              <span>satoshi_fan</span>
+              <span>8 replies</span>
+              <span>Last reply 3h ago</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="discussion-card" onclick="showToast('Opening thread…')">
+          <div class="avatar">M</div>
+          <div class="disc-body">
+            <h4>Reading schedule: Chapter 7-9 this week</h4>
+            <p>Let's aim to finish the next three chapters by Sunday. Share highlights as you go!</p>
+            <div class="disc-meta">
+              <span>maria_v</span>
+              <span>3 replies</span>
+              <span>Last reply 6h ago</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="discussion-card" onclick="showToast('Opening thread…')">
+          <div class="avatar">J</div>
+          <div class="disc-body">
+            <h4>Connecting this to Balaji's "Network State" concept</h4>
+            <p>I see a clear lineage from Sovereign Individual to The Network State. Anyone else drawing these connections?</p>
+            <div class="disc-meta">
+              <span>jake_n</span>
+              <span>15 replies</span>
+              <span>Last reply Yesterday</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- More Artifacts Panel -->
+    <div id="member-artifacts" class="tab-panel">
+      <div class="artifacts-grid">
+
+        <div class="artifact-card" onclick="showToast('Opening artifact…')">
+          <div class="thumb">📕</div>
+          <div class="card-body">
+            <h4>The Network State</h4>
+            <div class="card-meta">Balaji Srinivasan</div>
+            <div class="card-type">Book</div>
+          </div>
+        </div>
+
+        <div class="artifact-card" onclick="showToast('Opening artifact…')">
+          <div class="thumb">📄</div>
+          <div class="card-body">
+            <h4>Bitcoin: A Peer-to-Peer Electronic Cash System</h4>
+            <div class="card-meta">Satoshi Nakamoto</div>
+            <div class="card-type">Article</div>
+          </div>
+        </div>
+
+        <div class="artifact-card" onclick="showToast('Opening artifact…')">
+          <div class="thumb">🎙</div>
+          <div class="card-body">
+            <h4>Lex Fridman #312 — Balaji on Network States</h4>
+            <div class="card-meta">Lex Fridman Podcast</div>
+            <div class="card-type">Podcast</div>
+          </div>
+        </div>
+
+        <div class="artifact-card" onclick="showToast('Opening artifact…')">
+          <div class="thumb">▶</div>
+          <div class="card-body">
+            <h4>The Future of Governance</h4>
+            <div class="card-meta">Bitcoin Conference 2025</div>
+            <div class="card-type">Video</div>
+          </div>
+        </div>
+
+        <div class="artifact-card" onclick="showToast('Opening artifact…')">
+          <div class="thumb">📕</div>
+          <div class="card-body">
+            <h4>Cryptonomicon</h4>
+            <div class="card-meta">Neal Stephenson</div>
+            <div class="card-type">Book</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- FAB -->
+    <button class="fab" onclick="openShareModal()" title="Share new content">+</button>
+
+    <div class="wf-footer">Wireframe · Community View · Member</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 2. NON-MEMBER PUBLIC VIEW                   -->
+<!-- ═══════════════════════════════════════════ -->
+<div id="view-public" class="view">
+  <div class="container">
+
+    <!-- Group Header -->
+    <div class="group-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <h1>◈ The Sovereign Readers Club</h1>
+        <div class="group-meta">
+          <span class="tag">Open</span>
+          <span class="tag">Public</span>
+          <span>42 members</span>
+        </div>
+        <p class="group-description">A community exploring the intersection of technology, freedom, and self-sovereignty through shared reading and discussion.</p>
+      </div>
+      <button class="btn btn-primary" onclick="showToast('Join request sent!')" style="margin-top: 8px; flex-shrink: 0;">Join Group</button>
+    </div>
+
+    <!-- Hero: Active Artifact (Teaser) -->
+    <div class="hero-artifact">
+      <div class="cover">
+        <div class="placeholder">
+          📖
+          <span>Book Cover</span>
+        </div>
+      </div>
+      <div class="info">
+        <div>
+          <div class="badge">⚡ Now Reading</div>
+          <h2>The Sovereign Individual</h2>
+          <div class="author">by James Dale Davidson & Lord William Rees-Mogg</div>
+          <p class="excerpt">Mastering the transition to the information age — a prophetic analysis of how the digital revolution will reshape the relationship between individual and state.</p>
+          <div class="stats">
+            <span><strong>18</strong> highlights</span>
+            <span><strong>7</strong> discussions</span>
+            <span><strong>34</strong> readers</span>
+          </div>
+        </div>
+        <div class="hero-bottom">
+          <button class="btn" onclick="showToast('Join to access the full artifact')">Preview →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-bar" id="public-tabs">
+      <button class="active" onclick="switchTab('public-tabs', 'public-highlights')">Highlights (18)</button>
+      <button onclick="switchTab('public-tabs', 'public-discussions')">Discussions (7)</button>
+      <button onclick="switchTab('public-tabs', 'public-artifacts')">More Artifacts (5)</button>
+    </div>
+
+    <!-- Public Highlights — visible -->
+    <div id="public-highlights" class="tab-panel active">
+      <div class="highlights-list">
+
+        <div class="highlight-card">
+          <blockquote>"The capacity to earn a living by working exclusively with the mind, rather than the body, is the most important single marker of the coming age."</blockquote>
+          <div class="hl-meta">
+            <span>★ alex_k · 2 hours ago</span>
+            <a href="#" class="hl-source" onclick="event.preventDefault(); showToast('Join to navigate to source')">Chapter 3, p. 47</a>
+          </div>
+        </div>
+
+        <div class="highlight-card">
+          <blockquote>"When technology is mobile, and transactions occur in cyberspace, governments will no longer be able to charge more for their services than they are worth."</blockquote>
+          <div class="hl-meta">
+            <span>★ satoshi_fan · 5 hours ago</span>
+            <a href="#" class="hl-source" onclick="event.preventDefault(); showToast('Join to navigate to source')">Chapter 6, p. 112</a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Public Discussions — LOCKED -->
+    <div id="public-discussions" class="tab-panel">
+      <div class="locked-section" style="min-height: 300px;">
+        <div class="discussions-list">
+
+          <div class="discussion-card" style="opacity: 0.5; pointer-events: none;">
+            <div class="avatar">A</div>
+            <div class="disc-body">
+              <h4>Was Chapter 6's prediction about digital money right?</h4>
+              <p>The authors predicted a form of "cybercash" that would undermine government monetary control…</p>
+              <div class="disc-meta">
+                <span>alex_k</span>
+                <span>12 replies</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="discussion-card" style="opacity: 0.3; pointer-events: none;">
+            <div class="avatar">S</div>
+            <div class="disc-body">
+              <h4>The "cognitive elite" framing feels uncomfortably elitist</h4>
+              <p>Anyone else troubled by the implicit classism in their predictions…</p>
+              <div class="disc-meta">
+                <span>satoshi_fan</span>
+                <span>8 replies</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="discussion-card" style="opacity: 0.15; pointer-events: none;">
+            <div class="avatar">M</div>
+            <div class="disc-body">
+              <h4>Reading schedule: Chapter 7-9 this week</h4>
+              <p>Let's aim to finish the next three chapters by Sunday…</p>
+              <div class="disc-meta">
+                <span>maria_v</span>
+                <span>3 replies</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <div class="lock-overlay">
+          <div class="lock-icon">🔒</div>
+          <p>Discussions are for members only</p>
+          <button class="btn btn-primary" onclick="showToast('Join request sent!')">Join to Participate</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Public Artifacts — visible -->
+    <div id="public-artifacts" class="tab-panel">
+      <div class="artifacts-grid">
+
+        <div class="artifact-card" onclick="showToast('Join to access')">
+          <div class="thumb">📕</div>
+          <div class="card-body">
+            <h4>The Network State</h4>
+            <div class="card-meta">Balaji Srinivasan</div>
+            <div class="card-type">Book</div>
+          </div>
+        </div>
+
+        <div class="artifact-card" onclick="showToast('Join to access')">
+          <div class="thumb">📄</div>
+          <div class="card-body">
+            <h4>Bitcoin: A Peer-to-Peer Electronic Cash System</h4>
+            <div class="card-meta">Satoshi Nakamoto</div>
+            <div class="card-type">Article</div>
+          </div>
+        </div>
+
+        <div class="artifact-card" onclick="showToast('Join to access')">
+          <div class="thumb">🎙</div>
+          <div class="card-body">
+            <h4>Lex Fridman #312 — Balaji on Network States</h4>
+            <div class="card-meta">Lex Fridman Podcast</div>
+            <div class="card-type">Podcast</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="wf-footer">Wireframe · Community View · Non-Member (Public Group)</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 3. NON-MEMBER PRIVATE VIEW                  -->
+<!-- ═══════════════════════════════════════════ -->
+<div id="view-private" class="view">
+  <div class="container">
+    <div class="private-gate">
+      <div class="private-gate-card">
+        <div class="lock-big">🔐</div>
+        <h1>◈ The Sovereign Readers Club</h1>
+        <p class="pg-desc">A community exploring the intersection of technology, freedom, and self-sovereignty through shared reading and discussion.</p>
+        <div class="pg-stats">
+          <div>
+            <strong>42</strong>
+            members
+          </div>
+          <div>
+            <strong>23</strong>
+            artifacts
+          </div>
+          <div>
+            <strong>156</strong>
+            highlights
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="showToast('Join request sent! Awaiting admin approval.')">Request to Join</button>
+        <p style="font-size: 11px; color: #aaa; margin-top: 16px;">This is a private group. Membership requires approval.</p>
+      </div>
+    </div>
+    <div class="wf-footer">Wireframe · Community View · Non-Member (Private Group)</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SHARE MODAL                                 -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="modal-backdrop" id="share-modal">
+  <div class="modal">
+    <h3>+ Share New Content</h3>
+    <label>Content Type</label>
+    <select>
+      <option>Book</option>
+      <option>Article</option>
+      <option>Podcast</option>
+      <option>Video</option>
+    </select>
+    <label>Title</label>
+    <input type="text" placeholder="e.g. The Network State">
+    <label>Author / Source</label>
+    <input type="text" placeholder="e.g. Balaji Srinivasan">
+    <label>Why share this?</label>
+    <textarea placeholder="Brief note on why this is relevant to the group…"></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeShareModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="closeShareModal(); showToast('Content shared with the group!')">Share</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── View Switching ──
+  function switchView(view) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.view-switcher button').forEach(b => b.classList.remove('active'));
+    document.getElementById('view-' + view).classList.add('active');
+    event.target.classList.add('active');
+    window.scrollTo(0, 0);
+  }
+
+  // ── Tab Switching ──
+  function switchTab(tabBarId, panelId) {
+    const tabBar = document.getElementById(tabBarId);
+    tabBar.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+
+    // Find sibling panels
+    let panel = tabBar.nextElementSibling;
+    while (panel && panel.classList.contains('tab-panel')) {
+      panel.classList.remove('active');
+      panel = panel.nextElementSibling;
+    }
+    document.getElementById(panelId).classList.add('active');
+  }
+
+  // ── Modal ──
+  function openShareModal() {
+    document.getElementById('share-modal').classList.add('active');
+  }
+  function closeShareModal() {
+    document.getElementById('share-modal').classList.remove('active');
+  }
+  document.getElementById('share-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeShareModal();
+  });
+
+  // ── Toast ──
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 2000);
+  }
+</script>
+
+</body>
+</html>
