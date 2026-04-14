@@ -169,8 +169,7 @@
   <!-- ═══ SIGNED-IN FEED ═══ -->
   <section class="dashboard-header">
     <div class="dashboard-header-copy">
-      <p class="dashboard-eyebrow">YOUR FEED</p>
-      <h1 class="dashboard-headline">What your circles are reading</h1>
+      <h1 class="dashboard-headline">Your feed</h1>
     </div>
     <div class="dashboard-ctas">
       {#each memberActions as action (action.href)}
@@ -574,14 +573,6 @@
     justify-content: space-between;
     gap: 1rem;
     padding: 1.5rem 0 0;
-  }
-
-  .dashboard-eyebrow {
-    margin: 0;
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    color: var(--accent);
   }
 
   .dashboard-headline {
