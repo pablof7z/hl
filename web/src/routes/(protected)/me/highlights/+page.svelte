@@ -2,7 +2,8 @@
   import { browser } from '$app/environment';
   import { NDKKind } from '@nostr-dev-kit/ndk';
   import type { ArtifactRecord } from '$lib/ndk/artifacts';
-  import HighlightCard from '$lib/features/highlights/HighlightCard.svelte';
+  import HighlightSourceGroup from '$lib/features/highlights/HighlightSourceGroup.svelte';
+  import { groupHighlightsBySource } from '$lib/features/highlights/grouping';
   import { fetchArtifactsByHighlightReferenceKeys } from '$lib/ndk/artifacts';
   import { ndk } from '$lib/ndk/client';
   import { DEFAULT_RELAYS, GROUP_RELAY_URLS } from '$lib/ndk/config';
@@ -104,6 +105,7 @@
 
   let artifactsByReference = $state<Map<string, ArtifactRecord>>(new Map());
   let resolvingArtifacts = $state(false);
+  const highlightGroups = $derived(groupHighlightsBySource(highlights, artifactsByReference));
 
   $effect(() => {
     if (!browser) {
@@ -177,7 +179,7 @@
     </div>
   </section>
 
-  {#if highlights.length === 0}
+  {#if highlightGroups.length === 0}
     <section class="empty-state">
       <p>{resolvingRelayList ? 'Looking for your highlights…' : 'No highlights found yet.'}</p>
       <p>
@@ -191,14 +193,9 @@
       </p>
     </section>
   {:else}
-    <section class="highlight-stack">
-      {#each highlights as highlight (highlight.eventId)}
-        <HighlightCard
-          {highlight}
-          artifact={artifactsByReference.get(highlight.sourceReferenceKey)}
-          {communities}
-          showShareControl={true}
-        />
+    <section class="highlight-groups">
+      {#each highlightGroups as group (group.referenceKey)}
+        <HighlightSourceGroup {group} {communities} showShareControl={true} />
       {/each}
     </section>
   {/if}
@@ -295,7 +292,7 @@
     line-height: 1;
   }
 
-  .highlight-stack {
+  .highlight-groups {
     display: grid;
     gap: 0.9rem;
   }

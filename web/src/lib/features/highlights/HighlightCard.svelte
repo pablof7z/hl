@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { ArtifactRecord } from '$lib/ndk/artifacts';
-  import { artifactPath } from '$lib/ndk/artifacts';
+  import { artifactPath, buildFallbackNostrUrl } from '$lib/ndk/artifacts';
   import { ensureClientNdk, ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
   import {
     highlightPath,
     shareHighlightToCommunity,
@@ -42,10 +43,39 @@
   const canShareAgain = $derived(
     Boolean(showShareControl && currentUser && !isReadOnly && selectedGroupId && !sharing)
   );
-  const sourceLabel = $derived(
-    artifact ? `${artifact.title} · ${artifact.domain}` : highlight.sourceUrl.replace(/^https?:\/\//, '')
-  );
   const primaryShare = $derived(allShares[0]);
+  const excerptSegments = $derived(buildExcerptSegments(highlight.context, highlight.quote));
+  const createdLabel = $derived(
+    highlight.createdAt
+      ? new Intl.DateTimeFormat('en', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        }).format(new Date(highlight.createdAt * 1000))
+      : ''
+  );
+  const sourceTitle = $derived.by(() => {
+    if (artifact?.title) return artifact.title;
+    if (highlight.sourceUrl) return highlight.sourceUrl.replace(/^https?:\/\//, '');
+    if (highlight.artifactAddress) return 'Nostr article';
+    if (highlight.eventReference) return 'Referenced event';
+    return 'Unknown source';
+  });
+  const sourceHref = $derived.by(() => {
+    if (artifact?.url) return artifact.url;
+    if (highlight.sourceUrl) return highlight.sourceUrl;
+    if (highlight.artifactAddress) return buildFallbackNostrUrl(highlight.artifactAddress);
+    return '';
+  });
+  const sourceMeta = $derived.by(() => {
+    const values: string[] = [];
+
+    if (artifact?.source) values.push(artifact.source);
+    if (artifact?.domain) values.push(artifact.domain);
+    if (!artifact && highlight.artifactAddress) values.push('nostr');
+
+    return [...new Set(values.filter(Boolean))];
+  });
 
   $effect(() => {
     if (!selectedGroupId && shareableCommunities.length > 0) {
@@ -72,9 +102,11 @@
         optimisticShares = [result.share, ...optimisticShares];
       }
 
+      const selectedCommunity =
+        communities.find((community) => community.id === selectedGroupId)?.name ?? selectedGroupId;
       shareStatus = result.existing
-        ? 'That community already has this highlight.'
-        : `Shared to ${selectedGroupId}.`;
+        ? `${selectedCommunity} already has this highlight.`
+        : `Shared to ${selectedCommunity}.`;
       selectedGroupId = '';
     } catch (error) {
       shareError = error instanceof Error ? error.message : 'Could not share the highlight.';
@@ -87,59 +119,127 @@
     if (!value) return '';
     return `${value.slice(0, 8)}…${value.slice(-4)}`;
   }
+
+  function buildExcerptSegments(context: string, quote: string): Array<{ text: string; marked: boolean }> {
+    const normalizedContext = compactWhitespace(context);
+    const normalizedQuote = compactWhitespace(quote);
+
+    if (!normalizedContext && !normalizedQuote) {
+      return [];
+    }
+
+    if (!normalizedContext || normalizedContext.toLocaleLowerCase() === normalizedQuote.toLocaleLowerCase()) {
+      return [{ text: normalizedQuote || normalizedContext, marked: true }];
+    }
+
+    const matchIndex = normalizedContext.toLocaleLowerCase().indexOf(normalizedQuote.toLocaleLowerCase());
+    if (normalizedQuote && matchIndex >= 0) {
+      return [
+        { text: normalizedContext.slice(0, matchIndex), marked: false },
+        {
+          text: normalizedContext.slice(matchIndex, matchIndex + normalizedQuote.length),
+          marked: true
+        },
+        {
+          text: normalizedContext.slice(matchIndex + normalizedQuote.length),
+          marked: false
+        }
+      ].filter((segment) => segment.text.length > 0);
+    }
+
+    if (!normalizedQuote) {
+      return [{ text: normalizedContext, marked: false }];
+    }
+
+    return [
+      { text: normalizedContext, marked: false },
+      { text: ' … ', marked: false },
+      { text: normalizedQuote, marked: true }
+    ];
+  }
+
+  function compactWhitespace(value: string): string {
+    return value.trim().replace(/\s+/g, ' ');
+  }
 </script>
 
 <article class="highlight-card">
-  {#if primaryShare}
-    <div class="highlight-header">
+  <div class="highlight-header">
+    <div class="highlight-byline">
+      <User.Root {ndk} pubkey={highlight.pubkey}>
+        <a class="author-link" href={`/profile/${highlight.pubkey}`}>
+          <User.Name fallback={shortPubkey(highlight.pubkey)} />
+        </a>
+      </User.Root>
+
+      {#if createdLabel}
+        <span class="created-at">{createdLabel}</span>
+      {/if}
+    </div>
+
+    {#if primaryShare}
       <a class="share-link" href={highlightPath(primaryShare.groupId, highlight.eventId)}>
         Public card
       </a>
-    </div>
-  {/if}
+    {/if}
+  </div>
 
-  <blockquote class="highlight-quote">
-    <p>{highlight.quote}</p>
+  <blockquote class="highlight-excerpt">
+    <p>
+      {#each excerptSegments as segment (segment.text)}
+        {#if segment.marked}
+          <mark>{segment.text}</mark>
+        {:else}
+          {segment.text}
+        {/if}
+      {/each}
+    </p>
   </blockquote>
-
-  {#if highlight.context}
-    <p class="highlight-context">{highlight.context}</p>
-  {/if}
 
   {#if highlight.note}
     <p class="highlight-note">{highlight.note}</p>
   {/if}
 
-  <div class="highlight-meta">
-    <span>{shortPubkey(highlight.pubkey)}</span>
-    {#if sourceLabel}
-      <span>{sourceLabel}</span>
-    {/if}
-    {#if artifact}
-      <a href={artifactPath(artifact.groupId, artifact.id)}>Artifact</a>
-    {/if}
-    {#if highlight.shareCount > 0}
-      <span>{highlight.shareCount} communit{highlight.shareCount === 1 ? 'y' : 'ies'}</span>
+  <div class="highlight-footer">
+    <div class="highlight-source">
+      {#if artifact}
+        <a class="artifact-link" href={artifactPath(artifact.groupId, artifact.id)}>{sourceTitle}</a>
+      {:else if sourceHref}
+        <a class="artifact-link" href={sourceHref} target="_blank" rel="noreferrer">{sourceTitle}</a>
+      {:else}
+        <span class="artifact-link static">{sourceTitle}</span>
+      {/if}
+
+      {#each sourceMeta as item (item)}
+        <span class="meta-chip">{item}</span>
+      {/each}
+
+      {#if highlight.shareCount > 0}
+        <span class="meta-chip">
+          {highlight.shareCount} communit{highlight.shareCount === 1 ? 'y' : 'ies'}
+        </span>
+      {/if}
+    </div>
+
+    {#if sourceHref}
+      <a class="source-link" href={sourceHref} target="_blank" rel="noreferrer">Open source</a>
     {/if}
   </div>
 
   {#if showShareControl && communities.length > 0}
     <div class="share-again">
-      <label>
-        <span>Share again</span>
-        <select bind:value={selectedGroupId} disabled={shareableCommunities.length === 0 || sharing}>
-          {#if shareableCommunities.length === 0}
-            <option value="">Already shared everywhere loaded here</option>
-          {:else}
-            {#each shareableCommunities as community (community.id)}
-              <option value={community.id}>{community.name}</option>
-            {/each}
-          {/if}
-        </select>
-      </label>
+      <select bind:value={selectedGroupId} disabled={shareableCommunities.length === 0 || sharing}>
+        {#if shareableCommunities.length === 0}
+          <option value="">Already shared everywhere loaded here</option>
+        {:else}
+          {#each shareableCommunities as community (community.id)}
+            <option value={community.id}>{community.name}</option>
+          {/each}
+        {/if}
+      </select>
 
       <button type="button" disabled={!canShareAgain} onclick={handleShareAgain}>
-        {sharing ? 'Sharing…' : 'Share'}
+        {sharing ? 'Sharing…' : 'Share to community'}
       </button>
     </div>
 
@@ -160,11 +260,12 @@
     padding: 1.1rem 1.15rem 1.15rem;
     border: 1px solid var(--border);
     border-radius: 1.2rem;
-    background: var(--surface);
+    background: color-mix(in srgb, var(--surface) 90%, white);
   }
 
   .highlight-header,
-  .highlight-meta,
+  .highlight-footer,
+  .highlight-source,
   .share-again {
     display: flex;
     gap: 0.55rem;
@@ -173,9 +274,32 @@
     justify-content: flex-start;
   }
 
+  .highlight-header {
+    justify-content: space-between;
+  }
+
+  .highlight-byline {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+
+  .author-link {
+    color: var(--text-strong);
+    font-size: 0.84rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .author-link:hover {
+    color: var(--accent);
+  }
+
+  .created-at,
   .share-link,
-  .highlight-meta span,
-  .highlight-meta a {
+  .meta-chip,
+  .source-link {
     display: inline-flex;
     align-items: center;
     min-height: 1.9rem;
@@ -185,19 +309,20 @@
     color: var(--muted);
     font-size: 0.76rem;
     font-weight: 600;
+    text-decoration: none;
   }
 
   .share-link {
     color: var(--accent);
   }
 
-  .highlight-quote {
+  .highlight-excerpt {
     margin: 0;
     padding: 0 0 0 1rem;
     border-left: 2px solid var(--accent);
   }
 
-  .highlight-quote p {
+  .highlight-excerpt p {
     margin: 0;
     color: var(--text-strong);
     font-family: var(--font-serif);
@@ -205,7 +330,13 @@
     line-height: 1.55;
   }
 
-  .highlight-context,
+  .highlight-excerpt mark {
+    background: color-mix(in srgb, var(--accent) 18%, white);
+    color: inherit;
+    padding: 0.06em 0.14em;
+    border-radius: 0.2em;
+  }
+
   .highlight-note,
   .error,
   .status {
@@ -213,28 +344,32 @@
     line-height: 1.6;
   }
 
-  .highlight-context {
-    color: var(--muted);
-  }
-
   .highlight-note {
     color: var(--text);
   }
 
-  .share-again {
+  .highlight-footer {
+    justify-content: space-between;
+    align-items: start;
+  }
+
+  .highlight-source {
     justify-content: flex-start;
   }
 
-  .share-again label {
-    display: grid;
-    gap: 0.35rem;
-    min-width: min(100%, 18rem);
+  .artifact-link {
+    color: var(--text-strong);
+    font-size: 0.86rem;
+    font-weight: 700;
+    text-decoration: none;
   }
 
-  .share-again label span {
-    color: var(--text-strong);
-    font-size: 0.82rem;
-    font-weight: 700;
+  .artifact-link:hover {
+    color: var(--accent);
+  }
+
+  .artifact-link.static {
+    pointer-events: none;
   }
 
   .share-again select {
@@ -244,6 +379,7 @@
     background: white;
     color: var(--text);
     padding: 0 0.85rem;
+    min-width: min(100%, 16rem);
   }
 
   .share-again button {
@@ -271,5 +407,22 @@
   .status {
     color: #0f766e;
     font-size: 0.88rem;
+  }
+
+  @media (max-width: 640px) {
+    .highlight-footer {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .share-again {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .share-again button,
+    .share-again select {
+      width: 100%;
+    }
   }
 </style>

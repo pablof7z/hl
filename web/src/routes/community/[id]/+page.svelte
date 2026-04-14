@@ -13,7 +13,8 @@
   import ArtifactForm from '$lib/features/artifacts/ArtifactForm.svelte';
   import ArtifactMiniCard from '$lib/features/groups/ArtifactMiniCard.svelte';
   import FeaturedArtifactPanel from '$lib/features/groups/FeaturedArtifactPanel.svelte';
-  import HighlightCard from '$lib/features/highlights/HighlightCard.svelte';
+  import HighlightSourceGroup from '$lib/features/highlights/HighlightSourceGroup.svelte';
+  import { groupHighlightsBySource } from '$lib/features/highlights/grouping';
   import {
     buildArtifactHighlightFilters,
     hydrateStandaloneHighlights,
@@ -99,7 +100,9 @@
   const communityHighlights = $derived<HydratedHighlight[]>(
     hydrateStandaloneHighlights([...highlightFeed.events])
   );
-  const recentHighlights = $derived(communityHighlights.slice(0, 6));
+  const recentHighlightGroups = $derived(
+    groupHighlightsBySource(communityHighlights, artifactsByReference).slice(0, 4)
+  );
   const highlightCounts = $derived(highlightCountsByArtifact(communityHighlights));
   const featuredArtifact = $derived(
     artifacts
@@ -370,13 +373,12 @@
     <section class="highlight-feed">
         <div class="artifact-feed-header">
           <div>
-            <p class="panel-label">What Caught Our Eye</p>
             <h2>Recent community highlights</h2>
           </div>
-        <span>{itemLabel(recentHighlights.length, 'highlight')}</span>
+        <span>{itemLabel(communityHighlights.length, 'highlight')}</span>
       </div>
 
-      {#if recentHighlights.length === 0}
+      {#if recentHighlightGroups.length === 0}
         <div class="artifact-empty">
           <p>No member highlights yet.</p>
           <p>
@@ -385,12 +387,9 @@
           </p>
         </div>
       {:else}
-        <div class="highlight-grid">
-          {#each recentHighlights as highlight (highlight.eventId)}
-            <HighlightCard
-              highlight={highlight}
-              artifact={artifactsByReference.get(highlight.sourceReferenceKey)}
-            />
+        <div class="highlight-groups">
+          {#each recentHighlightGroups as group (group.referenceKey)}
+            <HighlightSourceGroup {group} />
           {/each}
         </div>
       {/if}
@@ -654,7 +653,7 @@
     gap: 0.95rem;
   }
 
-  .highlight-grid {
+  .highlight-groups {
     display: grid;
     gap: 0.95rem;
   }

@@ -53,7 +53,6 @@
 
     {#if highlight}
       <div class="featured-highlight">
-        <p class="highlight-label">What caught our eye</p>
         <blockquote>
           <p>{highlight.quote}</p>
         </blockquote>
@@ -129,8 +128,7 @@
     justify-content: space-between;
   }
 
-  .eyebrow,
-  .highlight-label {
+  .eyebrow {
     margin: 0;
     color: var(--accent);
     font-size: 0.76rem;
