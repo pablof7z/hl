@@ -27,11 +27,30 @@
 
   const currentUser = $derived(ndk.$currentUser);
   const isReadOnly = $derived(Boolean(ndk.$sessions?.isReadOnly()));
-  const communityFeed = ndk.$subscribe(() => {
+  const membershipFeed = ndk.$subscribe(() => {
     if (!currentUser) return undefined;
 
     return {
-      filters: [{ kinds: [NDKKind.GroupMetadata, NDKKind.GroupAdmins, NDKKind.GroupMembers], limit: 192 }],
+      filters: [{ kinds: [NDKKind.GroupAdmins, NDKKind.GroupMembers], '#p': [currentUser.pubkey], limit: 128 }],
+      relayUrls: GROUP_RELAY_URLS,
+      closeOnEose: true
+    };
+  });
+  const membershipGroupIds = $derived.by(() => {
+    const ids = new Set<string>();
+
+    for (const event of membershipFeed.events) {
+      const groupId = groupIdFromEvent(event);
+      if (groupId) ids.add(groupId);
+    }
+
+    return [...ids];
+  });
+  const metadataFeed = ndk.$subscribe(() => {
+    if (!currentUser || membershipGroupIds.length === 0) return undefined;
+
+    return {
+      filters: [{ kinds: [NDKKind.GroupMetadata], '#d': membershipGroupIds, limit: Math.max(membershipGroupIds.length * 2, 32) }],
       relayUrls: GROUP_RELAY_URLS,
       closeOnEose: true
     };
@@ -44,11 +63,11 @@
     })
   );
 
-  function latestByGroupId(kind: number): Map<string, NDKEvent> {
+  function latestByGroupId(events: NDKEvent[], kind: number): Map<string, NDKEvent> {
     const latest = new Map<string, NDKEvent>();
 
-    for (const event of communityFeed.events.filter((candidate) => candidate.kind === kind)) {
-      const groupId = event.tagValue('d')?.trim();
+    for (const event of events.filter((candidate) => candidate.kind === kind)) {
+      const groupId = groupIdFromEvent(event);
       if (!groupId) continue;
 
       const existing = latest.get(groupId);
@@ -60,6 +79,10 @@
     return latest;
   }
 
+  function groupIdFromEvent(event: NDKEvent): string {
+    return event.tagValue('d')?.trim() || event.tagValue('h')?.trim() || '';
+  }
+
   function includesPubkey(event: NDKEvent | undefined, pubkey: string): boolean {
     if (!event || !pubkey) return false;
     return event.getMatchingTags('p').some((tag) => tag[1] === pubkey);
@@ -68,9 +91,9 @@
   const communities = $derived.by(() => {
     if (!currentUser) return [];
 
-    const metadataByGroupId = latestByGroupId(NDKKind.GroupMetadata);
-    const adminByGroupId = latestByGroupId(NDKKind.GroupAdmins);
-    const memberByGroupId = latestByGroupId(NDKKind.GroupMembers);
+    const metadataByGroupId = latestByGroupId(metadataFeed.events, NDKKind.GroupMetadata);
+    const adminByGroupId = latestByGroupId(membershipFeed.events, NDKKind.GroupAdmins);
+    const memberByGroupId = latestByGroupId(membershipFeed.events, NDKKind.GroupMembers);
     const joined = [];
 
     for (const [groupId, metadataEvent] of metadataByGroupId) {
