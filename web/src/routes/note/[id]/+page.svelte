@@ -19,7 +19,7 @@
     noteTitle,
     profileIdentifier
   } from '$lib/ndk/format';
-  import { ndk } from '$lib/ndk/client';
+  import { ensureClientNdk, ndk } from '$lib/ndk/client';
   import {
     BOOKMARK_LIST_KIND,
     bookmarkListHasAddress,
@@ -45,6 +45,25 @@
   let submitting = $state(false);
   let bookmarking = $state(false);
   let articleContentEl = $state<HTMLElement | null>(null);
+  let clientFetchReady = $state(false);
+
+  $effect(() => {
+    let active = true;
+
+    void ensureClientNdk()
+      .catch((error) => {
+        console.error('Failed to connect client NDK before note fetch', error);
+      })
+      .finally(() => {
+        if (active) {
+          clientFetchReady = true;
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  });
 
   const currentUser = $derived(ndk.$currentUser);
 
@@ -76,7 +95,7 @@
   const routeIdentifier = $derived(page.params.id || '');
   const seedEvent = $derived(data.event ? new NDKEvent(ndk, data.event) : undefined);
   const fetchedEvent = createFetchEvent(ndk, () => ({
-    bech32: routeIdentifier,
+    bech32: clientFetchReady ? routeIdentifier : '',
     opts: { closeOnEose: true }
   }));
   const event = $derived(fetchedEvent.event ?? seedEvent);
