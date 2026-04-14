@@ -1,5 +1,6 @@
 <script lang="ts">
   import { browser } from '$app/environment';
+  import { NDKKind } from '@nostr-dev-kit/ndk';
   import type { PageProps } from './$types';
   import { ndk } from '$lib/ndk/client';
   import { GROUP_RELAY_URLS } from '$lib/ndk/config';
@@ -11,6 +12,7 @@
   import ArtifactCard from '$lib/features/artifacts/ArtifactCard.svelte';
   import ArtifactForm from '$lib/features/artifacts/ArtifactForm.svelte';
   import ArtifactMiniCard from '$lib/features/groups/ArtifactMiniCard.svelte';
+  import CommunityMembershipPanel from '$lib/features/groups/CommunityMembershipPanel.svelte';
   import FeaturedArtifactPanel from '$lib/features/groups/FeaturedArtifactPanel.svelte';
   import HighlightSourceGroup from '$lib/features/highlights/HighlightSourceGroup.svelte';
   import { groupHighlightsBySource } from '$lib/features/highlights/grouping';
@@ -20,9 +22,19 @@
     highlightCountsByArtifact,
     type HydratedHighlight
   } from '$lib/ndk/highlights';
+  import { groupIdFromEvent, requestToJoinCommunity } from '$lib/ndk/groups';
 
   let { data }: PageProps = $props();
   const currentUser = $derived(ndk.$currentUser);
+  const membershipFeed = ndk.$subscribe(() => {
+    if (!browser || !currentUser?.pubkey) return undefined;
+
+    return {
+      filters: [{ kinds: [NDKKind.GroupAdmins, NDKKind.GroupMembers], '#p': [currentUser.pubkey], limit: 128 }],
+      relayUrls: GROUP_RELAY_URLS,
+      closeOnEose: true
+    };
+  });
 
   const artifactFeed = ndk.$subscribe(() => {
     if (!browser || !data.community) return undefined;
@@ -136,6 +148,38 @@
         )
       : artifacts
   );
+  const isMember = $derived.by(() => {
+    if (!currentUser?.pubkey || !data.community) {
+      return false;
+    }
+
+    return membershipFeed.events.some((event) => groupIdFromEvent(event) === data.community?.id);
+  });
+  const membershipReady = $derived(!currentUser || membershipFeed.eosed || isMember);
+  const canShare = $derived(Boolean(currentUser && membershipReady && isMember));
+  let joinPending = $state(false);
+  let joinRequested = $state(false);
+  let joinNotice = $state('');
+  let joinError = $state('');
+
+  $effect(() => {
+    data.community?.id;
+    joinPending = false;
+    joinRequested = false;
+    joinNotice = '';
+    joinError = '';
+  });
+
+  $effect(() => {
+    if (!isMember) {
+      return;
+    }
+
+    joinPending = false;
+    joinRequested = false;
+    joinNotice = '';
+    joinError = '';
+  });
 
   function memberLabel(memberCount: number | null): string {
     if (memberCount === null) return 'Private membership';
@@ -143,8 +187,54 @@
     return `${memberCount} members`;
   }
 
+  function accessLabel(access: 'open' | 'closed'): string {
+    return access === 'open' ? 'Open to join' : 'Invite only';
+  }
+
+  function visibilityLabel(visibility: 'public' | 'private'): string {
+    return visibility === 'public' ? 'Public preview' : 'Private inside';
+  }
+
+  function shelfLabel(count: number): string {
+    return count === 1 ? '1 piece on the shelf' : `${count} pieces on the shelf`;
+  }
+
+  function passageLabel(count: number): string {
+    return count === 1 ? '1 passage saved' : `${count} passages saved`;
+  }
+
   function itemLabel(count: number, singular: string, plural = `${singular}s`): string {
     return `${count} ${count === 1 ? singular : plural}`;
+  }
+
+  function joinActionLabel(): string {
+    if (!data.community) return 'Join this community';
+    if (joinPending) return data.community.access === 'open' ? 'Joining...' : 'Sending...';
+    if (joinRequested) return 'Request sent';
+    return data.community.access === 'open' ? 'Join this community' : 'Request to join';
+  }
+
+  async function joinCommunity() {
+    if (!data.community || !currentUser || !membershipReady || isMember || joinPending || joinRequested) {
+      return;
+    }
+
+    joinPending = true;
+    joinError = '';
+    joinNotice = '';
+
+    try {
+      await requestToJoinCommunity(ndk, data.community.id);
+      joinRequested = true;
+      joinNotice =
+        data.community.access === 'open'
+          ? 'Join request sent. This page will update as soon as you are added.'
+          : 'Request sent. A moderator can let you in when they are ready.';
+    } catch (caught) {
+      joinError = caught instanceof Error ? caught.message : 'Could not send the join request.';
+    } finally {
+      joinPending = false;
+    }
   }
 </script>
 
@@ -182,45 +272,32 @@
             <p class="eyebrow">Community</p>
             <h1>{data.community.name}</h1>
             <p class="community-about">
-              {data.community.about || 'A calm private collection of artifacts, highlights, and conversation, all anchored to one relay-backed community.'}
+              {data.community.about || 'A reading room for pieces people want to keep passing around.'}
             </p>
             <div class="community-badges">
-              <span>{data.community.visibility}</span>
-              <span>{data.community.access}</span>
+              <span>{accessLabel(data.community.access)}</span>
+              <span>{visibilityLabel(data.community.visibility)}</span>
               <span>{memberLabel(data.community.memberCount)}</span>
-              <span>{data.community.adminPubkeys.length || 1} admin{data.community.adminPubkeys.length === 1 ? '' : 's'}</span>
+            </div>
+
+            <div class="community-glance">
+              <span>{shelfLabel(artifacts.length)}</span>
+              <span>{passageLabel(communityHighlights.length)}</span>
             </div>
           </div>
         </div>
 
-        <div class="community-actions">
-          <a href="/community">All communities</a>
-          {#if currentUser}
-            <a href="#share-artifact">Share new content</a>
-          {:else}
-            <a href="/discover">Preview more groups</a>
-          {/if}
-        </div>
-      </div>
-
-      <div class="community-summary-strip">
-        <section class="summary-card">
-          <p class="panel-label">Collection</p>
-          <strong>{itemLabel(artifacts.length, 'artifact')}</strong>
-          <span>Shared directly into this community’s shelf.</span>
-        </section>
-
-        <section class="summary-card">
-          <p class="panel-label">Highlights</p>
-          <strong>{itemLabel(communityHighlights.length, 'highlight')}</strong>
-          <span>Shared into this community from the reading shelf below.</span>
-        </section>
-
-        <section class="summary-card">
-          <p class="panel-label">Relay</p>
-          <strong>{data.community.relayUrl.replace(/^wss?:\/\//, '')}</strong>
-          <span>The community’s home and routing layer.</span>
-        </section>
+        <CommunityMembershipPanel
+          community={data.community}
+          signedIn={Boolean(currentUser)}
+          joined={isMember}
+          checkingMembership={Boolean(currentUser && !membershipReady)}
+          {joinPending}
+          {joinRequested}
+          {joinNotice}
+          {joinError}
+          onJoin={joinCommunity}
+        />
       </div>
     </header>
 
@@ -235,15 +312,36 @@
           </p>
         </div>
 
-        {#if currentUser}
+        {#if canShare}
           <div id="share-artifact">
             <ArtifactForm groupId={data.community.id} />
           </div>
+        {:else if currentUser}
+          <section class="side-card guest-card">
+            <p class="panel-label">Join To Add</p>
+            <h3>Join before you start the shelf.</h3>
+            <p>
+              Once you are in, you can bring the first article, book, podcast, or video into the room.
+            </p>
+            {#if membershipReady}
+              <button
+                class="side-card-action"
+                type="button"
+                disabled={joinPending || joinRequested}
+                onclick={() => void joinCommunity()}
+              >
+                {joinActionLabel()}
+              </button>
+            {:else}
+              <span class="side-card-note">Checking your membership...</span>
+            {/if}
+          </section>
         {:else}
           <section class="side-card guest-card">
-            <p class="panel-label">Preview</p>
-            <h3>Sign in to add the first piece.</h3>
-            <p>Guests can read the shape of the collection, but sharing starts after login.</p>
+            <p class="panel-label">Want To Add Something?</p>
+            <h3>Set up a profile to join in.</h3>
+            <p>Guests can browse the room. Members can start the shelf and keep it moving.</p>
+            <a class="side-card-action" href="/onboarding">Set up a profile</a>
           </section>
         {/if}
       </section>
@@ -302,31 +400,69 @@
             {/if}
           </section>
 
-          {#if currentUser}
+          {#if canShare}
             <section class="side-card share-card">
               <p class="panel-label">Add To The Collection</p>
               <h3>Bring in the next artifact.</h3>
               <p>Share a new source and give this community a stronger shelf to react to.</p>
               <a href="#share-artifact">Open the share form</a>
             </section>
+          {:else if currentUser}
+            <section class="side-card guest-card">
+              <p class="panel-label">Join To Contribute</p>
+              <h3>Join before you share your own picks.</h3>
+              <p>Reading is public here. Adding to the shelf starts once this community lets you in.</p>
+              {#if membershipReady}
+                <button
+                  class="side-card-action"
+                  type="button"
+                  disabled={joinPending || joinRequested}
+                  onclick={() => void joinCommunity()}
+                >
+                  {joinActionLabel()}
+                </button>
+              {:else}
+                <span class="side-card-note">Checking your membership...</span>
+              {/if}
+            </section>
           {:else}
             <section class="side-card guest-card">
-              <p class="panel-label">Preview</p>
-              <h3>Want to add something?</h3>
-              <p>Sign in to share an artifact, save highlights, and join the conversation.</p>
+              <p class="panel-label">Want To Add Something?</p>
+              <h3>Set up a profile to join in.</h3>
+              <p>Create a profile to join, save highlights, and add your own pieces to the shelf.</p>
+              <a class="side-card-action" href="/onboarding">Set up a profile</a>
             </section>
           {/if}
         </aside>
       </section>
 
       <section class="composer-row" id="share-artifact">
-        {#if currentUser}
+        {#if canShare}
           <ArtifactForm groupId={data.community.id} />
+        {:else if currentUser}
+          <section class="side-card guest-card">
+            <p class="panel-label">Join To Share</p>
+            <h3>This shelf opens once you are a member.</h3>
+            <p>Join the community first, then come back here to share your next article, book, podcast, or video.</p>
+            {#if membershipReady}
+              <button
+                class="side-card-action"
+                type="button"
+                disabled={joinPending || joinRequested}
+                onclick={() => void joinCommunity()}
+              >
+                {joinActionLabel()}
+              </button>
+            {:else}
+              <span class="side-card-note">Checking your membership...</span>
+            {/if}
+          </section>
         {:else}
           <section class="side-card guest-card">
             <p class="panel-label">Share Into This Community</p>
-            <h3>Sign in to contribute.</h3>
+            <h3>Set up a profile to contribute.</h3>
             <p>Guests can browse the collection. Members can keep feeding it.</p>
+            <a class="side-card-action" href="/onboarding">Set up a profile</a>
           </section>
         {/if}
       </section>
@@ -390,7 +526,7 @@
 
   .community-hero {
     display: grid;
-    gap: 1.25rem;
+    gap: 1rem;
     padding: 1.5rem;
     border: 1px solid var(--border);
     border-radius: 1.5rem;
@@ -400,7 +536,6 @@
   }
 
   .community-hero-top,
-  .community-summary-strip,
   .featured-stage,
   .featured-rail,
   .mini-card-stack,
@@ -414,7 +549,7 @@
   }
 
   .community-hero-top {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 20rem);
     gap: 1.5rem;
     align-items: start;
   }
@@ -472,8 +607,8 @@
   }
 
   .community-badges,
-  .actions,
-  .community-actions {
+  .community-glance,
+  .actions {
     display: flex;
     gap: 0.45rem;
     flex-wrap: wrap;
@@ -483,8 +618,12 @@
     margin-top: 1rem;
   }
 
+  .community-glance {
+    margin-top: 0.75rem;
+  }
+
   .community-badges span,
-  .community-actions a,
+  .community-glance span,
   .actions a {
     display: inline-flex;
     align-items: center;
@@ -497,19 +636,11 @@
     font-weight: 600;
   }
 
-  .community-actions a:last-child,
   .actions a:last-child {
     background: var(--accent);
     color: white;
   }
 
-  .community-summary-strip {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 0.85rem;
-  }
-
-  .summary-card,
   .artifact-empty,
   .side-card,
   .empty-collection {
@@ -519,7 +650,6 @@
     background: var(--surface);
   }
 
-  .summary-card strong,
   .empty-collection h2 {
     margin: 0;
     color: var(--text-strong);
@@ -529,7 +659,6 @@
     letter-spacing: -0.02em;
   }
 
-  .summary-card span,
   .empty-collection p,
   .side-card p,
   .side-card-empty {
@@ -546,6 +675,31 @@
   .side-card {
     display: grid;
     gap: 0.9rem;
+  }
+
+  .side-card-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.5rem;
+    width: fit-content;
+    padding: 0 0.95rem;
+    border-radius: 999px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+  }
+
+  button.side-card-action:disabled {
+    cursor: default;
+    opacity: 0.7;
+  }
+
+  .side-card-note {
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.5;
   }
 
   .side-card-header {

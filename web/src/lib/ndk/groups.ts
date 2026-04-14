@@ -142,6 +142,35 @@ export function buildJoinedCommunities(
   return joined.toSorted((left, right) => left.name.localeCompare(right.name));
 }
 
+export async function requestToJoinCommunity(
+  ndk: NDK,
+  groupId: string,
+  message?: string
+): Promise<void> {
+  const normalizedGroupId = groupId.trim();
+
+  if (!normalizedGroupId) {
+    throw new Error('Missing community id.');
+  }
+
+  if (!ndk.signer) {
+    throw new Error('Connect a signer before joining a community.');
+  }
+
+  const user = await ndk.signer.user();
+  if (!user?.pubkey) {
+    throw new Error('Could not resolve the current account.');
+  }
+
+  const group = new NDKSimpleGroup(ndk, buildCommunityRelaySet(ndk), normalizedGroupId);
+
+  try {
+    await group.requestToJoin(user.pubkey, message);
+  } catch (error) {
+    throw new Error(describePublishError(error, 'Could not send the join request.'));
+  }
+}
+
 export async function createCommunity(
   ndk: NDK,
   input: CreateCommunityInput
