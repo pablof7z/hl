@@ -14,70 +14,91 @@
     communityName: string;
     highlightCount?: number;
   } = $props();
+
+  const detailHref = $derived(artifactPath(artifact.groupId, artifact.id));
 </script>
 
 <article class="featured-artifact">
-  <div class="featured-media">
-    {#if artifact.image}
-      <img src={artifact.image} alt="" loading="lazy" />
-    {:else}
-      <div class="featured-fallback">
-        <span>{artifact.domain.charAt(0).toUpperCase() || '#'}</span>
-      </div>
-    {/if}
-  </div>
-
-  <div class="featured-copy">
-    <div class="featured-topline">
-      <p class="eyebrow">Featured Conversation</p>
-      <div class="featured-badges">
-        <span>{artifact.source}</span>
-        <span>{artifact.domain}</span>
-        {#if highlightCount > 0}
-          <span>{highlightCount} highlight{highlightCount === 1 ? '' : 's'}</span>
-        {/if}
-      </div>
+  <a class="featured-primary" href={detailHref} aria-label={`Read ${artifact.title} in Highlighter`}>
+    <div class="featured-media">
+      {#if artifact.image}
+        <img src={artifact.image} alt="" loading="lazy" />
+      {:else}
+        <div class="featured-fallback">
+          <span>{artifact.domain.charAt(0).toUpperCase() || '#'}</span>
+        </div>
+      {/if}
     </div>
 
-    <h2>{artifact.title}</h2>
-
-    <p class="featured-community">In {communityName}</p>
-
-    {#if artifact.author}
-      <p class="featured-author">{artifact.author}</p>
-    {/if}
-
-    {#if artifact.note}
-      <p class="featured-note">{artifact.note}</p>
-    {/if}
-
-    {#if highlight}
-      <div class="featured-highlight">
-        <blockquote>
-          <p>{highlight.quote}</p>
-        </blockquote>
+    <div class="featured-copy">
+      <div class="featured-topline">
+        <p class="eyebrow">Featured Conversation</p>
+        <div class="featured-badges">
+          <span>{artifact.source}</span>
+          <span>{artifact.domain}</span>
+          {#if highlightCount > 0}
+            <span>{highlightCount} highlight{highlightCount === 1 ? '' : 's'}</span>
+          {/if}
+        </div>
       </div>
-    {/if}
 
-    <div class="featured-actions">
-      <a href={artifactPath(artifact.groupId, artifact.id)}>Open artifact</a>
-      <a href={`/community/${artifact.groupId}/content/${artifact.id}/discussion`}>Open discussion</a>
-      <a href={artifact.url} target="_blank" rel="noreferrer">Visit source</a>
+      <h2>{artifact.title}</h2>
+
+      <p class="featured-community">In {communityName}</p>
+
+      {#if artifact.author}
+        <p class="featured-author">{artifact.author}</p>
+      {/if}
+
+      {#if artifact.note}
+        <p class="featured-note">{artifact.note}</p>
+      {/if}
+
+      {#if highlight}
+        <div class="featured-highlight">
+          <blockquote>
+            <p>{highlight.quote}</p>
+          </blockquote>
+        </div>
+      {/if}
     </div>
+  </a>
+
+  <div class="featured-actions">
+    <a href={`/community/${artifact.groupId}/content/${artifact.id}/discussion`}>Discussion</a>
+    <a href={artifact.url} target="_blank" rel="noreferrer">Visit source</a>
   </div>
 </article>
 
 <style>
   .featured-artifact {
     display: grid;
-    grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
-    gap: 1.35rem;
+    gap: 0.95rem;
     padding: 1.35rem;
     border: 1px solid var(--border);
     border-radius: 1.6rem;
     background:
       radial-gradient(circle at top left, rgba(255, 103, 25, 0.12), transparent 34%),
       linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 244, 238, 0.96));
+  }
+
+  .featured-primary {
+    display: grid;
+    grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
+    gap: 1.35rem;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .featured-primary:hover h2,
+  .featured-primary:focus-visible h2 {
+    color: var(--accent);
+  }
+
+  .featured-primary:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 42%, white);
+    outline-offset: 0.25rem;
+    border-radius: 1.2rem;
   }
 
   .featured-media,
@@ -150,9 +171,14 @@
     font-weight: 600;
   }
 
+  .featured-actions {
+    justify-self: start;
+  }
+
   .featured-actions a:first-child {
     background: var(--accent);
     color: white;
+    text-decoration: none;
   }
 
   h2 {
@@ -203,7 +229,7 @@
   }
 
   @media (max-width: 820px) {
-    .featured-artifact {
+    .featured-primary {
       grid-template-columns: 1fr;
     }
 

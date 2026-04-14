@@ -19,7 +19,7 @@
       <h1>See every public community in one place.</h1>
       <p class="lede">
         Start with rooms you can join now, scan what is already active on the relay, and move
-        straight into the artifact shelves that look worth your time.
+        straight into the shelves that look worth your time.
       </p>
     </div>
 

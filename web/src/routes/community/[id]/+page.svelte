@@ -386,7 +386,7 @@
 
             {#if conversationArtifacts.length === 0}
               <p class="side-card-empty">
-                Once members start saving highlights, the most magnetic artifacts will surface here.
+                Once members start saving highlights, the most magnetic sources will surface here.
               </p>
             {:else}
               <div class="mini-card-stack">
@@ -403,7 +403,7 @@
           {#if canShare}
             <section class="side-card share-card">
               <p class="panel-label">Add To The Collection</p>
-              <h3>Bring in the next artifact.</h3>
+              <h3>Bring in the next source.</h3>
               <p>Share a new source and give this community a stronger shelf to react to.</p>
               <a href="#share-artifact">Open the share form</a>
             </section>
@@ -474,7 +474,7 @@
               <p class="panel-label">From The Shelf</p>
               <h2>Full community library</h2>
             </div>
-            <span>{itemLabel(archiveArtifacts.length, 'artifact')}</span>
+            <span>{itemLabel(archiveArtifacts.length, 'item')}</span>
           </div>
 
           <div class="artifact-grid">

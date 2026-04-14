@@ -124,7 +124,7 @@
           </div>
           <p class="vault-bio">
             {profileBio ||
-              'Your highlights, saved artifacts, and community movement all collect here.'}
+              'Your highlights, saved items, and community movement all collect here.'}
           </p>
         </div>
       </div>

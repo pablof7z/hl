@@ -45,7 +45,7 @@
       </div>
 
       <p class="community-card-about">
-        {community.about || 'No description yet. This group is live on the relay and ready for artifacts, highlights, and discussion.'}
+        {community.about || 'No description yet. This group is live on the relay and ready for sources, highlights, and discussion.'}
       </p>
 
       <div class="community-card-meta">

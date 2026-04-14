@@ -71,12 +71,12 @@
 
   async function handlePublish() {
     if (!currentUser) {
-      errorMessage = 'Sign in before sharing artifacts.';
+      errorMessage = 'Sign in before sharing sources.';
       return;
     }
 
     if (isReadOnly) {
-      errorMessage = 'Read-only sessions cannot publish artifact events.';
+      errorMessage = 'Read-only sessions cannot publish shares.';
       return;
     }
 
@@ -118,7 +118,7 @@
 
 <section class="artifact-form-shell">
   <div class="artifact-form-copy">
-    <p class="eyebrow">Share Artifact</p>
+    <p class="eyebrow">Share Source</p>
     <h2>Share something worth reading, watching, or hearing.</h2>
     <p>
       Choose the type first, preview the metadata, then share it into this community.

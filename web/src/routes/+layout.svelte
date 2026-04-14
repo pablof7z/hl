@@ -56,7 +56,7 @@
 
 <footer class="shell footer">
   <div class="footer-grid">
-    <span>Nostr-native reading communities for artifacts, highlights, and discussion.</span>
+    <span>Nostr-native reading communities for sources, highlights, and discussion.</span>
     <span><a href="/about">About Highlighter</a></span>
   </div>
 </footer>

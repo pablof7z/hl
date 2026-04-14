@@ -111,7 +111,7 @@ export const communitySpec: SurfaceSpec = {
   eyebrow: 'Community',
   title: 'A community front page will live here.',
   description:
-    'This route will combine public-safe SSR metadata with client-side subscriptions for artifacts, highlights, and membership-aware actions.',
+    'This route will combine public-safe SSR metadata with client-side subscriptions for sources, highlights, and membership-aware actions.',
   status: 'Milestone 1 scaffold',
   actions: [
     { href: '/community', label: 'Back to communities', tone: 'secondary' },
@@ -122,7 +122,7 @@ export const communitySpec: SurfaceSpec = {
       title: 'Planned layout',
       items: [
         'Hero header with name, picture, about copy, and membership controls.',
-        'Featured artifact rail plus a denser community library below.',
+        'Featured source rail plus a denser community library below.',
         'Entry points for invites, joins, and role-aware admin actions.'
       ]
     },
@@ -170,10 +170,10 @@ export const communityCreateSpec: SurfaceSpec = {
 };
 
 export const artifactSpec: SurfaceSpec = {
-  eyebrow: 'Artifact',
-  title: 'Artifact detail is the reading room.',
+  eyebrow: 'Source',
+  title: 'Source detail is the reading room.',
   description:
-    'The artifact route will become the place where metadata, highlights, discussion, and saving flows converge around one shared source.',
+    'This route will become the place where metadata, highlights, discussion, and saving flows converge around one shared source.',
   status: 'Milestone 1 scaffold',
   actions: [
     { href: '/community', label: 'Back to communities', tone: 'secondary' },
@@ -183,17 +183,17 @@ export const artifactSpec: SurfaceSpec = {
     {
       title: 'Planned content',
       items: [
-        'Artifact header with source, author, link, and hero media.',
-        'Group-shared highlights keyed to the artifact address.',
+        'Reader header with source, author, link, and hero media.',
+        'Group-shared highlights keyed to the source address.',
         'Discussion and For Later entry points tied to the same source.'
       ]
     },
     {
       title: 'Protocol notes',
       items: [
-        'Artifacts are addressable events keyed by a d tag URL hash.',
-        'Highlights reference artifacts through a tags, not raw event ids.',
-        'Duplicate shares should resolve to the same artifact address inside a group.'
+        'Shared sources are addressable events keyed by a d tag URL hash.',
+        'Highlights reference sources through a tags, not raw event ids.',
+        'Duplicate shares should resolve to the same source address inside a group.'
       ]
     }
   ]
@@ -313,7 +313,7 @@ export const shareHighlightSpec: SurfaceSpec = {
       items: [
         'Canonical highlights stay group-neutral and carry no h tag.',
         'Community sharing uses a kind:16 repost with an h tag.',
-        'Public cards should resolve artifact context from the highlight a tag.'
+        'Public cards should resolve source context from the highlight a tag.'
       ]
     }
   ]
@@ -367,7 +367,7 @@ export const meForLaterSpec: SurfaceSpec = {
   eyebrow: 'For Later',
   title: 'Private saves will start here.',
   description:
-    'For MVP this queue is intentionally local-first so saving an artifact does not depend on relay writes or cross-device sync.',
+    'For MVP this queue is intentionally local-first so saving a source does not depend on relay writes or cross-device sync.',
   status: 'Milestone 1 scaffold',
   actions: [
     { href: '/me', label: 'Back to my vault', tone: 'secondary' },
@@ -377,7 +377,7 @@ export const meForLaterSpec: SurfaceSpec = {
     {
       title: 'Planned content',
       items: [
-        'Locally stored saved artifacts with status pills.',
+        'Locally stored saved items with status pills.',
         'Quick actions for moving an item into a community.',
         'A later upgrade path to encrypted NIP-51 bookmark storage.'
       ]
@@ -399,7 +399,7 @@ export const meRecommendedSpec: SurfaceSpec = {
     {
       title: 'Planned content',
       items: [
-        'Discovery suggestions based on communities and artifacts you interact with.',
+        'Discovery suggestions based on communities and sources you interact with.',
         'A bridge from public discovery into your personal vault.',
         'Low-noise recommendations that feel useful rather than feed-like.'
       ]
@@ -421,7 +421,7 @@ export const meSynthesisSpec: SurfaceSpec = {
     {
       title: 'Planned content',
       items: [
-        'Cross-artifact patterns discovered from your highlights.',
+        'Cross-source patterns discovered from your highlights.',
         'A lightweight summary layer instead of noisy chat output.',
         'Privacy decisions made explicitly before any model integration.'
       ]

@@ -15,7 +15,7 @@
   const heroDescription = $derived(
     signedIn
       ? 'Use the app shell to move between communities, your vault, and the first public share surfaces while the NIP-29 flows come online.'
-      : 'Highlighter is being rebuilt around artifacts, highlights, and discussions inside Nostr-native groups. This deploy establishes the app routes and public share surfaces.'
+      : 'Highlighter is being rebuilt around shared sources, highlights, and discussions inside Nostr-native groups. This deploy establishes the app routes and public share surfaces.'
   );
   const actions = $derived((signedIn ? memberActions : guestActions) as SurfaceAction[]);
 </script>
@@ -72,7 +72,7 @@
     <h2>What comes next</h2>
     <ul>
       <li>Wire community membership and metadata into `/community` and `/community/[id]`.</li>
-      <li>Replace route scaffolds with artifact, highlight, and discussion data flows.</li>
+      <li>Replace route scaffolds with source, highlight, and discussion data flows.</li>
       <li>Ship the first relay-backed deploy once local verification stays clean.</li>
     </ul>
   </article>

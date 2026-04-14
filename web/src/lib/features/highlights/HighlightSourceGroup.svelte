@@ -74,7 +74,7 @@
 
     <div class="group-actions">
       {#if artifactPageHref}
-        <a href={artifactPageHref}>Artifact page</a>
+        <a href={artifactPageHref}>Open reader</a>
       {/if}
       {#if sourceHref}
         <a href={sourceHref} target="_blank" rel="noreferrer">Open source</a>

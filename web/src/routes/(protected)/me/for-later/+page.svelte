@@ -110,7 +110,7 @@
     <p class="eyebrow">For Later</p>
     <h2>Keep sources local until you know what to do with them.</h2>
     <p>
-      Save articles, books, podcasts, and other artifacts privately. Add a teaser now or later,
+      Save articles, books, podcasts, and other sources privately. Add a teaser now or later,
       then move them into a community when the timing is right.
     </p>
   </header>
@@ -158,8 +158,8 @@
     <p class="feedback">Loading your local queue…</p>
   {:else if items.length === 0}
     <section class="empty-state">
-      <p>No saved artifacts yet.</p>
-      <p>Preview a source above or save something from an artifact page to start your queue.</p>
+      <p>No saved items yet.</p>
+      <p>Preview a source above or save something from a source page to start your queue.</p>
     </section>
   {:else}
     <section class="for-later-list">

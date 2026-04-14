@@ -177,7 +177,7 @@
         {#if resolvingRelayList}
           Highlighter is checking the places where your highlights live.
         {:else}
-          Share an artifact into a community, save an excerpt, and it will appear here as your
+          Share something into a community, save an excerpt, and it will appear here as your
           permanent entry in your vault.
         {/if}
       </p>
@@ -191,7 +191,7 @@
   {/if}
 
   {#if resolvingArtifacts}
-    <p class="loading">Resolving artifact metadata…</p>
+    <p class="loading">Resolving source details…</p>
   {/if}
 </section>
 

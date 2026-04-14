@@ -76,7 +76,7 @@
       });
 
       statusMessage = result.existing
-        ? 'Updated the saved artifact in your queue.'
+        ? 'Updated the saved item in your queue.'
         : 'Saved to your For Later queue.';
       onSaved?.(result.item);
 

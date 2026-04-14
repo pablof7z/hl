@@ -75,7 +75,7 @@
       });
 
       if (!updated) {
-        throw new Error('That saved artifact could not be found anymore.');
+        throw new Error('That saved item could not be found anymore.');
       }
 
       editingTeaser = false;
@@ -118,18 +118,18 @@
       });
 
       if (!updated) {
-        throw new Error('The saved artifact disappeared while it was being moved.');
+        throw new Error('The saved item disappeared while it was being moved.');
       }
 
       const communityName =
         communities.find((community) => community.id === selectedGroupId)?.name ?? selectedGroupId;
       statusMessage = result.existing
-        ? `${communityName} already had this artifact.`
+        ? `${communityName} already had this source.`
         : `Moved into ${communityName}.`;
       selectedGroupId = '';
       onChanged?.(updated);
     } catch (error) {
-      actionError = error instanceof Error ? error.message : 'Could not move this artifact yet.';
+      actionError = error instanceof Error ? error.message : 'Could not move this item yet.';
     } finally {
       sharing = false;
     }

@@ -738,7 +738,7 @@ function fallbackTitle(url: string): string {
 
     return domainLabel(url);
   } catch {
-    return 'Untitled artifact';
+    return 'Untitled source';
   }
 }
 
