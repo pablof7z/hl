@@ -401,19 +401,22 @@ async function findExistingHighlightShare(
   return existing ? highlightShareFromEvent(existing) : undefined;
 }
 
-async function buildUserHighlightRelaySet(ndk: NDK, pubkey: string): Promise<NDKRelaySet> {
+export async function resolveUserHighlightRelayUrls(ndk: NDK, pubkey: string): Promise<string[]> {
   const relayLists = await getRelayListForUsers([pubkey], ndk, false, 1500);
   const relayList = relayLists.get(pubkey);
   const userRelayUrls = relayList?.writeRelayUrls.length
     ? relayList.writeRelayUrls
     : (relayList?.relays ?? []);
-  const relayUrls = uniqueValues(
+
+  return uniqueValues(
     userRelayUrls.length > 0
       ? [...userRelayUrls, HIGHLIGHTER_RELAY_URL]
       : [HIGHLIGHTER_RELAY_URL, ...DEFAULT_RELAYS]
   );
+}
 
-  return NDKRelaySet.fromRelayUrls(relayUrls, ndk);
+async function buildUserHighlightRelaySet(ndk: NDK, pubkey: string): Promise<NDKRelaySet> {
+  return NDKRelaySet.fromRelayUrls(await resolveUserHighlightRelayUrls(ndk, pubkey), ndk);
 }
 
 export function artifactReferenceKey(artifact: Pick<ArtifactRecord, 'highlightTagName' | 'highlightTagValue'>): string {

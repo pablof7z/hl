@@ -1,6 +1,6 @@
 <script lang="ts">
   import { browser } from '$app/environment';
-  import type { PageProps } from './$types';
+  import { NDKKind } from '@nostr-dev-kit/ndk';
   import type { ArtifactRecord } from '$lib/ndk/artifacts';
   import HighlightCard from '$lib/features/highlights/HighlightCard.svelte';
   import { fetchArtifactsByHighlightReferenceKeys } from '$lib/ndk/artifacts';
@@ -9,18 +9,48 @@
   import {
     HIGHLIGHTER_HIGHLIGHT_KIND,
     HIGHLIGHTER_HIGHLIGHT_REPOST_KIND,
-    hydrateHighlights
+    hydrateHighlights,
+    resolveUserHighlightRelayUrls
   } from '$lib/ndk/highlights';
+  import { buildJoinedCommunities, groupIdFromEvent } from '$lib/ndk/groups';
 
-  let { data }: PageProps = $props();
   const currentUser = $derived(ndk.$currentUser);
+  let highlightRelayUrls = $state<string[]>(DEFAULT_RELAYS);
+  let resolvingRelayList = $state(false);
+
+  $effect(() => {
+    if (!browser || !currentUser) {
+      highlightRelayUrls = DEFAULT_RELAYS;
+      resolvingRelayList = false;
+      return;
+    }
+
+    let cancelled = false;
+    resolvingRelayList = true;
+
+    void resolveUserHighlightRelayUrls(ndk, currentUser.pubkey)
+      .then((relayUrls) => {
+        if (!cancelled) {
+          highlightRelayUrls = relayUrls;
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          resolvingRelayList = false;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  });
 
   const authoredHighlightFeed = ndk.$subscribe(() => {
     if (!browser || !currentUser) return undefined;
 
     return {
       filters: [{ kinds: [HIGHLIGHTER_HIGHLIGHT_KIND], authors: [currentUser.pubkey], limit: 96 }],
-      relayUrls: DEFAULT_RELAYS,
+      relayUrls: highlightRelayUrls,
       closeOnEose: true
     };
   });
@@ -37,6 +67,39 @@
 
   const highlights = $derived(
     hydrateHighlights([...authoredHighlightFeed.events], [...authoredShareFeed.events])
+  );
+  const membershipFeed = ndk.$subscribe(() => {
+    if (!browser || !currentUser) return undefined;
+
+    return {
+      filters: [{ kinds: [NDKKind.GroupAdmins, NDKKind.GroupMembers], '#p': [currentUser.pubkey], limit: 128 }],
+      relayUrls: GROUP_RELAY_URLS,
+      closeOnEose: true
+    };
+  });
+  const membershipGroupIds = $derived.by(() => {
+    const ids = new Set<string>();
+
+    for (const event of membershipFeed.events) {
+      const groupId = groupIdFromEvent(event);
+      if (groupId) ids.add(groupId);
+    }
+
+    return [...ids];
+  });
+  const metadataFeed = ndk.$subscribe(() => {
+    if (!browser || membershipGroupIds.length === 0) return undefined;
+
+    return {
+      filters: [{ kinds: [NDKKind.GroupMetadata], '#d': membershipGroupIds, limit: Math.max(membershipGroupIds.length * 2, 32) }],
+      relayUrls: GROUP_RELAY_URLS,
+      closeOnEose: true
+    };
+  });
+  const communities = $derived(
+    currentUser
+      ? buildJoinedCommunities(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events])
+      : []
   );
 
   let artifactsByReference = $state<Map<string, ArtifactRecord>>(new Map());
@@ -104,17 +167,27 @@
     </div>
     <div class="summary-card">
       <p class="summary-label">Loaded communities</p>
-      <strong>{data.communities.length}</strong>
+      <strong>{communities.length}</strong>
       <span>Available as share-again targets on each card.</span>
+    </div>
+    <div class="summary-card">
+      <p class="summary-label">Highlight relays</p>
+      <strong>{highlightRelayUrls.length}</strong>
+      <span>Checked from your relay list plus the Highlighter fallback relay.</span>
     </div>
   </section>
 
   {#if highlights.length === 0}
     <section class="empty-state">
-      <p>No highlights yet.</p>
+      <p>{resolvingRelayList ? 'Looking for your highlights…' : 'No highlights found yet.'}</p>
       <p>
-        Share an artifact into a community, save an excerpt, and it will appear here as your
-        canonical vault entry.
+        {#if resolvingRelayList}
+          Highlighter is resolving your relay list and checking where your canonical `kind:9802`
+          events live.
+        {:else}
+          Share an artifact into a community, save an excerpt, and it will appear here as your
+          canonical vault entry.
+        {/if}
       </p>
     </section>
   {:else}
@@ -123,7 +196,7 @@
         <HighlightCard
           {highlight}
           artifact={artifactsByReference.get(highlight.sourceReferenceKey)}
-          communities={data.communities}
+          {communities}
           showShareControl={true}
         />
       {/each}
