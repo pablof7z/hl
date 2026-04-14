@@ -430,11 +430,42 @@ export async function publishArtifact(
   }
 
   const existing = await findExistingArtifact(ndk, input.groupId, input.preview.id);
+  const relaySet = buildCommunityRelaySet(ndk);
+
   if (existing) {
-    return { artifact: existing, existing: true };
+    const mergedPreview = mergeArtifactPreview(existing, input.preview);
+    if (!artifactPreviewShouldRefresh(existing, mergedPreview)) {
+      return { artifact: existing, existing: true };
+    }
+
+    const event = buildArtifactShareEvent(ndk, {
+      groupId: input.groupId,
+      preview: mergedPreview,
+      note: existing.note || input.note
+    });
+
+    await event.sign();
+    await event.publish(relaySet);
+
+    return { artifact: artifactFromEvent(event), existing: true };
   }
 
-  const relaySet = buildCommunityRelaySet(ndk);
+  const event = buildArtifactShareEvent(ndk, input);
+
+  await event.sign();
+  await event.publish(relaySet);
+
+  return { artifact: artifactFromEvent(event), existing: false };
+}
+
+function buildArtifactShareEvent(
+  ndk: NDK,
+  input: {
+    groupId: string;
+    preview: ArtifactPreview;
+    note?: string;
+  }
+): NDKEvent {
   const event = new NDKEvent(ndk);
   event.kind = HIGHLIGHTER_ARTIFACT_SHARE_KIND;
   event.content = cleanText(input.note);
@@ -475,10 +506,103 @@ export async function publishArtifact(
     event.tags.push(['summary', input.preview.description]);
   }
 
-  await event.sign();
-  await event.publish(relaySet);
+  return event;
+}
 
-  return { artifact: artifactFromEvent(event), existing: false };
+function artifactPreviewShouldRefresh(existing: ArtifactRecord, preview: ArtifactPreview): boolean {
+  return (
+    cleanText(existing.title) !== cleanText(preview.title) ||
+    cleanText(existing.author) !== cleanText(preview.author) ||
+    cleanText(existing.image) !== cleanText(preview.image) ||
+    cleanText(existing.description) !== cleanText(preview.description)
+  );
+}
+
+function mergeArtifactPreview(existing: ArtifactRecord, preview: ArtifactPreview): ArtifactPreview {
+  return {
+    ...preview,
+    title: choosePreferredArtifactText(existing.title, preview.title, existing.domain),
+    author: choosePreferredArtifactText(existing.author, preview.author, ''),
+    image: choosePreferredArtifactImage(existing.image, preview.image, existing.domain),
+    description: choosePreferredArtifactText(existing.description, preview.description, existing.domain)
+  };
+}
+
+function choosePreferredArtifactText(existingValue: string, nextValue: string, domain: string): string {
+  const current = cleanText(existingValue);
+  const next = cleanText(nextValue);
+
+  if (!next) return current;
+  if (!current) return next;
+  if (current === next) return current;
+  if (isLikelyGenericArtifactText(current, domain) && !isLikelyGenericArtifactText(next, domain)) {
+    return next;
+  }
+
+  return current;
+}
+
+function choosePreferredArtifactImage(existingValue: string, nextValue: string, domain: string): string {
+  const current = cleanText(existingValue);
+  const next = cleanText(nextValue);
+
+  if (!next) return current;
+  if (!current) return next;
+  if (current === next) return current;
+  if (isLikelyGenericArtifactImage(current, domain) && !isLikelyGenericArtifactImage(next, domain)) {
+    return next;
+  }
+
+  return current;
+}
+
+function isLikelyGenericArtifactText(value: string, domain: string): boolean {
+  const normalizedValue = comparisonText(value);
+  const normalizedDomain = comparisonText(domain);
+
+  if (!normalizedValue) return true;
+  if (normalizedDomain && normalizedValue === normalizedDomain) return true;
+  if (normalizedDomain) {
+    const siteLabel = normalizedDomain.split(' ')[0];
+    if (siteLabel && normalizedValue === siteLabel) return true;
+  }
+
+  return false;
+}
+
+function isLikelyGenericArtifactImage(value: string, domain: string): boolean {
+  if (!value) return true;
+
+  try {
+    const parsed = new URL(value);
+    const pathname = parsed.pathname.toLowerCase();
+    const filename = pathname.split('/').at(-1) ?? '';
+    const siteToken = comparisonText(domain).replace(/\s+/g, '');
+
+    if (/favicon|apple-touch|sprite|logo|icon/.test(pathname)) {
+      return true;
+    }
+
+    if (/share-icons|social-preview|previewdoh/.test(pathname)) {
+      return true;
+    }
+
+    if (siteToken && new RegExp(`^${siteToken}(?:[-_.]|$)`, 'i').test(filename)) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function comparisonText(value: string): string {
+  return cleanText(value)
+    .toLowerCase()
+    .replace(/^www\./, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 }
 
 export function buildFallbackNostrUrl(address: string): string {
