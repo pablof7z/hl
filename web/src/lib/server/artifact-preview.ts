@@ -165,7 +165,11 @@ function extractArtifactHtmlMetadata(html: string, responseUrl: string): Artifac
   return {
     title: pickBestText(
       [
+        { value: amazonProductTitle(html) },
         { value: elementTextById(html, 'productTitle') },
+        { value: cleanMarketplaceTitle(schema.title, responseUrl) },
+        { value: cleanMarketplaceTitle(metaContent(html, 'name', 'title'), responseUrl) },
+        { value: cleanMarketplaceTitle(textContent(html, 'title'), responseUrl) },
         { value: schema.title },
         { value: metaContent(html, 'property', 'og:title') },
         { value: metaContent(html, 'name', 'twitter:title') },
@@ -176,6 +180,9 @@ function extractArtifactHtmlMetadata(html: string, responseUrl: string): Artifac
     ),
     description: pickBestText(
       [
+        { value: cleanMarketplaceTitle(schema.description, responseUrl) },
+        { value: cleanMarketplaceTitle(metaContent(html, 'name', 'description'), responseUrl) },
+        { value: cleanMarketplaceTitle(metaContent(html, 'name', 'twitter:description'), responseUrl) },
         { value: schema.description },
         { value: metaContent(html, 'property', 'og:description') },
         { value: metaContent(html, 'name', 'description') },
@@ -201,11 +208,16 @@ function extractArtifactHtmlMetadata(html: string, responseUrl: string): Artifac
     ),
     author: pickBestText(
       [
+        { value: amazonBylineAuthor(html), allowGeneric: true },
         { value: schema.author, allowGeneric: true },
         { value: bylineAuthor(html), allowGeneric: true },
         { value: metaContent(html, 'name', 'author'), allowGeneric: true },
         { value: metaContent(html, 'property', 'article:author'), allowGeneric: true },
-        { value: metaContent(html, 'property', 'og:article:author'), allowGeneric: true }
+        { value: metaContent(html, 'property', 'og:article:author'), allowGeneric: true },
+        {
+          value: amazonAuthorFromTitle(schema.title || metaContent(html, 'name', 'title') || textContent(html, 'title'), responseUrl),
+          allowGeneric: true
+        }
       ],
       context
     ),
@@ -396,6 +408,86 @@ function bylineAuthor(html: string): string {
   }
 
   return '';
+}
+
+function amazonProductTitle(html: string): string {
+  const match = /<span[^>]*id=["']productTitle["'][^>]*>\s*([^<]+?)\s*<\/span>/i.exec(html);
+  return normalizeWhitespace(decodeHtml(match?.[1] ?? ''));
+}
+
+function amazonBylineAuthor(html: string): string {
+  const patterns = [
+    /<div[^>]*id=["']bylineInfo["'][^>]*>[\s\S]{0,800}?<a[^>]*href=["'][^"']*dp_byline[^"']*["'][^>]*>\s*([^<]+?)\s*<\/a>/i,
+    /<a[^>]*href=["'][^"']*\/e\/[^"']*dp_byline[^"']*["'][^>]*>\s*([^<]+?)\s*<\/a>/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(html);
+    const value = normalizeWhitespace(decodeHtml(match?.[1] ?? ''));
+    if (value) {
+      return value;
+    }
+  }
+
+  return '';
+}
+
+function cleanMarketplaceTitle(value: string, responseUrl: string): string {
+  const normalized = normalizeWhitespace(value);
+  if (!normalized) return '';
+
+  if (hostnameLabel(responseUrl).includes('amazon.')) {
+    let cleaned = normalized.replace(/:\s*Amazon\.[^:]+:\s*.+$/i, '').trim();
+    const lastSeparator = cleaned.lastIndexOf(' : ');
+
+    if (lastSeparator > 0) {
+      const trailing = cleaned.slice(lastSeparator + 3).trim();
+      if (/^[^:]+,\s*[^:]+(?:;\s*[^:]+,\s*[^:]+)*$/.test(trailing)) {
+        cleaned = cleaned.slice(0, lastSeparator).trim();
+      }
+    }
+
+    return cleaned;
+  }
+
+  return normalized;
+}
+
+function amazonAuthorFromTitle(value: string, responseUrl: string): string {
+  if (!hostnameLabel(responseUrl).includes('amazon.')) {
+    return '';
+  }
+
+  const normalized = normalizeWhitespace(value);
+  if (!normalized) return '';
+
+  const beforeMarketplace = normalized.replace(/:\s*Amazon\.[^:]+:\s*.+$/i, '').trim();
+  const lastSeparator = beforeMarketplace.lastIndexOf(' : ');
+  if (lastSeparator <= 0) {
+    return '';
+  }
+
+  const trailing = beforeMarketplace.slice(lastSeparator + 3).trim();
+  if (!/^[^:]+,\s*[^:]+(?:;\s*[^:]+,\s*[^:]+)*$/.test(trailing)) {
+    return '';
+  }
+
+  return trailing
+    .split(/\s*;\s*/)
+    .map((part) => {
+      const segments = part
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      if (segments.length === 2) {
+        return `${segments[1]} ${segments[0]}`;
+      }
+
+      return part.trim();
+    })
+    .filter(Boolean)
+    .join(', ');
 }
 
 function elementTextById(html: string, id: string): string {
