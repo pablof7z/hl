@@ -9,33 +9,33 @@
 </script>
 
 <svelte:head>
-  <title>Communities — Highlighter</title>
+  <title>Circles — Highlighter</title>
 </svelte:head>
 
 <section class="community-index">
   <header class="community-index-header">
     <div class="community-index-copy">
-      <p class="eyebrow">Communities</p>
-      <h1>Public reading groups are live now.</h1>
+      <p class="eyebrow">Circles</p>
+      <h1>Public reading circles are live now.</h1>
       <p class="lede">
-        Browse the public reading communities already indexed on Highlighter and jump into the one
+        Browse the public reading circles already on Highlighter and jump into the one
         you want to build around.
       </p>
     </div>
 
     <a class="create-link" href="/community/create">
-      {currentUser ? 'Create community' : 'Sign in to create'}
+      {currentUser ? 'Create a circle' : 'Sign in to create'}
     </a>
   </header>
 
   <CommunityGrid
     communities={data.communities}
     showVisibilityFilter={false}
-    searchPlaceholder="Search public communities by name, URL, or description"
-    emptyLabel="No public communities have been indexed yet."
-    emptyCopy="The creation flow is live. Publish the first public group and it will appear here as soon as its details propagate."
+    searchPlaceholder="Search circles by name, URL, or description"
+    emptyLabel="No public circles have been indexed yet."
+    emptyCopy="Publish the first circle and it will appear here shortly."
     emptyCtaHref="/community/create"
-    emptyCtaLabel="Create the first community"
+    emptyCtaLabel="Create the first circle"
   />
 </section>
 

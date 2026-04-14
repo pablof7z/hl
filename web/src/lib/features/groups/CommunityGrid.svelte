@@ -139,7 +139,7 @@
   </div>
 
   <p class="result-label">
-    Showing {filteredCommunities.length} of {communities.length} communit{communities.length === 1 ? 'y' : 'ies'}
+    Showing {filteredCommunities.length} of {communities.length} circle{communities.length === 1 ? '' : 's'}
   </p>
 
   {#if filteredCommunities.length === 0}
@@ -170,10 +170,6 @@
   .community-browser-toolbar {
     display: grid;
     gap: 0.9rem;
-    padding: 1rem;
-    border: 1px solid var(--border);
-    border-radius: 1.2rem;
-    background: linear-gradient(180deg, rgba(255, 103, 25, 0.05), rgba(255, 255, 255, 0));
   }
 
   .search-field,
@@ -222,7 +218,7 @@
     padding: 1.75rem;
     border: 1px solid var(--border);
     border-radius: 1.4rem;
-    background: linear-gradient(180deg, rgba(255, 103, 25, 0.06), rgba(255, 255, 255, 0));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent);
   }
 
   .empty-label {

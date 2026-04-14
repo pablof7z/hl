@@ -68,7 +68,7 @@
 
   .community-card:hover,
   .community-card:focus-within {
-    border-color: rgba(255, 103, 25, 0.3);
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
     transform: translateY(-1px);
     box-shadow: 0 16px 40px rgba(17, 17, 17, 0.06);
   }
@@ -89,7 +89,7 @@
     width: 3.25rem;
     height: 3.25rem;
     border-radius: 1rem;
-    background: linear-gradient(160deg, rgba(255, 103, 25, 0.14), rgba(255, 103, 25, 0.04));
+    background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--accent) 4%, transparent));
     overflow: hidden;
     color: var(--accent);
     font-size: 1.1rem;
@@ -144,7 +144,7 @@
   }
 
   .community-badges .joined-badge {
-    background: rgba(255, 103, 25, 0.12);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
     color: var(--accent);
   }
 
