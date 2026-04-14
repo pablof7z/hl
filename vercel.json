@@ -1,4 +1,6 @@
 {
-  "rootDirectory": "web",
-  "framework": "sveltekit"
+  "framework": "sveltekit",
+  "buildCommand": "cd web && npm install && npm run build",
+  "outputDirectory": "web/.vercel/output",
+  "installCommand": "cd web && npm install"
 }
