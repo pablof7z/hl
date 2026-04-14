@@ -90,14 +90,13 @@
 </script>
 
 <article class="highlight-card">
-  <div class="highlight-header">
-    <p class="eyebrow">What Caught Our Eye</p>
-    {#if primaryShare}
+  {#if primaryShare}
+    <div class="highlight-header">
       <a class="share-link" href={highlightPath(primaryShare.groupId, highlight.eventId)}>
         Public card
       </a>
-    {/if}
-  </div>
+    </div>
+  {/if}
 
   <blockquote class="highlight-quote">
     <p>{highlight.quote}</p>
@@ -171,16 +170,7 @@
     gap: 0.55rem;
     align-items: center;
     flex-wrap: wrap;
-    justify-content: space-between;
-  }
-
-  .eyebrow {
-    margin: 0;
-    color: var(--accent);
-    font-size: 0.76rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    justify-content: flex-start;
   }
 
   .share-link,
