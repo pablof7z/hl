@@ -1,9 +1,11 @@
 import {
   HIGHLIGHTER_ARTIFACT_SHARE_KIND,
   artifactFromEvent,
+  naddrFromAddress,
   type ArtifactRecord
 } from '$lib/ndk/artifacts';
 import { GROUP_RELAY_URLS } from '$lib/ndk/config';
+import { fetchNoteWithAuthor } from '$lib/server/nostr';
 import { getServerNdk } from '$lib/server/nostr';
 
 export async function fetchArtifactForGroup(
@@ -29,4 +31,17 @@ export async function fetchArtifactForGroup(
 
   const event = events[0];
   return event ? artifactFromEvent(event) : undefined;
+}
+
+export async function fetchNostrArticleForArtifact(
+  artifact:
+    | Pick<ArtifactRecord, 'referenceTagName' | 'referenceTagValue' | 'referenceKind'>
+    | undefined
+) {
+  if (!artifact || artifact.referenceTagName !== 'a' || artifact.referenceKind !== '30023') {
+    return {};
+  }
+
+  const identifier = naddrFromAddress(artifact.referenceTagValue) ?? artifact.referenceTagValue;
+  return fetchNoteWithAuthor(identifier);
 }

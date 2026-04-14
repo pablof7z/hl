@@ -459,16 +459,20 @@ export async function publishArtifact(
 }
 
 export function buildFallbackNostrUrl(address: string): string {
-  const parsed = parseAddress(address);
-  if (!parsed) return 'https://highlighter.f7z.io/';
+  const naddr = naddrFromAddress(address);
+  if (!naddr) return 'https://highlighter.f7z.io/';
+  return `https://highlighter.f7z.io/note/${naddr}`;
+}
 
-  const naddr = nip19.naddrEncode({
+export function naddrFromAddress(address: string): string | undefined {
+  const parsed = parseAddress(address);
+  if (!parsed) return undefined;
+
+  return nip19.naddrEncode({
     kind: parsed.kind,
     pubkey: parsed.pubkey,
     identifier: parsed.identifier
   });
-
-  return `https://highlighter.f7z.io/note/${naddr}`;
 }
 
 function firstTagValue(event: NDKEventType, tagName: string): string {

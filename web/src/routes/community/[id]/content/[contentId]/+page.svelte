@@ -1,20 +1,48 @@
 <script lang="ts">
   import { browser } from '$app/environment';
-  import { NDKKind, type NDKEvent } from '@nostr-dev-kit/ndk';
+  import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
   import type { PageProps } from './$types';
+  import ArticleMarkdown from '$lib/components/ArticleMarkdown.svelte';
+  import HighlightPopover from '$lib/components/HighlightPopover.svelte';
   import HighlightCard from '$lib/features/highlights/HighlightCard.svelte';
   import HighlightForm from '$lib/features/highlights/HighlightForm.svelte';
   import { ndk } from '$lib/ndk/client';
   import {
+    articlePublishedAt,
+    articleReadTimeMinutes,
+    articleSummary,
+    displayNip05,
+    displayName,
+    formatDisplayDate
+  } from '$lib/ndk/format';
+  import {
     buildArtifactHighlightFilters,
+    highlightReferenceKey,
     hydrateStandaloneHighlights,
     type HydratedHighlight
   } from '$lib/ndk/highlights';
   import { DEFAULT_RELAYS, GROUP_RELAY_URLS } from '$lib/ndk/config';
   import { artifactHighlightReferenceKey } from '$lib/ndk/artifacts';
+  import { User } from '$lib/ndk/ui/user';
 
   let { data }: PageProps = $props();
+  let articleContentEl = $state<HTMLElement | null>(null);
   const currentUser = $derived(ndk.$currentUser);
+  const articleEvent = $derived(data.articleEvent ? new NDKEvent(ndk, data.articleEvent) : undefined);
+  const articleAuthorPubkey = $derived(data.articleAuthorPubkey || articleEvent?.pubkey || '');
+  const articleAuthorIdentifier = $derived(
+    data.articleAuthorIdentifier || data.articleAuthorNpub || articleAuthorPubkey || 'author'
+  );
+  const articleAuthorName = $derived(
+    displayName(
+      data.articleProfile,
+      articleAuthorPubkey ? `${articleAuthorPubkey.slice(0, 8)}...` : 'Author'
+    )
+  );
+  const articleAuthorIdentity = $derived.by(() => {
+    const nip05 = displayNip05(data.articleProfile);
+    return nip05 && nip05 !== articleAuthorName ? nip05 : '';
+  });
 
   const groupAdminFeed = ndk.$subscribe(() => {
     if (!browser || !data.community) return undefined;
@@ -71,6 +99,18 @@
   const artifactHighlights = $derived(
     data.artifact
       ? communityHighlights.filter((highlight) => highlight.sourceReferenceKey === artifactReferenceKey)
+      : []
+  );
+  const artifactHighlightEvents = $derived(
+    data.artifact
+      ? highlightFeed.events.filter(
+          (highlight) =>
+            highlightReferenceKey({
+              artifactAddress: highlight.tagValue('a'),
+              eventReference: highlight.tagValue('e'),
+              sourceUrl: highlight.tagValue('r')
+            }) === artifactReferenceKey
+        )
       : []
   );
 </script>
@@ -148,14 +188,68 @@
     </section>
 
     <section class="artifact-next">
-      <p class="panel-label">What lands here next</p>
+      <p class="panel-label">{articleEvent ? 'Reading Surface' : 'What lands here next'}</p>
       <p>
-        Artifact-level discussion hangs off this same coordinate on the discussion route, while
-        canonical highlights resolve back here through their `a` tag.
+        {#if articleEvent}
+          This route now renders the underlying Nostr article in full, and group members can select
+          text directly from the source to create highlights.
+        {:else}
+          Artifact-level discussion hangs off this same coordinate on the discussion route, while
+          canonical highlights resolve back here through their `a` tag.
+        {/if}
       </p>
     </section>
 
-    {#if currentUser}
+    {#if articleEvent}
+      <section class="artifact-reader">
+        <div class="artifact-reader-header">
+          <p class="panel-label">Article</p>
+          <p class="artifact-reader-hint">
+            {#if currentUser}
+              Select text in the article to create a highlight.
+            {:else}
+              Sign in, then select text in the article to create a highlight.
+            {/if}
+          </p>
+        </div>
+
+        <article class="article-container artifact-reader-article">
+          <div class="article-byline">
+            <User.Root {ndk} pubkey={articleAuthorPubkey} profile={data.articleProfile}>
+              <a class="article-author-link" href={`/profile/${articleAuthorIdentifier}`}>
+                <User.Avatar class="article-author-avatar" />
+              </a>
+              <div class="article-author-copy">
+                <div class="feed-meta">
+                  <a class="article-author-name" href={`/profile/${articleAuthorIdentifier}`}>
+                    {articleAuthorName}
+                  </a>
+                  <span>{formatDisplayDate(articlePublishedAt(articleEvent.rawEvent()))}</span>
+                  <span>{articleReadTimeMinutes(articleEvent.content)} min read</span>
+                </div>
+                {#if articleAuthorIdentity}
+                  <div class="feed-meta">
+                    <span class="article-author-handle">{articleAuthorIdentity}</span>
+                  </div>
+                {/if}
+              </div>
+            </User.Root>
+          </div>
+
+          <p class="lede" style="margin: 0;">
+            {articleSummary(articleEvent.rawEvent(), 320)}
+          </p>
+
+          <div bind:this={articleContentEl}>
+            <ArticleMarkdown
+              content={articleEvent.content}
+              tags={articleEvent.tags}
+              highlights={artifactHighlightEvents}
+            />
+          </div>
+        </article>
+      </section>
+    {:else if currentUser}
       <HighlightForm artifact={data.artifact} groupId={data.community.id} />
     {:else}
       <section class="artifact-next">
@@ -189,6 +283,10 @@
         </div>
       {/if}
     </section>
+
+    {#if articleEvent}
+      <HighlightPopover articleEvent={articleEvent} containerEl={articleContentEl} />
+    {/if}
   </article>
 {/if}
 
@@ -326,6 +424,34 @@
   .artifact-highlights {
     display: grid;
     gap: 1rem;
+  }
+
+  .artifact-reader {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .artifact-reader-header {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .artifact-reader-hint {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .artifact-reader-article {
+    max-width: none;
+    margin: 0;
+    padding: 1.25rem 1.35rem 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 1.25rem;
+    background: var(--surface);
   }
 
   .artifact-highlights-header {
