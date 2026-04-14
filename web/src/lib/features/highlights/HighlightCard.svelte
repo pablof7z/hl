@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatPodcastClock } from '$lib/features/podcasts/format';
   import type { ArtifactRecord } from '$lib/ndk/artifacts';
   import { artifactPath, buildFallbackNostrUrl } from '$lib/ndk/artifacts';
   import { ensureClientNdk, ndk } from '$lib/ndk/client';
@@ -15,12 +16,14 @@
     highlight,
     artifact = undefined,
     communities = [],
-    showShareControl = false
+    showShareControl = false,
+    seekTo = undefined
   }: {
     highlight: HydratedHighlight;
     artifact?: ArtifactRecord | undefined;
     communities?: CommunitySummary[];
     showShareControl?: boolean;
+    seekTo?: ((seconds: number) => void) | undefined;
   } = $props();
 
   let optimisticShares = $state<HighlightShareRecord[]>([]);
@@ -45,6 +48,13 @@
   );
   const primaryShare = $derived(allShares[0]);
   const excerptSegments = $derived(buildExcerptSegments(highlight.context, highlight.quote));
+  const clipLabel = $derived.by(() => {
+    if (highlight.clipStartSeconds == null) return '';
+    const startLabel = formatPodcastClock(highlight.clipStartSeconds);
+    const endLabel =
+      highlight.clipEndSeconds != null ? formatPodcastClock(highlight.clipEndSeconds) : '';
+    return endLabel ? `${startLabel}-${endLabel}` : startLabel;
+  });
   const createdLabel = $derived(
     highlight.createdAt
       ? new Intl.DateTimeFormat('en', {
@@ -64,6 +74,7 @@
     if (highlight.eventReference) return 'Referenced event';
     return 'Unknown source';
   });
+  const canSeek = $derived(Boolean(seekTo && highlight.clipStartSeconds != null));
   const sourceHref = $derived.by(() => {
     if (artifact?.url) return artifact.url;
     if (highlight.sourceUrl) return highlight.sourceUrl;
@@ -164,6 +175,12 @@
   function compactWhitespace(value: string): string {
     return value.trim().replace(/\s+/g, ' ');
   }
+
+  function handleSeek() {
+    if (seekTo && highlight.clipStartSeconds != null) {
+      seekTo(highlight.clipStartSeconds);
+    }
+  }
 </script>
 
 <article class="highlight-card">
@@ -177,6 +194,12 @@
 
       {#if createdLabel}
         <span class="created-at">{createdLabel}</span>
+      {/if}
+
+      {#if clipLabel}
+        <button type="button" class="clip-chip" onclick={handleSeek} disabled={!canSeek}>
+          {clipLabel}
+        </button>
       {/if}
     </div>
 
@@ -201,6 +224,10 @@
 
   {#if highlight.note}
     <p class="highlight-note">{highlight.note}</p>
+  {/if}
+
+  {#if highlight.clipSpeaker}
+    <p class="highlight-speaker">Speaker: {highlight.clipSpeaker}</p>
   {/if}
 
   <div class="highlight-footer">
@@ -302,7 +329,8 @@
   .created-at,
   .share-link,
   .meta-chip,
-  .source-link {
+  .source-link,
+  .clip-chip {
     display: inline-flex;
     align-items: center;
     min-height: 1.9rem;
@@ -317,6 +345,15 @@
 
   .share-link {
     color: var(--accent);
+  }
+
+  .clip-chip {
+    border: 0;
+    cursor: pointer;
+  }
+
+  .clip-chip:disabled {
+    cursor: default;
   }
 
   .highlight-excerpt {
@@ -341,6 +378,7 @@
   }
 
   .highlight-note,
+  .highlight-speaker,
   .error,
   .status {
     margin: 0;
@@ -349,6 +387,12 @@
 
   .highlight-note {
     color: var(--text);
+  }
+
+  .highlight-speaker {
+    color: var(--muted);
+    font-size: 0.84rem;
+    font-weight: 600;
   }
 
   .highlight-footer {

@@ -8,6 +8,7 @@ import {
   type ArtifactPreview,
   type ArtifactSource
 } from '$lib/ndk/artifacts';
+import { extractPodcastMetadataFromHtml } from '$lib/server/podcasts';
 import { fetchNoteWithAuthor } from '$lib/server/nostr';
 
 const FETCH_TIMEOUT_MS = 8000;
@@ -95,23 +96,39 @@ export async function previewArtifactReference(input: {
 
     const html = (await response.text()).slice(0, MAX_HTML_CHARS);
     const metadata = extractArtifactHtmlMetadata(html, responseUrl);
-    const entity = detectCatalogEntity(html, metadata.canonicalUrl, metadata.isbn);
-    const source = input.source ?? inferSourceFromEntity(entity.kind, metadata.canonicalUrl, metadata.ogType);
+    const podcastMetadata = extractPodcastMetadataFromHtml(html, metadata.canonicalUrl || responseUrl);
+    const entity = detectCatalogEntity(html, metadata.canonicalUrl, metadata.isbn, podcastMetadata);
+    const inferredSource = inferSourceFromEntity(entity.kind, metadata.canonicalUrl, metadata.ogType);
+    const source = input.source ?? inferredSource;
+    const usePodcastMetadata =
+      source === 'podcast' ||
+      entity.kind === 'podcast:guid' ||
+      entity.kind === 'spotify:episode' ||
+      entity.kind === 'apple:podcast-episode' ||
+      entity.kind === 'overcast:episode';
 
     return buildArtifactPreview({
-      url: metadata.canonicalUrl,
-      title: metadata.title,
-      author: metadata.author,
-      image: metadata.image,
-      description: metadata.description,
+      url: usePodcastMetadata ? podcastMetadata.canonicalUrl : metadata.canonicalUrl,
+      title: usePodcastMetadata ? podcastMetadata.episodeTitle || metadata.title : metadata.title,
+      author: usePodcastMetadata ? podcastMetadata.showTitle || metadata.author : metadata.author,
+      image: usePodcastMetadata ? podcastMetadata.image || metadata.image : metadata.image,
+      description: usePodcastMetadata ? podcastMetadata.description || metadata.description : metadata.description,
       source,
       catalogId: entity.id,
       catalogKind: entity.kind,
+      podcastGuid: usePodcastMetadata ? podcastMetadata.podcastGuid : '',
+      podcastShowTitle: usePodcastMetadata ? podcastMetadata.showTitle : '',
+      audioUrl: usePodcastMetadata ? podcastMetadata.audioUrl : '',
+      audioPreviewUrl: usePodcastMetadata ? podcastMetadata.audioPreviewUrl : '',
+      transcriptUrl: usePodcastMetadata ? podcastMetadata.transcriptUrl : '',
+      feedUrl: usePodcastMetadata ? podcastMetadata.feedUrl : '',
+      publishedAt: usePodcastMetadata ? podcastMetadata.publishedAt : '',
+      durationSeconds: usePodcastMetadata ? podcastMetadata.durationSeconds : null,
       referenceTagName: 'i',
       referenceTagValue: entity.id,
       referenceKind: entity.kind,
       highlightTagName: 'r',
-      highlightTagValue: metadata.canonicalUrl
+      highlightTagValue: usePodcastMetadata ? podcastMetadata.canonicalUrl : metadata.canonicalUrl
     });
   } catch (error) {
     console.warn('Artifact preview fetch failed:', error);
@@ -678,8 +695,16 @@ function extractNostrIdentifier(value: string): string | null {
 function detectCatalogEntity(
   html: string,
   canonicalUrl: string,
-  schemaIsbn: string
+  schemaIsbn: string,
+  podcastMetadata?: { catalogId: string; catalogKind: string }
 ): { id: string; kind: string } {
+  if (podcastMetadata && podcastMetadata.catalogKind !== 'web') {
+    return {
+      id: podcastMetadata.catalogId,
+      kind: podcastMetadata.catalogKind
+    };
+  }
+
   const isbn = extractIsbn(html, canonicalUrl, schemaIsbn);
   if (isbn) {
     return {

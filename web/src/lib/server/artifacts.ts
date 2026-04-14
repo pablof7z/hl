@@ -5,7 +5,9 @@ import {
   parseNostrAddress,
   type ArtifactRecord
 } from '$lib/ndk/artifacts';
+import type { PodcastArtifactData } from '$lib/features/podcasts/types';
 import { DEFAULT_RELAYS, GROUP_RELAY_URLS } from '$lib/ndk/config';
+import { fetchPodcastExperienceForArtifact as fetchPodcastData } from '$lib/server/podcasts';
 import { getServerNdk } from '$lib/server/nostr';
 
 export async function fetchArtifactForGroup(
@@ -76,4 +78,34 @@ export async function fetchNostrArticleForArtifact(
     undefined;
 
   return { event, author, profile };
+}
+
+export async function fetchPodcastExperienceForArtifact(
+  artifact:
+    | Pick<
+        ArtifactRecord,
+        | 'source'
+        | 'url'
+        | 'title'
+        | 'description'
+        | 'image'
+        | 'publishedAt'
+        | 'durationSeconds'
+        | 'audioUrl'
+        | 'audioPreviewUrl'
+        | 'transcriptUrl'
+        | 'feedUrl'
+        | 'podcastGuid'
+        | 'podcastShowTitle'
+        | 'catalogId'
+        | 'catalogKind'
+        | 'domain'
+      >
+    | undefined
+): Promise<PodcastArtifactData | undefined> {
+  if (!artifact || artifact.source !== 'podcast') {
+    return undefined;
+  }
+
+  return fetchPodcastData(artifact);
 }

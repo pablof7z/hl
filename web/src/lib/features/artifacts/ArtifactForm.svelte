@@ -1,5 +1,9 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import {
+    formatPodcastDuration,
+    formatPodcastReleaseDate
+  } from '$lib/features/podcasts/format';
   import { ndk, ensureClientNdk } from '$lib/ndk/client';
   import {
     artifactPath,
@@ -187,8 +191,24 @@
             {/if}
           </div>
           <strong>{preview.title}</strong>
+          {#if preview.podcastShowTitle}
+            <p>{preview.podcastShowTitle}</p>
+          {/if}
           {#if preview.author}
             <p>{preview.author}</p>
+          {/if}
+          {#if preview.source === 'podcast' && (preview.durationSeconds || preview.publishedAt)}
+            <p>
+              {#if preview.durationSeconds}
+                <span>{formatPodcastDuration(preview.durationSeconds)}</span>
+              {/if}
+              {#if preview.durationSeconds && preview.publishedAt}
+                <span> · </span>
+              {/if}
+              {#if preview.publishedAt}
+                <span>{formatPodcastReleaseDate(preview.publishedAt)}</span>
+              {/if}
+            </p>
           {/if}
           {#if preview.description}
             <p>{preview.description}</p>

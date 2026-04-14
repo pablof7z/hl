@@ -7,6 +7,7 @@
   import HighlightPopover from '$lib/components/HighlightPopover.svelte';
   import HighlightCard from '$lib/features/highlights/HighlightCard.svelte';
   import HighlightForm from '$lib/features/highlights/HighlightForm.svelte';
+  import PodcastArtifactView from '$lib/features/podcasts/PodcastArtifactView.svelte';
   import {
     getForLaterArtifact,
     removeForLaterArtifact,
@@ -215,6 +216,18 @@
       <a href="/community">Browse communities</a>
     </div>
   </section>
+{:else if data.artifact.source === 'podcast'}
+  <PodcastArtifactView
+    artifact={data.artifact}
+    community={{ id: data.community.id, name: data.community.name }}
+    podcast={data.podcast}
+    highlights={artifactHighlights}
+    {savedForLater}
+    {savingForLater}
+    {forLaterMessage}
+    {forLaterError}
+    onToggleForLater={toggleForLater}
+  />
 {:else}
   <article class="artifact-page">
     <header class="artifact-hero">

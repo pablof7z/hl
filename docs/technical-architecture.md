@@ -62,10 +62,11 @@ Our relay handles:
 | **Group creation** | Admin sends `kind:9007` → relay creates group state → signs `kind:39000` metadata |
 | **Membership** | Join requests (`kind:9021`), admin adds (`kind:9000`), invite codes (`kind:9009`) |
 | **Access control** | Enforce `private`/`closed`/`restricted`/`hidden` tags per group |
-| **Message routing** | Accept events with `h` tag → validate membership → store and broadcast |
+| **Message routing** | Accept community-scoped events with `h` tag → validate membership → store and broadcast. Canonical `kind:30023` and `kind:9802` events may be stored without `h`. |
 | **Moderation** | Process `kinds:9000-9020` from authorized admins |
 | **Group state** | Maintain and serve `kind:39000` (metadata), `kind:39001` (admins), `kind:39002` (members), `kind:39003` (roles) |
 | **Highlighter events** | Accept and serve custom event kinds for artifacts and highlights (see §4) |
+| **Cross-community artifact lookup** | Resolve artifact/share-thread lookups by artifact address or canonical `d` tag without requiring an explicit `#h` filter, while still respecting private-group visibility |
 
 ### Relay Configuration
 
@@ -75,7 +76,8 @@ Key policies we implement on top of relay29's defaults:
 - **Late publication window**: Reject events with timestamps older than 1 hour (prevents replay/confusion).
 - **Timeline references enforced**: At least 2 `previous` tags required on group events (NIP-29 anti-fork protection).
 - **Rate limiting**: Per-pubkey rate limits on message events to prevent spam.
-- **Content types**: The relay accepts standard Nostr event kinds (chat messages `kind:9`, text notes `kind:1`, long-form `kind:30023`, etc.) within groups, plus custom Highlighter kinds.
+- **Content types**: The relay accepts the standard Nostr kinds Highlighter relies on inside groups, especially `kind:11` share threads, `kind:1111` replies, and `kind:16` highlight reposts. It also accepts canonical group-neutral `kind:9802` highlights and `kind:30023` articles without an `h` tag.
+- **Non-`#h` artifact resolution**: Clients must be able to fetch artifacts and "other communities that shared this" data starting from an artifact identifier, not just from a group ID. The relay therefore needs to support REQs by artifact address / canonical `d` tag / event id without forcing an `#h` filter for public content. Private-group content still requires membership-aware filtering even when the filter omits `#h`.
 
 ---
 
@@ -141,57 +143,96 @@ Default Highlighter roles (defined via `kind:39003`):
 
 ---
 
-## 4. Custom Event Kinds
+## 4. Event Model
 
-Beyond standard NIP-29 events and standard Nostr kinds, Highlighter uses custom event kinds for its domain-specific data. These are sent within groups (with `h` tag) and follow NIP-29 conventions.
+Highlighter uses standard Nostr kinds plus structured tags for its domain-specific data. The important distinction is:
+- the **community-facing share/proposal** is a `kind:11` group thread
+- the **artifact identity** is a source reference carried in tags, not a separate custom event kind
+- the **highlight** is a standard `kind:9802`
 
-### Artifact Event (kind TBD)
+### Artifact Share Thread (kind:11 / NIP-7D)
 
-When a member shares a piece of content to a group:
-
-```jsonc
-{
-  "kind": <TBD>,
-  "content": "", // optional description/note from the sharer
-  "tags": [
-    ["h", "<group-id>"],
-    ["d", "<artifact-id>"],        // deduplication identifier (URL hash or ISBN)
-    ["title", "Thinking, Fast and Slow"],
-    ["author", "Daniel Kahneman"],
-    ["source", "book"],            // book | article | podcast | video | paper | web
-    ["url", "https://..."],        // canonical URL when available
-    ["image", "https://..."],      // cover image
-    ["previous", "..."]            // NIP-29 timeline ref
-  ]
-}
-```
-
-### Highlight Event (kind TBD)
-
-When a member highlights an excerpt from an artifact:
+When a member proposes an artifact to a group, Highlighter publishes a lightweight group-scoped thread that carries both the community framing and the artifact metadata:
 
 ```jsonc
 {
-  "kind": <TBD>,
-  "content": "People tend to assess the relative importance of issues by the ease with which they are retrieved from memory",
+  "kind": 11,
+  "content": "Interesting article for this group: nostr:naddr1...",
   "tags": [
     ["h", "<group-id>"],
-    ["a", "<artifact-event-coordinate>"],  // reference to the artifact
-    ["context", "Chapter 12: The Availability Heuristic"],  // optional location context
+    ["d", "<artifact-id>"],                  // stable local route key derived from the source reference
+    ["title", "Interesting article for the group"],
+    ["source", "article"],                  // book | article | podcast | video | paper | web
+    ["author", "Author name"],              // optional
+    ["image", "https://..."],               // optional
+    ["summary", "Short metadata summary"],  // optional
+    ["podcast_guid", "<guid>"],             // optional episode GUID when the source is a podcast
+    ["podcast_show_title", "Show name"],    // optional, podcast-only
+    ["audio", "https://...mp3"],            // optional direct audio enclosure for podcast playback
+    ["audio_preview", "https://...mp3"],    // optional preview-only clip when the source withholds full audio
+    ["transcript", "https://..."],          // optional transcript URL
+    ["feed", "https://...rss"],             // optional RSS feed URL used to refresh podcast metadata
+    ["published_at", "2026-04-14T12:00:00Z"], // optional ISO timestamp for books/podcasts/articles
+    ["duration", "3691"],                   // optional duration in seconds, especially for audio/video
+    ["a", "<30023:pubkey:identifier>"],     // for Nostr addressable content like long-form articles
+    ["e", "<event-id>"],                    // for non-addressable Nostr events when needed
+    ["i", "isbn:9780374533557", "https://..."], // for external content identity (ISBN, DOI, URL, podcast GUID, etc.)
+    ["k", "isbn"],                          // classification for the `i` tag value
+    ["r", "https://..."],                   // canonical URL when available
     ["previous", "..."]
   ]
 }
 ```
 
+Important consequences:
+- There is **no custom artifact event kind** and specifically no `30403`-style Highlighter artifact event
+- The **`kind:11` thread** stores the community-specific framing and enough metadata to render the artifact card
+- The same underlying artifact can therefore be shared into multiple groups, each with its own `kind:11` thread and reply context
+- Artifact identity is the source reference itself:
+  - `a` tag for addressable Nostr content like `kind:30023`
+  - `e` tag for non-addressable Nostr events
+  - `i` tag plus optional `k` tag for external entities like URLs, ISBNs, DOIs, or podcast GUIDs
+
+### Highlight Event (`kind:9802` / NIP-84)
+
+When a member highlights an excerpt from an artifact source:
+
+```jsonc
+{
+  "kind": 9802,
+  "content": "People tend to assess the relative importance of issues by the ease with which they are retrieved from memory",
+  "tags": [
+    ["a", "<30023:pubkey:identifier>"],   // for addressable Nostr sources
+    ["e", "<event-id>"],                  // for non-addressable Nostr sources
+    ["r", "https://..."],                 // for external sources
+    ["context", "Chapter 12: The Availability Heuristic"],
+    ["comment", "Optional note from the reader"],
+    ["start", "262.000"],                 // optional clip start for podcasts/videos, in seconds
+    ["end", "295.400"],                   // optional clip end for podcasts/videos, in seconds
+    ["speaker", "Maria Chen"],            // optional speaker label when transcript data exists
+    ["segment", "seg-42"]                 // optional repeated transcript segment ids covered by the clip
+  ]
+}
+```
+
+Highlights are canonical and group-neutral. Community scoping happens when a member reposts the highlight into a group via `kind:16` with an `h` tag.
+
+For podcast clips, the same `kind:9802` event remains canonical. The excerpt text stays in `content` when transcript text is available; timestamp tags carry the clip boundaries so the client can seek and replay the moment inside a podcast artifact page.
+
+The relay should therefore accept canonical `kind:9802` highlights and `kind:30023` articles even when they are not tagged to any group. Only community-scoped events require `h`-tag routing.
+
 ### Discussion Events
 
 Discussions use standard Nostr kinds within groups:
+- `kind:11` (NIP-7D) for the root share/proposal thread when an artifact is introduced to a group
 - `kind:1` (text note) for top-level comments on artifacts
 - `kind:1111` (NIP-22 comments) for threaded replies
 - Standard `e` and `p` tags for threading and mentions
 - `h` tag for group routing
 
-**Note:** Specific kind numbers for artifact and highlight events will be registered with the Nostr community or allocated from the application-specific range. The schemas above are directional.
+Replies to artifact share threads follow NIP-7D: the `kind:11` event is the root, and replies use `kind:1111`.
+
+**Note:** The important model constraint is that Highlighter does not invent an artifact kind. Artifact identity is carried in source-reference tags, while highlights use the standard `kind:9802`.
 
 ---
 
@@ -288,6 +329,7 @@ All authentication is Nostr-native:
 | NIP-23 | Long-form content (if groups share long-form posts) |
 | NIP-25 | Reactions |
 | NIP-29 | **Core** — Relay-based groups (the foundation of communities) |
+| NIP-7D | Threads (`kind:11`) for community-level artifact share / proposal posts |
 | NIP-42 | Relay authentication (membership enforcement) |
 | NIP-46 | Remote signing (Nostr Connect) |
 | NIP-55 | Android signer integration |

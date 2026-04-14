@@ -27,6 +27,14 @@ export type ArtifactPreview = {
   domain: string;
   catalogId: string;
   catalogKind: string;
+  podcastGuid: string;
+  podcastShowTitle: string;
+  audioUrl: string;
+  audioPreviewUrl: string;
+  transcriptUrl: string;
+  feedUrl: string;
+  publishedAt: string;
+  durationSeconds: number | null;
   referenceTagName: ArtifactReferenceTagName;
   referenceTagValue: string;
   referenceKind: string;
@@ -169,6 +177,14 @@ export function buildArtifactPreview(input: {
   domain?: string;
   catalogId?: string;
   catalogKind?: string;
+  podcastGuid?: string;
+  podcastShowTitle?: string;
+  audioUrl?: string;
+  audioPreviewUrl?: string;
+  transcriptUrl?: string;
+  feedUrl?: string;
+  publishedAt?: string;
+  durationSeconds?: number | string | null;
   referenceTagName?: ArtifactReferenceTagName;
   referenceTagValue?: string;
   referenceKind?: string;
@@ -201,6 +217,14 @@ export function buildArtifactPreview(input: {
     domain,
     catalogId: cleanText(input.catalogId) || referenceTagValue,
     catalogKind: cleanText(input.catalogKind) || referenceKind,
+    podcastGuid: cleanText(input.podcastGuid) || podcastGuidFromCatalogValue(referenceTagValue),
+    podcastShowTitle: cleanText(input.podcastShowTitle),
+    audioUrl: cleanText(input.audioUrl),
+    audioPreviewUrl: cleanText(input.audioPreviewUrl),
+    transcriptUrl: cleanText(input.transcriptUrl),
+    feedUrl: cleanText(input.feedUrl),
+    publishedAt: cleanText(input.publishedAt),
+    durationSeconds: sanitizeDurationSeconds(input.durationSeconds),
     referenceTagName,
     referenceTagValue,
     referenceKind,
@@ -240,6 +264,14 @@ export function buildNostrArticleArtifactPreview(input: {
     domain: 'nostr',
     catalogId: address,
     catalogKind: `nostr:${kindLabel}`,
+    podcastGuid: '',
+    podcastShowTitle: '',
+    audioUrl: '',
+    audioPreviewUrl: '',
+    transcriptUrl: '',
+    feedUrl: '',
+    publishedAt: '',
+    durationSeconds: null,
     referenceTagName: 'a',
     referenceTagValue: address,
     referenceKind: kindLabel,
@@ -273,6 +305,14 @@ export function artifactFromEvent(event: NDKEventType): ArtifactRecord {
           description: event.tagValue('summary'),
           source: parseSource(event.tagValue('source')) ?? 'article',
           domain: 'nostr',
+          podcastGuid: event.tagValue('podcast_guid'),
+          podcastShowTitle: event.tagValue('podcast_show_title'),
+          audioUrl: event.tagValue('audio'),
+          audioPreviewUrl: event.tagValue('audio_preview'),
+          transcriptUrl: event.tagValue('transcript'),
+          feedUrl: event.tagValue('feed'),
+          publishedAt: event.tagValue('published_at'),
+          durationSeconds: event.tagValue('duration'),
           catalogId: primaryReference.value,
           catalogKind: `nostr:${primaryReference.kind}`,
           referenceTagName: 'a',
@@ -288,6 +328,14 @@ export function artifactFromEvent(event: NDKEventType): ArtifactRecord {
           image: event.tagValue('image'),
           description: event.tagValue('summary'),
           source: parseSource(event.tagValue('source')),
+          podcastGuid: event.tagValue('podcast_guid'),
+          podcastShowTitle: event.tagValue('podcast_show_title'),
+          audioUrl: event.tagValue('audio'),
+          audioPreviewUrl: event.tagValue('audio_preview'),
+          transcriptUrl: event.tagValue('transcript'),
+          feedUrl: event.tagValue('feed'),
+          publishedAt: event.tagValue('published_at'),
+          durationSeconds: event.tagValue('duration'),
           catalogId: primaryReference.catalogId,
           catalogKind: primaryReference.catalogKind,
           referenceTagName: primaryReference.referenceTagName,
@@ -506,6 +554,38 @@ function buildArtifactShareEvent(
     event.tags.push(['summary', input.preview.description]);
   }
 
+  if (input.preview.podcastGuid) {
+    event.tags.push(['podcast_guid', input.preview.podcastGuid]);
+  }
+
+  if (input.preview.podcastShowTitle) {
+    event.tags.push(['podcast_show_title', input.preview.podcastShowTitle]);
+  }
+
+  if (input.preview.audioUrl) {
+    event.tags.push(['audio', input.preview.audioUrl]);
+  }
+
+  if (input.preview.audioPreviewUrl) {
+    event.tags.push(['audio_preview', input.preview.audioPreviewUrl]);
+  }
+
+  if (input.preview.transcriptUrl) {
+    event.tags.push(['transcript', input.preview.transcriptUrl]);
+  }
+
+  if (input.preview.feedUrl) {
+    event.tags.push(['feed', input.preview.feedUrl]);
+  }
+
+  if (input.preview.publishedAt) {
+    event.tags.push(['published_at', input.preview.publishedAt]);
+  }
+
+  if (typeof input.preview.durationSeconds === 'number' && Number.isFinite(input.preview.durationSeconds)) {
+    event.tags.push(['duration', String(Math.max(0, Math.round(input.preview.durationSeconds)))]);
+  }
+
   return event;
 }
 
@@ -514,7 +594,15 @@ function artifactPreviewShouldRefresh(existing: ArtifactRecord, preview: Artifac
     cleanText(existing.title) !== cleanText(preview.title) ||
     cleanText(existing.author) !== cleanText(preview.author) ||
     cleanText(existing.image) !== cleanText(preview.image) ||
-    cleanText(existing.description) !== cleanText(preview.description)
+    cleanText(existing.description) !== cleanText(preview.description) ||
+    cleanText(existing.podcastGuid) !== cleanText(preview.podcastGuid) ||
+    cleanText(existing.podcastShowTitle) !== cleanText(preview.podcastShowTitle) ||
+    cleanText(existing.audioUrl) !== cleanText(preview.audioUrl) ||
+    cleanText(existing.audioPreviewUrl) !== cleanText(preview.audioPreviewUrl) ||
+    cleanText(existing.transcriptUrl) !== cleanText(preview.transcriptUrl) ||
+    cleanText(existing.feedUrl) !== cleanText(preview.feedUrl) ||
+    cleanText(existing.publishedAt) !== cleanText(preview.publishedAt) ||
+    sanitizeDurationSeconds(existing.durationSeconds) !== sanitizeDurationSeconds(preview.durationSeconds)
   );
 }
 
@@ -524,8 +612,35 @@ function mergeArtifactPreview(existing: ArtifactRecord, preview: ArtifactPreview
     title: choosePreferredArtifactText(existing.title, preview.title, existing.domain),
     author: choosePreferredArtifactText(existing.author, preview.author, ''),
     image: choosePreferredArtifactImage(existing.image, preview.image, existing.domain),
-    description: choosePreferredArtifactText(existing.description, preview.description, existing.domain)
+    description: choosePreferredArtifactText(existing.description, preview.description, existing.domain),
+    podcastGuid: choosePreferredArtifactValue(existing.podcastGuid, preview.podcastGuid),
+    podcastShowTitle: choosePreferredArtifactText(existing.podcastShowTitle, preview.podcastShowTitle, ''),
+    audioUrl: choosePreferredArtifactValue(existing.audioUrl, preview.audioUrl),
+    audioPreviewUrl: choosePreferredArtifactValue(existing.audioPreviewUrl, preview.audioPreviewUrl),
+    transcriptUrl: choosePreferredArtifactValue(existing.transcriptUrl, preview.transcriptUrl),
+    feedUrl: choosePreferredArtifactValue(existing.feedUrl, preview.feedUrl),
+    publishedAt: choosePreferredArtifactValue(existing.publishedAt, preview.publishedAt),
+    durationSeconds: choosePreferredDurationSeconds(existing.durationSeconds, preview.durationSeconds)
   };
+}
+
+function choosePreferredArtifactValue(existingValue: string, nextValue: string): string {
+  const current = cleanText(existingValue);
+  const next = cleanText(nextValue);
+  if (!next) return current;
+  if (!current) return next;
+  return current;
+}
+
+function choosePreferredDurationSeconds(
+  existingValue: number | null,
+  nextValue: number | null
+): number | null {
+  const current = sanitizeDurationSeconds(existingValue);
+  const next = sanitizeDurationSeconds(nextValue);
+  if (next == null) return current;
+  if (current == null) return next;
+  return current;
 }
 
 function choosePreferredArtifactText(existingValue: string, nextValue: string, domain: string): string {
@@ -763,6 +878,9 @@ function inferCatalogKindFromValue(value: string): string {
   if (value.startsWith('podcast:guid:')) return 'podcast:guid';
   if (value.startsWith('podcast:item:guid:')) return 'podcast:item:guid';
   if (value.startsWith('podcast:publisher:guid:')) return 'podcast:publisher:guid';
+  if (value.startsWith('spotify:episode:')) return 'spotify:episode';
+  if (value.startsWith('apple:podcast-episode:')) return 'apple:podcast-episode';
+  if (value.startsWith('overcast:episode:')) return 'overcast:episode';
   return 'web';
 }
 
@@ -864,6 +982,28 @@ function fallbackTitle(url: string): string {
   } catch {
     return 'Untitled source';
   }
+}
+
+function podcastGuidFromCatalogValue(value: string): string {
+  const normalized = cleanText(value);
+  if (normalized.startsWith('podcast:guid:')) {
+    return normalized.slice('podcast:guid:'.length);
+  }
+
+  return '';
+}
+
+function sanitizeDurationSeconds(value: number | string | null | undefined): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : null;
+  }
+
+  return null;
 }
 
 function domainLabel(url: string): string {

@@ -26,6 +26,10 @@ export type HighlightRecord = {
   eventReference: string;
   sourceUrl: string;
   sourceReferenceKey: string;
+  clipStartSeconds: number | null;
+  clipEndSeconds: number | null;
+  clipSpeaker: string;
+  clipTranscriptSegmentIds: string[];
   createdAt: number | null;
 };
 
@@ -69,6 +73,10 @@ export function highlightFromEvent(event: NDKEventType): HighlightRecord {
       eventReference,
       sourceUrl
     }),
+    clipStartSeconds: numericTagValue(highlight, 'start'),
+    clipEndSeconds: numericTagValue(highlight, 'end'),
+    clipSpeaker: cleanText(highlight.tagValue('speaker')),
+    clipTranscriptSegmentIds: uniqueValues(highlight.getMatchingTags('segment').map((tag) => tag[1] ?? '')),
     createdAt: highlight.created_at ?? null
   };
 }
@@ -282,9 +290,15 @@ export async function publishAndShareHighlight(
   input: {
     groupId: string;
     artifact: ArtifactRecord;
-    quote: string;
+    quote?: string;
     context?: string;
     note?: string;
+    clip?: {
+      startTime: number;
+      endTime: number;
+      speaker?: string;
+      transcriptSegmentIds?: string[];
+    };
   }
 ): Promise<{
   highlight: HighlightRecord;
@@ -346,9 +360,15 @@ async function publishCanonicalHighlight(
   ndk: NDK,
   input: {
     artifact: ArtifactRecord;
-    quote: string;
+    quote?: string;
     context?: string;
     note?: string;
+    clip?: {
+      startTime: number;
+      endTime: number;
+      speaker?: string;
+      transcriptSegmentIds?: string[];
+    };
   }
 ): Promise<HighlightRecord> {
   if (!ndk.signer) {
@@ -356,7 +376,8 @@ async function publishCanonicalHighlight(
   }
 
   const quote = cleanText(input.quote);
-  if (!quote) {
+  const clip = normalizeClip(input.clip);
+  if (!quote && !clip) {
     throw new Error('Enter the highlighted text first.');
   }
 
@@ -364,7 +385,7 @@ async function publishCanonicalHighlight(
   const relaySet = await buildUserHighlightRelaySet(ndk, currentUser.pubkey);
   const event = new NDKHighlight(ndk);
 
-  event.content = quote;
+  event.content = quote || buildClipFallbackQuote(clip);
   event.tags = [];
 
   if (input.artifact.highlightTagName === 'r' && input.artifact.url) {
@@ -374,12 +395,25 @@ async function publishCanonicalHighlight(
   }
 
   const context = cleanText(input.context);
-  event.context = context && context !== quote ? context : undefined;
+  event.context = context && context !== event.content ? context : undefined;
 
   const note = cleanText(input.note);
   if (note) {
     event.removeTag('comment');
     event.tags.push(['comment', note]);
+  }
+
+  if (clip) {
+    event.tags.push(['start', clip.startTime.toFixed(3)]);
+    event.tags.push(['end', clip.endTime.toFixed(3)]);
+
+    if (clip.speaker) {
+      event.tags.push(['speaker', clip.speaker]);
+    }
+
+    for (const segmentId of clip.transcriptSegmentIds) {
+      event.tags.push(['segment', segmentId]);
+    }
   }
 
   await event.sign();
@@ -460,4 +494,74 @@ function cleanText(value: string | undefined): string {
 
 function uniqueValues(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function numericTagValue(event: Pick<NDKEventType, 'tagValue'>, tagName: string): number | null {
+  const rawValue = cleanText(event.tagValue(tagName));
+  if (!rawValue) return null;
+
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function normalizeClip(
+  clip:
+    | {
+        startTime: number;
+        endTime: number;
+        speaker?: string;
+        transcriptSegmentIds?: string[];
+      }
+    | undefined
+): {
+  startTime: number;
+  endTime: number;
+  speaker: string;
+  transcriptSegmentIds: string[];
+} | null {
+  if (!clip) return null;
+
+  const startTime = Number(clip.startTime);
+  const endTime = Number(clip.endTime);
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
+    return null;
+  }
+
+  const normalizedStart = Math.max(0, Math.min(startTime, endTime));
+  const normalizedEnd = Math.max(0, Math.max(startTime, endTime));
+  if (normalizedEnd <= normalizedStart) {
+    return null;
+  }
+
+  return {
+    startTime: normalizedStart,
+    endTime: normalizedEnd,
+    speaker: cleanText(clip.speaker),
+    transcriptSegmentIds: uniqueValues(clip.transcriptSegmentIds ?? [])
+  };
+}
+
+function buildClipFallbackQuote(
+  clip:
+    | {
+        startTime: number;
+        endTime: number;
+      }
+    | null
+): string {
+  if (!clip) return '';
+  return `Clip ${formatClipTime(clip.startTime)}-${formatClipTime(clip.endTime)}`;
+}
+
+function formatClipTime(value: number): string {
+  const totalSeconds = Math.max(0, Math.round(value));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
