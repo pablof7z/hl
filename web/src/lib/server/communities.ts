@@ -34,6 +34,15 @@ export async function fetchCommunities(
     )) ?? []
   ).sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
 
+  return (await buildCommunitySummariesFromMetadataEvents(metadataEvents))
+    .filter((community): community is CommunitySummary => Boolean(community))
+    .filter((community) => visibility === 'all' || community.visibility === visibility)
+    .slice(0, limit);
+}
+
+export async function buildCommunitySummariesFromMetadataEvents(
+  metadataEvents: NDKEvent[]
+): Promise<CommunitySummary[]> {
   if (metadataEvents.length === 0) {
     return [];
   }
@@ -58,9 +67,7 @@ export async function fetchCommunities(
         return null;
       }
     })
-    .filter((community): community is CommunitySummary => Boolean(community))
-    .filter((community) => visibility === 'all' || community.visibility === visibility)
-    .slice(0, limit);
+    .filter((community): community is CommunitySummary => Boolean(community));
 }
 
 export async function fetchCommunityById(groupId: string): Promise<CommunitySummary | undefined> {

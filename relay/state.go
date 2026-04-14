@@ -37,6 +37,8 @@ type GroupsState struct {
 	baseURL  string
 	livekit  LiveKitSettings
 
+	globalSearchIndex *BleveIndex
+
 	deletedCache      [128]nostr.ID
 	deletedCacheIndex atomic.Uint32
 
@@ -70,13 +72,18 @@ func (s *GroupsState) UpdateRuntimeConfig(relayURL string, baseURL string, livek
 func (s *GroupsState) HandleEventSaved(ctx context.Context, event nostr.Event) {
 	for _, affectedGroup := range s.ProcessEvent(ctx, event) {
 		for updated := range s.SyncGroupMetadataEvents(affectedGroup) {
+			if err := s.IndexEvent(updated); err != nil {
+				L.Warn().Err(err).Int("kind", int(updated.Kind)).Msg("failed to index metadata event")
+			}
 			global.R.BroadcastEvent(updated)
 		}
 	}
 
-	if group := s.GetGroupFromEvent(event); group != nil {
-		if err := group.IndexEvent(event); err != nil {
+	if err := s.IndexEvent(event); err != nil {
+		if group := s.GetGroupFromEvent(event); group != nil {
 			L.Warn().Err(err).Str("group", group.Address.ID).Msg("failed to index event")
+		} else {
+			L.Warn().Err(err).Int("kind", int(event.Kind)).Msg("failed to index event")
 		}
 	}
 }

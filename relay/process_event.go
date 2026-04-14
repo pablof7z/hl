@@ -91,6 +91,9 @@ func (s *GroupsState) ProcessEvent(ctx context.Context, event nostr.Event) (grou
 					if err := group.DeindexEvent(id); err != nil {
 						L.Warn().Err(err).Str("group", group.Address.ID).Str("target", id.Hex()).Msg("failed to delete event from search index")
 					}
+					if err := s.DeindexEvent(id); err != nil {
+						L.Warn().Err(err).Str("scope", "global").Str("target", id.Hex()).Msg("failed to delete event from global search index")
+					}
 				}
 			}
 		} else if event.Kind == nostr.KindSimpleGroupDeleteGroup {

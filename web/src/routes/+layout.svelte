@@ -4,6 +4,7 @@
   import type { LayoutProps } from './$types';
   import '../app.css';
   import AuthPanel from '$lib/features/auth/AuthPanel.svelte';
+  import HeaderSearch from '$lib/components/HeaderSearch.svelte';
   import SiteNavigation from '$lib/components/SiteNavigation.svelte';
   import SeoHead from '$lib/components/SeoHead.svelte';
   import { ndk, ensureClientNdk } from '$lib/ndk/client';
@@ -27,20 +28,24 @@
 {/if}
 
 <header class="app-navbar-shell">
-  <div class="navbar app-navbar shell">
-    <div class="navbar-start">
+  <div class="shell app-header">
+    <div class="app-header-top">
       <a class="brand" href="/">
         <span class="brand-name">Highlighter</span>
         <span class="brand-dot" aria-hidden="true"></span>
       </a>
+
+      <div class="header-search-wrap">
+        <HeaderSearch />
+      </div>
+
+      <div class="header-auth">
+        <AuthPanel />
+      </div>
     </div>
 
-    <div class="navbar-center">
+    <div class="app-header-bottom">
       <SiteNavigation />
-    </div>
-
-    <div class="navbar-end">
-      <AuthPanel />
     </div>
   </div>
 </header>
@@ -65,26 +70,32 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .app-navbar {
+  .app-header {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.65rem 0 0.6rem;
+  }
+
+  .app-header-top {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 1rem;
-    padding: 0.5rem 0;
-    min-height: 3.5rem;
-    justify-content: space-between;
-  }
-
-  .navbar-start,
-  .navbar-end {
-    flex-shrink: 0;
-    display: flex;
     align-items: center;
   }
 
-  .navbar-center {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .header-search-wrap {
     min-width: 0;
+  }
+
+  .header-auth {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .app-header-bottom {
+    display: flex;
+    justify-content: center;
   }
 
   .brand {
@@ -110,5 +121,16 @@
     background: var(--accent);
     flex-shrink: 0;
     margin-bottom: 0.08rem;
+  }
+
+  @media (max-width: 900px) {
+    .app-header-top {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .header-search-wrap {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
   }
 </style>

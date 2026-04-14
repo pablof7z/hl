@@ -38,6 +38,7 @@ func configureRelay(relay *khatru.Relay, relayBaseURL string) error {
 	relay.Info.PubKey = &pk
 	relay.Info.Self = &pk
 	relay.Info.AddSupportedNIP(29)
+	relay.Info.AddSupportedNIP(50)
 
 	relay.QueryStored = State.Query
 	relay.StoreEvent = func(ctx context.Context, event nostr.Event) error {

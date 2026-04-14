@@ -213,7 +213,8 @@ func (b *BleveIndex) SaveEvent(evt nostr.Event) error {
 	docID := evt.ID
 
 	var references []string
-	var extras string
+	var extras strings.Builder
+	var prefix strings.Builder
 
 	switch evt.Kind {
 	case 6, 16:
@@ -227,6 +228,38 @@ func (b *BleveIndex) SaveEvent(evt nostr.Event) error {
 		if err := json.Unmarshal([]byte(evt.Content), &pm); err == nil {
 			evt.Content = pm.Name + "\n" + pm.DisplayName + "\n" + pm.About
 			references = append(references, pm.NIP05)
+		}
+	case nostr.KindSimpleGroupMetadata:
+		appendSearchLine(&prefix, searchTagValue(evt.Tags, "name"))
+		appendSearchLine(&prefix, searchTagValue(evt.Tags, "about"))
+		appendSearchExtra(&extras, searchTagValue(evt.Tags, "d"))
+		appendSearchExtra(&extras, searchTagValue(evt.Tags, "name"))
+		appendSearchExtra(&extras, searchTagValue(evt.Tags, "about"))
+	case nostr.KindArticle:
+		appendSearchLine(&prefix, searchTagValue(evt.Tags, "title"))
+		appendSearchLine(&prefix, searchTagValue(evt.Tags, "summary"))
+		appendSearchExtra(&extras, searchTagValue(evt.Tags, "d"))
+		appendSearchExtra(&extras, searchTagValue(evt.Tags, "title"))
+		appendSearchExtra(&extras, searchTagValue(evt.Tags, "summary"))
+		for _, tag := range evt.Tags {
+			if len(tag) < 2 {
+				continue
+			}
+			switch tag[0] {
+			case "t":
+				appendSearchExtra(&extras, tag[1])
+			case "r":
+				references = append(references, tag[1])
+				appendSearchExtra(&extras, tag[1])
+			case "a":
+				if ptr, err := nostr.EntityPointerFromTag(tag); err == nil {
+					references = append(references, ptr.AsTagReference())
+				}
+			case "e":
+				if ptr, err := nostr.EventPointerFromTag(tag); err == nil {
+					references = append(references, ptr.AsTagReference())
+				}
+			}
 		}
 	case 9802:
 		for _, tag := range evt.Tags {
@@ -249,6 +282,13 @@ func (b *BleveIndex) SaveEvent(evt nostr.Event) error {
 			}
 		}
 	}
+	if prefix.Len() > 0 {
+		if evt.Content != "" {
+			evt.Content = prefix.String() + "\n" + evt.Content
+		} else {
+			evt.Content = prefix.String()
+		}
+	}
 
 	doc := map[string]any{
 		labelKindField:      strconv.Itoa(int(evt.Kind)),
@@ -265,7 +305,7 @@ func (b *BleveIndex) SaveEvent(evt nostr.Event) error {
 		} else {
 			references = append(references, block.Pointer.AsTagReference())
 			if ep, ok := block.Pointer.(nip73.ExternalPointer); ok {
-				extras += ep.Thing + " "
+				appendSearchExtra(&extras, ep.Thing)
 			}
 		}
 	}
@@ -273,7 +313,7 @@ func (b *BleveIndex) SaveEvent(evt nostr.Event) error {
 	doc[b.contentFieldName()] = content.String()
 
 	doc[labelReferencesField] = references
-	doc[labelExtrasField] = extras
+	doc[labelExtrasField] = extras.String()
 
 	if err := b.index.Index(docID.Hex(), doc); err != nil {
 		return fmt.Errorf("failed to index '%s' document: %w", docID.Hex(), err)
@@ -445,4 +485,51 @@ func (b *BleveIndex) CountEvents(filter nostr.Filter) (uint32, error) {
 	}
 
 	return 0, errors.New("not supported")
+}
+
+func collectSearchableEvents(filter nostr.Filter, count uint32) []nostr.Event {
+	maxInt := int(^uint(0) >> 1)
+	maxLimit := int(count)
+	if maxLimit <= 0 || maxLimit > maxInt {
+		maxLimit = maxInt
+	}
+
+	events := make([]nostr.Event, 0, maxLimit)
+	for evt := range store.QueryEvents(filter, maxLimit) {
+		events = append(events, evt)
+	}
+
+	return events
+}
+
+func appendSearchLine(builder *strings.Builder, value string) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return
+	}
+
+	if builder.Len() > 0 {
+		builder.WriteByte('\n')
+	}
+	builder.WriteString(trimmed)
+}
+
+func appendSearchExtra(builder *strings.Builder, value string) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return
+	}
+
+	if builder.Len() > 0 {
+		builder.WriteByte(' ')
+	}
+	builder.WriteString(trimmed)
+}
+
+func searchTagValue(tags nostr.Tags, name string) string {
+	if tag := tags.Find(name); tag != nil && len(tag) > 1 {
+		return tag[1]
+	}
+
+	return ""
 }

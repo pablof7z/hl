@@ -27,8 +27,22 @@ func (s *GroupsState) Query(ctx context.Context, filter nostr.Filter) iter.Seq[n
 					}
 				}
 			} else {
-				// no groups or too many groups
-				return
+				if len(groupIDs) > 0 {
+					return
+				}
+
+				for evt := range s.SearchGlobalEvents(filter, 40) {
+					if evt.Kind == nostr.KindSimpleGroupMetadata {
+						group := s.GetGroupFromEvent(evt)
+						if group != nil && (group.Private || group.Hidden) && !group.AnyOfTheseIsAMember(authed) {
+							continue
+						}
+					}
+
+					if !yield(evt) {
+						return
+					}
+				}
 			}
 		} else {
 			for evt := range s.DB.QueryEvents(filter, 1500) {
