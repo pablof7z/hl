@@ -17,6 +17,12 @@ The example product surfaces in this repo include profiles, notes, articles, com
 - Do not add new global styling to `src/app.css` if the change can live beside the component or be scoped to a smaller styling surface.
 - Add nested `AGENTS.md` files sparingly. Only create one when a subtree has non-obvious architectural rules that are worth preserving.
 
+## Deployment
+
+- Production deploys for this app should be run with `npm run deploy:web:prod` from the repo root.
+- That command changes into `web/`, runs `bun run build`, and then runs `vercel deploy --prebuilt --prod`, which is the path currently serving `beta.highlighter.com`.
+- Do not use bare `vercel deploy --prod` from the monorepo root for this app. It can produce a production alias that does not serve the SvelteKit output.
+
 ## Preferred Boundaries
 
 - `src/routes`: route orchestration, route-local loading, and page composition.

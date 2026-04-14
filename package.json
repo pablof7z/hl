@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "build": "node scripts/build-static-app.mjs && npx @tailwindcss/cli -i ./app.css -o ./public/output.css --minify",
-    "dev": "node scripts/build-static-app.mjs && npx @tailwindcss/cli -i ./app.css -o ./public/output.css --watch"
+    "dev": "node scripts/build-static-app.mjs && npx @tailwindcss/cli -i ./app.css -o ./public/output.css --watch",
+    "deploy:web:prod": "cd web && bun run build && vercel deploy --prebuilt --prod"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.4",
