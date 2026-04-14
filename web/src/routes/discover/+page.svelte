@@ -6,8 +6,6 @@
   let { data }: PageProps = $props();
 
   const currentUser = $derived(ndk.$currentUser);
-  const openCount = $derived(data.communities.filter((community) => community.access === 'open').length);
-  const closedCount = $derived(data.communities.length - openCount);
 </script>
 
 <svelte:head>
@@ -32,24 +30,6 @@
       </a>
     </div>
   </header>
-
-  <section class="discover-summary">
-    <article class="summary-card">
-      <p class="summary-label">Public communities</p>
-      <strong>{data.communities.length}</strong>
-      <span>Relay-indexed groups visible to guests.</span>
-    </article>
-    <article class="summary-card">
-      <p class="summary-label">Open now</p>
-      <strong>{openCount}</strong>
-      <span>Groups a reader can join without an invite code.</span>
-    </article>
-    <article class="summary-card">
-      <p class="summary-label">Invite only</p>
-      <strong>{closedCount}</strong>
-      <span>Closed communities that are still publicly legible.</span>
-    </article>
-  </section>
 
   <CommunityGrid
     communities={data.communities}
@@ -80,8 +60,7 @@
     max-width: 44rem;
   }
 
-  .eyebrow,
-  .summary-label {
+  .eyebrow {
     margin: 0;
     color: var(--accent);
     font-size: 0.8rem;
@@ -100,8 +79,7 @@
     max-width: 11ch;
   }
 
-  .lede,
-  .summary-card span {
+  .lede {
     margin: 0.9rem 0 0;
     color: var(--muted);
     line-height: 1.65;
@@ -133,30 +111,6 @@
   .secondary-link {
     background: var(--surface);
     color: var(--text);
-  }
-
-  .discover-summary {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 0.9rem;
-  }
-
-  .summary-card {
-    display: grid;
-    gap: 0.35rem;
-    padding: 1rem 1.1rem;
-    border: 1px solid var(--border);
-    border-radius: 1.1rem;
-    background:
-      radial-gradient(circle at top left, rgba(255, 103, 25, 0.08), transparent 40%),
-      var(--surface);
-  }
-
-  .summary-card strong {
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 2rem;
-    line-height: 1;
   }
 
   @media (max-width: 760px) {
