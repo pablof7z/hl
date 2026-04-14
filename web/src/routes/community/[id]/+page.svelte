@@ -257,10 +257,10 @@
   </section>
 {:else}
   <section class="community-page">
-    <header class="community-hero">
-      <div class="community-hero-top">
-        <div class="community-identity">
-          <div class="community-avatar">
+    {#if isMember}
+      <header class="community-bar">
+        <div class="community-bar-left">
+          <div class="community-avatar-sm">
             {#if data.community.picture}
               <img src={data.community.picture} alt="" />
             {:else}
@@ -268,38 +268,66 @@
             {/if}
           </div>
 
-          <div class="community-copy">
-            <p class="eyebrow">Community</p>
-            <h1>{data.community.name}</h1>
-            <p class="community-about">
-              {data.community.about || 'A reading room for pieces people want to keep passing around.'}
-            </p>
-            <div class="community-badges">
-              <span>{accessLabel(data.community.access)}</span>
-              <span>{visibilityLabel(data.community.visibility)}</span>
+          <div class="community-bar-info">
+            <h1 class="community-bar-name">{data.community.name}</h1>
+            <div class="community-bar-meta">
               <span>{memberLabel(data.community.memberCount)}</span>
-            </div>
-
-            <div class="community-glance">
               <span>{shelfLabel(artifacts.length)}</span>
               <span>{passageLabel(communityHighlights.length)}</span>
             </div>
           </div>
         </div>
 
-        <CommunityMembershipPanel
-          community={data.community}
-          signedIn={Boolean(currentUser)}
-          joined={isMember}
-          checkingMembership={Boolean(currentUser && !membershipReady)}
-          {joinPending}
-          {joinRequested}
-          {joinNotice}
-          {joinError}
-          onJoin={joinCommunity}
-        />
-      </div>
-    </header>
+        <div class="community-bar-actions">
+          <a class="bar-share-btn" href="#share-artifact">Share something</a>
+          <a class="bar-link" href="/community">All communities</a>
+        </div>
+      </header>
+    {:else}
+      <header class="community-hero">
+        <div class="community-hero-top">
+          <div class="community-identity">
+            <div class="community-avatar">
+              {#if data.community.picture}
+                <img src={data.community.picture} alt="" />
+              {:else}
+                <span>{data.community.name.trim().charAt(0).toUpperCase() || '#'}</span>
+              {/if}
+            </div>
+
+            <div class="community-copy">
+              <p class="eyebrow">Community</p>
+              <h1>{data.community.name}</h1>
+              <p class="community-about">
+                {data.community.about || 'A reading room for pieces people want to keep passing around.'}
+              </p>
+              <div class="community-badges">
+                <span>{accessLabel(data.community.access)}</span>
+                <span>{visibilityLabel(data.community.visibility)}</span>
+                <span>{memberLabel(data.community.memberCount)}</span>
+              </div>
+
+              <div class="community-glance">
+                <span>{shelfLabel(artifacts.length)}</span>
+                <span>{passageLabel(communityHighlights.length)}</span>
+              </div>
+            </div>
+          </div>
+
+          <CommunityMembershipPanel
+            community={data.community}
+            signedIn={Boolean(currentUser)}
+            joined={isMember}
+            checkingMembership={Boolean(currentUser && !membershipReady)}
+            {joinPending}
+            {joinRequested}
+            {joinNotice}
+            {joinError}
+            onJoin={joinCommunity}
+          />
+        </div>
+      </header>
+    {/if}
 
     {#if artifacts.length === 0}
       <section class="empty-collection">
@@ -522,6 +550,112 @@
     display: grid;
     gap: 1.8rem;
     padding: 2rem 0 3rem;
+  }
+
+  .community-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    background: var(--surface);
+  }
+
+  .community-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .community-avatar-sm {
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    background: linear-gradient(160deg, rgba(255, 103, 25, 0.16), rgba(255, 103, 25, 0.04));
+    overflow: hidden;
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .community-avatar-sm img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .community-bar-info {
+    min-width: 0;
+  }
+
+  .community-bar-name {
+    margin: 0;
+    color: var(--text-strong);
+    font-family: var(--font-serif);
+    font-size: 1.15rem;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .community-bar-meta {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    margin-top: 0.2rem;
+  }
+
+  .community-bar-meta span {
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .community-bar-meta span:not(:last-child)::after {
+    content: '\00b7';
+    margin-left: 0.35rem;
+  }
+
+  .community-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+  }
+
+  .bar-share-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.1rem;
+    padding: 0 0.85rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .bar-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.1rem;
+    padding: 0 0.85rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.85rem;
+    font-weight: 600;
   }
 
   .community-hero {
@@ -816,6 +950,19 @@
     .community-page,
     .community-missing {
       padding-top: 1.5rem;
+    }
+
+    .community-bar {
+      flex-wrap: wrap;
+    }
+
+    .community-bar-actions {
+      width: 100%;
+    }
+
+    .bar-share-btn,
+    .bar-link {
+      flex: 1;
     }
 
     .community-hero-top,
