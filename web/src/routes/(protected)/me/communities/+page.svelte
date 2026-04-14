@@ -53,19 +53,11 @@
 </svelte:head>
 
 <section class="me-communities-page">
-  <header class="me-header">
-    <p class="eyebrow">Me</p>
-    <h1>My Communities</h1>
+  <header class="page-copy">
+    <p class="eyebrow">Communities</p>
+    <h2>Everything your pubkey currently belongs to.</h2>
     <p>Everything your pubkey currently belongs to, across public and private relay-backed groups.</p>
   </header>
-
-  <nav class="me-tabs">
-    <a href="/me/highlights" class="me-tab">Highlights</a>
-    <a href="/me/communities" class="me-tab active">Communities</a>
-    <a href="/me/for-later" class="me-tab">For Later</a>
-    <a href="/me/recommended" class="me-tab">Recommended</a>
-    <a href="/me/synthesis" class="me-tab">Synthesis</a>
-  </nav>
 
   <section class="me-summary">
     <div class="summary-card">
@@ -101,10 +93,9 @@
   .me-communities-page {
     display: grid;
     gap: 1.5rem;
-    padding: 1rem 0 3rem;
   }
 
-  .me-header {
+  .page-copy {
     display: grid;
     gap: 0.35rem;
   }
@@ -119,44 +110,20 @@
     text-transform: uppercase;
   }
 
-  h1 {
+  h2 {
     margin: 0;
     color: var(--text-strong);
     font-family: var(--font-serif);
-    font-size: clamp(2rem, 4vw, 2.8rem);
-    line-height: 1.05;
-    letter-spacing: -0.03em;
+    font-size: clamp(1.6rem, 3vw, 2.2rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
   }
 
-  .me-header p:last-child,
+  .page-copy p:last-child,
   .summary-card span {
     margin: 0;
     color: var(--muted);
     line-height: 1.65;
-  }
-
-  .me-tabs {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .me-tab {
-    padding: 0.45rem 1rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 0.88rem;
-    font-weight: 500;
-    text-decoration: none;
-    transition: border-color 140ms, color 140ms;
-  }
-
-  .me-tab:hover,
-  .me-tab.active {
-    border-color: var(--accent);
-    color: var(--accent);
   }
 
   .me-summary {

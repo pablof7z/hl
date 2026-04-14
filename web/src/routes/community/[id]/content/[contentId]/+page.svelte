@@ -6,6 +6,11 @@
   import HighlightPopover from '$lib/components/HighlightPopover.svelte';
   import HighlightCard from '$lib/features/highlights/HighlightCard.svelte';
   import HighlightForm from '$lib/features/highlights/HighlightForm.svelte';
+  import {
+    getForLaterArtifact,
+    removeForLaterArtifact,
+    saveForLaterArtifact
+  } from '$lib/features/vault/vault';
   import { ndk } from '$lib/ndk/client';
   import {
     articlePublishedAt,
@@ -103,6 +108,68 @@
         )
       : []
   );
+  let savingForLater = $state(false);
+  let savedForLater = $state(false);
+  let forLaterMessage = $state('');
+  let forLaterError = $state('');
+
+  $effect(() => {
+    if (!browser || !data.artifact) {
+      savedForLater = false;
+      return;
+    }
+
+    let cancelled = false;
+
+    void getForLaterArtifact(data.artifact.id)
+      .then((item) => {
+        if (!cancelled) {
+          savedForLater = Boolean(item);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          savedForLater = false;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  async function toggleForLater() {
+    if (!data.artifact || !data.community || savingForLater) {
+      return;
+    }
+
+    savingForLater = true;
+    forLaterMessage = '';
+    forLaterError = '';
+
+    try {
+      if (savedForLater) {
+        await removeForLaterArtifact(data.artifact.id);
+        savedForLater = false;
+        forLaterMessage = 'Removed from For Later.';
+        return;
+      }
+
+      const result = await saveForLaterArtifact({
+        artifact: data.artifact,
+        communityIds: [data.community.id],
+        sharedRoutes: [{ groupId: data.community.id, artifactId: data.artifact.id }]
+      });
+
+      savedForLater = true;
+      forLaterMessage = result.existing ? 'Already saved in For Later.' : 'Saved to For Later.';
+    } catch (error) {
+      forLaterError =
+        error instanceof Error ? error.message : 'Could not update your For Later queue.';
+    } finally {
+      savingForLater = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -156,7 +223,22 @@
           <a href={`/community/${data.community.id}/content/${data.artifact.id}/discussion`}>
             Discussion
           </a>
+          <button type="button" class:active={savedForLater} disabled={savingForLater} onclick={toggleForLater}>
+            {savingForLater
+              ? 'Updating…'
+              : savedForLater
+                ? 'Saved to For Later'
+                : 'Save to For Later'}
+          </button>
         </div>
+
+        {#if forLaterError}
+          <p class="artifact-feedback error">{forLaterError}</p>
+        {/if}
+
+        {#if forLaterMessage}
+          <p class="artifact-feedback">{forLaterMessage}</p>
+        {/if}
       </div>
     </header>
 
@@ -319,6 +401,7 @@
 
   .artifact-badges span,
   .artifact-actions a,
+  .artifact-actions button,
   .actions a {
     display: inline-flex;
     align-items: center;
@@ -331,18 +414,29 @@
     font-weight: 600;
   }
 
+  .artifact-actions button {
+    border: 0;
+    cursor: pointer;
+  }
+
   .artifact-actions a:first-child,
+  .artifact-actions button.active,
   .actions a:last-child {
     background: var(--accent);
     color: white;
   }
 
   .artifact-note,
+  .artifact-feedback,
   .artifact-next p,
   .artifact-missing p {
     margin: 0;
     color: var(--muted);
     line-height: 1.65;
+  }
+
+  .artifact-feedback.error {
+    color: #b42318;
   }
 
   .artifact-next,
