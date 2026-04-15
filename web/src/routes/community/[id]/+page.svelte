@@ -161,6 +161,7 @@
   let joinRequested = $state(false);
   let joinNotice = $state('');
   let joinError = $state('');
+  let shareOpen = $state(false);
 
   $effect(() => {
     data.community?.id;
@@ -278,7 +279,7 @@
         </div>
 
         <div class="community-bar-actions">
-          <a class="bar-share-btn" href="#share-artifact">Share something</a>
+          <button class="bar-share-btn" type="button" onclick={() => shareOpen = true}>Share something</button>
           <a class="bar-link" href="/community">All communities</a>
         </div>
       </header>
@@ -322,6 +323,7 @@
             {joinNotice}
             {joinError}
             onJoin={joinCommunity}
+            onShare={() => shareOpen = true}
           />
         </div>
       </header>
@@ -339,8 +341,10 @@
         </div>
 
         {#if canShare}
-          <div id="share-artifact">
-            <ArtifactForm groupId={data.community.id} />
+          <div class="empty-collection-action">
+            <button class="side-card-action" type="button" onclick={() => shareOpen = true}>
+              Share the first source
+            </button>
           </div>
         {:else if currentUser}
           <section class="side-card guest-card">
@@ -431,7 +435,7 @@
               <p class="panel-label">Add To The Collection</p>
               <h3>Bring in the next source.</h3>
               <p>Share a new source and give this community a stronger shelf to react to.</p>
-              <a href="#share-artifact">Open the share form</a>
+              <button class="side-card-action" type="button" onclick={() => shareOpen = true}>Share something</button>
             </section>
           {:else if currentUser}
             <section class="side-card guest-card">
@@ -462,37 +466,6 @@
         </aside>
       </section>
 
-      <section class="composer-row" id="share-artifact">
-        {#if canShare}
-          <ArtifactForm groupId={data.community.id} />
-        {:else if currentUser}
-          <section class="side-card guest-card">
-            <p class="panel-label">Join To Share</p>
-            <h3>This shelf opens once you are a member.</h3>
-            <p>Join the community first, then come back here to share your next article, book, podcast, or video.</p>
-            {#if membershipReady}
-              <button
-                class="side-card-action"
-                type="button"
-                disabled={joinPending || joinRequested}
-                onclick={() => void joinCommunity()}
-              >
-                {joinActionLabel()}
-              </button>
-            {:else}
-              <span class="side-card-note">Checking your membership...</span>
-            {/if}
-          </section>
-        {:else}
-          <section class="side-card guest-card">
-            <p class="panel-label">Share Into This Community</p>
-            <h3>Set up a profile to contribute.</h3>
-            <p>Guests can browse the collection. Members can keep feeding it.</p>
-            <a class="side-card-action" href="/onboarding">Set up a profile</a>
-          </section>
-        {/if}
-      </section>
-
       {#if archiveArtifacts.length > 0}
         <section class="artifact-feed">
           <div class="artifact-feed-header">
@@ -513,6 +486,10 @@
           </div>
         </section>
       {/if}
+    {/if}
+
+    {#if canShare}
+      <ArtifactForm groupId={data.community.id} bind:open={shareOpen} />
     {/if}
 
     <section class="highlight-feed">
@@ -671,7 +648,6 @@
   .mini-card-stack,
   .empty-collection,
   .empty-collection-copy,
-  .composer-row,
   .highlight-feed,
   .artifact-feed {
     display: grid;
@@ -877,19 +853,6 @@
     background: var(--surface-soft);
     color: var(--muted);
     font-size: 0.76rem;
-    font-weight: 700;
-  }
-
-  .share-card a {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 2.5rem;
-    width: fit-content;
-    padding: 0 0.95rem;
-    border-radius: 999px;
-    background: var(--accent);
-    color: white;
     font-weight: 700;
   }
 

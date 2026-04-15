@@ -10,7 +10,8 @@
     joinRequested = false,
     joinNotice = '',
     joinError = '',
-    onJoin
+    onJoin,
+    onShare
   }: {
     community: CommunitySummary;
     signedIn: boolean;
@@ -21,6 +22,7 @@
     joinNotice?: string;
     joinError?: string;
     onJoin?: () => void | Promise<void>;
+    onShare?: () => void;
   } = $props();
 
   function accessLabel(access: CommunitySummary['access']): string {
@@ -86,7 +88,7 @@
 
   <div class="membership-actions">
     {#if joined}
-      <a class="primary-action" href="#share-artifact">{primaryActionLabel()}</a>
+      <button class="primary-action" type="button" onclick={() => onShare?.()}>{primaryActionLabel()}</button>
     {:else if checkingMembership}
       <span class="pending-pill">Checking access...</span>
     {:else if signedIn}

@@ -10,11 +10,14 @@
     publishArtifact,
     type ArtifactPreview
   } from '$lib/ndk/artifacts';
+  import * as Dialog from '$lib/components/ui/dialog';
 
   let {
-    groupId
+    groupId,
+    open = $bindable(false)
   }: {
     groupId: string;
+    open?: boolean;
   } = $props();
 
   let reference = $state('');
@@ -25,6 +28,17 @@
   let publishing = $state(false);
   let errorMessage = $state('');
   let statusMessage = $state('');
+
+  $effect(() => {
+    if (!open) {
+      reference = '';
+      source = 'article';
+      note = '';
+      preview = null;
+      errorMessage = '';
+      statusMessage = '';
+    }
+  });
 
   const currentUser = $derived(ndk.$currentUser);
   const isReadOnly = $derived(Boolean(ndk.$sessions?.isReadOnly()));
@@ -120,11 +134,23 @@
   }
 </script>
 
-<section class="artifact-form-shell">
-  <div class="artifact-form-copy">
-    <h2>Share a source</h2>
-  </div>
+<Dialog.Root bind:open>
+  <Dialog.Content class="artifact-form-dialog">
+    <div class="artifact-form-chrome">
+      <div class="artifact-form-handle" aria-hidden="true"></div>
 
+      <Dialog.Header class="artifact-form-header">
+        <Dialog.Title>Share a source</Dialog.Title>
+      </Dialog.Header>
+
+      <Dialog.Close class="dialog-close" aria-label="Close share dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </Dialog.Close>
+    </div>
+
+    <div class="artifact-form-body">
   <form class="artifact-form" onsubmit={handlePreview}>
     <label class="field">
       <span>Type</span>
@@ -185,9 +211,8 @@
         <div class="preview-copy">
           <div class="preview-topline">
             <span>{preview.source}</span>
-            <span>{preview.domain}</span>
-            {#if preview.catalogKind && preview.catalogKind !== 'web' && preview.catalogKind !== 'nostr:30023'}
-              <span>{preview.catalogKind}</span>
+            {#if preview.domain}
+              <span>{preview.domain}</span>
             {/if}
           </div>
           <strong>{preview.title}</strong>
@@ -213,35 +238,62 @@
           {#if preview.description}
             <p>{preview.description}</p>
           {/if}
-          {#if preview.catalogId && preview.catalogKind !== 'web' && preview.catalogId !== preview.url}
-            <code>{preview.catalogId}</code>
-          {/if}
-          <code>/community/{groupId}/content/{preview.id}</code>
         </div>
       </div>
     {/if}
   </form>
-</section>
+    </div>
+  </Dialog.Content>
+</Dialog.Root>
 
 <style>
-  .artifact-form-shell {
-    display: grid;
-    gap: 1rem;
-    padding: 1.2rem;
-    border: 1px solid var(--border);
-    border-radius: 1.35rem;
+  :global(.artifact-form-dialog) {
+    padding: 1.15rem;
     background:
       radial-gradient(circle at top left, rgba(255, 103, 25, 0.08), transparent 36%),
-      var(--surface);
+      #ffffff;
   }
 
-  .artifact-form-copy h2 {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 1.5rem;
-    line-height: 1.15;
-    letter-spacing: -0.02em;
+  .artifact-form-chrome {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    gap: 0.9rem;
+  }
+
+  .artifact-form-handle {
+    grid-column: 1 / -1;
+    width: 3rem;
+    height: 0.3rem;
+    border-radius: 999px;
+    background: rgba(17, 17, 17, 0.08);
+    margin: 0 auto 0.15rem;
+  }
+
+  :global(.artifact-form-header) {
+    gap: 0.35rem;
+  }
+
+  :global(.dialog-close) {
+    display: grid;
+    place-items: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  :global(.dialog-close svg) {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .artifact-form-body {
+    margin-top: 1rem;
   }
 
   .preview-copy p {
@@ -365,8 +417,7 @@
     flex-wrap: wrap;
   }
 
-  .preview-topline span,
-  .preview-copy code {
+  .preview-topline span {
     display: inline-flex;
     align-items: center;
     min-height: 1.75rem;
