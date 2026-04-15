@@ -3,9 +3,14 @@ import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 
-const commitHash =
-  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ??
-  execSync('git rev-parse --short HEAD').toString().trim();
+let commitHash = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7);
+if (!commitHash) {
+  try {
+    commitHash = execSync('git rev-parse --short HEAD').toString().trim();
+  } catch {
+    commitHash = 'dev';
+  }
+}
 
 export default defineConfig({
   plugins: [tailwindcss(), sveltekit()],
