@@ -85,13 +85,13 @@
   }
 
   .app-header-top {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 1rem;
+    display: flex;
     align-items: center;
+    gap: 1rem;
   }
 
   .header-search-wrap {
+    flex: 1;
     min-width: 0;
   }
 
@@ -170,12 +170,7 @@
 
   @media (max-width: 900px) {
     .app-header-top {
-      grid-template-columns: minmax(0, 1fr) auto;
-    }
-
-    .header-search-wrap {
-      grid-column: 1 / -1;
-      grid-row: 2;
+      gap: 0.65rem;
     }
   }
 </style>

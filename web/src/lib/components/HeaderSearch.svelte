@@ -1,13 +1,15 @@
 <script lang="ts">
   import { browser } from '$app/environment';
   import { page } from '$app/state';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { MIN_SEARCH_QUERY_LENGTH, type SearchResponse } from '$lib/search';
 
   const SEARCH_RESULT_LIMIT = 4;
 
   let rootEl = $state<HTMLElement | null>(null);
+  let inputEl = $state<HTMLInputElement | null>(null);
   let query = $state(page.url.searchParams.get('q') ?? '');
+  let expanded = $state(false);
   let open = $state(false);
   let loading = $state(false);
   let lastFetchedQuery = $state('');
@@ -27,6 +29,7 @@
   );
   const showDropdown = $derived(
     open &&
+      expanded &&
       trimmedQuery.length >= MIN_SEARCH_QUERY_LENGTH &&
       (loading || hasResults || lastFetchedQuery === trimmedQuery)
   );
@@ -71,12 +74,12 @@
         return;
       }
 
-      open = false;
+      collapse();
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        open = false;
+        collapse();
       }
     };
 
@@ -88,6 +91,22 @@
       document.removeEventListener('keydown', handleKeyDown);
     };
   });
+
+  async function expand(): Promise<void> {
+    expanded = true;
+    open = true;
+    await tick();
+    inputEl?.focus();
+  }
+
+  function collapse(): void {
+    open = false;
+    expanded = false;
+  }
+
+  function closeDropdown(): void {
+    collapse();
+  }
 
   async function fetchResults(searchQuery: string): Promise<void> {
     controller?.abort();
@@ -143,271 +162,115 @@
       articles: []
     };
   }
-
-  function closeDropdown(): void {
-    open = false;
-  }
 </script>
 
-<form class="header-search" role="search" method="GET" action="/search" bind:this={rootEl}>
-  <label class="header-search-input">
-    <input
-      bind:value={query}
-      type="search"
-      name="q"
-      placeholder="Search circles and articles"
-      autocomplete="off"
-      spellcheck="false"
-      aria-label="Search circles and articles"
-      onfocus={() => {
-        open = true;
-      }}
-    />
-  </label>
-
-  <button type="submit">Search</button>
+<div class="header-search" bind:this={rootEl}>
+  {#if expanded}
+    <form class="search-expanded" role="search" method="GET" action="/search">
+      <label class="input input-bordered input-sm flex items-center gap-2 flex-1 rounded-full">
+        <svg class="opacity-50" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input
+          bind:this={inputEl}
+          bind:value={query}
+          type="search"
+          name="q"
+          class="grow"
+          placeholder="Search circles and articles…"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Search circles and articles"
+          onfocus={() => { open = true; }}
+        />
+      </label>
+      <button type="button" class="btn btn-ghost btn-circle btn-sm" onclick={collapse} aria-label="Close search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </form>
+  {:else}
+    <button type="button" class="btn btn-ghost btn-circle btn-sm" onclick={expand} aria-label="Open search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    </button>
+  {/if}
 
   {#if showDropdown}
-    <div class="header-search-dropdown">
+    <ul class="menu menu-sm search-dropdown rounded-box bg-base-100 shadow-lg border border-base-300">
       {#if loading}
-        <p class="search-status">Searching the Highlighter relay...</p>
+        <li class="menu-title text-base-content/50"><span>Searching…</span></li>
       {:else if showEmptyState}
-        <p class="search-status">No circles or articles matched "{trimmedQuery}".</p>
+        <li class="menu-title text-base-content/50"><span>No results for "{trimmedQuery}"</span></li>
       {:else}
         {#if results.communities.length > 0}
-          <section class="search-section">
-            <div class="search-section-head">
-              <span>Circles</span>
-              <a href={`/search?q=${encodeURIComponent(trimmedQuery)}`} onclick={closeDropdown}>View all</a>
-            </div>
-
-            <div class="search-result-list">
-              {#each results.communities as community (community.id)}
-                <a class="search-result-row" href={`/community/${community.id}`} onclick={closeDropdown}>
-                  <div class="search-result-copy">
-                    <strong>{community.name}</strong>
-                    <span>{community.about || `/community/${community.id}`}</span>
-                  </div>
-                  <small>/community/{community.id}</small>
-                </a>
-              {/each}
-            </div>
-          </section>
+          <li class="menu-title"><span>Circles</span></li>
+          {#each results.communities as community (community.id)}
+            <li>
+              <a href={`/community/${community.id}`} onclick={closeDropdown}>
+                <span class="flex-1 truncate font-medium">{community.name}</span>
+                {#if community.about}
+                  <span class="text-xs text-base-content/50 truncate max-w-[12rem]">{community.about}</span>
+                {/if}
+              </a>
+            </li>
+          {/each}
         {/if}
 
         {#if results.articles.length > 0}
-          <section class="search-section">
-            <div class="search-section-head">
-              <span>Articles</span>
-              <a href={`/search?q=${encodeURIComponent(trimmedQuery)}`} onclick={closeDropdown}>View all</a>
-            </div>
-
-            <div class="search-result-list">
-              {#each results.articles as article (article.id)}
-                <a
-                  class="search-result-row search-result-row-article"
-                  href={`/note/${encodeURIComponent(article.noteIdentifier)}`}
-                  onclick={closeDropdown}
-                >
-                  {#if article.image}
-                    <img class="article-thumb" src={article.image} alt="" loading="lazy" />
-                  {/if}
-                  <div class="search-result-copy">
-                    <strong>{article.title}</strong>
-                    <span>{article.summary}</span>
-                  </div>
-                  <small>By {article.authorName}</small>
-                </a>
-              {/each}
-            </div>
-          </section>
+          <li class="menu-title"><span>Articles</span></li>
+          {#each results.articles as article (article.id)}
+            <li>
+              <a href={`/note/${encodeURIComponent(article.noteIdentifier)}`} onclick={closeDropdown}>
+                {#if article.image}
+                  <img class="w-7 h-7 rounded object-cover shrink-0" src={article.image} alt="" loading="lazy" />
+                {/if}
+                <span class="flex-1 truncate font-medium">{article.title}</span>
+                <span class="text-xs text-base-content/50 shrink-0">by {article.authorName}</span>
+              </a>
+            </li>
+          {/each}
         {/if}
+
+        <li class="mt-1 border-t border-base-300">
+          <a
+            class="justify-center text-primary font-semibold text-xs"
+            href={`/search?q=${encodeURIComponent(trimmedQuery)}`}
+            onclick={closeDropdown}
+          >
+            View all results
+          </a>
+        </li>
       {/if}
-    </div>
+    </ul>
   {/if}
-</form>
+</div>
 
 <style>
   .header-search {
     position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.65rem;
-    width: 100%;
-  }
-
-  .header-search-input {
-    display: block;
-  }
-
-  .header-search input {
-    width: 100%;
-    min-height: 2.9rem;
-    padding: 0 1rem;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--surface);
-    color: var(--text);
-    font: inherit;
-  }
-
-  .header-search input:focus {
-    outline: none;
-    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
-  }
-
-  .header-search button {
-    min-height: 2.9rem;
-    padding: 0 1rem;
-    border: 1px solid var(--accent);
-    border-radius: 999px;
-    background: var(--accent);
-    color: white;
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .header-search button:hover,
-  .header-search button:focus-visible {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
-  }
-
-  .header-search-dropdown {
-    position: absolute;
-    top: calc(100% + 0.55rem);
-    left: 0;
-    right: 0;
-    display: grid;
-    gap: 0.9rem;
-    padding: 1rem;
-    border: 1px solid var(--border);
-    border-radius: 1.25rem;
-    background: color-mix(in srgb, var(--surface) 92%, white);
-    box-shadow: 0 24px 60px rgba(17, 17, 17, 0.12);
-    backdrop-filter: blur(10px);
-    max-height: min(70vh, 34rem);
-    overflow-y: auto;
-    z-index: 30;
-  }
-
-  .search-status {
-    margin: 0;
-    color: var(--muted);
-    line-height: 1.6;
-  }
-
-  .search-section {
-    display: grid;
-    gap: 0.65rem;
-  }
-
-  .search-section-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
+    justify-content: flex-end;
   }
 
-  .search-section-head span,
-  .search-section-head a {
-    color: var(--muted);
-    font-size: 0.76rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+  .search-expanded {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: 100%;
   }
 
-  .search-section-head a:hover,
-  .search-section-head a:focus-visible {
-    color: var(--accent);
-  }
-
-  .search-result-list {
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  .search-result-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.8rem;
-    align-items: start;
-    padding: 0.85rem 0.95rem;
-    border: 1px solid var(--border);
-    border-radius: 1rem;
-    background: var(--surface);
-    color: inherit;
-    text-decoration: none;
-    transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
-  }
-
-  .search-result-row:hover,
-  .search-result-row:focus-visible {
-    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-    transform: translateY(-1px);
-    box-shadow: 0 12px 30px rgba(17, 17, 17, 0.08);
-  }
-
-  .search-result-copy {
-    display: grid;
-    gap: 0.25rem;
-    min-width: 0;
-  }
-
-  .search-result-copy strong {
-    color: var(--text-strong);
-    font-size: 0.97rem;
-    line-height: 1.25;
-  }
-
-  .search-result-copy span,
-  .search-result-row small {
-    color: var(--muted);
-    line-height: 1.45;
-  }
-
-  .search-result-row small {
-    font-size: 0.8rem;
-    text-align: right;
-  }
-
-  .search-result-row-article {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
-
-  .article-thumb {
-    width: 3rem;
-    height: 3rem;
-    border-radius: 0.5rem;
-    object-fit: cover;
-  }
-
-  .search-result-row-article small {
-    max-width: 8rem;
+  .search-dropdown {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    max-height: min(70vh, 28rem);
+    overflow-y: auto;
   }
 
   @media (max-width: 700px) {
-    .header-search {
-      grid-template-columns: 1fr;
-    }
-
-    .header-search button {
-      width: 100%;
-    }
-
-    .search-result-row {
-      grid-template-columns: 1fr;
-    }
-
-    .search-result-row-article {
-      grid-template-columns: auto 1fr;
-    }
-
-    .search-result-row small {
-      text-align: left;
+    .search-dropdown {
+      left: -2rem;
+      right: -2rem;
     }
   }
 </style>
