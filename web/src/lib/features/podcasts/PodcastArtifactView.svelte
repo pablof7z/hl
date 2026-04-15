@@ -1,9 +1,12 @@
 <script lang="ts">
   import HighlightCard from '$lib/features/highlights/HighlightCard.svelte';
+  import DiscussionPanel from '$lib/features/discussions/DiscussionPanel.svelte';
+  import type { DiscussionRootContext } from '$lib/features/discussions/discussion';
   import {
     formatPodcastClock,
     formatPodcastDuration,
-    formatPodcastReleaseDate
+    formatPodcastReleaseDate,
+    parseTimeInput
   } from '$lib/features/podcasts/format';
   import type { PodcastArtifactData, PodcastTranscriptSegment } from '$lib/features/podcasts/types';
   import type { ArtifactRecord } from '$lib/ndk/artifacts';
@@ -34,6 +37,22 @@
     onToggleForLater: () => void | Promise<void>;
   } = $props();
 
+  let viewMode = $state<'listen' | 'discussion'>('listen');
+
+  const podcastRootContext = $derived.by((): DiscussionRootContext => {
+    if (artifact.referenceTagName === 'a') {
+      return {
+        type: 'artifact',
+        artifactAddress: artifact.referenceTagValue,
+        artifactKind: artifact.referenceKind
+      };
+    }
+    return {
+      type: 'share-thread',
+      shareThreadEventId: artifact.shareEventId
+    };
+  });
+
   let audioEl = $state<HTMLAudioElement | null>(null);
   let timelineEl = $state<HTMLElement | null>(null);
   let audioDuration = $state<number | null>(null);
@@ -49,6 +68,9 @@
   let publishError = $state('');
   let publishStatus = $state('');
   let transcriptNodes = $state<Array<HTMLElement | null>>([]);
+  let clipMode = $state<'listen' | 'fine-tune' | 'preview'>('listen');
+  let zoomedTimelineEl = $state<HTMLElement | null>(null);
+  let draggedBoundary = $state<'start' | 'end' | null>(null);
 
   const currentUser = $derived(ndk.$currentUser);
   const isReadOnly = $derived(Boolean(ndk.$sessions?.isReadOnly()));
@@ -92,6 +114,22 @@
     return fallbackIndex;
   });
   const clipRange = $derived.by(() => normalizeRange(clipStart, clipEnd));
+  const hasPartialClip = $derived(clipStart != null && clipEnd == null);
+  const hasCompleteClip = $derived(clipRange != null);
+  const canPreviewClip = $derived(hasCompleteClip && playbackAvailable);
+  const zoomedTimelineRange = $derived.by(() => {
+    if (!clipRange) return null;
+    const totalDuration = durationSeconds ?? 0;
+    if (totalDuration <= 0) return null;
+    const pad = 15;
+    const start = Math.max(0, clipRange.start - pad);
+    const end = Math.min(totalDuration, clipRange.end + pad);
+    return { start, end, duration: end - start };
+  });
+  const clipDurationSeconds = $derived.by(() => {
+    if (!clipRange) return 0;
+    return clipRange.end - clipRange.start;
+  });
   const selectedTranscriptSegments = $derived.by(() => {
     const range = clipRange;
     if (!range) return [];
@@ -159,15 +197,72 @@
   });
 
   $effect(() => {
+    if (hasCompleteClip && clipMode === 'listen') {
+      clipMode = 'fine-tune';
+    }
+  });
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
+
+      if (event.key === 'i' || event.key === 'I') {
+        event.preventDefault();
+        handleMarkIn();
+        return;
+      }
+
+      if (event.key === 'o' || event.key === 'O') {
+        event.preventDefault();
+        handleMarkOut();
+        return;
+      }
+
+      if (event.key === ' ') {
+        event.preventDefault();
+        togglePlayback();
+        return;
+      }
+
+      if (event.key === 'Escape' && clipMode === 'preview') {
+        event.preventDefault();
+        stopPreview();
+        return;
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
+
+  $effect(() => {
     if (typeof window === 'undefined') return;
 
     function handlePointerMove(event: PointerEvent) {
+      if (draggedBoundary && zoomedTimelineEl && clipRange) {
+        const time = pointerToZoomedTime(event.clientX);
+        if (draggedBoundary === 'start') {
+          clipStart = Math.min(time, clipRange.end - 1);
+        } else {
+          clipEnd = Math.max(time, clipRange.start + 1);
+        }
+        return;
+      }
+
       if (!draggingSelection || dragAnchor == null) return;
       clipStart = dragAnchor;
       clipEnd = pointerToTime(event.clientX);
     }
 
     function handlePointerUp(event: PointerEvent) {
+      if (draggedBoundary) {
+        draggedBoundary = null;
+        return;
+      }
+
       if (!draggingSelection || dragAnchor == null) return;
       clipStart = dragAnchor;
       clipEnd = pointerToTime(event.clientX);
@@ -245,9 +340,96 @@
     clipEnd = nextEnd;
   }
 
+  function handleMarkIn() {
+    if (!playbackAvailable) return;
+    clipStart = currentTime;
+    if (clipEnd != null && clipEnd <= currentTime) {
+      clipEnd = null;
+    }
+  }
+
+  function handleMarkOut() {
+    if (!playbackAvailable) return;
+    clipEnd = currentTime;
+    if (clipStart == null) {
+      clipStart = Math.max(0, currentTime - 30);
+    }
+    if (clipStart > currentTime) {
+      clipStart = Math.max(0, currentTime - 30);
+    }
+  }
+
+  function nudgeClipStart(delta: number) {
+    if (clipStart == null) return;
+    const totalDuration = durationSeconds ?? Infinity;
+    clipStart = Math.max(0, Math.min(clipStart + delta, clipEnd != null ? clipEnd - 1 : totalDuration));
+  }
+
+  function nudgeClipEnd(delta: number) {
+    if (clipEnd == null) return;
+    const totalDuration = durationSeconds ?? Infinity;
+    clipEnd = Math.min(totalDuration, Math.max(clipEnd + delta, clipStart != null ? clipStart + 1 : 0));
+  }
+
+  function handleTimeInputChange(boundary: 'start' | 'end', value: string) {
+    const seconds = parseTimeInput(value);
+    if (seconds == null) return;
+    const totalDuration = durationSeconds ?? Infinity;
+    if (boundary === 'start') {
+      clipStart = Math.max(0, Math.min(seconds, clipEnd != null ? clipEnd - 1 : totalDuration));
+    } else {
+      clipEnd = Math.min(totalDuration, Math.max(seconds, clipStart != null ? clipStart + 1 : 0));
+    }
+  }
+
+  function startPreview() {
+    if (!canPreviewClip || !audioEl || !clipRange) return;
+    clipMode = 'preview';
+    audioEl.currentTime = clipRange.start;
+    void audioEl.play();
+    isPlaying = true;
+  }
+
+  function stopPreview() {
+    clipMode = 'fine-tune';
+    if (audioEl && isPlaying) {
+      audioEl.pause();
+      isPlaying = false;
+    }
+  }
+
+  function pointerToZoomedTime(clientX: number): number {
+    if (!zoomedTimelineEl || !zoomedTimelineRange) return 0;
+    const rect = zoomedTimelineEl.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return zoomedTimelineRange.start + ratio * zoomedTimelineRange.duration;
+  }
+
+  function handleZoomedDragStart(event: PointerEvent, boundary: 'start' | 'end') {
+    event.preventDefault();
+    event.stopPropagation();
+    draggedBoundary = boundary;
+  }
+
+  function zoomedSelectionLeft(): string {
+    if (!clipRange || !zoomedTimelineRange) return '0%';
+    return `${((clipRange.start - zoomedTimelineRange.start) / zoomedTimelineRange.duration) * 100}%`;
+  }
+
+  function zoomedSelectionWidth(): string {
+    if (!clipRange || !zoomedTimelineRange) return '0%';
+    return `${((clipRange.end - clipRange.start) / zoomedTimelineRange.duration) * 100}%`;
+  }
+
+  function zoomedMarkerLeft(seconds: number): string {
+    if (!zoomedTimelineRange) return '0%';
+    return `${((seconds - zoomedTimelineRange.start) / zoomedTimelineRange.duration) * 100}%`;
+  }
+
   function clearClip() {
     clipStart = null;
     clipEnd = null;
+    clipMode = 'listen';
     note = '';
     publishError = '';
     publishStatus = '';
@@ -296,6 +478,7 @@
       note = '';
       clipStart = null;
       clipEnd = null;
+      clipMode = 'listen';
     } catch (error) {
       publishError = error instanceof Error ? error.message : 'Could not save that clip.';
     } finally {
@@ -323,6 +506,10 @@
     currentTime = audioEl.currentTime;
     isPlaying = !audioEl.paused;
     audioDuration = Number.isFinite(audioEl.duration) ? audioEl.duration : audioDuration;
+
+    if (clipMode === 'preview' && clipRange && currentTime >= clipRange.end) {
+      audioEl.currentTime = clipRange.start;
+    }
   }
 
   function buildWaveformBars(seed: string, count: number) {
@@ -396,7 +583,13 @@
       <div class="actions">
         <a class="primary-link" href={artifact.url} target="_blank" rel="noreferrer">Open source</a>
         <a href={`/community/${community.id}`}>Back to {community.name}</a>
-        <a href={`/community/${community.id}/content/${artifact.id}/discussion`}>Discussion</a>
+        <button
+          type="button"
+          class:active={viewMode === 'discussion'}
+          onclick={() => (viewMode = viewMode === 'discussion' ? 'listen' : 'discussion')}
+        >
+          Discussion
+        </button>
         <button type="button" class:active={savedForLater} disabled={savingForLater} onclick={onToggleForLater}>
           {savingForLater ? 'Updating…' : savedForLater ? 'Saved to For Later' : 'Save to For Later'}
         </button>
@@ -425,11 +618,30 @@
     ></audio>
   {/if}
 
+  {#if viewMode === 'listen'}
   <section class="player-shell">
+    {#if clipMode === 'preview'}
+      <div class="preview-badge">
+        <span>Previewing clip</span>
+        <button type="button" class="secondary-button" onclick={stopPreview}>Stop preview</button>
+      </div>
+    {/if}
+
     <div class="player-topline">
       <button type="button" class="play-button" disabled={!playbackAvailable} onclick={togglePlayback}>
         {isPlaying ? 'Pause' : 'Play'}
       </button>
+
+      {#if playbackAvailable}
+        <div class="mark-buttons">
+          <button type="button" class="mark-button" onclick={handleMarkIn} title="Mark clip start (I)">
+            Mark In
+          </button>
+          <button type="button" class="mark-button" onclick={handleMarkOut} title="Mark clip end (O)">
+            Mark Out
+          </button>
+        </div>
+      {/if}
 
       <div class="clock-row">
         <span>{formatPodcastClock(currentTime)}</span>
@@ -473,6 +685,75 @@
       {/if}
     </div>
 
+    {#if clipMode === 'fine-tune' || clipMode === 'preview'}
+      {#if zoomedTimelineRange && clipRange && playbackAvailable}
+        <div class="zoomed-timeline-shell">
+          <div class="zoomed-timeline-label">
+            <span>Clip region ({formatPodcastClock(zoomedTimelineRange.start)} – {formatPodcastClock(zoomedTimelineRange.end)})</span>
+            <button type="button" class="link-button" onclick={() => { clipMode = 'listen'; }}>Back to full timeline</button>
+          </div>
+          <div
+            class="zoomed-timeline"
+            bind:this={zoomedTimelineEl}
+            role="presentation"
+          >
+            <div
+              class="clip-selection zoomed"
+              style={`left:${zoomedSelectionLeft()};width:${zoomedSelectionWidth()};`}
+            >
+              <button
+                type="button"
+                class="drag-handle start"
+                onpointerdown={(e) => handleZoomedDragStart(e, 'start')}
+              ></button>
+              <button
+                type="button"
+                class="drag-handle end"
+                onpointerdown={(e) => handleZoomedDragStart(e, 'end')}
+              ></button>
+            </div>
+            {#if durationSeconds}
+              <div class="playhead" style={`left:${zoomedMarkerLeft(currentTime)};`}></div>
+            {/if}
+          </div>
+        </div>
+      {/if}
+
+      {#if hasCompleteClip && clipRange}
+        <div class="fine-tune-panel">
+          <div class="fine-tune-row">
+            <span class="fine-tune-label">Start</span>
+            <button type="button" class="nudge-button" onclick={() => nudgeClipStart(-5)}>−5s</button>
+            <button type="button" class="nudge-button" onclick={() => nudgeClipStart(-1)}>−1s</button>
+            <input
+              type="text"
+              class="time-input"
+              value={formatPodcastClock(clipRange.start)}
+              onchange={(e) => handleTimeInputChange('start', e.currentTarget.value)}
+            />
+            <button type="button" class="nudge-button" onclick={() => nudgeClipStart(1)}>+1s</button>
+            <button type="button" class="nudge-button" onclick={() => nudgeClipStart(5)}>+5s</button>
+          </div>
+          <div class="fine-tune-row">
+            <span class="fine-tune-label">End</span>
+            <button type="button" class="nudge-button" onclick={() => nudgeClipEnd(-5)}>−5s</button>
+            <button type="button" class="nudge-button" onclick={() => nudgeClipEnd(-1)}>−1s</button>
+            <input
+              type="text"
+              class="time-input"
+              value={formatPodcastClock(clipRange.end)}
+              onchange={(e) => handleTimeInputChange('end', e.currentTarget.value)}
+            />
+            <button type="button" class="nudge-button" onclick={() => nudgeClipEnd(1)}>+1s</button>
+            <button type="button" class="nudge-button" onclick={() => nudgeClipEnd(5)}>+5s</button>
+          </div>
+          {#if canPreviewClip && clipMode !== 'preview'}
+            <button type="button" class="preview-button" onclick={startPreview}>Preview clip</button>
+          {/if}
+        </div>
+      {/if}
+    {/if}
+
     <div class="player-help">
       {#if playbackAvailable && transcriptAvailable}
         <p>Drag across the timeline to define the clip. The transcript below fills the quote automatically.</p>
@@ -492,7 +773,12 @@
       <h2>Capture the moment worth replaying.</h2>
       {#if clipRange}
         <p class="selection-label">
-          Selected {formatPodcastClock(clipRange.start)}-{formatPodcastClock(clipRange.end)}
+          Selected {formatPodcastClock(clipRange.start)}–{formatPodcastClock(clipRange.end)}
+          ({formatPodcastDuration(clipDurationSeconds)})
+        </p>
+      {:else if hasPartialClip}
+        <p class="selection-label">
+          Clip start marked at {formatPodcastClock(clipStart ?? 0)} — mark end to continue
         </p>
       {:else}
         <p class="selection-label">No clip selected yet.</p>
@@ -597,11 +883,16 @@
     {:else}
       <div class="highlight-stack">
         {#each sortedHighlights as highlight (highlight.eventId)}
-          <HighlightCard {highlight} {artifact} seekTo={seekToTime} />
+          <HighlightCard {highlight} {artifact} seekTo={seekToTime} groupId={community.id} showDiscussAction />
         {/each}
       </div>
     {/if}
   </section>
+  {:else}
+  <section class="podcast-discussion">
+    <DiscussionPanel groupId={community.id} rootContext={podcastRootContext} />
+  </section>
+  {/if}
 </article>
 
 <style>
@@ -949,6 +1240,15 @@
     letter-spacing: 0.06em;
   }
 
+  .podcast-discussion {
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 1.35rem;
+    background:
+      radial-gradient(circle at top left, rgba(255, 103, 25, 0.08), transparent 34%),
+      var(--surface);
+  }
+
   .unavailable-panel {
     display: grid;
     gap: 0.35rem;
@@ -956,6 +1256,187 @@
     border: 1px solid var(--border);
     border-radius: 1rem;
     background: color-mix(in srgb, var(--surface-soft) 78%, white);
+  }
+
+  .preview-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 1rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 14%, white);
+    color: var(--accent);
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .mark-buttons {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .mark-button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.4rem;
+    padding: 0 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-soft);
+    color: var(--text);
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .mark-button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .zoomed-timeline-shell {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .zoomed-timeline-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .link-button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .zoomed-timeline {
+    position: relative;
+    min-height: 4rem;
+    border-radius: 0.8rem;
+    background: linear-gradient(180deg, rgba(255, 103, 25, 0.12), rgba(15, 23, 42, 0.06));
+    overflow: hidden;
+  }
+
+  .clip-selection.zoomed {
+    pointer-events: auto;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+  }
+
+  .drag-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 12px;
+    border: 0;
+    padding: 0;
+    background: var(--accent);
+    cursor: col-resize;
+    opacity: 0.7;
+  }
+
+  .drag-handle:hover {
+    opacity: 1;
+  }
+
+  .drag-handle.start {
+    left: -2px;
+    border-radius: 0.4rem 0 0 0.4rem;
+  }
+
+  .drag-handle.end {
+    right: -2px;
+    border-radius: 0 0.4rem 0.4rem 0;
+  }
+
+  .fine-tune-panel {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .fine-tune-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .fine-tune-label {
+    min-width: 3rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .nudge-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2rem;
+    min-width: 2.8rem;
+    padding: 0 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 0.55rem;
+    background: white;
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .nudge-button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .time-input {
+    width: 5.5rem;
+    min-height: 2rem;
+    padding: 0 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: 0.55rem;
+    background: white;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .time-input:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+
+  .preview-button {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    min-height: 2.2rem;
+    padding: 0 1rem;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    background: white;
+    color: var(--accent);
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .preview-button:hover {
+    background: color-mix(in srgb, var(--accent) 8%, white);
   }
 
   @media (max-width: 900px) {

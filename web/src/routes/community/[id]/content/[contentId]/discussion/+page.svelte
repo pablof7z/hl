@@ -1,10 +1,14 @@
 <script lang="ts">
-  import SurfacePlaceholder from '$lib/components/SurfacePlaceholder.svelte';
-  import { discussionSpec } from '$lib/highlighter/surfaces';
+  import { goto } from '$app/navigation';
+  import type { PageProps } from './$types';
+
+  let { data }: PageProps = $props();
+
+  $effect(() => {
+    const path = window.location.pathname;
+    const parentPath = path.replace(/\/discussion\/?$/, '');
+    goto(`${parentPath}?tab=discussion`, { replaceState: true });
+  });
 </script>
 
-<svelte:head>
-  <title>Discussion — Highlighter</title>
-</svelte:head>
-
-<SurfacePlaceholder spec={discussionSpec} />
+<p style="color: var(--muted); padding: 2rem 0;">Redirecting to discussion…</p>

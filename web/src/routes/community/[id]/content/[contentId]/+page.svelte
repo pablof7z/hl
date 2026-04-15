@@ -34,8 +34,11 @@
   import { artifactHighlightReferenceKey, naddrFromAddress } from '$lib/ndk/artifacts';
   import { safeUserIdentifier } from '$lib/ndk/user';
   import { User } from '$lib/ndk/ui/user';
+  import DiscussionPanel from '$lib/features/discussions/DiscussionPanel.svelte';
+  import type { DiscussionRootContext } from '$lib/features/discussions/discussion';
 
   let { data }: PageProps = $props();
+  let activeTab = $state<'content' | 'discussion'>('content');
   let articleContentEl = $state<HTMLElement | null>(null);
   const currentUser = $derived(ndk.$currentUser);
   const seedArticleEvent = $derived(data.articleEvent ? new NDKEvent(ndk, data.articleEvent) : undefined);
@@ -166,6 +169,30 @@
     };
   });
 
+  const artifactRootContext = $derived.by((): DiscussionRootContext | null => {
+    if (!data.artifact) return null;
+    if (data.artifact.referenceTagName === 'a') {
+      return {
+        type: 'artifact',
+        artifactAddress: data.artifact.referenceTagValue,
+        artifactKind: data.artifact.referenceKind
+      };
+    }
+    return {
+      type: 'share-thread',
+      shareThreadEventId: data.artifact.shareEventId
+    };
+  });
+
+  $effect(() => {
+    if (!browser) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'discussion') {
+      activeTab = 'discussion';
+      history.replaceState(null, '', window.location.pathname);
+    }
+  });
+
   async function toggleForLater() {
     if (!data.artifact || !data.community || savingForLater) {
       return;
@@ -258,9 +285,13 @@
         <div class="artifact-actions">
           <a href={data.artifact.url} target="_blank" rel="noreferrer">Open source</a>
           <a href={`/community/${data.community.id}`}>Back to {data.community.name}</a>
-          <a href={`/community/${data.community.id}/content/${data.artifact.id}/discussion`}>
+          <button
+            type="button"
+            class:active={activeTab === 'discussion'}
+            onclick={() => (activeTab = activeTab === 'discussion' ? 'content' : 'discussion')}
+          >
             Discussion
-          </a>
+          </button>
           <button type="button" class:active={savedForLater} disabled={savingForLater} onclick={toggleForLater}>
             {savingForLater
               ? 'Updating…'
@@ -280,99 +311,105 @@
       </div>
     </header>
 
-    {#if articleEvent}
-      <section class="artifact-reader">
-        <article class="article-container artifact-reader-article">
-          <div class="article-byline">
-            <User.Root {ndk} pubkey={articleAuthorPubkey} profile={articleProfile}>
-              <a class="article-author-link" href={`/profile/${articleAuthorIdentifier}`}>
-                <User.Avatar class="article-author-avatar" />
-              </a>
-              <div class="article-author-copy">
-                <div class="feed-meta">
-                  <a class="article-author-name" href={`/profile/${articleAuthorIdentifier}`}>
-                    {articleAuthorName}
-                  </a>
-                  <span>{formatDisplayDate(articlePublishedAt(articleEvent.rawEvent()))}</span>
-                  <span>{articleReadTimeMinutes(articleEvent.content)} min read</span>
-                </div>
-                {#if articleAuthorIdentity}
+    {#if activeTab === 'content'}
+      {#if articleEvent}
+        <section class="artifact-reader">
+          <article class="article-container artifact-reader-article">
+            <div class="article-byline">
+              <User.Root {ndk} pubkey={articleAuthorPubkey} profile={articleProfile}>
+                <a class="article-author-link" href={`/profile/${articleAuthorIdentifier}`}>
+                  <User.Avatar class="article-author-avatar" />
+                </a>
+                <div class="article-author-copy">
                   <div class="feed-meta">
-                    <span class="article-author-handle">{articleAuthorIdentity}</span>
+                    <a class="article-author-name" href={`/profile/${articleAuthorIdentifier}`}>
+                      {articleAuthorName}
+                    </a>
+                    <span>{formatDisplayDate(articlePublishedAt(articleEvent.rawEvent()))}</span>
+                    <span>{articleReadTimeMinutes(articleEvent.content)} min read</span>
                   </div>
-                {/if}
-              </div>
-            </User.Root>
-          </div>
+                  {#if articleAuthorIdentity}
+                    <div class="feed-meta">
+                      <span class="article-author-handle">{articleAuthorIdentity}</span>
+                    </div>
+                  {/if}
+                </div>
+              </User.Root>
+            </div>
 
-          <p class="lede" style="margin: 0;">
-            {articleSummary(articleEvent.rawEvent(), 320)}
-          </p>
+            <p class="lede" style="margin: 0;">
+              {articleSummary(articleEvent.rawEvent(), 320)}
+            </p>
 
-          <div bind:this={articleContentEl}>
-            <ArticleMarkdown
-              content={articleEvent.content}
-              tags={articleEvent.tags}
-              highlights={artifactHighlightEvents}
-            />
-          </div>
-        </article>
-      </section>
-    {:else if articlePending}
-      <section class="artifact-next">
-        <p class="panel-label">Loading Article</p>
-        <p>Resolving the original Nostr article so you can read and highlight it here.</p>
-      </section>
-    {:else if articleUnavailable}
-      <section class="artifact-next">
-        <p class="panel-label">Article Unavailable</p>
-        <p>
-          This share points to a Nostr article, but the event could not be loaded right now. Use
-          the source link above and refresh in a moment.
-        </p>
-      </section>
-    {:else if currentUser}
-      <HighlightForm artifact={data.artifact} groupId={data.community.id} />
-    {:else}
-      <section class="artifact-next">
-        <p class="panel-label">Create Highlight</p>
-        <p>Sign in to save a highlight and share it into this community.</p>
-      </section>
-    {/if}
-
-    <section class="artifact-highlights">
-      <div class="artifact-highlights-header">
-        <div>
-          <p class="panel-label">Highlights</p>
-          <h2>What this community pulled out</h2>
-        </div>
-        <span>{artifactHighlights.length} item{artifactHighlights.length === 1 ? '' : 's'}</span>
-      </div>
-
-      {#if artifactHighlights.length === 0}
-        <div class="artifact-empty">
-          <p>No highlights shared here yet.</p>
+            <div bind:this={articleContentEl}>
+              <ArticleMarkdown
+                content={articleEvent.content}
+                tags={articleEvent.tags}
+                highlights={artifactHighlightEvents}
+              />
+            </div>
+          </article>
+        </section>
+      {:else if articlePending}
+        <section class="artifact-next">
+          <p class="panel-label">Loading Article</p>
+          <p>Resolving the original Nostr article so you can read and highlight it here.</p>
+        </section>
+      {:else if articleUnavailable}
+        <section class="artifact-next">
+          <p class="panel-label">Article Unavailable</p>
           <p>
-            Save the first excerpt from this source and it will appear here once someone shares it
-            into this community.
+            This share points to a Nostr article, but the event could not be loaded right now. Use
+            the source link above and refresh in a moment.
           </p>
-        </div>
+        </section>
+      {:else if currentUser}
+        <HighlightForm artifact={data.artifact} groupId={data.community.id} />
       {:else}
-        <div class="highlight-stack">
-          {#each artifactHighlights as highlight (highlight.eventId)}
-            <HighlightCard {highlight} artifact={data.artifact} />
-          {/each}
-        </div>
+        <section class="artifact-next">
+          <p class="panel-label">Create Highlight</p>
+          <p>Sign in to save a highlight and share it into this community.</p>
+        </section>
       {/if}
-    </section>
 
-    {#if articleEvent}
-      <HighlightPopover
-        articleEvent={articleEvent}
-        containerEl={articleContentEl}
-        groupId={data.community.id}
-        artifact={data.artifact}
-      />
+      <section class="artifact-highlights">
+        <div class="artifact-highlights-header">
+          <div>
+            <p class="panel-label">Highlights</p>
+            <h2>What this community pulled out</h2>
+          </div>
+          <span>{artifactHighlights.length} item{artifactHighlights.length === 1 ? '' : 's'}</span>
+        </div>
+
+        {#if artifactHighlights.length === 0}
+          <div class="artifact-empty">
+            <p>No highlights shared here yet.</p>
+            <p>
+              Save the first excerpt from this source and it will appear here once someone shares it
+              into this community.
+            </p>
+          </div>
+        {:else}
+          <div class="highlight-stack">
+            {#each artifactHighlights as highlight (highlight.eventId)}
+              <HighlightCard {highlight} artifact={data.artifact} groupId={data.community.id} showDiscussAction />
+            {/each}
+          </div>
+        {/if}
+      </section>
+
+      {#if articleEvent}
+        <HighlightPopover
+          articleEvent={articleEvent}
+          containerEl={articleContentEl}
+          groupId={data.community.id}
+          artifact={data.artifact}
+        />
+      {/if}
+    {:else if artifactRootContext}
+      <section class="artifact-discussion">
+        <DiscussionPanel groupId={data.community.id} rootContext={artifactRootContext} />
+      </section>
     {/if}
   </article>
 {/if}
@@ -561,6 +598,13 @@
   .highlight-stack {
     display: grid;
     gap: 0.85rem;
+  }
+
+  .artifact-discussion {
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 1.25rem;
+    background: var(--surface);
   }
 
   .artifact-empty p {

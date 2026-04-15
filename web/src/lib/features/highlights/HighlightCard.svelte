@@ -1,5 +1,6 @@
 <script lang="ts">
   import { formatPodcastClock } from '$lib/features/podcasts/format';
+  import DiscussionPanel from '$lib/features/discussions/DiscussionPanel.svelte';
   import type { ArtifactRecord } from '$lib/ndk/artifacts';
   import { artifactPath, buildFallbackNostrUrl } from '$lib/ndk/artifacts';
   import { ensureClientNdk, ndk } from '$lib/ndk/client';
@@ -17,14 +18,21 @@
     artifact = undefined,
     communities = [],
     showShareControl = false,
+    showDiscussAction = false,
+    groupId = '',
     seekTo = undefined
   }: {
     highlight: HydratedHighlight;
     artifact?: ArtifactRecord | undefined;
     communities?: CommunitySummary[];
     showShareControl?: boolean;
+    showDiscussAction?: boolean;
+    groupId?: string;
     seekTo?: ((seconds: number) => void) | undefined;
   } = $props();
+
+  let showThread = $state(false);
+  const canDiscuss = $derived(Boolean(showDiscussAction && groupId && highlight.eventId));
 
   let optimisticShares = $state<HighlightShareRecord[]>([]);
   let selectedGroupId = $state('');
@@ -256,6 +264,25 @@
     {/if}
   </div>
 
+  {#if canDiscuss}
+    <div class="discuss-action">
+      <button type="button" class="discuss-button" class:active={showThread} onclick={() => (showThread = !showThread)}>
+        {showThread ? 'Hide discussion' : 'Discuss'}
+      </button>
+    </div>
+
+    {#if showThread}
+      <div class="inline-discussion">
+        <DiscussionPanel
+          {groupId}
+          rootContext={{ type: 'highlight', highlightEventId: highlight.eventId }}
+          compact
+          maxVisible={3}
+        />
+      </div>
+    {/if}
+  {/if}
+
   {#if showShareControl && communities.length > 0}
     <div class="share-again">
       <select bind:value={selectedGroupId} disabled={shareableCommunities.length === 0 || sharing}>
@@ -417,6 +444,35 @@
 
   .artifact-link.static {
     pointer-events: none;
+  }
+
+  .discuss-action {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .discuss-button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.9rem;
+    padding: 0 0.65rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--surface-soft);
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .discuss-button:hover,
+  .discuss-button.active {
+    color: var(--accent);
+  }
+
+  .inline-discussion {
+    padding: 0.85rem 0 0;
+    border-top: 1px solid var(--border);
   }
 
   .share-again select {
