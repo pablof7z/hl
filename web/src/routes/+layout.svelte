@@ -57,7 +57,10 @@
       <a href="/about">About</a>
       <a href="/discover">Discover</a>
     </div>
-    <span class="footer-note">Built on Nostr. Your circles, your data, always.</span>
+    <span class="footer-note">
+      Built on Nostr. Your circles, your data, always.
+      <a href="/changelog" class="commit-hash">{__COMMIT_HASH__}</a>
+    </span>
   </div>
 </footer>
 
@@ -131,6 +134,20 @@
   .footer-note {
     font-size: 0.82rem;
     color: var(--muted);
+  }
+
+  .commit-hash {
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    opacity: 0.6;
+    text-decoration: none;
+    margin-left: 0.5rem;
+  }
+
+  .commit-hash:hover {
+    opacity: 1;
+    color: var(--accent);
   }
 
 </style>

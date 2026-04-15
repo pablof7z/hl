@@ -1,9 +1,17 @@
+import { execSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 
+const commitHash =
+  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ??
+  execSync('git rev-parse --short HEAD').toString().trim();
+
 export default defineConfig({
   plugins: [tailwindcss(), sveltekit()],
+  define: {
+    __COMMIT_HASH__: JSON.stringify(commitHash)
+  },
   build: {
     rollupOptions: {
       output: {

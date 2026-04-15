@@ -1,3 +1,5 @@
+declare const __COMMIT_HASH__: string;
+
 declare global {
   namespace App {
     interface PageData {
