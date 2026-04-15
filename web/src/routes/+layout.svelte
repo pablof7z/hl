@@ -56,8 +56,15 @@
 
 <footer class="shell footer">
   <div class="footer-grid">
-    <span>Nostr-native reading communities for sources, highlights, and discussion.</span>
-    <span><a href="/about">About Highlighter</a></span>
+    <div class="footer-logo">
+      <span class="footer-logo-mark"></span>
+      Highlighter
+    </div>
+    <div class="footer-links">
+      <a href="/about">About</a>
+      <a href="/discover">Discover</a>
+    </div>
+    <span class="footer-note">Built on Nostr. Your circles, your data, always.</span>
   </div>
 </footer>
 
@@ -66,8 +73,9 @@
     position: sticky;
     top: 0;
     z-index: 20;
-    background: var(--canvas);
-    border-bottom: 1px solid var(--border);
+    background: rgba(248, 245, 240, 0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-light);
   }
 
   .app-header {
@@ -121,6 +129,43 @@
     background: var(--accent);
     flex-shrink: 0;
     margin-bottom: 0.08rem;
+  }
+
+  .footer-logo {
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-strong);
+  }
+
+  .footer-logo-mark {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    background: var(--accent);
+    border-radius: 3px;
+    margin-right: 0.5rem;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .footer-links a {
+    font-size: 0.88rem;
+    color: var(--muted);
+    transition: color 0.15s;
+  }
+
+  .footer-links a:hover {
+    color: var(--text-strong);
+  }
+
+  .footer-note {
+    font-size: 0.82rem;
+    color: var(--muted);
   }
 
   @media (max-width: 900px) {

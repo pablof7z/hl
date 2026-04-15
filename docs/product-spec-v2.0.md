@@ -57,6 +57,16 @@ An artifact is any piece of external content shared to a group:
 
 Each artifact has: title, author/creator, source, cover image/thumbnail, and a canonical URL when available.
 
+### Artifact Shares / Proposals
+
+Sharing an artifact to a community does **not** imply the member has already read, watched, or listened to it. A member can share something simply because they think it is worth the group's attention.
+
+- A share can be a **proposal**: "this looks worth reading," "curious what this group thinks," "someone here should review this"
+- These shares appear in a **dedicated community surface**, separate from highlights, so the group can distinguish "here's something to look at" from "here's a passage I pulled out"
+- The share itself can collect lightweight conversation before anyone adds highlights
+- The same artifact can be shared into multiple communities, each with its own context and discussion
+- Protocol note: the community-facing share is a standard `kind:11` thread with source-reference tags; Highlighter does **not** invent a custom artifact kind like `30403`
+
 ### Highlights
 
 Highlights are excerpts pulled from artifacts by community members. They are the unique layer Highlighter adds — what people found compelling, surprising, or discussion-worthy in a piece of content.
@@ -70,11 +80,12 @@ Highlights are:
 
 ### Discussions
 
-Every artifact in a group has a discussion thread. Discussions can happen at two levels:
+Every artifact in a group can generate conversation at three levels:
+- **Share-thread level**: Lightweight replies to the act of proposing the artifact to the group — "worth reading?", "I want to read this next", "this seems relevant here"
 - **Artifact-level**: General discussion about the content itself — threaded, intentional, debate-ready. Someone creates a discussion when they want to go deep or spark a structured conversation.
 - **Highlight-level**: Conversation sparked by a specific excerpt
 
-**Cross-community union**: When the same artifact is shared to multiple groups, discussions remain per-group (respecting group privacy boundaries). However, users who belong to multiple groups can see and cross-reference discussions they have access to.
+**Cross-community union**: When the same artifact is shared to multiple groups, discussions remain per-group (respecting group privacy boundaries). However, users who belong to multiple groups can see and cross-reference discussions they have access to. For **public groups**, the artifact page can also show other communities where the same artifact has been shared, giving members a way to discover adjacent communities with similar interests.
 
 ### Notes
 
@@ -143,6 +154,8 @@ Highlighter operates a **khatru-based Nostr relay** as part of the project:
 - Manual entry for books, physical media
 - Browser extension for one-click capture from any webpage
 - Share to one or multiple groups simultaneously
+- Share even if you have not consumed the artifact yet — the first action can be a recommendation/proposal, not a highlight
+- Optional recommendation note attached to the share, shown in a dedicated community "shared with the community" surface
 
 #### Highlighting
 - Pull excerpts from shared artifacts
@@ -151,14 +164,15 @@ Highlighter operates a **khatru-based Nostr relay** as part of the project:
 - Each highlight attributed to the member who created it
 
 #### Discussion & Notes
-- Threaded discussions on artifacts (artifact-level) and individual highlights (highlight-level)
+- Threaded discussions on artifact share-threads, artifacts (artifact-level), and individual highlights (highlight-level)
 - **Notes**: lightweight off-the-cuff annotations at the artifact level — separate from discussions, lighter social weight, their own tab on the artifact page
 - Reactions and replies
 - @mentions of group members
 
 #### Discovery & Browsing
-- **Group home page**: Featured section uses a **carousel** — the active artifact and its highlights/discussions are visible, and members can swipe to see other featured artifacts. Below the featured carousel, the rest of the group's library is presented with **varied visual representations** (not a uniform card grid) — sections switch up layout and density, like the Apple TV app does, so the page feels alive and curated rather than a wall of identical cards.
-- **Artifact detail page**: tabs for Highlights, Notes, Discussions — plus artifact-specific rendering per content type (see wireframes)
+- **Highlighter front page**: The front page should get a new user to value quickly. It opens with a clear hero/TLDR of what Highlighter is, then immediately shows a list of popular **open** communities worth checking out, followed by category-browsable carousels of popular artifacts that have already accumulated strong highlights.
+- **Group home page**: Includes a dedicated lane for newly shared/proposed artifacts, then a **featured carousel** where the active artifact and its highlights/discussions are visible. Below the featured carousel, the rest of the group's library is presented with **varied visual representations** (not a uniform card grid) — sections switch up layout and density, like the Apple TV app does, so the page feels alive and curated rather than a wall of identical cards.
+- **Artifact detail page**: tabs for Highlights, Notes, Discussions — plus artifact-specific rendering per content type (see wireframes) and an **"Also shared in"** module for other public communities that have shared the same artifact
 - **Personal vault**: all your highlights across all groups, searchable. Also includes highlights you've bookmarked from others.
 
 #### Public Pages (for public groups)
@@ -171,7 +185,7 @@ Highlighter operates a **khatru-based Nostr relay** as part of the project:
 
 - AI co-host: discussion facilitation, weekly summaries, "What the group learned this month"
 - Creator-owned groups (authors create communities around their books/content)
-- Advanced cross-group discovery (for public groups): "Groups discussing similar content"
+- Advanced cross-group discovery (for public groups) beyond the per-artifact "Also shared in" module: "Groups discussing similar content"
 - Voice/audio highlights (podcast timestamp clips)
 - Reading challenges and group goals
 - API for third-party integrations
@@ -189,6 +203,8 @@ Growth is not a strategy section — it's a **design principle** that governs ev
 2. **Every surface is a growth surface.** Not just the "invite" button — every highlight card, every public group page, every artifact discussion is a potential entry point for new users.
 
 3. **Value before signup.** Public groups and shared highlight cards should deliver value (beautiful content, interesting discussions) before asking for anything. The conversion happens because the content is good, not because we gated it.
+
+4. **Compress time to aha.** The front page should show a new visitor something valuable as quickly as possible — ideally an artifact they care about and a compelling highlight pulled from it. Fast relevance beats generic onboarding copy.
 
 ### Virality Loops
 
@@ -216,6 +232,7 @@ Examples of how growth thinking shapes product choices:
 |---|---|---|
 | Highlight creation | Save highlight to my library | Save highlight → prompt "Share to group?" → prompt "Share as card?" → beautiful card with group branding + CTA |
 | Group creation | Fill out form, done | Fill out form → immediate "Invite 5 friends" flow → pre-written invite message → track who joined |
+| Front page | Marketing copy and a signup CTA | Hero TLDR → popular open communities → category shelves of popular artifacts with strong highlights so the user reaches an aha moment fast |
 | Public group page | List of content | Designed as a landing page: hero content, social proof (member count, activity), FOMO triggers, dead-simple join CTA |
 | Non-member view | "Sign up to see more" | Rich preview of best content + best discussions, enough to demonstrate value, with contextual CTAs throughout |
 | Browser extension | Highlight and save | Highlight → "Which groups want to see this?" → instant share → notification to group members ("Sarah just highlighted something in...") |

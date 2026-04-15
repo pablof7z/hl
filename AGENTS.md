@@ -74,9 +74,9 @@ The repo is in early specification phase. No build commands exist yet. When code
 
 ## Deployment
 
-- **Manual deployment**: deploy the web app from the repo root with the Vercel CLI, but make sure the repo root is linked to the Vercel `web` project.
-- Run `vercel deploy --prod` from the repo root after verifying the `web/` build.
-- Validate the result on `beta.highlighter.com`. `highlighter.f7z.io` may alias the same deployment, but beta is the intended check target.
+- **Manual deployment**: deploy the web app from the repo root with `npm run deploy:web:prod`.
+- That command builds `web/` and runs `vercel deploy --prebuilt --prod`, which is the path currently serving `beta.highlighter.com`.
+- Validate the result on `beta.highlighter.com`. The relay is in `relay.highlighter.com` (running in this computer behind Caddy)
 - Do **not** rely on Git-based auto deployment for the current web app setup.
 
 ## Documentation
@@ -93,13 +93,6 @@ All product and architecture docs live in `/docs`:
 | `community-page-proposals.md` | Community page wireframes (v1) |
 | `landing-page-proposals.md` | Landing page wireframes |
 
-## Pull Request Guidelines
-
-- Title format: `[component] Brief description` (e.g., `[relay] add invite code validation`)
-- Keep PRs focused — one concern per PR
-- Reference relevant NIP numbers when changing protocol behavior
-- When modifying event schemas, update both the implementation and `technical-architecture.md`
-
 ## Architecture Decisions
 
 ### Why Croissant?
@@ -110,11 +103,3 @@ Shared protocol logic (Nostr client, NIP-29, signing, sync) across all native pl
 
 ### Why NIP-29 groups (not DMs or channels)?
 Groups are relay-native, portable, have built-in membership/role/moderation semantics, and support the four access×visibility combinations Highlighter needs. See `docs/technical-architecture.md` §3.
-
-## Navigation
-
-- **Root** → `AGENTS.md` (this file)
-- **Relay** → `relay/AGENTS.md`
-- **Web app** → `web/AGENTS.md`
-- **Mobile/Desktop** → `app/AGENTS.md`
-- **Docs** → `docs/AGENTS.md`

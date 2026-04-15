@@ -10,6 +10,15 @@ import (
 	"fiatjaf.com/nostr/nip29"
 )
 
+func canPublishWithoutGroup(kind nostr.Kind) bool {
+	switch kind {
+	case nostr.KindArticle, nostr.KindHighlights:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *GroupsState) RejectEvent(ctx context.Context, event nostr.Event) (reject bool, msg string) {
 	// the relay root key can write to any group
 	if event.PubKey == global.S.RelayPublicKey() {
@@ -29,7 +38,10 @@ func (s *GroupsState) RejectEvent(ctx context.Context, event nostr.Event) (rejec
 
 	htag := event.Tags.Find("h")
 	if htag == nil {
-		// events always need an "h" tag
+		if canPublishWithoutGroup(event.Kind) {
+			return false, ""
+		}
+
 		return true, "missing group (`h`) tag"
 	}
 

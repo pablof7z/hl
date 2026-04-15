@@ -33,7 +33,7 @@ This document defines the **client-side experience**: screens, navigation, compo
 **Terminology mapping:**
 - "Community" (user-facing) = NIP-29 group (protocol-level)
 - "Highlight" = "Teaser" = NIP-84 `kind:9802` event (an excerpt from an artifact)
-- "Artifact" = external content identified via NIP-73 entity tagging (book, article, podcast, video)
+- "Artifact" = external content identified by source-reference tags on a community `kind:11` share thread (`a`, `e`, or `i`/`k`)
 - "For Later" = private personal queue (no Nostr event kind — local/private storage)
 
 ---
@@ -208,7 +208,7 @@ How the 3-tab navigation maps to the webapp routes defined in `product-surfaces-
 | Recommended | `/me/recommended` |
 | Synthesis | `/me/synthesis` |
 | Public Community Page (SEO) | `/share/community/[id]` |
-| Public Highlight Card (SEO) | `/share/highlight/[id]` |
+| Public Highlight Card (SEO) | `/g/[group-id]/e/[highlight-id]` |
 
 **Note:** Routes use "community" in URLs (user-facing language), mapped to NIP-29 group IDs internally.
 

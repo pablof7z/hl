@@ -66,7 +66,7 @@ func (s *GroupsState) ShouldPreventBroadcast(ws *khatru.WebSocket, filter nostr.
 func (s *GroupsState) hideEventFromReader(evt nostr.Event, authed []nostr.PubKey) bool {
 	group := s.GetGroupFromEvent(evt)
 	if nil == group {
-		return true
+		return !canPublishWithoutGroup(evt.Kind)
 	}
 
 	// filtering by checking if a user is a member of a group (when 'private') is already done by
@@ -78,5 +78,5 @@ func (s *GroupsState) hideEventFromReader(evt nostr.Event, authed []nostr.PubKey
 		return false
 	}
 
-	return false
+	return true
 }

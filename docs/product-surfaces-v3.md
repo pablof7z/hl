@@ -8,7 +8,7 @@
 | Decision | Choice | Rationale |
 |---|---|---|
 | Relay | Custom fork of croissant | Full NIP-29 relay with web UI, Bleve search, Blossom, LiveKit, presence verification. We fork and add Highlighter-specific policies. |
-| Event kinds | NIP-84 + NIP-73 (no custom kinds) | Highlights use NIP-84 (`kind:9802`). Artifacts identified via NIP-73 entity tagging. No custom kinds needed. |
+| Event kinds | `kind:11` + NIP-73-style source refs + NIP-84 | Community shares use `kind:11`; highlights use NIP-84 (`kind:9802`); artifact identity lives in source-reference tags, not a custom artifact kind. |
 | Webapp stack | ndk-template-sveltekit-vercel (SvelteKit + NDK + Vercel) | Massive head start: SSR, auth, SEO, onboarding, NDK primitives all pre-built |
 | Webapp priority | Build first | Template gives a working starting point; validates the product fastest |
 | Mobile approach | Rust core + native Swift/Kotlin UIs | True native feel, shared protocol/data layer, platform-native UX |
@@ -116,7 +116,7 @@ Highlighter does **not** define custom event kinds. Instead, we use established 
 | Concept | NIP | Kind | How It Works |
 |---|---|---|---|
 | **Highlight** | NIP-84 | `9802` | Standard highlight/annotation event. Contains the excerpt text, source reference, and context. Already a defined kind. |
-| **Artifact** | NIP-73 | N/A (no dedicated kind) | External content is identified through NIP-73 entity tagging. The artifact is not a separate event — it's a reference using NIP-73 tags (`r`, `i`, etc.) on any event type (e.g., a `kind:1` note with NIP-73 tags describing the external content). The entity type (book, article, podcast, video) is determined by the NIP-73 tag classification. |
+| **Artifact** | Source-reference tags on `kind:11` share threads | `11` | External content is identified through tags on the share thread itself: `a` for addressable Nostr content like `kind:30023`, `e` for non-addressable Nostr events, `i` plus `k` for external entities like URLs, ISBNs, DOIs, and podcast GUIDs. There is no custom artifact event kind. |
 
 **Why no custom kinds:** The domain logic lives in the **tags**, not the kind number. This means:
 - Croissant doesn't need custom event kind additions in its codebase — it just accepts standard kinds within groups
@@ -128,9 +128,9 @@ Highlighter does **not** define custom event kinds. Instead, we use established 
 
 | Policy | Description |
 |---|---|
-| **Artifact validation** | Verify artifact events have required tags (`d`, `title`, `source`, at least one of `url` or manual entry fields). Reject malformed artifacts. |
-| **Highlight validation** | Verify highlight events reference a valid artifact within the same group (`a` tag points to an artifact event coordinate). Reject orphan highlights. |
-| **Content type enforcement** | Extend croissant's `SupportedKinds` to include Highlighter custom kinds. Groups can optionally restrict to specific content types. |
+| **Artifact validation** | Verify `kind:11` share threads have required metadata and source-reference tags (`d`, `title`, `source`, plus one of `a`, `e`, or `i`). Reject malformed shares. |
+| **Highlight validation** | Verify highlight events reference a valid source (`a`, `e`, or `r`) that the client can resolve back to a shared artifact surface. Reject orphan highlights when policy requires it. |
+| **Content type enforcement** | Restrict to the standard kinds Highlighter relies on (`11`, `9802`, `1111`, etc.). No custom artifact kind registration needed. |
 | **Late publication window** | Reject events with timestamps older than 1 hour (anti-replay, in addition to croissant's existing moderation timestamp check). |
 
 #### Custom Features (Additions to `process_event.go`)
@@ -187,7 +187,7 @@ Key settings (extending croissant's `settings.json`):
 - Track upstream croissant and rebase periodically
 - Highlighter extensions live in clean, isolated files (`highlighter.go`, `highlighter_events.go`, `highlighter_policies.go`)
 - Keep policy hooks separate from core event processing so upstream merges stay clean
-- Open-source the fork; custom kinds are documented for interop
+- Open-source the fork; the event model stays on standard kinds and documented tag conventions for interop
 - The templ web UI is fully replaced with Highlighter-specific pages (this is the least mergeable part — expect divergence here)
 
 ---
@@ -224,7 +224,7 @@ Key settings (extending croissant's `settings.json`):
 | `/group/[groupId]/highlight/[highlightId]` | Single highlight view + discussion |
 | `/discover` | Public group discovery: browse, search, trending |
 | `/vault` | Personal vault: all your highlights across groups, searchable |
-| `/share/highlight/[highlightId]` | Public highlight card (SEO-optimized, shareable) |
+| `/g/[group-id]/e/[highlight-id]` | Public highlight card (SEO-optimized, shareable) |
 | `/share/group/[groupId]` | Public group page (SEO landing page for growth) |
 | `/onboarding/group-create` | Creator flywheel: create a group, set access/visibility, invite flow |
 
@@ -241,11 +241,11 @@ Key settings (extending croissant's `settings.json`):
 
 | Area | What We Add |
 |---|---|
-| **NDK event handling** | Custom NDK event classes for Artifact and Highlight kinds; NIP-29 group subscription management |
+| **NDK event handling** | Helpers for `kind:11` share threads, `kind:9802` highlights, source-reference parsing, and NIP-29 group subscription management |
 | **Relay configuration** | Point to Highlighter relay(s) as primary; support additional user relays |
 | **NIP-42 auth** | Implement NIP-42 authentication flow for group membership verification on the relay |
 | **Group state management** | Client-side store for group metadata, membership lists, roles — synced from relay |
-| **Artifact extraction** | URL metadata extraction (OpenGraph, oEmbed, manual entry) for creating artifact events |
+| **Artifact extraction** | URL metadata extraction and Nostr article resolution for creating `kind:11` share previews |
 | **Highlight card rendering** | Beautiful, shareable highlight cards with group branding — the core growth mechanic |
 | **Invite mechanics** | Shareable links, invite codes (`kind:9009`), group join flows — baked into every surface |
 | **Public pages** | SSR-optimized group and highlight pages for SEO and social sharing |
@@ -455,7 +455,7 @@ All four surfaces (web, iOS, Android, desktop) present the same data and same co
 All surfaces talk to the same relay infrastructure. The data model is identical:
 
 - Groups are NIP-29 groups on the relay
-- Artifacts and highlights are Nostr events (custom kinds)
+- Artifact shares and highlights are standard Nostr events with protocol-level tags, not made-up custom kinds
 - Memberships and roles are relay-managed NIP-29 state
 - A user's identity (Nostr keypair) works across all surfaces
 - A user's data follows them — groups, highlights, artifacts are portable

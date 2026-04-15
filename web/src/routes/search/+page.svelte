@@ -22,9 +22,9 @@
     {:else}
       <h1>Results for "{data.results.query}"</h1>
       <p class="search-summary">
-        {totalCount} result{totalCount === 1 ? '' : 's'} · {communityCount} communit{communityCount === 1
-          ? 'y'
-          : 'ies'} · {articleCount} article{articleCount === 1 ? '' : 's'}
+        {totalCount} result{totalCount === 1 ? '' : 's'} · {communityCount} circle{communityCount === 1
+          ? ''
+          : 's'} · {articleCount} article{articleCount === 1 ? '' : 's'}
       </p>
     {/if}
   </header>
@@ -33,14 +33,14 @@
     <section class="search-message">
       <p class="message-title">Type at least {MIN_SEARCH_QUERY_LENGTH} characters in the header search.</p>
       <p class="message-copy">
-        Community names, route slugs, article titles, summaries, and article body text are all searchable.
+        Circle names, route slugs, article titles, summaries, and article body text are all searchable.
       </p>
     </section>
   {:else if !hasResults}
     <section class="search-message">
       <p class="message-title">Nothing matched "{data.results.query}".</p>
       <p class="message-copy">
-        Try a broader phrase, a community route slug, or a few words from the article title or body.
+        Try a broader phrase, a circle route slug, or a few words from the article title or body.
       </p>
     </section>
   {:else}
@@ -48,7 +48,7 @@
       <section class="result-section">
         <div class="result-section-head">
           <div>
-            <h2>{data.results.communities.length} public communit{data.results.communities.length === 1 ? 'y' : 'ies'}</h2>
+            <h2>{data.results.communities.length} public circle{data.results.communities.length === 1 ? '' : 's'}</h2>
           </div>
         </div>
 
@@ -139,7 +139,7 @@
     padding: 1.5rem;
     border: 1px solid var(--border);
     border-radius: 1.3rem;
-    background: linear-gradient(180deg, rgba(255, 103, 25, 0.07), rgba(255, 255, 255, 0));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent);
   }
 
   .message-title {
@@ -177,20 +177,16 @@
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 1rem;
     align-items: start;
-    padding: 1rem;
-    border: 1px solid var(--border);
-    border-radius: 1.3rem;
-    background: var(--surface);
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
     color: inherit;
     text-decoration: none;
-    transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+    transition: background 120ms ease;
   }
 
   .article-result-card:hover,
   .article-result-card:focus-visible {
-    border-color: rgba(255, 103, 25, 0.3);
-    transform: translateY(-1px);
-    box-shadow: 0 16px 40px rgba(17, 17, 17, 0.08);
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
   }
 
   .article-result-copy {
@@ -224,20 +220,16 @@
   }
 
   .article-result-card img {
-    width: 8rem;
-    height: 6rem;
+    width: 6rem;
+    height: 4.5rem;
     object-fit: cover;
-    border-radius: 1rem;
+    border-radius: 0.6rem;
   }
 
   @media (max-width: 760px) {
-    .article-result-card {
-      grid-template-columns: 1fr;
-    }
-
     .article-result-card img {
-      width: 100%;
-      height: 11rem;
+      width: 4.5rem;
+      height: 3.5rem;
     }
   }
 </style>

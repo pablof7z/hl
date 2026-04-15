@@ -70,6 +70,26 @@ go vet ./...
 gofmt -w .
 ```
 
+### Live Relay Restart Requirement
+
+`relay.highlighter.com` on this machine runs under the launch agent `io.f7z.relay-highlighter`, serving `/Users/customer/Work/highlighter/relay/croissant` behind Caddy on `127.0.0.1:9888`.
+
+After any relay code or config change that should affect the live relay, do not stop at tests or a local build. Rebuild the binary in `relay/` and restart the launch agent so the running relay picks up the change:
+
+```bash
+cd relay
+go build -o ./croissant.new .
+mv ./croissant.new ./croissant
+launchctl kickstart -k gui/$(id -u)/io.f7z.relay-highlighter
+```
+
+Verify the service after restarting:
+
+```bash
+launchctl print gui/$(id -u)/io.f7z.relay-highlighter
+curl -sS -H 'Accept: application/nostr+json' http://127.0.0.1:9888
+```
+
 ## Project Structure
 
 ```

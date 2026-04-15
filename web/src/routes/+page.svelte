@@ -198,7 +198,7 @@
           <p>Join a circle or follow someone to see highlights appear in your feed.</p>
           <div class="feed-empty-actions">
             <a href="/community" class="btn-primary">Discover circles</a>
-            <a href="/circle/create" class="btn-secondary">Create a circle</a>
+            <a href="/community/create" class="btn-secondary">Create a circle</a>
           </div>
         </div>
       {:else if isEmpty && hasCircles}
@@ -253,7 +253,7 @@
       <div class="rail-cta-card">
         <h3>Start a new circle</h3>
         <p>Gather your people around the content you care about.</p>
-        <a href="/circle/create" class="btn-primary">Create a circle</a>
+        <a href="/community/create" class="btn-primary">Create a circle</a>
       </div>
     </aside>
   </section>

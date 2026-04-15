@@ -155,10 +155,10 @@
       bind:value={query}
       type="search"
       name="q"
-      placeholder="Search communities and articles"
+      placeholder="Search circles and articles"
       autocomplete="off"
       spellcheck="false"
-      aria-label="Search communities and articles"
+      aria-label="Search circles and articles"
       onfocus={() => {
         open = true;
       }}
@@ -172,12 +172,12 @@
       {#if loading}
         <p class="search-status">Searching the Highlighter relay...</p>
       {:else if showEmptyState}
-        <p class="search-status">No communities or articles matched "{trimmedQuery}".</p>
+        <p class="search-status">No circles or articles matched "{trimmedQuery}".</p>
       {:else}
         {#if results.communities.length > 0}
           <section class="search-section">
             <div class="search-section-head">
-              <span>Communities</span>
+              <span>Circles</span>
               <a href={`/search?q=${encodeURIComponent(trimmedQuery)}`} onclick={closeDropdown}>View all</a>
             </div>
 
@@ -209,6 +209,9 @@
                   href={`/note/${encodeURIComponent(article.noteIdentifier)}`}
                   onclick={closeDropdown}
                 >
+                  {#if article.image}
+                    <img class="article-thumb" src={article.image} alt="" loading="lazy" />
+                  {/if}
                   <div class="search-result-copy">
                     <strong>{article.title}</strong>
                     <span>{article.summary}</span>
@@ -250,8 +253,8 @@
 
   .header-search input:focus {
     outline: none;
-    border-color: rgba(255, 103, 25, 0.4);
-    box-shadow: 0 0 0 3px rgba(255, 103, 25, 0.12);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
   }
 
   .header-search button {
@@ -343,7 +346,7 @@
 
   .search-result-row:hover,
   .search-result-row:focus-visible {
-    border-color: rgba(255, 103, 25, 0.3);
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
     transform: translateY(-1px);
     box-shadow: 0 12px 30px rgba(17, 17, 17, 0.08);
   }
@@ -371,6 +374,17 @@
     text-align: right;
   }
 
+  .search-result-row-article {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .article-thumb {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.5rem;
+    object-fit: cover;
+  }
+
   .search-result-row-article small {
     max-width: 8rem;
   }
@@ -386,6 +400,10 @@
 
     .search-result-row {
       grid-template-columns: 1fr;
+    }
+
+    .search-result-row-article {
+      grid-template-columns: auto 1fr;
     }
 
     .search-result-row small {
