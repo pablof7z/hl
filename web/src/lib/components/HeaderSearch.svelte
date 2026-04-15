@@ -258,57 +258,51 @@
 <style>
   .header-search {
     position: relative;
-    display: grid;
+    display: flex;
     align-items: center;
-    justify-items: end;
-  }
-
-  .search-toggle,
-  .search-form {
-    grid-row: 1;
-    grid-column: 1;
   }
 
   .search-toggle {
-    z-index: 1;
-    transition: opacity 150ms ease, transform 150ms ease;
+    flex-shrink: 0;
+    transition: opacity 120ms ease, transform 120ms ease;
   }
 
   .search-toggle.is-hidden {
     opacity: 0;
     transform: scale(0.85);
     pointer-events: none;
+    position: absolute;
+    right: 0;
   }
 
   .search-form {
-    justify-self: stretch;
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    opacity: 0;
+    width: 24rem;
+    max-width: calc(100vw - 4rem);
+    clip-path: inset(0 0 0 100%);
     pointer-events: none;
-    transition: opacity 180ms ease;
+    transition: clip-path 200ms ease-out;
   }
 
   .search-form.is-active {
-    opacity: 1;
+    clip-path: inset(0);
     pointer-events: auto;
   }
 
   .search-dropdown {
     position: absolute;
     top: calc(100% + 0.4rem);
-    left: 0;
     right: 0;
+    width: 24rem;
+    max-width: calc(100vw - 2rem);
     z-index: 30;
     max-height: min(70vh, 28rem);
     overflow-y: auto;
-  }
-
-  @media (max-width: 700px) {
-    .search-dropdown {
-      left: -2rem;
-      right: -2rem;
-    }
   }
 </style>

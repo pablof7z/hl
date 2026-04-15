@@ -28,24 +28,17 @@
 {/if}
 
 <header class="app-navbar-shell">
-  <div class="shell app-header">
-    <div class="app-header-top">
+  <div class="shell navbar min-h-0 px-0 py-2 gap-4">
+    <div class="navbar-start gap-4">
       <a class="brand" href="/">
         <span class="brand-name">Highlighter</span>
         <span class="brand-dot" aria-hidden="true"></span>
       </a>
-
-      <div class="header-search-wrap">
-        <HeaderSearch />
-      </div>
-
-      <div class="header-auth">
-        <AuthPanel />
-      </div>
-    </div>
-
-    <div class="app-header-bottom">
       <SiteNavigation />
+    </div>
+    <div class="navbar-end gap-2">
+      <HeaderSearch />
+      <AuthPanel />
     </div>
   </div>
 </header>
@@ -76,34 +69,6 @@
     background: rgba(248, 245, 240, 0.92);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-light);
-  }
-
-  .app-header {
-    display: grid;
-    gap: 0.45rem;
-    padding: 0.65rem 0 0.6rem;
-  }
-
-  .app-header-top {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .header-search-wrap {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .header-auth {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-  }
-
-  .app-header-bottom {
-    display: flex;
-    justify-content: center;
   }
 
   .brand {
@@ -168,9 +133,4 @@
     color: var(--muted);
   }
 
-  @media (max-width: 900px) {
-    .app-header-top {
-      gap: 0.65rem;
-    }
-  }
 </style>
