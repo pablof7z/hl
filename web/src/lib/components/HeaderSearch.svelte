@@ -165,32 +165,45 @@
 </script>
 
 <div class="header-search" bind:this={rootEl}>
-  {#if expanded}
-    <form class="search-expanded" role="search" method="GET" action="/search">
-      <label class="input input-bordered input-sm flex items-center gap-2 flex-1 rounded-full">
-        <svg class="opacity-50" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input
-          bind:this={inputEl}
-          bind:value={query}
-          type="search"
-          name="q"
-          class="grow"
-          placeholder="Search circles and articles…"
-          autocomplete="off"
-          spellcheck="false"
-          aria-label="Search circles and articles"
-          onfocus={() => { open = true; }}
-        />
-      </label>
-      <button type="button" class="btn btn-ghost btn-circle btn-sm" onclick={collapse} aria-label="Close search">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-      </button>
-    </form>
-  {:else}
-    <button type="button" class="btn btn-ghost btn-circle btn-sm" onclick={expand} aria-label="Open search">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+  <button
+    type="button"
+    class="btn btn-ghost btn-circle btn-sm search-toggle"
+    class:is-hidden={expanded}
+    onclick={expand}
+    aria-label="Open search"
+    tabindex={expanded ? -1 : 0}
+  >
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+  </button>
+
+  <form
+    class="search-form"
+    class:is-active={expanded}
+    role="search"
+    method="GET"
+    action="/search"
+    aria-hidden={!expanded}
+  >
+    <label class="input input-bordered input-sm flex items-center gap-2 flex-1 rounded-full">
+      <svg class="opacity-50" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input
+        bind:this={inputEl}
+        bind:value={query}
+        type="search"
+        name="q"
+        class="grow"
+        placeholder="Search circles and articles…"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="Search circles and articles"
+        tabindex={expanded ? 0 : -1}
+        onfocus={() => { open = true; }}
+      />
+    </label>
+    <button type="button" class="btn btn-ghost btn-circle btn-sm" onclick={collapse} aria-label="Close search" tabindex={expanded ? 0 : -1}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
     </button>
-  {/if}
+  </form>
 
   {#if showDropdown}
     <ul class="menu menu-sm search-dropdown rounded-box bg-base-100 shadow-lg border border-base-300">
@@ -245,16 +258,41 @@
 <style>
   .header-search {
     position: relative;
-    display: flex;
+    display: grid;
     align-items: center;
-    justify-content: flex-end;
+    justify-items: end;
   }
 
-  .search-expanded {
+  .search-toggle,
+  .search-form {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .search-toggle {
+    z-index: 1;
+    transition: opacity 150ms ease, transform 150ms ease;
+  }
+
+  .search-toggle.is-hidden {
+    opacity: 0;
+    transform: scale(0.85);
+    pointer-events: none;
+  }
+
+  .search-form {
+    justify-self: stretch;
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    width: 100%;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+  }
+
+  .search-form.is-active {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .search-dropdown {
