@@ -1,5 +1,4 @@
 {
-  "framework": "sveltekit",
-  "rootDirectory": "web",
-  "buildCommand": "node scripts/generate-changelog.js && npm run build"
+  "buildCommand": "cd web && node scripts/generate-changelog.js && npm run build",
+  "installCommand": "cd web && npm install"
 }
