@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd web && node scripts/generate-changelog.js && npm run build",
-  "outputDirectory": "web/.vercel/output",
+  "buildCommand": "cd web && node scripts/generate-changelog.js && npm run build && cd .. && cp -r web/.vercel/output .vercel/output",
+  "outputDirectory": ".vercel/output",
   "installCommand": "cd web && npm install"
 }
