@@ -1,6 +1,5 @@
 {
   "framework": "sveltekit",
-  "buildCommand": "cd web && npm install && node scripts/generate-changelog.js && npm run build",
-  "outputDirectory": "web/.vercel/output",
-  "installCommand": "cd web && npm install"
+  "rootDirectory": "web",
+  "buildCommand": "node scripts/generate-changelog.js && npm run build"
 }
