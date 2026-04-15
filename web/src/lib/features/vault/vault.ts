@@ -1,8 +1,19 @@
 import type { ArtifactPreview } from '$lib/ndk/artifacts';
+import { ensureClientNdk, ndk } from '$lib/ndk/client';
+import {
+  BOOKMARK_LIST_KIND,
+  decryptPrivateListTags,
+  ensureList,
+  fetchLatestUserList,
+  publishPrivateListTags,
+  type ListTag
+} from '$lib/ndk/lists';
 
-const DB_NAME = 'highlighter-vault';
-const DB_VERSION = 1;
-const FOR_LATER_STORE = 'for-later';
+const LEGACY_DB_NAME = 'highlighter-vault';
+const LEGACY_DB_VERSION = 1;
+const LEGACY_FOR_LATER_STORE = 'for-later';
+const LEGACY_MIGRATION_KEY = 'highlighter:for-later:nip51-migrated:v1';
+const FOR_LATER_TAG = 'hl-for-later';
 
 const ARTIFACT_PREVIEW_KEYS = [
   'id',
@@ -61,35 +72,22 @@ export type ForLaterStatus =
       label: string;
     };
 
-export async function listForLaterArtifacts(): Promise<ForLaterItem[]> {
-  const db = await openVaultDb();
+type ForLaterPayload = {
+  version: 1;
+  item: ForLaterItem;
+};
 
-  try {
-    const transaction = db.transaction(FOR_LATER_STORE, 'readonly');
-    const items = await requestToPromise<ForLaterItem[]>(transaction.objectStore(FOR_LATER_STORE).getAll());
-    await waitForTransaction(transaction);
-    return items.map(normalizeForLaterItem).toSorted((left, right) => right.savedAt - left.savedAt);
-  } finally {
-    db.close();
-  }
+export async function listForLaterArtifacts(): Promise<ForLaterItem[]> {
+  const { items } = await loadForLaterState();
+  return items.toSorted((left, right) => right.savedAt - left.savedAt);
 }
 
 export async function getForLaterArtifact(id: string): Promise<ForLaterItem | undefined> {
   const normalizedId = cleanText(id);
   if (!normalizedId) return undefined;
 
-  const db = await openVaultDb();
-
-  try {
-    const transaction = db.transaction(FOR_LATER_STORE, 'readonly');
-    const item = await requestToPromise<ForLaterItem | undefined>(
-      transaction.objectStore(FOR_LATER_STORE).get(normalizedId)
-    );
-    await waitForTransaction(transaction);
-    return item ? normalizeForLaterItem(item) : undefined;
-  } finally {
-    db.close();
-  }
+  const { items } = await loadForLaterState();
+  return items.find((item) => item.id === normalizedId);
 }
 
 export async function saveForLaterArtifact(input: {
@@ -99,28 +97,24 @@ export async function saveForLaterArtifact(input: {
   sharedRoutes?: ForLaterSharedRoute[];
 }): Promise<{ item: ForLaterItem; existing: boolean }> {
   const artifact = pickArtifactPreviewFields(input.artifact);
-  const db = await openVaultDb();
+  const { list, items } = await loadForLaterState();
+  const existing = items.find((item) => item.id === artifact.id);
+  const item = buildForLaterItem(
+    {
+      artifact,
+      teaser: input.teaser,
+      communityIds: input.communityIds,
+      sharedRoutes: input.sharedRoutes
+    },
+    existing
+  );
 
-  try {
-    const transaction = db.transaction(FOR_LATER_STORE, 'readwrite');
-    const store = transaction.objectStore(FOR_LATER_STORE);
-    const existing = await requestToPromise<ForLaterItem | undefined>(store.get(artifact.id));
-    const item = buildForLaterItem(
-      {
-        artifact,
-        teaser: input.teaser,
-        communityIds: input.communityIds,
-        sharedRoutes: input.sharedRoutes
-      },
-      existing ? normalizeForLaterItem(existing) : undefined
-    );
+  const nextItems = existing
+    ? items.map((candidate) => (candidate.id === item.id ? item : candidate))
+    : [...items, item];
 
-    await requestToPromise(store.put(item));
-    await waitForTransaction(transaction);
-    return { item, existing: Boolean(existing) };
-  } finally {
-    db.close();
-  }
+  await writeForLaterItems(list, nextItems);
+  return { item, existing: Boolean(existing) };
 }
 
 export async function updateForLaterArtifact(
@@ -131,34 +125,46 @@ export async function updateForLaterArtifact(
     sharedRoutes?: ForLaterSharedRoute[];
   }
 ): Promise<ForLaterItem | undefined> {
-  const existing = await getForLaterArtifact(id);
+  const normalizedId = cleanText(id);
+  if (!normalizedId) return undefined;
+
+  const { list, items } = await loadForLaterState();
+  const existing = items.find((item) => item.id === normalizedId);
   if (!existing) {
     return undefined;
   }
 
-  return (
-    await saveForLaterArtifact({
+  const updated = buildForLaterItem(
+    {
       artifact: previewFromForLaterItem(existing),
       teaser: patch.teaser ?? existing.teaser,
       communityIds: patch.communityIds ?? existing.communityIds,
       sharedRoutes: patch.sharedRoutes ?? existing.sharedRoutes
-    })
-  ).item;
+    },
+    existing
+  );
+
+  await writeForLaterItems(
+    list,
+    items.map((item) => (item.id === normalizedId ? updated : item))
+  );
+
+  return updated;
 }
 
 export async function removeForLaterArtifact(id: string): Promise<void> {
   const normalizedId = cleanText(id);
   if (!normalizedId) return;
 
-  const db = await openVaultDb();
-
-  try {
-    const transaction = db.transaction(FOR_LATER_STORE, 'readwrite');
-    transaction.objectStore(FOR_LATER_STORE).delete(normalizedId);
-    await waitForTransaction(transaction);
-  } finally {
-    db.close();
+  const { list, items } = await loadForLaterState();
+  if (!items.some((item) => item.id === normalizedId)) {
+    return;
   }
+
+  await writeForLaterItems(
+    list,
+    items.filter((item) => item.id !== normalizedId)
+  );
 }
 
 export function previewFromForLaterItem(item: ForLaterItem): ArtifactPreview {
@@ -184,6 +190,135 @@ export function forLaterStatus(item: Pick<ForLaterItem, 'teaser' | 'communityIds
     tone: 'ready',
     label: 'Ready to share'
   };
+}
+
+async function loadForLaterState(): Promise<{
+  list: ReturnType<typeof ensureList>;
+  items: ForLaterItem[];
+}> {
+  await ensureClientNdk();
+
+  const currentUser = ndk.$currentUser;
+  if (!currentUser) {
+    throw new Error('Sign in to manage your private For Later list.');
+  }
+  if (!ndk.signer) {
+    throw new Error('Use a signing session to manage your private For Later list.');
+  }
+
+  const event = await fetchLatestUserList(ndk, BOOKMARK_LIST_KIND, currentUser.pubkey);
+  const list = ensureList(ndk, BOOKMARK_LIST_KIND, event);
+  let items = decodeForLaterItems(await decryptPrivateListTags(list));
+
+  if (shouldAttemptLegacyMigration()) {
+    try {
+      items = await migrateLegacyItems(list, items);
+    } catch {
+      // Keep the remote list usable even if local migration is unavailable.
+    }
+  }
+
+  return { list, items };
+}
+
+async function migrateLegacyItems(
+  list: ReturnType<typeof ensureList>,
+  items: ForLaterItem[]
+): Promise<ForLaterItem[]> {
+  const legacyItems = await listLegacyForLaterArtifacts();
+  markLegacyMigrationChecked();
+
+  if (legacyItems.length === 0) {
+    return items;
+  }
+
+  const merged = mergeLegacyForLaterItems(items, legacyItems);
+  if (merged.length === items.length) {
+    return items;
+  }
+
+  await writeForLaterItems(list, merged);
+  return merged;
+}
+
+function mergeLegacyForLaterItems(currentItems: ForLaterItem[], legacyItems: ForLaterItem[]): ForLaterItem[] {
+  const seen = new Set(currentItems.map((item) => item.id));
+  const merged = [...currentItems];
+
+  for (const item of legacyItems.toSorted((left, right) => left.savedAt - right.savedAt)) {
+    if (!seen.has(item.id)) {
+      merged.push(item);
+      seen.add(item.id);
+    }
+  }
+
+  return merged.toSorted((left, right) => left.savedAt - right.savedAt);
+}
+
+async function writeForLaterItems(
+  list: ReturnType<typeof ensureList>,
+  items: ForLaterItem[]
+): Promise<void> {
+  const encryptedTags = await decryptPrivateListTags(list);
+  const preservedTags = encryptedTags.filter((tag) => tag[0] !== FOR_LATER_TAG);
+  const nextTags = [...preservedTags, ...encodeForLaterItems(items)];
+
+  await publishPrivateListTags(list, nextTags);
+}
+
+function encodeForLaterItems(items: ForLaterItem[]): ListTag[] {
+  return items
+    .toSorted((left, right) => left.savedAt - right.savedAt)
+    .map((item) => {
+      const normalizedItem = normalizeForLaterItem(item);
+      const payload: ForLaterPayload = {
+        version: 1,
+        item: normalizedItem
+      };
+
+      return [FOR_LATER_TAG, normalizedItem.id, JSON.stringify(payload)];
+    });
+}
+
+function decodeForLaterItems(tags: ListTag[]): ForLaterItem[] {
+  const seen = new Set<string>();
+  const items: ForLaterItem[] = [];
+
+  for (const tag of tags) {
+    const item = decodeForLaterTag(tag);
+    if (!item || seen.has(item.id)) continue;
+    seen.add(item.id);
+    items.push(item);
+  }
+
+  return items.toSorted((left, right) => left.savedAt - right.savedAt);
+}
+
+function decodeForLaterTag(tag: ListTag): ForLaterItem | undefined {
+  if (tag[0] !== FOR_LATER_TAG) {
+    return undefined;
+  }
+
+  const normalizedId = cleanText(tag[1]);
+  const payload = cleanText(tag[2]);
+  if (!normalizedId || !payload) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(payload) as Partial<ForLaterPayload> | undefined;
+    const rawItem = parsed?.item;
+    if (!rawItem || parsed?.version !== 1) {
+      return undefined;
+    }
+
+    return normalizeForLaterItem({
+      ...(rawItem as ForLaterItem),
+      id: normalizedId
+    });
+  } catch {
+    return undefined;
+  }
 }
 
 function buildForLaterItem(
@@ -278,25 +413,54 @@ function cleanText(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-async function openVaultDb(): Promise<IDBDatabase> {
-  if (typeof indexedDB === 'undefined') {
-    throw new Error('For Later storage is only available in a browser session.');
+function shouldAttemptLegacyMigration(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof localStorage !== 'undefined' &&
+    localStorage.getItem(LEGACY_MIGRATION_KEY) !== '1'
+  );
+}
+
+function markLegacyMigrationChecked(): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return;
   }
 
+  localStorage.setItem(LEGACY_MIGRATION_KEY, '1');
+}
+
+async function listLegacyForLaterArtifacts(): Promise<ForLaterItem[]> {
+  if (typeof indexedDB === 'undefined') {
+    return [];
+  }
+
+  const db = await openLegacyVaultDb();
+
+  try {
+    const transaction = db.transaction(LEGACY_FOR_LATER_STORE, 'readonly');
+    const items = await requestToPromise<ForLaterItem[]>(transaction.objectStore(LEGACY_FOR_LATER_STORE).getAll());
+    await waitForTransaction(transaction);
+    return items.map(normalizeForLaterItem).toSorted((left, right) => right.savedAt - left.savedAt);
+  } finally {
+    db.close();
+  }
+}
+
+async function openLegacyVaultDb(): Promise<IDBDatabase> {
   return await new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = indexedDB.open(LEGACY_DB_NAME, LEGACY_DB_VERSION);
 
     request.onupgradeneeded = () => {
       const database = request.result;
 
-      if (!database.objectStoreNames.contains(FOR_LATER_STORE)) {
-        database.createObjectStore(FOR_LATER_STORE, { keyPath: 'id' });
+      if (!database.objectStoreNames.contains(LEGACY_FOR_LATER_STORE)) {
+        database.createObjectStore(LEGACY_FOR_LATER_STORE, { keyPath: 'id' });
       }
     };
 
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
-      reject(request.error ?? new Error('Could not open the For Later database.'));
+      reject(request.error ?? new Error('Could not open the legacy For Later database.'));
   });
 }
 

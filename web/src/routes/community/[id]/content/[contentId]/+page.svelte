@@ -145,7 +145,7 @@
   let forLaterError = $state('');
 
   $effect(() => {
-    if (!browser || !data.artifact) {
+    if (!browser || !data.artifact || !currentUser) {
       savedForLater = false;
       return;
     }
@@ -198,6 +198,12 @@
       return;
     }
 
+    if (!currentUser) {
+      forLaterError = 'Sign in to save this source to your private For Later list.';
+      forLaterMessage = '';
+      return;
+    }
+
     savingForLater = true;
     forLaterMessage = '';
     forLaterError = '';
@@ -206,7 +212,7 @@
       if (savedForLater) {
         await removeForLaterArtifact(data.artifact.id);
         savedForLater = false;
-        forLaterMessage = 'Removed from For Later.';
+        forLaterMessage = 'Removed from your private For Later list.';
         return;
       }
 
@@ -217,10 +223,12 @@
       });
 
       savedForLater = true;
-      forLaterMessage = result.existing ? 'Already saved in For Later.' : 'Saved to For Later.';
+      forLaterMessage = result.existing
+        ? 'Already saved in your private For Later list.'
+        : 'Saved to your private For Later list.';
     } catch (error) {
       forLaterError =
-        error instanceof Error ? error.message : 'Could not update your For Later queue.';
+        error instanceof Error ? error.message : 'Could not update your private For Later list.';
     } finally {
       savingForLater = false;
     }
@@ -292,9 +300,16 @@
           >
             Discussion
           </button>
-          <button type="button" class:active={savedForLater} disabled={savingForLater} onclick={toggleForLater}>
+          <button
+            type="button"
+            class:active={savedForLater}
+            disabled={savingForLater}
+            onclick={toggleForLater}
+          >
             {savingForLater
               ? 'Updating…'
+              : !currentUser
+                ? 'Sign in to save'
               : savedForLater
                 ? 'Saved to For Later'
                 : 'Save to For Later'}

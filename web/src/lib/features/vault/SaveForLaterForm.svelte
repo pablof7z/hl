@@ -80,8 +80,8 @@
       });
 
       statusMessage = result.existing
-        ? 'Updated the saved item in your queue.'
-        : 'Saved to your For Later queue.';
+        ? 'Updated the saved item in your private For Later list.'
+        : 'Saved to your private For Later list.';
       onSaved?.(result.item);
 
       reference = '';
@@ -105,6 +105,7 @@
 <section class="save-form-shell">
   <div class="save-form-copy">
     <h2>Save a source</h2>
+    <p>Store it as a private NIP-51 bookmark until you are ready to share it.</p>
   </div>
 
   <form class="save-form" onsubmit={handlePreview}>
@@ -217,6 +218,12 @@
     font-size: 1.5rem;
     line-height: 1.15;
     letter-spacing: -0.02em;
+  }
+
+  .save-form-copy p {
+    margin: 0.35rem 0 0;
+    color: var(--muted);
+    line-height: 1.6;
   }
 
   .preview-copy p {

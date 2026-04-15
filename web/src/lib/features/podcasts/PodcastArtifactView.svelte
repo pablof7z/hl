@@ -591,7 +591,13 @@
           Discussion
         </button>
         <button type="button" class:active={savedForLater} disabled={savingForLater} onclick={onToggleForLater}>
-          {savingForLater ? 'Updating…' : savedForLater ? 'Saved to For Later' : 'Save to For Later'}
+          {savingForLater
+            ? 'Updating…'
+            : !currentUser
+              ? 'Sign in to save'
+              : savedForLater
+                ? 'Saved to For Later'
+                : 'Save to For Later'}
         </button>
       </div>
 

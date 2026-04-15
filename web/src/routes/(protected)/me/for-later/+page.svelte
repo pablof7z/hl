@@ -58,8 +58,10 @@
   const sharedCount = $derived(items.filter((item) => item.communityIds.length > 0).length);
 
   $effect(() => {
-    if (!browser) {
+    if (!browser || !currentUser) {
       items = [];
+      loadingItems = false;
+      storageError = '';
       return;
     }
 
@@ -76,7 +78,7 @@
       .catch((error) => {
         if (!cancelled) {
           storageError =
-            error instanceof Error ? error.message : 'Could not load your local For Later queue.';
+            error instanceof Error ? error.message : 'Could not load your private For Later list.';
         }
       })
       .finally(() => {
@@ -107,15 +109,15 @@
 
 <section class="for-later-page">
   <header class="page-copy">
-    <h2>Your reading queue</h2>
-    <p>Saved privately in this browser until you're ready to share.</p>
+    <h2>Your private reading queue</h2>
+    <p>Saved as private NIP-51 bookmarks so this list travels with your Nostr identity.</p>
   </header>
 
   <section class="me-summary">
     <div class="summary-card">
       <p class="summary-label">Saved items</p>
       <strong>{items.length}</strong>
-      <span>Private to this browser for MVP.</span>
+      <span>Encrypted inside your private bookmark list.</span>
     </div>
     <div class="summary-card">
       <p class="summary-label">Ready to share</p>
@@ -151,11 +153,11 @@
   {/if}
 
   {#if loadingItems}
-    <p class="feedback">Loading your local queue…</p>
+    <p class="feedback">Loading your private bookmark list…</p>
   {:else if items.length === 0}
     <section class="empty-state">
       <p>No saved items yet.</p>
-      <p>Add a source above to start your queue.</p>
+      <p>Add a source above to start your private NIP-51 queue.</p>
     </section>
   {:else}
     <section class="for-later-list">
