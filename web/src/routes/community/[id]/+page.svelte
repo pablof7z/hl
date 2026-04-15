@@ -659,12 +659,10 @@
   .community-hero {
     display: grid;
     gap: 1rem;
-    padding: 1.5rem;
-    border: 1px solid var(--border);
-    border-radius: 1.5rem;
+    padding: 1.5rem 0;
     background:
       radial-gradient(circle at top left, rgba(255, 103, 25, 0.12), transparent 38%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 1));
+      transparent;
   }
 
   .community-hero-top,
@@ -773,12 +771,32 @@
   }
 
   .artifact-empty,
-  .side-card,
   .empty-collection {
     padding: 1rem 1.1rem;
     border: 1px solid var(--border);
     border-radius: 1.1rem;
     background: var(--surface);
+  }
+
+  .side-card {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .side-card:first-child {
+    padding-top: 0;
+  }
+
+  .side-card:last-child {
+    border-bottom: none;
+  }
+
+  .side-card.share-card,
+  .side-card.guest-card {
+    padding: 1rem 1.1rem;
+    border: none;
+    border-radius: 1.1rem;
+    background: color-mix(in srgb, var(--accent) 6%, var(--surface));
   }
 
   .empty-collection h2 {

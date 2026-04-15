@@ -121,10 +121,7 @@
     display: grid;
     gap: 0.75rem;
     min-width: 0;
-    padding: 1rem;
-    border: 1px solid var(--border);
-    border-radius: 1rem;
-    background: var(--surface);
+    padding: 0;
   }
 
   .surface-section h2 {

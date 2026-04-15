@@ -93,11 +93,13 @@
   .highlight-source-group {
     display: grid;
     gap: 0.9rem;
-    padding: 1rem;
-    border: 1px solid var(--border);
-    border-radius: 1.35rem;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, white), var(--surface));
+    padding: 1.25rem 0 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .highlight-source-group:first-child {
+    border-top: none;
+    padding-top: 0;
   }
 
   .group-header,

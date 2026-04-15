@@ -314,10 +314,13 @@
   .highlight-card {
     display: grid;
     gap: 0.9rem;
-    padding: 1.1rem 1.15rem 1.15rem;
-    border: 1px solid var(--border);
-    border-radius: 1.2rem;
-    background: color-mix(in srgb, var(--surface) 90%, white);
+    padding: 0 0 1.1rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  }
+
+  .highlight-card:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
   }
 
   .highlight-header,

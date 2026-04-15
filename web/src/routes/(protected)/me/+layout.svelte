@@ -169,12 +169,10 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 1.25rem;
-    padding: 1.25rem;
-    border: 1px solid var(--border);
-    border-radius: 1.4rem;
+    padding: 1.25rem 0;
     background:
       radial-gradient(circle at top left, rgba(255, 103, 25, 0.08), transparent 38%),
-      var(--surface);
+      transparent;
   }
 
   .vault-identity,
@@ -221,8 +219,7 @@
     letter-spacing: -0.04em;
   }
 
-  .vault-meta span,
-  .stat-card span {
+  .vault-meta span {
     display: inline-flex;
     align-items: center;
     min-height: 1.9rem;
@@ -232,6 +229,14 @@
     color: var(--muted);
     font-size: 0.75rem;
     font-weight: 700;
+  }
+
+  .stat-card span {
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 
   .vault-bio {
@@ -247,12 +252,9 @@
 
   .stat-card {
     display: grid;
-    gap: 0.35rem;
-    min-width: 8.5rem;
-    padding: 0.95rem 1rem;
-    border: 1px solid var(--border);
-    border-radius: 1.1rem;
-    background: white;
+    gap: 0.2rem;
+    min-width: 5rem;
+    text-align: center;
   }
 
   .stat-card strong {

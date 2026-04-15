@@ -738,10 +738,8 @@
   .rail-cta-card {
     display: grid;
     gap: 0.5rem;
-    padding: 1.25rem;
-    border: 1px solid var(--border);
-    border-radius: 1rem;
-    background: var(--surface);
+    padding: 1.25rem 0 0;
+    border-top: 1px solid var(--border);
   }
 
   .rail-cta-card h3 {
@@ -1505,10 +1503,6 @@
     .dashboard-ctas .btn-primary,
     .dashboard-ctas .btn-secondary {
       flex: 1;
-      text-align: center;
-    }
-
-    .rail-cta-card {
       text-align: center;
     }
   }
