@@ -1,1 +1,4 @@
 .vercel
+.env
+.svelte-kit/
+.playwright-mcp/
