@@ -100,6 +100,7 @@
 
   // ── derived ─────────────────────────────────────────────────────
   const currentUser = $derived(ndk.$currentUser);
+  const sessionsReady = $derived(ndk.$sessions !== undefined);
   const interestEvent = $derived(ndk.$sessions?.getSessionEvent(NDKKind.InterestList));
   const blossomEvent = $derived(ndk.$sessions?.getSessionEvent(NDKKind.BlossomList));
   const isReadOnly = $derived(Boolean(ndk.$sessions?.isReadOnly()));
@@ -145,7 +146,9 @@
     Boolean(cleanText(name) || cleanText(display)) && managedNip05Ready
   );
   const step2Valid = $derived(normalizedInterests.length > 0);
-  const canPublish = $derived(!isReadOnly && !saving && !uploadingAvatar && step2Valid && managedNip05Ready);
+  const canPublish = $derived(
+    sessionsReady && !isReadOnly && !saving && !uploadingAvatar && step2Valid && managedNip05Ready
+  );
 
   // ── profile helpers ─────────────────────────────────────────────
   function clearMessages() {
@@ -359,12 +362,15 @@
 
   // ── publish ─────────────────────────────────────────────────────
   async function publish() {
-    if (!ndk.$sessions || !canPublish) return;
+    await ensureClientNdk();
+    const session = ndk.$sessions;
+    if (!session) return;
+    if (session.isReadOnly() || saving || uploadingAvatar || !step2Valid || !managedNip05Ready) return;
 
     let publishingUser = currentUser;
     if (!publishingUser) {
       const signer = NDKPrivateKeySigner.generate();
-      await ndk.$sessions.login(signer);
+      await session.login(signer);
       publishingUser = await signer.user();
     }
 
@@ -843,6 +849,9 @@
             {saving ? 'Publishing…' : 'Start reading'}
           </button>
         </div>
+        {#if !sessionsReady}
+          <p class="ob-hint">Restoring your session before publishing your setup.</p>
+        {/if}
         {#if !step2Valid}
           <p class="ob-hint">Pick at least one topic to continue.</p>
         {/if}
