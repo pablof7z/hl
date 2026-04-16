@@ -227,11 +227,6 @@
       artifact: data.artifact,
       rootContext: artifactRootContext
     }}
-    {savedForLater}
-    {savingForLater}
-    onToggleForLater={toggleForLater}
-    {forLaterMessage}
-    {forLaterError}
   />
 {:else if articlePending}
   <section class="artifact-status">

@@ -57,12 +57,7 @@
     authorLinkIdentifier,
     commentEvents = undefined,
     highlightEvents = [],
-    communityContext = undefined,
-    savedForLater = false,
-    savingForLater = false,
-    onToggleForLater = undefined,
-    forLaterMessage = '',
-    forLaterError = ''
+    communityContext = undefined
   }: {
     event: NDKEvent;
     authorPubkey: string;
@@ -71,14 +66,11 @@
     commentEvents?: NDKEvent[];
     highlightEvents: NDKEvent[];
     communityContext?: CommunityContext;
-    savedForLater?: boolean;
-    savingForLater?: boolean;
-    onToggleForLater?: () => void;
-    forLaterMessage?: string;
-    forLaterError?: string;
   } = $props();
 
+  type Lens = 'community' | 'circles' | 'network';
   let activeTab = $state<'article' | 'comments' | 'highlights'>('article');
+  let activeLens = $state<Lens>('community');
   let replyingTo = $state<string | null>(null);
   let replyText = $state('');
   let submitting = $state(false);
@@ -173,6 +165,8 @@
     <CommunityContextBar
       communityName={communityContext.communityName}
       communityUrl={communityContext.communityUrl}
+      {activeLens}
+      onLensChange={(lens) => (activeLens = lens)}
     />
   {/if}
 
@@ -225,31 +219,8 @@
             <BookmarkIcon filled={isBookmarked} />
           </button>
         {/if}
-        {#if communityContext && onToggleForLater}
-          <button
-            class="btn btn-sm btn-outline"
-            class:btn-active={savedForLater}
-            disabled={savingForLater}
-            onclick={onToggleForLater}
-          >
-            {savingForLater
-              ? 'Updating...'
-              : !currentUser
-                ? 'Sign in to save'
-                : savedForLater
-                  ? 'Saved'
-                  : 'Save for Later'}
-          </button>
-        {/if}
       </div>
     </div>
-
-    {#if forLaterError}
-      <p class="error" style="margin: 0; font-size: 0.88rem;">{forLaterError}</p>
-    {/if}
-    {#if forLaterMessage}
-      <p class="muted" style="margin: 0; font-size: 0.88rem;">{forLaterMessage}</p>
-    {/if}
 
     <p class="lede" style="margin: 0;">
       {isArticle ? articleSummary(event.rawEvent(), 320) : noteExcerpt(event.content, 320)}
