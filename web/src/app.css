@@ -310,6 +310,15 @@ kbd,
   font-size: 0.92rem;
 }
 
+/* ── article content surface ────────────────────────────────── */
+
+.article-content-surface {
+  background: var(--surface);
+  border-radius: 1.25rem;
+  padding: 1.5rem 1.35rem;
+  border: 1px solid var(--border-light);
+}
+
 /* ── inline highlights ──────────────────────────────────────── */
 
 mark.inline-highlight {

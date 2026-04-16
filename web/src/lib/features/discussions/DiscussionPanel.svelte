@@ -17,12 +17,14 @@
     groupId,
     rootContext,
     compact = false,
-    maxVisible = 0
+    maxVisible = 0,
+    showHeader = true
   }: {
     groupId: string;
     rootContext: DiscussionRootContext;
     compact?: boolean;
     maxVisible?: number;
+    showHeader?: boolean;
   } = $props();
 
   let optimisticComments = $state<CommentRecord[]>([]);
@@ -78,10 +80,12 @@
 </script>
 
 <div class="discussion-panel" class:compact>
-  <div class="discussion-header">
-    <h3>Discussion</h3>
-    <span class="comment-count">{allComments.length} comment{allComments.length === 1 ? '' : 's'}</span>
-  </div>
+  {#if showHeader}
+    <div class="discussion-header">
+      <h3>Discussion</h3>
+      <span class="comment-count">{allComments.length} comment{allComments.length === 1 ? '' : 's'}</span>
+    </div>
+  {/if}
 
   <CommentComposer
     {groupId}
