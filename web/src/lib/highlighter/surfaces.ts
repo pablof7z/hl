@@ -41,7 +41,7 @@ export const launchCards: LaunchCard[] = [
   {
     href: '/me',
     label: 'Me',
-    description: 'Personal vault, circle membership list, and a private NIP-51 For Later queue.',
+    description: 'Personal vault, circle membership list, and a standard NIP-51 For Later queue.',
     status: 'Protected'
   },
   {
@@ -353,9 +353,9 @@ export const meCommunitiesSpec: SurfaceSpec = {
 };
 
 export const meForLaterSpec: SurfaceSpec = {
-  title: 'Private saves live here.',
+  title: 'For Later bookmarks live here.',
   description:
-    'This queue uses private NIP-51 bookmark entries so the sources you save stay tied to your Nostr identity.',
+    'This queue uses standard NIP-51 bookmark tags so saved sources stay tied to your Nostr identity.',
   status: 'Milestone 1 scaffold',
   actions: [
     { href: '/me', label: 'Back to my vault', tone: 'secondary' },
@@ -365,9 +365,9 @@ export const meForLaterSpec: SurfaceSpec = {
     {
       title: 'Planned content',
       items: [
-        'Private NIP-51 saved items with status pills.',
+        'Plain NIP-51 a, e, and r bookmarks.',
         'Quick actions for moving an item into a circle.',
-        'Encrypted bookmark entries that stay portable across clients.'
+        'Portable saved sources across clients that understand bookmark lists.'
       ]
     }
   ]

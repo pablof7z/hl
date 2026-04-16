@@ -49,13 +49,8 @@
       ? buildJoinedCommunities(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events])
       : []
   );
-  const readyCount = $derived(
-    items.filter((item) => item.communityIds.length === 0 && item.teaser.trim().length > 0).length
-  );
-  const needsTeaserCount = $derived(
-    items.filter((item) => item.communityIds.length === 0 && item.teaser.trim().length === 0).length
-  );
-  const sharedCount = $derived(items.filter((item) => item.communityIds.length > 0).length);
+  const nostrBookmarkCount = $derived(items.filter((item) => item.bookmarkTagName !== 'r').length);
+  const urlBookmarkCount = $derived(items.filter((item) => item.bookmarkTagName === 'r').length);
 
   $effect(() => {
     if (!browser || !currentUser) {
@@ -78,7 +73,7 @@
       .catch((error) => {
         if (!cancelled) {
           storageError =
-            error instanceof Error ? error.message : 'Could not load your private For Later list.';
+            error instanceof Error ? error.message : 'Could not load your For Later bookmarks.';
         }
       })
       .finally(() => {
@@ -93,13 +88,11 @@
   });
 
   function upsertItem(nextItem: ForLaterItem) {
-    items = [nextItem, ...items.filter((item) => item.id !== nextItem.id)].toSorted(
-      (left, right) => right.savedAt - left.savedAt
-    );
+    items = [nextItem, ...items.filter((item) => item.bookmarkKey !== nextItem.bookmarkKey)];
   }
 
   function removeItem(id: string) {
-    items = items.filter((item) => item.id !== id);
+    items = items.filter((item) => item.bookmarkKey !== id);
   }
 </script>
 
@@ -109,30 +102,25 @@
 
 <section class="for-later-page">
   <header class="page-copy">
-    <h2>Your private reading queue</h2>
-    <p>Saved as private NIP-51 bookmarks so this list travels with your Nostr identity.</p>
+    <h2>Your For Later bookmarks</h2>
+    <p>Saved directly as standard NIP-51 bookmark tags on your Nostr identity.</p>
   </header>
 
   <section class="me-summary">
     <div class="summary-card">
       <p class="summary-label">Saved items</p>
       <strong>{items.length}</strong>
-      <span>Encrypted inside your private bookmark list.</span>
+      <span>Public tags in your NIP-51 bookmark list.</span>
     </div>
     <div class="summary-card">
-      <p class="summary-label">Ready to share</p>
-      <strong>{readyCount}</strong>
-      <span>Saved items with a teaser and no community yet.</span>
+      <p class="summary-label">Nostr refs</p>
+      <strong>{nostrBookmarkCount}</strong>
+      <span>Address or event bookmarks.</span>
     </div>
     <div class="summary-card">
-      <p class="summary-label">Needs teaser</p>
-      <strong>{needsTeaserCount}</strong>
-      <span>Saved privately, but still waiting for framing.</span>
-    </div>
-    <div class="summary-card">
-      <p class="summary-label">Already shared</p>
-      <strong>{sharedCount}</strong>
-      <span>Items you are still tracking after they reached at least one community.</span>
+      <p class="summary-label">URLs</p>
+      <strong>{urlBookmarkCount}</strong>
+      <span>External links saved as r tags.</span>
     </div>
   </section>
 
@@ -153,16 +141,16 @@
   {/if}
 
   {#if loadingItems}
-    <p class="feedback">Loading your private bookmark list…</p>
+    <p class="feedback">Loading your NIP-51 bookmark list...</p>
   {:else if items.length === 0}
     <section class="empty-state">
       <p>No saved items yet.</p>
-      <p>Add a source above to start your private NIP-51 queue.</p>
+      <p>Add a source above to start your NIP-51 bookmark list.</p>
     </section>
   {:else}
     <section class="for-later-list">
-      {#each items as item (item.id)}
-        <ForLaterCard {item} {communities} onChanged={upsertItem} onRemoved={removeItem} />
+      {#each items as item (item.bookmarkKey)}
+        <ForLaterCard {item} {communities} onRemoved={removeItem} />
       {/each}
     </section>
   {/if}

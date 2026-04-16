@@ -144,7 +144,7 @@
       return;
     }
     let cancelled = false;
-    void getForLaterArtifact(data.artifact.id)
+    void getForLaterArtifact(data.artifact)
       .then((item) => { if (!cancelled) savedForLater = Boolean(item); })
       .catch(() => { if (!cancelled) savedForLater = false; });
     return () => { cancelled = true; };
@@ -153,7 +153,7 @@
   async function toggleForLater() {
     if (!data.artifact || !data.community || savingForLater) return;
     if (!currentUser) {
-      forLaterError = 'Sign in to save this source to your private For Later list.';
+      forLaterError = 'Sign in to save this source to your For Later bookmarks.';
       forLaterMessage = '';
       return;
     }
@@ -162,23 +162,21 @@
     forLaterError = '';
     try {
       if (savedForLater) {
-        await removeForLaterArtifact(data.artifact.id);
+        await removeForLaterArtifact(data.artifact);
         savedForLater = false;
-        forLaterMessage = 'Removed from your private For Later list.';
+        forLaterMessage = 'Removed from your For Later bookmarks.';
         return;
       }
       const result = await saveForLaterArtifact({
-        artifact: data.artifact,
-        communityIds: [data.community.id],
-        sharedRoutes: [{ groupId: data.community.id, artifactId: data.artifact.id }]
+        artifact: data.artifact
       });
       savedForLater = true;
       forLaterMessage = result.existing
-        ? 'Already saved in your private For Later list.'
-        : 'Saved to your private For Later list.';
+        ? 'Already saved in your For Later bookmarks.'
+        : 'Saved to your For Later bookmarks.';
     } catch (error) {
       forLaterError =
-        error instanceof Error ? error.message : 'Could not update your private For Later list.';
+        error instanceof Error ? error.message : 'Could not update your For Later bookmarks.';
     } finally {
       savingForLater = false;
     }

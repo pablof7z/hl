@@ -1,483 +1,272 @@
 import type { ArtifactPreview } from '$lib/ndk/artifacts';
+import {
+  buildArtifactPreview,
+  buildFallbackNostrUrl,
+  fetchArtifactsByHighlightReferenceKeys,
+  normalizeArtifactUrl
+} from '$lib/ndk/artifacts';
 import { ensureClientNdk, ndk } from '$lib/ndk/client';
 import {
   BOOKMARK_LIST_KIND,
-  decryptPrivateListTags,
   ensureList,
   fetchLatestUserList,
-  publishPrivateListTags,
   type ListTag
 } from '$lib/ndk/lists';
 
-const LEGACY_DB_NAME = 'highlighter-vault';
-const LEGACY_DB_VERSION = 1;
-const LEGACY_FOR_LATER_STORE = 'for-later';
-const LEGACY_MIGRATION_KEY = 'highlighter:for-later:nip51-migrated:v1';
-const FOR_LATER_TAG = 'hl-for-later';
+type BookmarkTagName = 'a' | 'e' | 'r';
 
-const ARTIFACT_PREVIEW_KEYS = [
-  'id',
-  'url',
-  'title',
-  'author',
-  'image',
-  'description',
-  'source',
-  'domain',
-  'catalogId',
-  'catalogKind',
-  'podcastGuid',
-  'podcastShowTitle',
-  'audioUrl',
-  'audioPreviewUrl',
-  'transcriptUrl',
-  'feedUrl',
-  'publishedAt',
-  'durationSeconds',
-  'referenceTagName',
-  'referenceTagValue',
-  'referenceKind',
-  'referenceKey',
-  'highlightTagName',
-  'highlightTagValue',
-  'highlightReferenceKey'
-] as const satisfies ReadonlyArray<keyof ArtifactPreview>;
-
-type ArtifactPreviewKey = (typeof ARTIFACT_PREVIEW_KEYS)[number];
-type ArtifactPreviewFields = Pick<ArtifactPreview, ArtifactPreviewKey>;
-
-export type ForLaterSharedRoute = {
-  groupId: string;
-  artifactId: string;
+export type ForLaterItem = ArtifactPreview & {
+  bookmarkTagName: BookmarkTagName;
+  bookmarkTagValue: string;
+  bookmarkKey: string;
 };
 
-export type ForLaterItem = ArtifactPreviewFields & {
-  savedAt: number;
-  teaser: string;
-  communityIds: string[];
-  sharedRoutes: ForLaterSharedRoute[];
-};
-
-export type ForLaterStatus =
-  | {
-      tone: 'ready';
-      label: 'Ready to share';
-    }
-  | {
-      tone: 'needs-teaser';
-      label: 'Needs teaser';
-    }
-  | {
-      tone: 'already-shared';
-      label: string;
-    };
-
-type ForLaterPayload = {
-  version: 1;
-  item: ForLaterItem;
-};
+type BookmarkTarget = string | Pick<
+  ArtifactPreview,
+  'id' | 'url' | 'referenceTagName' | 'referenceTagValue' | 'highlightTagName' | 'highlightTagValue'
+>;
 
 export async function listForLaterArtifacts(): Promise<ForLaterItem[]> {
-  const { items } = await loadForLaterState();
-  return items.toSorted((left, right) => right.savedAt - left.savedAt);
+  const { list } = await loadBookmarkList();
+  return await resolveBookmarkTags(bookmarkTags(list.tags));
 }
 
-export async function getForLaterArtifact(id: string): Promise<ForLaterItem | undefined> {
-  const normalizedId = cleanText(id);
-  if (!normalizedId) return undefined;
+export async function getForLaterArtifact(target: BookmarkTarget): Promise<ForLaterItem | undefined> {
+  const { list } = await loadBookmarkList();
+  const tags = bookmarkTags(list.tags);
+  const key = targetKey(target);
 
-  const { items } = await loadForLaterState();
-  return items.find((item) => item.id === normalizedId);
+  if (!key) return undefined;
+
+  const directTag = tags.find((tag) => bookmarkKey(tag) === key);
+  if (directTag) {
+    return (await resolveBookmarkTags([directTag]))[0];
+  }
+
+  if (typeof target !== 'string') {
+    return undefined;
+  }
+
+  return (await resolveBookmarkTags(tags)).find(
+    (item) => item.id === key || item.referenceKey === key || item.highlightReferenceKey === key
+  );
 }
 
 export async function saveForLaterArtifact(input: {
   artifact: ArtifactPreview;
-  teaser?: string;
-  communityIds?: string[];
-  sharedRoutes?: ForLaterSharedRoute[];
 }): Promise<{ item: ForLaterItem; existing: boolean }> {
-  const artifact = pickArtifactPreviewFields(input.artifact);
-  const { list, items } = await loadForLaterState();
-  const existing = items.find((item) => item.id === artifact.id);
-  const item = buildForLaterItem(
-    {
-      artifact,
-      teaser: input.teaser,
-      communityIds: input.communityIds,
-      sharedRoutes: input.sharedRoutes
-    },
-    existing
-  );
+  const { list } = await loadBookmarkList();
+  const existingTags = bookmarkTags(list.tags);
+  const nextTag = bookmarkTagForArtifact(input.artifact);
+  const key = bookmarkKey(nextTag);
+  const existing = existingTags.some((tag) => bookmarkKey(tag) === key);
 
-  const nextItems = existing
-    ? items.map((candidate) => (candidate.id === item.id ? item : candidate))
-    : [...items, item];
-
-  await writeForLaterItems(list, nextItems);
-  return { item, existing: Boolean(existing) };
-}
-
-export async function updateForLaterArtifact(
-  id: string,
-  patch: {
-    teaser?: string;
-    communityIds?: string[];
-    sharedRoutes?: ForLaterSharedRoute[];
-  }
-): Promise<ForLaterItem | undefined> {
-  const normalizedId = cleanText(id);
-  if (!normalizedId) return undefined;
-
-  const { list, items } = await loadForLaterState();
-  const existing = items.find((item) => item.id === normalizedId);
   if (!existing) {
-    return undefined;
-  }
-
-  const updated = buildForLaterItem(
-    {
-      artifact: previewFromForLaterItem(existing),
-      teaser: patch.teaser ?? existing.teaser,
-      communityIds: patch.communityIds ?? existing.communityIds,
-      sharedRoutes: patch.sharedRoutes ?? existing.sharedRoutes
-    },
-    existing
-  );
-
-  await writeForLaterItems(
-    list,
-    items.map((item) => (item.id === normalizedId ? updated : item))
-  );
-
-  return updated;
-}
-
-export async function removeForLaterArtifact(id: string): Promise<void> {
-  const normalizedId = cleanText(id);
-  if (!normalizedId) return;
-
-  const { list, items } = await loadForLaterState();
-  if (!items.some((item) => item.id === normalizedId)) {
-    return;
-  }
-
-  await writeForLaterItems(
-    list,
-    items.filter((item) => item.id !== normalizedId)
-  );
-}
-
-export function previewFromForLaterItem(item: ForLaterItem): ArtifactPreview {
-  return pickArtifactPreviewFields(item);
-}
-
-export function forLaterStatus(item: Pick<ForLaterItem, 'teaser' | 'communityIds'>): ForLaterStatus {
-  if (item.communityIds.length > 0) {
-    return {
-      tone: 'already-shared',
-      label: `Already in ${item.communityIds.length} communit${item.communityIds.length === 1 ? 'y' : 'ies'}`
-    };
-  }
-
-  if (!cleanText(item.teaser)) {
-    return {
-      tone: 'needs-teaser',
-      label: 'Needs teaser'
-    };
+    await publishBookmarkTags(list, [nextTag, ...existingTags]);
   }
 
   return {
-    tone: 'ready',
-    label: 'Ready to share'
+    item: decorateBookmarkPreview(input.artifact, nextTag),
+    existing
   };
 }
 
-async function loadForLaterState(): Promise<{
+export async function removeForLaterArtifact(target: BookmarkTarget): Promise<void> {
+  const { list } = await loadBookmarkList();
+  const tags = bookmarkTags(list.tags);
+  const key = targetKey(target);
+  if (!key) return;
+
+  let nextTags = tags.filter((tag) => bookmarkKey(tag) !== key);
+
+  if (nextTags.length === tags.length && typeof target === 'string') {
+    const items = await resolveBookmarkTags(tags);
+    const matchingKeys = new Set(
+      items
+        .filter((item) => item.id === key || item.referenceKey === key || item.highlightReferenceKey === key)
+        .map((item) => item.bookmarkKey)
+    );
+    nextTags = tags.filter((tag) => !matchingKeys.has(bookmarkKey(tag)));
+  }
+
+  if (nextTags.length !== tags.length) {
+    await publishBookmarkTags(list, nextTags);
+  }
+}
+
+async function loadBookmarkList(): Promise<{
   list: ReturnType<typeof ensureList>;
-  items: ForLaterItem[];
 }> {
   await ensureClientNdk();
 
   const currentUser = ndk.$currentUser;
   if (!currentUser) {
-    throw new Error('Sign in to manage your private For Later list.');
+    throw new Error('Sign in to manage your For Later bookmarks.');
   }
   if (!ndk.signer) {
-    throw new Error('Use a signing session to manage your private For Later list.');
+    throw new Error('Use a signing session to manage your For Later bookmarks.');
   }
 
   const event = await fetchLatestUserList(ndk, BOOKMARK_LIST_KIND, currentUser.pubkey);
-  const list = ensureList(ndk, BOOKMARK_LIST_KIND, event);
-  let items = decodeForLaterItems(await decryptPrivateListTags(list));
-
-  if (shouldAttemptLegacyMigration()) {
-    try {
-      items = await migrateLegacyItems(list, items);
-    } catch {
-      // Keep the remote list usable even if local migration is unavailable.
-    }
-  }
-
-  return { list, items };
+  return { list: ensureList(ndk, BOOKMARK_LIST_KIND, event) };
 }
 
-async function migrateLegacyItems(
+async function publishBookmarkTags(
   list: ReturnType<typeof ensureList>,
-  items: ForLaterItem[]
-): Promise<ForLaterItem[]> {
-  const legacyItems = await listLegacyForLaterArtifacts();
-  markLegacyMigrationChecked();
-
-  if (legacyItems.length === 0) {
-    return items;
-  }
-
-  const merged = mergeLegacyForLaterItems(items, legacyItems);
-  if (merged.length === items.length) {
-    return items;
-  }
-
-  await writeForLaterItems(list, merged);
-  return merged;
-}
-
-function mergeLegacyForLaterItems(currentItems: ForLaterItem[], legacyItems: ForLaterItem[]): ForLaterItem[] {
-  const seen = new Set(currentItems.map((item) => item.id));
-  const merged = [...currentItems];
-
-  for (const item of legacyItems.toSorted((left, right) => left.savedAt - right.savedAt)) {
-    if (!seen.has(item.id)) {
-      merged.push(item);
-      seen.add(item.id);
-    }
-  }
-
-  return merged.toSorted((left, right) => left.savedAt - right.savedAt);
-}
-
-async function writeForLaterItems(
-  list: ReturnType<typeof ensureList>,
-  items: ForLaterItem[]
+  tags: ListTag[]
 ): Promise<void> {
-  const encryptedTags = await decryptPrivateListTags(list);
-  const preservedTags = encryptedTags.filter((tag) => tag[0] !== FOR_LATER_TAG);
-  const nextTags = [...preservedTags, ...encodeForLaterItems(items)];
-
-  await publishPrivateListTags(list, nextTags);
+  list.tags = uniqueBookmarkTags(tags);
+  list.content = '';
+  list.created_at = Math.floor(Date.now() / 1e3);
+  await list.publishReplaceable();
 }
 
-function encodeForLaterItems(items: ForLaterItem[]): ListTag[] {
-  return items
-    .toSorted((left, right) => left.savedAt - right.savedAt)
-    .map((item) => {
-      const normalizedItem = normalizeForLaterItem(item);
-      const payload: ForLaterPayload = {
-        version: 1,
-        item: normalizedItem
-      };
+async function resolveBookmarkTags(tags: ListTag[]): Promise<ForLaterItem[]> {
+  const uniqueTags = uniqueBookmarkTags(tags);
+  const referenceKeys = uniqueTags.map(bookmarkKey).filter(Boolean);
+  const resolvedArtifacts = await fetchArtifactsByHighlightReferenceKeys(ndk, referenceKeys);
 
-      return [FOR_LATER_TAG, normalizedItem.id, JSON.stringify(payload)];
-    });
+  return await Promise.all(
+    uniqueTags.map(async (tag) => {
+      const resolved = resolvedArtifacts.get(bookmarkKey(tag));
+      if (resolved) {
+        return decorateBookmarkPreview(resolved, tag);
+      }
+
+      return decorateBookmarkPreview(await fallbackPreviewForTag(tag), tag);
+    })
+  );
 }
 
-function decodeForLaterItems(tags: ListTag[]): ForLaterItem[] {
-  const seen = new Set<string>();
-  const items: ForLaterItem[] = [];
+async function fallbackPreviewForTag(tag: ListTag): Promise<ArtifactPreview> {
+  const tagName = tag[0] as BookmarkTagName;
+  const value = cleanText(tag[1]);
 
-  for (const tag of tags) {
-    const item = decodeForLaterTag(tag);
-    if (!item || seen.has(item.id)) continue;
-    seen.add(item.id);
-    items.push(item);
-  }
-
-  return items.toSorted((left, right) => left.savedAt - right.savedAt);
-}
-
-function decodeForLaterTag(tag: ListTag): ForLaterItem | undefined {
-  if (tag[0] !== FOR_LATER_TAG) {
-    return undefined;
-  }
-
-  const normalizedId = cleanText(tag[1]);
-  const payload = cleanText(tag[2]);
-  if (!normalizedId || !payload) {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(payload) as Partial<ForLaterPayload> | undefined;
-    const rawItem = parsed?.item;
-    if (!rawItem || parsed?.version !== 1) {
-      return undefined;
+  if (tagName === 'r') {
+    const normalizedUrl = normalizeArtifactUrl(value);
+    if (normalizedUrl) {
+      return await previewUrl(normalizedUrl).catch(() =>
+        buildArtifactPreview({ url: normalizedUrl })
+      );
     }
-
-    return normalizeForLaterItem({
-      ...(rawItem as ForLaterItem),
-      id: normalizedId
-    });
-  } catch {
-    return undefined;
   }
-}
 
-function buildForLaterItem(
-  input: {
-    artifact: ArtifactPreviewFields;
-    teaser?: string;
-    communityIds?: string[];
-    sharedRoutes?: ForLaterSharedRoute[];
-  },
-  existing?: ForLaterItem
-): ForLaterItem {
-  return {
-    ...input.artifact,
-    savedAt: existing?.savedAt ?? Date.now(),
-    teaser: cleanText(input.teaser ?? existing?.teaser),
-    communityIds: uniqueValues([...(existing?.communityIds ?? []), ...(input.communityIds ?? [])]),
-    sharedRoutes: uniqueRoutes([...(existing?.sharedRoutes ?? []), ...(input.sharedRoutes ?? [])])
-  };
-}
-
-function normalizeForLaterItem(item: ForLaterItem): ForLaterItem {
-  return {
-    ...pickArtifactPreviewFields(item),
-    savedAt: Number.isFinite(item.savedAt) && item.savedAt > 0 ? item.savedAt : Date.now(),
-    teaser: cleanText(item.teaser),
-    communityIds: uniqueValues(item.communityIds),
-    sharedRoutes: uniqueRoutes(item.sharedRoutes)
-  };
-}
-
-function pickArtifactPreviewFields(value: ArtifactPreviewFields): ArtifactPreviewFields {
-  return {
-    id: cleanText(value.id),
-    url: cleanText(value.url),
-    title: cleanText(value.title),
-    author: cleanText(value.author),
-    image: cleanText(value.image),
-    description: cleanText(value.description),
-    source: value.source,
-    domain: cleanText(value.domain),
-    catalogId: cleanText(value.catalogId),
-    catalogKind: cleanText(value.catalogKind),
-    podcastGuid: cleanText(value.podcastGuid),
-    podcastShowTitle: cleanText(value.podcastShowTitle),
-    audioUrl: cleanText(value.audioUrl),
-    audioPreviewUrl: cleanText(value.audioPreviewUrl),
-    transcriptUrl: cleanText(value.transcriptUrl),
-    feedUrl: cleanText(value.feedUrl),
-    publishedAt: cleanText(value.publishedAt),
-    durationSeconds:
-      typeof value.durationSeconds === 'number' && Number.isFinite(value.durationSeconds)
-        ? Math.max(0, Math.round(value.durationSeconds))
-        : null,
-    referenceTagName: value.referenceTagName,
-    referenceTagValue: cleanText(value.referenceTagValue),
-    referenceKind: cleanText(value.referenceKind),
-    referenceKey: cleanText(value.referenceKey),
-    highlightTagName: value.highlightTagName,
-    highlightTagValue: cleanText(value.highlightTagValue),
-    highlightReferenceKey: cleanText(value.highlightReferenceKey)
-  };
-}
-
-function uniqueValues(values: string[] | undefined): string[] {
-  return [...new Set((values ?? []).map(cleanText).filter(Boolean))];
-}
-
-function uniqueRoutes(routes: ForLaterSharedRoute[] | undefined): ForLaterSharedRoute[] {
-  const seen = new Set<string>();
-
-  return (routes ?? [])
-    .map((route) => ({
-      groupId: cleanText(route.groupId),
-      artifactId: cleanText(route.artifactId)
-    }))
-    .filter((route) => {
-      if (!route.groupId || !route.artifactId) {
-        return false;
-      }
-
-      const key = `${route.groupId}:${route.artifactId}`;
-      if (seen.has(key)) {
-        return false;
-      }
-
-      seen.add(key);
-      return true;
+  if (tagName === 'a') {
+    return buildArtifactPreview({
+      url: buildFallbackNostrUrl(value),
+      title: 'Nostr article',
+      source: 'article',
+      domain: 'nostr',
+      catalogId: value,
+      catalogKind: 'nostr',
+      referenceTagName: 'a',
+      referenceTagValue: value,
+      highlightTagName: 'a',
+      highlightTagValue: value
     });
+  }
+
+  return buildArtifactPreview({
+    url: 'https://beta.highlighter.com/',
+    title: tagName === 'e' ? 'Nostr event' : value,
+    source: 'article',
+    domain: 'nostr',
+    catalogId: value,
+    catalogKind: tagName === 'e' ? 'nostr:event' : 'nostr',
+    referenceTagName: tagName === 'e' ? 'e' : 'i',
+    referenceTagValue: value,
+    highlightTagName: tagName === 'e' ? 'e' : 'r',
+    highlightTagValue: value
+  });
+}
+
+async function previewUrl(url: string): Promise<ArtifactPreview> {
+  const response = await fetch('/api/artifacts/preview', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ reference: url, source: 'article' })
+  });
+
+  const body = (await response.json()) as ArtifactPreview | { error?: string };
+  if (!response.ok) {
+    throw new Error('error' in body && body.error ? body.error : 'Could not preview that bookmark.');
+  }
+
+  return body as ArtifactPreview;
+}
+
+function bookmarkTagForArtifact(
+  artifact: Pick<
+    ArtifactPreview,
+    'url' | 'referenceTagName' | 'referenceTagValue' | 'highlightTagName' | 'highlightTagValue'
+  >
+): ListTag {
+  if (artifact.referenceTagName === 'a' || artifact.referenceTagName === 'e') {
+    return [artifact.referenceTagName, artifact.referenceTagValue];
+  }
+
+  if (artifact.highlightTagName === 'a' || artifact.highlightTagName === 'e') {
+    return [artifact.highlightTagName, artifact.highlightTagValue];
+  }
+
+  const url = normalizeArtifactUrl(artifact.url || artifact.highlightTagValue || artifact.referenceTagValue);
+  if (!url) {
+    throw new Error('For Later bookmarks need a Nostr address, event id, or URL.');
+  }
+
+  return ['r', url];
+}
+
+function decorateBookmarkPreview(preview: ArtifactPreview, tag: ListTag): ForLaterItem {
+  const bookmarkTagName = tag[0] as BookmarkTagName;
+  const bookmarkTagValue = cleanText(tag[1]);
+
+  return {
+    ...preview,
+    bookmarkTagName,
+    bookmarkTagValue,
+    bookmarkKey: bookmarkKey(tag)
+  };
+}
+
+function bookmarkTags(tags: ListTag[]): ListTag[] {
+  return tags.filter((tag) => isBookmarkTagName(tag[0]) && cleanText(tag[1]));
+}
+
+function uniqueBookmarkTags(tags: ListTag[]): ListTag[] {
+  const seen = new Set<string>();
+  const uniqueTags: ListTag[] = [];
+
+  for (const tag of bookmarkTags(tags)) {
+    const key = bookmarkKey(tag);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniqueTags.push([tag[0], cleanText(tag[1])]);
+  }
+
+  return uniqueTags;
+}
+
+function targetKey(target: BookmarkTarget): string {
+  if (typeof target === 'string') {
+    return cleanText(target);
+  }
+
+  return bookmarkKey(bookmarkTagForArtifact(target));
+}
+
+function bookmarkKey(tag: ListTag): string {
+  const tagName = cleanText(tag[0]);
+  const value = cleanText(tag[1]);
+  return tagName && value ? `${tagName}:${value}` : '';
+}
+
+function isBookmarkTagName(value: string | undefined): value is BookmarkTagName {
+  return value === 'a' || value === 'e' || value === 'r';
 }
 
 function cleanText(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function shouldAttemptLegacyMigration(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof localStorage !== 'undefined' &&
-    localStorage.getItem(LEGACY_MIGRATION_KEY) !== '1'
-  );
-}
-
-function markLegacyMigrationChecked(): void {
-  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-    return;
-  }
-
-  localStorage.setItem(LEGACY_MIGRATION_KEY, '1');
-}
-
-async function listLegacyForLaterArtifacts(): Promise<ForLaterItem[]> {
-  if (typeof indexedDB === 'undefined') {
-    return [];
-  }
-
-  const db = await openLegacyVaultDb();
-
-  try {
-    const transaction = db.transaction(LEGACY_FOR_LATER_STORE, 'readonly');
-    const items = await requestToPromise<ForLaterItem[]>(transaction.objectStore(LEGACY_FOR_LATER_STORE).getAll());
-    await waitForTransaction(transaction);
-    return items.map(normalizeForLaterItem).toSorted((left, right) => right.savedAt - left.savedAt);
-  } finally {
-    db.close();
-  }
-}
-
-async function openLegacyVaultDb(): Promise<IDBDatabase> {
-  return await new Promise((resolve, reject) => {
-    const request = indexedDB.open(LEGACY_DB_NAME, LEGACY_DB_VERSION);
-
-    request.onupgradeneeded = () => {
-      const database = request.result;
-
-      if (!database.objectStoreNames.contains(LEGACY_FOR_LATER_STORE)) {
-        database.createObjectStore(LEGACY_FOR_LATER_STORE, { keyPath: 'id' });
-      }
-    };
-
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () =>
-      reject(request.error ?? new Error('Could not open the legacy For Later database.'));
-  });
-}
-
-async function waitForTransaction(transaction: IDBTransaction): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () =>
-      reject(transaction.error ?? new Error('For Later storage transaction was aborted.'));
-    transaction.onerror = () =>
-      reject(transaction.error ?? new Error('For Later storage transaction failed.'));
-  });
-}
-
-async function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
-  return await new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () =>
-      reject(request.error ?? new Error('IndexedDB request failed.'));
-  });
 }

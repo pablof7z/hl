@@ -1,32 +1,23 @@
 <script lang="ts">
   import { ensureClientNdk, ndk } from '$lib/ndk/client';
-  import { artifactPath, buildFallbackNostrUrl, publishArtifact } from '$lib/ndk/artifacts';
+  import { buildFallbackNostrUrl, publishArtifact } from '$lib/ndk/artifacts';
   import type { CommunitySummary } from '$lib/ndk/groups';
-  import StatusPill from './StatusPill.svelte';
   import {
-    forLaterStatus,
-    previewFromForLaterItem,
     removeForLaterArtifact,
-    updateForLaterArtifact,
     type ForLaterItem
   } from './vault';
 
   let {
     item,
     communities = [],
-    onChanged = undefined,
     onRemoved = undefined
   }: {
     item: ForLaterItem;
     communities?: CommunitySummary[];
-    onChanged?: ((item: ForLaterItem) => void) | undefined;
     onRemoved?: ((id: string) => void) | undefined;
   } = $props();
 
-  let editingTeaser = $state(false);
-  let draftTeaser = $state('');
   let selectedGroupId = $state('');
-  let savingTeaser = $state(false);
   let sharing = $state(false);
   let removing = $state(false);
   let actionError = $state('');
@@ -34,59 +25,19 @@
 
   const currentUser = $derived(ndk.$currentUser);
   const isReadOnly = $derived(Boolean(ndk.$sessions?.isReadOnly()));
-  const status = $derived(forLaterStatus(item));
-  const shareableCommunities = $derived(
-    communities.filter((community) => !item.communityIds.includes(community.id))
+  const sourceHref = $derived(
+    item.url || (item.bookmarkTagName === 'a' ? buildFallbackNostrUrl(item.bookmarkTagValue) : '')
   );
-  const latestSharedRoute = $derived(item.sharedRoutes.at(-1));
-  const latestSharedHref = $derived(
-    latestSharedRoute ? artifactPath(latestSharedRoute.groupId, latestSharedRoute.artifactId) : ''
-  );
-  const sourceHref = $derived(item.url || buildFallbackNostrUrl(item.referenceTagValue));
-  const savedLabel = $derived(
-    new Intl.DateTimeFormat('en', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    }).format(new Date(item.savedAt))
-  );
+  const bookmarkLabel = $derived(`${item.bookmarkTagName} tag`);
   const canShare = $derived(
-    Boolean(currentUser && !isReadOnly && selectedGroupId && !sharing && shareableCommunities.length > 0)
+    Boolean(currentUser && !isReadOnly && selectedGroupId && !sharing && communities.length > 0)
   );
 
   $effect(() => {
-    draftTeaser = item.teaser;
-  });
-
-  $effect(() => {
-    if (!selectedGroupId && shareableCommunities.length > 0) {
-      selectedGroupId = shareableCommunities[0].id;
+    if (!selectedGroupId && communities.length > 0) {
+      selectedGroupId = communities[0].id;
     }
   });
-
-  async function handleSaveTeaser() {
-    savingTeaser = true;
-    actionError = '';
-    statusMessage = '';
-
-    try {
-      const updated = await updateForLaterArtifact(item.id, {
-        teaser: draftTeaser
-      });
-
-      if (!updated) {
-        throw new Error('That saved item could not be found anymore.');
-      }
-
-      editingTeaser = false;
-      statusMessage = updated.teaser ? 'Teaser saved.' : 'Teaser cleared.';
-      onChanged?.(updated);
-    } catch (error) {
-      actionError = error instanceof Error ? error.message : 'Could not save the teaser.';
-    } finally {
-      savingTeaser = false;
-    }
-  }
 
   async function handleMoveToCommunity() {
     if (!canShare) {
@@ -102,32 +53,15 @@
 
       const result = await publishArtifact(ndk, {
         groupId: selectedGroupId,
-        preview: previewFromForLaterItem(item),
-        note: draftTeaser || item.teaser
+        preview: item,
+        note: ''
       });
-      const updated = await updateForLaterArtifact(item.id, {
-        teaser: draftTeaser || item.teaser,
-        communityIds: [...item.communityIds, selectedGroupId],
-        sharedRoutes: [
-          ...item.sharedRoutes,
-          {
-            groupId: selectedGroupId,
-            artifactId: result.artifact.id
-          }
-        ]
-      });
-
-      if (!updated) {
-        throw new Error('The saved item disappeared while it was being moved.');
-      }
 
       const communityName =
         communities.find((community) => community.id === selectedGroupId)?.name ?? selectedGroupId;
       statusMessage = result.existing
         ? `${communityName} already had this source.`
-        : `Moved into ${communityName}.`;
-      selectedGroupId = '';
-      onChanged?.(updated);
+        : `Shared into ${communityName}.`;
     } catch (error) {
       actionError = error instanceof Error ? error.message : 'Could not move this item yet.';
     } finally {
@@ -141,8 +75,8 @@
     statusMessage = '';
 
     try {
-      await removeForLaterArtifact(item.id);
-      onRemoved?.(item.id);
+      await removeForLaterArtifact(item);
+      onRemoved?.(item.bookmarkKey);
     } catch (error) {
       actionError = error instanceof Error ? error.message : 'Could not remove this item.';
     } finally {
@@ -165,16 +99,12 @@
   <div class="card-copy">
     <div class="card-topline">
       <div class="card-tags">
-        <StatusPill label={status.label} tone={status.tone} />
+        <span class="meta-chip">{bookmarkLabel}</span>
         <span class="meta-chip">{item.source}</span>
         <span class="meta-chip">{item.domain}</span>
-        <span class="meta-chip">Saved {savedLabel}</span>
       </div>
 
       <div class="card-links">
-        {#if latestSharedHref}
-          <a href={latestSharedHref}>Latest share</a>
-        {/if}
         {#if sourceHref}
           <a href={sourceHref} target="_blank" rel="noreferrer">Open source</a>
         {/if}
@@ -191,57 +121,25 @@
       {/if}
     </div>
 
-    <div class="card-teaser">
-      <div class="card-section-header">
-        <span>Teaser</span>
-        <button type="button" class="inline-button" onclick={() => editingTeaser = !editingTeaser}>
-          {editingTeaser ? 'Cancel' : item.teaser ? 'Edit teaser' : 'Add teaser'}
-        </button>
-      </div>
-
-      {#if editingTeaser}
-        <textarea
-          bind:value={draftTeaser}
-          rows="3"
-          maxlength="280"
-          placeholder="Write a note you can reuse when you move this into a community."
-        ></textarea>
-        <div class="card-actions">
-          <button type="button" class="primary" disabled={savingTeaser} onclick={handleSaveTeaser}>
-            {savingTeaser ? 'Saving…' : 'Save teaser'}
-          </button>
-        </div>
-      {:else if item.teaser}
-        <p class="teaser-copy">{item.teaser}</p>
-      {:else}
-        <p class="teaser-empty">No teaser yet.</p>
-      {/if}
-    </div>
-
     <div class="card-share">
       <div class="card-section-header">
-        <span>Move to community</span>
-        {#if item.communityIds.length > 0}
-          <span class="helper-text">{item.communityIds.length} communit{item.communityIds.length === 1 ? 'y' : 'ies'} already have it</span>
-        {/if}
+        <span>Actions</span>
       </div>
 
       <div class="card-actions card-actions-share">
-        <select bind:value={selectedGroupId} disabled={shareableCommunities.length === 0 || sharing}>
-          {#if shareableCommunities.length === 0}
-            <option value="">Already shared everywhere loaded here</option>
-          {:else}
-            {#each shareableCommunities as community (community.id)}
+        {#if communities.length > 0}
+          <select bind:value={selectedGroupId} disabled={sharing}>
+            {#each communities as community (community.id)}
               <option value={community.id}>{community.name}</option>
             {/each}
-          {/if}
-        </select>
+          </select>
 
-        <button type="button" class="primary" disabled={!canShare} onclick={handleMoveToCommunity}>
-          {sharing ? 'Moving…' : 'Move to community'}
-        </button>
+          <button type="button" class="primary" disabled={!canShare} onclick={handleMoveToCommunity}>
+            {sharing ? 'Sharing…' : 'Share to community'}
+          </button>
+        {/if}
         <button type="button" class="ghost" disabled={removing} onclick={handleRemove}>
-          {removing ? 'Removing…' : 'Remove'}
+          {removing ? 'Removing…' : 'Remove bookmark'}
         </button>
       </div>
     </div>
@@ -296,7 +194,6 @@
 
   .card-copy,
   .card-body,
-  .card-teaser,
   .card-share {
     display: grid;
     gap: 0.7rem;
@@ -320,8 +217,7 @@
   }
 
   .meta-chip,
-  .card-links a,
-  .helper-text {
+  .card-links a {
     display: inline-flex;
     align-items: center;
     min-height: 1.85rem;
@@ -334,8 +230,7 @@
     text-decoration: none;
   }
 
-  .card-links a:hover,
-  .inline-button:hover {
+  .card-links a:hover {
     color: var(--accent);
   }
 
@@ -350,16 +245,10 @@
 
   .author,
   .description,
-  .teaser-copy,
-  .teaser-empty,
   .feedback {
     margin: 0;
     color: var(--muted);
     line-height: 1.6;
-  }
-
-  .teaser-copy {
-    color: var(--text);
   }
 
   .card-section-header span:first-child {
@@ -368,40 +257,19 @@
     font-weight: 700;
   }
 
-  .inline-button,
   button,
-  select,
-  textarea {
+  select {
     font: inherit;
   }
 
-  .inline-button {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--muted);
-    font-size: 0.82rem;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
-  textarea,
   select {
     width: 100%;
+    min-width: min(22rem, 100%);
     border: 1px solid var(--border);
     border-radius: 0.95rem;
     background: white;
     color: var(--text);
     padding: 0.8rem 0.9rem;
-  }
-
-  textarea {
-    min-height: 5rem;
-    resize: vertical;
-  }
-
-  select {
-    min-width: min(22rem, 100%);
   }
 
   button {
@@ -427,8 +295,7 @@
     color: var(--text);
   }
 
-  button:disabled,
-  .inline-button:disabled {
+  button:disabled {
     opacity: 0.6;
     cursor: default;
   }

@@ -115,67 +115,6 @@ export function relayFeedListFromEvent(event: NDKEvent | undefined): NDKRelayFee
   return event ? NDKRelayFeedList.from(event) : undefined;
 }
 
-export async function decryptPrivateListTags(list: NDKList): Promise<ListTag[]> {
-  const content = cleanText(list.content);
-  if (!content) return [];
-  if (!list.ndk?.signer) {
-    throw new Error('A signer is required to read private list items.');
-  }
-
-  const user = await list.ndk.signer.user();
-
-  for (const scheme of preferredEncryptionSchemes(content)) {
-    try {
-      const decrypted = await list.ndk.signer.decrypt(user, content, scheme);
-      const parsed = JSON.parse(decrypted);
-      if (!Array.isArray(parsed)) {
-        return [];
-      }
-
-      return parsed
-        .filter((tag): tag is unknown[] => Array.isArray(tag))
-        .map((tag) => tag.map((value) => String(value ?? '')));
-    } catch {
-      continue;
-    }
-  }
-
-  return [];
-}
-
-export async function publishPrivateListTags(list: NDKList, tags: ListTag[]): Promise<void> {
-  if (!list.ndk?.signer) {
-    throw new Error('A signer is required to publish private list items.');
-  }
-
-  if (tags.length === 0) {
-    list.content = '';
-  } else {
-    const user = await list.ndk.signer.user();
-    const payload = JSON.stringify(tags);
-    let lastError: unknown;
-
-    for (const scheme of ['nip44', 'nip04'] as const) {
-      try {
-        list.content = await list.ndk.signer.encrypt(user, payload, scheme);
-        lastError = undefined;
-        break;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-
-    if (typeof list.content !== 'string' || list.content.length === 0) {
-      throw lastError instanceof Error
-        ? lastError
-        : new Error('Could not encrypt the private list content.');
-    }
-  }
-
-  list.created_at = Math.floor(Date.now() / 1e3);
-  await list.publishReplaceable();
-}
-
 export function relayUrlsFromEvent(event: NDKEvent | undefined): string[] {
   return uniqueValues(relayFeedListFromEvent(event)?.relayUrls.map((relayUrl) => cleanText(relayUrl)) ?? []);
 }
@@ -225,10 +164,4 @@ async function removeAllListItemsByValue(list: NDKList, value: string): Promise<
 
 function uniqueValues(values: string[]): string[] {
   return [...new Set(values.map((value) => cleanText(value)).filter(Boolean))];
-}
-
-function preferredEncryptionSchemes(content: string): Array<'nip44' | 'nip04'> {
-  return /(?:\?|&)iv=/.test(content) || content.includes('?iv=')
-    ? ['nip04', 'nip44']
-    : ['nip44', 'nip04'];
 }

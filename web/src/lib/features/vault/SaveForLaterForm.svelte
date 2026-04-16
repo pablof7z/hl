@@ -14,7 +14,6 @@
 
   let reference = $state('');
   let source = $state<'article' | 'book' | 'podcast' | 'video' | 'paper' | 'web'>('article');
-  let teaser = $state('');
   let preview = $state<ArtifactPreview | null>(null);
   let previewing = $state(false);
   let saving = $state(false);
@@ -75,17 +74,15 @@
 
     try {
       const result = await saveForLaterArtifact({
-        artifact: resolvedPreview,
-        teaser
+        artifact: resolvedPreview
       });
 
       statusMessage = result.existing
-        ? 'Updated the saved item in your private For Later list.'
-        : 'Saved to your private For Later list.';
+        ? 'Already in your NIP-51 bookmark list.'
+        : 'Saved to your NIP-51 bookmark list.';
       onSaved?.(result.item);
 
       reference = '';
-      teaser = '';
       preview = null;
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : 'Could not save this item for later.';
@@ -105,7 +102,7 @@
 <section class="save-form-shell">
   <div class="save-form-copy">
     <h2>Save a source</h2>
-    <p>Store it as a private NIP-51 bookmark until you are ready to share it.</p>
+    <p>Store it as a standard NIP-51 bookmark tag.</p>
   </div>
 
   <form class="save-form" onsubmit={handlePreview}>
@@ -130,16 +127,6 @@
         placeholder="https://example.com/article or naddr1..."
         autocomplete="off"
       />
-    </label>
-
-    <label class="field field-wide">
-      <span>Teaser</span>
-      <textarea
-        bind:value={teaser}
-        rows="3"
-        maxlength="280"
-        placeholder="Optional note for your future self."
-      ></textarea>
     </label>
 
     <div class="save-actions">
@@ -238,38 +225,25 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .field,
-  .field-wide {
+  .field {
     display: grid;
     gap: 0.45rem;
   }
 
-  .field-wide {
-    grid-column: 1 / -1;
-  }
-
-  .field span,
-  .field-wide span {
+  .field span {
     color: var(--text-strong);
     font-size: 0.88rem;
     font-weight: 700;
   }
 
   .field input,
-  .field textarea,
-  .field select,
-  .field-wide textarea {
+  .field select {
     width: 100%;
     border: 1px solid var(--border);
     border-radius: 0.95rem;
     background: white;
     color: var(--text);
     padding: 0.85rem 0.95rem;
-  }
-
-  .field-wide textarea {
-    min-height: 5.5rem;
-    resize: vertical;
   }
 
   .save-actions {
