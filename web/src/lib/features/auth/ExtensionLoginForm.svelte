@@ -8,10 +8,10 @@
   let { hasExtension, pending, onLogin }: Props = $props();
 </script>
 
-<div class="stack">
-  <p class="muted" style="margin: 0;">Use a browser extension you already trust.</p>
+<div class="flex flex-col gap-3">
+  <p class="text-base-content/60 text-sm m-0">Use a browser extension you already trust.</p>
   <button
-    class="button auth-action"
+    class="btn btn-primary w-full"
     type="button"
     onclick={() => void onLogin?.()}
     disabled={pending || !hasExtension}

@@ -3,7 +3,6 @@
   import { NDKNip07Signer, NDKNip46Signer, NDKPrivateKeySigner } from '@nostr-dev-kit/ndk';
   import { onDestroy } from 'svelte';
   import * as Dialog from '$lib/components/ui/dialog';
-  import * as Tabs from '$lib/components/ui/tabs';
   import { ndk } from '$lib/ndk/client';
   import ExtensionLoginForm from './ExtensionLoginForm.svelte';
   import PrivateKeyLoginForm from './PrivateKeyLoginForm.svelte';
@@ -156,8 +155,8 @@
 <div class="auth-panel">
   <Dialog.Root bind:open>
     <div class="auth-guest-actions">
-      <button class="button auth-join" type="button" onclick={startJoin}>Join</button>
-      <Dialog.Trigger class="button auth-trigger">Log in</Dialog.Trigger>
+      <button class="btn btn-outline" type="button" onclick={startJoin}>Join</button>
+      <Dialog.Trigger class="btn btn-primary">Log in</Dialog.Trigger>
     </div>
 
     <Dialog.Content class="auth-dialog">
@@ -171,53 +170,62 @@
           </Dialog.Description>
         </Dialog.Header>
 
-        <Dialog.Close class="dialog-close" aria-label="Close login">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M6 6l12 12M18 6L6 18" />
+        <Dialog.Close class="btn btn-sm btn-circle btn-ghost" aria-label="Close login">
+          <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
           </svg>
         </Dialog.Close>
       </div>
 
       <div class="auth-dialog-body">
-        <Tabs.Root bind:value={mode}>
-          <Tabs.List class="auth-switcher" aria-label="Login methods">
-            <Tabs.Trigger value="extension" class="auth-switcher-button">Extension</Tabs.Trigger>
-            <Tabs.Trigger value="private-key" class="auth-switcher-button">Secret key</Tabs.Trigger>
-            <Tabs.Trigger value="remote" class="auth-switcher-button">Another app</Tabs.Trigger>
-          </Tabs.List>
+        <div role="tablist" class="tabs tabs-bordered">
+          <button
+            role="tab"
+            class="tab"
+            class:tab-active={mode === 'extension'}
+            onclick={() => mode = 'extension'}
+          >Extension</button>
+          <button
+            role="tab"
+            class="tab"
+            class:tab-active={mode === 'private-key'}
+            onclick={() => mode = 'private-key'}
+          >Secret key</button>
+          <button
+            role="tab"
+            class="tab"
+            class:tab-active={mode === 'remote'}
+            onclick={() => mode = 'remote'}
+          >Another app</button>
+        </div>
 
-          <Tabs.Content value="extension" class="auth-mode-panel">
-            <ExtensionLoginForm
-              hasExtension={extensionAvailable}
-              {pending}
-              onLogin={loginWithExtension}
-            />
-          </Tabs.Content>
-
-          <Tabs.Content value="private-key" class="auth-mode-panel">
-            <PrivateKeyLoginForm
-              bind:secretKey={privateKey}
-              {pending}
-              onLogin={loginWithPrivateKey}
-            />
-          </Tabs.Content>
-
-          <Tabs.Content value="remote" class="auth-mode-panel">
-            <RemoteLoginForm
-              bind:bunkerUri
-              {connectingBunker}
-              {nostrConnectUri}
-              {preparingRemoteSigner}
-              {qrCodeDataUrl}
-              {remoteSignerReady}
-              onLoginWithBunker={loginWithBunker}
-              onStartRemoteSigner={startRemoteSigner}
-            />
-          </Tabs.Content>
-        </Tabs.Root>
+        {#if mode === 'extension'}
+          <ExtensionLoginForm
+            hasExtension={extensionAvailable}
+            {pending}
+            onLogin={loginWithExtension}
+          />
+        {:else if mode === 'private-key'}
+          <PrivateKeyLoginForm
+            bind:secretKey={privateKey}
+            {pending}
+            onLogin={loginWithPrivateKey}
+          />
+        {:else if mode === 'remote'}
+          <RemoteLoginForm
+            bind:bunkerUri
+            {connectingBunker}
+            {nostrConnectUri}
+            {preparingRemoteSigner}
+            {qrCodeDataUrl}
+            {remoteSignerReady}
+            onLoginWithBunker={loginWithBunker}
+            onStartRemoteSigner={startRemoteSigner}
+          />
+        {/if}
 
         {#if error}
-          <p class="error" style="margin: 0;">{error}</p>
+          <p class="text-error text-sm" style="margin: 0;">{error}</p>
         {/if}
       </div>
     </Dialog.Content>

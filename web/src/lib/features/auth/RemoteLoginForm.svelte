@@ -22,8 +22,8 @@
   }: Props = $props();
 </script>
 
-<div class="stack">
-  <p class="muted" style="margin: 0;">
+<div class="flex flex-col gap-3">
+  <p class="text-base-content/60 text-sm m-0">
     Pair with another app. Show a QR code to approve this session, or paste a connection link.
   </p>
 
@@ -38,9 +38,9 @@
       </p>
     </div>
   {:else}
-    <div class="stack tight">
+    <div class="flex flex-col gap-1.5">
       <button
-        class="button auth-action"
+        class="btn btn-primary w-full"
         type="button"
         onclick={() => void onStartRemoteSigner?.()}
         disabled={preparingRemoteSigner || connectingBunker}
@@ -53,16 +53,16 @@
     </div>
   {/if}
 
-  <div class="auth-divider">
-    <span>Or paste a link</span>
-  </div>
+  <div class="divider text-xs uppercase font-semibold tracking-wider">Or paste a link</div>
 
-  <label class="field">
-    <span class="muted">Connection link</span>
-    <input bind:value={bunkerUri} placeholder="Paste a connection link" />
+  <label class="form-control w-full">
+    <div class="label">
+      <span class="label-text text-base-content/60">Connection link</span>
+    </div>
+    <input class="input w-full" bind:value={bunkerUri} placeholder="Paste a connection link" />
   </label>
   <button
-    class="button auth-action"
+    class="btn btn-primary w-full"
     type="button"
     onclick={() => void onLoginWithBunker?.()}
     disabled={connectingBunker || !bunkerUri.trim().startsWith('bunker://')}
