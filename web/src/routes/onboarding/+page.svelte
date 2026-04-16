@@ -100,7 +100,6 @@
 
   // ── derived ─────────────────────────────────────────────────────
   const currentUser = $derived(ndk.$currentUser);
-  const sessionsReady = $derived(ndk.$sessions !== undefined);
   const interestEvent = $derived(ndk.$sessions?.getSessionEvent(NDKKind.InterestList));
   const blossomEvent = $derived(ndk.$sessions?.getSessionEvent(NDKKind.BlossomList));
   const isReadOnly = $derived(Boolean(ndk.$sessions?.isReadOnly()));
@@ -146,9 +145,7 @@
     Boolean(cleanText(name) || cleanText(display)) && managedNip05Ready
   );
   const step2Valid = $derived(normalizedInterests.length > 0);
-  const canPublish = $derived(
-    sessionsReady && !isReadOnly && !saving && !uploadingAvatar && step2Valid && managedNip05Ready
-  );
+  const canPublish = $derived(!isReadOnly && !saving && !uploadingAvatar && step2Valid && managedNip05Ready);
 
   // ── profile helpers ─────────────────────────────────────────────
   function clearMessages() {
@@ -362,47 +359,51 @@
 
   // ── publish ─────────────────────────────────────────────────────
   async function publish() {
-    await ensureClientNdk();
-    const session = ndk.$sessions;
-    if (!session) return;
-    if (session.isReadOnly() || saving || uploadingAvatar || !step2Valid || !managedNip05Ready) return;
+    if (saving || uploadingAvatar || !step2Valid || !managedNip05Ready || isReadOnly) return;
 
-    let publishingUser = currentUser;
-    if (!publishingUser) {
-      const signer = NDKPrivateKeySigner.generate();
-      await session.login(signer);
-      publishingUser = await signer.user();
-    }
-
-    if (!publishingUser || isReadOnly) return;
-
-    const nextName = cleanText(name);
-    const nextDisplay = cleanText(display);
-    const nextAbout = cleanText(about);
-    const nextWebsite = cleanText(website);
-    const nextInterests = normalizeInterestTags(selectedInterests);
-    const hasCustomValue = Boolean(cleanText(blossomServer));
-    const nextServer = parseBlossomServer(blossomServer) ?? (hasCustomValue ? null : DEFAULT_BLOSSOM_SERVER);
-
-    if (!nextServer) {
-      saveError = 'Enter a valid storage server URL.';
-      return;
-    }
-
-    let nextAvatar = cleanText(avatarUrl) || selectedDicebear || '';
-    if (avatarFile) {
-      const uploadedUrl = await uploadAvatarFile();
-      if (!uploadedUrl) {
-        saveError = uploadError || 'Upload failed.';
-        return;
-      }
-      nextAvatar = cleanText(uploadedUrl);
-    }
+    saving = true;
 
     try {
       clearMessages();
-      saving = true;
       await ensureClientNdk();
+      const session = ndk.$sessions;
+      if (!session) {
+        throw new Error("Couldn't restore your Nostr session.");
+      }
+
+      let publishingUser = currentUser;
+      if (!publishingUser) {
+        const signer = NDKPrivateKeySigner.generate();
+        await session.login(signer);
+        publishingUser = await signer.user();
+      }
+
+      if (!publishingUser) {
+        throw new Error("Couldn't create a publishing identity.");
+      }
+
+      const nextName = cleanText(name);
+      const nextDisplay = cleanText(display);
+      const nextAbout = cleanText(about);
+      const nextWebsite = cleanText(website);
+      const nextInterests = normalizeInterestTags(selectedInterests);
+      const hasCustomValue = Boolean(cleanText(blossomServer));
+      const nextServer = parseBlossomServer(blossomServer) ?? (hasCustomValue ? null : DEFAULT_BLOSSOM_SERVER);
+
+      if (!nextServer) {
+        saveError = 'Enter a valid storage server URL.';
+        return;
+      }
+
+      let nextAvatar = cleanText(avatarUrl) || selectedDicebear || '';
+      if (avatarFile) {
+        const uploadedUrl = await uploadAvatarFile();
+        if (!uploadedUrl) {
+          saveError = uploadError || 'Upload failed.';
+          return;
+        }
+        nextAvatar = cleanText(uploadedUrl);
+      }
 
       const previousProfile = publishingUser.profile ? { ...publishingUser.profile } : undefined;
       const nextProfile: NDKUserProfile = { ...(publishingUser.profile ?? {}) };
@@ -429,7 +430,7 @@
         throw caught;
       }
 
-      const session = ndk.$sessions.current;
+      const currentSession = session.current;
 
       const nextBlossom =
         blossomEvent instanceof NDKBlossomList
@@ -440,7 +441,7 @@
       nextBlossom.servers = mergeBlossomServers(nextServer, nextBlossom.servers);
       nextBlossom.default = nextServer;
       await nextBlossom.publish();
-      session?.events.set(NDKKind.BlossomList, nextBlossom);
+      currentSession?.events.set(NDKKind.BlossomList, nextBlossom);
 
       const nextInterestEvent =
         interestEvent instanceof NDKInterestList
@@ -450,7 +451,7 @@
             : new NDKInterestList(ndk);
       nextInterestEvent.interests = nextInterests;
       await nextInterestEvent.publish();
-      session?.events.set(NDKKind.InterestList, nextInterestEvent);
+      currentSession?.events.set(NDKKind.InterestList, nextInterestEvent);
 
       await goto(`/profile/${profileIdentifier(nextProfile, publishingUser.npub)}`);
     } catch (caught) {
@@ -849,9 +850,6 @@
             {saving ? 'Publishing…' : 'Start reading'}
           </button>
         </div>
-        {#if !sessionsReady}
-          <p class="ob-hint">Restoring your session before publishing your setup.</p>
-        {/if}
         {#if !step2Valid}
           <p class="ob-hint">Pick at least one topic to continue.</p>
         {/if}
