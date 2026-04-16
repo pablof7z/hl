@@ -1,0 +1,36 @@
+{
+	"/": [
+		"src/routes/+page.server.ts"
+	],
+	"/.well-known/nostr.json": [
+		"src/routes/.well-known/nostr.json/+server.ts"
+	],
+	"/about": [
+		"src/routes/about/+page.server.ts"
+	],
+	"/api/debug/front-page-cache": [
+		"src/routes/api/debug/front-page-cache/+server.ts"
+	],
+	"/api/nip05": [
+		"src/routes/api/nip05/+server.ts"
+	],
+	"/bookmarks": [],
+	"/highlights": [
+		"src/routes/highlights/+page.server.ts"
+	],
+	"/note/[id]": [
+		"src/routes/note/[id]/+page.server.ts"
+	],
+	"/og/note/[id]": [
+		"src/routes/og/note/[id]/+server.ts"
+	],
+	"/onboarding": [
+		"src/routes/onboarding/+page.server.ts"
+	],
+	"/profile/edit": [],
+	"/profile/[identifier]": [
+		"src/routes/profile/[identifier]/+page.server.ts"
+	],
+	"/relays": [],
+	"/relay/[hostname]": []
+}

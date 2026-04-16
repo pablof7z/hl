@@ -1,0 +1,1 @@
+export { default as component } from "../../../../src/routes/relay/[hostname]/+page.svelte";
