@@ -1,105 +1,109 @@
 <script lang="ts">
-  import MemberDot from './MemberDot.svelte';
+  import FilterRow from './FilterRow.svelte';
+  import DiscussionRow from './DiscussionRow.svelte';
 
-  const mockDiscussions = [
+  const FILTER_PILLS = ['All', 'Books', 'Podcasts', 'Articles'];
+
+  const seedDiscussions = [
     {
-      id: 1,
-      colorIndex: 1,
-      name: 'craig_烈日',
-      time: '2h ago',
-      text: 'The thesis on sovereign individuals resonates deeply with the Nostr ethos — censorship-resistance as first principle.'
+      id: 'd1',
+      memberColorIndex: 1,
+      memberName: 'craig_烈日',
+      preview:
+        "The chapter on digital governance is the most prescient. We're living through exactly the transition they described.",
+      replyCount: 12,
+      lastActivity: '2h ago'
     },
     {
-      id: 2,
-      colorIndex: 5,
-      name: 'Lyn Alden',
-      time: '5h ago',
-      text: 'Davidson & Rees-Mogg got a lot right, but underestimated the network effects of existing institutions. Still, a prescient read.'
+      id: 'd2',
+      memberColorIndex: 3,
+      memberName: 'nickand',
+      preview:
+        'Did anyone else notice the parallel with Taleb? The sovereign individual concept maps directly onto antifragility.',
+      replyCount: 8,
+      lastActivity: '5h ago'
     },
     {
-      id: 3,
-      colorIndex: 2,
-      name: 'dergigi',
-      time: 'yesterday',
-      text: 'Chapter 4 is the one that aged best. The idea that violence becomes economically irrational for extractive states when individuals are mobile and cryptographic.'
+      id: 'd3',
+      memberColorIndex: 5,
+      memberName: 'Lyn Alden',
+      preview:
+        'The economic predictions held up surprisingly well. The geopolitical predictions are still unfolding.',
+      replyCount: 6,
+      lastActivity: '1d ago'
     }
   ];
+
+  let activePill = $state('All');
+
+  function handleSeeAll() {
+    console.log('see all discussions — stub for M5+');
+  }
 </script>
 
 <div class="discussions-tab">
-  {#each mockDiscussions as discussion (discussion.id)}
-    <div class="discussion-entry">
-      <div class="discussion-avatar" aria-hidden="true">
-        <MemberDot colorIndex={discussion.colorIndex} size="md" />
-      </div>
-      <div class="discussion-content">
-        <div class="discussion-header">
-          <span class="discussion-name">{discussion.name}</span>
-          <span class="discussion-time">{discussion.time}</span>
-        </div>
-        <p class="discussion-text">{discussion.text}</p>
-      </div>
-    </div>
-  {/each}
+  <FilterRow
+    pills={FILTER_PILLS}
+    {activePill}
+    onToggle={(label) => (activePill = label)}
+  />
+
+  <div class="discussions-list" role="list">
+    {#each seedDiscussions as discussion (discussion.id)}
+      <DiscussionRow
+        id={discussion.id}
+        memberColorIndex={discussion.memberColorIndex}
+        memberName={discussion.memberName}
+        preview={discussion.preview}
+        replyCount={discussion.replyCount}
+        lastActivity={discussion.lastActivity}
+      />
+    {/each}
+  </div>
+
+  <div class="discussions-footer">
+    <button class="see-all-link" type="button" onclick={handleSeeAll}>
+      See all discussions →
+    </button>
+  </div>
 </div>
 
 <style>
   .discussions-tab {
     display: flex;
     flex-direction: column;
+    gap: 16px;
+  }
+
+  .discussions-list {
+    display: flex;
+    flex-direction: column;
     gap: 0;
   }
 
-  .discussion-entry {
-    display: flex;
-    gap: 14px;
-    padding: 18px 0;
-    border-bottom: 1px solid var(--rule-soft);
+  .discussions-footer {
+    padding-top: 4px;
   }
 
-  .discussion-entry:last-child {
-    border-bottom: none;
-  }
-
-  .discussion-avatar {
-    flex-shrink: 0;
-    padding-top: 2px;
-  }
-
-  .discussion-content {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .discussion-header {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-
-  .discussion-name {
+  .see-all-link {
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
-    color: var(--ink);
+    color: var(--brand-accent);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: none;
   }
 
-  .discussion-time {
-    font-family: var(--font-sans);
-    font-size: 12px;
-    font-weight: 400;
-    color: var(--ink-fade);
+  .see-all-link:hover {
+    text-decoration: underline;
   }
 
-  .discussion-text {
-    font-family: var(--font-sans);
-    font-size: 14px;
-    font-weight: 400;
-    color: var(--ink-soft);
-    line-height: 1.55;
-    margin: 0;
+  .see-all-link:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
   }
 </style>

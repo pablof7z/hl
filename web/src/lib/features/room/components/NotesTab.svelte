@@ -18,6 +18,10 @@
   function handleAddNote() {
     console.log('stub — full implementation in M5+');
   }
+
+  function handleSeeAll() {
+    console.log('see all notes — stub for M5+');
+  }
 </script>
 
 <div class="notes-tab">
@@ -37,9 +41,12 @@
     {/if}
   </div>
 
-  <div class="notes-cta">
+  <div class="notes-footer">
     <button class="add-note-btn" type="button" onclick={handleAddNote}>
-      Add a note
+      ✎ Write a note
+    </button>
+    <button class="see-all-link" type="button" onclick={handleSeeAll}>
+      See all notes →
     </button>
   </div>
 </div>
@@ -55,8 +62,6 @@
     display: flex;
     flex-direction: column;
     gap: 0;
-    max-height: 480px;
-    overflow-y: auto;
   }
 
   .empty-state {
@@ -68,10 +73,12 @@
     margin: 0;
   }
 
-  .notes-cta {
+  .notes-footer {
     padding: 20px 0 4px;
     display: flex;
-    justify-content: flex-start;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
   }
 
   .add-note-btn {
@@ -80,16 +87,37 @@
     font-weight: 500;
     color: var(--brand-accent);
     background: none;
+    border: 1px solid var(--brand-accent);
+    padding: 6px 12px;
+    border-radius: var(--radius, 4px);
+    cursor: pointer;
+  }
+
+  .add-note-btn:hover {
+    background-color: var(--surface-warm);
+  }
+
+  .add-note-btn:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+  }
+
+  .see-all-link {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--brand-accent);
+    background: none;
     border: none;
     padding: 0;
     cursor: pointer;
   }
 
-  .add-note-btn:hover {
+  .see-all-link:hover {
     text-decoration: underline;
   }
 
-  .add-note-btn:focus-visible {
+  .see-all-link:focus-visible {
     outline: 2px solid var(--brand-accent);
     outline-offset: 2px;
     border-radius: 2px;
