@@ -372,7 +372,7 @@ Contents: a single white card containing an activity feed.
 
 Each row: `member-dot` + activity sentence (inline-styled action verb in mono terracotta: `marked`, `replied`, `shared`, `voted`, `proposed`, `started`, `opened`) + right-aligned relative time (mono 10px).
 
-**No "live" updates.** The feed is server-rendered and hydrated client-side on first load, then quiet. A manual refresh gesture (pull-down / button) is out of scope for v1.
+The feed is powered by an NDK subscription (`ndk.$subscribe`) that streams room events in real time. No polling, no refresh button needed — events arrive automatically within the 48-hour window filter. This is past-tense activity, not live-presence signalling — see §2.5.
 
 ### 3.12 Sidebar
 
@@ -388,9 +388,7 @@ Three cards, stacked 24px gap:
 - Italic Fraunces status line (one short quoted sentence — personal voice, e.g., "Highlighting at 3am again.")
 - **No "active N ago" timestamp.** See §2.5.
 
-**Up next card**: 4 voting rows. Each row: position number (mono) + title/source + vote tally (honey-amber dots matching vote count + number).
-
-Bottom: "Voting closes Sunday, 9pm." + `cast yours →` link.
+**Up next card**: 4 voting rows. Each row: position number (mono) + title/source + vote tally (honey-amber dots matching vote count + number). The card is fully functional — members can cast votes via the relay. Vote event kind: `kind:999` with `h` tag = room id, `a` tag = candidate artifact id, `vote` tag = upvote. Multiple votes by the same member on the same artifact are replaced (idempotent). Bottom: "Voting closes Sunday, 9pm." + `cast yours →` button.
 
 **Capture CTA**: full-width dark-ink block. Icon (Fraunces italic ✎) + heading (Inter 600) + subtitle (Inter 13px). Hovers to terracotta.
 
@@ -645,14 +643,14 @@ The room page aggregates events from the room's relay (Croissant-based, NIP-29) 
 | Member list | `kind:39002` (member list) + fallback: tally `kind:9000`/`9001`/`9021`/`9022` |
 | Member avatars, display names, bios | `kind:0` profile metadata, per-pubkey |
 | Member status line (italic in sidebar) | Derive from most recent `kind:0` about or a dedicated short-status event (decision D-04 below) |
-| Pinned artifact | `kind:11` share thread that room admin has pinned (decision D-01: we need a pinned-artifact mechanism — proposed: `kind:10003`-style list on the room, or a `pinned:true` tag on the share thread written by an admin) |
+| Pinned artifact | `kind:999` — `h` tag = NIP-29 group id, `e` tag = the pinned `kind:11` share thread. Most recent `kind:999` event for the room is the pinned artifact. Only admins can write. See D-01. |
 | Artifact title, author, source | Tags on the `kind:11` share thread (`title`, `source`, `a`/`e`/`i`+`k`) |
 | Highlights on the pinned artifact | `kind:9802` events referencing the artifact's `a`/`e`/`i` tag, filtered by membership (authored by room members) |
 | "Marked by" attribution on a highlight | `.pubkey` of the `kind:9802` event → member dot |
 | Discussions on a highlight | `kind:1111` events (`e` tag → highlight event id, uppercase `E`/`K` tags → root scope) |
-| Notes on an artifact | A new distinct `kind:11` thread with `type: note` tag (decision D-05) — NOT another kind, keeps no-custom-kinds principle. Body lives in the thread's content + subsequent `kind:1111` comments (not implemented yet — MVP may surface existing notes read-only) |
-| Activity feed | Timeline over the last 48 hours aggregating: `kind:9802` creations, `kind:1111` postings, `kind:11` shares, `kind:7` reactions, vote events (decision D-06) |
-| Up-next votes | New: lightweight vote events; design TBD. For v1 placeholder, render from a stub adapter. |
+| Notes on an artifact | A `kind:11` thread with `type: note` tag — NOT a new kind, keeps no-custom-kinds principle. Body lives in the thread's content + subsequent `kind:1111` comments. Fully implemented in v1 — members can write new notes. See D-05. |
+| Activity feed | NDK subscription (`ndk.$subscribe`) streaming room events within a 48-hour window — `kind:9802`, `kind:1111`, `kind:11` shares, `kind:7` reactions, vote events. Events arrive in real time as they occur; no polling, no refresh button. See D-06. |
+| Up-next votes | `kind:999` events — `h` tag = room id, `a` tag = candidate artifact id, `vote` tag = upvote. Multiple votes by the same member on the same artifact are replaced (idempotent). See D-16. |
 | Everyone's listen progress (podcast) | Decision D-07: for v1 this reads from a local-per-device cumulative "how far I got" record + publishes a low-frequency `kind:30078` app-specific store ("parameterised replaceable") with `d` tag = artifact id and tag `position: <seconds>`. Other room members read each other's `kind:30078` for that artifact to render progress bars. **This is past-state publish, not real-time broadcast.** |
 | Per-member contribution counts (Members tab) | Aggregate on client from the events the client already holds |
 
@@ -739,8 +737,8 @@ web/src/lib/ndk/
 Non-obvious choices captured here so future revisitors have the reasoning.
 
 **D-01 · Pinned artifact mechanism**
-The room surfaces one "currently pinned" piece of content at a time. We need a mechanism for the room's admin to pin it. Provisional: a `kind:10003`-style list on the room pubkey with one `a` tag pointing to the pinned `kind:11` share thread. Relay policy enforces that only an admin can write. Alternative — a `pinned:true` tag on the share thread itself — is simpler but allows multiple pins; keep simpler option for v1 and limit to one pinned at a time via UI.
-*Why*: the product surfaces a singular weekly focus; we need a way to signal it.
+`kind:999` — a made-up event kind that h-tags the NIP-29 group and e-tags the pinned post. The most recent `kind:999` event for the group is the authoritative pinned artifact. Only admins can write `kind:999` events; the relay enforces this.
+*Why*: simplest possible pin — no custom list kind, no tagging convention on the share thread. The newest one wins, which maps naturally to "set the pinned artifact" semantics.
 
 **D-02 · Four tabs on the pinned artifact — Discussions as default**
 The four-tab set (Highlights, Discussions, Notes, Members) with Discussions as the default active tab is a decision, not a guess. Discussions is the liveliest surface for an actively-read piece and answers "what is my room *saying* right now?" immediately. Highlights shows accumulated marginalia; Notes is longer-form reflection; Members is reader-progress state.
@@ -754,13 +752,13 @@ Explicit, strict, covered in §2.5.
 The italic one-sentence status in the sidebar ("Highlighting at 3am again.") is personal voice, not system-derived. Source: most recent `kind:0` `about` field, OR a dedicated short-status event (e.g., `kind:0`'s `status` extension). Decision for v1: read from `kind:0.about` (one line max, truncate after 80 chars). A dedicated status-event can come later.
 *Why*: avoids a new kind; gives members control over their own copy; degrades gracefully if they don't set one.
 
-**D-05 · Notes are `kind:11` with `type: note` tag, not a new kind**
-Consistent with the "no custom event kinds" rule from `product-surfaces-v3.md`. A note is a thread rooted in the artifact, flagged as `note` rather than `share`. Replies to a note are normal `kind:1111` comments.
-*Why*: keeps the ecosystem-interop discipline intact.
+**D-05 · Notes are fully functional — kind:11 with type:note tag**
+Consistent with the "no custom event kinds" rule from `product-surfaces-v3.md`. A note is a thread rooted in the artifact, flagged as `note` rather than `share`. Replies to a note are normal `kind:1111` comments. The "Write a note" button in the Notes tab is live — members can post new notes. Reading and writing are both implemented in v1.
+*Why*: a reading group needs the ability to publish reflections; read-only surface is a dead end that would need to be rebuilt.
 
-**D-06 · Activity feed is aggregated, not live**
-"Lately in the room" renders from a 48-hour window of events collected on page load. It does not update while the user is looking at it. A manual refresh is possible via a gesture (not shipped in v1).
-*Why*: consistent with §2.5. The feed is a weekly-pulse surface, not a notifications panel.
+**D-06 · Activity feed is event-based via NDK subscriptions**
+"Lately in the room" is powered by an NDK subscription (`ndk.$subscribe`) that streams events in real time as they arrive. No polling, no refresh button needed — events surface automatically. The 48-hour window is the subscription filter, not a batch-fetch.
+*Why*: consistent with §2.5 (no live-updates that draw attention), but the feed is still alive when the user is actively on the page. Events arrive in the background without aggressive notification.
 
 **D-07 · Listening/reading progress is published, not broadcast**
 Per-member progress bars (podcast sidebar, members tab) are driven by `kind:30078` events with artifact-id `d` tags + `position` tags, published at low frequency (on pause, on chapter change, on exit — never more than once per 30 seconds). They appear as past state, not "currently listening."
@@ -797,6 +795,10 @@ Because the top nav (62px) + room nav (~44px) = ~106px sticky UI, the active-sec
 **D-15 · Sidebar sticks at 112px top**
 Matches the combined height of top nav + room nav (62 + ~44 + a few px breathing room). Scrolls independently with `max-height: 100vh − 140px`.
 *Why*: sidebar should accompany the reader through the page, not scroll off.
+
+**D-16 · Up-next voting uses kind:999**
+`kind:999` is the same made-up kind used for pinned artifacts (D-01). For voting, it carries: `h` tag = room id, `a` tag = candidate artifact id, `vote` tag = upvote. All non-pinned `kind:999` events for the room are aggregated by `a` tag to produce the vote tally. Multiple votes by the same pubkey on the same artifact replace each other (last-write-wins, replaceable). The same event kind reused across both use cases keeps the surface small.
+*Why*: consistent with D-01; avoids a second custom kind.
 
 ---
 

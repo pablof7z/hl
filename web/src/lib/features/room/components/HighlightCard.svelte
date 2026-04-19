@@ -1,22 +1,52 @@
 <script lang="ts">
   import MemberDot from './MemberDot.svelte';
 
+  type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
+
+  interface ArtifactRef {
+    id: string;
+    type: ArtifactType;
+    title: string;
+    author?: string;
+    cover?: string;
+  }
+
   let {
     id,
     quote,
     memberColorIndex,
     memberName,
-    artifactTitle
+    artifactTitle,
+    artifact,
+    onHighlightClick
   }: {
     id: string;
     quote: string;
     memberColorIndex: number;
     memberName: string;
     artifactTitle: string;
+    artifact?: ArtifactRef;
+    onHighlightClick?: (artifact: ArtifactRef) => void;
   } = $props();
+
+  function handleClick() {
+    if (onHighlightClick && artifact) {
+      onHighlightClick(artifact);
+    } else {
+      console.log('highlight clicked:', id);
+    }
+  }
 </script>
 
-<article class="highlight-card" role="listitem" data-id={id}>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<article
+  class="highlight-card"
+  role="listitem"
+  data-id={id}
+  onclick={handleClick}
+  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
+  style:cursor={onHighlightClick && artifact ? 'pointer' : 'default'}
+>
   <p class="highlight-quote">{quote}</p>
   <div class="highlight-footer">
     <div class="highlight-member" aria-hidden="true">

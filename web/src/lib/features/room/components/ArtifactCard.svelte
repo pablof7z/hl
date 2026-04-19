@@ -8,7 +8,8 @@
     author,
     cover,
     highlightCount = 0,
-    discussionCount = 0
+    discussionCount = 0,
+    onArtifactClick
   }: {
     id: string;
     type: ArtifactType;
@@ -17,10 +18,15 @@
     cover?: string;
     highlightCount?: number;
     discussionCount?: number;
+    onArtifactClick?: (artifact: { id: string; type: ArtifactType; title: string; author?: string; cover?: string; highlightCount?: number; discussionCount?: number }) => void;
   } = $props();
 
   function handleClick() {
-    console.log('artifact clicked:', id);
+    if (onArtifactClick) {
+      onArtifactClick({ id, type, title, author, cover, highlightCount, discussionCount });
+    } else {
+      console.log('artifact clicked:', id);
+    }
   }
 
   const PLACEHOLDER_ICONS: Record<ArtifactType, string> = {
