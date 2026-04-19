@@ -37,7 +37,8 @@
 <style>
   .pinned-artifact {
     display: flex;
-    gap: 24px;
+    flex-direction: column;
+    gap: 16px;
     background: var(--surface);
     border: 1px solid var(--rule);
     border-radius: var(--radius);
@@ -52,12 +53,13 @@
 
   /* ── Cover ──────────────────────────────────────────────────── */
   .artifact-cover-wrap {
-    flex-shrink: 0;
+    width: 100%;
   }
 
   .artifact-cover {
-    width: 160px;
-    height: 240px;
+    width: 100%;
+    height: auto;
+    max-height: 200px;
     border-radius: var(--radius);
     object-fit: cover;
     display: block;
@@ -116,21 +118,21 @@
   }
 
   /* ── Responsive ─────────────────────────────────────────────── */
-  @media (max-width: 767px) {
+  @media (min-width: 768px) {
     .pinned-artifact {
-      flex-direction: column;
-      gap: 16px;
+      flex-direction: row;
+      gap: 24px;
     }
 
     .artifact-cover-wrap {
-      width: 100%;
+      width: auto;
+      flex-shrink: 0;
     }
 
     .artifact-cover {
-      width: 100%;
-      height: auto;
-      max-height: 200px;
-      object-fit: cover;
+      width: 160px;
+      height: 240px;
+      max-height: none;
     }
   }
 

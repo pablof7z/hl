@@ -180,7 +180,8 @@
   .controls-row {
     display: flex;
     align-items: center;
-    gap: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
   }
 
   .play-btn {
@@ -213,6 +214,8 @@
     gap: 6px;
     flex: 1;
     min-width: 0;
+    width: 100%;
+    order: 3;
   }
 
   .time-display {
@@ -280,6 +283,7 @@
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
+    margin-left: auto;
   }
 
   .volume-icon {
@@ -291,23 +295,19 @@
     accent-color: var(--brand-accent);
   }
 
-  @media (max-width: 768px) {
+  @media (min-width: 768px) {
     .controls-row {
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .play-btn {
-      flex-shrink: 0;
+      flex-wrap: nowrap;
+      gap: 16px;
     }
 
     .time-scrub {
-      width: 100%;
-      order: 3;
+      width: auto;
+      order: 0;
     }
 
     .volume-control {
-      margin-left: auto;
+      margin-left: 0;
     }
   }
 </style>

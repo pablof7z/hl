@@ -276,27 +276,28 @@
 
   .room-layout {
     display: grid;
-    grid-template-columns: var(--grid-sidebar) 1fr;
+    grid-template-columns: 1fr;
     gap: var(--grid-gap);
     max-width: var(--container-max);
     padding: 0 var(--container-px);
     margin: 0 auto;
-    padding-top: 40px;
+    padding-top: 24px;
     padding-bottom: 80px;
   }
 
   .room-sidebar {
-    position: sticky;
-    top: 24px;
+    order: 2;
+    position: static;
     align-self: start;
     display: flex;
     flex-direction: column;
     gap: 16px;
-    max-height: calc(100vh - 48px);
-    overflow-y: auto;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .room-main {
+    order: 1;
     display: flex;
     flex-direction: column;
     gap: 32px;
@@ -335,25 +336,22 @@
     padding-top: 8px;
   }
 
-  @media (max-width: 767px) {
+  @media (min-width: 768px) {
     .room-layout {
-      grid-template-columns: 1fr;
-      padding-top: 24px;
+      grid-template-columns: var(--grid-sidebar) 1fr;
+      padding-top: 40px;
     }
 
     .room-sidebar {
-      order: 2;
-      position: static;
-      max-height: none;
-      overflow-y: visible;
+      order: unset;
+      position: sticky;
+      top: 24px;
+      max-height: calc(100vh - 48px);
+      overflow-y: auto;
     }
 
     .room-main {
-      order: 1;
-    }
-
-    .view-container {
-      padding: 0 var(--container-px);
+      order: unset;
     }
   }
 </style>

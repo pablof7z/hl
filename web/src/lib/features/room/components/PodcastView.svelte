@@ -235,6 +235,7 @@
   /* Hero */
   .podcast-hero {
     display: flex;
+    flex-direction: column;
     gap: 32px;
     align-items: flex-start;
   }
@@ -245,8 +246,8 @@
   }
 
   .hero-cover {
-    width: 200px;
-    height: 200px;
+    width: 160px;
+    height: 160px;
     border-radius: var(--radius);
     object-fit: cover;
     display: block;
@@ -331,7 +332,7 @@
   /* Body grid */
   .podcast-body {
     display: grid;
-    grid-template-columns: 3fr 2fr;
+    grid-template-columns: 1fr;
     gap: 40px;
     align-items: start;
   }
@@ -358,8 +359,7 @@
     display: flex;
     flex-direction: column;
     gap: 28px;
-    position: sticky;
-    top: 24px;
+    position: static;
   }
 
   /* Chapters */
@@ -484,22 +484,23 @@
     align-self: flex-end;
   }
 
-  @media (max-width: 768px) {
+  @media (min-width: 768px) {
     .podcast-hero {
-      flex-direction: column;
+      flex-direction: row;
     }
 
     .hero-cover {
-      width: 160px;
-      height: 160px;
+      width: 200px;
+      height: 200px;
     }
 
     .podcast-body {
-      grid-template-columns: 1fr;
+      grid-template-columns: 3fr 2fr;
     }
 
     .podcast-sidebar {
-      position: static;
+      position: sticky;
+      top: 24px;
     }
   }
 </style>
