@@ -7,6 +7,7 @@
   const seedDiscussions = [
     {
       id: 'd1',
+      type: 'books',
       memberColorIndex: 1,
       memberName: 'craig_烈日',
       preview:
@@ -16,6 +17,7 @@
     },
     {
       id: 'd2',
+      type: 'articles',
       memberColorIndex: 3,
       memberName: 'nickand',
       preview:
@@ -25,6 +27,7 @@
     },
     {
       id: 'd3',
+      type: 'podcasts',
       memberColorIndex: 5,
       memberName: 'Lyn Alden',
       preview:
@@ -35,6 +38,11 @@
   ];
 
   let activePill = $state('All');
+
+  const filteredDiscussions = $derived.by(() => {
+    if (activePill === 'All') return seedDiscussions;
+    return seedDiscussions.filter((d) => d.type === activePill.toLowerCase());
+  });
 
   function handleSeeAll() {
     console.log('see all discussions — stub for M5+');
@@ -49,7 +57,7 @@
   />
 
   <div class="discussions-list" role="list">
-    {#each seedDiscussions as discussion (discussion.id)}
+    {#each filteredDiscussions as discussion (discussion.id)}
       <DiscussionRow
         id={discussion.id}
         memberColorIndex={discussion.memberColorIndex}

@@ -18,7 +18,7 @@
   } = $props();
 </script>
 
-<div class="discussion-row" data-id={id} role="listitem">
+<a class="discussion-row" href="/room/{id}">
   <div class="discussion-meta">
     <div class="discussion-author" aria-hidden="true">
       <MemberDot colorIndex={memberColorIndex} size="sm" />
@@ -28,7 +28,7 @@
     <span class="discussion-activity">{lastActivity}</span>
   </div>
   <p class="discussion-preview">{preview}</p>
-</div>
+</a>
 
 <style>
   .discussion-row {
@@ -37,7 +37,8 @@
     gap: 6px;
     padding: 14px 0;
     border-bottom: 1px solid var(--rule-soft);
-    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
     transition: background-color 0s;
   }
 

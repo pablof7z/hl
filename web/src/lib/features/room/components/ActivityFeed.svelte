@@ -74,10 +74,10 @@
   }
 
   .activity-action {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 13px;
     font-weight: 400;
-    color: var(--ink-soft);
+    color: var(--brand-accent);
     flex-shrink: 0;
   }
 

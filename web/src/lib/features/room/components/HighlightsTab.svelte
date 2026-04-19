@@ -3,8 +3,6 @@
   import HighlightEntry from './HighlightEntry.svelte';
   import HighlightCard from './HighlightCard.svelte';
 
-  const FILTER_PILLS = ['All', 'craig_烈日', 'dergigi', 'nickand', 'Lyn Alden', 'nick'];
-
   const seedHighlightCards = [
     {
       id: 'hc1',
@@ -65,11 +63,6 @@
 <div class="highlights-tab">
   <!-- Highlight card reel -->
   <div class="reel-section">
-    <FilterRow
-      pills={FILTER_PILLS}
-      activePill="All"
-      onToggle={() => {}}
-    />
     <div class="highlight-reel" role="list" aria-label="Highlights reel">
       {#each seedHighlightCards as card (card.id)}
         <HighlightCard

@@ -16,7 +16,7 @@
   } = $props();
 </script>
 
-<article class="highlight-card" data-id={id}>
+<article class="highlight-card" role="listitem" data-id={id}>
   <p class="highlight-quote">{quote}</p>
   <div class="highlight-footer">
     <div class="highlight-member" aria-hidden="true">

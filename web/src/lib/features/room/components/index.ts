@@ -12,3 +12,8 @@ export { default as HighlightsTab } from './HighlightsTab.svelte';
 export { default as NoteEntry } from './NoteEntry.svelte';
 export { default as NotesTab } from './NotesTab.svelte';
 export { default as MembersTable } from './MembersTable.svelte';
+export { default as DiscussionRow } from './DiscussionRow.svelte';
+export { default as HighlightCard } from './HighlightCard.svelte';
+export { default as ArtifactCard } from './ArtifactCard.svelte';
+export { default as ShelfTile } from './ShelfTile.svelte';
+export { default as ActivityFeed } from './ActivityFeed.svelte';
