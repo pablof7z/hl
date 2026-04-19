@@ -1,0 +1,51 @@
+/* ── Room UI Design Tokens ─────────────────────────────────────────────── */
+/* Google Fonts imports for room typography */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400&family=JetBrains+Mono:wght@400&display=swap');
+
+:root {
+  /* ── Palette ───────────────────────────────────────────────────────────── */
+  --bg: #FAFAF7;
+  --surface: #FFFFFF;
+  --surface-warm: #F5EFE0;
+  --surface-muted: #F3F2EE;
+  --rule: #E5E0D0;
+  --rule-soft: #EFEAD9;
+  --ink: #15130F;
+  --ink-soft: #3A362E;
+  --ink-fade: #7A7468;
+  --brand-accent: #C24D2C;
+  --marker: #F5D896;
+  --marker-strong: #E8B96A;
+
+  /* ── Member tints (6 hues, cycling) ───────────────────────────────────── */
+  --h-amber: #F5D896;
+  --h-sage: #C8D4B5;
+  --h-blue: #BCD0E0;
+  --h-rose: #EAC6C8;
+  --h-lilac: #D0C4E0;
+  --h-amber-l: #F5E6A8;
+
+  /* ── Typography ───────────────────────────────────────────────────────── */
+  --font-sans: 'Inter', sans-serif;
+  --font-serif: 'Fraunces', serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* ── Spacing + Grid ───────────────────────────────────────────────────── */
+  --container-max: 1440px;
+  --container-px: 40px;
+  --grid-sidebar: 380px;
+  --grid-gap: 44px;
+  --block-spacing: 44px;
+  --scroll-margin: 120px;
+  --radius: 4px;
+  --radius-pill: 999px;
+
+  /* ── Motion ───────────────────────────────────────────────────────────── */
+  --transition: 200ms ease-out;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --container-px: 20px;
+  }
+}
