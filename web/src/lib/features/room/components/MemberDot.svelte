@@ -28,6 +28,12 @@
   const diameter = $derived(SIZES[size]);
 </script>
 
+<!--
+  Accessibility note: When used purely decoratively (e.g. inside MemberStack),
+  the parent should supply aria-hidden="true" on the stack container.
+  When used as an avatar with meaningful identity, pass aria-label to the parent
+  wrapper or add role="img" + aria-label here. Not critical for M1 decoration use.
+-->
 <div
   class="member-dot"
   style:width={diameter}

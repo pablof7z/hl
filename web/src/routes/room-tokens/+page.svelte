@@ -60,7 +60,7 @@
     <div class="swatch-grid">
       {#each palette as swatch (swatch.name)}
         <div class="swatch">
-          <div class="swatch-color" style:background-color={swatch.hex}></div>
+          <div class="swatch-color" style:background-color={`var(${swatch.name})`}></div>
           <div class="swatch-meta">
             <code class="swatch-token">{swatch.name}</code>
             <span class="swatch-hex">{swatch.hex}</span>

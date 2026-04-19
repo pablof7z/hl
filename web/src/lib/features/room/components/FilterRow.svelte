@@ -18,6 +18,7 @@
       class="filter-row-btn"
       onclick={() => onToggle(pill)}
       type="button"
+      aria-pressed={pill === activePill}
     >
       <FilterPill label={pill} active={pill === activePill} />
     </button>
@@ -39,6 +40,11 @@
     padding: 0;
     margin: 0;
     cursor: pointer;
-    display: contents;
+    border-radius: var(--radius-pill);
+  }
+
+  .filter-row-btn:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
   }
 </style>

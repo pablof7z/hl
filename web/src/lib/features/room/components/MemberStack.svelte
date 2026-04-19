@@ -15,7 +15,7 @@
 
 <div class="member-stack">
   {#each visible as member, i (i)}
-    <div class="member-stack-item" style:z-index={visible.length - i}>
+    <div class="member-stack-item" style:z-index={i + 1}>
       <MemberDot colorIndex={member.colorIndex} size="md" />
     </div>
   {/each}
