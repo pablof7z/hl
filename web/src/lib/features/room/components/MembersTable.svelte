@@ -19,8 +19,8 @@
   <tbody>
     {#each members as member (member.name)}
       <tr class="member-row">
-        <td class="cell-avatar" aria-hidden="true">
-          <MemberDot colorIndex={member.colorIndex} size="lg" />
+        <td class="cell-avatar">
+          <span aria-hidden="true"><MemberDot colorIndex={member.colorIndex} size="lg" /></span>
         </td>
         <td class="cell-name">{member.name}</td>
         <td class="cell-joined">{member.joinedAt ?? '—'}</td>

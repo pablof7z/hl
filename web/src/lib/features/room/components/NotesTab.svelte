@@ -55,11 +55,12 @@
     display: flex;
     flex-direction: column;
     gap: 0;
+    max-height: 480px;
+    overflow-y: auto;
   }
 
   .empty-state {
-    font-family: var(--font-serif);
-    font-style: italic;
+    font-family: var(--font-sans);
     font-size: 15px;
     color: var(--ink-fade);
     text-align: center;
