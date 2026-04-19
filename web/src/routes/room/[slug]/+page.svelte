@@ -159,6 +159,14 @@
     },
   ];
 
+  // Derived from data.room (primary) with seed fallbacks — ready for real API wiring
+  const members = $derived(data.room?.members ?? seedMembers);
+  const artifacts = $derived(data.room?.artifacts ?? seedArtifacts);
+  const pinnedArtifact = $derived(data.room?.pinnedArtifact ?? pinnedBook);
+  const highlights = $derived(data.room?.highlights ?? seedHighlights);
+  const upNext = $derived(data.room?.upNext ?? seedUpNext);
+  const notes = $derived(data.room?.notes ?? seedNotes);
+
   let activeTab = $state<RoomTab>('Discussions');
   let activeView = $state<'room' | 'article' | 'podcast'>('room');
   let selectedArtifact = $state<ArtifactCardProps | null>(null);
@@ -182,7 +190,7 @@
   <div class="view-container">
     <ArticleView
       artifact={selectedArtifact}
-      members={seedMembers}
+      members={members}
       onBack={handleBack}
     />
   </div>
@@ -190,30 +198,30 @@
   <div class="view-container">
     <PodcastView
       artifact={selectedArtifact}
-      members={seedMembers}
+      members={members}
       onBack={handleBack}
     />
   </div>
 {:else}
   <div class="room-layout">
     <aside class="room-sidebar">
-      <MembersSidebar members={seedMembers}>
+      <MembersSidebar members={members}>
         {#snippet children()}
           {roomTitle}
         {/snippet}
       </MembersSidebar>
-      <UpNextVoting items={seedUpNext} />
+      <UpNextVoting items={upNext} />
       <CaptureCta {roomTitle} />
     </aside>
 
     <main class="room-main">
-      <PinnedArtifact artifact={pinnedBook} />
+      <PinnedArtifact artifact={pinnedArtifact} />
 
       <!-- Artifacts shelf -->
       <section class="artifacts-shelf" aria-label="Room artifacts">
         <h2 class="shelf-heading">In This Room</h2>
         <div class="artifacts-list">
-          {#each seedArtifacts as artifact (artifact.id)}
+          {#each artifacts as artifact (artifact.id)}
             <ArtifactCard
               id={artifact.id}
               type={artifact.type}
@@ -246,7 +254,7 @@
             aria-labelledby="room-tab-highlights"
             hidden={activeTab !== 'Highlights'}
           >
-            <HighlightsTab highlights={seedHighlights} onHighlightClick={handleArtifactClick} />
+            <HighlightsTab highlights={highlights} onHighlightClick={handleArtifactClick} />
           </div>
           <div
             id="room-panel-notes"
@@ -254,7 +262,7 @@
             aria-labelledby="room-tab-notes"
             hidden={activeTab !== 'Notes'}
           >
-            <NotesTab notes={seedNotes} />
+            <NotesTab notes={notes} />
           </div>
           <div
             id="room-panel-members"
@@ -262,7 +270,7 @@
             aria-labelledby="room-tab-members"
             hidden={activeTab !== 'Members'}
           >
-            <MembersTable members={seedMembers} />
+            <MembersTable members={members} />
           </div>
         </div>
       </div>

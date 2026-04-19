@@ -1,11 +1,9 @@
 import { getRoom } from '$lib/features/room/api/room';
-import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params }) => {
   const room = await getRoom(params.slug);
-  if (!room) {
-    throw error(404, 'Room not found');
-  }
+  // Return room even when null — component uses seed fallback while API stub is in place.
+  // Only throw 404 once real API can distinguish "not connected" from "room doesn't exist".
   return { room };
 };
