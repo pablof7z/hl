@@ -4,14 +4,79 @@
   import MembersSidebar from '$lib/features/room/components/MembersSidebar.svelte';
   import TabStrip, { type RoomTab } from '$lib/features/room/components/TabStrip.svelte';
   import DiscussionsTab from '$lib/features/room/components/DiscussionsTab.svelte';
+  import HighlightsTab from '$lib/features/room/components/HighlightsTab.svelte';
+  import NotesTab from '$lib/features/room/components/NotesTab.svelte';
+  import MembersTable from '$lib/features/room/components/MembersTable.svelte';
 
   const seedMembers = [
-    { colorIndex: 1, name: 'craig_烈日' },
-    { colorIndex: 2, name: 'dergigi' },
-    { colorIndex: 3, name: 'nickand' },
-    { colorIndex: 4, name: 'Bob Rocket' },
-    { colorIndex: 5, name: 'Lyn Alden' },
-    { colorIndex: 6, name: 'nick' }
+    { colorIndex: 1, name: 'craig_烈日', joinedAt: 'Mar 2024' },
+    { colorIndex: 2, name: 'dergigi', joinedAt: 'Mar 2024' },
+    { colorIndex: 3, name: 'nickand', joinedAt: 'Apr 2024' },
+    { colorIndex: 4, name: 'Bob Rocket', joinedAt: 'Apr 2024' },
+    { colorIndex: 5, name: 'Lyn Alden', joinedAt: 'Jun 2024' },
+    { colorIndex: 6, name: 'nick', joinedAt: 'Jun 2024' }
+  ];
+
+  const seedHighlights = [
+    {
+      id: 'h1',
+      memberColorIndex: 1,
+      memberName: 'craig_烈日',
+      quote:
+        '"The death of distance" — the communication revolution compresses both time and space, making geography increasingly irrelevant to economic activity.',
+      timestamp: '3d ago'
+    },
+    {
+      id: 'h2',
+      memberColorIndex: 2,
+      memberName: 'dergigi',
+      quote:
+        'The transition from the Industrial Age to the Information Age will be as disruptive as the transition from the Agricultural to the Industrial Age.',
+      timestamp: '5d ago'
+    },
+    {
+      id: 'h3',
+      memberColorIndex: 3,
+      memberName: 'nickand',
+      quote:
+        'The sovereign individual will be someone who can earn a living anywhere on earth, unbound by national borders or currency controls.',
+      timestamp: '1w ago'
+    },
+    {
+      id: 'h4',
+      memberColorIndex: 5,
+      memberName: 'Lyn Alden',
+      quote:
+        'The book correctly predicts many aspects of the 1999–2024 era that we are now living through, including the decline of the nation-state.',
+      timestamp: '2w ago'
+    },
+    {
+      id: 'h5',
+      memberColorIndex: 6,
+      memberName: 'nick',
+      quote:
+        'Their framework for understanding the transition from agricultural to industrial societies applies directly to the current transition.',
+      timestamp: '3w ago'
+    }
+  ];
+
+  const seedNotes = [
+    {
+      id: 'n1',
+      memberColorIndex: 4,
+      memberName: 'Bob Rocket',
+      content:
+        'Reading this chapter alongside "The Pragmatic Programmer" — the sovereignty framework maps surprisingly well onto software architecture decisions.',
+      timestamp: '1d ago'
+    },
+    {
+      id: 'n2',
+      memberColorIndex: 1,
+      memberName: 'craig_烈日',
+      content:
+        'This prediction about cyberspace predating the mainstream internet is striking. They wrote this in 1996.',
+      timestamp: '4d ago'
+    }
   ];
 
   const pinnedBook = {
@@ -58,7 +123,7 @@
           aria-labelledby="room-tab-highlights"
           hidden={activeTab !== 'Highlights'}
         >
-          <p class="tab-stub">Highlights coming soon.</p>
+          <HighlightsTab highlights={seedHighlights} />
         </div>
         <div
           id="room-panel-notes"
@@ -66,7 +131,7 @@
           aria-labelledby="room-tab-notes"
           hidden={activeTab !== 'Notes'}
         >
-          <p class="tab-stub">Notes coming soon.</p>
+          <NotesTab notes={seedNotes} />
         </div>
         <div
           id="room-panel-members"
@@ -74,7 +139,7 @@
           aria-labelledby="room-tab-members"
           hidden={activeTab !== 'Members'}
         >
-          <p class="tab-stub">Members coming soon.</p>
+          <MembersTable members={seedMembers} />
         </div>
       </div>
     </div>
@@ -107,14 +172,6 @@
 
   .tab-content {
     padding-top: 8px;
-  }
-
-  .tab-stub {
-    font-family: var(--font-sans);
-    font-size: 14px;
-    color: var(--ink-fade);
-    padding: 24px 0;
-    margin: 0;
   }
 
   @media (max-width: 768px) {

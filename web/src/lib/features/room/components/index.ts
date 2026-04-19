@@ -7,3 +7,8 @@ export { default as PinnedArtifact } from './PinnedArtifact.svelte';
 export { default as MembersSidebar } from './MembersSidebar.svelte';
 export { default as TabStrip } from './TabStrip.svelte';
 export { default as DiscussionsTab } from './DiscussionsTab.svelte';
+export { default as HighlightEntry } from './HighlightEntry.svelte';
+export { default as HighlightsTab } from './HighlightsTab.svelte';
+export { default as NoteEntry } from './NoteEntry.svelte';
+export { default as NotesTab } from './NotesTab.svelte';
+export { default as MembersTable } from './MembersTable.svelte';
