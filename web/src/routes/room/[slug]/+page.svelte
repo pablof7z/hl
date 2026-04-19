@@ -1,8 +1,5 @@
 <script lang="ts">
-  import type { PageData } from './$types';
   import '$lib/features/room/styles/tokens.css';
-
-  const { data }: { data: PageData } = $props();
   import PinnedArtifact from '$lib/features/room/components/PinnedArtifact.svelte';
   import MembersSidebar from '$lib/features/room/components/MembersSidebar.svelte';
   import TabStrip, { type RoomTab } from '$lib/features/room/components/TabStrip.svelte';
@@ -15,6 +12,8 @@
   import PodcastView from '$lib/features/room/components/PodcastView.svelte';
   import UpNextVoting from '$lib/features/room/components/UpNextVoting.svelte';
   import CaptureCta from '$lib/features/room/components/CaptureCta.svelte';
+
+  const {} = $props();
 
   type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
 
@@ -178,11 +177,7 @@
   <title>Signal vs Noise · Room</title>
 </svelte:head>
 
-{#if !data.isRoomEnabled}
-  <div class="coming-soon">
-    <p>Room view coming soon</p>
-  </div>
-{:else if activeView === 'article' && selectedArtifact}
+{#if activeView === 'article' && selectedArtifact}
   <div class="view-container">
     <ArticleView
       artifact={selectedArtifact}
@@ -275,20 +270,6 @@
 {/if}
 
 <style>
-  .coming-soon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 40vh;
-    padding: var(--space-8, 2rem);
-  }
-
-  .coming-soon p {
-    font-family: var(--font-sans);
-    font-size: 1rem;
-    color: var(--ink-fade);
-  }
-
   .view-container {
     max-width: var(--container-max);
     padding: 0 var(--container-px);

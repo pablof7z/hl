@@ -1,0 +1,2 @@
+[     468ms] [ERROR] WebSocket connection to 'wss://f7z.io/' failed: Error during WebSocket handshake: Unexpected response code: 200 @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[     528ms] [ERROR] WebSocket connection to 'wss://relay-highlighter.f7z.io/' failed: Error during WebSocket handshake: Unexpected response code: 502 @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650

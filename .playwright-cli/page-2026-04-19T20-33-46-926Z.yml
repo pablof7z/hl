@@ -1,0 +1,80 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - link "Highlighter" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: Highlighter
+        - navigation [ref=e9]:
+          - link "Discover" [ref=e10] [cursor=pointer]:
+            - /url: /discover
+          - link "Communities" [ref=e11] [cursor=pointer]:
+            - /url: /community
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - button "Open search" [ref=e14] [cursor=pointer]:
+            - img [ref=e15]
+          - search:
+            - generic:
+              - img
+              - searchbox
+            - button:
+              - img
+        - generic [ref=e19]:
+          - button "Join" [ref=e20] [cursor=pointer]
+          - button "Log in" [ref=e21] [cursor=pointer]
+  - main [ref=e22]:
+    - generic [ref=e23]:
+      - generic [ref=e25]:
+        - generic [ref=e28]:
+          - heading "Signal over noise" [level=1] [ref=e29]
+          - paragraph [ref=e30]: A reading room for pieces people want to keep passing around.
+          - generic [ref=e31]:
+            - generic [ref=e32]: Open to join
+            - generic [ref=e33]: Public preview
+            - generic [ref=e34]: 3 members
+          - generic [ref=e35]:
+            - generic [ref=e36]: 0 pieces on the shelf
+            - generic [ref=e37]: 0 passages saved
+        - complementary [ref=e38]:
+          - generic [ref=e39]:
+            - generic [ref=e40]: Open to join
+            - generic [ref=e41]: Public preview
+          - paragraph [ref=e42]: Join
+          - heading "Join this community." [level=2] [ref=e43]
+          - paragraph [ref=e44]: Create a profile to join, save highlights, and share your own picks.
+          - generic [ref=e45]:
+            - link "Set up a profile" [ref=e46] [cursor=pointer]:
+              - /url: /onboarding
+            - link "All communities" [ref=e47] [cursor=pointer]:
+              - /url: /community
+      - generic [ref=e48]:
+        - generic [ref=e49]:
+          - paragraph [ref=e50]: The Collection Starts Here
+          - heading "Nothing has been shared into this room yet." [level=2] [ref=e51]
+          - paragraph [ref=e52]: The home page is live and ready for the first article, book, podcast, or video that should anchor the conversation.
+        - generic [ref=e53]:
+          - paragraph [ref=e54]: Want To Add Something?
+          - heading "Set up a profile to join in." [level=3] [ref=e55]
+          - paragraph [ref=e56]: Guests can browse the room. Members can start the shelf and keep it moving.
+          - link "Set up a profile" [ref=e57] [cursor=pointer]:
+            - /url: /onboarding
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - heading "Recent community highlights" [level=2] [ref=e61]
+          - generic [ref=e62]: 0 highlights
+        - generic [ref=e63]:
+          - paragraph [ref=e64]: No highlights shared here yet.
+          - paragraph [ref=e65]: Once people start saving passages from the items shared in this community, they will show up here.
+  - contentinfo [ref=e66]:
+    - generic [ref=e67]:
+      - generic [ref=e68]: Highlighter
+      - generic [ref=e70]:
+        - link "About" [ref=e71] [cursor=pointer]:
+          - /url: /about
+        - link "Discover" [ref=e72] [cursor=pointer]:
+          - /url: /discover
+      - generic [ref=e73]:
+        - text: Built on Nostr. Your circles, your data, always.
+        - link "6460195" [ref=e74] [cursor=pointer]:
+          - /url: /changelog

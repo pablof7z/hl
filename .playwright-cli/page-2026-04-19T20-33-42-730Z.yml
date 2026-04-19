@@ -1,0 +1,68 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - link "Highlighter" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: Highlighter
+        - navigation [ref=e9]:
+          - link "Discover" [ref=e10] [cursor=pointer]:
+            - /url: /discover
+          - link "Communities" [ref=e11] [cursor=pointer]:
+            - /url: /community
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - button "Open search" [ref=e14] [cursor=pointer]:
+            - img [ref=e15]
+          - search:
+            - generic:
+              - img
+              - searchbox
+            - button:
+              - img
+        - generic [ref=e19]:
+          - button "Join" [ref=e20] [cursor=pointer]
+          - button "Log in" [ref=e21] [cursor=pointer]
+  - main [ref=e22]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - heading "Explore public circles" [level=1] [ref=e25]
+        - link "Sign in to create" [ref=e26] [cursor=pointer]:
+          - /url: /community/create
+      - generic [ref=e27]:
+        - generic [ref=e28]:
+          - generic [ref=e29]:
+            - generic [ref=e30]: Search
+            - searchbox "Search" [ref=e31]
+          - generic [ref=e33]:
+            - generic [ref=e34]: Sort
+            - combobox "Sort" [ref=e35]:
+              - option "Featured" [selected]
+              - option "Newest"
+              - option "A-Z"
+        - paragraph [ref=e36]: Showing 1 of 1 circle
+        - article [ref=e38]:
+          - link "Signal over noise" [ref=e39] [cursor=pointer]:
+            - /url: /community/signal-over-noise
+            - generic [ref=e41]:
+              - generic [ref=e42]:
+                - paragraph [ref=e43]: Signal over noise
+                - generic [ref=e44]:
+                  - generic [ref=e45]: public
+                  - generic [ref=e46]: open
+              - paragraph [ref=e47]: No description yet. This group is live on the relay and ready for sources, highlights, and discussion.
+              - generic [ref=e48]:
+                - generic [ref=e49]: 3 members
+                - generic [ref=e50]: /community/signal-over-noise
+  - contentinfo [ref=e51]:
+    - generic [ref=e52]:
+      - generic [ref=e53]: Highlighter
+      - generic [ref=e55]:
+        - link "About" [ref=e56] [cursor=pointer]:
+          - /url: /about
+        - link "Discover" [ref=e57] [cursor=pointer]:
+          - /url: /discover
+      - generic [ref=e58]:
+        - text: Built on Nostr. Your circles, your data, always.
+        - link "6460195" [ref=e59] [cursor=pointer]:
+          - /url: /changelog

@@ -1,0 +1,102 @@
+[     525ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  174557ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  217591ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  224537ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  224907ms] [ERROR] WebSocket connection to 'wss://relay.damus.io/' failed: Error during WebSocket handshake: Unexpected response code: 503 @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[  228348ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  314488ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  464565ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  467045ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  470113ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  472973ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  476654ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  483078ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  613124ms] [ERROR] WebSocket connection to 'wss://relay.damus.io/' failed: Error during WebSocket handshake: Unexpected response code: 503 @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[  930753ms] [ERROR] WebSocket connection to 'wss://relay.damus.io/' failed: Error during WebSocket handshake: Unexpected response code: 503 @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[  936944ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  949502ms] ReferenceError: data is not defined
+
+	in <unknown>
+	in +page.svelte
+	in +layout.svelte
+	in +layout.svelte
+	in root.svelte
+	in undefined
+
+    at http://localhost:5174/src/routes/room/[slug]/+page.svelte?t=1776631839483:486:5
+    at http://localhost:5174/node_modules/.vite/deps/chunk-EEJWA6UK.js?v=e5489070:800:5
+    at update_reaction (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:4016:18)
+    at update_effect (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:4155:21)
+    at create_effect (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:3499:7)
+    at block (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:3665:17)
+    at Module.if_block (http://localhost:5174/node_modules/.vite/deps/chunk-EEJWA6UK.js?v=e5489070:798:3)
+    at http://localhost:5174/src/routes/room/[slug]/+page.svelte?t=1776631839483:485:14
+    at Module.add_svelte_meta (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:602:12)
+    at _page (http://localhost:5174/src/routes/room/[slug]/+page.svelte?t=1776631839483:484:5)
+[  953209ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[  965207ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1011223ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1011275ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1051260ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1051363ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1051365ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1052146ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1052264ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1052265ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1052793ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1052899ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1052901ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1053124ms] [ERROR] WebSocket connection to 'wss://relay.damus.io/' failed: Error during WebSocket handshake: Unexpected response code: 503 @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1053126ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1053137ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1054292ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1054399ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1054402ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1055459ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1055558ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1055560ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1055833ms] [ERROR] WebSocket connection to 'wss://relay.damus.io/' failed: Error during WebSocket handshake: Unexpected response code: 503 @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1055835ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1055845ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1057686ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1057794ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1057796ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1060009ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1060081ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1060084ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1064861ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1064960ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1064965ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1074424ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1074541ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1074544ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1081519ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1081595ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5174/room/signal-vs-noise:0
+[ 1081840ms] [ERROR] WebSocket connection to 'wss://relay.highlighter.com/' failed: Error in connection establishment: net::ERR_SSL_PROTOCOL_ERROR @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1081851ms] [ERROR] WebSocket connection to 'wss://purplepag.es/' failed: Error in connection establishment: net::ERR_SSL_PROTOCOL_ERROR @ http://localhost:5174/node_modules/.vite/deps/chunk-ZJOBL6MA.js?v=e5489070:15650
+[ 1094681ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1094781ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1094886ms] [WARNING] Failed to hydrate:  HierarchyRequestError: Failed to execute 'appendChild' on 'Node': This node type does not support this method.
+
+	in <unknown>
+	in +layout.svelte
+	in root.svelte
+	in undefined
+
+    at Module.child (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:4780:27)
+    at _page (http://localhost:5174/src/routes/relays/+page.svelte:121:16)
+    at http://localhost:5174/node_modules/.vite/deps/chunk-EEJWA6UK.js?v=e5489070:312:56
+    at update_reaction (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:4016:18)
+    at update_effect (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:4155:21)
+    at create_effect (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:3499:7)
+    at branch (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:3679:10)
+    at http://localhost:5174/node_modules/.vite/deps/chunk-EEJWA6UK.js?v=e5489070:308:17
+    at update_reaction (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:4016:18)
+    at update_effect (http://localhost:5174/node_modules/.vite/deps/chunk-XN3RWHDP.js?v=e5489070:4155:21) @ http://localhost:5174/node_modules/@sveltejs/kit/src/runtime/client/client.js?v=e5489070:3323
+[ 1095166ms] [ERROR] Failed to load resource: net::ERR_SSL_PROTOCOL_ERROR @ https://140.f7z.io/:0
+[ 1095233ms] [ERROR] Access to fetch at 'https://algo.utxo.one/' from origin 'http://localhost:5174' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://localhost:5174/room/signal-vs-noise:0
+[ 1095233ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://algo.utxo.one/:0
+[ 1141834ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1148802ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1152332ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
+[ 1165655ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg:0
