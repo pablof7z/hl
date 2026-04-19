@@ -3,3 +3,7 @@ export { default as MemberStack } from './components/MemberStack.svelte';
 export { default as FilterPill } from './components/FilterPill.svelte';
 export { default as FilterRow } from './components/FilterRow.svelte';
 export { default as Block } from './components/Block.svelte';
+export { default as PinnedArtifact } from './components/PinnedArtifact.svelte';
+export { default as MembersSidebar } from './components/MembersSidebar.svelte';
+export { default as TabStrip } from './components/TabStrip.svelte';
+export { default as DiscussionsTab } from './components/DiscussionsTab.svelte';
