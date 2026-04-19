@@ -51,6 +51,11 @@
     gap: 14px;
   }
 
+  .sidebar-stack {
+    overflow-y: auto;
+    max-height: 200px;
+  }
+
 
 
   .sidebar-count {

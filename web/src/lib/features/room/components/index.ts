@@ -17,3 +17,5 @@ export { default as HighlightCard } from './HighlightCard.svelte';
 export { default as ArtifactCard } from './ArtifactCard.svelte';
 export { default as ShelfTile } from './ShelfTile.svelte';
 export { default as ActivityFeed } from './ActivityFeed.svelte';
+export { default as UpNextVoting } from './UpNextVoting.svelte';
+export { default as CaptureCta } from './CaptureCta.svelte';

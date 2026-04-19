@@ -10,6 +10,8 @@
   import ArtifactCard from '$lib/features/room/components/ArtifactCard.svelte';
   import ArticleView from '$lib/features/room/components/ArticleView.svelte';
   import PodcastView from '$lib/features/room/components/PodcastView.svelte';
+  import UpNextVoting from '$lib/features/room/components/UpNextVoting.svelte';
+  import CaptureCta from '$lib/features/room/components/CaptureCta.svelte';
 
   type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
 
@@ -128,6 +130,32 @@
     }
   ];
 
+  const roomTitle = 'Signal vs Noise';
+
+  const seedUpNext = [
+    {
+      id: 'u1',
+      title: 'The Bitcoin Standard',
+      type: 'book' as const,
+      voterCount: 4,
+      voterColors: [1, 2, 3, 5],
+    },
+    {
+      id: 'u2',
+      title: 'The Great Mental Models',
+      type: 'podcast' as const,
+      voterCount: 3,
+      voterColors: [1, 4, 6],
+    },
+    {
+      id: 'u3',
+      title: 'Principles for Dealing with the Changing World',
+      type: 'article' as const,
+      voterCount: 2,
+      voterColors: [2, 3],
+    },
+  ];
+
   let activeTab = $state<RoomTab>('Discussions');
   let activeView = $state<'room' | 'article' | 'podcast'>('room');
   let selectedArtifact = $state<ArtifactCardProps | null>(null);
@@ -168,9 +196,11 @@
     <aside class="room-sidebar">
       <MembersSidebar members={seedMembers}>
         {#snippet children()}
-          Signal vs Noise
+          {roomTitle}
         {/snippet}
       </MembersSidebar>
+      <UpNextVoting items={seedUpNext} />
+      <CaptureCta {roomTitle} />
     </aside>
 
     <main class="room-main">
@@ -255,6 +285,15 @@
     padding-bottom: 80px;
   }
 
+  .room-sidebar {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
   .room-main {
     display: flex;
     flex-direction: column;
@@ -301,6 +340,7 @@
 
     .room-sidebar {
       order: 2;
+      position: static;
     }
 
     .room-main {
