@@ -115,6 +115,25 @@
     margin: 0;
   }
 
+  /* ── Responsive ─────────────────────────────────────────────── */
+  @media (max-width: 767px) {
+    .pinned-artifact {
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .artifact-cover-wrap {
+      width: 100%;
+    }
+
+    .artifact-cover {
+      width: 100%;
+      height: auto;
+      max-height: 200px;
+      object-fit: cover;
+    }
+  }
+
   /* ── Meta ───────────────────────────────────────────────────── */
   .artifact-meta {
     display: flex;

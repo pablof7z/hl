@@ -96,6 +96,11 @@
     border-color: var(--brand-accent);
   }
 
+  .artifact-card:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+  }
+
   .artifact-cover {
     flex-shrink: 0;
   }

@@ -128,6 +128,11 @@
     border-color: var(--brand-accent);
   }
 
+  .vote-btn:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+  }
+
   .vote-btn.voted .vote-count {
     color: var(--surface);
   }

@@ -294,6 +294,12 @@
     color: var(--brand-accent);
   }
 
+  .back-btn:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius);
+  }
+
   /* Hero */
   .article-hero {
     display: flex;
@@ -520,7 +526,7 @@
     justify-content: space-between;
   }
 
-  @media (max-width: 768px) {
+  @media (max-width: 767px) {
     .article-hero {
       flex-direction: column;
     }
@@ -530,12 +536,17 @@
       max-width: 100%;
     }
 
+    .article-body {
+      max-width: 100%;
+      margin: 0;
+    }
+
     .article-body-layout {
       grid-template-columns: 1fr;
     }
 
     .article-margin {
-      display: none;
+      position: static;
     }
   }
 </style>

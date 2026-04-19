@@ -158,6 +158,7 @@
     gap: 12px;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
     padding-bottom: 8px;
     /* Custom scrollbar */
     scrollbar-width: thin;

@@ -335,9 +335,10 @@
     padding-top: 8px;
   }
 
-  @media (max-width: 768px) {
+  @media (max-width: 767px) {
     .room-layout {
       grid-template-columns: 1fr;
+      padding-top: 24px;
     }
 
     .room-sidebar {

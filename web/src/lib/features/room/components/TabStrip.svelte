@@ -54,6 +54,13 @@
     display: flex;
     border-bottom: 1px solid var(--rule);
     gap: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .tab-strip::-webkit-scrollbar {
+    display: none;
   }
 
   .tab-btn {
@@ -77,5 +84,10 @@
   .tab-btn.tab-active {
     color: var(--ink);
     border-bottom-color: var(--brand-accent);
+  }
+
+  .tab-btn:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: -2px;
   }
 </style>

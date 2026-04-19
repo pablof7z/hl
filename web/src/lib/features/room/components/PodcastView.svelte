@@ -226,6 +226,12 @@
     color: var(--brand-accent);
   }
 
+  .back-btn:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius);
+  }
+
   /* Hero */
   .podcast-hero {
     display: flex;
@@ -388,6 +394,18 @@
 
   .chapter-btn:hover .chapter-title {
     color: var(--brand-accent);
+  }
+
+  .chapter-btn:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius);
+  }
+
+  .play-overlay:focus-visible {
+    outline: 2px solid var(--surface);
+    outline-offset: -4px;
+    opacity: 1;
   }
 
   .chapter-item.active .chapter-time,

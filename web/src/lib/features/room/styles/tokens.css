@@ -60,3 +60,13 @@
     --container-px: 20px;
   }
 }
+
+/* ── Focus ring (keyboard navigation) ───────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
+*:focus:not(:focus-visible) {
+  outline: none;
+}
