@@ -29,23 +29,24 @@
     onHighlightClick?: (artifact: ArtifactRef) => void;
   } = $props();
 
+  const isClickable = $derived(!!(onHighlightClick && artifact));
+
   function handleClick() {
     if (onHighlightClick && artifact) {
       onHighlightClick(artifact);
-    } else {
-      console.log('highlight clicked:', id);
     }
   }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<article
+<div
   class="highlight-card"
-  role="listitem"
+  class:clickable={isClickable}
+  role="button"
+  tabindex="0"
   data-id={id}
+  aria-label="{memberName} on {artifactTitle}: {quote}"
   onclick={handleClick}
-  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
-  style:cursor={onHighlightClick && artifact ? 'pointer' : 'default'}
+  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } }}
 >
   <p class="highlight-quote">{quote}</p>
   <div class="highlight-footer">
@@ -55,7 +56,7 @@
     <span class="highlight-name">{memberName}</span>
     <span class="highlight-artifact">{artifactTitle}</span>
   </div>
-</article>
+</div>
 
 <style>
   .highlight-card {
@@ -70,6 +71,21 @@
     flex-direction: column;
     gap: 12px;
     scroll-snap-align: start;
+    text-align: left;
+  }
+
+  .highlight-card.clickable {
+    cursor: pointer;
+    transition: background-color var(--transition);
+  }
+
+  .highlight-card.clickable:hover {
+    background-color: var(--surface-muted);
+  }
+
+  .highlight-card.clickable:focus-visible {
+    outline: 2px solid var(--brand-accent);
+    outline-offset: 2px;
   }
 
   .highlight-quote {

@@ -3,13 +3,29 @@
   import HighlightEntry from './HighlightEntry.svelte';
   import HighlightCard from './HighlightCard.svelte';
 
+  type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
+
+  interface ArtifactRef {
+    id: string;
+    type: ArtifactType;
+    title: string;
+    author?: string;
+    cover?: string;
+  }
+
   const seedHighlightCards = [
     {
       id: 'hc1',
       quote: '"The death of distance" — the communication revolution compresses both time and space.',
       memberColorIndex: 1,
       memberName: 'craig_烈日',
-      artifactTitle: 'The Sovereign Individual'
+      artifactTitle: 'The Death of Distance',
+      artifact: {
+        id: 'a1',
+        type: 'article' as ArtifactType,
+        title: 'The Death of Distance: How the Communications Revolution Is Changing Our Lives',
+        author: 'Frances Cairncross'
+      }
     },
     {
       id: 'hc2',
@@ -17,14 +33,26 @@
         'The transition from the Industrial Age to the Information Age will be as disruptive as the prior agricultural-to-industrial shift.',
       memberColorIndex: 2,
       memberName: 'dergigi',
-      artifactTitle: 'The Sovereign Individual'
+      artifactTitle: 'The Death of Distance',
+      artifact: {
+        id: 'a1',
+        type: 'article' as ArtifactType,
+        title: 'The Death of Distance: How the Communications Revolution Is Changing Our Lives',
+        author: 'Frances Cairncross'
+      }
     },
     {
       id: 'hc3',
       quote: 'Their framework for understanding historical transitions applies directly to the current era.',
       memberColorIndex: 6,
       memberName: 'nick',
-      artifactTitle: 'The Sovereign Individual'
+      artifactTitle: 'The Sovereign Individual Podcast',
+      artifact: {
+        id: 'a2',
+        type: 'podcast' as ArtifactType,
+        title: 'The Sovereign Individual with James Dale Davidson',
+        author: 'What Bitcoin Did'
+      }
     }
   ];
 
@@ -37,9 +65,11 @@
   }
 
   let {
-    highlights
+    highlights,
+    onHighlightClick
   }: {
     highlights: HighlightEntryProps[];
+    onHighlightClick?: (artifact: ArtifactRef) => void;
   } = $props();
 
   const allNames = $derived([
@@ -71,6 +101,8 @@
           memberColorIndex={card.memberColorIndex}
           memberName={card.memberName}
           artifactTitle={card.artifactTitle}
+          artifact={card.artifact}
+          {onHighlightClick}
         />
       {/each}
     </div>

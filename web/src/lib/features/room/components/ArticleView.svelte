@@ -45,21 +45,21 @@
     'var(--h-amber-l)'
   ] as const;
 
-  const TINT_HEX = [
-    '#F5D896',
-    '#C8D4B5',
-    '#BCD0E0',
-    '#EAC6C8',
-    '#D0C4E0',
-    '#F5E6A8'
+  const TINT_BG_VARS = [
+    'var(--h-amber-bg)',
+    'var(--h-sage-bg)',
+    'var(--h-blue-bg)',
+    'var(--h-rose-bg)',
+    'var(--h-lilac-bg)',
+    'var(--h-amber-l-bg)'
   ] as const;
 
   function getMemberColor(colorIndex: number): string {
     return TINT_VARS[((colorIndex - 1) % 6 + 6) % 6];
   }
 
-  function getMemberHex(colorIndex: number): string {
-    return TINT_HEX[((colorIndex - 1) % 6 + 6) % 6];
+  function getMemberBgColor(colorIndex: number): string {
+    return TINT_BG_VARS[((colorIndex - 1) % 6 + 6) % 6];
   }
 
   type BodyBlock =
@@ -180,12 +180,12 @@
         {#if block.type === 'paragraph'}
           {#if block.highlightMemberColorIndex && block.highlightMemberName}
             {@const color = getMemberColor(block.highlightMemberColorIndex)}
-            {@const hex = getMemberHex(block.highlightMemberColorIndex)}
+            {@const bg = getMemberBgColor(block.highlightMemberColorIndex)}
             {@const name = block.highlightMemberName}
             <p class="body-paragraph">
               <mark
                 class="inline-mark"
-                style:background="{hex}33"
+                style:background={bg}
                 style:border-left="3px solid {color}"
                 title="{name} highlighted this"
               >{block.text}</mark>
@@ -275,7 +275,7 @@
   }
 
   .article-nav {
-    padding: 0 var(--container-px, 40px);
+    padding: 0;
   }
 
   .back-btn {
@@ -299,7 +299,6 @@
     display: flex;
     gap: 40px;
     align-items: flex-start;
-    padding: 0 var(--container-px, 40px);
   }
 
   .hero-cover {
@@ -364,12 +363,12 @@
     display: grid;
     grid-template-columns: 1fr 220px;
     gap: 40px;
-    padding: 0 var(--container-px, 40px);
     align-items: start;
   }
 
   .article-body {
     max-width: 680px;
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: 20px;

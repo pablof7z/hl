@@ -47,13 +47,6 @@
     console.log('podcast player:', playing ? 'play' : 'pause');
   }
 
-  function handleScrubClick(e: MouseEvent) {
-    const target = e.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    scrubPercent = ((e.clientX - rect.left) / rect.width) * 100;
-    console.log('seek to:', scrubPercent.toFixed(1) + '%');
-  }
-
   function handleVolumeChange(e: Event) {
     const val = (e.target as HTMLInputElement).value;
     console.log('volume:', val);
@@ -91,40 +84,43 @@
     <div class="time-scrub">
       <span class="time-display">{currentTime} / {duration}</span>
 
-      <!-- Scrubber track -->
-      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-      <div
-        class="scrubber-track"
-        onclick={handleScrubClick}
-        role="slider"
-        aria-label="Seek position"
-        aria-valuenow={scrubPercent}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        tabindex="0"
-      >
-        <div class="scrubber-fill" style:width="{scrubPercent}%"></div>
+      <!-- Scrubber wrapper with native range input -->
+      <div class="scrubber-wrapper">
+        <input
+          type="range"
+          class="scrubber-input"
+          min="0"
+          max="100"
+          step="0.1"
+          bind:value={scrubPercent}
+          aria-label="Seek position"
+          aria-valuetext="{currentTime} of {duration}"
+          oninput={() => console.log('seek to:', scrubPercent.toFixed(1) + '%')}
+        />
 
-        <!-- Highlight spans -->
-        {#each highlightSpans as span, i (i)}
-          {@const startPct = spanToPercent(span.start)}
-          {@const endPct = spanToPercent(span.end)}
-          {@const widthPct = Math.max(endPct - startPct, 1.5)}
-          {@const color = getMemberColor(span.colorIndex)}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div
-            class="highlight-span"
-            style:left="{startPct}%"
-            style:width="{widthPct}%"
-            style:background={color}
-            onmouseenter={() => (hoveredSpan = `${span.memberName} highlighted at ${span.start}`)}
-            onmouseleave={() => (hoveredSpan = null)}
-          ></div>
-        {/each}
+        <!-- Highlight spans overlaid on scrubber track -->
+        <div class="scrubber-spans" aria-hidden="true">
+          {#each highlightSpans as span, i (i)}
+            {@const startPct = spanToPercent(span.start)}
+            {@const endPct = spanToPercent(span.end)}
+            {@const widthPct = Math.max(endPct - startPct, 1.5)}
+            {@const color = getMemberColor(span.colorIndex)}
+            <div
+              class="highlight-span"
+              role="presentation"
+              style:left="{startPct}%"
+              style:width="{widthPct}%"
+              style:background={color}
+              title="{span.memberName} highlighted at {span.start}"
+              onmouseenter={() => (hoveredSpan = `${span.memberName} highlighted at ${span.start}`)}
+              onmouseleave={() => (hoveredSpan = null)}
+            ></div>
+          {/each}
 
-        {#if hoveredSpan}
-          <div class="span-tooltip">{hoveredSpan}</div>
-        {/if}
+          {#if hoveredSpan}
+            <div class="span-tooltip">{hoveredSpan}</div>
+          {/if}
+        </div>
       </div>
     </div>
 
@@ -225,22 +221,25 @@
     color: var(--ink-soft);
   }
 
-  .scrubber-track {
+  .scrubber-wrapper {
     position: relative;
-    height: 6px;
-    background-color: var(--surface-muted);
-    border-radius: 3px;
-    cursor: pointer;
-    overflow: visible;
   }
 
-  .scrubber-fill {
+  .scrubber-input {
+    width: 100%;
+    height: 6px;
+    accent-color: var(--brand-accent);
+    cursor: pointer;
+    display: block;
+  }
+
+  .scrubber-spans {
     position: absolute;
+    top: 50%;
     left: 0;
-    top: 0;
-    height: 100%;
-    background-color: var(--brand-accent);
-    border-radius: 3px;
+    right: 0;
+    transform: translateY(-50%);
+    height: 6px;
     pointer-events: none;
   }
 
@@ -290,5 +289,25 @@
   .volume-slider {
     width: 80px;
     accent-color: var(--brand-accent);
+  }
+
+  @media (max-width: 768px) {
+    .controls-row {
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .play-btn {
+      flex-shrink: 0;
+    }
+
+    .time-scrub {
+      width: 100%;
+      order: 3;
+    }
+
+    .volume-control {
+      margin-left: auto;
+    }
   }
 </style>

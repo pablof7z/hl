@@ -25,6 +25,17 @@
   --h-lilac: #D0C4E0;
   --h-amber-l: #F5E6A8;
 
+  /* ── Member tint backgrounds (20% opacity) ──────────────────────────────── */
+  --h-amber-bg: #F5D89633;
+  --h-sage-bg: #C8D4B533;
+  --h-blue-bg: #BCD0E033;
+  --h-rose-bg: #EAC6C833;
+  --h-lilac-bg: #D0C4E033;
+  --h-amber-l-bg: #F5E6A833;
+
+  /* ── Overlay ────────────────────────────────────────────────────────────── */
+  --overlay-dark: rgba(0, 0, 0, 0.35);
+
   /* ── Typography ───────────────────────────────────────────────────────── */
   --font-sans: 'Inter', sans-serif;
   --font-serif: 'Fraunces', serif;

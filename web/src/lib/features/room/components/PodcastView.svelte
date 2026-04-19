@@ -261,7 +261,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--overlay-dark);
     border: none;
     border-radius: var(--radius);
     cursor: pointer;

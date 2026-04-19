@@ -213,7 +213,7 @@
             aria-labelledby="room-tab-highlights"
             hidden={activeTab !== 'Highlights'}
           >
-            <HighlightsTab highlights={seedHighlights} />
+            <HighlightsTab highlights={seedHighlights} onHighlightClick={handleArtifactClick} />
           </div>
           <div
             id="room-panel-notes"
