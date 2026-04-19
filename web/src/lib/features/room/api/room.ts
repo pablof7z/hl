@@ -1,5 +1,5 @@
 import { NDKKind, NDKSimpleGroupMetadata, profileFromEvent } from '@nostr-dev-kit/ndk';
-import type { NDKEvent } from '@nostr-dev-kit/ndk';
+import type { NDKEvent, NDKKind as NDKKindType } from '@nostr-dev-kit/ndk';
 import { fetchEventsForSsr } from '$lib/server/nostr';
 import { GROUP_RELAY_URLS } from '$lib/ndk/config';
 import { displayName, shortPubkey } from '$lib/ndk/format';
@@ -60,7 +60,7 @@ export interface Room {
 }
 
 // kind:999 is the made-up pin/vote kind used by Highlighter (see decision D-01 in room-ui.md)
-const KIND_PIN = 999;
+const KIND_PIN = 999 as NDKKindType;
 
 export async function getRoom(slug: string): Promise<Room | null> {
   const groupId = slug.trim();
