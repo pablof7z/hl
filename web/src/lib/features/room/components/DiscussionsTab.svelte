@@ -57,7 +57,7 @@
   />
 
   <div class="discussions-list" role="list">
-    {#each filteredDiscussions as discussion (discussion.id)}
+    {#each filteredDiscussions as discussion, index (discussion.id)}
       <div role="listitem">
         <DiscussionRow
           id={discussion.id}
@@ -66,6 +66,7 @@
           preview={discussion.preview}
           replyCount={discussion.replyCount}
           lastActivity={discussion.lastActivity}
+          isLast={index === filteredDiscussions.length - 1}
         />
       </div>
     {/each}

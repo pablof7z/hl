@@ -7,7 +7,8 @@
     memberName,
     preview,
     replyCount,
-    lastActivity
+    lastActivity,
+    isLast = false
   }: {
     id: string;
     memberColorIndex: number;
@@ -15,10 +16,11 @@
     preview: string;
     replyCount: number;
     lastActivity: string;
+    isLast?: boolean;
   } = $props();
 </script>
 
-<a class="discussion-row" href="/room/{id}">
+<a class="discussion-row" class:last-row={isLast} href="/room/{id}">
   <div class="discussion-meta">
     <div class="discussion-author" aria-hidden="true">
       <MemberDot colorIndex={memberColorIndex} size="sm" />
@@ -46,7 +48,7 @@
     background-color: var(--surface-muted);
   }
 
-  .discussion-row:last-child {
+  .discussion-row.last-row {
     border-bottom: none;
   }
 
