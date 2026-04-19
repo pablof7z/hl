@@ -1,12 +1,6 @@
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { fetchCommunities } from '$lib/server/communities';
 
-export const load: PageServerLoad = async ({ setHeaders }) => {
-  setHeaders({
-    'cache-control': 'public, max-age=30, s-maxage=120, stale-while-revalidate=600'
-  });
-
-  return {
-    communities: await fetchCommunities({ limit: 64, visibility: 'public' })
-  };
+export const load: PageServerLoad = () => {
+  redirect(301, '/room');
 };
