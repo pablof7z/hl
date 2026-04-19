@@ -58,14 +58,16 @@
 
   <div class="discussions-list" role="list">
     {#each filteredDiscussions as discussion (discussion.id)}
-      <DiscussionRow
-        id={discussion.id}
-        memberColorIndex={discussion.memberColorIndex}
-        memberName={discussion.memberName}
-        preview={discussion.preview}
-        replyCount={discussion.replyCount}
-        lastActivity={discussion.lastActivity}
-      />
+      <div role="listitem">
+        <DiscussionRow
+          id={discussion.id}
+          memberColorIndex={discussion.memberColorIndex}
+          memberName={discussion.memberName}
+          preview={discussion.preview}
+          replyCount={discussion.replyCount}
+          lastActivity={discussion.lastActivity}
+        />
+      </div>
     {/each}
   </div>
 
