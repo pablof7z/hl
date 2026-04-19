@@ -65,6 +65,28 @@ PUBLIC_NOSTR_RELAYS=wss://relay.damus.io,wss://purplepag.es,wss://relay.primal.n
 
 If omitted, the template uses those three relays by default.
 
+To enable durable SSR NDK caching on Vercel, provide either Upstash Redis REST credentials:
+
+```bash
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+```
+
+or Vercel KV REST credentials:
+
+```bash
+KV_REST_API_URL=
+KV_REST_API_TOKEN=
+```
+
+Server renders read from the cache first and fall back to relays on misses. The default namespace is
+`highlighter:ssr:v1` and entries expire after one hour. Override those with:
+
+```bash
+NDK_SSR_CACHE_NAMESPACE=
+NDK_SSR_CACHE_TTL_SECONDS=
+```
+
 To enable managed NIP-05 registration in onboarding, add:
 
 ```bash
@@ -73,7 +95,8 @@ PUBLIC_NIP05_DOMAIN=your-domain.com
 
 The value can be a bare domain or a full URL. If set, onboarding shows an optional handle field, checks `username@your-domain.com` availability, and the app serves `/.well-known/nostr.json`.
 
-For durable registrations on Vercel, also provide a writable KV-compatible store:
+For durable registrations on Vercel, also provide a writable KV-compatible store. The same Vercel KV
+credentials can back both managed handles and SSR NDK caching:
 
 ```bash
 KV_REST_API_URL=

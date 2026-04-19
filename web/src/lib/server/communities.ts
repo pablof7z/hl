@@ -5,7 +5,7 @@ import {
   type CommunitySummary,
   type CommunityVisibility
 } from '$lib/ndk/groups';
-import { getServerNdk } from '$lib/server/nostr';
+import { fetchEventsForSsr } from '$lib/server/nostr';
 
 type FetchCommunitiesOptions = {
   limit?: number;
@@ -22,17 +22,19 @@ export async function fetchCommunities(
     limit: options.limit ?? 32,
     visibility: options.visibility ?? 'all'
   };
-  const ndk = await getServerNdk(GROUP_RELAY_URLS);
   const fetchLimit = visibility === 'all' ? limit : Math.max(limit * 4, 96);
   const metadataEvents = Array.from(
-    (await ndk.fetchEvents(
+    (await fetchEventsForSsr(
       {
         kinds: [NDKKind.GroupMetadata],
         limit: fetchLimit
       },
-      { closeOnEose: true }
+      `fetchCommunities(${fetchLimit})`,
+      { relays: GROUP_RELAY_URLS }
     )) ?? []
-  ).sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
+  )
+    .sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0))
+    .slice(0, fetchLimit);
 
   return (await buildCommunitySummariesFromMetadataEvents(metadataEvents))
     .filter((community): community is CommunitySummary => Boolean(community))
@@ -74,14 +76,14 @@ export async function fetchCommunityById(groupId: string): Promise<CommunitySumm
   const trimmedGroupId = groupId.trim();
   if (!trimmedGroupId) return undefined;
 
-  const ndk = await getServerNdk(GROUP_RELAY_URLS);
   const metadataEvents = Array.from(
-    (await ndk.fetchEvents(
+    (await fetchEventsForSsr(
       {
         kinds: [NDKKind.GroupMetadata],
         '#d': [trimmedGroupId]
       },
-      { closeOnEose: true }
+      `fetchCommunityById(${trimmedGroupId})`,
+      { relays: GROUP_RELAY_URLS }
     )) ?? []
   ).sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
 
@@ -107,15 +109,15 @@ async function fetchReplaceableGroupEvents(
     return new Map();
   }
 
-  const ndk = await getServerNdk(GROUP_RELAY_URLS);
   const events = Array.from(
-    (await ndk.fetchEvents(
+    (await fetchEventsForSsr(
       {
         kinds: [kind],
         '#d': groupIds,
         limit: Math.max(groupIds.length * 2, 32)
       },
-      { closeOnEose: true }
+      `fetchReplaceableGroupEvents(${kind},${groupIds.length})`,
+      { relays: GROUP_RELAY_URLS }
     )) ?? []
   );
 
@@ -126,15 +128,15 @@ async function fetchLatestGroupEvent(
   kind: NDKKind.GroupAdmins | NDKKind.GroupMembers,
   groupId: string
 ): Promise<NDKEvent | undefined> {
-  const ndk = await getServerNdk(GROUP_RELAY_URLS);
   const events = Array.from(
-    (await ndk.fetchEvents(
+    (await fetchEventsForSsr(
       {
         kinds: [kind],
         '#d': [groupId],
         limit: 1
       },
-      { closeOnEose: true }
+      `fetchLatestGroupEvent(${kind},${groupId})`,
+      { relays: GROUP_RELAY_URLS }
     )) ?? []
   ).sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
 

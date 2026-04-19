@@ -12,7 +12,7 @@ import {
 } from '$lib/ndk/format';
 import { GROUP_RELAY_URLS } from '$lib/ndk/config';
 import { buildCommunitySummariesFromMetadataEvents } from '$lib/server/communities';
-import { fetchProfilesByPubkeys, getServerNdk } from '$lib/server/nostr';
+import { fetchEventsForSsr, fetchProfilesByPubkeys } from '$lib/server/nostr';
 import {
   DEFAULT_SEARCH_SECTION_LIMIT,
   MAX_SEARCH_SECTION_LIMIT,
@@ -42,23 +42,24 @@ export async function searchRelayContent(
     };
   }
 
-  const ndk = await getServerNdk(GROUP_RELAY_URLS);
   const [communityEvents, articleEvents] = await Promise.all([
-    ndk.fetchEvents(
+    fetchEventsForSsr(
       {
         kinds: [NDKKind.GroupMetadata],
         search: normalizedQuery,
         limit: Math.max(communityLimit * 3, DEFAULT_SEARCH_SECTION_LIMIT)
       },
-      { closeOnEose: true }
+      `searchRelayContent:communities(${normalizedQuery})`,
+      { relays: GROUP_RELAY_URLS }
     ),
-    ndk.fetchEvents(
+    fetchEventsForSsr(
       {
         kinds: [30023],
         search: normalizedQuery,
         limit: articleLimit
       },
-      { closeOnEose: true }
+      `searchRelayContent:articles(${normalizedQuery})`,
+      { relays: GROUP_RELAY_URLS }
     )
   ]);
 

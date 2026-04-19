@@ -8,7 +8,7 @@ import {
 import type { PodcastArtifactData } from '$lib/features/podcasts/types';
 import { DEFAULT_RELAYS, GROUP_RELAY_URLS } from '$lib/ndk/config';
 import { fetchPodcastExperienceForArtifact as fetchPodcastData } from '$lib/server/podcasts';
-import { getServerNdk } from '$lib/server/nostr';
+import { fetchEventsForSsr, getServerNdk } from '$lib/server/nostr';
 
 export async function fetchArtifactForGroup(
   groupId: string,
@@ -18,18 +18,20 @@ export async function fetchArtifactForGroup(
   const trimmedArtifactId = artifactId.trim();
   if (!trimmedGroupId || !trimmedArtifactId) return undefined;
 
-  const ndk = await getServerNdk(GROUP_RELAY_URLS);
   const events = Array.from(
-    (await ndk.fetchEvents(
+    (await fetchEventsForSsr(
       {
         kinds: [HIGHLIGHTER_ARTIFACT_SHARE_KIND],
         '#h': [trimmedGroupId],
         '#d': [trimmedArtifactId],
         limit: 10
       },
-      { closeOnEose: true }
+      `fetchArtifactForGroup(${trimmedGroupId},${trimmedArtifactId})`,
+      { relays: GROUP_RELAY_URLS }
     )) ?? []
-  ).sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
+  )
+    .sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0))
+    .slice(0, 10);
 
   const event = events[0];
   return event ? artifactFromEvent(event) : undefined;
@@ -39,7 +41,7 @@ export async function fetchNostrArticleForArtifact(
   artifact:
     | Pick<ArtifactRecord, 'referenceTagName' | 'referenceTagValue' | 'referenceKind'>
     | undefined
-) : Promise<{
+): Promise<{
   event?: NDKEvent;
   author?: NDKUser;
   profile?: NDKUserProfile;
@@ -53,18 +55,21 @@ export async function fetchNostrArticleForArtifact(
     return {};
   }
 
-  const ndk = await getServerNdk(DEFAULT_RELAYS);
+  const ndk = await getServerNdk(DEFAULT_RELAYS, { connect: false });
   const events = Array.from(
-    (await ndk.fetchEvents(
+    (await fetchEventsForSsr(
       {
         kinds: [parsed.kind],
         authors: [parsed.pubkey],
         '#d': [parsed.identifier],
         limit: 10
       },
-      { closeOnEose: true }
+      `fetchNostrArticleForArtifact(${artifact.referenceTagValue})`,
+      { relays: DEFAULT_RELAYS }
     )) ?? []
-  ).sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
+  )
+    .sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0))
+    .slice(0, 10);
 
   const event = events[0];
   if (!event) {
