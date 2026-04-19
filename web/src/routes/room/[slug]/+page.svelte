@@ -12,8 +12,9 @@
   import PodcastView from '$lib/features/room/components/PodcastView.svelte';
   import UpNextVoting from '$lib/features/room/components/UpNextVoting.svelte';
   import CaptureCta from '$lib/features/room/components/CaptureCta.svelte';
+  import type { PageData } from './$types';
 
-  const {} = $props();
+  let { data }: { data: PageData } = $props();
 
   type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
 
@@ -132,7 +133,7 @@
     }
   ];
 
-  const roomTitle = 'Signal vs Noise';
+  const roomTitle = $derived(data.room?.name ?? 'Signal vs Noise');
 
   const seedUpNext = [
     {
@@ -174,7 +175,7 @@
 </script>
 
 <svelte:head>
-  <title>Signal vs Noise · Room</title>
+  <title>{roomTitle} · Room</title>
 </svelte:head>
 
 {#if activeView === 'article' && selectedArtifact}
