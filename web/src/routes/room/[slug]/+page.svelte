@@ -2,11 +2,8 @@
   import '$lib/features/room/styles/tokens.css';
   import PinnedArtifact from '$lib/features/room/components/PinnedArtifact.svelte';
   import MembersSidebar from '$lib/features/room/components/MembersSidebar.svelte';
-  import TabStrip from '$lib/features/room/components/TabStrip.svelte';
+  import TabStrip, { type RoomTab } from '$lib/features/room/components/TabStrip.svelte';
   import DiscussionsTab from '$lib/features/room/components/DiscussionsTab.svelte';
-  import { page } from '$app/stores';
-
-  const slug = $derived($page.params.slug);
 
   const seedMembers = [
     { colorIndex: 1, name: 'craig_烈日' },
@@ -24,7 +21,7 @@
       'https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1445342743i/26816291.jpg'
   };
 
-  let activeTab = $state('Discussions');
+  let activeTab = $state<RoomTab>('Discussions');
 </script>
 
 <svelte:head>
@@ -47,15 +44,38 @@
       <TabStrip {activeTab} onTabChange={(tab) => (activeTab = tab)} />
 
       <div class="tab-content">
-        {#if activeTab === 'Discussions'}
+        <div
+          id="room-panel-discussions"
+          role="tabpanel"
+          aria-labelledby="room-tab-discussions"
+          hidden={activeTab !== 'Discussions'}
+        >
           <DiscussionsTab />
-        {:else if activeTab === 'Highlights'}
+        </div>
+        <div
+          id="room-panel-highlights"
+          role="tabpanel"
+          aria-labelledby="room-tab-highlights"
+          hidden={activeTab !== 'Highlights'}
+        >
           <p class="tab-stub">Highlights coming soon.</p>
-        {:else if activeTab === 'Notes'}
+        </div>
+        <div
+          id="room-panel-notes"
+          role="tabpanel"
+          aria-labelledby="room-tab-notes"
+          hidden={activeTab !== 'Notes'}
+        >
           <p class="tab-stub">Notes coming soon.</p>
-        {:else if activeTab === 'Members'}
+        </div>
+        <div
+          id="room-panel-members"
+          role="tabpanel"
+          aria-labelledby="room-tab-members"
+          hidden={activeTab !== 'Members'}
+        >
           <p class="tab-stub">Members coming soon.</p>
-        {/if}
+        </div>
       </div>
     </div>
   </main>
