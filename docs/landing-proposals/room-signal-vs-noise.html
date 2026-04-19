@@ -1,0 +1,2411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal vs Noise — Highlighter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FAFAF7;
+    --surface:#FFFFFF;
+    --surface-warm:#F5EFE0;
+    --surface-muted:#F3F2EE;
+    --ink:#15130F;
+    --ink-soft:#3A362E;
+    --ink-fade:#7A7468;
+    --rule:#E5E0D0;
+    --rule-soft:#EFEAD9;
+
+    --marker:#F5D896;
+    --marker-strong:#E8B96A;
+    --h-sage:#C8D4B5;
+    --h-rose:#EAC6C8;
+    --h-blue:#BCD0E0;
+    --h-lilac:#D0C4E0;
+    --h-amber-l:#F5E6A8;
+
+    --online:#7CAE7A;
+    --brand-accent:#C24D2C;
+  }
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    font-weight:400;
+    font-size:15px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+
+  .back-nav{
+    position:fixed;top:120px;left:20px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.2em;text-transform:uppercase;
+    color:var(--ink-fade);text-decoration:none;
+    padding:8px 12px;
+    background:rgba(250,250,247,0.92);
+    border:1px solid var(--rule);
+    z-index:8;
+  }
+  .back-nav:hover{color:var(--brand-accent);border-color:var(--brand-accent);}
+
+  /* ── TOP NAV ──────────── */
+  .topnav{
+    position:sticky;top:0;
+    background:var(--surface);
+    border-bottom:1px solid var(--rule);
+    padding:14px 28px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    z-index:20;
+    height:62px;
+  }
+  .nav-left{display:flex;align-items:center;gap:32px;}
+  .nav-logo{
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:17px;
+    letter-spacing:-0.02em;
+    color:var(--ink);
+  }
+  .nav-logo em{font-style:normal;font-weight:500;color:var(--brand-accent);}
+  .nav-links{display:flex;gap:22px;font-size:13.5px;color:var(--ink-soft);}
+  .nav-links a{text-decoration:none;padding:6px 0;position:relative;font-weight:500;}
+  .nav-links a.active{color:var(--ink);}
+  .nav-links a.active::after{
+    content:'';
+    position:absolute;left:0;right:0;bottom:-16px;
+    height:2px;background:var(--brand-accent);
+  }
+  .nav-links a:hover{color:var(--ink);}
+
+  .nav-right{display:flex;align-items:center;gap:16px;}
+  .nav-icon-btn{
+    display:flex;align-items:center;justify-content:center;
+    width:34px;height:34px;
+    border:1px solid var(--rule);
+    background:var(--surface);
+    color:var(--ink-soft);
+    text-decoration:none;
+    font-size:15px;
+    transition:all 200ms ease;
+  }
+  .nav-icon-btn:hover{border-color:var(--brand-accent);color:var(--brand-accent);}
+  .nav-capture{
+    padding:9px 16px;
+    background:var(--ink);
+    color:var(--surface);
+    font-size:13px;font-weight:500;
+    text-decoration:none;
+    display:flex;align-items:center;gap:8px;
+    transition:background 200ms ease;
+  }
+  .nav-capture:hover{background:var(--brand-accent);}
+  .nav-capture::before{content:'✎';font-size:13px;}
+  .nav-avatar{
+    width:34px;height:34px;border-radius:50%;
+    background:var(--h-sage);
+    font-family:'Inter',sans-serif;
+    font-size:11px;font-weight:600;
+    text-align:center;line-height:34px;
+    color:var(--ink);
+    cursor:pointer;
+    position:relative;
+  }
+
+  /* ── PAGE WRAPPER ───── */
+  .page{
+    max-width:1440px;
+    margin:0 auto;
+    padding:0 40px;
+  }
+  @media(max-width:900px){.page{padding:0 20px;}}
+
+  /* ── ROOM HEADER BAND ── */
+  .room-id{
+    padding:56px 0 36px;
+    border-bottom:1px solid var(--rule);
+  }
+  .room-kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.22em;
+    text-transform:uppercase;color:var(--brand-accent);
+    margin-bottom:14px;
+  }
+  .room-title{
+    font-family:'Fraunces',serif;
+    font-weight:400;
+    font-size:clamp(44px,6vw,68px);
+    line-height:1.02;letter-spacing:-0.025em;
+    color:var(--ink);margin:0 0 8px;
+  }
+  .room-tagline{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-size:clamp(18px,1.8vw,22px);
+    color:var(--ink-soft);
+    margin:0 0 28px;
+    max-width:50ch;
+  }
+  .room-meta{
+    display:flex;
+    gap:20px;flex-wrap:wrap;
+    align-items:center;
+    font-family:'Inter',sans-serif;
+    font-size:12.5px;font-weight:500;
+    color:var(--ink-fade);
+    letter-spacing:0.01em;
+    margin-bottom:28px;
+  }
+  .room-meta b{color:var(--ink);font-weight:600;}
+  .room-meta .live-dot{
+    display:inline-block;
+    width:6px;height:6px;border-radius:50%;
+    background:var(--online);
+    margin-right:6px;
+    animation:pulse 2.3s ease-in-out infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
+  .room-meta-sep{color:var(--rule);}
+
+  .room-members-row{display:flex;align-items:center;gap:14px;}
+  .room-members-row .stack{display:flex;}
+  .room-members-row .member-dot{
+    width:36px;height:36px;border-radius:50%;
+    font-family:'Inter',sans-serif;
+    font-size:12px;font-weight:600;
+    text-align:center;line-height:36px;
+    color:var(--ink);
+    border:2.5px solid var(--bg);
+    position:relative;
+  }
+  .room-members-row .member-dot.online::after{
+    content:'';position:absolute;
+    bottom:0;right:0;width:10px;height:10px;border-radius:50%;
+    background:var(--online);border:2px solid var(--bg);
+  }
+  .room-members-row .overlap{margin-left:-10px;}
+  .md-1{background:var(--marker);}
+  .md-2{background:var(--h-sage);}
+  .md-3{background:var(--h-rose);}
+  .md-4{background:var(--h-blue);}
+  .md-5{background:var(--h-lilac);}
+  .md-6{background:var(--h-amber-l);}
+  .room-members-note{
+    font-size:13px;color:var(--ink-fade);
+    font-style:italic;
+    font-family:'Fraunces',serif;
+  }
+
+  /* ── SECONDARY ROOM NAV ── */
+  .roomnav{
+    position:sticky;top:62px;
+    background:var(--bg);
+    border-bottom:1px solid var(--rule);
+    z-index:15;
+    margin:0 -40px;
+    padding:0 40px;
+    overflow-x:auto;
+  }
+  @media(max-width:900px){.roomnav{margin:0 -20px;padding:0 20px;}}
+  .roomnav-inner{
+    display:flex;
+    gap:0;
+    max-width:1440px;
+    margin:0 auto;
+  }
+  .roomnav a{
+    padding:14px 18px 12px;
+    font-family:'Inter',sans-serif;
+    font-size:13px;font-weight:500;
+    color:var(--ink-fade);
+    text-decoration:none;
+    border-bottom:2px solid transparent;
+    white-space:nowrap;
+    display:flex;align-items:center;gap:7px;
+    transition:color 150ms ease;
+  }
+  .roomnav a:first-child{padding-left:0;}
+  .roomnav a.active{
+    color:var(--ink);
+    border-bottom-color:var(--brand-accent);
+  }
+  .roomnav a:hover{color:var(--ink);}
+  .roomnav a .count{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10.5px;
+    color:var(--ink-fade);
+    font-weight:400;
+    letter-spacing:0.02em;
+  }
+  .roomnav a.active .count{color:var(--brand-accent);}
+
+  /* ── MAIN GRID ────────── */
+  .room-main{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 380px;
+    gap:44px;
+    padding:44px 0 80px;
+  }
+  @media(max-width:1060px){.room-main{grid-template-columns:1fr;gap:32px;}}
+
+  /* ── BLOCK HEAD ─────────── */
+  .block{margin-bottom:44px;scroll-margin-top:120px;}
+  .block-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    padding-bottom:14px;
+    border-bottom:1px solid var(--rule);
+    margin-bottom:24px;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  .block-head h2{
+    font-family:'Inter',sans-serif;
+    font-weight:700;
+    font-size:19px;
+    line-height:1.15;letter-spacing:-0.018em;
+    color:var(--ink);
+    margin:0;
+  }
+  .block-head h2 em{font-style:normal;color:var(--brand-accent);font-weight:700;}
+  .block-head .meta{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;letter-spacing:0.08em;
+    text-transform:uppercase;color:var(--ink-fade);
+  }
+
+  /* Filter row */
+  .filter-row{
+    display:flex;gap:8px;flex-wrap:wrap;
+    margin-bottom:20px;
+  }
+  .filter-pill{
+    padding:6px 12px;
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-radius:999px;
+    font-family:'Inter',sans-serif;
+    font-size:12px;font-weight:500;
+    color:var(--ink-soft);
+    cursor:pointer;
+    display:inline-flex;align-items:center;gap:6px;
+    transition:all 150ms ease;
+  }
+  .filter-pill.on{
+    background:var(--ink);color:var(--surface);border-color:var(--ink);
+  }
+  .filter-pill:hover:not(.on){border-color:var(--ink);color:var(--ink);}
+  .filter-pill .c{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;opacity:0.7;font-weight:400;
+  }
+  .filter-pill .dot{width:8px;height:8px;border-radius:50%;}
+
+  /* See all link */
+  .see-all{
+    margin-top:20px;
+    text-align:center;
+    font-family:'Inter',sans-serif;
+    font-size:13px;font-weight:500;
+    color:var(--brand-accent);
+    text-decoration:none;
+    display:block;
+    padding:14px;
+    border:1px dashed var(--rule);
+    border-radius:4px;
+    transition:all 150ms ease;
+  }
+  .see-all:hover{border-color:var(--brand-accent);border-style:solid;background:var(--surface);}
+  .see-all::after{content:' →';}
+
+  /* ── PINNED ─────────── */
+  .pinned{
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-radius:4px;
+    box-shadow:0 18px 40px -22px rgba(21,19,15,0.12);
+    overflow:hidden;
+  }
+  .pinned-top{
+    display:grid;
+    grid-template-columns:140px 1fr auto;
+    gap:28px;
+    padding:28px 32px 24px;
+    align-items:start;
+    border-bottom:1px solid var(--rule);
+  }
+  @media(max-width:760px){
+    .pinned-top{grid-template-columns:100px 1fr;gap:20px;padding:20px;}
+    .pinned-top .pin-actions{grid-column:1/-1;justify-self:start;}
+  }
+
+  .book-cover-lg{
+    aspect-ratio:2/3;
+    background:linear-gradient(140deg,#1C1814 0%,#3A2D1E 55%,#1C1814 100%);
+    border-radius:2px;
+    padding:22px 18px;
+    color:#E6D9BC;
+    font-family:'Fraunces',serif;
+    font-weight:400;
+    display:flex;flex-direction:column;justify-content:space-between;
+    box-shadow:3px 3px 14px rgba(0,0,0,0.18);
+    position:relative;
+  }
+  .book-cover-lg::before{
+    content:'';position:absolute;
+    top:10px;bottom:10px;left:5px;width:2px;
+    background:rgba(230,217,188,0.22);
+  }
+  .book-cover-lg .bc-bookmark{
+    position:absolute;top:-4px;right:16px;
+    width:14px;height:30px;
+    background:var(--brand-accent);
+  }
+  .book-cover-lg .bc-top{font-style:italic;font-size:10px;opacity:0.7;letter-spacing:0.1em;text-transform:uppercase;}
+  .book-cover-lg .bc-title{font-size:18px;line-height:1.08;margin-top:auto;margin-bottom:10px;font-weight:500;}
+  .book-cover-lg .bc-author{font-style:italic;font-size:11px;opacity:0.85;border-top:1px solid rgba(230,217,188,0.3);padding-top:6px;}
+
+  .pin-meta h3{
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:26px;line-height:1.15;
+    margin:0 0 4px;
+    color:var(--ink);letter-spacing:-0.01em;
+  }
+  .pin-meta .subt{
+    font-family:'Inter',sans-serif;
+    font-style:italic;font-weight:400;
+    font-size:14px;color:var(--ink-fade);
+    margin-bottom:18px;
+  }
+  .pin-stats{
+    display:flex;gap:20px;flex-wrap:wrap;
+    font-family:'Inter',sans-serif;
+    font-size:13px;color:var(--ink-fade);
+  }
+  .pin-stats b{color:var(--ink);font-weight:600;font-size:14px;}
+  .pin-readers{
+    display:flex;align-items:center;gap:10px;
+    margin-top:16px;font-size:12px;color:var(--ink-fade);
+  }
+  .pin-readers .member-dot{width:22px;height:22px;line-height:22px;font-size:10px;font-weight:600;border:2px solid var(--surface);}
+  .pin-readers .note{font-family:'Inter',sans-serif;font-size:12.5px;color:var(--ink-fade);margin-left:4px;}
+
+  .pin-actions{display:flex;gap:10px;align-items:flex-start;}
+  .pin-action{
+    padding:8px 14px;
+    border:1px solid var(--rule);
+    background:var(--surface);
+    color:var(--ink-soft);
+    font-size:12px;letter-spacing:0.01em;
+    font-family:'Inter',sans-serif;
+    text-decoration:none;font-weight:500;
+    transition:all 200ms ease;
+  }
+  .pin-action:hover{border-color:var(--brand-accent);color:var(--brand-accent);}
+  .pin-action.filled{background:var(--ink);color:var(--surface);border-color:var(--ink);}
+  .pin-action.filled:hover{background:var(--brand-accent);border-color:var(--brand-accent);color:var(--surface);}
+
+  .pin-tabs{
+    display:flex;
+    border-bottom:1px solid var(--rule);
+    padding:0 32px;gap:4px;
+  }
+  @media(max-width:760px){.pin-tabs{padding:0 20px;}}
+  .pin-tab{
+    padding:14px 20px 12px;
+    font-size:13px;
+    font-family:'Inter',sans-serif;font-weight:500;
+    color:var(--ink-fade);
+    background:none;
+    border:none;
+    border-bottom:2px solid transparent;
+    text-decoration:none;
+    display:flex;align-items:center;gap:8px;cursor:pointer;
+  }
+  .pin-tab.active{color:var(--ink);border-bottom-color:var(--brand-accent);}
+  .pin-tab .count{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;color:var(--ink-fade);
+    background:var(--surface-muted);
+    padding:1px 6px;border-radius:999px;
+  }
+  .pin-tab.active .count{background:var(--marker);color:var(--ink);}
+  .pin-tab:hover{color:var(--ink);}
+
+  /* ── PANELS ──────────────── */
+  .pin-panel{display:none;}
+  .pin-panel.active{display:block;}
+
+  .panel-head{
+    padding:18px 32px 14px;
+    border-bottom:1px solid var(--rule);
+    display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  @media(max-width:760px){.panel-head{padding:14px 20px;}}
+  .panel-head-note{
+    font-family:'Inter',sans-serif;font-size:12px;
+    color:var(--ink-fade);font-weight:500;
+  }
+  .panel-sort{
+    font-family:'Inter',sans-serif;font-size:12px;
+    color:var(--ink-fade);font-weight:500;
+  }
+  .panel-btn{
+    padding:7px 14px;
+    background:var(--surface);
+    border:1px solid var(--rule);
+    font-family:'Inter',sans-serif;font-size:12px;font-weight:500;
+    color:var(--ink-soft);cursor:pointer;
+    display:inline-flex;align-items:center;gap:6px;
+  }
+  .panel-btn:hover{border-color:var(--brand-accent);color:var(--brand-accent);}
+
+  /* Highlights panel */
+  .hl-list{padding:0 32px;}
+  @media(max-width:760px){.hl-list{padding:0 20px;}}
+  .hl-entry{
+    padding:20px 0;
+    border-bottom:1px solid var(--rule-soft);
+  }
+  .hl-entry:last-child{border-bottom:none;}
+  .hl-entry-meta{
+    display:flex;align-items:center;gap:10px;
+    margin-bottom:10px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;color:var(--ink-fade);
+    letter-spacing:0.06em;text-transform:uppercase;
+  }
+  .hl-entry-meta .member-dot{width:22px;height:22px;line-height:22px;font-size:10px;font-weight:600;}
+  .hl-loc{color:var(--brand-accent);font-weight:500;}
+  .hl-date{margin-left:auto;}
+  .hl-entry-quote{
+    font-family:'Fraunces',serif;font-style:italic;
+    font-size:18px;line-height:1.5;color:var(--ink);
+    margin:0 0 10px;
+    padding-left:14px;
+    border-left:2px solid var(--marker-strong);
+  }
+  .hl-entry-foot{display:flex;gap:14px;align-items:center;}
+  .hl-thread{
+    font-family:'Inter',sans-serif;font-size:12px;font-weight:500;
+    color:var(--brand-accent);text-decoration:none;
+  }
+  .hl-thread:hover{text-decoration:underline;}
+  .pin-panel .see-all{margin:20px 32px 28px;}
+  @media(max-width:760px){.pin-panel .see-all{margin:20px 20px 24px;}}
+
+  /* Notes panel */
+  .note-list{padding:24px 32px 32px;display:flex;flex-direction:column;gap:20px;}
+  @media(max-width:760px){.note-list{padding:20px;}}
+  .note-entry{
+    padding:26px 28px;
+    background:var(--surface-warm);
+    border-radius:4px;
+  }
+  @media(max-width:760px){.note-entry{padding:20px;}}
+  .note-head{
+    display:grid;
+    grid-template-columns:36px 1fr;
+    gap:14px;
+    margin-bottom:16px;
+    align-items:center;
+  }
+  .note-head .member-dot{width:36px;height:36px;line-height:36px;font-size:12px;font-weight:600;}
+  .note-head-meta{display:flex;flex-direction:column;gap:2px;}
+  .note-author{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:14px;color:var(--ink);
+    display:flex;align-items:baseline;gap:8px;
+  }
+  .note-author .handle{font-weight:400;color:var(--ink-fade);font-family:'JetBrains Mono',monospace;font-size:11px;}
+  .note-date{
+    font-family:'JetBrains Mono',monospace;font-size:10px;
+    color:var(--ink-fade);letter-spacing:0.04em;text-transform:uppercase;
+  }
+  .note-title{
+    font-family:'Inter',sans-serif;font-weight:700;font-size:18px;
+    color:var(--ink);margin:0 0 14px;
+    letter-spacing:-0.015em;line-height:1.2;
+  }
+  .note-body{
+    font-family:'Fraunces',serif;font-size:17px;line-height:1.65;color:var(--ink);
+  }
+  .note-body p{margin:0 0 0.85em;}
+  .note-body p:last-child{margin-bottom:0;}
+  .note-foot{
+    margin-top:18px;padding-top:14px;
+    border-top:1px dashed rgba(21,19,15,0.1);
+  }
+  .note-foot a{
+    font-family:'Inter',sans-serif;font-size:12px;font-weight:500;
+    color:var(--brand-accent);text-decoration:none;
+  }
+  .note-foot a:hover{text-decoration:underline;}
+
+  /* Members panel */
+  .members-table{padding:14px 32px 32px;}
+  @media(max-width:760px){.members-table{padding:14px 20px 24px;}}
+  .mt-head{
+    display:grid;
+    grid-template-columns:1.5fr 2fr 2fr 90px;
+    gap:18px;
+    padding:10px 0;
+    border-bottom:1px solid var(--rule);
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.14em;text-transform:uppercase;
+    color:var(--ink-fade);
+  }
+  .mt-row{
+    display:grid;
+    grid-template-columns:1.5fr 2fr 2fr 90px;
+    gap:18px;
+    padding:16px 0;
+    align-items:center;
+    border-bottom:1px dotted rgba(21,19,15,0.08);
+    font-size:13px;
+  }
+  .mt-row:last-child{border-bottom:none;}
+  .mt-member{display:flex;align-items:center;gap:10px;}
+  .mt-member .member-dot{width:30px;height:30px;line-height:30px;font-size:11px;font-weight:600;flex-shrink:0;}
+  .mt-member .m-n{font-family:'Inter',sans-serif;font-weight:600;color:var(--ink);font-size:13px;}
+  .mt-member .m-h{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-fade);letter-spacing:0.02em;}
+  .mt-progress{display:flex;flex-direction:column;gap:5px;}
+  .mt-progress-bar{
+    height:4px;background:var(--surface-muted);border-radius:2px;overflow:hidden;
+    max-width:160px;
+  }
+  .mt-progress-fill{height:100%;background:var(--brand-accent);}
+  .mt-progress-fill.done{background:var(--online);}
+  .mt-progress-fill.none{background:transparent;}
+  .mt-progress-label{
+    font-family:'Inter',sans-serif;font-size:12px;color:var(--ink-soft);
+  }
+  .mt-progress-label b{color:var(--ink);font-weight:600;}
+  .mt-progress-label em{font-style:italic;color:var(--ink-fade);font-family:'Fraunces',serif;}
+  .mt-contribution{
+    display:flex;gap:14px;flex-wrap:wrap;
+    font-family:'Inter',sans-serif;font-size:12.5px;color:var(--ink-soft);
+  }
+  .mt-contribution b{color:var(--ink);font-weight:600;}
+  .mt-contribution .none{color:var(--ink-fade);}
+  .mt-last{
+    font-family:'JetBrains Mono',monospace;font-size:10.5px;
+    color:var(--ink-fade);letter-spacing:0.04em;text-transform:uppercase;
+    text-align:right;
+  }
+  @media(max-width:760px){
+    .mt-head{display:none;}
+    .mt-row{grid-template-columns:1fr;gap:10px;padding:16px 0;}
+    .mt-last{text-align:left;}
+  }
+
+
+  .passage-wrap{padding:32px 32px 36px;}
+  @media(max-width:760px){.passage-wrap{padding:24px 20px 28px;}}
+  .passage-label{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.14em;text-transform:uppercase;
+    color:var(--ink-fade);margin-bottom:12px;
+    display:flex;gap:8px;align-items:center;
+  }
+  .passage-label .pin-ico{color:var(--brand-accent);}
+  .passage{
+    font-family:'Fraunces',serif;
+    font-size:22px;line-height:1.65;
+    color:var(--ink);margin:0 0 28px;max-width:62ch;
+  }
+  .passage .hl{padding:2px 4px;margin:0 -2px;border-radius:2px;position:relative;cursor:pointer;}
+  .passage .hl::after{
+    content:attr(data-by);
+    position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px;letter-spacing:0.1em;text-transform:uppercase;
+    color:var(--ink);white-space:nowrap;
+    background:var(--surface);
+    padding:3px 8px;border:1px solid var(--rule);border-radius:2px;
+    opacity:0;pointer-events:none;transition:opacity 150ms ease;
+  }
+  .passage .hl:hover::after{opacity:1;}
+  .hl-dk{background:var(--marker);}
+  .hl-pf{background:var(--h-sage);}
+  .hl-mj{background:var(--h-blue);}
+  .hl-bs{background:var(--h-rose);}
+  .hl-sl{background:var(--h-lilac);}
+  .hl-mw{background:var(--h-amber-l);}
+
+  .thread{
+    background:var(--surface-warm);
+    border-radius:4px;
+    padding:20px 24px;margin-top:8px;
+  }
+  .thread-title{
+    font-family:'Inter',sans-serif;
+    font-size:11px;font-weight:600;letter-spacing:0.08em;
+    text-transform:uppercase;color:var(--ink-fade);
+    margin-bottom:14px;
+  }
+  .thread-title b{color:var(--brand-accent);font-weight:600;}
+  .msg{
+    display:grid;grid-template-columns:30px 1fr;gap:14px;
+    padding:10px 0;
+    border-bottom:1px dotted rgba(21,19,15,0.08);
+  }
+  .msg:last-of-type{border-bottom:none;}
+  .msg .avatar{
+    width:30px;height:30px;border-radius:50%;
+    font-family:'Inter',sans-serif;
+    font-size:11px;font-weight:600;
+    text-align:center;line-height:30px;color:var(--ink);
+  }
+  .msg-body{font-size:14.5px;line-height:1.55;color:var(--ink);}
+  .msg-head{display:flex;align-items:baseline;gap:10px;margin-bottom:3px;}
+  .msg-name{font-weight:600;color:var(--ink);}
+  .msg-handle{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-fade);}
+  .msg-time{font-size:11px;color:var(--ink-fade);margin-left:auto;font-family:'JetBrains Mono',monospace;letter-spacing:0.04em;}
+  .msg-text{color:var(--ink-soft);}
+  .msg-text em{font-style:italic;font-family:'Fraunces',serif;}
+  .msg-text .mention{color:var(--brand-accent);font-weight:500;}
+  .msg.reply{padding-left:22px;border-left:1px dotted rgba(21,19,15,0.15);margin-left:15px;}
+
+  .thread-reply-box{
+    margin-top:12px;padding:10px 14px;
+    background:var(--surface);border:1px solid var(--rule);border-radius:4px;
+    display:flex;align-items:center;gap:12px;
+    font-size:13px;color:var(--ink-fade);
+    font-family:'Inter',sans-serif;
+  }
+  .thread-reply-box .send{
+    margin-left:auto;padding:6px 14px;
+    background:var(--ink);border:none;color:var(--surface);
+    font-family:'Inter',sans-serif;font-size:12px;font-style:normal;font-weight:500;cursor:pointer;
+  }
+
+  /* ── ALSO THIS WEEK ─── */
+  .also-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:760px){.also-grid{grid-template-columns:1fr;}}
+  .also-card{
+    background:var(--surface);
+    border:1px solid var(--rule);border-radius:4px;
+    padding:22px 24px;
+    display:flex;flex-direction:column;gap:10px;
+    text-decoration:none;color:inherit;
+    transition:border-color 200ms ease, transform 200ms ease;
+  }
+  .also-card:hover{border-color:var(--brand-accent);transform:translateY(-2px);}
+  .also-type{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.14em;
+    text-transform:uppercase;color:var(--ink-fade);
+  }
+  .also-type b{color:var(--brand-accent);font-weight:500;}
+  .also-head{display:grid;grid-template-columns:58px 1fr;gap:14px;margin-bottom:6px;}
+  .also-artwork{
+    aspect-ratio:1/1;
+    background:linear-gradient(140deg,#2A3E5E 0%,#4A6B9C 100%);
+    border-radius:3px;
+    display:flex;align-items:center;justify-content:center;
+    color:#D8E3F2;font-family:'Fraunces',serif;
+    font-style:italic;font-size:10px;
+    line-height:1.1;text-align:center;padding:6px;font-weight:500;
+  }
+  .also-artwork.essay{
+    background:linear-gradient(140deg,#3E1F14 0%,#6A3922 100%);
+    color:#F0D9B6;
+  }
+  .also-artwork.essay::before{content:'§';font-size:22px;font-style:normal;font-weight:300;}
+  .also-title{
+    font-family:'Inter',sans-serif;font-weight:600;
+    font-size:17px;line-height:1.2;
+    color:var(--ink);letter-spacing:-0.005em;
+  }
+  .also-source{
+    font-family:'Inter',sans-serif;font-style:italic;
+    font-size:13px;color:var(--ink-fade);margin-top:-2px;
+  }
+  .also-highlight{
+    padding:10px 14px;
+    background:var(--surface-warm);
+    border-left:3px solid var(--marker-strong);
+    border-radius:0 3px 3px 0;
+  }
+  .also-stamp{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.08em;
+    color:var(--ink-fade);margin-bottom:6px;
+    text-transform:uppercase;
+  }
+  .also-stamp b{color:var(--brand-accent);font-weight:500;}
+  .also-quote{
+    font-family:'Fraunces',serif;font-style:italic;
+    font-size:14.5px;line-height:1.55;color:var(--ink);margin:0 0 10px;
+  }
+  .also-reactions{
+    display:flex;flex-direction:column;gap:8px;
+    padding-top:8px;border-top:1px dashed rgba(21,19,15,0.1);
+  }
+  .also-reactions .r-line{
+    display:grid;grid-template-columns:24px 1fr;gap:10px;
+    font-size:13px;line-height:1.45;color:var(--ink-soft);
+  }
+  .also-reactions .member-dot{width:22px;height:22px;line-height:22px;font-size:10px;font-weight:600;}
+  .also-reactions .r-name{font-weight:600;color:var(--ink);margin-right:6px;}
+  .also-foot{
+    display:flex;justify-content:space-between;align-items:center;
+    padding-top:10px;border-top:1px dotted var(--rule);margin-top:auto;
+  }
+  .also-foot .dots{display:flex;}
+  .also-foot .member-dot{width:22px;height:22px;line-height:22px;font-size:10px;font-weight:600;border:2px solid var(--surface);}
+  .also-foot .overlap{margin-left:-8px;}
+  .also-foot .meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-fade);letter-spacing:0.04em;}
+  .also-foot .open-arrow{
+    display:inline-block;font-family:'Inter',sans-serif;
+    font-size:11px;font-weight:500;letter-spacing:0.02em;
+    color:var(--brand-accent);text-transform:none;
+  }
+
+  /* ── SHELF (past material) ─────────── */
+  .shelf-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+    gap:14px;
+  }
+  .shelf-tile{
+    background:var(--surface);
+    border:1px solid var(--rule);border-radius:4px;
+    text-decoration:none;color:inherit;
+    display:flex;flex-direction:column;overflow:hidden;
+    transition:border-color 200ms, transform 200ms;
+  }
+  .shelf-tile:hover{border-color:var(--brand-accent);transform:translateY(-2px);}
+  .shelf-cover{
+    aspect-ratio:4/5;
+    position:relative;
+    display:flex;flex-direction:column;justify-content:space-between;
+    padding:14px;
+    color:inherit;overflow:hidden;
+  }
+  .shelf-cover .type-chip{
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px;letter-spacing:0.14em;text-transform:uppercase;
+    padding:2px 6px;align-self:flex-start;
+    background:rgba(255,255,255,0.15);
+    border:1px solid rgba(255,255,255,0.2);
+    color:currentColor;font-weight:500;
+  }
+  /* book covers */
+  .shelf-cover.book{
+    background:linear-gradient(140deg,#1C1814 0%,#3A2D1E 55%,#1C1814 100%);
+    color:#E6D9BC;font-family:'Fraunces',serif;
+  }
+  .shelf-cover.book.blue{background:linear-gradient(140deg,#141C2E 0%,#1C2D4D 55%,#141C2E 100%);color:#D6DBE6;}
+  .shelf-cover.book.red{background:linear-gradient(140deg,#3A1818 0%,#5A2A2A 55%,#3A1818 100%);color:#E8D0C8;}
+  .shelf-cover.book.green{background:linear-gradient(140deg,#14241A 0%,#1E3A28 55%,#14241A 100%);color:#D2E0D4;}
+  .shelf-cover.book.plum{background:linear-gradient(140deg,#241422 0%,#3A1E35 55%,#241422 100%);color:#E0D0DA;}
+  .shelf-cover.book .sc-title{font-size:16px;line-height:1.08;font-weight:500;margin-top:auto;margin-bottom:8px;}
+  .shelf-cover.book .sc-author{font-style:italic;font-size:10px;opacity:0.85;border-top:1px solid rgba(255,255,255,0.15);padding-top:5px;}
+  .shelf-cover.book::before{content:'';position:absolute;top:10px;bottom:10px;left:4px;width:1.5px;background:rgba(255,255,255,0.15);}
+  /* podcast */
+  .shelf-cover.podcast{
+    background:linear-gradient(135deg,#2A1E44 0%,#4E3A6E 100%);
+    color:#D8D0E6;
+  }
+  .shelf-cover.podcast.orange{background:linear-gradient(135deg,#4E2812 0%,#8B4A20 100%);color:#F5D9B8;}
+  .shelf-cover.podcast::after{
+    content:'';
+    position:absolute;top:38%;left:50%;
+    transform:translate(-50%,-50%);
+    width:55%;aspect-ratio:1/1;border-radius:50%;
+    border:2px solid rgba(255,255,255,0.18);
+    background:radial-gradient(circle,rgba(255,255,255,0.1) 0%,transparent 70%);
+  }
+  .shelf-cover.podcast .sc-title{
+    font-family:'Fraunces',serif;font-weight:500;
+    font-size:13px;line-height:1.12;margin-top:auto;z-index:2;
+  }
+  .shelf-cover.podcast .sc-author{font-family:'Inter',sans-serif;font-size:10px;opacity:0.75;margin-top:4px;z-index:2;font-style:italic;}
+  /* essay */
+  .shelf-cover.essay{
+    background:var(--surface-warm);color:var(--ink);
+  }
+  .shelf-cover.essay .type-chip{background:rgba(21,19,15,0.08);border-color:rgba(21,19,15,0.15);color:var(--ink-soft);}
+  .shelf-cover.essay .essay-mark{
+    font-family:'Fraunces',serif;font-style:italic;
+    font-size:44px;color:var(--brand-accent);line-height:1;margin-bottom:8px;
+  }
+  .shelf-cover.essay .sc-title{
+    font-family:'Fraunces',serif;font-weight:500;
+    font-size:13px;line-height:1.18;margin-top:auto;
+  }
+  .shelf-cover.essay .sc-author{font-family:'Inter',sans-serif;font-style:italic;font-size:10px;color:var(--ink-fade);margin-top:3px;}
+  /* paper */
+  .shelf-cover.paper{
+    background:#EFEEE8;color:var(--ink-soft);
+    padding-bottom:18px;
+  }
+  .shelf-cover.paper .type-chip{background:rgba(21,19,15,0.06);border-color:rgba(21,19,15,0.12);color:var(--ink-soft);}
+  .shelf-cover.paper .paper-lines{
+    position:absolute;top:42px;left:14px;right:14px;bottom:48px;
+    background:repeating-linear-gradient(
+      transparent,
+      transparent 6px,
+      rgba(21,19,15,0.1) 6px,
+      rgba(21,19,15,0.1) 7px
+    );
+    opacity:0.55;
+  }
+  .shelf-cover.paper .sc-title{
+    font-family:'JetBrains Mono',monospace;font-weight:500;
+    font-size:11px;line-height:1.3;margin-top:auto;z-index:2;
+  }
+  .shelf-cover.paper .sc-author{font-family:'Inter',sans-serif;font-style:italic;font-size:10px;color:var(--ink-fade);margin-top:3px;z-index:2;}
+  /* archive */
+  .shelf-cover.archive{
+    background:linear-gradient(140deg,#D8C8A4 0%,#BFAF8C 100%);
+    color:#3A2E18;
+  }
+  .shelf-cover.archive .type-chip{background:rgba(58,46,24,0.15);border-color:rgba(58,46,24,0.3);color:#3A2E18;}
+  .shelf-cover.archive .archive-mark{
+    font-family:'Fraunces',serif;font-style:italic;
+    font-size:36px;color:rgba(58,46,24,0.5);line-height:1;
+    margin-bottom:8px;
+  }
+  .shelf-cover.archive .sc-title{
+    font-family:'Fraunces',serif;font-weight:500;font-style:italic;
+    font-size:13px;line-height:1.15;margin-top:auto;
+  }
+  .shelf-cover.archive .sc-author{font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(58,46,24,0.65);margin-top:3px;letter-spacing:0.04em;}
+
+  /* status badge */
+  .shelf-status{
+    position:absolute;top:10px;right:10px;
+    padding:2px 8px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px;letter-spacing:0.1em;text-transform:uppercase;
+    background:var(--brand-accent);color:var(--surface);
+    font-weight:500;
+    border-radius:2px;
+  }
+  .shelf-status.open{background:var(--online);}
+  .shelf-status.week{background:var(--brand-accent);}
+
+  .shelf-meta{
+    padding:12px 14px 6px;
+    display:flex;flex-direction:column;gap:2px;
+  }
+  .shelf-tile-title{
+    font-family:'Inter',sans-serif;font-weight:600;
+    font-size:13px;line-height:1.25;color:var(--ink);
+  }
+  .shelf-tile-author{
+    font-family:'Inter',sans-serif;font-style:italic;
+    font-size:12px;color:var(--ink-fade);
+  }
+  .shelf-tile-foot{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:8px 14px 10px;
+    border-top:1px dotted rgba(21,19,15,0.08);
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;color:var(--ink-fade);letter-spacing:0.04em;
+  }
+  .shelf-tile-foot .dots{display:flex;}
+  .shelf-tile-foot .member-dot{width:18px;height:18px;line-height:18px;font-size:8px;font-weight:600;border:1.5px solid var(--surface);}
+  .shelf-tile-foot .overlap{margin-left:-5px;}
+
+  /* ── HIGHLIGHTS REEL ─── */
+  .hl-reel{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+    gap:14px;
+  }
+  .hr-card{
+    background:var(--surface);
+    border:1px solid var(--rule);border-radius:4px;
+    padding:20px 22px 16px;
+    display:flex;flex-direction:column;gap:14px;
+    transition:border-color 200ms, transform 200ms;
+    text-decoration:none;color:inherit;
+  }
+  .hr-card:hover{border-color:var(--brand-accent);transform:translateY(-2px);}
+  .hr-quote{
+    font-family:'Fraunces',serif;font-style:italic;
+    font-size:17px;line-height:1.5;color:var(--ink);
+    margin:0;
+    padding:0 4px;
+    background:linear-gradient(180deg,transparent 60%,rgba(245,216,150,0.55) 60%);
+    display:inline;
+    -webkit-box-decoration-break:clone;
+    box-decoration-break:clone;
+  }
+  .hr-quote::before{content:'\201C';color:var(--brand-accent);margin-right:1px;}
+  .hr-quote::after{content:'\201D';color:var(--brand-accent);margin-left:1px;}
+  .hr-meta{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    padding-top:12px;border-top:1px dotted rgba(21,19,15,0.08);gap:10px;
+    margin-top:auto;
+  }
+  .hr-source{
+    font-family:'Inter',sans-serif;
+    font-size:12px;color:var(--ink-fade);line-height:1.4;
+    flex:1;min-width:0;
+  }
+  .hr-source b{color:var(--ink);font-weight:600;display:block;}
+  .hr-source .sc{font-style:italic;}
+  .hr-marks{
+    display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;
+  }
+  .hr-marks .dots{display:flex;}
+  .hr-marks .member-dot{width:20px;height:20px;line-height:20px;font-size:9px;font-weight:600;border:1.5px solid var(--surface);}
+  .hr-marks .overlap{margin-left:-5px;}
+  .hr-replies{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;color:var(--ink-fade);
+    letter-spacing:0.04em;
+  }
+  .hr-replies b{color:var(--brand-accent);font-weight:500;}
+  .hr-date{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;color:var(--ink-fade);
+    letter-spacing:0.04em;text-transform:uppercase;
+  }
+
+  /* ── DISCUSSIONS LIST ─── */
+  .disc-list{
+    background:var(--surface);
+    border:1px solid var(--rule);border-radius:4px;
+    overflow:hidden;
+  }
+  .disc-row{
+    display:grid;
+    grid-template-columns:88px 1fr auto;
+    gap:16px;
+    padding:18px 22px;
+    border-bottom:1px solid var(--rule-soft);
+    align-items:center;
+    text-decoration:none;color:inherit;
+    transition:background 150ms;
+  }
+  .disc-row:hover{background:var(--bg);}
+  .disc-row:last-child{border-bottom:none;}
+  .dr-dots{display:flex;flex-direction:row;align-items:center;}
+  .dr-dots .member-dot{
+    width:26px;height:26px;line-height:26px;
+    font-size:10px;font-weight:600;
+    border:2px solid var(--surface);
+  }
+  .dr-dots .overlap{margin-left:-8px;}
+  .dr-body{min-width:0;}
+  .dr-status{
+    display:inline-block;
+    padding:1px 6px;border-radius:2px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px;letter-spacing:0.1em;text-transform:uppercase;
+    margin-bottom:5px;font-weight:500;
+  }
+  .dr-status.active{background:rgba(124,174,122,0.18);color:#4A7248;}
+  .dr-status.closed{background:var(--surface-muted);color:var(--ink-fade);}
+  .dr-title{
+    font-family:'Inter',sans-serif;font-weight:600;
+    font-size:14.5px;color:var(--ink);line-height:1.3;
+    margin-bottom:3px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .dr-source{
+    font-family:'Inter',sans-serif;font-style:italic;
+    font-size:12px;color:var(--ink-fade);
+  }
+  .dr-source b{color:var(--ink);font-weight:600;font-style:normal;}
+  .dr-stats{
+    text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px;
+    min-width:110px;flex-shrink:0;
+  }
+  .dr-replies{
+    font-family:'Inter',sans-serif;
+    font-size:13.5px;font-weight:600;color:var(--ink);
+    display:flex;align-items:center;gap:5px;
+  }
+  .dr-replies .hot{color:var(--brand-accent);}
+  .dr-last{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;color:var(--ink-fade);
+    letter-spacing:0.04em;text-transform:uppercase;
+  }
+
+  /* ── ACTIVITY FEED ──── */
+  .feed{
+    background:var(--surface);
+    border:1px solid var(--rule);border-radius:4px;overflow:hidden;
+  }
+  .feed-row{
+    display:grid;grid-template-columns:28px 1fr auto;gap:12px;
+    padding:12px 20px;align-items:center;
+    border-bottom:1px dotted rgba(21,19,15,0.08);
+    font-size:13.5px;
+  }
+  .feed-row:last-child{border-bottom:none;}
+  .feed-row .member-dot{width:24px;height:24px;line-height:24px;font-size:10px;font-weight:600;}
+  .feed-row .f-body{color:var(--ink-soft);line-height:1.45;}
+  .feed-row .f-body b{color:var(--ink);font-weight:600;}
+  .feed-row .f-body .f-ref{font-style:italic;color:var(--ink);}
+  .feed-row .f-time{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;color:var(--ink-fade);
+    letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;
+  }
+  .feed-row .f-action{
+    display:inline-block;padding:0 6px;
+    font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:500;
+    letter-spacing:0.08em;text-transform:uppercase;
+    color:var(--brand-accent);margin-right:6px;
+  }
+
+  /* ── SIDEBAR ─────────── */
+  aside.sidebar{display:flex;flex-direction:column;gap:24px;}
+  @media(min-width:1060px){
+    aside.sidebar{position:sticky;top:112px;align-self:start;max-height:calc(100vh - 140px);overflow-y:auto;padding-right:4px;}
+    aside.sidebar::-webkit-scrollbar{width:4px;}
+    aside.sidebar::-webkit-scrollbar-thumb{background:var(--rule);}
+  }
+  .sb-card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:20px 22px;}
+  .sb-head{
+    display:flex;align-items:baseline;justify-content:space-between;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.18em;
+    text-transform:uppercase;color:var(--ink-fade);
+    padding-bottom:12px;border-bottom:1px dotted var(--rule);margin-bottom:14px;
+  }
+  .sb-head .sb-link{
+    color:var(--brand-accent);text-transform:none;
+    letter-spacing:0.02em;font-size:11px;text-decoration:none;
+    font-family:'Inter',sans-serif;font-style:normal;font-weight:500;
+  }
+  .mem-row{
+    display:grid;grid-template-columns:34px 1fr;gap:12px;
+    padding:10px 0;border-bottom:1px dotted rgba(21,19,15,0.08);align-items:start;
+  }
+  .mem-row:last-child{border-bottom:none;}
+  .mem-row .member-dot{width:32px;height:32px;line-height:32px;font-size:11px;font-weight:600;position:relative;}
+  .mem-row .member-dot.online::after{
+    content:'';position:absolute;bottom:-1px;right:-1px;
+    width:9px;height:9px;border-radius:50%;
+    background:var(--online);border:2px solid var(--surface);
+  }
+  .mem-name{
+    font-family:'Inter',sans-serif;font-size:13.5px;font-weight:600;color:var(--ink);
+    line-height:1.2;display:flex;align-items:baseline;gap:8px;
+  }
+  .mem-name .handle{font-weight:400;color:var(--ink-fade);font-size:12px;font-family:'JetBrains Mono',monospace;}
+  .mem-status{
+    font-family:'Fraunces',serif;font-style:italic;
+    font-size:13px;line-height:1.4;color:var(--ink-soft);margin-top:2px;
+  }
+  .mem-time{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-fade);letter-spacing:0.04em;margin-top:3px;text-transform:uppercase;}
+
+  .vote-row{
+    display:grid;grid-template-columns:24px 1fr auto;gap:12px;
+    padding:12px 0;border-bottom:1px dotted rgba(21,19,15,0.08);align-items:center;
+  }
+  .vote-row:last-child{border-bottom:none;}
+  .vote-pos{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-fade);text-align:center;}
+  .vote-body .vt-title{font-family:'Inter',sans-serif;font-weight:600;font-size:14px;line-height:1.2;color:var(--ink);}
+  .vote-body .vt-source{font-family:'Inter',sans-serif;font-style:italic;font-size:12px;color:var(--ink-fade);margin-top:1px;}
+  .vote-tally{display:flex;gap:3px;align-items:center;}
+  .vote-tally .dot{width:8px;height:8px;border-radius:50%;background:var(--marker);}
+  .vote-tally .dot.empty{background:var(--rule);}
+  .vote-tally .num{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-fade);margin-left:4px;font-weight:500;}
+  .vote-close{
+    padding-top:12px;margin-top:8px;border-top:1px dashed var(--rule);
+    font-family:'Inter',sans-serif;
+    font-size:12px;color:var(--ink-fade);
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .vote-close a{color:var(--brand-accent);font-size:12px;font-weight:500;}
+
+  .capture-cta{
+    background:var(--ink);color:var(--surface);
+    padding:18px 22px;border-radius:4px;
+    display:flex;align-items:center;gap:12px;
+    text-decoration:none;transition:background 200ms ease;
+  }
+  .capture-cta:hover{background:var(--brand-accent);}
+  .capture-cta-ico{font-size:20px;line-height:1;}
+  .capture-cta-t b{display:block;font-family:'Inter',sans-serif;font-weight:600;font-size:14px;margin-bottom:2px;}
+  .capture-cta-t span{font-family:'Inter',sans-serif;font-size:13px;line-height:1.4;opacity:0.75;}
+
+  footer{
+    border-top:1px solid var(--rule);
+    padding:32px 40px;
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.12em;
+    text-transform:uppercase;color:var(--ink-fade);
+  }
+  footer .brand{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:14px;
+    color:var(--ink);text-transform:none;letter-spacing:-0.01em;
+  }
+  footer .brand em{font-style:normal;color:var(--brand-accent);}
+
+  @media(max-width:760px){
+    .nav-links{display:none;}
+    .nav-capture{display:none;}
+    .disc-row{grid-template-columns:1fr auto;}
+    .dr-dots{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<a class="back-nav" href="index.html">← Index</a>
+
+<nav class="topnav">
+  <div class="nav-left">
+    <div class="nav-logo">Highlighter<em>.</em></div>
+    <div class="nav-links">
+      <a href="#" class="active">Your rooms</a>
+      <a href="#">Discover</a>
+      <a href="#">Vault</a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <a href="#" class="nav-icon-btn" title="Search">⌕</a>
+    <a href="#" class="nav-capture">Share to a room</a>
+    <div class="nav-avatar" title="pablof7z">PF</div>
+  </div>
+</nav>
+
+<div class="page">
+
+  <section class="room-id">
+    <h1 class="room-title" style="margin-bottom:32px;">Signal vs Noise</h1>
+
+    <div class="room-members-row">
+      <div class="stack">
+        <span class="member-dot md-1" title="DK">DK</span>
+        <span class="member-dot md-2 overlap" title="Pablo F">PF</span>
+        <span class="member-dot md-4 overlap" title="Miljan">MB</span>
+        <span class="member-dot md-3 overlap" title="Bob S">BS</span>
+        <span class="member-dot md-5 overlap" title="Steve L">SL</span>
+        <span class="member-dot md-6 overlap" title="Max W">MW</span>
+      </div>
+    </div>
+  </section>
+
+  <nav class="roomnav">
+    <div class="roomnav-inner">
+      <a href="#pinned" class="active">Pinned</a>
+      <a href="#this-week">This week</a>
+      <a href="#shelf">The shelf <span class="count">24</span></a>
+      <a href="#highlights">Highlights <span class="count">412</span></a>
+      <a href="#discussions">Discussions <span class="count">38</span></a>
+      <a href="#lately">Lately</a>
+    </div>
+  </nav>
+
+  <div class="room-main">
+    <div>
+
+      <!-- ═════ PINNED ═════ -->
+      <div class="block" id="pinned">
+        <div class="block-head">
+          <h2>Currently <em>pinned.</em></h2>
+        </div>
+
+        <div class="pinned">
+          <div class="pinned-top">
+            <div class="book-cover-lg">
+              <div class="bc-bookmark"></div>
+              <div class="bc-top">A Book · 1985</div>
+              <div>
+                <div class="bc-title">Amusing<br>Ourselves to Death</div>
+                <div class="bc-author">Neil Postman</div>
+              </div>
+            </div>
+            <div class="pin-meta">
+              <h3>Amusing Ourselves to Death</h3>
+              <div class="subt">Neil Postman · 1985 · currently reading: chapter 6</div>
+              <div class="pin-stats">
+                <span><b>4 of 6</b> reading</span>
+                <span><b>31</b> highlights</span>
+                <span><b>5</b> threads</span>
+                <span><b>14 days</b> in the room</span>
+              </div>
+              <div class="pin-readers">
+                <span class="member-dot md-1">DK</span>
+                <span class="member-dot md-2">PF</span>
+                <span class="member-dot md-4">MB</span>
+                <span class="member-dot md-6">MW</span>
+                <span class="note">Bob &amp; Steve haven't started</span>
+              </div>
+            </div>
+            <div class="pin-actions">
+              <a href="#" class="pin-action">Open artifact</a>
+              <a href="#" class="pin-action filled">Continue reading</a>
+            </div>
+          </div>
+
+          <div class="pin-tabs">
+            <button class="pin-tab" data-tab="highlights">Highlights <span class="count">31</span></button>
+            <button class="pin-tab active" data-tab="discussions">Discussions <span class="count">5</span></button>
+            <button class="pin-tab" data-tab="notes">Notes <span class="count">3</span></button>
+            <button class="pin-tab" data-tab="members">Members <span class="count">6</span></button>
+          </div>
+
+          <div class="pin-panel active" data-panel="discussions">
+          <div class="passage-wrap">
+            <div class="passage-label"><span class="pin-ico">⎙</span> Most-discussed passage · chapter 6, §2 · 8 replies</div>
+
+            <p class="passage">Americans no longer talk to each other, <span class="hl hl-dk" data-by="DK">they entertain each other</span>. They do not exchange ideas; <span class="hl hl-pf" data-by="Pablo F">they exchange images</span>. <span class="hl hl-mj" data-by="Miljan">They do not argue with propositions</span>; they argue with <span class="hl hl-bs" data-by="Bob S">good looks, celebrities and commercials</span>.</p>
+
+            <div class="thread">
+              <div class="thread-title">Thread · <b>8 messages</b> · started by DK · Mon</div>
+
+              <div class="msg">
+                <div class="avatar md-1">DK</div>
+                <div class="msg-body">
+                  <div class="msg-head"><span class="msg-name">DK</span><span class="msg-handle">@dk</span><span class="msg-time">Mon 9:12</span></div>
+                  <div class="msg-text">Thirty-nine years later and &ldquo;television&rdquo; is the only word you'd need to swap.</div>
+                </div>
+              </div>
+
+              <div class="msg reply">
+                <div class="avatar md-2">PF</div>
+                <div class="msg-body">
+                  <div class="msg-head"><span class="msg-name">Pablo F</span><span class="msg-handle">@pablof7z</span><span class="msg-time">Mon 9:44</span></div>
+                  <div class="msg-text">Replace &ldquo;television&rdquo; with &ldquo;algorithmic feed&rdquo; &mdash; the meter doesn't break.</div>
+                </div>
+              </div>
+
+              <div class="msg reply">
+                <div class="avatar md-4">MB</div>
+                <div class="msg-body">
+                  <div class="msg-head"><span class="msg-name">Miljan</span><span class="msg-handle">@miljan</span><span class="msg-time">Mon 10:20</span></div>
+                  <div class="msg-text">Postman saw the trajectory. He didn't see the way out. This is genuinely what we're building Primal against.</div>
+                </div>
+              </div>
+
+              <div class="msg">
+                <div class="avatar md-3">BS</div>
+                <div class="msg-body">
+                  <div class="msg-head"><span class="msg-name">Bob S</span><span class="msg-handle">@bobscully</span><span class="msg-time">Mon 11:05</span></div>
+                  <div class="msg-text">Stealing &ldquo;good looks, celebrities and commercials&rdquo; for the boardwalk deck. No apology.</div>
+                </div>
+              </div>
+
+              <div class="msg">
+                <div class="avatar md-5">SL</div>
+                <div class="msg-body">
+                  <div class="msg-head"><span class="msg-name">Steve L</span><span class="msg-handle">@moneyball</span><span class="msg-time">Tue 6:40</span></div>
+                  <div class="msg-text">Genuine question: is this a book to read, or the operating manual for the last forty years of consumer internet?</div>
+                </div>
+              </div>
+
+              <div class="msg">
+                <div class="avatar md-6">MW</div>
+                <div class="msg-body">
+                  <div class="msg-head"><span class="msg-name">Max W</span><span class="msg-handle">@maxwebster</span><span class="msg-time">Tue 8:30</span></div>
+                  <div class="msg-text">Re-read it last year. Holds up in ways the sequel (<em>Building a Bridge to the 18th Century</em>) does not, but the sequel is worth it for one chapter.</div>
+                </div>
+              </div>
+
+              <div class="msg reply">
+                <div class="avatar md-1">DK</div>
+                <div class="msg-body">
+                  <div class="msg-head"><span class="msg-name">DK</span><span class="msg-handle">@dk</span><span class="msg-time">Tue 9:00</span></div>
+                  <div class="msg-text"><span class="mention">@max</span> &mdash; add the sequel to up-next?</div>
+                </div>
+              </div>
+
+              <div class="msg reply">
+                <div class="avatar md-6">MW</div>
+                <div class="msg-body">
+                  <div class="msg-head"><span class="msg-name">Max W</span><span class="msg-handle">@maxwebster</span><span class="msg-time">Tue 9:03</span></div>
+                  <div class="msg-text">done. people &mdash; please vote.</div>
+                </div>
+              </div>
+
+              <div class="thread-reply-box">
+                <span>Reply in the thread&hellip;</span>
+                <button class="send">Send</button>
+              </div>
+            </div>
+          </div>
+          </div><!-- /pin-panel discussions -->
+
+          <!-- ─── Highlights panel ─── -->
+          <div class="pin-panel" data-panel="highlights">
+            <div class="panel-head">
+              <div class="filter-row" style="margin:0;">
+                <div class="filter-pill on">All <span class="c">31</span></div>
+                <div class="filter-pill"><span class="dot md-1"></span>DK <span class="c">12</span></div>
+                <div class="filter-pill"><span class="dot md-2"></span>PF <span class="c">7</span></div>
+                <div class="filter-pill"><span class="dot md-4"></span>MB <span class="c">8</span></div>
+                <div class="filter-pill"><span class="dot md-6"></span>MW <span class="c">4</span></div>
+              </div>
+              <div class="panel-sort">By position ↓</div>
+            </div>
+
+            <div class="hl-list">
+
+              <div class="hl-entry">
+                <div class="hl-entry-meta">
+                  <span class="member-dot md-1">DK</span>
+                  <span class="hl-loc">Foreword</span>
+                  <span class="hl-date">Tue</span>
+                </div>
+                <p class="hl-entry-quote">Orwell feared those who would deprive us of information. Huxley feared those who would give us so much that we would be reduced to passivity and egoism.</p>
+                <div class="hl-entry-foot"><a class="hl-thread" href="#">● 2 replies →</a></div>
+              </div>
+
+              <div class="hl-entry">
+                <div class="hl-entry-meta">
+                  <span class="member-dot md-2">PF</span>
+                  <span class="hl-loc">Ch. 1 · pg. 8</span>
+                  <span class="hl-date">Mon</span>
+                </div>
+                <p class="hl-entry-quote">The media of communication available to a culture are a dominant influence on the formation of the culture's intellectual and social preoccupations.</p>
+              </div>
+
+              <div class="hl-entry">
+                <div class="hl-entry-meta">
+                  <span class="member-dot md-1">DK</span>
+                  <span class="hl-loc">Ch. 1 · pg. 11</span>
+                  <span class="hl-date">Mon</span>
+                </div>
+                <p class="hl-entry-quote">Television has achieved the status of &ldquo;meta-medium&rdquo; &mdash; an instrument that directs not only our knowledge of the world, but our knowledge of ways of knowing as well.</p>
+                <div class="hl-entry-foot"><a class="hl-thread" href="#">● 1 reply →</a></div>
+              </div>
+
+              <div class="hl-entry">
+                <div class="hl-entry-meta">
+                  <span class="member-dot md-4">MB</span>
+                  <span class="hl-loc">Ch. 2 · pg. 20</span>
+                  <span class="hl-date">Mon</span>
+                </div>
+                <p class="hl-entry-quote">A new medium does not add something; it changes everything.</p>
+              </div>
+
+              <div class="hl-entry">
+                <div class="hl-entry-meta">
+                  <span class="member-dot md-1">DK</span>
+                  <span class="hl-loc">Ch. 3 · pg. 34</span>
+                  <span class="hl-date">Mon</span>
+                </div>
+                <p class="hl-entry-quote">Truth does not, and never has, come unadorned. It must appear in its proper clothing or it is not acknowledged.</p>
+              </div>
+
+              <div class="hl-entry">
+                <div class="hl-entry-meta">
+                  <span class="member-dot md-4">MB</span>
+                  <span class="hl-loc">Ch. 4 · pg. 52</span>
+                  <span class="hl-date">Sun</span>
+                </div>
+                <p class="hl-entry-quote">The printing press made a new kind of culture possible, but also made the old culture increasingly unfunctional.</p>
+                <div class="hl-entry-foot"><a class="hl-thread" href="#">● 3 replies →</a></div>
+              </div>
+
+              <div class="hl-entry">
+                <div class="hl-entry-meta">
+                  <span class="member-dot md-2">PF</span>
+                  <span class="hl-loc">Ch. 5 · pg. 68</span>
+                  <span class="hl-date">Sun · 3am</span>
+                </div>
+                <p class="hl-entry-quote">The clock made us into time-keepers, and then time-savers, and now time-servers.</p>
+              </div>
+
+              <div class="hl-entry">
+                <div class="hl-entry-meta">
+                  <span class="member-dot md-6">MW</span>
+                  <span class="hl-loc">Ch. 5 · pg. 72</span>
+                  <span class="hl-date">Sat</span>
+                </div>
+                <p class="hl-entry-quote">Every technology has a bias, and every bias favours some kinds of thought over others.</p>
+              </div>
+
+              <div class="hl-entry">
+                <div class="hl-entry-meta">
+                  <span class="member-dot md-1">DK</span>
+                  <span class="hl-loc">Ch. 6 · pg. 86</span>
+                  <span class="hl-date">Mon · 9:12</span>
+                </div>
+                <p class="hl-entry-quote">Americans no longer talk to each other, they entertain each other.</p>
+                <div class="hl-entry-foot"><a class="hl-thread" href="#">● 8 replies &mdash; most-discussed →</a></div>
+              </div>
+
+              <div class="hl-entry">
+                <div class="hl-entry-meta">
+                  <span class="member-dot md-2">PF</span>
+                  <span class="hl-loc">Ch. 6 · pg. 86</span>
+                  <span class="hl-date">Mon · 9:44</span>
+                </div>
+                <p class="hl-entry-quote">They do not exchange ideas; they exchange images.</p>
+              </div>
+
+              <div class="hl-entry">
+                <div class="hl-entry-meta">
+                  <span class="member-dot md-4">MB</span>
+                  <span class="hl-loc">Ch. 6 · pg. 86</span>
+                  <span class="hl-date">Mon · 10:20</span>
+                </div>
+                <p class="hl-entry-quote">They do not argue with propositions.</p>
+              </div>
+
+            </div>
+
+            <a href="#" class="see-all">See all 31 highlights</a>
+          </div>
+
+          <!-- ─── Notes panel ─── -->
+          <div class="pin-panel" data-panel="notes">
+            <div class="panel-head">
+              <div class="panel-head-note">Longer-form reflections from the room. 3 so far.</div>
+              <button class="panel-btn">✎ Write a note</button>
+            </div>
+
+            <div class="note-list">
+
+              <article class="note-entry">
+                <div class="note-head">
+                  <span class="member-dot md-1">DK</span>
+                  <div class="note-head-meta">
+                    <div class="note-author">DK <span class="handle">@dk</span></div>
+                    <div class="note-date">Tuesday · 3 replies</div>
+                  </div>
+                </div>
+                <h4 class="note-title">On re-reading Postman in 2026</h4>
+                <div class="note-body">
+                  <p>This is my third time through <em>Amusing Ourselves to Death</em>. The first was 2009, the second 2016. Both times I read it as history. This time, reading it in 2026 with LLMs reshaping the attention economy in real time, it reads as forecast.</p>
+                  <p>The move I missed both times: Postman is not arguing that the medium determines the message. He's arguing that the dominant medium determines what a culture can <em>know</em>. Print-based culture knows some things. Television-based culture cannot know them. What we're now watching, I think, is the formation of a culture that can only know what an algorithm can optimise for.</p>
+                  <p>Curious if the room agrees.</p>
+                </div>
+                <div class="note-foot"><a href="#">View 3 replies →</a></div>
+              </article>
+
+              <article class="note-entry">
+                <div class="note-head">
+                  <span class="member-dot md-2">PF</span>
+                  <div class="note-head-meta">
+                    <div class="note-author">Pablo F <span class="handle">@pablof7z</span></div>
+                    <div class="note-date">Sunday · 3:12am · 1 reply</div>
+                  </div>
+                </div>
+                <h4 class="note-title">Chapter 5 and the shape of what's next</h4>
+                <div class="note-body">
+                  <p>Chapter 5 is the chapter I've been thinking about all week. Postman is making the case that the telegraph broke a particular shape of public discourse. But the thing he's describing &mdash; the decontextualisation of information, the separation of facts from their use-cases &mdash; is the exact failure mode we're building Nostr to route around.</p>
+                  <p>A highlight on Nostr is a recontextualisation. The excerpt + the signature + the group it's shared to &mdash; that's the &ldquo;place&rdquo; the information has. Postman would call this re-entry. I'd call it a mild cure.</p>
+                </div>
+                <div class="note-foot"><a href="#">View 1 reply →</a></div>
+              </article>
+
+              <article class="note-entry">
+                <div class="note-head">
+                  <span class="member-dot md-4">MB</span>
+                  <div class="note-head-meta">
+                    <div class="note-author">Miljan <span class="handle">@miljan</span></div>
+                    <div class="note-date">Monday · 7:14am · 4 replies</div>
+                  </div>
+                </div>
+                <h4 class="note-title">Is this a book you disagree with or not?</h4>
+                <div class="note-body">
+                  <p>I'm five chapters in and I still can't tell if this is a book I agree with. The argument is persuasive but Postman's implied prescription &mdash; television bad, print good &mdash; collapses into nostalgia whenever he gets specific. The real argument, I think, is not about television. It's about what any dominant medium does to thought.</p>
+                  <p>Would love to know what the rest of the room thinks. DK, Pablo &mdash; you've been through this before.</p>
+                </div>
+                <div class="note-foot"><a href="#">View 4 replies →</a></div>
+              </article>
+
+            </div>
+          </div>
+
+          <!-- ─── Members panel ─── -->
+          <div class="pin-panel" data-panel="members">
+            <div class="members-table">
+              <div class="mt-head">
+                <div>Member</div>
+                <div>Progress</div>
+                <div>Contribution</div>
+                <div>Last here</div>
+              </div>
+
+              <div class="mt-row">
+                <div class="mt-member">
+                  <span class="member-dot md-1">DK</span>
+                  <div><div class="m-n">DK</div><div class="m-h">@dk</div></div>
+                </div>
+                <div class="mt-progress">
+                  <div class="mt-progress-bar"><div class="mt-progress-fill done" style="width:100%"></div></div>
+                  <div class="mt-progress-label"><b>Ch. 6</b> · finished the book</div>
+                </div>
+                <div class="mt-contribution">
+                  <span><b>12</b> highlights</span>
+                  <span><b>4</b> messages</span>
+                  <span><b>1</b> note</span>
+                </div>
+                <div class="mt-last">Tue 9:00</div>
+              </div>
+
+              <div class="mt-row">
+                <div class="mt-member">
+                  <span class="member-dot md-2">PF</span>
+                  <div><div class="m-n">Pablo F</div><div class="m-h">@pablof7z</div></div>
+                </div>
+                <div class="mt-progress">
+                  <div class="mt-progress-bar"><div class="mt-progress-fill" style="width:90%"></div></div>
+                  <div class="mt-progress-label"><b>Ch. 6</b> · pg. 86</div>
+                </div>
+                <div class="mt-contribution">
+                  <span><b>7</b> highlights</span>
+                  <span><b>2</b> messages</span>
+                  <span><b>1</b> note</span>
+                </div>
+                <div class="mt-last">Mon 9:44</div>
+              </div>
+
+              <div class="mt-row">
+                <div class="mt-member">
+                  <span class="member-dot md-4">MB</span>
+                  <div><div class="m-n">Miljan</div><div class="m-h">@miljan</div></div>
+                </div>
+                <div class="mt-progress">
+                  <div class="mt-progress-bar"><div class="mt-progress-fill" style="width:72%"></div></div>
+                  <div class="mt-progress-label"><b>Ch. 5</b> · pg. 68</div>
+                </div>
+                <div class="mt-contribution">
+                  <span><b>8</b> highlights</span>
+                  <span><b>3</b> messages</span>
+                  <span><b>1</b> note</span>
+                </div>
+                <div class="mt-last">Mon 10:20</div>
+              </div>
+
+              <div class="mt-row">
+                <div class="mt-member">
+                  <span class="member-dot md-6">MW</span>
+                  <div><div class="m-n">Max W</div><div class="m-h">@maxwebster</div></div>
+                </div>
+                <div class="mt-progress">
+                  <div class="mt-progress-bar"><div class="mt-progress-fill" style="width:54%"></div></div>
+                  <div class="mt-progress-label"><b>Ch. 4</b> · pg. 56</div>
+                </div>
+                <div class="mt-contribution">
+                  <span><b>4</b> highlights</span>
+                  <span><b>2</b> messages</span>
+                  <span class="none">&mdash;</span>
+                </div>
+                <div class="mt-last">Tue 8:30</div>
+              </div>
+
+              <div class="mt-row">
+                <div class="mt-member">
+                  <span class="member-dot md-3">BS</span>
+                  <div><div class="m-n">Bob S</div><div class="m-h">@bobscully</div></div>
+                </div>
+                <div class="mt-progress">
+                  <div class="mt-progress-bar"><div class="mt-progress-fill none" style="width:0%"></div></div>
+                  <div class="mt-progress-label"><em>not started</em> &mdash; &ldquo;will get to it&rdquo;</div>
+                </div>
+                <div class="mt-contribution">
+                  <span class="none">&mdash;</span>
+                  <span><b>1</b> message</span>
+                  <span class="none">&mdash;</span>
+                </div>
+                <div class="mt-last">Mon 11:05</div>
+              </div>
+
+              <div class="mt-row">
+                <div class="mt-member">
+                  <span class="member-dot md-5">SL</span>
+                  <div><div class="m-n">Steve L</div><div class="m-h">@moneyball</div></div>
+                </div>
+                <div class="mt-progress">
+                  <div class="mt-progress-bar"><div class="mt-progress-fill none" style="width:0%"></div></div>
+                  <div class="mt-progress-label"><em>not started</em></div>
+                </div>
+                <div class="mt-contribution">
+                  <span class="none">&mdash;</span>
+                  <span><b>1</b> message</span>
+                  <span class="none">&mdash;</span>
+                </div>
+                <div class="mt-last">Tue 6:40</div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ═════ ALSO THIS WEEK ═════ -->
+      <div class="block" id="this-week">
+        <div class="block-head">
+          <h2>Also this <em>week.</em></h2>
+        </div>
+
+        <div class="also-grid">
+
+          <a href="artifact-podcast.html" class="also-card">
+            <div class="also-type"><b>Podcast</b> · shared by Bob S · 2h ago</div>
+            <div class="also-head">
+              <div class="also-artwork">TFTC</div>
+              <div>
+                <div class="also-title">Broken Money, Two Years In</div>
+                <div class="also-source">Marty Bent &amp; Lyn Alden · ep. 642 · 1h 24m</div>
+              </div>
+            </div>
+            <div class="also-highlight">
+              <div class="also-stamp"><b>00:43:12 → 00:44:08</b> · marked by Miljan + Steve L</div>
+              <p class="also-quote">&ldquo;The unit of account is the thing nobody audits. That's why it's the best place to hide a long-running monetary lie.&rdquo;</p>
+              <div class="also-reactions">
+                <div class="r-line"><span class="member-dot md-4">MB</span><span><span class="r-name">Miljan</span>This is the chapter she didn't quite write in the book.</span></div>
+                <div class="r-line"><span class="member-dot md-5">SL</span><span><span class="r-name">Steve L</span>Ran this past a bank analyst friend yesterday. She didn't have a counter.</span></div>
+              </div>
+            </div>
+            <div class="also-foot">
+              <div class="dots"><span class="member-dot md-3">BS</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-6 overlap">MW</span></div>
+              <span class="open-arrow">Open episode →</span>
+            </div>
+          </a>
+
+          <a href="artifact-article.html" class="also-card">
+            <div class="also-type"><b>Essay</b> · shared by Pablo F · yesterday</div>
+            <div class="also-head">
+              <div class="also-artwork essay"></div>
+              <div>
+                <div class="also-title">Purple Text, Orange Highlights</div>
+                <div class="also-source">Dergigi · dergigi.com · 2023 (re-read)</div>
+              </div>
+            </div>
+            <div class="also-highlight">
+              <div class="also-stamp"><b>a line worth re-reading</b> · marked by all 6</div>
+              <p class="also-quote">&ldquo;Reading is a solitary act that yearns to be a social one.&rdquo;</p>
+              <div class="also-reactions">
+                <div class="r-line"><span class="member-dot md-2">PF</span><span><span class="r-name">Pablo F</span>Gigi wrote this two months before I started the Nostr build. He knew.</span></div>
+                <div class="r-line"><span class="member-dot md-1">DK</span><span><span class="r-name">DK</span>Three years on, NIP-84 did what this essay was asking for.</span></div>
+              </div>
+            </div>
+            <div class="also-foot">
+              <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-3 overlap">BS</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-6 overlap">MW</span></div>
+              <span class="open-arrow">Open essay →</span>
+            </div>
+          </a>
+
+        </div>
+      </div>
+
+      <!-- ═════ SHELF ═════ -->
+      <div class="block" id="shelf">
+        <div class="block-head">
+          <h2>The <em>shelf.</em></h2>
+        </div>
+
+        <div class="filter-row">
+          <div class="filter-pill on">Everything <span class="c">24</span></div>
+          <div class="filter-pill">Books <span class="c">8</span></div>
+          <div class="filter-pill">Podcasts <span class="c">5</span></div>
+          <div class="filter-pill">Essays <span class="c">7</span></div>
+          <div class="filter-pill">Papers <span class="c">2</span></div>
+          <div class="filter-pill">Archive <span class="c">2</span></div>
+          <div class="filter-pill" style="margin-left:auto;">Recent ↓</div>
+        </div>
+
+        <div class="shelf-grid">
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover book">
+              <div class="shelf-status open">Reading</div>
+              <div class="type-chip">Book · 1985</div>
+              <div>
+                <div class="sc-title">Amusing<br>Ourselves<br>to Death</div>
+                <div class="sc-author">Neil Postman</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">Amusing Ourselves to Death</div>
+              <div class="shelf-tile-author">Neil Postman · 1985</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-6 overlap">MW</span></div>
+              <span>31 hl · 5 thr</span>
+            </div>
+          </a>
+
+          <a href="artifact-podcast.html" class="shelf-tile">
+            <div class="shelf-cover podcast">
+              <div class="shelf-status week">This week</div>
+              <div class="type-chip">Podcast</div>
+              <div>
+                <div class="sc-title">Broken Money,<br>Two Years In</div>
+                <div class="sc-author">TFTC · ep. 642 · Lyn Alden</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">Broken Money, Two Years In</div>
+              <div class="shelf-tile-author">TFTC #642 · Lyn Alden</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-3">BS</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-6 overlap">MW</span></div>
+              <span>7 hl · 2 thr</span>
+            </div>
+          </a>
+
+          <a href="artifact-article.html" class="shelf-tile">
+            <div class="shelf-cover essay">
+              <div class="shelf-status week">Re-read</div>
+              <div class="type-chip">Essay · 2023</div>
+              <div class="essay-mark">§</div>
+              <div>
+                <div class="sc-title">Purple Text,<br>Orange Highlights</div>
+                <div class="sc-author">Dergigi · dergigi.com</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">Purple Text, Orange Highlights</div>
+              <div class="shelf-tile-author">Dergigi · 2023</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-3 overlap">BS</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-6 overlap">MW</span></div>
+              <span>14 hl · 3 thr</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover paper">
+              <div class="type-chip">Paper · 2008</div>
+              <div class="paper-lines"></div>
+              <div>
+                <div class="sc-title">Bitcoin: A Peer-to-Peer<br>Electronic Cash System</div>
+                <div class="sc-author">Satoshi Nakamoto</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">Bitcoin: A Peer-to-Peer Electronic Cash System</div>
+              <div class="shelf-tile-author">Satoshi Nakamoto · 2008 (re-read)</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span></div>
+              <span>22 hl · 3 thr · Dec</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover essay">
+              <div class="type-chip">Essay · 2025</div>
+              <div class="essay-mark">§</div>
+              <div>
+                <div class="sc-title">Nostr and the<br>Seven Churches</div>
+                <div class="sc-author">fiatjaf</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">Nostr and the Seven Churches</div>
+              <div class="shelf-tile-author">fiatjaf</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-2">PF</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-1 overlap">DK</span></div>
+              <span>11 hl · 2 thr · Nov</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover book red">
+              <div class="type-chip">Book · 2019</div>
+              <div>
+                <div class="sc-title">The Age of<br>Surveillance<br>Capitalism</div>
+                <div class="sc-author">Shoshana Zuboff</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">The Age of Surveillance Capitalism</div>
+              <div class="shelf-tile-author">Shoshana Zuboff · 2019</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-3 overlap">BS</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-6 overlap">MW</span></div>
+              <span>41 hl · 4 thr · Oct</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover essay">
+              <div class="type-chip">Essay · 2017</div>
+              <div class="essay-mark">§</div>
+              <div>
+                <div class="sc-title">The Premium<br>Mediocre Life of<br>Maya Millennial</div>
+                <div class="sc-author">Venkatesh Rao · ribbonfarm</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">The Premium Mediocre Life of Maya Millennial</div>
+              <div class="shelf-tile-author">Venkatesh Rao · 2017</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-6">MW</span><span class="member-dot md-1 overlap">DK</span><span class="member-dot md-3 overlap">BS</span></div>
+              <span>8 hl · 1 thr · Sep</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover podcast orange">
+              <div class="type-chip">Podcast · 2025</div>
+              <div>
+                <div class="sc-title">Saifedean on<br>Hard Money</div>
+                <div class="sc-author">Stephan Livera · ep. 550</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">Saifedean on Hard Money</div>
+              <div class="shelf-tile-author">Stephan Livera #550</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-6 overlap">MW</span></div>
+              <span>6 hl · 1 thr · Aug</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover book red">
+              <div class="type-chip">Book · 2024</div>
+              <div>
+                <div class="sc-title">Read<br>Write<br>Own</div>
+                <div class="sc-author">Chris Dixon</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">Read Write Own</div>
+              <div class="shelf-tile-author">Chris Dixon · 2024 — &ldquo;the argument&rdquo;</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-3 overlap">BS</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-6 overlap">MW</span></div>
+              <span>62 hl · 6 thr · Jul</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover essay">
+              <div class="type-chip">Essay · 2002</div>
+              <div class="essay-mark">§</div>
+              <div>
+                <div class="sc-title">Shelling Out:<br>The Origins of Money</div>
+                <div class="sc-author">Nick Szabo</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">Shelling Out: The Origins of Money</div>
+              <div class="shelf-tile-author">Nick Szabo · 2002</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-3">BS</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span></div>
+              <span>9 hl · 1 thr · Jun</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover book blue">
+              <div class="type-chip">Book · 2022</div>
+              <div>
+                <div class="sc-title">The<br>Network<br>State</div>
+                <div class="sc-author">Balaji Srinivasan</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">The Network State</div>
+              <div class="shelf-tile-author">Balaji Srinivasan · 2022</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-6 overlap">MW</span></div>
+              <span>48 hl · 7 thr · May</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover essay">
+              <div class="type-chip">Essay · 1988</div>
+              <div class="essay-mark">§</div>
+              <div>
+                <div class="sc-title">The Crypto<br>Anarchist<br>Manifesto</div>
+                <div class="sc-author">Timothy C. May</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">The Crypto Anarchist Manifesto</div>
+              <div class="shelf-tile-author">Timothy C. May · 1988 (re-read)</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span></div>
+              <span>14 hl · 2 thr · Apr</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover book green">
+              <div class="type-chip">Book · 2019</div>
+              <div>
+                <div class="sc-title">21 Lessons<br>— what I've learned<br>from falling down the<br>Bitcoin rabbit hole</div>
+                <div class="sc-author">Gigi</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">21 Lessons</div>
+              <div class="shelf-tile-author">Gigi · 2019</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-3 overlap">BS</span><span class="member-dot md-5 overlap">SL</span></div>
+              <span>28 hl · 3 thr · Feb</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover archive">
+              <div class="type-chip">Archive · 1993</div>
+              <div class="archive-mark">&ldquo;</div>
+              <div>
+                <div class="sc-title">Hal Finney on<br>the Extropians list</div>
+                <div class="sc-author">archive.org · 1993–2000</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">Hal Finney on Extropians</div>
+              <div class="shelf-tile-author">archive.org · 1993–2000</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-4 overlap">MB</span></div>
+              <span>11 hl · 1 thr · Jan</span>
+            </div>
+          </a>
+
+          <a href="#" class="shelf-tile">
+            <div class="shelf-cover book plum">
+              <div class="type-chip">Book · 2023</div>
+              <div>
+                <div class="sc-title">Broken<br>Money</div>
+                <div class="sc-author">Lyn Alden</div>
+              </div>
+            </div>
+            <div class="shelf-meta">
+              <div class="shelf-tile-title">Broken Money</div>
+              <div class="shelf-tile-author">Lyn Alden · 2023</div>
+            </div>
+            <div class="shelf-tile-foot">
+              <div class="dots"><span class="member-dot md-4">MB</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-3 overlap">BS</span></div>
+              <span>36 hl · 4 thr · Nov 2024</span>
+            </div>
+          </a>
+
+        </div>
+
+        <a href="#" class="see-all">See all 24 on the shelf</a>
+      </div>
+
+      <!-- ═════ HIGHLIGHTS ═════ -->
+      <div class="block" id="highlights">
+        <div class="block-head">
+          <h2>The room's <em>highlights.</em></h2>
+        </div>
+
+        <div class="filter-row">
+          <div class="filter-pill on">All <span class="c">412</span></div>
+          <div class="filter-pill"><span class="dot md-1"></span>DK <span class="c">84</span></div>
+          <div class="filter-pill"><span class="dot md-2"></span>Pablo F <span class="c">92</span></div>
+          <div class="filter-pill"><span class="dot md-4"></span>Miljan <span class="c">51</span></div>
+          <div class="filter-pill"><span class="dot md-3"></span>Bob S <span class="c">48</span></div>
+          <div class="filter-pill"><span class="dot md-5"></span>Steve L <span class="c">76</span></div>
+          <div class="filter-pill"><span class="dot md-6"></span>Max W <span class="c">61</span></div>
+          <div class="filter-pill" style="margin-left:auto;">Most-replied ↓</div>
+        </div>
+
+        <div class="hl-reel">
+
+          <a href="#" class="hr-card">
+            <p class="hr-quote">They do not exchange ideas; they exchange images.</p>
+            <div class="hr-meta">
+              <div class="hr-source"><b>Postman · Amusing Ourselves to Death</b><span class="sc">ch. 6 · Currently reading</span></div>
+              <div class="hr-marks">
+                <div class="dots"><span class="member-dot md-2">PF</span></div>
+                <div class="hr-replies"><b>8</b> replies · hot</div>
+                <div class="hr-date">Mon</div>
+              </div>
+            </div>
+          </a>
+
+          <a href="artifact-podcast.html" class="hr-card">
+            <p class="hr-quote">The unit of account is the thing nobody audits. That's why it's the best place to hide a long-running monetary lie.</p>
+            <div class="hr-meta">
+              <div class="hr-source"><b>Lyn Alden · TFTC #642</b><span class="sc">00:43:12 → 00:44:08 · this week</span></div>
+              <div class="hr-marks">
+                <div class="dots"><span class="member-dot md-4">MB</span><span class="member-dot md-5 overlap">SL</span></div>
+                <div class="hr-replies"><b>3</b> replies</div>
+                <div class="hr-date">Tue</div>
+              </div>
+            </div>
+          </a>
+
+          <a href="artifact-article.html" class="hr-card">
+            <p class="hr-quote">Orange is the new purple.</p>
+            <div class="hr-meta">
+              <div class="hr-source"><b>Dergigi · Purple Text, Orange Highlights</b><span class="sc">this week · re-read</span></div>
+              <div class="hr-marks">
+                <div class="dots"><span class="member-dot md-6">MW</span></div>
+                <div class="hr-replies"><b>2</b> replies</div>
+                <div class="hr-date">Mon</div>
+              </div>
+            </div>
+          </a>
+
+          <a href="artifact-article.html" class="hr-card">
+            <p class="hr-quote">Reading is a solitary act that yearns to be a social one.</p>
+            <div class="hr-meta">
+              <div class="hr-source"><b>Dergigi · Purple Text, Orange Highlights</b><span class="sc">marked by all 6</span></div>
+              <div class="hr-marks">
+                <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-3 overlap">BS</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-6 overlap">MW</span></div>
+                <div class="hr-replies"><b>0</b> replies</div>
+                <div class="hr-date">Sun</div>
+              </div>
+            </div>
+          </a>
+
+          <a href="#" class="hr-card">
+            <p class="hr-quote">A purely peer-to-peer version of electronic cash would allow online payments to be sent directly from one party to another without going through a financial institution.</p>
+            <div class="hr-meta">
+              <div class="hr-source"><b>Satoshi · Bitcoin Whitepaper</b><span class="sc">§1 · Dec 2025 re-read</span></div>
+              <div class="hr-marks">
+                <div class="dots"><span class="member-dot md-5">SL</span></div>
+                <div class="hr-replies"><b>11</b> replies · hot</div>
+                <div class="hr-date">Dec</div>
+              </div>
+            </div>
+          </a>
+
+          <a href="#" class="hr-card">
+            <p class="hr-quote">Money is memory.</p>
+            <div class="hr-meta">
+              <div class="hr-source"><b>Nick Szabo · Shelling Out</b><span class="sc">three words, one thesis</span></div>
+              <div class="hr-marks">
+                <div class="dots"><span class="member-dot md-3">BS</span></div>
+                <div class="hr-replies"><b>4</b> replies</div>
+                <div class="hr-date">Jun</div>
+              </div>
+            </div>
+          </a>
+
+          <a href="#" class="hr-card">
+            <p class="hr-quote">Seven small churches is better than one large cathedral.</p>
+            <div class="hr-meta">
+              <div class="hr-source"><b>fiatjaf · Nostr and the Seven Churches</b><span class="sc">§2</span></div>
+              <div class="hr-marks">
+                <div class="dots"><span class="member-dot md-2">PF</span><span class="member-dot md-4 overlap">MB</span></div>
+                <div class="hr-replies"><b>6</b> replies</div>
+                <div class="hr-date">Nov</div>
+              </div>
+            </div>
+          </a>
+
+          <a href="#" class="hr-card">
+            <p class="hr-quote">Surveillance capitalism unilaterally claims human experience as raw material for translation into behavioral data.</p>
+            <div class="hr-meta">
+              <div class="hr-source"><b>Zuboff · Age of Surveillance Capitalism</b><span class="sc">intro · all 6 marked</span></div>
+              <div class="hr-marks">
+                <div class="dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-3 overlap">BS</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-6 overlap">MW</span></div>
+                <div class="hr-replies"><b>9</b> replies · hot</div>
+                <div class="hr-date">Oct</div>
+              </div>
+            </div>
+          </a>
+
+          <a href="#" class="hr-card">
+            <p class="hr-quote">We are not just consumers of premium mediocre, we are its producers.</p>
+            <div class="hr-meta">
+              <div class="hr-source"><b>Venkatesh Rao · Premium Mediocre</b><span class="sc">the uncomfortable line</span></div>
+              <div class="hr-marks">
+                <div class="dots"><span class="member-dot md-6">MW</span></div>
+                <div class="hr-replies"><b>2</b> replies</div>
+                <div class="hr-date">Sep</div>
+              </div>
+            </div>
+          </a>
+
+        </div>
+
+        <a href="#" class="see-all">See all 412 highlights</a>
+      </div>
+
+      <!-- ═════ DISCUSSIONS ═════ -->
+      <div class="block" id="discussions">
+        <div class="block-head">
+          <h2>Every <em>discussion.</em></h2>
+        </div>
+
+        <div class="filter-row">
+          <div class="filter-pill on">All <span class="c">38</span></div>
+          <div class="filter-pill">Active <span class="c">4</span></div>
+          <div class="filter-pill">Unread <span class="c">2</span></div>
+          <div class="filter-pill">Books</div>
+          <div class="filter-pill">Podcasts</div>
+          <div class="filter-pill">Essays</div>
+          <div class="filter-pill" style="margin-left:auto;">Most recent ↓</div>
+        </div>
+
+        <div class="disc-list">
+
+          <a href="#" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-4 overlap">MB</span></div>
+            <div class="dr-body">
+              <span class="dr-status active">Active</span>
+              <div class="dr-title">Thirty-nine years later and &ldquo;television&rdquo; is the only word you'd need to swap.</div>
+              <div class="dr-source">on <b>Postman · Amusing Ourselves to Death</b> · ch. 6 · started by DK</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><span class="hot">●</span> <b>8</b> replies</div>
+              <div class="dr-last">Tue 9:03</div>
+            </div>
+          </a>
+
+          <a href="artifact-podcast.html" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-4">MB</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-1 overlap">DK</span></div>
+            <div class="dr-body">
+              <span class="dr-status active">Active</span>
+              <div class="dr-title">The unit of account is the thing nobody audits.</div>
+              <div class="dr-source">on <b>Lyn Alden · TFTC #642</b> · 43:12 · started by Miljan</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><span class="hot">●</span> <b>3</b> replies</div>
+              <div class="dr-last">Tue 16:44</div>
+            </div>
+          </a>
+
+          <a href="artifact-article.html" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-2">PF</span><span class="member-dot md-1 overlap">DK</span></div>
+            <div class="dr-body">
+              <span class="dr-status active">Active</span>
+              <div class="dr-title">Gigi wrote this two months before I started the Nostr build.</div>
+              <div class="dr-source">on <b>Dergigi · Purple Text, Orange Highlights</b> · started by Pablo F</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><span class="hot">●</span> <b>4</b> replies</div>
+              <div class="dr-last">yesterday</div>
+            </div>
+          </a>
+
+          <a href="artifact-podcast.html" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-3">BS</span><span class="member-dot md-6 overlap">MW</span></div>
+            <div class="dr-body">
+              <span class="dr-status active">Active</span>
+              <div class="dr-title">Stealing the small-denomination line for the boardwalk deck.</div>
+              <div class="dr-source">on <b>Lyn Alden · TFTC #642</b> · 1:17:30 · started by Bob S</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><span class="hot">●</span> <b>2</b> replies</div>
+              <div class="dr-last">Wed</div>
+            </div>
+          </a>
+
+          <a href="#" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-2">PF</span><span class="member-dot md-1 overlap">DK</span><span class="member-dot md-4 overlap">MB</span></div>
+            <div class="dr-body">
+              <span class="dr-status closed">Closed · Jan</span>
+              <div class="dr-title">Hal's 1993 post on remailers reads like a Nostr NIP.</div>
+              <div class="dr-source">on <b>Hal Finney · Extropians archive</b> · started by Pablo F</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><b>11</b> replies</div>
+              <div class="dr-last">Jan 2026</div>
+            </div>
+          </a>
+
+          <a href="#" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-5">SL</span><span class="member-dot md-6 overlap">MW</span></div>
+            <div class="dr-body">
+              <span class="dr-status closed">Closed · Dec</span>
+              <div class="dr-title">Is the Whitepaper holding up, at year 17?</div>
+              <div class="dr-source">on <b>Satoshi · Bitcoin Whitepaper</b> · started by Steve L · annual re-read</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><b>23</b> replies</div>
+              <div class="dr-last">Dec 2025</div>
+            </div>
+          </a>
+
+          <a href="#" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-3 overlap">BS</span><span class="member-dot md-4 overlap">MB</span><span class="member-dot md-5 overlap">SL</span><span class="member-dot md-6 overlap">MW</span></div>
+            <div class="dr-body">
+              <span class="dr-status closed">Closed · Oct</span>
+              <div class="dr-title">Is surveillance capitalism inevitable, or can the Nostr thesis actually route around it?</div>
+              <div class="dr-source">on <b>Shoshana Zuboff · Surveillance Capitalism</b> · started by DK · longest thread in the room</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><b>47</b> replies</div>
+              <div class="dr-last">Oct 2025</div>
+            </div>
+          </a>
+
+          <a href="#" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-6 overlap">MW</span></div>
+            <div class="dr-body">
+              <span class="dr-status closed">Closed · Jul</span>
+              <div class="dr-title">Dixon's framing of ownership vs the actual Nostr thesis of portability.</div>
+              <div class="dr-source">on <b>Chris Dixon · Read Write Own</b> · started by Steve L · the argument</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><b>34</b> replies</div>
+              <div class="dr-last">Jul 2025</div>
+            </div>
+          </a>
+
+          <a href="#" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-3">BS</span><span class="member-dot md-4 overlap">MB</span></div>
+            <div class="dr-body">
+              <span class="dr-status closed">Closed · Jun</span>
+              <div class="dr-title">Szabo's &ldquo;money is memory&rdquo; read against on-chain state.</div>
+              <div class="dr-source">on <b>Nick Szabo · Shelling Out</b> · started by Bob S</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><b>9</b> replies</div>
+              <div class="dr-last">Jun 2025</div>
+            </div>
+          </a>
+
+          <a href="#" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span><span class="member-dot md-4 overlap">MB</span></div>
+            <div class="dr-body">
+              <span class="dr-status closed">Closed · May</span>
+              <div class="dr-title">Network State critique: exit vs. voice at civilization scale.</div>
+              <div class="dr-source">on <b>Balaji Srinivasan · Network State</b> · started by Pablo F</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><b>23</b> replies</div>
+              <div class="dr-last">May 2025</div>
+            </div>
+          </a>
+
+          <a href="#" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-1">DK</span><span class="member-dot md-2 overlap">PF</span></div>
+            <div class="dr-body">
+              <span class="dr-status closed">Closed · Apr</span>
+              <div class="dr-title">Tim May at 38 years — what survived, what didn't.</div>
+              <div class="dr-source">on <b>Timothy C. May · Crypto Anarchist Manifesto</b> · started by DK</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><b>14</b> replies</div>
+              <div class="dr-last">Apr 2025</div>
+            </div>
+          </a>
+
+          <a href="#" class="disc-row">
+            <div class="dr-dots"><span class="member-dot md-6">MW</span><span class="member-dot md-3 overlap">BS</span></div>
+            <div class="dr-body">
+              <span class="dr-status closed">Closed · Sep</span>
+              <div class="dr-title">Premium mediocre as a hidden growth strategy.</div>
+              <div class="dr-source">on <b>Venkatesh Rao · Premium Mediocre</b> · started by Max W</div>
+            </div>
+            <div class="dr-stats">
+              <div class="dr-replies"><b>6</b> replies</div>
+              <div class="dr-last">Sep 2025</div>
+            </div>
+          </a>
+
+        </div>
+
+        <a href="#" class="see-all">See all 38 threads</a>
+      </div>
+
+      <!-- ═════ LATELY ═════ -->
+      <div class="block" id="lately">
+        <div class="block-head">
+          <h2>Lately in the <em>room.</em></h2>
+        </div>
+
+        <div class="feed">
+          <div class="feed-row"><span class="member-dot md-6">MW</span><div class="f-body"><b>Max W</b> <span class="f-action">marked</span> &ldquo;<span class="f-ref">slow literature</span>&rdquo; in the Stewart Brand lecture.</div><div class="f-time">12m</div></div>
+          <div class="feed-row"><span class="member-dot md-4">MB</span><div class="f-body"><b>Miljan</b> <span class="f-action">replied</span> to DK's thread on Postman — <span class="f-ref">&ldquo;This is genuinely what we're building Primal against.&rdquo;</span></div><div class="f-time">34m</div></div>
+          <div class="feed-row"><span class="member-dot md-2">PF</span><div class="f-body"><b>Pablo F</b> <span class="f-action">marked</span> &ldquo;<span class="f-ref">they exchange images</span>&rdquo; in Postman, chapter 6.</div><div class="f-time">1h</div></div>
+          <div class="feed-row"><span class="member-dot md-3">BS</span><div class="f-body"><b>Bob S</b> <span class="f-action">shared</span> <span class="f-ref">TFTC #642 — Lyn Alden on Broken Money</span> to the room.</div><div class="f-time">2h</div></div>
+          <div class="feed-row"><span class="member-dot md-5">SL</span><div class="f-body"><b>Steve L</b> <span class="f-action">voted</span> for <span class="f-ref">Broken Money</span> in the up-next.</div><div class="f-time">5h</div></div>
+          <div class="feed-row"><span class="member-dot md-6">MW</span><div class="f-body"><b>Max W</b> <span class="f-action">proposed</span> <span class="f-ref">Building a Bridge to the 18th Century</span> for the queue.</div><div class="f-time">Tue</div></div>
+          <div class="feed-row"><span class="member-dot md-1">DK</span><div class="f-body"><b>DK</b> <span class="f-action">started</span> a thread on the Postman opening passage.</div><div class="f-time">Mon</div></div>
+          <div class="feed-row"><span class="member-dot md-2">PF</span><div class="f-body"><b>Pablo F</b> <span class="f-action">opened</span> a note on the Dergigi essay — <span class="f-ref">three paragraphs, a rough draft.</span></div><div class="f-time">Sun</div></div>
+        </div>
+      </div>
+
+    </div>
+
+    <aside class="sidebar">
+
+      <div class="sb-card">
+        <div class="sb-head"><span>Members · 6</span><a href="#" class="sb-link">invite another →</a></div>
+        <div class="mem-row"><span class="member-dot md-1">DK</span><div><div class="mem-name">David King <span class="handle">@dk</span></div><div class="mem-status">&ldquo;Reading Postman. 1985 has more to say about 2026 than 2025 did.&rdquo;</div></div></div>
+        <div class="mem-row"><span class="member-dot md-2">PF</span><div><div class="mem-name">Pablo Fernandez <span class="handle">@pablof7z</span></div><div class="mem-status">&ldquo;Highlighting at 3am again.&rdquo;</div></div></div>
+        <div class="mem-row"><span class="member-dot md-4">MB</span><div><div class="mem-name">Miljan Braticevic <span class="handle">@miljan</span></div><div class="mem-status">&ldquo;On chapter 5. Unlocking something.&rdquo;</div></div></div>
+        <div class="mem-row"><span class="member-dot md-3">BS</span><div><div class="mem-name">Bob Scully <span class="handle">@bobscully</span></div><div class="mem-status">&ldquo;Listening to Lyn on the walk to the boardwalk office.&rdquo;</div></div></div>
+        <div class="mem-row"><span class="member-dot md-5">SL</span><div><div class="mem-name">Steve Lee <span class="handle">@moneyball</span></div><div class="mem-status">&ldquo;Re-read the Dergigi twice this morning.&rdquo;</div></div></div>
+        <div class="mem-row"><span class="member-dot md-6">MW</span><div><div class="mem-name">Max Webster <span class="handle">@maxwebster</span></div><div class="mem-status">&ldquo;Trying to convince everyone to vote for the McLuhan.&rdquo;</div></div></div>
+      </div>
+
+      <div class="sb-card">
+        <div class="sb-head"><span>Up next · voting</span><a href="#" class="sb-link">see all →</a></div>
+        <div class="vote-row"><div class="vote-pos">01</div><div class="vote-body"><div class="vt-title">Read Write Own</div><div class="vt-source">Chris Dixon · 2024</div></div><div class="vote-tally"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="num">3</span></div></div>
+        <div class="vote-row"><div class="vote-pos">02</div><div class="vote-body"><div class="vt-title">Broken Money</div><div class="vt-source">Lyn Alden · 2023</div></div><div class="vote-tally"><span class="dot"></span><span class="dot"></span><span class="num">2</span></div></div>
+        <div class="vote-row"><div class="vote-pos">03</div><div class="vote-body"><div class="vt-title">The Medium is the Massage</div><div class="vt-source">Marshall McLuhan · 1967</div></div><div class="vote-tally"><span class="dot"></span><span class="num">1</span></div></div>
+        <div class="vote-row"><div class="vote-pos">04</div><div class="vote-body"><div class="vt-title">Building a Bridge to the 18th Century</div><div class="vt-source">Neil Postman · 1999 · just proposed</div></div><div class="vote-tally"><span class="dot empty"></span><span class="num">0</span></div></div>
+        <div class="vote-close"><span>Voting closes Sunday, 9pm.</span><a href="#">cast yours →</a></div>
+      </div>
+
+      <a href="#" class="capture-cta">
+        <div class="capture-cta-ico">✎</div>
+        <div class="capture-cta-t">
+          <b>Share to this room</b>
+          <span>Something everyone here should read.</span>
+        </div>
+      </a>
+
+    </aside>
+
+  </div>
+
+</div>
+
+<footer>
+  <div class="brand">Highlighter<em>.</em></div>
+  <div>Signal vs Noise · closed · since Aug MMXXIV · running on Nostr</div>
+</footer>
+
+<script>
+  // Simple scroll-spy for the secondary nav
+  (function(){
+    const nav = document.querySelectorAll('.roomnav a');
+    const blocks = [...document.querySelectorAll('.block[id]')];
+    const mapRef = Object.fromEntries([...nav].map(a => [a.getAttribute('href').slice(1), a]));
+    function onScroll(){
+      const top = window.scrollY + 140;
+      let active = blocks[0];
+      for(const b of blocks){
+        if(b.offsetTop <= top) active = b;
+      }
+      nav.forEach(a => a.classList.remove('active'));
+      const link = mapRef[active.id];
+      if(link) link.classList.add('active');
+    }
+    window.addEventListener('scroll', onScroll, {passive:true});
+    onScroll();
+  })();
+
+  // Pinned-artifact tab switcher
+  (function(){
+    const tabs   = document.querySelectorAll('.pin-tab');
+    const panels = document.querySelectorAll('.pin-panel');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const name = tab.dataset.tab;
+        tabs.forEach(t => t.classList.toggle('active', t === tab));
+        panels.forEach(p => p.classList.toggle('active', p.dataset.panel === name));
+      });
+    });
+  })();
+</script>
+
+</body>
+</html>

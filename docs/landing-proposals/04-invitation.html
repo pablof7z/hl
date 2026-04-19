@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Highlighter — Opening April MMXXVI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@100;200;300;400;500;600&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F5F3ED;
+    --paper-2:#EDEBE3;
+    --ink:#0C1524;
+    --ink-soft:#333B4A;
+    --muted:#7A8091;
+    --rule:#D6D3C8;
+    --accent:#8B2E1F;
+  }
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Archivo',system-ui,sans-serif;
+    font-weight:300;
+    font-size:16px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none;}
+
+  /* ── FIXED NAV ─────────────────── */
+  .grid-frame{
+    position:fixed;
+    top:0;left:0;right:0;bottom:0;
+    pointer-events:none;
+    z-index:1;
+  }
+  .grid-frame::before,.grid-frame::after{
+    content:'';
+    position:absolute;
+    background:var(--rule);
+  }
+  .topbar,.bottombar{
+    position:fixed;
+    left:0;right:0;
+    height:42px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 24px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--ink);
+    z-index:5;
+    background:var(--paper);
+  }
+  .topbar{top:0;border-bottom:1px solid var(--rule);}
+  .bottombar{bottom:0;border-top:1px solid var(--rule);}
+  .topbar a.back{color:var(--ink-soft);}
+  .topbar a.back:hover{color:var(--accent);}
+  .topbar .mark{color:var(--ink);font-weight:500;}
+  .bottombar a:hover{color:var(--accent);}
+
+  /* ── MAIN CONTAINER ─────────── */
+  main{
+    padding-top:42px;
+    padding-bottom:42px;
+  }
+  section{
+    min-height:calc(100vh - 84px);
+    padding:80px 48px;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    border-bottom:1px solid var(--rule);
+    position:relative;
+  }
+  section:last-of-type{border-bottom:none;}
+  @media(max-width:700px){section{padding:72px 24px;min-height:auto;}}
+
+  /* ── ACT 01 — THE MARK ─────── */
+  .hero{
+    background:var(--paper);
+    text-align:left;
+  }
+  .hero-inner{
+    max-width:1200px;
+    margin:0 auto;
+    width:100%;
+  }
+  .hero-kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.22em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:120px;
+  }
+  .hero-kicker .dot{
+    display:inline-block;
+    width:6px;height:6px;background:var(--accent);
+    border-radius:50%;
+    margin:0 10px;
+    transform:translateY(-1px);
+  }
+  .hero-mark{
+    font-family:'Archivo',sans-serif;
+    font-weight:100;
+    font-size:clamp(80px,18vw,230px);
+    line-height:0.92;
+    letter-spacing:-0.045em;
+    color:var(--ink);
+    margin:0;
+  }
+  .hero-mark .thin{font-weight:100;}
+  .hero-mark .serif{
+    font-family:'Instrument Serif',serif;
+    font-style:italic;
+    font-weight:400;
+    letter-spacing:-0.02em;
+    color:var(--accent);
+  }
+  .hero-sub{
+    display:grid;
+    grid-template-columns:repeat(12,1fr);
+    gap:24px;
+    margin-top:120px;
+    padding-top:32px;
+    border-top:1px solid var(--rule);
+  }
+  @media(max-width:700px){
+    .hero-sub{grid-template-columns:repeat(6,1fr);margin-top:80px;}
+    .hero-kicker{margin-bottom:56px;}
+  }
+  .hero-sub .label{
+    grid-column:span 2;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
+  .hero-sub .v{
+    grid-column:span 4;
+    font-family:'Archivo',sans-serif;
+    font-weight:300;
+    font-size:20px;
+    line-height:1.35;
+    color:var(--ink);
+  }
+  @media(max-width:700px){
+    .hero-sub .label,.hero-sub .v{grid-column:span 6;}
+    .hero-sub .v{font-size:17px;margin-bottom:10px;}
+  }
+
+  /* ── ACT 02 — WHAT IT IS ───── */
+  .stmt{
+    background:var(--paper);
+  }
+  .stmt-inner{
+    max-width:1200px;
+    margin:0 auto;
+    display:grid;
+    grid-template-columns:repeat(12,1fr);
+    gap:24px;
+    width:100%;
+  }
+  .stmt-inner .col-num{
+    grid-column:span 2;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.22em;
+    text-transform:uppercase;
+    color:var(--accent);
+  }
+  .stmt-inner .col-body{
+    grid-column:span 9;
+  }
+  @media(max-width:900px){
+    .stmt-inner .col-num,.stmt-inner .col-body{grid-column:span 12;}
+  }
+  .stmt-head{
+    font-family:'Archivo',sans-serif;
+    font-weight:200;
+    font-size:clamp(34px,5vw,62px);
+    line-height:1.1;
+    letter-spacing:-0.025em;
+    color:var(--ink);
+    margin:0 0 40px;
+  }
+  .stmt-head em{
+    font-family:'Instrument Serif',serif;
+    font-weight:400;
+    font-style:italic;
+    color:var(--accent);
+  }
+  .stmt-body{
+    font-family:'Archivo',sans-serif;
+    font-weight:300;
+    font-size:19px;
+    line-height:1.55;
+    max-width:640px;
+    color:var(--ink-soft);
+  }
+  .stmt-body + .stmt-body{margin-top:1em;}
+
+  /* ── ACT 03 — THE TERMS ────── */
+  .terms{
+    background:var(--paper-2);
+  }
+  .terms-inner{
+    max-width:1200px;
+    margin:0 auto;
+    width:100%;
+  }
+  .terms-kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.22em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin-bottom:28px;
+  }
+  .terms-head{
+    font-family:'Archivo',sans-serif;
+    font-weight:200;
+    font-size:clamp(34px,5vw,62px);
+    line-height:1.05;
+    letter-spacing:-0.025em;
+    color:var(--ink);
+    margin:0 0 72px;
+  }
+  .terms-head em{
+    font-family:'Instrument Serif',serif;
+    font-style:italic;
+    color:var(--accent);
+  }
+  .terms-grid{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    border-top:1px solid var(--rule);
+  }
+  @media(max-width:900px){.terms-grid{grid-template-columns:repeat(2,1fr);}}
+  @media(max-width:500px){.terms-grid{grid-template-columns:1fr;}}
+  .term{
+    padding:32px 24px 32px 0;
+    border-right:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);
+  }
+  .term:last-child{border-right:none;}
+  @media(max-width:900px){.term:nth-child(2n){border-right:none;}}
+  .term-n{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.2em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:18px;
+  }
+  .term-t{
+    font-family:'Archivo',sans-serif;
+    font-weight:300;
+    font-size:22px;
+    line-height:1.25;
+    letter-spacing:-0.01em;
+    color:var(--ink);
+    margin-bottom:12px;
+  }
+  .term-t em{
+    font-family:'Instrument Serif',serif;
+    font-style:italic;
+    color:var(--accent);
+  }
+  .term-d{
+    font-family:'Archivo',sans-serif;
+    font-weight:300;
+    font-size:14.5px;
+    line-height:1.55;
+    color:var(--ink-soft);
+  }
+
+  /* ── ACT 04 — THE CARD ────── */
+  .card{
+    background:var(--paper);
+    text-align:center;
+  }
+  .card-inner{
+    max-width:820px;
+    margin:0 auto;
+    padding:60px 24px;
+    border:1px solid var(--ink);
+    position:relative;
+  }
+  .card-inner::before,.card-inner::after{
+    content:'';
+    position:absolute;
+    width:20px;height:20px;
+    border:1px solid var(--ink);
+  }
+  .card-inner::before{top:-11px;left:-11px;background:var(--paper);border-right:none;border-bottom:none;}
+  .card-inner::after{bottom:-11px;right:-11px;background:var(--paper);border-left:none;border-top:none;}
+
+  .card-kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.28em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin-bottom:24px;
+  }
+  .card-head{
+    font-family:'Archivo',sans-serif;
+    font-weight:200;
+    font-size:clamp(40px,6vw,84px);
+    line-height:1;
+    letter-spacing:-0.03em;
+    color:var(--ink);
+    margin:0 0 20px;
+  }
+  .card-head em{
+    font-family:'Instrument Serif',serif;
+    font-style:italic;
+    color:var(--accent);
+  }
+  .card-sub{
+    font-family:'Instrument Serif',serif;
+    font-style:italic;
+    font-size:24px;
+    line-height:1.3;
+    color:var(--ink-soft);
+    margin:0 auto 48px;
+    max-width:520px;
+  }
+  .card-cta{
+    display:inline-block;
+    padding:18px 40px;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.28em;
+    text-transform:uppercase;
+    transition:all 200ms ease;
+  }
+  .card-cta:hover{background:var(--accent);}
+  .card-secondary{
+    display:block;
+    margin-top:24px;
+    font-family:'Instrument Serif',serif;
+    font-style:italic;
+    font-size:17px;
+    color:var(--ink-soft);
+    text-decoration:underline;
+    text-decoration-color:var(--rule);
+    text-underline-offset:4px;
+  }
+
+  /* measurements on the grid */
+  .measure{
+    position:absolute;
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
+  .measure.tl{top:16px;left:24px;}
+  .measure.tr{top:16px;right:24px;text-align:right;}
+  .measure.bl{bottom:16px;left:24px;}
+  .measure.br{bottom:16px;right:24px;text-align:right;}
+  @media(max-width:700px){.measure{display:none;}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="back" href="index.html">← Back to index</a>
+  <span class="mark">Highlighter · 2026</span>
+  <span>Opening · Q3 MMXXVI</span>
+</div>
+
+<main>
+
+<!-- ACT 01 -->
+<section class="hero">
+  <span class="measure tl">Act I · The Mark</span>
+  <span class="measure tr">01 / 04</span>
+  <div class="hero-inner">
+    <div class="hero-kicker">By invitation <span class="dot"></span> On the open internet <span class="dot"></span> Opening MMXXVI</div>
+    <h1 class="hero-mark">
+      <span class="thin">A room</span><br>
+      <span class="serif">for reading</span><br>
+      <span class="thin">together.</span>
+    </h1>
+    <div class="hero-sub">
+      <div class="label">Form</div>
+      <div class="v">Closed rooms of six to twenty. No feed. No audience.</div>
+      <div class="label">Medium</div>
+      <div class="v">One book, essay, or podcast in the room at a time. Highlights sit next to the passage.</div>
+    </div>
+  </div>
+  <span class="measure bl">— 2026 —</span>
+  <span class="measure br">scroll ↓</span>
+</section>
+
+<!-- ACT 02 -->
+<section class="stmt">
+  <span class="measure tl">Act II · The Argument</span>
+  <span class="measure tr">02 / 04</span>
+  <div class="stmt-inner">
+    <div class="col-num">— 01<br>What we made</div>
+    <div class="col-body">
+      <h2 class="stmt-head">The internet solved <em>finding anyone</em> to talk to. It never solved finding the <em>particular few</em> whose reading would make the conversation worth the time.</h2>
+      <p class="stmt-body">Highlighter is the smallest possible answer to that. An invite-only room, a specific book, a few people whose taste you trust, and a shared spine where highlights and arguments live next to the passage they are about.</p>
+      <p class="stmt-body">No discovery surface. No algorithmic reading list. Nobody performing for strangers. The product does one thing slowly, and stops.</p>
+    </div>
+  </div>
+  <span class="measure bl">— medium: reading —</span>
+  <span class="measure br">— 02 —</span>
+</section>
+
+<!-- ACT 03 -->
+<section class="terms">
+  <span class="measure tl">Act III · The Terms</span>
+  <span class="measure tr">03 / 04</span>
+  <div class="terms-inner">
+    <div class="terms-kicker">— 02 · Terms of the room</div>
+    <h2 class="terms-head">Four things we will <em>not</em> do.</h2>
+    <div class="terms-grid">
+      <div class="term">
+        <div class="term-n">i</div>
+        <div class="term-t">We will not build a <em>feed</em>.</div>
+        <div class="term-d">The room's daily surface is whatever the room is reading this week. Not a ranked river of strangers. Never.</div>
+      </div>
+      <div class="term">
+        <div class="term-n">ii</div>
+        <div class="term-t">We will not <em>broadcast</em> what is yours.</div>
+        <div class="term-d">Private rooms stay private. Public ones stay read-only to non-members. Participation is by invitation, always.</div>
+      </div>
+      <div class="term">
+        <div class="term-n">iii</div>
+        <div class="term-t">We will not <em>hold</em> your rooms hostage.</div>
+        <div class="term-d">Rooms live on an open protocol. Keys and data are yours. If we ever go dark, the rooms can move without you losing a thing.</div>
+      </div>
+      <div class="term">
+        <div class="term-n">iv</div>
+        <div class="term-t">We will not let the <em>machines</em> choose.</div>
+        <div class="term-d">Your reading is not ranked, scored, or recommended by a model. The room decides what the room reads. The model's job is to extract, not to direct.</div>
+      </div>
+    </div>
+  </div>
+  <span class="measure bl">— iv. of iv. —</span>
+  <span class="measure br">— 03 —</span>
+</section>
+
+<!-- ACT 04 -->
+<section class="card">
+  <span class="measure tl">Act IV · The Card</span>
+  <span class="measure tr">04 / 04</span>
+  <div class="card-inner">
+    <div class="card-kicker">— on the open internet —</div>
+    <h2 class="card-head">Opening in <em>small waves</em>.</h2>
+    <p class="card-sub">If someone sent you this, you have a way in. If nobody did, ask for a card and we will write back when there is space.</p>
+    <a href="#" class="card-cta">Request a card</a>
+    <a href="#" class="card-secondary">or, read how a room works</a>
+  </div>
+</section>
+
+</main>
+
+<div class="bottombar">
+  <span>Highlighter</span>
+  <span>MMXXVI · Nostr</span>
+  <span>Opening Q3</span>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Broken Money, Two Years In — TFTC Podcast — via Signal vs Noise</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FAFAF7;
+    --surface:#FFFFFF;
+    --surface-warm:#F5EFE0;
+    --surface-muted:#F3F2EE;
+    --ink:#15130F;
+    --ink-soft:#3A362E;
+    --ink-fade:#7A7468;
+    --rule:#E5E0D0;
+
+    --marker:#F5D896;
+    --marker-strong:#E8B96A;
+    --h-sage:#C8D4B5;
+    --h-rose:#EAC6C8;
+    --h-blue:#BCD0E0;
+    --h-lilac:#D0C4E0;
+    --h-amber-l:#F5E6A8;
+
+    --online:#7CAE7A;
+    --brand-accent:#C24D2C;
+  }
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    font-weight:400;
+    font-size:15px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+
+  .back-nav{
+    position:fixed;top:76px;left:20px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.2em;text-transform:uppercase;
+    color:var(--ink-fade);text-decoration:none;
+    padding:8px 12px;
+    background:rgba(250,250,247,0.92);
+    border:1px solid var(--rule);
+    z-index:30;
+  }
+  .back-nav:hover{color:var(--brand-accent);border-color:var(--brand-accent);}
+
+  /* ── THIN TOP BAR ─── */
+  .topbar{
+    position:sticky;top:0;
+    background:var(--surface);
+    border-bottom:1px solid var(--rule);
+    padding:12px 32px;
+    display:flex;align-items:center;gap:24px;
+    z-index:20;
+    height:54px;
+  }
+  .tb-back{
+    display:flex;align-items:center;gap:8px;
+    font-family:'Inter',sans-serif;
+    font-size:13px;font-weight:500;
+    color:var(--ink-soft);
+    text-decoration:none;
+  }
+  .tb-back:hover{color:var(--brand-accent);}
+  .tb-back .room-chip{
+    font-family:'Fraunces',serif;
+    font-style:italic;font-weight:500;
+    color:var(--ink);
+  }
+  .tb-artifact{
+    display:flex;align-items:baseline;gap:10px;
+    flex:1;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;letter-spacing:0.08em;
+    text-transform:uppercase;color:var(--ink-fade);
+  }
+  .tb-artifact b{color:var(--brand-accent);font-weight:500;}
+  .tb-actions{display:flex;gap:8px;}
+  .tb-btn{
+    padding:6px 12px;
+    font-family:'Inter',sans-serif;
+    font-size:12px;font-weight:500;
+    color:var(--ink-soft);
+    background:var(--surface);
+    border:1px solid var(--rule);
+    text-decoration:none;
+    display:flex;align-items:center;gap:6px;
+  }
+  .tb-btn:hover{border-color:var(--brand-accent);color:var(--brand-accent);}
+  .tb-btn.filled{background:var(--ink);color:var(--surface);border-color:var(--ink);}
+  .tb-btn.filled:hover{background:var(--brand-accent);border-color:var(--brand-accent);color:var(--surface);}
+
+  /* ── EPISODE HERO ─────── */
+  .ep-hero{
+    max-width:1200px;margin:0 auto;
+    padding:56px 40px 32px;
+    display:grid;
+    grid-template-columns:200px 1fr;
+    gap:36px;
+    align-items:end;
+  }
+  @media(max-width:760px){
+    .ep-hero{grid-template-columns:120px 1fr;padding:36px 20px 24px;gap:20px;}
+  }
+  .ep-art{
+    aspect-ratio:1/1;
+    background:linear-gradient(135deg,#1A2A44 0%,#3A5780 60%,#1A2A44 100%);
+    border-radius:4px;
+    display:flex;flex-direction:column;justify-content:space-between;
+    padding:20px;
+    color:#D8E3F2;
+    font-family:'Fraunces',serif;
+    box-shadow:0 18px 40px -18px rgba(21,19,15,0.25);
+    position:relative;
+  }
+  .ep-art::before{
+    content:'';position:absolute;top:14px;right:14px;
+    width:28px;height:28px;border-radius:50%;
+    border:2px solid rgba(216,227,242,0.35);
+  }
+  .ep-art::after{
+    content:'';position:absolute;top:22px;right:22px;
+    width:12px;height:12px;border-radius:50%;
+    background:rgba(216,227,242,0.55);
+  }
+  .ep-art-show{font-size:11px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.8;}
+  .ep-art-mark{
+    font-family:'Fraunces',serif;font-weight:500;font-size:32px;line-height:0.95;
+  }
+  .ep-art-mark em{font-style:italic;font-weight:400;}
+  .ep-art-foot{
+    font-size:10px;letter-spacing:0.15em;text-transform:uppercase;opacity:0.7;
+    border-top:1px solid rgba(216,227,242,0.22);padding-top:8px;
+  }
+
+  .ep-meta .ep-kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.2em;text-transform:uppercase;
+    color:var(--brand-accent);
+    margin-bottom:16px;
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+  }
+  .ep-kicker .sep{color:var(--rule);}
+  .ep-kicker .shared-by{color:var(--ink-fade);display:flex;align-items:center;gap:6px;}
+  .ep-kicker .member-dot-mini{
+    width:18px;height:18px;border-radius:50%;
+    background:var(--h-rose);
+    font-family:'Inter',sans-serif;font-size:8px;font-weight:600;
+    text-align:center;line-height:18px;color:var(--ink);
+    text-transform:none;
+  }
+  .ep-meta h1{
+    font-family:'Fraunces',serif;
+    font-weight:400;
+    font-size:clamp(34px,4.6vw,50px);
+    line-height:1.05;letter-spacing:-0.018em;
+    color:var(--ink);
+    margin:0 0 10px;
+  }
+  .ep-show{
+    font-family:'Fraunces',serif;font-style:italic;
+    font-size:18px;color:var(--ink-soft);
+    margin-bottom:18px;
+  }
+  .ep-show a{text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:4px;}
+  .ep-stats{
+    display:flex;gap:20px;flex-wrap:wrap;
+    font-family:'Inter',sans-serif;
+    font-size:13px;color:var(--ink-fade);
+    padding-top:14px;
+    border-top:1px solid var(--rule);
+  }
+  .ep-stats b{color:var(--ink);font-weight:600;}
+
+  /* ── PLAYER ─────────── */
+  .player{
+    max-width:1200px;margin:0 auto;
+    padding:0 40px 20px;
+  }
+  @media(max-width:760px){.player{padding:0 20px 12px;}}
+  .player-inner{
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-radius:4px;
+    padding:22px 28px;
+    box-shadow:0 18px 40px -22px rgba(21,19,15,0.12);
+  }
+  @media(max-width:760px){.player-inner{padding:18px 16px;}}
+  .player-row{
+    display:grid;
+    grid-template-columns:48px 1fr auto;
+    gap:18px;
+    align-items:center;
+  }
+  .play-btn{
+    width:48px;height:48px;border-radius:50%;
+    background:var(--ink);color:var(--surface);
+    font-size:16px;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    transition:background 200ms ease;
+    border:none;
+  }
+  .play-btn:hover{background:var(--brand-accent);}
+  .scrub{
+    position:relative;
+    height:48px;
+  }
+  .scrub-track{
+    position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
+    height:6px;background:var(--surface-muted);border-radius:3px;overflow:hidden;
+  }
+  .scrub-fill{
+    position:absolute;left:0;top:0;bottom:0;
+    width:18%;background:var(--ink);border-radius:3px;
+  }
+  .scrub-head{
+    position:absolute;left:18%;top:50%;transform:translate(-50%,-50%);
+    width:14px;height:14px;border-radius:50%;
+    background:var(--ink);
+    box-shadow:0 0 0 4px rgba(21,19,15,0.08);
+  }
+  .scrub-hl{
+    position:absolute;top:50%;transform:translateY(-50%);
+    height:18px;border-radius:2px;
+    cursor:pointer;
+    border:1.5px solid transparent;
+  }
+  .scrub-hl:hover{border-color:var(--ink);}
+  .scrub-hl::after{
+    content:attr(data-stamp) ' · ' attr(data-by);
+    position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px;letter-spacing:0.08em;text-transform:uppercase;
+    color:var(--ink);white-space:nowrap;
+    background:var(--surface);
+    padding:3px 8px;border:1px solid var(--rule);border-radius:2px;
+    opacity:0;pointer-events:none;transition:opacity 150ms ease;
+  }
+  .scrub-hl:hover::after{opacity:1;}
+  .scrub-hl.a1{left:9.6%;width:1.8%;background:var(--marker);}
+  .scrub-hl.a2{left:29.5%;width:1.9%;background:var(--h-sage);}
+  .scrub-hl.a3{left:51.4%;width:1.2%;background:var(--h-blue);}
+  .scrub-hl.a3b{left:52.4%;width:0.8%;background:var(--h-lilac);}
+  .scrub-hl.a4{left:74%;width:1.7%;background:var(--h-amber-l);}
+  .scrub-hl.a5{left:92%;width:1.2%;background:var(--h-rose);}
+
+  .player-time{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;color:var(--ink-fade);
+    letter-spacing:0.02em;
+  }
+  .player-time b{color:var(--ink);font-weight:500;}
+
+  .player-ctrls{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-top:14px;padding-top:14px;border-top:1px dotted var(--rule);
+    font-family:'Inter',sans-serif;
+    font-size:12.5px;color:var(--ink-fade);
+  }
+  .pc-left{display:flex;gap:14px;align-items:center;}
+  .pc-pill{
+    padding:4px 10px;border:1px solid var(--rule);border-radius:999px;
+    font-family:'Inter',sans-serif;font-weight:500;
+    font-size:11.5px;color:var(--ink-soft);cursor:pointer;
+  }
+  .pc-pill:hover{border-color:var(--ink);color:var(--ink);}
+  .pc-right{
+    display:flex;gap:8px;align-items:center;
+    font-family:'JetBrains Mono',monospace;font-size:11px;
+  }
+  .pc-right .member-dot-mini{
+    width:16px;height:16px;border-radius:50%;
+    font-size:8px;font-weight:600;line-height:16px;text-align:center;
+    color:var(--ink);margin-right:-3px;border:1.5px solid var(--surface);
+  }
+  .pc-where{font-family:'Fraunces',serif;font-style:italic;font-size:13px;color:var(--ink-soft);margin-left:8px;}
+
+  /* ── MAIN GRID ─────── */
+  .pod-main{
+    max-width:1200px;
+    margin:28px auto 0;
+    padding:0 40px 80px;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 320px;
+    gap:44px;
+    align-items:start;
+  }
+  @media(max-width:1060px){.pod-main{grid-template-columns:1fr;gap:32px;}}
+  @media(max-width:760px){.pod-main{padding:0 20px 60px;}}
+
+  /* ── TIMELINE ─── */
+  .timeline-head{
+    display:flex;align-items:baseline;justify-content:space-between;
+    padding-bottom:14px;
+    border-bottom:1px solid var(--rule);
+    margin-bottom:24px;
+  }
+  .timeline-head h2{
+    font-family:'Inter',sans-serif;
+    font-weight:700;font-size:19px;line-height:1.15;
+    letter-spacing:-0.018em;color:var(--ink);margin:0;
+  }
+  .timeline-head h2 em{font-style:normal;color:var(--brand-accent);font-weight:700;}
+  .timeline-head .meta{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-fade);
+  }
+
+  .timeline{
+    position:relative;
+    padding-left:40px;
+  }
+  .timeline::before{
+    content:'';position:absolute;
+    left:15px;top:4px;bottom:4px;width:1px;
+    background:var(--rule);
+  }
+
+  .stamp-row{
+    position:relative;
+    margin-bottom:28px;
+  }
+  .stamp-row::before{
+    content:'';position:absolute;
+    left:-32px;top:16px;
+    width:14px;height:14px;border-radius:50%;
+    background:var(--surface);border:2px solid var(--brand-accent);
+    z-index:2;
+  }
+  .stamp-row .stamp-time{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;font-weight:500;letter-spacing:0.06em;
+    color:var(--brand-accent);
+    margin-bottom:8px;display:block;
+  }
+  .stamp-card{
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-radius:4px;
+    padding:20px 24px 18px;
+    box-shadow:0 10px 30px -18px rgba(21,19,15,0.08);
+  }
+  .stamp-head{
+    display:flex;align-items:center;gap:10px;
+    margin-bottom:14px;
+  }
+  .stamp-head .member-dot{
+    width:28px;height:28px;border-radius:50%;
+    font-family:'Inter',sans-serif;font-size:11px;font-weight:600;
+    text-align:center;line-height:28px;color:var(--ink);
+  }
+  .md-1{background:var(--marker);}
+  .md-2{background:var(--h-sage);}
+  .md-3{background:var(--h-rose);}
+  .md-4{background:var(--h-blue);}
+  .md-5{background:var(--h-lilac);}
+  .md-6{background:var(--h-amber-l);}
+  .stamp-who{font-family:'Inter',sans-serif;font-size:13px;color:var(--ink-soft);}
+  .stamp-who b{font-weight:600;color:var(--ink);margin-right:8px;}
+  .stamp-who .handle{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-fade);}
+
+  .stamp-quote{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-size:18px;line-height:1.55;
+    color:var(--ink);
+    margin:0 0 14px;
+    padding:0 0 0 14px;
+    border-left:3px solid var(--marker-strong);
+  }
+  .stamp-quote.multi{
+    border-left-color:transparent;
+    position:relative;
+  }
+  .stamp-quote.multi::before{
+    content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:linear-gradient(180deg,var(--marker-strong) 0%,var(--h-lilac) 100%);
+  }
+
+  .stamp-replies{
+    display:flex;flex-direction:column;gap:8px;
+    padding-top:12px;
+    border-top:1px dashed rgba(21,19,15,0.1);
+  }
+  .stamp-reply{
+    display:grid;
+    grid-template-columns:26px 1fr auto;
+    gap:10px;
+    font-family:'Inter',sans-serif;
+    font-size:13.5px;line-height:1.5;
+    color:var(--ink-soft);
+    align-items:start;
+  }
+  .stamp-reply .member-dot{width:24px;height:24px;line-height:24px;font-size:10px;font-weight:600;}
+  .stamp-reply b{color:var(--ink);font-weight:600;margin-right:8px;}
+  .stamp-reply .r-time{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;color:var(--ink-fade);
+    letter-spacing:0.04em;text-transform:uppercase;
+  }
+
+  .stamp-reply-prompt{
+    margin-top:10px;padding:8px 14px;
+    background:var(--surface-warm);
+    border-radius:3px;
+    font-family:'Inter',sans-serif;
+    font-size:12px;color:var(--ink-fade);
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .stamp-reply-prompt button{
+    padding:4px 10px;background:var(--ink);color:var(--surface);
+    font-family:'Inter',sans-serif;font-size:11px;font-weight:500;
+    border:none;cursor:pointer;
+  }
+
+  /* ── SIDEBAR ─────── */
+  aside.pod-side{
+    display:flex;flex-direction:column;gap:20px;
+  }
+  @media(min-width:1060px){
+    aside.pod-side{position:sticky;top:78px;align-self:start;max-height:calc(100vh - 100px);overflow-y:auto;padding-right:4px;}
+    aside.pod-side::-webkit-scrollbar{width:4px;}
+    aside.pod-side::-webkit-scrollbar-thumb{background:var(--rule);}
+  }
+  .sb-card{
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-radius:4px;
+    padding:20px 22px;
+  }
+  .sb-head{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.18em;
+    text-transform:uppercase;color:var(--ink-fade);
+    padding-bottom:12px;
+    border-bottom:1px dotted var(--rule);
+    margin-bottom:14px;
+  }
+
+  /* chapters list */
+  .chap-row{
+    display:grid;grid-template-columns:60px 1fr auto;
+    gap:12px;
+    padding:9px 0;
+    border-bottom:1px dotted rgba(21,19,15,0.08);
+    font-size:13px;color:var(--ink-soft);
+    align-items:center;
+  }
+  .chap-row:last-child{border-bottom:none;}
+  .chap-row.active{color:var(--ink);}
+  .chap-row.active .chap-t{font-weight:600;}
+  .chap-time{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;color:var(--ink-fade);letter-spacing:0.04em;
+  }
+  .chap-t{font-family:'Inter',sans-serif;line-height:1.3;}
+  .chap-count{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;color:var(--ink-fade);
+  }
+  .chap-count b{color:var(--brand-accent);font-weight:500;}
+
+  /* listen progress */
+  .prog-row{
+    display:grid;grid-template-columns:26px 1fr auto;gap:10px;
+    padding:10px 0;align-items:center;
+    border-bottom:1px dotted rgba(21,19,15,0.08);
+  }
+  .prog-row:last-child{border-bottom:none;}
+  .prog-row .member-dot{width:24px;height:24px;line-height:24px;font-size:10px;font-weight:600;}
+  .prog-meta .nm{font-family:'Inter',sans-serif;font-size:13px;font-weight:600;color:var(--ink);}
+  .prog-meta .pg{
+    height:4px;margin-top:4px;
+    background:var(--surface-muted);
+    border-radius:2px;overflow:hidden;
+    width:100%;
+  }
+  .prog-meta .pg-fill{height:100%;background:var(--brand-accent);}
+  .prog-pct{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;color:var(--ink-fade);
+    text-align:right;
+    letter-spacing:0.02em;
+  }
+
+  /* CTA */
+  .capture-cta{
+    background:var(--ink);color:var(--surface);
+    padding:16px 20px;
+    border-radius:4px;
+    display:flex;align-items:center;gap:12px;
+    text-decoration:none;
+    transition:background 200ms ease;
+  }
+  .capture-cta:hover{background:var(--brand-accent);}
+  .capture-cta-ico{font-size:20px;line-height:1;}
+  .capture-cta-t b{
+    display:block;font-family:'Inter',sans-serif;font-weight:600;font-size:14px;margin-bottom:2px;
+  }
+  .capture-cta-t span{
+    font-family:'Inter',sans-serif;font-size:13px;opacity:0.75;line-height:1.4;
+  }
+
+  footer{
+    border-top:1px solid var(--rule);
+    padding:28px 40px;
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.12em;
+    text-transform:uppercase;color:var(--ink-fade);
+  }
+  footer .brand{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:14px;
+    color:var(--ink);text-transform:none;letter-spacing:-0.01em;
+  }
+  footer .brand em{font-style:normal;color:var(--brand-accent);}
+
+  @media(max-width:760px){
+    .tb-actions .tb-btn:not(.filled){display:none;}
+  }
+</style>
+</head>
+<body>
+
+<a class="back-nav" href="index.html">← Index</a>
+
+<!-- ─────── THIN TOP BAR ─────── -->
+<div class="topbar">
+  <a href="room-signal-vs-noise.html" class="tb-back">
+    ← <span class="room-chip">Signal vs Noise</span>
+  </a>
+  <div class="tb-artifact">
+    <span><b>Podcast</b></span>
+    <span>·</span>
+    <span>Broken Money, Two Years In</span>
+    <span>·</span>
+    <span>TFTC #642</span>
+  </div>
+  <div class="tb-actions">
+    <a href="#" class="tb-btn">Transcript</a>
+    <a href="#" class="tb-btn">Share</a>
+    <a href="#" class="tb-btn filled">✎ Mark a moment</a>
+  </div>
+</div>
+
+<!-- ─────── HERO ─────── -->
+<section class="ep-hero">
+  <div class="ep-art">
+    <div class="ep-art-show">TFTC Podcast</div>
+    <div class="ep-art-mark"><em>Broken<br>Money.</em></div>
+    <div class="ep-art-foot">ep. 642 · Apr 2026</div>
+  </div>
+  <div class="ep-meta">
+    <div class="ep-kicker">
+      <span>A podcast</span>
+      <span class="sep">·</span>
+      <span class="shared-by"><span class="member-dot-mini">BS</span>shared by Bob S · 2h ago</span>
+      <span class="sep">·</span>
+      <span>this week's listen</span>
+    </div>
+    <h1>Broken Money, Two Years In</h1>
+    <p class="ep-show">— <a href="#">Marty Bent</a> &amp; <a href="#">Lyn Alden</a>, on <a href="#">TFTC Podcast</a></p>
+    <div class="ep-stats">
+      <span><b>1h 24m</b></span>
+      <span>·</span>
+      <span>Released <b>Apr 9, 2026</b></span>
+      <span>·</span>
+      <span><b>4 of 6</b> have listened</span>
+      <span>·</span>
+      <span><b>7 highlights</b> · 2 threads</span>
+    </div>
+  </div>
+</section>
+
+<!-- ─────── PLAYER ─────── -->
+<div class="player">
+  <div class="player-inner">
+    <div class="player-row">
+      <button class="play-btn">▶</button>
+      <div class="scrub">
+        <div class="scrub-track"></div>
+        <div class="scrub-fill"></div>
+        <div class="scrub-head"></div>
+        <div class="scrub-hl a1" data-stamp="08:14" data-by="DK"></div>
+        <div class="scrub-hl a2" data-stamp="24:40" data-by="Pablo F"></div>
+        <div class="scrub-hl a3" data-stamp="43:12" data-by="Miljan"></div>
+        <div class="scrub-hl a3b" data-stamp="43:12" data-by="Steve L"></div>
+        <div class="scrub-hl a4" data-stamp="01:02:18" data-by="Max W"></div>
+        <div class="scrub-hl a5" data-stamp="01:17:30" data-by="Bob S"></div>
+      </div>
+      <div class="player-time"><b>15:04</b> / 1:24:00</div>
+    </div>
+    <div class="player-ctrls">
+      <div class="pc-left">
+        <div class="pc-pill">← 30s</div>
+        <div class="pc-pill">1.0×</div>
+        <div class="pc-pill">30s →</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────── MAIN GRID ─────── -->
+<div class="pod-main">
+
+  <div>
+    <div class="timeline-head">
+      <h2>Marked <em>moments.</em></h2>
+      <div class="meta">6 highlights · 4 listeners</div>
+    </div>
+
+    <div class="timeline">
+
+      <div class="stamp-row">
+        <span class="stamp-time">00:08:14 → 00:09:02</span>
+        <div class="stamp-card">
+          <div class="stamp-head">
+            <div class="member-dot md-1">DK</div>
+            <div class="stamp-who"><b>DK</b><span class="handle">@dk</span></div>
+          </div>
+          <p class="stamp-quote">The reason I keep writing new chapters is that the story hasn't stopped. The book, in that sense, is a snapshot. The argument is ongoing.</p>
+          <div class="stamp-replies">
+            <div class="stamp-reply">
+              <div class="member-dot md-1">DK</div>
+              <div><b>DK</b>She's essentially saying: the book isn't a book, it's a rolling audit. Compare to a Fed report that admits it'll be out of date on publication.</div>
+              <div class="r-time">Tue 7:40</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stamp-row">
+        <span class="stamp-time">00:24:40 → 00:25:31</span>
+        <div class="stamp-card">
+          <div class="stamp-head">
+            <div class="member-dot md-2">PF</div>
+            <div class="stamp-who"><b>Pablo F</b><span class="handle">@pablof7z</span></div>
+          </div>
+          <p class="stamp-quote">The internet broke the twentieth-century information monopoly. Money was the one monopoly that didn't break. That's the chapter we haven't finished writing yet.</p>
+          <div class="stamp-replies">
+            <div class="stamp-reply">
+              <div class="member-dot md-2">PF</div>
+              <div><b>Pablo F</b>This one sentence is worth the episode. Replace &ldquo;money&rdquo; with &ldquo;identity&rdquo; and you get Nostr. The pattern repeats.</div>
+              <div class="r-time">Sun 3:20</div>
+            </div>
+            <div class="stamp-reply">
+              <div class="member-dot md-4">MB</div>
+              <div><b>Miljan</b>Or replace &ldquo;money&rdquo; with &ldquo;social graph&rdquo; and you get why Primal exists. Same pattern, different layer.</div>
+              <div class="r-time">Sun 4:01</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stamp-row">
+        <span class="stamp-time">00:43:12 → 00:44:08</span>
+        <div class="stamp-card">
+          <div class="stamp-head">
+            <div class="member-dot md-4">MB</div>
+            <div class="member-dot md-5" style="margin-left:-8px;">SL</div>
+            <div class="stamp-who" style="margin-left:6px;"><b>Miljan</b> + <b>Steve L</b>&nbsp;marked this</div>
+          </div>
+          <p class="stamp-quote multi">The unit of account is the thing nobody audits. That's why it's the best place to hide a long-running monetary lie.</p>
+          <div class="stamp-replies">
+            <div class="stamp-reply">
+              <div class="member-dot md-4">MB</div>
+              <div><b>Miljan</b>This is the chapter she didn't quite write in the book. I'd put this line on the inside cover of the next edition.</div>
+              <div class="r-time">Mon 14:22</div>
+            </div>
+            <div class="stamp-reply">
+              <div class="member-dot md-5">SL</div>
+              <div><b>Steve L</b>Ran this past a bank analyst friend yesterday. She didn't have a counter. That's the test I use for a real claim.</div>
+              <div class="r-time">Tue 11:10</div>
+            </div>
+            <div class="stamp-reply">
+              <div class="member-dot md-1">DK</div>
+              <div><b>DK</b>The phrase &ldquo;long-running monetary lie&rdquo; — she's doing Postman's move. Same rhetorical gear, different domain.</div>
+              <div class="r-time">Tue 16:44</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stamp-row">
+        <span class="stamp-time">01:02:18 → 01:03:05</span>
+        <div class="stamp-card">
+          <div class="stamp-head">
+            <div class="member-dot md-6">MW</div>
+            <div class="stamp-who"><b>Max W</b><span class="handle">@maxwebster</span></div>
+          </div>
+          <p class="stamp-quote">The next ten years are going to feel less like an argument about Bitcoin and more like an audit of fiat. And the audit is self-administering.</p>
+          <div class="stamp-replies">
+            <div class="stamp-reply">
+              <div class="member-dot md-6">MW</div>
+              <div><b>Max W</b>Filing under &ldquo;lines I wish my LPs would hear instead of my deck.&rdquo; The audit is self-administering is the whole thesis.</div>
+              <div class="r-time">Tue 9:15</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stamp-row">
+        <span class="stamp-time">01:17:30 → 01:18:06</span>
+        <div class="stamp-card">
+          <div class="stamp-head">
+            <div class="member-dot md-3">BS</div>
+            <div class="stamp-who"><b>Bob S</b><span class="handle">@bobscully</span></div>
+          </div>
+          <p class="stamp-quote">You're going to see a layer of money emerge that behaves like cash for small amounts and like stored value for large ones. The small-amount layer is going to sneak up on everyone.</p>
+          <div class="stamp-replies">
+            <div class="stamp-reply">
+              <div class="member-dot md-3">BS</div>
+              <div><b>Bob S</b>This is boardwalk.cash in one paragraph. Lyn described the shape of what we've been building without knowing we exist.</div>
+              <div class="r-time">Wed 6:02</div>
+            </div>
+            <div class="stamp-reply">
+              <div class="member-dot md-6">MW</div>
+              <div><b>Max W</b><span class="mention" style="color:var(--brand-accent);font-weight:500;">@bob</span> — re-listen at 1.12.30 too. Same point from a slightly different angle.</div>
+              <div class="r-time">Wed 7:20</div>
+            </div>
+          </div>
+
+          <div class="stamp-reply-prompt">
+            <span>Mark a passage &mdash; select text in the transcript, or drop a new timestamp below.</span>
+            <button>✎ Mark a moment</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ─── SIDEBAR ─── -->
+  <aside class="pod-side">
+
+    <div class="sb-card">
+      <div class="sb-head">Chapters · 6</div>
+      <div class="chap-row"><span class="chap-time">00:00</span><span class="chap-t">Cold open</span><span class="chap-count">&nbsp;</span></div>
+      <div class="chap-row"><span class="chap-time">04:20</span><span class="chap-t">Two years in — framing</span><span class="chap-count"><b>1</b></span></div>
+      <div class="chap-row"><span class="chap-time">21:10</span><span class="chap-t">The internet &amp; money</span><span class="chap-count"><b>1</b></span></div>
+      <div class="chap-row active"><span class="chap-time">41:00</span><span class="chap-t">Hidden in the unit of account</span><span class="chap-count"><b>1</b></span></div>
+      <div class="chap-row"><span class="chap-time">58:45</span><span class="chap-t">The next ten years</span><span class="chap-count"><b>1</b></span></div>
+      <div class="chap-row"><span class="chap-time">01:14:00</span><span class="chap-t">Small-denom money</span><span class="chap-count"><b>1</b></span></div>
+    </div>
+
+    <div class="sb-card">
+      <div class="sb-head">Everyone's listen · 4 of 6</div>
+
+      <div class="prog-row">
+        <div class="member-dot md-4">MB</div>
+        <div class="prog-meta"><div class="nm">Miljan</div><div class="pg"><div class="pg-fill" style="width:57%;"></div></div></div>
+        <div class="prog-pct">48:12</div>
+      </div>
+      <div class="prog-row">
+        <div class="member-dot md-5">SL</div>
+        <div class="prog-meta"><div class="nm">Steve L</div><div class="pg"><div class="pg-fill" style="width:94%;"></div></div></div>
+        <div class="prog-pct">1:19:10</div>
+      </div>
+      <div class="prog-row">
+        <div class="member-dot md-3">BS</div>
+        <div class="prog-meta"><div class="nm">Bob S</div><div class="pg"><div class="pg-fill" style="width:100%;"></div></div></div>
+        <div class="prog-pct">Done</div>
+      </div>
+      <div class="prog-row">
+        <div class="member-dot md-6">MW</div>
+        <div class="prog-meta"><div class="nm">Max W</div><div class="pg"><div class="pg-fill" style="width:80%;"></div></div></div>
+        <div class="prog-pct">1:07:32</div>
+      </div>
+      <div class="prog-row">
+        <div class="member-dot md-1" style="opacity:0.5;">DK</div>
+        <div class="prog-meta"><div class="nm" style="color:var(--ink-fade);">DK</div><div class="pg"><div class="pg-fill" style="width:11%;"></div></div></div>
+        <div class="prog-pct">09:44</div>
+      </div>
+      <div class="prog-row">
+        <div class="member-dot md-2" style="opacity:0.35;">PF</div>
+        <div class="prog-meta"><div class="nm" style="color:var(--ink-fade);">Pablo F</div><div class="pg"><div class="pg-fill" style="width:30%;"></div></div></div>
+        <div class="prog-pct">24:58</div>
+      </div>
+    </div>
+
+    <a href="#" class="capture-cta">
+      <div class="capture-cta-ico">✎</div>
+      <div class="capture-cta-t">
+        <b>Mark a moment</b>
+        <span>Pull the thirty seconds you want the room to hear.</span>
+      </div>
+    </a>
+
+  </aside>
+
+</div>
+
+<footer>
+  <div class="brand">Highlighter<em>.</em></div>
+  <div>Podcast · shared to Signal vs Noise · timestamp reactions · running on Nostr</div>
+</footer>
+
+</body>
+</html>

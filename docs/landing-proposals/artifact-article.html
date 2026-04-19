@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Purple Text, Orange Highlights — Dergigi — via Signal vs Noise</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FAFAF7;
+    --surface:#FFFFFF;
+    --surface-warm:#F5EFE0;
+    --surface-muted:#F3F2EE;
+    --ink:#15130F;
+    --ink-soft:#3A362E;
+    --ink-fade:#7A7468;
+    --rule:#E5E0D0;
+
+    --marker:#F5D896;
+    --marker-strong:#E8B96A;
+    --h-sage:#C8D4B5;
+    --h-rose:#EAC6C8;
+    --h-blue:#BCD0E0;
+    --h-lilac:#D0C4E0;
+    --h-amber-l:#F5E6A8;
+
+    --online:#7CAE7A;
+    --brand-accent:#C24D2C;
+  }
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    font-weight:400;
+    font-size:15px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+
+  /* ── BACK LINK ────────────── */
+  .back-nav{
+    position:fixed;top:76px;left:20px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.2em;text-transform:uppercase;
+    color:var(--ink-fade);text-decoration:none;
+    padding:8px 12px;
+    background:rgba(250,250,247,0.92);
+    border:1px solid var(--rule);
+    z-index:30;
+  }
+  .back-nav:hover{color:var(--brand-accent);border-color:var(--brand-accent);}
+
+  /* ── THIN TOP BAR ─────────── */
+  .topbar{
+    position:sticky;top:0;
+    background:var(--surface);
+    border-bottom:1px solid var(--rule);
+    padding:12px 32px;
+    display:flex;align-items:center;gap:24px;
+    z-index:20;
+    height:54px;
+  }
+  .tb-back{
+    display:flex;align-items:center;gap:8px;
+    font-family:'Inter',sans-serif;
+    font-size:13px;font-weight:500;
+    color:var(--ink-soft);
+    text-decoration:none;
+  }
+  .tb-back:hover{color:var(--brand-accent);}
+  .tb-back .room-chip{
+    font-family:'Fraunces',serif;
+    font-style:italic;font-weight:500;
+    color:var(--ink);
+  }
+  .tb-artifact{
+    display:flex;align-items:baseline;gap:10px;
+    flex:1;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;letter-spacing:0.08em;
+    text-transform:uppercase;color:var(--ink-fade);
+  }
+  .tb-artifact b{color:var(--brand-accent);font-weight:500;}
+  .tb-actions{display:flex;gap:8px;}
+  .tb-btn{
+    padding:6px 12px;
+    font-family:'Inter',sans-serif;
+    font-size:12px;font-weight:500;
+    color:var(--ink-soft);
+    background:var(--surface);
+    border:1px solid var(--rule);
+    text-decoration:none;
+    display:flex;align-items:center;gap:6px;
+  }
+  .tb-btn:hover{border-color:var(--brand-accent);color:var(--brand-accent);}
+  .tb-btn.filled{background:var(--ink);color:var(--surface);border-color:var(--ink);}
+  .tb-btn.filled:hover{background:var(--brand-accent);border-color:var(--brand-accent);color:var(--surface);}
+
+  .filter-ctl{
+    display:flex;align-items:center;gap:6px;
+    padding:6px 10px 6px 12px;
+    border:1px solid var(--rule);
+    font-family:'Inter',sans-serif;
+    font-size:12px;font-weight:500;
+    color:var(--ink-soft);
+  }
+  .filter-ctl .dots-mini{display:flex;}
+  .filter-ctl .md-mini{
+    width:14px;height:14px;border-radius:50%;
+    border:1.5px solid var(--surface);
+  }
+  .filter-ctl .md-mini.overlap{margin-left:-5px;}
+
+  /* ── ARTICLE HERO ─────────── */
+  .hero{
+    max-width:720px;margin:0 auto;
+    padding:72px 40px 48px;
+    text-align:left;
+  }
+  @media(max-width:640px){.hero{padding:48px 20px 32px;}}
+  .hero-kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.2em;text-transform:uppercase;
+    color:var(--brand-accent);
+    margin-bottom:22px;
+    display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  }
+  .hero-kicker .dot{color:var(--rule);}
+  .hero-kicker .shared-by{display:flex;align-items:center;gap:6px;color:var(--ink-fade);}
+  .hero-kicker .member-dot-mini{
+    width:18px;height:18px;border-radius:50%;
+    background:var(--h-sage);
+    font-family:'Inter',sans-serif;font-size:8px;font-weight:600;
+    text-align:center;line-height:18px;color:var(--ink);
+    text-transform:none;
+  }
+  .hero h1{
+    font-family:'Fraunces',serif;
+    font-weight:400;
+    font-size:clamp(40px,5.5vw,64px);
+    line-height:1.05;letter-spacing:-0.02em;
+    color:var(--ink);
+    margin:0 0 18px;
+  }
+  .hero-author{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-size:20px;color:var(--ink-soft);
+    margin:0 0 18px;
+  }
+  .hero-author a{text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:4px;}
+  .hero-meta{
+    display:flex;gap:16px;flex-wrap:wrap;
+    font-family:'Inter',sans-serif;
+    font-size:13px;color:var(--ink-fade);
+    padding-top:18px;
+    border-top:1px solid var(--rule);
+  }
+  .hero-meta b{color:var(--ink);font-weight:600;}
+  .hero-meta .sep{color:var(--rule);}
+
+  /* ── ARTICLE BODY ─────────── */
+  .article-wrap{
+    max-width:1280px;
+    margin:0 auto;
+    padding:0 40px 120px;
+    display:grid;
+    grid-template-columns:minmax(0,720px) minmax(0,300px);
+    gap:64px;
+    justify-content:center;
+  }
+  @media(max-width:1060px){.article-wrap{grid-template-columns:minmax(0,720px);justify-content:center;}}
+  @media(max-width:640px){.article-wrap{padding:0 20px 80px;}}
+
+  .article-body{
+    font-family:'Fraunces',serif;
+    font-size:20px;
+    line-height:1.72;
+    color:var(--ink);
+  }
+  .article-body p{
+    margin:0 0 1.3em;
+  }
+  .article-body p:first-of-type::first-letter{
+    font-family:'Fraunces',serif;
+    font-weight:500;font-style:normal;
+    font-size:68px;line-height:0.9;float:left;
+    padding:8px 14px 0 0;
+    color:var(--brand-accent);
+  }
+  .article-body .drop{
+    color:var(--ink-fade);
+    font-style:italic;
+    font-size:17px;
+    padding:10px 0 24px;
+    border-bottom:1px solid var(--rule);
+    margin-bottom:32px;
+  }
+
+  /* inline highlights from different members */
+  .hl{
+    padding:2px 4px;
+    margin:0 -2px;
+    border-radius:2px;
+    position:relative;cursor:pointer;
+    -webkit-box-decoration-break:clone;
+    box-decoration-break:clone;
+  }
+  .hl[data-by]::after{
+    content:attr(data-by);
+    position:absolute;bottom:calc(100% + 6px);left:0;
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px;letter-spacing:0.1em;text-transform:uppercase;
+    color:var(--ink);white-space:nowrap;
+    background:var(--surface);
+    padding:3px 8px;border:1px solid var(--rule);
+    opacity:0;pointer-events:none;transition:opacity 150ms ease;
+  }
+  .hl:hover::after{opacity:1;}
+  .hl-dk{background:var(--marker);}
+  .hl-pf{background:var(--h-sage);}
+  .hl-mj{background:var(--h-blue);}
+  .hl-bs{background:var(--h-rose);}
+  .hl-sl{background:var(--h-lilac);}
+  .hl-mw{background:var(--h-amber-l);}
+  .hl-all{background:linear-gradient(90deg,var(--marker) 0%,var(--h-sage) 20%,var(--h-rose) 40%,var(--h-blue) 60%,var(--h-lilac) 80%,var(--h-amber-l) 100%);}
+
+  /* pulled annotation inline with text */
+  .annot-inline{
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-left:3px solid var(--marker-strong);
+    padding:14px 16px 12px;
+    font-family:'Inter',sans-serif;
+    font-size:13.5px;line-height:1.5;
+    color:var(--ink-soft);
+    margin:14px 0 22px;
+    display:flex;gap:12px;align-items:flex-start;
+    border-radius:0 2px 2px 0;
+  }
+  .annot-inline .member-dot{
+    width:26px;height:26px;border-radius:50%;
+    font-size:10px;font-weight:600;
+    text-align:center;line-height:26px;color:var(--ink);
+    flex-shrink:0;
+  }
+  .md-1{background:var(--marker);}
+  .md-2{background:var(--h-sage);}
+  .md-3{background:var(--h-rose);}
+  .md-4{background:var(--h-blue);}
+  .md-5{background:var(--h-lilac);}
+  .md-6{background:var(--h-amber-l);}
+  .annot-inline .r-name{font-weight:600;color:var(--ink);margin-right:8px;}
+  .annot-inline .r-time{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;color:var(--ink-fade);margin-left:6px;
+    letter-spacing:0.04em;text-transform:uppercase;
+  }
+
+  /* ── MARGIN COLUMN ──────── */
+  aside.margin{
+    position:relative;
+  }
+  @media(min-width:1060px){
+    aside.margin{position:sticky;top:78px;align-self:start;max-height:calc(100vh - 100px);overflow-y:auto;padding-right:4px;}
+    aside.margin::-webkit-scrollbar{width:4px;}
+    aside.margin::-webkit-scrollbar-thumb{background:var(--rule);}
+  }
+  .margin-head{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.18em;
+    text-transform:uppercase;color:var(--ink-fade);
+    padding-bottom:12px;
+    border-bottom:1px solid var(--rule);
+    margin-bottom:14px;
+  }
+  .margin-head b{color:var(--brand-accent);}
+  .margin-card{
+    background:var(--surface);
+    border:1px solid var(--rule);
+    padding:16px 18px;
+    margin-bottom:12px;
+    font-family:'Inter',sans-serif;
+    font-size:13px;line-height:1.5;
+    color:var(--ink-soft);
+  }
+  .margin-card .mc-head{
+    display:flex;align-items:center;gap:8px;
+    margin-bottom:8px;
+    font-size:12px;
+  }
+  .margin-card .member-dot{width:22px;height:22px;line-height:22px;font-size:10px;font-weight:600;}
+  .margin-card .mc-name{font-weight:600;color:var(--ink);}
+  .margin-card .mc-time{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-fade);margin-left:auto;letter-spacing:0.04em;text-transform:uppercase;}
+  .margin-card .mc-quote{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-size:13px;line-height:1.45;
+    color:var(--ink);
+    padding:4px 0;
+    background:linear-gradient(180deg,transparent 55%,rgba(245,216,150,0.55) 55%);
+    display:inline;
+    -webkit-box-decoration-break:clone;
+    box-decoration-break:clone;
+  }
+  .margin-card .mc-quote::before{content:'“';}
+  .margin-card .mc-quote::after{content:'”';}
+  .margin-card .mc-text{
+    color:var(--ink);
+    margin-top:8px;
+  }
+
+  /* filter rail at top of margin */
+  .margin-filter{
+    background:var(--surface-warm);
+    border-radius:4px;
+    padding:14px 16px;
+    margin-bottom:16px;
+    font-family:'Inter',sans-serif;
+    font-size:12px;color:var(--ink-soft);
+  }
+  .margin-filter-head{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.14em;text-transform:uppercase;
+    color:var(--ink-fade);margin-bottom:10px;
+  }
+  .margin-filter-row{
+    display:flex;gap:8px;flex-wrap:wrap;
+  }
+  .mfpill{
+    display:flex;align-items:center;gap:6px;
+    padding:4px 10px;
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-radius:999px;
+    font-size:11.5px;font-weight:500;
+    cursor:pointer;
+    color:var(--ink-soft);
+  }
+  .mfpill.on{border-color:var(--ink);}
+  .mfpill .dot{
+    width:10px;height:10px;border-radius:50%;
+  }
+  .mfpill .c{color:var(--ink-fade);font-size:10px;font-family:'JetBrains Mono',monospace;}
+
+  /* ── FOOTER ────────────── */
+  .article-foot{
+    max-width:720px;
+    margin:64px auto 0;
+    padding:40px;
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-radius:4px;
+  }
+  @media(max-width:640px){.article-foot{padding:28px 20px;margin:48px 20px 0;}}
+  .af-kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.16em;text-transform:uppercase;
+    color:var(--brand-accent);
+    margin-bottom:14px;
+  }
+  .af-title{
+    font-family:'Inter',sans-serif;
+    font-weight:700;font-size:22px;line-height:1.2;
+    color:var(--ink);margin:0 0 16px;
+    letter-spacing:-0.018em;
+  }
+  .af-title em{font-style:normal;color:var(--brand-accent);font-weight:700;}
+  .af-stats{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:14px;
+    margin:20px 0 24px;
+    padding-top:20px;
+    border-top:1px solid var(--rule);
+  }
+  .af-stat{
+    display:flex;align-items:center;gap:10px;
+    font-family:'Inter',sans-serif;
+    font-size:13px;color:var(--ink-soft);
+  }
+  .af-stat .member-dot{width:26px;height:26px;line-height:26px;font-size:10px;font-weight:600;flex-shrink:0;}
+  .af-stat b{color:var(--ink);font-weight:600;margin-right:4px;}
+  .af-cta{
+    display:flex;gap:12px;align-items:center;
+    padding-top:20px;
+    border-top:1px solid var(--rule);
+    flex-wrap:wrap;
+  }
+  .af-primary{
+    padding:12px 22px;
+    background:var(--ink);color:var(--surface);
+    font-family:'Inter',sans-serif;font-weight:500;font-size:14px;
+    text-decoration:none;
+    transition:background 200ms ease;
+  }
+  .af-primary:hover{background:var(--brand-accent);}
+  .af-secondary{
+    color:var(--ink-fade);
+    font-family:'Inter',sans-serif;
+    font-size:13px;font-weight:500;
+    text-decoration:underline;text-decoration-color:var(--rule);
+    text-underline-offset:4px;
+  }
+
+  footer{
+    border-top:1px solid var(--rule);
+    padding:32px 40px;
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;letter-spacing:0.12em;
+    text-transform:uppercase;color:var(--ink-fade);
+  }
+  footer .brand{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:14px;
+    color:var(--ink);text-transform:none;letter-spacing:-0.01em;
+  }
+  footer .brand em{font-style:normal;color:var(--brand-accent);}
+
+  @media(max-width:760px){
+    .tb-actions .tb-btn:not(.filled){display:none;}
+    .filter-ctl{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<a class="back-nav" href="index.html">← Index</a>
+
+<!-- ─────── THIN TOP BAR ─────── -->
+<div class="topbar">
+  <a href="room-signal-vs-noise.html" class="tb-back">
+    ← <span class="room-chip">Signal vs Noise</span>
+  </a>
+  <div class="tb-artifact">
+    <span><b>Essay</b></span>
+    <span>·</span>
+    <span>Purple Text, Orange Highlights</span>
+    <span>·</span>
+    <span>Dergigi</span>
+  </div>
+  <div class="tb-actions">
+    <div class="filter-ctl" title="Filter highlights">
+      <span class="dots-mini">
+        <span class="md-mini" style="background:var(--marker);"></span>
+        <span class="md-mini overlap" style="background:var(--h-sage);"></span>
+        <span class="md-mini overlap" style="background:var(--h-blue);"></span>
+        <span class="md-mini overlap" style="background:var(--h-rose);"></span>
+      </span>
+      All 6 ▾
+    </div>
+    <a href="#" class="tb-btn">Share</a>
+    <a href="#" class="tb-btn filled">✎ Highlight</a>
+  </div>
+</div>
+
+<!-- ─────── HERO ─────── -->
+<section class="hero">
+  <div class="hero-kicker">
+    <span>An essay</span>
+    <span class="dot">·</span>
+    <span class="shared-by">
+      <span class="member-dot-mini">PF</span>
+      shared by Pablo F · yesterday
+    </span>
+    <span class="dot">·</span>
+    <span>re-read · week 1</span>
+  </div>
+
+  <h1>Purple Text, Orange Highlights</h1>
+
+  <p class="hero-author">— <a href="#">Dergigi</a>, on <a href="#">dergigi.com</a></p>
+
+  <div class="hero-meta">
+    <span><b>12 min</b> read</span>
+    <span class="sep">·</span>
+    <span>Published April 2023</span>
+    <span class="sep">·</span>
+    <span>English</span>
+    <span class="sep">·</span>
+    <span><b>14 highlights</b> · 9 replies</span>
+    <span class="sep">·</span>
+    <span><b>All 6</b> have read</span>
+  </div>
+</section>
+
+<!-- ─────── BODY ─────── -->
+<div class="article-wrap">
+
+  <article class="article-body">
+
+    <p class="drop">What follows is a short argument for a new social gesture on the open internet. It is not an argument about bookmarks, libraries, or the attention economy. It is an argument about pencils.</p>
+
+    <p>The web is full of text. Some of it worth remembering. Most of it not. The ancient art of highlighting is the reader's instinct for separating the two. <span class="hl hl-dk" data-by="DK">A pencil in the margin. A coloured slash under a line. An index card. Three sentences bracketed with brackets.</span> The tools change; the gesture is older than the book.</p>
+
+    <p>On the internet, we lost the gesture. The infrastructure for reading never built a serious layer for reacting. Twitter is reaction without context. Medium is text without marginalia. Substack is text with a comment section, which is not the same thing. In neither case can I pass a book back to you with my pencil marks in it, or read it with your pencil marks already there.</p>
+
+    <div class="annot-inline">
+      <div class="member-dot md-1">DK</div>
+      <div>
+        <span class="r-name">DK</span>
+        <span class="r-time">Tue · 8:14</span>
+        Gigi writes this like it's obvious. Three years later the obvious thing still doesn't exist on any platform at scale, except the one he predicted.
+      </div>
+    </div>
+
+    <p><span class="hl hl-pf" data-by="Pablo F">Nostr gives us a chance to rebuild highlights from the ground up.</span> NIP-84 defines a new event kind: 9802. It is, in its plainest terms, a note whose content is an excerpt, whose tags point to a source, and whose signature is yours. This is all a highlight is. It is also all a highlight has ever been.</p>
+
+    <p>What changes when we put highlights on Nostr is that they stop being private. Or, rather, they stop being imprisoned. A Kindle highlight dies in your Amazon account. A Readwise highlight lives in Readwise. <span class="hl hl-mj" data-by="Miljan">A highlight on Nostr is an event &mdash; portable, signed, searchable, shareable, yours.</span> You can show it to someone else. They can reply to it. They can highlight their own reaction to yours. The act becomes social by default, in the same way conversation has always been.</p>
+
+    <div class="annot-inline">
+      <div class="member-dot md-2">PF</div>
+      <div>
+        <span class="r-name">Pablo F</span>
+        <span class="r-time">Sun · 2:41am</span>
+        This is the line that made me stop what I was doing in early 2023 and start on the Nostr build. Gigi shipped the manifesto; I just followed it.
+      </div>
+    </div>
+
+    <p>I believe this is the medium's natural state. <span class="hl hl-all" data-by="All 6 marked this">Reading is a solitary act that yearns to be a social one.</span> The book club is the crude proof. The best discussion of a book I ever had was on a train with a stranger who had read the same chapter I had. The worst was in a reading group of twelve, where nine hadn't finished, and the three who had couldn't find the passage we all wanted to argue about.</p>
+
+    <div class="annot-inline">
+      <div class="member-dot md-3">BS</div>
+      <div>
+        <span class="r-name">Bob S</span>
+        <span class="r-time">Mon · 11:22</span>
+        Have been in two book clubs that failed at exactly the point Gigi describes. He's right about the twelve. Six is almost right. Four is better.
+      </div>
+    </div>
+
+    <p>Highlights are the smallest possible unit of reader response. They are not reviews. They are not essays. They are not performance. <span class="hl hl-sl" data-by="Steve L">They are the literal passages the reader wanted to come back to. They are the trail the reader left through the text.</span> Your highlights are breadcrumbs of attention. They show where you've been.</p>
+
+    <p>Three years ago I wrote down a phrase: <span class="hl hl-mw" data-by="Max W">orange is the new purple.</span> Purple was the colour of links. Orange is the colour of highlights. What I meant was this &mdash; we are about to have, on the open internet, the second great structural reading gesture since hypertext. The link said: <em>here is something related</em>. The highlight will say: <em>here is the thing I want you to read, together with me.</em></p>
+
+    <div class="annot-inline">
+      <div class="member-dot md-6">MW</div>
+      <div>
+        <span class="r-name">Max W</span>
+        <span class="r-time">Mon · 6:08am</span>
+        This is the line of the essay. Possibly the line of the decade, if he turns out to be right. I'm putting it at the top of Hivemind Fund II's memo.
+      </div>
+    </div>
+
+    <p>A highlight is a small thing. It is the smallest possible readerly gesture. But we have not had an internet-wide, open, social, portable, signed version of it. Until now we have had private libraries, walled gardens, and comment sections. Good enough to read alone. Not good enough to read together.</p>
+
+    <p>I think this is going to matter more than we currently think it does. A lot of the anxiety about AI, about the commons, about &ldquo;the last internet&rdquo; &mdash; all of it is really anxiety about a kind of reading that doesn't happen anywhere yet. <span class="hl hl-dk" data-by="DK">The web we inherited was optimised for traffic. The next one will have to be optimised for attention.</span> Highlights are where attention leaves a trace small enough, and specific enough, to build on.</p>
+
+    <p><em>Orange is the new purple.</em> The underline is the new link.</p>
+
+  </article>
+
+  <!-- ─── MARGIN ─── -->
+  <aside class="margin">
+
+    <div class="margin-filter">
+      <div class="margin-filter-head">Filter by member</div>
+      <div class="margin-filter-row">
+        <div class="mfpill on"><span class="dot" style="background:var(--marker);"></span>DK<span class="c">3</span></div>
+        <div class="mfpill on"><span class="dot" style="background:var(--h-sage);"></span>PF<span class="c">1</span></div>
+        <div class="mfpill on"><span class="dot" style="background:var(--h-blue);"></span>MB<span class="c">1</span></div>
+        <div class="mfpill on"><span class="dot" style="background:var(--h-rose);"></span>BS<span class="c">1</span></div>
+        <div class="mfpill on"><span class="dot" style="background:var(--h-lilac);"></span>SL<span class="c">1</span></div>
+        <div class="mfpill on"><span class="dot" style="background:var(--h-amber-l);"></span>MW<span class="c">1</span></div>
+      </div>
+    </div>
+
+    <div class="margin-head">Highlights · <b>14</b></div>
+
+    <div class="margin-card">
+      <div class="mc-head">
+        <div class="member-dot md-1">DK</div>
+        <div class="mc-name">DK</div>
+        <div class="mc-time">Tue 8:12</div>
+      </div>
+      <span class="mc-quote">A pencil in the margin. A coloured slash under a line.</span>
+      <div class="mc-text">The gesture is pre-computational. The closest thing a keyboard ever gave us is the blockquote, which is clumsy by comparison. This essay is the first real argument I've seen for fixing it.</div>
+    </div>
+
+    <div class="margin-card">
+      <div class="mc-head">
+        <div class="member-dot md-2">PF</div>
+        <div class="mc-name">Pablo F</div>
+        <div class="mc-time">Sun 2:41am</div>
+      </div>
+      <span class="mc-quote">rebuild highlights from the ground up.</span>
+      <div class="mc-text">The line that started the current build. Every NIP-84 event that exists in 2026 traces to this sentence in April 2023.</div>
+    </div>
+
+    <div class="margin-card">
+      <div class="mc-head">
+        <div class="member-dot md-4">MB</div>
+        <div class="mc-name">Miljan</div>
+        <div class="mc-time">Mon 10:40</div>
+      </div>
+      <span class="mc-quote">portable, signed, searchable, shareable, yours.</span>
+      <div class="mc-text">Every word is a Primal pitch deck bullet. We stole this paragraph from Gigi and built a product around it. Due him a beer.</div>
+    </div>
+
+    <div class="margin-card">
+      <div class="mc-head">
+        <div class="member-dot md-1">DK</div>
+        <div class="mc-name">DK</div>
+        <div class="mc-time">Tue 8:14</div>
+      </div>
+      <span class="mc-quote">In neither case can I pass a book back to you with my pencil marks in it.</span>
+      <div class="mc-text">This is the sentence Highlighter, Inc. should have opened with in 2019 and didn't. We didn't know how to say it then. Gigi did.</div>
+    </div>
+
+    <div class="margin-card">
+      <div class="mc-head">
+        <div class="member-dot md-6">MW</div>
+        <div class="mc-name">Max W</div>
+        <div class="mc-time">Mon 6:08</div>
+      </div>
+      <span class="mc-quote">orange is the new purple.</span>
+      <div class="mc-text">Line of the essay. I'm using this in Hivemind Fund II's thesis page.</div>
+    </div>
+
+    <div class="margin-card">
+      <div class="mc-head">
+        <div class="member-dot md-3">BS</div>
+        <div class="mc-name">Bob S</div>
+        <div class="mc-time">Mon 11:22</div>
+      </div>
+      <span class="mc-quote">The book club is the crude proof.</span>
+      <div class="mc-text">Tried twice. Both failed. Gigi diagnoses the failure in one paragraph. Better than most business school case studies I've read.</div>
+    </div>
+
+    <div class="margin-card">
+      <div class="mc-head">
+        <div class="member-dot md-5">SL</div>
+        <div class="mc-name">Steve L</div>
+        <div class="mc-time">Mon 14:05</div>
+      </div>
+      <span class="mc-quote">the literal passages the reader wanted to come back to.</span>
+      <div class="mc-text">A clean definition. The best definition of a highlight I've seen in any product spec. We should quote it.</div>
+    </div>
+
+    <div class="margin-card">
+      <div class="mc-head">
+        <div class="member-dot md-1">DK</div>
+        <div class="mc-name">DK</div>
+        <div class="mc-time">Tue 9:10</div>
+      </div>
+      <span class="mc-quote">optimised for attention.</span>
+      <div class="mc-text">If this is the next internet, I'd like to buy a ticket early. The LLM-flood is going to make this argument irresistible.</div>
+    </div>
+
+  </aside>
+
+</div>
+
+<!-- ─────── FOOT CTA ─────── -->
+<div class="article-foot">
+  <div class="af-kicker">— room stats · this essay</div>
+  <h2 class="af-title">All <em>six members</em> have read the Dergigi.</h2>
+  <div class="af-stats">
+    <div class="af-stat"><div class="member-dot md-1">DK</div><span><b>3</b>highlights</span></div>
+    <div class="af-stat"><div class="member-dot md-2">PF</div><span><b>4</b>highlights</span></div>
+    <div class="af-stat"><div class="member-dot md-4">MB</div><span><b>2</b>highlights</span></div>
+    <div class="af-stat"><div class="member-dot md-3">BS</div><span><b>2</b>highlights</span></div>
+    <div class="af-stat"><div class="member-dot md-5">SL</div><span><b>2</b>highlights</span></div>
+    <div class="af-stat"><div class="member-dot md-6">MW</div><span><b>1</b>highlight</span></div>
+  </div>
+  <div class="af-cta">
+    <a href="room-signal-vs-noise.html" class="af-primary">← Back to Signal vs Noise</a>
+    <a href="#" class="af-secondary">Open the full thread (9 replies) →</a>
+  </div>
+</div>
+
+<footer>
+  <div class="brand">Highlighter<em>.</em></div>
+  <div>Essay · shared to Signal vs Noise · open protocol · Nostr</div>
+</footer>
+
+</body>
+</html>

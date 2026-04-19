@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Highlighter · Landing Page Exploration — Round 02</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,700;1,9..144,400&family=Inter:wght@300;400;500;600&family=Caveat:wght@400;500;600&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper:#F5F0E6;
+    --paper-darker:#EBE5D7;
+    --ink:#181612;
+    --ink-soft:#4A463E;
+    --muted:#8C877A;
+    --rule:#CFC7B5;
+    --mark:#8B2E1F;
+    --pen:#1F3F78;
+    --dropped:#B9B3A3;
+  }
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    font-weight:400;
+    line-height:1.55;
+    font-size:16px;
+    -webkit-font-smoothing:antialiased;
+    padding:0;
+  }
+  a{color:inherit;}
+
+  .page{
+    max-width:980px;
+    margin:0 auto;
+    padding:72px 40px 160px;
+  }
+
+  /* HEADER */
+  .masthead{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    padding-bottom:22px;
+    border-bottom:1px solid var(--rule);
+    margin-bottom:80px;
+  }
+  .masthead-left,.masthead-right{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);}
+  .masthead-right{text-align:right;}
+
+  .masthead-title{
+    font-family:'Fraunces',serif;
+    font-weight:300;
+    font-size:clamp(34px,5vw,60px);
+    line-height:1.05;
+    letter-spacing:-0.01em;
+    margin:44px 0 8px;
+    max-width:760px;
+  }
+  .masthead-title em{font-style:italic;font-weight:300;}
+  .masthead-dek{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-weight:400;
+    font-size:19px;
+    line-height:1.5;
+    color:var(--ink-soft);
+    max-width:620px;
+    margin:0 0 48px;
+  }
+
+  /* Round 2 callout */
+  .round-callout{
+    background:var(--paper-darker);
+    border-left:3px solid var(--mark);
+    padding:28px 32px;
+    margin-bottom:72px;
+    display:grid;
+    grid-template-columns:auto 1fr;
+    gap:28px;
+    align-items:start;
+  }
+  @media(max-width:700px){.round-callout{grid-template-columns:1fr;gap:14px;}}
+  .round-num{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-weight:400;
+    font-size:56px;
+    line-height:0.9;
+    color:var(--mark);
+  }
+  .round-body h3{
+    font-family:'Fraunces',serif;
+    font-weight:500;
+    font-size:22px;
+    line-height:1.2;
+    margin:0 0 10px;
+  }
+  .round-body p{
+    font-size:15.5px;
+    line-height:1.6;
+    color:var(--ink-soft);
+    max-width:58ch;
+    margin:0 0 0.8em;
+  }
+  .round-body p:last-child{margin-bottom:0;}
+  .round-body em{font-style:italic;}
+  .round-body strong{color:var(--ink);font-weight:500;}
+
+  /* section */
+  section{margin-bottom:80px;}
+  .section-num{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--mark);
+    margin-bottom:14px;
+    display:block;
+  }
+  h2{
+    font-family:'Fraunces',serif;
+    font-weight:400;
+    font-size:32px;
+    line-height:1.1;
+    margin:0 0 24px;
+    letter-spacing:-0.01em;
+  }
+  h3{
+    font-family:'Fraunces',serif;
+    font-weight:500;
+    font-size:22px;
+    line-height:1.15;
+    margin:0 0 12px;
+  }
+  p{
+    max-width:66ch;
+    font-size:16.5px;
+    line-height:1.65;
+    color:var(--ink-soft);
+    margin:0 0 1em;
+  }
+  p strong{color:var(--ink);font-weight:500;}
+  p em{font-family:'Fraunces',serif;font-style:italic;font-weight:400;}
+
+  /* feedback captured list */
+  .feedback{
+    border-top:1px solid var(--rule);
+    padding-top:18px;
+  }
+  .feedback-head{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:14px;
+  }
+  .feedback-quote{
+    font-family:'Caveat',cursive;
+    font-size:24px;
+    line-height:1.3;
+    color:var(--pen);
+    max-width:56ch;
+    margin:0 0 12px;
+  }
+  .feedback-quote::before{content:'“';}
+  .feedback-quote::after{content:'”';}
+
+  /* mock index cards */
+  .mock-list{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:40px;
+    margin-top:32px;
+  }
+  @media(max-width:780px){.mock-list{grid-template-columns:1fr;}}
+
+  .mock{
+    display:block;
+    text-decoration:none;
+    background:var(--paper-darker);
+    border:1px solid var(--rule);
+    padding:40px 36px 36px;
+    position:relative;
+    transition:transform 250ms ease, border-color 250ms ease;
+  }
+  .mock:hover{transform:translateY(-2px);border-color:var(--mark);}
+
+  .mock-status{
+    position:absolute;
+    top:16px;right:16px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px;
+    letter-spacing:0.22em;
+    text-transform:uppercase;
+    padding:4px 8px;
+    background:var(--paper);
+    border:1px solid var(--rule);
+    color:var(--muted);
+  }
+
+  .mock.featured{
+    background:var(--paper);
+    border:2px solid var(--mark);
+    box-shadow:0 20px 50px -24px rgba(139,46,31,0.25);
+  }
+  .mock.featured .mock-status{
+    background:var(--mark);
+    color:var(--paper);
+    border-color:var(--mark);
+  }
+
+  .mock.dropped{
+    background:transparent;
+    border-style:dashed;
+    opacity:0.65;
+  }
+  .mock.dropped .mock-name,
+  .mock.dropped .mock-tag{
+    text-decoration:line-through;
+    text-decoration-color:var(--dropped);
+    text-decoration-thickness:1px;
+  }
+  .mock.dropped .mock-status{color:var(--dropped);}
+
+  .mock-num{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.2em;
+    color:var(--mark);
+    margin-bottom:18px;
+    display:block;
+  }
+  .mock-name{
+    font-family:'Fraunces',serif;
+    font-weight:400;
+    font-size:30px;
+    line-height:1.05;
+    margin:0 0 6px;
+    color:var(--ink);
+  }
+  .mock-name em{font-style:italic;}
+  .mock-tag{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-size:15px;
+    color:var(--mark);
+    margin-bottom:22px;
+  }
+  .mock dl{margin:0;display:grid;grid-template-columns:1fr;gap:10px;}
+  .mock dt{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:2px;
+  }
+  .mock dd{
+    margin:0 0 10px;
+    font-size:14.5px;
+    line-height:1.5;
+    color:var(--ink-soft);
+  }
+  .mock-open{
+    margin-top:24px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--mark);
+  }
+  .mock-open::after{content:' →';}
+  .mock.dropped .mock-open{color:var(--dropped);}
+
+  /* brief box for featured direction */
+  .brief-box{
+    margin-top:20px;
+    padding-top:18px;
+    border-top:1px dotted var(--rule);
+  }
+  .brief-box h4{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--mark);
+    margin:0 0 10px;
+  }
+  .brief-box ul{margin:0;padding:0;list-style:none;}
+  .brief-box li{
+    font-size:14px;
+    line-height:1.55;
+    padding:8px 0;
+    border-bottom:1px dotted var(--rule);
+    color:var(--ink-soft);
+  }
+  .brief-box li:last-child{border-bottom:none;}
+  .brief-box li b{color:var(--ink);font-weight:500;}
+
+  .close{
+    border-top:1px solid var(--rule);
+    padding-top:36px;
+    margin-top:80px;
+  }
+  .ax{
+    display:grid;
+    grid-template-columns:auto 1fr;
+    gap:12px 24px;
+    margin:28px 0;
+  }
+  .ax dt{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-weight:500;
+    font-size:15px;
+    color:var(--mark);
+  }
+  .ax dd{
+    margin:0;
+    font-size:15px;
+    line-height:1.55;
+    color:var(--ink-soft);
+  }
+  .sig{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.12em;
+    color:var(--muted);
+    text-transform:uppercase;
+    margin-top:56px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="masthead-left">Studio Fieldnote · Brief №01</div>
+    <div class="masthead-right">Private · Round 02 of 03</div>
+  </div>
+
+  <span class="section-num">Brief · Round 02</span>
+  <h1 class="masthead-title">The <em>Annotation</em> direction, pushed — now structured as a real product page with a single reader's thoughts in the margin.</h1>
+  <p class="masthead-dek">You picked 03 as the strongest concept, flagged the execution as too literal — too much &ldquo;this is a book page,&rdquo; not enough &ldquo;this is a landing page you can overhear.&rdquo; Round two keeps the concept and rebuilds the execution as a recognizable product-page structure (hero, features, media examples, CTA) with one voice in the margin reacting in real time. Dropped 01 and 02. Held 04 for a later round.</p>
+
+  <!-- ── ROUND 2 CALLOUT ────────────── -->
+  <div class="round-callout">
+    <div class="round-num">02</div>
+    <div class="round-body">
+      <h3>What changed</h3>
+      <p>Round one's 03 was <strong>six members highlighting a page of Montaigne</strong>. Beautiful, but the reader couldn't tell where the product page was — the page <em>was</em> the book, and the job-to-be-done ("landing page") was missing.</p>
+      <p>Round two's 03 is a <strong>proper product landing page</strong> — hero, feature sections, UI mockups, CTA, footer, the whole structure. The annotations are now <strong>one person's handwritten reactions</strong>, not six members. They speak in a register the marketing copy can't reach — lowercase, specific, naming friends they'd invite, recognizing specific failed tools. The page now also explicitly explores podcasts and other non-book media with its own working UI mock.</p>
+    </div>
+  </div>
+
+  <!-- ── FEEDBACK CAPTURED ─────────── -->
+  <section class="feedback">
+    <div class="feedback-head">— Feedback captured from last round</div>
+    <p class="feedback-quote">drop #1 and #2, #3 is the strongest conceptually, not sure the execution gets us there, but it's strong — I imagine it more like a typical product page with the highlights and the annotations next to it that explain from a single-person's perspective in completely different terms, as if overhearing thoughts on someone reacting to the landing page. Ideally the page would also explore the fact that other media, like podcasts, are also discussable within their circle.</p>
+  </section>
+
+  <!-- ── MOCKS STATUS ─────────────── -->
+  <section>
+    <span class="section-num">01 · Direction status</span>
+    <h2>Where the four directions stand.</h2>
+
+    <div class="mock-list">
+
+      <a href="03-annotation.html" class="mock featured">
+        <div class="mock-status">Round 02 · Featured</div>
+        <span class="mock-num">Direction 03 · v2</span>
+        <h3 class="mock-name">The <em>Annotation</em>.</h3>
+        <div class="mock-tag">A product landing page, overheard.</div>
+        <dl>
+          <dt>What the new mock does</dt>
+          <dd>Hero, features, media examples, and CTA like a recognizable product page. Every section has a parallel margin column where <strong>one reader</strong> (blue ballpoint, handwritten) reacts as they scroll — from early skepticism, through recognition, to a final &ldquo;ok. doing it.&rdquo;</dd>
+          <dt>Podcast thread</dt>
+          <dd>A dedicated section demonstrates highlighting a 1h 47min Ezra Klein episode with timestamped spans. The reader's margin note breaks into &ldquo;WAIT&rdquo; at this point — the recognition that this solves the three-year podcast problem for them and their friend.</dd>
+          <dt>Still to refine</dt>
+          <dd>Mobile choreography (annotations collapsing inline). Motion (annotations appearing as you scroll, not all at once). Alternate reader voices for A/B. Final brand mark and palette sign-off.</dd>
+        </dl>
+        <div class="brief-box">
+          <h4>Open the round-two mock</h4>
+          <ul>
+            <li><b>Structure:</b> Top nav · Hero · What it is · How it works (with book UI mock) · Not just books (with podcast UI mock) · Rooms · Ownership · CTA · Footer</li>
+            <li><b>Reader arc:</b> &ldquo;ok. skeptical.&rdquo; → &ldquo;this is <u>the</u> problem&rdquo; → &ldquo;WAIT. the podcast thing&rdquo; → &ldquo;who i'd invite: M, J, T, S, R&rdquo; → &ldquo;ok. doing it.&rdquo;</li>
+            <li><b>Colour:</b> Warm cream paper (#F7F3EB), deep ink, honey-amber product highlights, <span style="color:var(--pen);font-weight:500;">ballpoint blue</span> annotations.</li>
+          </ul>
+        </div>
+        <div class="mock-open">Open v2 →</div>
+      </a>
+
+      <a href="room-signal-vs-noise.html" class="mock featured">
+        <div class="mock-status">Updated · Product Surface</div>
+        <span class="mock-num">Surface 01 · Room</span>
+        <h3 class="mock-name">A room: <em>Signal vs Noise.</em></h3>
+        <div class="mock-tag">Six real people, one closed room, content they'd actually read.</div>
+        <dl>
+          <dt>Who's in it</dt>
+          <dd><b>DK</b> (David King) · <b>Pablo F</b> (pablof7z) · <b>Miljan</b> (Primal) · <b>Bob S</b> (boardwalk.cash) · <b>Steve L</b> (Spiral) · <b>Max W</b> (Hivemind). A real constellation — DK and Bob were on Hivemind's 2024 Nostr panel together.</dd>
+          <dt>What they're reading</dt>
+          <dd>Currently pinned: <em>Postman, Amusing Ourselves to Death.</em> Also this week: TFTC on Lyn Alden's <em>Broken Money;</em> Dergigi's <em>Purple Text, Orange Highlights.</em> Up-next voting: Dixon's <em>Read Write Own,</em> McLuhan, and a Postman sequel.</dd>
+          <dt>Round-02 refinements</dt>
+          <dd>Typography rebalanced — serif now reserved for display moments, italic status lines, and book cover. Sans for every product label, artifact title, vote row, and chip. Palette dialed back — cream reduced to a single accent (thread panel &amp; highlight block), cards moved to pure white.</dd>
+        </dl>
+        <div class="mock-open">Open the room</div>
+      </a>
+
+      <a href="artifact-article.html" class="mock featured">
+        <div class="mock-status">New · Product Surface</div>
+        <span class="mock-num">Surface 02 · Article</span>
+        <h3 class="mock-name">Essay: <em>Purple Text, Orange Highlights.</em></h3>
+        <div class="mock-tag">Full-viewport reading view. Six members' highlights, inline.</div>
+        <dl>
+          <dt>What it is</dt>
+          <dd>The immersive reading surface. An essay by Dergigi opens edge-to-edge — narrow serif reading column, drop cap, multi-member highlights inline in the text (six distinct colors, one blended for an all-6 marker), margin column of annotation cards with quote-echo and per-member filter pills.</dd>
+          <dt>Who marked what</dt>
+          <dd><b>DK</b> on the pencil-in-the-margin line · <b>Pablo F</b> on &ldquo;rebuild highlights from the ground up&rdquo; · <b>Miljan</b> on &ldquo;portable, signed, searchable, shareable, yours&rdquo; · all 6 on &ldquo;reading is a solitary act that yearns to be a social one&rdquo; · <b>Max W</b> on &ldquo;orange is the new purple&rdquo; · etc.</dd>
+          <dt>Reachable from</dt>
+          <dd>Clicking the <em>Essay</em> card in the room mock's &ldquo;Also this week&rdquo; lane.</dd>
+        </dl>
+        <div class="mock-open">Open the essay view</div>
+      </a>
+
+      <a href="artifact-podcast.html" class="mock featured">
+        <div class="mock-status">New · Product Surface</div>
+        <span class="mock-num">Surface 03 · Podcast</span>
+        <h3 class="mock-name">Podcast: <em>Broken Money, Two Years In.</em></h3>
+        <div class="mock-tag">A TFTC episode with Lyn Alden, marked by four members.</div>
+        <dl>
+          <dt>What it is</dt>
+          <dd>Full-viewport podcast surface. Episode hero, interactive scrubber with six color-coded highlighted spans (hover to see timestamp + who marked), speed controls, and a live indicator showing where another member is currently listening.</dd>
+          <dt>The timeline</dt>
+          <dd>Chronological list of <b>six marked moments</b> with transcript-quote blocks and threaded replies. Timestamps range from 08:14 to 1:17:30. The 43:12 moment (Miljan + Steve L on &ldquo;the unit of account is the thing nobody audits&rdquo;) has 3 replies including a DK cross-reference to the Postman thread.</dd>
+          <dt>Sidebar</dt>
+          <dd>Chapters list, everyone's playback progress (Bob S finished, DK just started), and a capture CTA.</dd>
+          <dt>Reachable from</dt>
+          <dd>Clicking the <em>Podcast</em> card in the room mock.</dd>
+        </dl>
+        <div class="mock-open">Open the podcast view</div>
+      </a>
+
+      <a href="04-invitation.html" class="mock">
+        <div class="mock-status">Held</div>
+        <span class="mock-num">Direction 04</span>
+        <h3 class="mock-name">The <em>Invitation</em>.</h3>
+        <div class="mock-tag">Gallery opening card. Swiss grid. Austere.</div>
+        <dl>
+          <dt>Status</dt>
+          <dd>Not selected for round two, but kept in the folder as a comparator for the warm/austere axis. May return as an alternate for a press or investor-facing variant.</dd>
+        </dl>
+        <div class="mock-open">Open</div>
+      </a>
+
+      <a href="01-broadside.html" class="mock dropped">
+        <div class="mock-status">Dropped</div>
+        <span class="mock-num">Direction 01</span>
+        <h3 class="mock-name">The <em>Broadside</em>.</h3>
+        <div class="mock-tag">Manifesto. Kept for the archive.</div>
+        <dl>
+          <dt>Why it was dropped</dt>
+          <dd>Strong voice but one-shot — the thesis lives in a wall of prose. Hard to test, iterate, or convert against. Useful as a source of sentences for other directions.</dd>
+        </dl>
+        <div class="mock-open">Archive</div>
+      </a>
+
+      <a href="02-correspondence.html" class="mock dropped">
+        <div class="mock-status">Dropped</div>
+        <span class="mock-num">Direction 02</span>
+        <h3 class="mock-name">The <em>Correspondence</em>.</h3>
+        <div class="mock-tag">Open letter from a member. Kept for the archive.</div>
+        <dl>
+          <dt>Why it was dropped</dt>
+          <dd>Warm and readable but too niche — relies on the reader already half-knowing they want this. The reader's voice we wanted to surface has been reassigned to the margin of 03, where it does more work.</dd>
+        </dl>
+        <div class="mock-open">Archive</div>
+      </a>
+
+    </div>
+  </section>
+
+  <!-- ── DESIGN LANGUAGE DECISIONS -->
+  <section>
+    <span class="section-num">02 · Emerging design language</span>
+    <h2>What round two is quietly locking in.</h2>
+    <p>Round two isn't just a second draft — it's starting to settle some elements that a broader design system could build from. We're calling these out so you can push back before they become house style.</p>
+
+    <dl class="ax">
+      <dt>Typography</dt>
+      <dd><strong>Fraunces</strong> (a variable transitional serif) for display and emphasis; <strong>Inter</strong> for body copy; <strong>Caveat</strong> as the product's single permitted handwritten voice (reserved for member annotations); <strong>JetBrains Mono</strong> for meta-typography and technical labels.</dd>
+
+      <dt>Palette</dt>
+      <dd>Warm cream paper (<code>#F7F3EB</code>), deep ink (<code>#15130F</code>), and a single terracotta accent (<code>#C24D2C</code>) for emphasis and interactive states. A palette of soft, desaturated highlight colours for multi-member UI. One reserved color — ballpoint blue (<code>#1F3F78</code>) — for annotations. Nothing else chromatic.</dd>
+
+      <dt>Signature gesture</dt>
+      <dd>The marked phrase. A low, wavy pen underline under key sentences that reads as someone's pencil mark, not a hyperlink. It's the product's most recognisable gesture — we'd carry it into the app itself as the visual treatment of a highlight.</dd>
+
+      <dt>Voice</dt>
+      <dd>The marketing copy is <em>quiet, specific, and declarative</em>. The annotation voice is <em>lowercase, fragmented, and personal</em>. The contrast between the two is the product's core argument, made on the page itself.</dd>
+
+      <dt>Anti-patterns we're holding</dt>
+      <dd>No hero screenshots floating over headlines. No three-up feature cards. No testimonial walls. No gradients or generic SaaS motion. No emoji.</dd>
+    </dl>
+  </section>
+
+  <!-- ── WHAT TO DO NEXT -->
+  <section class="close">
+    <span class="section-num">03 · What we need from you next</span>
+    <h2>Three questions that move us to round three.</h2>
+
+    <dl class="ax">
+      <dt>The reader</dt>
+      <dd>Is one reader in the margin the right choice, or should we A/B test a room of three (less spotlight on any single voice but more diversity of reaction)? Our current bet: one reader is more honest and more powerful. Push back if you disagree.</dd>
+
+      <dt>The podcast lane</dt>
+      <dd>How much do you want to lean into podcasts as a named pillar? Round two treats it as &ldquo;not just books&rdquo; with a working UI mock and a reader annotation. A more aggressive version could open with podcasts (&ldquo;the two-hour conversation you can finally discuss&rdquo;) and treat books as equally first-class after. Tell us.</dd>
+
+      <dt>The CTA promise</dt>
+      <dd>Currently &ldquo;Request a card &mdash; opening in small waves.&rdquo; Scarcity-framed. Alternate: &ldquo;Start a room &mdash; bring your people.&rdquo; Abundance-framed, agency-first. Which feels truer to how you want this to open?</dd>
+    </dl>
+
+    <p>Round three will take the chosen answers into a fully responsive, motion-tested, copy-locked version of 03 and one alternate &mdash; probably a press-facing variant derived from 04's austerity. Reply with your three answers above and we'll land round three within the week.</p>
+
+    <div class="sig">— Studio Fieldnote · April 2026 · Round 02</div>
+  </section>
+
+</div>
+</body>
+</html>

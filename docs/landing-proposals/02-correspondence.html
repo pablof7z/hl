@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Highlighter — A Letter, April 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Caveat:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EFE5D0;
+    --paper-dark:#E4D7BC;
+    --paper-edge:#D6C39D;
+    --ink:#2B1F14;
+    --ink-soft:#4A382A;
+    --ink-fade:#7A6853;
+    --rust:#A24C28;
+    --fox:#C9A47A;
+  }
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:#D9CBA8;
+    background-image:
+      radial-gradient(ellipse at 30% 20%, rgba(139,107,72,0.06), transparent 60%),
+      radial-gradient(ellipse at 80% 90%, rgba(139,107,72,0.05), transparent 60%);
+    color:var(--ink);
+    font-family:'EB Garamond',Georgia,serif;
+    font-size:19px;
+    line-height:1.75;
+    -webkit-font-smoothing:antialiased;
+    padding:56px 20px 120px;
+  }
+  a{color:inherit;}
+
+  /* Back nav */
+  .back{
+    position:fixed;
+    top:20px;
+    left:20px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.2em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    text-decoration:none;
+    padding:8px 12px;
+    background:rgba(239,229,208,0.92);
+    border:1px solid var(--paper-edge);
+    z-index:10;
+  }
+  .back:hover{color:var(--rust);border-color:var(--rust);}
+
+  /* ── LETTER SHEET ──────────────── */
+  .sheet{
+    max-width:620px;
+    margin:0 auto 48px;
+    background:var(--paper);
+    padding:80px 72px 64px;
+    box-shadow:
+      0 1px 0 rgba(0,0,0,0.04),
+      0 30px 60px -20px rgba(43,31,20,0.28),
+      0 10px 30px -10px rgba(43,31,20,0.15);
+    position:relative;
+  }
+  .sheet::before{
+    content:'';
+    position:absolute;
+    top:0;left:0;right:0;bottom:0;
+    background:
+      radial-gradient(circle at 10% 15%, rgba(201,164,122,0.10), transparent 25%),
+      radial-gradient(circle at 88% 78%, rgba(201,164,122,0.08), transparent 30%),
+      radial-gradient(circle at 45% 92%, rgba(201,164,122,0.06), transparent 25%);
+    pointer-events:none;
+  }
+  .sheet.second{
+    max-width:560px;
+    padding:64px 56px 52px;
+    transform:rotate(-0.35deg);
+  }
+
+  /* ── DATELINE ──────────────────── */
+  .dateline{
+    text-align:right;
+    font-family:'EB Garamond',serif;
+    font-style:italic;
+    font-size:16px;
+    color:var(--ink-fade);
+    margin-bottom:40px;
+  }
+  .salutation{
+    font-family:'EB Garamond',serif;
+    font-size:22px;
+    font-style:italic;
+    color:var(--ink);
+    margin-bottom:28px;
+  }
+  .salutation em{font-style:normal;}
+
+  p{
+    margin:0 0 1.25em;
+    font-size:19px;
+    line-height:1.78;
+    color:var(--ink);
+  }
+
+  .indent{text-indent:2.4em;}
+  em{font-style:italic;}
+  strong{font-weight:500;color:var(--ink);}
+
+  /* ── HANDWRITTEN ANNOTATIONS ───── */
+  .margin-note{
+    font-family:'Caveat',cursive;
+    font-weight:400;
+    font-size:22px;
+    line-height:1.15;
+    color:var(--rust);
+    position:absolute;
+    max-width:160px;
+  }
+  .margin-note.r1{
+    top:380px;
+    right:-150px;
+    transform:rotate(-3deg);
+  }
+  .margin-note.r2{
+    top:880px;
+    right:-160px;
+    transform:rotate(2deg);
+    color:var(--ink-soft);
+  }
+  .margin-note.l1{
+    top:720px;
+    left:-140px;
+    transform:rotate(-2deg);
+    color:var(--rust);
+  }
+  @media(max-width:960px){.margin-note{display:none;}}
+
+  /* ── SIGNATURE ─────────────────── */
+  .signature{
+    margin-top:48px;
+    font-family:'Caveat',cursive;
+    font-weight:500;
+  }
+  .signature .closing{
+    font-family:'EB Garamond',serif;
+    font-style:italic;
+    font-size:19px;
+    color:var(--ink-soft);
+    display:block;
+    margin-bottom:8px;
+  }
+  .signature .name{
+    font-size:48px;
+    line-height:1;
+    color:var(--rust);
+    letter-spacing:0.01em;
+  }
+  .sheet.second .signature .name{font-size:42px;color:var(--ink);}
+
+  .postscript{
+    margin-top:36px;
+    padding-top:24px;
+    border-top:1px dashed var(--paper-edge);
+    font-size:17px;
+    font-style:italic;
+    color:var(--ink-fade);
+    line-height:1.7;
+  }
+  .postscript::before{
+    content:'p.s. ';
+    font-family:'EB Garamond',serif;
+    font-style:italic;
+    font-weight:500;
+    color:var(--rust);
+  }
+
+  /* ── SEPARATOR ────────────────── */
+  .seal{
+    text-align:center;
+    margin:32px auto 48px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.3em;
+    color:var(--paper);
+    text-transform:uppercase;
+  }
+  .seal span{
+    display:inline-block;
+    padding:8px 20px;
+    border:1px solid var(--paper);
+    border-radius:999px;
+  }
+
+  /* ── CTA ENVELOPE ────────────── */
+  .envelope{
+    max-width:560px;
+    margin:56px auto 0;
+    background:var(--paper-dark);
+    padding:48px 48px 40px;
+    border:1px solid var(--paper-edge);
+    text-align:center;
+    position:relative;
+  }
+  .envelope-label{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10px;
+    letter-spacing:0.22em;
+    text-transform:uppercase;
+    color:var(--rust);
+    margin-bottom:14px;
+  }
+  .envelope-head{
+    font-family:'EB Garamond',serif;
+    font-style:italic;
+    font-weight:400;
+    font-size:28px;
+    line-height:1.3;
+    color:var(--ink);
+    margin:0 0 28px;
+  }
+  .cta{
+    display:inline-block;
+    font-family:'EB Garamond',serif;
+    font-style:italic;
+    font-size:22px;
+    padding:14px 36px;
+    background:transparent;
+    color:var(--rust);
+    border:1.5px solid var(--rust);
+    text-decoration:none;
+    transition:all 200ms ease;
+  }
+  .cta:hover{background:var(--rust);color:var(--paper);}
+  .cta-sub{
+    display:block;
+    margin-top:22px;
+    font-family:'EB Garamond',serif;
+    font-style:italic;
+    font-size:15px;
+    color:var(--ink-fade);
+    text-decoration:underline;
+    text-decoration-color:var(--paper-edge);
+    text-underline-offset:4px;
+  }
+
+  .header-mark{
+    font-family:'JetBrains Mono',monospace;
+    font-size:9px;
+    letter-spacing:0.3em;
+    color:var(--ink-fade);
+    text-transform:uppercase;
+    text-align:center;
+    margin-bottom:48px;
+  }
+
+  @media(max-width:680px){
+    .sheet,.sheet.second{padding:48px 28px 40px;}
+    p{font-size:17px;line-height:1.75;}
+    .salutation{font-size:19px;}
+  }
+</style>
+</head>
+<body>
+
+<a class="back" href="index.html">← Index</a>
+
+<div class="header-mark">— A letter, found in the post, April MMXXVI —</div>
+
+<div class="sheet">
+
+  <div class="margin-note r1">I've now told this<br>story to 4 other people.</div>
+  <div class="margin-note l1">Mara also reads<br>it 3x slower than<br>anyone else, bless her.</div>
+  <div class="margin-note r2">you'd be Ben.<br>don't pretend you<br>wouldn't be Ben.</div>
+
+  <div class="dateline">Somewhere, a Tuesday<br>in April, 2026</div>
+
+  <p class="salutation">Dear <em>you</em>,</p>
+
+  <p class="indent">I've been meaning to tell you about this for a while, and I've been putting it off because I didn't want to oversell it and I didn't want to make you feel obligated. I'm going to try to split the difference.</p>
+
+  <p class="indent">You know the seven of us — Mara the translator, Ben who reads three things a week and won't shut up about any of them, Anjali who takes three months on a single book and is always right about it, Simon, Jo, Dora, and me. You've heard me talk about this group enough to know we are insufferable about what we read and devoted to each other in the way that only people who've argued about the same books for eight years can be.</p>
+
+  <p class="indent">For most of the last two years our group has lived in a beautiful mess. A WhatsApp thread that scrolled faster than anyone could keep up with. A Google Doc that grew to forty-two pages and stopped being readable in month three. A Substack we tried and quietly abandoned. Two Zoom calls that happened out of the six we scheduled. We all loved each other and we kept losing the thread, literally. I cannot tell you how many times someone has asked, <em>wait, where did Ben make that point about Middlemarch</em>, and the answer was, <em>it is forty-two Thursdays ago in a WhatsApp group, I'm not going to find it for you.</em></p>
+
+  <p class="indent">In January we moved to something called Highlighter, and I want to tell you what it's like.</p>
+
+  <p class="indent">It is a room. That's the part that matters first. Only the seven of us can see it. We put the book we're all reading at the top — this winter it was <em>Middlemarch</em>, and before that <em>The Rings of Saturn</em>, and before that a stretch of essays by Ursula Le Guin we'd all been meaning to read — and that's it, that's the room. No feed. No stranger's takes. Nothing is being sold to us. Nobody is optimizing anything.</p>
+
+  <p class="indent">What you do inside the room is you mark the passages. You pull the lines that caught you. When Mara pulls a line, you see it; when you pull one, she sees it. The conversation — what did this mean, who has the better reading of Dorothea's first marriage, was this sentence as devastating for you as it was for me — happens <em>next to the passages</em>. Not in a thread that scrolls away from the book. On the page.</p>
+
+  <p class="indent">That is the whole product. I'm not hiding a feature.</p>
+
+  <p class="indent">Here is what I can tell you honestly: our <em>Middlemarch</em> discussion this winter was the best sustained conversation the seven of us have had since graduate school. I know some of that is the book. I know some of it is that we've gotten older and are finally interesting. But some of it, I'm telling you, is that we could <em>find</em> the specific passage Ben was making his point about, and Mara's reply was <em>under</em> Ben's reply, which was <em>under the sentence in the book</em>, which meant the conversation kept the book and never became chatter about a book.</p>
+
+  <p class="indent">Nobody is trying to get us to read faster. Nobody is making us finish. Anjali is seventy pages in and has made the most interesting highlights of anyone. That's fine. Nothing breaks.</p>
+
+  <p class="indent">I don't know if it's for you, and I'm deliberately not selling it. What I can say is that if you ever wanted a version of our group — four of your own people, whose taste you'd follow into a difficult book — this is the thing that might finally make that actually happen. I've watched three friends try to start a book club this year and fail in the same way we did for two years. This is the thing we tried that worked.</p>
+
+  <p class="indent">If you want a card, I can get you one. You'd want to start a room with three or four of your own people. Not a broadcast list. Not an &ldquo;everyone who's ever read a book with me.&rdquo; Three or four people who will actually finish things with you.</p>
+
+  <p class="indent">If it doesn't sound like you, forget I wrote. I'll still text you the Le Guin.</p>
+
+  <div class="signature">
+    <span class="closing">Yours, as ever —</span>
+    <span class="name">L.</span>
+  </div>
+
+  <div class="postscript">The stack is something called Nostr, which I assume means nothing to you and means little to me. What it does mean is that the rooms are not trapped on their servers. We've all received one too many &ldquo;service is shutting down&rdquo; emails. This one won't generate another.</div>
+
+</div>
+
+<div class="seal"><span>— a second letter, shorter —</span></div>
+
+<div class="sheet second">
+  <div class="dateline">— same week —</div>
+  <p class="salutation">To whoever's reading,</p>
+  <p class="indent">L. sent me this page to read and asked if I wanted to add anything. Here is what I want to add.</p>
+  <p class="indent">I joined because I wanted an excuse to read Proust with three specific people. I stayed because after we finished Proust we kept going. We are on Calvino now. I have not missed a week in eleven months. I could not tell you the last time I said that about anything on the internet.</p>
+  <div class="signature">
+    <span class="closing">Yours —</span>
+    <span class="name">J.</span>
+  </div>
+</div>
+
+<div class="envelope">
+  <div class="envelope-label">If you'd like a card</div>
+  <p class="envelope-head">Ask, and we'll write back when there is a room.</p>
+  <a href="#" class="cta">Request a card</a>
+  <a href="#" class="cta-sub">or, read how a room works</a>
+</div>
+
+</body>
+</html>
