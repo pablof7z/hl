@@ -40,6 +40,7 @@
       {@const isVoted = voted.has(item.id)}
       <li class="upnext-row">
         <button
+          type="button"
           class="vote-btn"
           class:voted={isVoted}
           onclick={() => toggleVote(item)}
@@ -128,7 +129,7 @@
   }
 
   .vote-btn.voted .vote-count {
-    color: #fff;
+    color: var(--surface);
   }
 
   .vote-count {

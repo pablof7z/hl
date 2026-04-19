@@ -19,9 +19,9 @@
   <p class="subtext">Share a passage from something you're reading with the group.</p>
 
   <div class="actions">
-    <button class="btn-primary" onclick={handleAddHighlight}>Add highlight</button>
-    <button class="btn-secondary" onclick={handleAddNote}>Add note</button>
-    <button class="btn-link" onclick={handleInviteMember}>Invite a member</button>
+    <button type="button" class="btn-primary" onclick={handleAddHighlight}>Add highlight</button>
+    <button type="button" class="btn-secondary" onclick={handleAddNote}>Add note</button>
+    <button type="button" class="btn-link" onclick={handleInviteMember}>Invite a member</button>
   </div>
 </div>
 
@@ -65,7 +65,7 @@
     width: 100%;
     padding: 10px 16px;
     background: var(--brand-accent);
-    color: #fff;
+    color: var(--surface);
     font-family: var(--font-sans);
     font-size: 14px;
     font-weight: 600;

@@ -56,8 +56,6 @@
     max-height: 200px;
   }
 
-
-
   .sidebar-count {
     font-family: var(--font-sans);
     font-size: 13px;

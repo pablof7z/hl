@@ -292,6 +292,8 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
   }
 
   .room-main {
@@ -341,6 +343,8 @@
     .room-sidebar {
       order: 2;
       position: static;
+      max-height: none;
+      overflow-y: visible;
     }
 
     .room-main {
