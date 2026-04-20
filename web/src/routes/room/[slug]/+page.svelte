@@ -21,7 +21,7 @@
     type RoomMember,
     type Highlight,
     type Artifact
-  } from '$lib/features/room/api/room';
+  } from '$lib/features/room/api/types';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
