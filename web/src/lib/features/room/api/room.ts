@@ -59,7 +59,7 @@ export interface Room {
 }
 
 // kind:999 — made-up pin/vote kind (see decision D-01 in room-ui.md)
-const KIND_PIN = 999 as NDKKindType;
+export const KIND_PIN = 999 as NDKKindType;
 
 export async function getRoom(slug: string): Promise<Room | null> {
   const groupId = slug.trim();
@@ -161,7 +161,7 @@ const ARTIFACT_TYPE_TAG_VALUES: Artifact['type'][] = [
   'video'
 ];
 
-function artifactFromThreadEvent(event: NDKEvent): Artifact {
+export function artifactFromThreadEvent(event: NDKEvent): Artifact {
   const title = event.tagValue('title') || event.tagValue('name') || 'Untitled';
   const author = event.tagValue('author') || event.tagValue('summary') || '';
   const url = event.tagValue('r') || event.tagValue('url') || '';

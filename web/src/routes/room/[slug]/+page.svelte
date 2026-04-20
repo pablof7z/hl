@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { browser } from '$app/environment';
+  import { NDKKind } from '@nostr-dev-kit/ndk';
+  import { ndk } from '$lib/ndk/client';
+  import { GROUP_RELAY_URLS } from '$lib/ndk/config';
   import RoomHeader from '$lib/features/room/components/RoomHeader.svelte';
   import RoomNav from '$lib/features/room/components/RoomNav.svelte';
   import Block from '$lib/features/room/components/Block.svelte';
@@ -11,16 +15,86 @@
   import UpNextVoting from '$lib/features/room/components/UpNextVoting.svelte';
   import CaptureCta from '$lib/features/room/components/CaptureCta.svelte';
   import { relativeTime } from '$lib/utils/time';
+  import {
+    KIND_PIN,
+    artifactFromThreadEvent,
+    type RoomMember,
+    type Highlight,
+    type Artifact
+  } from '$lib/features/room/api/room';
   import type { PageData } from './$types';
-  import type { RoomMember, Highlight, Artifact } from '$lib/features/room/api/room';
 
   let { data }: { data: PageData } = $props();
 
   const roomTitle = $derived(data.room?.name ?? data.room?.id ?? '');
   const members = $derived<RoomMember[]>(data.room?.members ?? []);
-  const artifacts = $derived<Artifact[]>(data.room?.artifacts ?? []);
-  const highlights = $derived<Highlight[]>(data.room?.highlights ?? []);
-  const pinnedArtifact = $derived<Artifact | undefined>(data.room?.pinnedArtifact);
+  const slug = $derived(data.room?.id);
+
+  // Client-side subscriptions for NIP-29 room content, scoped by `#h` tag.
+  // SSR currently ships only metadata + members; this hydrates the shelf,
+  // highlights reel, and pinned artifact from relay.highlighter.com.
+  const threadsFeed = ndk.$subscribe(() => {
+    if (!browser || !slug) return undefined;
+    return {
+      filters: [{ kinds: [NDKKind.Thread], '#h': [slug], limit: 32 }],
+      relayUrls: GROUP_RELAY_URLS,
+      closeOnEose: false
+    };
+  });
+
+  const highlightsFeed = ndk.$subscribe(() => {
+    if (!browser || !slug) return undefined;
+    return {
+      filters: [{ kinds: [NDKKind.Highlight], '#h': [slug], limit: 64 }],
+      relayUrls: GROUP_RELAY_URLS,
+      closeOnEose: false
+    };
+  });
+
+  const pinsFeed = ndk.$subscribe(() => {
+    if (!browser || !slug) return undefined;
+    return {
+      filters: [{ kinds: [KIND_PIN], '#h': [slug], limit: 10 }],
+      relayUrls: GROUP_RELAY_URLS,
+      closeOnEose: false
+    };
+  });
+
+  const artifacts = $derived<Artifact[]>(
+    [...threadsFeed.events]
+      .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))
+      .map(artifactFromThreadEvent)
+  );
+
+  const colorByPubkey = $derived(new Map(members.map((m) => [m.pubkey, m.colorIndex])));
+
+  const highlights = $derived<Highlight[]>(
+    [...highlightsFeed.events]
+      .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))
+      .slice(0, 30)
+      .map((event) => ({
+        id: event.id,
+        artifactId: event.tagValue('a') || event.tagValue('e') || '',
+        quote: event.content.trim(),
+        authorPubkey: event.pubkey,
+        authorColorIndex: colorByPubkey.get(event.pubkey) ?? 1,
+        createdAt: event.created_at ?? 0
+      }))
+  );
+
+  const pinnedArtifact = $derived.by<Artifact | undefined>(() => {
+    const latestPin = [...pinsFeed.events].sort(
+      (a, b) => (b.created_at ?? 0) - (a.created_at ?? 0)
+    )[0];
+    if (latestPin) {
+      const pinnedThreadId = latestPin.tagValue('e');
+      if (pinnedThreadId) {
+        const match = artifacts.find((a) => a.id === pinnedThreadId);
+        if (match) return match;
+      }
+    }
+    return artifacts[0];
+  });
 
   const sections = $derived([
     { id: 'pinned', label: 'Pinned' },
