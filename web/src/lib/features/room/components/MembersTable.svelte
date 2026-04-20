@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
   import MemberDot from './MemberDot.svelte';
 
   interface Contribution {
@@ -8,15 +10,13 @@
   }
 
   interface MemberRow {
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name: string;
-    handle: string;
-    progressPct: number;
-    progressLabel: string;
+    progressPct?: number;
+    progressLabel?: string;
     progressState?: 'inProgress' | 'done' | 'none';
-    contribution: Contribution;
-    lastHere: string;
+    contribution?: Contribution;
+    lastHere?: string;
   }
 
   let {
@@ -34,53 +34,52 @@
     <div>Last here</div>
   </div>
 
-  {#each members as m (m.handle)}
-    <div class="mt-row">
-      <div class="mt-member">
-        <MemberDot
-          colorIndex={m.colorIndex}
-          initials={m.initials}
-          size={30}
-          title={m.name}
-        />
-        <div>
-          <div class="m-n">{m.name}</div>
-          <div class="m-h">@{m.handle}</div>
+  {#each members as m (m.pubkey)}
+    <User.Root {ndk} pubkey={m.pubkey}>
+      <div class="mt-row">
+        <div class="mt-member">
+          <MemberDot colorIndex={m.colorIndex} pubkey={m.pubkey} size={30} />
+          <div>
+            <div class="m-n"><User.Name field="displayName" /></div>
+            <div class="m-h"><User.Handle /></div>
+          </div>
         </div>
-      </div>
 
-      <div class="mt-progress">
-        <div class="mt-progress-bar">
-          <div
-            class="mt-progress-fill"
-            class:done={m.progressState === 'done'}
-            class:none={m.progressState === 'none'}
-            style:width="{m.progressPct}%"
-          ></div>
+        <div class="mt-progress">
+          <div class="mt-progress-bar">
+            <div
+              class="mt-progress-fill"
+              class:done={m.progressState === 'done'}
+              class:none={!m.progressState || m.progressState === 'none'}
+              style:width="{m.progressPct ?? 0}%"
+            ></div>
+          </div>
+          <div class="mt-progress-label">
+            {#if m.progressLabel}{@html m.progressLabel}{:else}<em>—</em>{/if}
+          </div>
         </div>
-        <div class="mt-progress-label">{@html m.progressLabel}</div>
-      </div>
 
-      <div class="mt-contribution">
-        {#if m.contribution.highlights !== undefined}
-          <span><b>{m.contribution.highlights}</b> highlights</span>
-        {:else}
-          <span class="none">—</span>
-        {/if}
-        {#if m.contribution.messages !== undefined}
-          <span><b>{m.contribution.messages}</b> messages</span>
-        {:else}
-          <span class="none">—</span>
-        {/if}
-        {#if m.contribution.notes !== undefined}
-          <span><b>{m.contribution.notes}</b> note{m.contribution.notes === 1 ? '' : 's'}</span>
-        {:else}
-          <span class="none">—</span>
-        {/if}
-      </div>
+        <div class="mt-contribution">
+          {#if m.contribution?.highlights !== undefined}
+            <span><b>{m.contribution.highlights}</b> highlights</span>
+          {:else}
+            <span class="none">—</span>
+          {/if}
+          {#if m.contribution?.messages !== undefined}
+            <span><b>{m.contribution.messages}</b> messages</span>
+          {:else}
+            <span class="none">—</span>
+          {/if}
+          {#if m.contribution?.notes !== undefined}
+            <span><b>{m.contribution.notes}</b> note{m.contribution.notes === 1 ? '' : 's'}</span>
+          {:else}
+            <span class="none">—</span>
+          {/if}
+        </div>
 
-      <div class="mt-last">{m.lastHere}</div>
-    </div>
+        <div class="mt-last">{m.lastHere ?? ''}</div>
+      </div>
+    </User.Root>
   {/each}
 </div>
 
@@ -214,16 +213,8 @@
   }
 
   @media (max-width: 760px) {
-    .mt-head {
-      display: none;
-    }
-    .mt-row {
-      grid-template-columns: 1fr;
-      gap: 10px;
-      padding: 16px 0;
-    }
-    .mt-last {
-      text-align: left;
-    }
+    .mt-head { display: none; }
+    .mt-row { grid-template-columns: 1fr; gap: 10px; padding: 16px 0; }
+    .mt-last { text-align: left; }
   }
 </style>

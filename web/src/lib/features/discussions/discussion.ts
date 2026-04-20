@@ -253,16 +253,4 @@ function buildRootEventForReply(
   return event;
 }
 
-export function relativeTime(timestamp: number): string {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = now - timestamp;
-
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
-
-  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(
-    new Date(timestamp * 1000)
-  );
-}
+export { relativeTime } from '$lib/utils/time';

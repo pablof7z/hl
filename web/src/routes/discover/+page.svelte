@@ -14,20 +14,20 @@
 
 <section class="discover-page">
   <header class="discover-hero">
-    <h1>Explore public circles</h1>
+    <h1>Discover rooms</h1>
     <a class="create-link" href="/community/create">
-      {currentUser ? 'Create a circle' : 'Sign in to create'}
+      {currentUser ? 'Create a room' : 'Sign in to create'}
     </a>
   </header>
 
   <CommunityGrid
     communities={data.communities}
     showVisibilityFilter={false}
-    searchPlaceholder="Search circles by name, URL, or description"
-    emptyLabel="No public circles are visible yet."
-    emptyCopy="Create the first circle or check back soon."
+    searchPlaceholder="Search rooms by name, URL, or description"
+    emptyLabel="No public rooms are visible yet."
+    emptyCopy="Create the first room or check back soon."
     emptyCtaHref="/community/create"
-    emptyCtaLabel="Create a circle"
+    emptyCtaLabel="Create a room"
   />
 </section>
 

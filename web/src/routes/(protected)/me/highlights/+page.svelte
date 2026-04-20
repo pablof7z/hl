@@ -152,10 +152,10 @@
     <div class="summary-card">
       <p class="summary-label">Saved highlights</p>
       <strong>{highlights.length}</strong>
-      <span>You can share the same highlight into more than one community.</span>
+      <span>You can share the same highlight into more than one room.</span>
     </div>
     <div class="summary-card">
-      <p class="summary-label">Loaded communities</p>
+      <p class="summary-label">Loaded rooms</p>
       <strong>{communities.length}</strong>
       <span>Available as share-again targets on each card.</span>
     </div>

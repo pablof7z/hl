@@ -1,13 +1,12 @@
-import { NDKKind, NDKSimpleGroupMetadata, profileFromEvent } from '@nostr-dev-kit/ndk';
+import { NDKKind, NDKSimpleGroupMetadata } from '@nostr-dev-kit/ndk';
 import type { NDKEvent, NDKKind as NDKKindType } from '@nostr-dev-kit/ndk';
 import { fetchEventsForSsr } from '$lib/server/nostr';
 import { GROUP_RELAY_URLS } from '$lib/ndk/config';
-import { displayName, shortPubkey } from '$lib/ndk/format';
+import { relativeTime } from '$lib/utils/time';
 
 export interface RoomMember {
   pubkey: string;
-  name: string;
-  colorIndex: number; // renamed from color — matches component expectations
+  colorIndex: number; // positional color (1..6), based on member list order
   joinedAt: string;
 }
 
@@ -16,28 +15,28 @@ export interface Artifact {
   type: 'book' | 'podcast' | 'article' | 'essay' | 'video';
   title: string;
   author: string;
-  cover: string; // renamed from coverUrl — matches component expectations
+  cover: string;
   url: string;
   progress: number; // 0-100
   highlightCount: number;
-  discussionCount: number; // added — displayed by ArtifactCard
+  discussionCount: number;
 }
 
 export interface Highlight {
   id: string;
   artifactId: string;
-  quote: string;          // renamed from text
-  memberName: string;     // renamed from author
-  memberColorIndex: number;
-  timestamp: string;      // renamed from createdAt
+  quote: string;
+  authorPubkey: string;
+  authorColorIndex: number;   // positional, from room member list order
+  createdAt: number;          // raw unix seconds; components format for display
 }
 
 export interface Note {
   id: string;
-  memberColorIndex: number;
-  memberName: string;
+  authorPubkey: string;
+  authorColorIndex: number;
   content: string;
-  timestamp: string;
+  createdAt: number;
 }
 
 export interface UpNextItem {
@@ -59,34 +58,29 @@ export interface Room {
   notes: Note[];
 }
 
-// kind:999 is the made-up pin/vote kind used by Highlighter (see decision D-01 in room-ui.md)
+// kind:999 — made-up pin/vote kind (see decision D-01 in room-ui.md)
 const KIND_PIN = 999 as NDKKindType;
 
 export async function getRoom(slug: string): Promise<Room | null> {
   const groupId = slug.trim();
   if (!groupId) return null;
 
-  // Fetch all room data in parallel for fast SSR
   const [metadataEvents, memberEvents, artifactEvents, highlightEvents] = await Promise.all([
-    // kind:39000 — group metadata (name, about, picture)
     fetchEventsForSsr(
       { kinds: [NDKKind.GroupMetadata], '#d': [groupId] },
       `getRoom:metadata(${groupId})`,
       { relays: GROUP_RELAY_URLS }
     ),
-    // kind:39002 — group member list
     fetchEventsForSsr(
       { kinds: [NDKKind.GroupMembers], '#d': [groupId] },
       `getRoom:members(${groupId})`,
       { relays: GROUP_RELAY_URLS }
     ),
-    // kind:11 — thread shares (each thread = an artifact shared to the room)
     fetchEventsForSsr(
       { kinds: [NDKKind.Thread], '#h': [groupId], limit: 32 },
       `getRoom:artifacts(${groupId})`,
       { relays: GROUP_RELAY_URLS }
     ),
-    // kind:9802 — highlights posted to this room
     fetchEventsForSsr(
       { kinds: [NDKKind.Highlight], '#h': [groupId], limit: 64 },
       `getRoom:highlights(${groupId})`,
@@ -94,69 +88,49 @@ export async function getRoom(slug: string): Promise<Room | null> {
     )
   ]);
 
-  // ── Room metadata ─────────────────────────────────────────────────────────
   const metadataEvent = sortByCreatedAtDesc([...(metadataEvents ?? [])])[0];
   if (!metadataEvent) return null;
 
   const metadata = NDKSimpleGroupMetadata.from(metadataEvent);
   const roomName = metadata.name?.trim() || groupId;
 
-  // ── Member list ───────────────────────────────────────────────────────────
   const memberEvent = sortByCreatedAtDesc([...(memberEvents ?? [])])[0];
   const memberPubkeys = memberEvent
     ? memberEvent.getMatchingTags('p').map((tag) => tag[1]).filter(Boolean)
     : [];
 
-  // Fetch kind:0 profiles for up to 30 members
-  const profiles = await fetchMemberProfiles(memberPubkeys.slice(0, 30));
-
   const members: RoomMember[] = memberPubkeys.map((pubkey, index) => ({
     pubkey,
-    name: displayName(profiles[pubkey], shortPubkey(pubkey)),
     colorIndex: (index % 6) + 1,
     joinedAt: ''
   }));
 
-  // ── Artifacts (kind:11 threads) ───────────────────────────────────────────
+  const colorByPubkey = new Map(members.map((m) => [m.pubkey, m.colorIndex]));
+
   const sortedArtifactEvents = sortByCreatedAtDesc([...(artifactEvents ?? [])]);
-  const artifacts: Artifact[] = sortedArtifactEvents.map((event) =>
-    artifactFromThreadEvent(event)
-  );
+  const artifacts: Artifact[] = sortedArtifactEvents.map(artifactFromThreadEvent);
 
-  // ── Highlights (kind:9802) ────────────────────────────────────────────────
   const sortedHighlightEvents = sortByCreatedAtDesc([...(highlightEvents ?? [])]);
-  const highlights: Highlight[] = sortedHighlightEvents.slice(0, 30).map((event) => {
-    const memberIndex = memberPubkeys.indexOf(event.pubkey);
-    const memberColorIndex = memberIndex >= 0 ? (memberIndex % 6) + 1 : 1;
-    const profile = profiles[event.pubkey];
-    const memberName = displayName(profile, shortPubkey(event.pubkey));
+  const highlights: Highlight[] = sortedHighlightEvents.slice(0, 30).map((event) => ({
+    id: event.id,
+    artifactId: event.tagValue('a') || event.tagValue('e') || '',
+    quote: event.content.trim(),
+    authorPubkey: event.pubkey,
+    authorColorIndex: colorByPubkey.get(event.pubkey) ?? 1,
+    createdAt: event.created_at ?? 0
+  }));
 
-    return {
-      id: event.id,
-      artifactId: event.tagValue('a') || event.tagValue('e') || '',
-      quote: event.content.trim(),
-      memberName,
-      memberColorIndex,
-      timestamp: relativeTime(event.created_at)
-    };
-  });
-
-  // ── Pinned artifact (kind:999) or fallback to most recent kind:11 ─────────
+  // Pinned artifact: latest kind:999 for the group, fallback to most recent kind:11
   let pinnedArtifact: Artifact | undefined;
-
   const pinnedEvents = await fetchEventsForSsr(
     { kinds: [KIND_PIN], '#h': [groupId], limit: 10 },
     `getRoom:pinned(${groupId})`,
     { relays: GROUP_RELAY_URLS }
   );
   const latestPin = sortByCreatedAtDesc([...(pinnedEvents ?? [])])[0];
-
   if (latestPin) {
     const pinnedThreadId = latestPin.tagValue('e');
-    const pinnedFromShelf = pinnedThreadId
-      ? artifacts.find((a) => a.id === pinnedThreadId)
-      : undefined;
-    pinnedArtifact = pinnedFromShelf ?? artifacts[0];
+    pinnedArtifact = (pinnedThreadId && artifacts.find((a) => a.id === pinnedThreadId)) || artifacts[0];
   } else {
     pinnedArtifact = artifacts[0];
   }
@@ -209,47 +183,5 @@ function artifactFromThreadEvent(event: NDKEvent): Artifact {
   };
 }
 
-async function fetchMemberProfiles(
-  pubkeys: string[]
-): Promise<Record<string, import('@nostr-dev-kit/ndk').NDKUserProfile>> {
-  if (pubkeys.length === 0) return {};
-
-  const profileEvents = [
-    ...(
-      (await fetchEventsForSsr(
-        { kinds: [0], authors: pubkeys },
-        `getRoom:profiles(${pubkeys.length})`
-      )) ?? []
-    )
-  ];
-
-  const latestByPubkey = new Map<string, NDKEvent>();
-  for (const event of profileEvents) {
-    const existing = latestByPubkey.get(event.pubkey);
-    if (!existing || (event.created_at ?? 0) > (existing.created_at ?? 0)) {
-      latestByPubkey.set(event.pubkey, event);
-    }
-  }
-
-  const result: Record<string, import('@nostr-dev-kit/ndk').NDKUserProfile> = {};
-  for (const [pubkey, event] of latestByPubkey) {
-    try {
-      result[pubkey] = profileFromEvent(event);
-    } catch {
-      // skip malformed profiles
-    }
-  }
-  return result;
-}
-
-function relativeTime(createdAt: number | undefined): string {
-  if (!createdAt) return '';
-  const diffMs = Date.now() - createdAt * 1000;
-  const diffDays = Math.floor(diffMs / 86_400_000);
-
-  if (diffDays === 0) return 'today';
-  if (diffDays === 1) return '1d ago';
-  if (diffDays < 7) return `${diffDays}d ago`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
-  return `${Math.floor(diffDays / 30)}mo ago`;
-}
+// Re-export for any legacy importers
+export { relativeTime };

@@ -20,6 +20,8 @@
     type SurfaceAction
   } from '$lib/highlighter/surfaces';
   import type { HydratedHighlight } from '$lib/ndk/highlights';
+  import TopNav from '$lib/features/room/components/TopNav.svelte';
+  import Footer from '$lib/features/room/components/Footer.svelte';
 
   const currentUser = $derived(ndk.$currentUser);
   const signedIn = $derived(Boolean(currentUser));
@@ -206,18 +208,18 @@
       {:else if isEmpty && !hasCircles && !hasFollows}
         <div class="feed-empty">
           <h2>Your feed starts here.</h2>
-          <p>Join a circle or follow someone to see highlights appear in your feed.</p>
+          <p>Join a room or follow someone to see highlights appear in your feed.</p>
           <div class="feed-empty-actions">
-            <a href="/community" class="btn-primary">Discover circles</a>
-            <a href="/community/create" class="btn-secondary">Create a circle</a>
+            <a href="/discover" class="btn-primary">Discover rooms</a>
+            <a href="/community/create" class="btn-secondary">Create a room</a>
           </div>
         </div>
       {:else if isEmpty && hasCircles}
         <div class="feed-empty">
-          <h2>Your circles are quiet.</h2>
+          <h2>Your rooms are quiet.</h2>
           <p>No highlights have been shared yet. Be the first.</p>
           <div class="feed-empty-actions">
-            <a href="/community" class="btn-primary">Visit your circles</a>
+            <a href="/rooms" class="btn-primary">Visit your rooms</a>
           </div>
         </div>
       {:else if isEmpty && hasFollows}
@@ -225,7 +227,7 @@
           <h2>Nothing new from your network.</h2>
           <p>The people you follow haven't shared highlights recently.</p>
           <div class="feed-empty-actions">
-            <a href="/community" class="btn-primary">Discover circles</a>
+            <a href="/discover" class="btn-primary">Discover rooms</a>
           </div>
         </div>
       {:else}
@@ -248,38 +250,30 @@
     <aside class="feed-rail">
       {#if communities.length > 0}
         <div class="rail-section">
-          <h3 class="rail-heading">Your circles</h3>
+          <h3 class="rail-heading">Your rooms</h3>
           <ul class="rail-circle-list">
             {#each communities.slice(0, 6) as community (community.id)}
               <li>
-                <a href="/community/{community.id}" class="rail-circle-link">{community.name}</a>
+                <a href="/room/{community.id}" class="rail-circle-link">{community.name}</a>
               </li>
             {/each}
           </ul>
           {#if communities.length > 6}
-            <a href="/community" class="rail-view-all">View all circles</a>
+            <a href="/rooms" class="rail-view-all">View all rooms</a>
           {/if}
         </div>
       {/if}
       <div class="rail-cta-card">
-        <h3>Start a new circle</h3>
+        <h3>Start a new room</h3>
         <p>Gather your people around the content you care about.</p>
-        <a href="/community/create" class="btn-primary">Create a circle</a>
+        <a href="/community/create" class="btn-primary">Create a room</a>
       </div>
     </aside>
   </section>
 {:else}
   <!-- ═══ GUEST — THE ANNOTATION LANDING ═══ -->
 
-  <nav class="landing-topnav">
-    <a href="/" class="topnav-left">Highlighter<em>.</em></a>
-    <div class="topnav-right">
-      <a href="#what">What it is</a>
-      <a href="#media">For everything</a>
-      <a href="#room">Rooms</a>
-      <a href="/onboarding" class="topnav-cta">Request a card</a>
-    </div>
-  </nav>
+  <TopNav variant="marketing" />
 
   <div class="landing-page">
 
@@ -806,31 +800,7 @@
     </section>
   </div>
 
-  <footer class="landing-footer">
-    <div class="footer-inner">
-      <div class="footer-mark">Highlighter<em>.</em></div>
-      <div class="footer-cols">
-        <div>
-          <h6>The product</h6>
-          <a href="#what">What it is</a>
-          <a href="#media">For any medium</a>
-          <a href="#room">Rooms</a>
-        </div>
-        <div>
-          <h6>Read</h6>
-          <a href="/about">How a room works</a>
-          <a href="/about">On the Nostr protocol</a>
-          <a href="/changelog">A note on the old Highlighter</a>
-        </div>
-        <div>
-          <h6>Reach us</h6>
-          <a href="/onboarding">Request a card</a>
-          <a href="/onboarding">Bring a room</a>
-          <a href="/about">contact</a>
-        </div>
-      </div>
-    </div>
-  </footer>
+  <Footer variant="marketing" />
 {/if}
 
 <style>
@@ -1056,119 +1026,15 @@
      LANDING (annotation direction, round 02)
      ═══════════════════════════════════════════ */
 
-  :global(.page:has(.landing-topnav)) {
-    gap: 0;
-    padding: 0;
-    max-width: none;
-  }
-
-  .landing-topnav,
-  .landing-page,
-  .landing-footer,
-  .landing-topnav *,
-  .landing-page *,
-  .landing-footer * {
-    box-sizing: border-box;
-  }
-
-  .landing-topnav {
-    --paper: #F7F3EB;
-    --paper-2: #EFE9DC;
-    --paper-card: #FFFEFA;
-    --ink: #15130F;
-    --ink-soft: #3A362E;
-    --ink-fade: #7A7468;
-    --rule: #D9D2BF;
-    --h-sage: #C8D4B5;
-    --h-rose: #EAC6C8;
-    --h-blue: #BCD0E0;
-    --h-lilac: #D0C4E0;
-    --marker: #F5D896;
-    --marker-strong: #E8B96A;
-    --pen: #1F3F78;
-    --pen-soft: #3A5A95;
-    --brand-accent: #C24D2C;
-  }
-
-  .landing-topnav {
-    position: sticky;
-    top: 0;
-    background: #F7F3EB;
-    border-bottom: 1px solid #D9D2BF;
-    padding: 18px 40px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    z-index: 20;
-    font-family: 'Inter', system-ui, sans-serif;
-  }
-
-  .topnav-left {
-    font-family: 'Fraunces', serif;
-    font-weight: 500;
-    font-size: 22px;
-    letter-spacing: -0.01em;
-    color: #15130F;
-    text-decoration: none;
-  }
-
-  .topnav-left em {
-    font-style: italic;
-    font-weight: 400;
-    color: #C24D2C;
-  }
-
-  .topnav-right {
-    display: flex;
-    gap: 32px;
-    align-items: center;
-    font-size: 14px;
-    color: #3A362E;
-  }
-
-  .topnav-right a {
-    text-decoration: none;
-    color: inherit;
-  }
-
-  .topnav-right a:hover {
-    color: #C24D2C;
-  }
-
-  .topnav-cta {
-    padding: 8px 18px;
-    background: #15130F;
-    color: #F7F3EB !important;
-    font-size: 13px;
-    font-weight: 500;
-    text-decoration: none !important;
-    letter-spacing: 0.01em;
-  }
-
-  .topnav-cta:hover {
-    background: #C24D2C !important;
-    color: #F7F3EB !important;
-  }
-
-  @media (max-width: 780px) {
-    .landing-topnav { padding: 14px 20px; }
-    .topnav-right { gap: 16px; font-size: 13px; }
-    .topnav-right a:not(.topnav-cta) { display: none; }
-  }
-
   .landing-page {
     max-width: 1280px;
     margin: 0 auto;
     padding: 0 40px;
-    background: #F7F3EB;
-    font-family: 'Inter', system-ui, sans-serif;
-    color: #15130F;
+    background: var(--bg);
+    font-family: var(--font-sans);
+    color: var(--ink);
     font-size: 17px;
     line-height: 1.6;
-  }
-
-  :global(body:has(.landing-topnav)) {
-    background: #F7F3EB;
   }
 
   @media (max-width: 900px) {
@@ -2085,61 +1951,4 @@
     max-width: 48ch;
   }
 
-  /* Footer */
-  .landing-footer {
-    background: #EFE9DC;
-    border-top: 1px solid #D9D2BF;
-    padding: 48px 40px;
-    margin-top: 40px;
-    font-family: 'Inter', sans-serif;
-  }
-
-  .footer-inner {
-    max-width: 1280px;
-    margin: 0 auto;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 32px;
-  }
-
-  .footer-mark {
-    font-family: 'Fraunces', serif;
-    font-weight: 400;
-    font-size: 20px;
-    color: #15130F;
-  }
-
-  .footer-mark em {
-    font-style: italic;
-    color: #C24D2C;
-  }
-
-  .footer-cols {
-    display: flex;
-    gap: 48px;
-    font-size: 13px;
-    color: #7A7468;
-  }
-
-  .footer-cols a {
-    display: block;
-    text-decoration: none;
-    margin-bottom: 8px;
-    color: inherit;
-  }
-
-  .footer-cols a:hover {
-    color: #C24D2C;
-  }
-
-  .footer-cols h6 {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: #15130F;
-    margin: 0 0 12px;
-  }
 </style>

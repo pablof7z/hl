@@ -1,13 +1,11 @@
 <script lang="ts">
   import HighlightEntry from './HighlightEntry.svelte';
   import SeeAllLink from './SeeAllLink.svelte';
-  import MemberDot from './MemberDot.svelte';
 
   interface HighlightRow {
     id: string;
-    memberColorIndex: number;
-    memberName: string;
-    memberInitials?: string;
+    authorPubkey: string;
+    colorIndex: number;
     quote: string;
     location?: string;
     date?: string;
@@ -15,9 +13,8 @@
   }
 
   interface MemberFilter {
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name: string;
     count: number;
   }
 
@@ -33,12 +30,12 @@
     seeAllHref?: string;
   } = $props();
 
-  let activeFilter = $state<string>('all');
+  let activePubkey = $state<string>('all');
 
   const filtered = $derived(
-    activeFilter === 'all'
+    activePubkey === 'all'
       ? highlights
-      : highlights.filter((h) => h.memberName === activeFilter)
+      : highlights.filter((h) => h.authorPubkey === activePubkey)
   );
 
   const total = $derived(totalCount ?? highlights.length);
@@ -49,20 +46,21 @@
     <button
       type="button"
       class="filter-pill"
-      class:on={activeFilter === 'all'}
-      onclick={() => (activeFilter = 'all')}
+      class:on={activePubkey === 'all'}
+      onclick={() => (activePubkey = 'all')}
     >
       All <span class="c">{total}</span>
     </button>
-    {#each memberFilters as mf (mf.name)}
+    {#each memberFilters as mf (mf.pubkey)}
       <button
         type="button"
         class="filter-pill"
-        class:on={activeFilter === mf.name}
-        onclick={() => (activeFilter = mf.name)}
+        class:on={activePubkey === mf.pubkey}
+        onclick={() => (activePubkey = mf.pubkey)}
+        aria-label="Filter by {mf.pubkey.slice(0, 8)}"
       >
-        <span class="dot"><MemberDot colorIndex={mf.colorIndex} size={10} /></span>
-        {mf.initials}
+        <span class="dot dot-{mf.colorIndex}"></span>
+        {mf.pubkey.slice(0, 4)}
         <span class="c">{mf.count}</span>
       </button>
     {/each}
@@ -75,7 +73,15 @@
     <p class="empty-state">No highlights yet.</p>
   {:else}
     {#each filtered as hl (hl.id)}
-      <HighlightEntry {...hl} />
+      <HighlightEntry
+        id={hl.id}
+        authorPubkey={hl.authorPubkey}
+        colorIndex={hl.colorIndex}
+        quote={hl.quote}
+        location={hl.location}
+        date={hl.date}
+        replies={hl.replies}
+      />
     {/each}
   {/if}
 </div>
@@ -96,9 +102,7 @@
   }
 
   @media (max-width: 760px) {
-    .panel-head {
-      padding: 14px 20px;
-    }
+    .panel-head { padding: 14px 20px; }
   }
 
   .filter-row {
@@ -141,16 +145,18 @@
     font-weight: 400;
   }
 
-  .filter-pill .dot {
-    display: inline-flex;
+  .dot {
     width: 10px;
     height: 10px;
+    border-radius: 50%;
   }
 
-  .filter-pill .dot :global(.member-dot) {
-    width: 10px !important;
-    height: 10px !important;
-  }
+  .dot-1 { background: var(--h-amber); }
+  .dot-2 { background: var(--h-sage); }
+  .dot-3 { background: var(--h-blue); }
+  .dot-4 { background: var(--h-rose); }
+  .dot-5 { background: var(--h-lilac); }
+  .dot-6 { background: var(--h-amber-l); }
 
   .panel-sort {
     font-family: var(--font-sans);
@@ -163,11 +169,7 @@
     padding: 0 32px;
   }
 
-  @media (max-width: 760px) {
-    .hl-list {
-      padding: 0 20px;
-    }
-  }
+  @media (max-width: 760px) { .hl-list { padding: 0 20px; } }
 
   .empty-state {
     font-family: var(--font-sans);
@@ -182,9 +184,5 @@
     padding: 0 32px 28px;
   }
 
-  @media (max-width: 760px) {
-    .see-all-wrap {
-      padding: 0 20px 24px;
-    }
-  }
+  @media (max-width: 760px) { .see-all-wrap { padding: 0 20px 24px; } }
 </style>

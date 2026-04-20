@@ -22,7 +22,7 @@
     {:else}
       <h1>Results for "{data.results.query}"</h1>
       <p class="search-summary">
-        {totalCount} result{totalCount === 1 ? '' : 's'} · {communityCount} circle{communityCount === 1
+        {totalCount} result{totalCount === 1 ? '' : 's'} · {communityCount} room{communityCount === 1
           ? ''
           : 's'} · {articleCount} article{articleCount === 1 ? '' : 's'}
       </p>
@@ -33,14 +33,14 @@
     <section class="search-message">
       <p class="message-title">Type at least {MIN_SEARCH_QUERY_LENGTH} characters in the header search.</p>
       <p class="message-copy">
-        Circle names, route slugs, article titles, summaries, and article body text are all searchable.
+        Room names, route slugs, article titles, summaries, and article body text are all searchable.
       </p>
     </section>
   {:else if !hasResults}
     <section class="search-message">
       <p class="message-title">Nothing matched "{data.results.query}".</p>
       <p class="message-copy">
-        Try a broader phrase, a circle route slug, or a few words from the article title or body.
+        Try a broader phrase, a room route slug, or a few words from the article title or body.
       </p>
     </section>
   {:else}
@@ -48,7 +48,7 @@
       <section class="result-section">
         <div class="result-section-head">
           <div>
-            <h2>{data.results.communities.length} public circle{data.results.communities.length === 1 ? '' : 's'}</h2>
+            <h2>{data.results.communities.length} public room{data.results.communities.length === 1 ? '' : 's'}</h2>
           </div>
         </div>
 

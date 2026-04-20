@@ -1,68 +1,91 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { page } from '$app/state';
   import ArticleView from '$lib/features/room/components/ArticleView.svelte';
   import PodcastView from '$lib/features/room/components/PodcastView.svelte';
+  import type { PageData } from './$types';
 
-  type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
+  let { data }: { data: PageData } = $props();
 
-  interface SeedArtifact {
-    id: string;
-    type: ArtifactType;
-    title: string;
-    author?: string;
-  }
-
-  // Seed map — until real API is wired, derives artifact metadata from id.
-  // Matches ids referenced by tiles in /room/[slug]/+page.svelte.
-  const SEED: Record<string, SeedArtifact> = {
-    'tftc-642': {
-      id: 'tftc-642',
-      type: 'podcast',
-      title: 'Broken Money, Two Years In',
-      author: 'Marty Bent & Lyn Alden · TFTC #642'
-    },
-    'dergigi-purple': {
-      id: 'dergigi-purple',
-      type: 'essay',
-      title: 'Purple Text, Orange Highlights',
-      author: 'Dergigi'
-    }
-  };
-
-  const seedMembers = [
-    { colorIndex: 1, name: 'DK' },
-    { colorIndex: 2, name: 'Pablo F' },
-    { colorIndex: 4, name: 'Miljan' },
-    { colorIndex: 3, name: 'Bob S' },
-    { colorIndex: 5, name: 'Steve L' },
-    { colorIndex: 6, name: 'Max W' }
-  ];
-
-  const slug = $derived(page.params.slug);
-  const id = $derived(page.params.id);
-  const artifact = $derived(
-    SEED[id ?? ''] ?? {
-      id: id ?? '',
-      type: 'article' as ArtifactType,
-      title: 'Untitled',
-      author: ''
-    }
+  const artifact = $derived(data.artifact);
+  const room = $derived(data.room);
+  const members = $derived(
+    (room?.members ?? []).map((m) => ({
+      pubkey: m.pubkey,
+      colorIndex: m.colorIndex,
+      name: m.pubkey.slice(0, 8),
+      joinedAt: m.joinedAt
+    }))
   );
 
-  const isPodcast = $derived(artifact.type === 'podcast');
+  const isPodcast = $derived(artifact?.type === 'podcast');
 
   function handleBack() {
-    void goto(`/room/${slug}`);
+    if (room) {
+      void goto(`/room/${room.id}`);
+    } else {
+      void goto('/rooms');
+    }
   }
 </script>
 
 <svelte:head>
-  <title>{artifact.title} · Room</title>
+  <title>{artifact?.title ?? 'Artifact'} · Room</title>
 </svelte:head>
 
-{#if isPodcast}
-  <PodcastView {artifact} members={seedMembers} onBack={handleBack} />
+{#if !artifact}
+  <div class="artifact-missing">
+    <h1>Artifact not available</h1>
+    <p>The event for this artifact wasn't found on the relays we queried.</p>
+    {#if room}
+      <a href={`/room/${room.id}`} class="btn">Back to {room.name}</a>
+    {:else}
+      <a href="/rooms" class="btn">Back to your rooms</a>
+    {/if}
+  </div>
+{:else if isPodcast}
+  <PodcastView {artifact} {members} onBack={handleBack} />
 {:else}
-  <ArticleView {artifact} members={seedMembers} onBack={handleBack} />
+  <ArticleView {artifact} {members} onBack={handleBack} />
 {/if}
+
+<style>
+  .artifact-missing {
+    padding: 80px 0;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .artifact-missing h1 {
+    font-family: var(--font-serif);
+    font-size: 36px;
+    font-weight: 400;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .artifact-missing p {
+    color: var(--ink-soft);
+    font-size: 15px;
+    max-width: 44ch;
+    margin: 0;
+  }
+
+  .btn {
+    padding: 10px 20px;
+    background: var(--ink);
+    color: var(--surface);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    border-radius: var(--radius);
+    transition: background 200ms ease;
+  }
+
+  .btn:hover {
+    background: var(--brand-accent);
+  }
+</style>

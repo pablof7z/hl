@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
   import MemberDot from './MemberDot.svelte';
 
   let {
     id,
-    memberColorIndex,
-    memberName,
-    memberInitials,
+    authorPubkey,
+    colorIndex,
     quote,
     location,
     date,
@@ -13,9 +14,8 @@
     replyHref = '#'
   }: {
     id: string;
-    memberColorIndex: number;
-    memberName: string;
-    memberInitials?: string;
+    authorPubkey: string;
+    colorIndex: number;
     quote: string;
     location?: string;
     date?: string;
@@ -25,16 +25,13 @@
 </script>
 
 <div class="hl-entry" data-id={id}>
-  <div class="hl-entry-meta">
-    <MemberDot
-      colorIndex={memberColorIndex}
-      initials={memberInitials ?? memberName.slice(0, 2).toUpperCase()}
-      size={22}
-      title={memberName}
-    />
-    {#if location}<span class="hl-loc">{location}</span>{/if}
-    {#if date}<span class="hl-date">{date}</span>{/if}
-  </div>
+  <User.Root {ndk} pubkey={authorPubkey}>
+    <div class="hl-entry-meta">
+      <MemberDot {colorIndex} pubkey={authorPubkey} size={22} />
+      {#if location}<span class="hl-loc">{location}</span>{/if}
+      {#if date}<span class="hl-date">{date}</span>{/if}
+    </div>
+  </User.Root>
 
   <p class="hl-entry-quote">{quote}</p>
 
@@ -51,9 +48,7 @@
     border-bottom: 1px solid var(--rule-soft);
   }
 
-  .hl-entry:last-child {
-    border-bottom: none;
-  }
+  .hl-entry:last-child { border-bottom: none; }
 
   .hl-entry-meta {
     display: flex;
@@ -67,14 +62,8 @@
     text-transform: uppercase;
   }
 
-  .hl-loc {
-    color: var(--brand-accent);
-    font-weight: 500;
-  }
-
-  .hl-date {
-    margin-left: auto;
-  }
+  .hl-loc { color: var(--brand-accent); font-weight: 500; }
+  .hl-date { margin-left: auto; }
 
   .hl-entry-quote {
     font-family: var(--font-serif);
@@ -101,7 +90,5 @@
     text-decoration: none;
   }
 
-  .hl-thread:hover {
-    text-decoration: underline;
-  }
+  .hl-thread:hover { text-decoration: underline; }
 </style>

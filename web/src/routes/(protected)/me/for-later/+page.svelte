@@ -128,10 +128,10 @@
 
   {#if communities.length === 0}
     <div class="community-note">
-      <p>Join or create a community to move saved items out of this queue.</p>
+      <p>Join or create a room to move saved items out of this queue.</p>
       <div class="community-actions">
-        <a href="/discover">Browse communities</a>
-        <a href="/community/create">Create a community</a>
+        <a href="/discover">Browse rooms</a>
+        <a href="/community/create">Create a room</a>
       </div>
     </div>
   {/if}

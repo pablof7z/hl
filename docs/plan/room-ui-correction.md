@@ -207,6 +207,23 @@ They built components but not the page. This correction plan replaces their "don
 **CD-02 · Verification is visual, against the mock, before marking a milestone complete**
 Commit log was previously trusted. That failed. Going forward, no milestone is marked complete without (a) the dev server running, (b) the mock open in another tab, (c) at least one agreed breakpoint compared, (d) a short note recording the comparison in the milestone's PR description.
 
+**CD-04 · Second correction pass: global chrome unification + seed purge**
+
+After C1–C9 shipped, two defects surfaced in production:
+
+1. `/room/[slug]/+page.svelte` rendered ~340 lines of hardcoded seed data (DK/Pablo F/Miljan members, *Amusing Ourselves to Death*, passage spans, messages, highlights, notes, etc.) because the component ignored `data.room` for everything except the room title. `/room/[slug]/artifact/[id]/+page.svelte` had the same problem with a 2-entry SEED map.
+2. The app had two chromes: the new `TopNav` only rendered on `/room/**`; every other page still used the old `app-navbar-shell` with `SiteNavigation` (Discover / Communities).
+
+Fix plan lives at `~/.claude/plans/wait-did-you-seriously-inherited-fairy.md`. Five phases:
+
+- **Phase A** — Promoted `TopNav`/`Footer` to the root layout with a `variant` prop (`'app'` vs `'marketing'`). Deleted `SiteNavigation.svelte`. Deleted `/room/+layout.svelte` + its feature flag — the room routes now use the global shell.
+- **Phase B** — Purged all seed from `/room/[slug]/+page.svelte` and `/room/[slug]/artifact/[id]/+page.svelte`. Slimmed `RoomMember` and `Highlight` to `{ pubkey, colorIndex, ... }` only — display data (name, avatar, bio, handle) is fetched by `<User.Root pubkey={...}>` inside each component (SRP). Moved `relativeTime` out of `api/room.ts` to `$lib/utils/time.ts`. Empty states everywhere there's no real data yet (Discussions, Lately, UpNext); client-side NDK subs for those four surfaces are the next follow-up.
+- **Phase C** — Built `/rooms` listing user's joined rooms (reuses `buildJoinedCommunities`). `/vault` → 301 → `/me/highlights`. `/discover` copy swept "circles" → "rooms".
+- **Phase D** — User-facing "community"/"circle" copy → "rooms" across `/me/**`, `/search`, `/about`, `/`. `/me/communities` → 301 → `/rooms`. Deleted dead `/community/[id]/content/**` subtree.
+- **Phase E** — Removed `PUBLIC_ROOM_UI_ENABLED` flag and empty `/room/+layout.svelte`.
+
+Components refactored for SRP (self-fetch via `<User.Root>`): `MemberDot`, `MembersSidebar`, `MembersTable`, `RoomHeader`, `HighlightCard`, `HighlightEntry`, `HighlightsTab`. Still to refactor in the follow-up (discussed/notes/activity subscriptions): `Thread`, `DiscussionRow`, `ActivityFeed`, `NoteEntry`, `AlsoCard` marks.
+
 **CD-03 · No new "In This Room" list, no in-page view swap**
 The `ArtifactCard`-based "In This Room" list and the `activeView` page-swap flow were both invented during implementation. Neither is in the mock; both are removed in C8. The mock uses tiles within `#this-week` / `#shelf` / `#highlights` / `#discussions` that link via real URLs.
 

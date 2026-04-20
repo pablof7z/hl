@@ -1,12 +1,11 @@
 <script lang="ts">
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
   import MemberDot from './MemberDot.svelte';
 
   interface Member {
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name: string;
-    handle: string;
-    status?: string;
   }
 
   let {
@@ -24,24 +23,19 @@
     <a href={inviteHref} class="sb-link">invite another →</a>
   </div>
 
-  {#each members as m (m.handle)}
-    <div class="mem-row">
-      <MemberDot
-        colorIndex={m.colorIndex}
-        initials={m.initials}
-        size={32}
-        title={m.name}
-      />
-      <div>
-        <div class="mem-name">
-          {m.name}
-          <span class="handle">@{m.handle}</span>
+  {#each members as m (m.pubkey)}
+    <User.Root {ndk} pubkey={m.pubkey}>
+      <div class="mem-row">
+        <MemberDot colorIndex={m.colorIndex} pubkey={m.pubkey} size={32} />
+        <div>
+          <div class="mem-name">
+            <User.Name field="displayName" />
+            <span class="handle"><User.Handle /></span>
+          </div>
+          <div class="mem-status"><User.Bio /></div>
         </div>
-        {#if m.status}
-          <div class="mem-status">"{m.status}"</div>
-        {/if}
       </div>
-    </div>
+    </User.Root>
   {/each}
 </div>
 
@@ -113,12 +107,12 @@
     font-family: var(--font-mono);
   }
 
-  .mem-status {
+  .mem-status :global(p) {
     font-family: var(--font-serif);
     font-style: italic;
     font-size: 13px;
     line-height: 1.4;
     color: var(--ink-soft);
-    margin-top: 2px;
+    margin: 2px 0 0;
   }
 </style>

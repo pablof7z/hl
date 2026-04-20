@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
   import MemberDot from './MemberDot.svelte';
 
   interface Mark {
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name?: string;
   }
 
   let {
@@ -39,14 +40,11 @@
     </div>
     <div class="hr-marks">
       <div class="dots">
-        {#each marks as mark, i (i)}
+        {#each marks as mark, i (mark.pubkey)}
           <span class:overlap={i > 0}>
-            <MemberDot
-              colorIndex={mark.colorIndex}
-              initials={mark.initials}
-              size={20}
-              title={mark.name}
-            />
+            <User.Root {ndk} pubkey={mark.pubkey}>
+              <MemberDot colorIndex={mark.colorIndex} pubkey={mark.pubkey} size={20} />
+            </User.Root>
           </span>
         {/each}
       </div>
@@ -93,17 +91,8 @@
     -webkit-box-decoration-break: clone;
   }
 
-  .hr-quote::before {
-    content: '\201C';
-    color: var(--brand-accent);
-    margin-right: 1px;
-  }
-
-  .hr-quote::after {
-    content: '\201D';
-    color: var(--brand-accent);
-    margin-left: 1px;
-  }
+  .hr-quote::before { content: '\201C'; color: var(--brand-accent); margin-right: 1px; }
+  .hr-quote::after  { content: '\201D'; color: var(--brand-accent); margin-left: 1px; }
 
   .hr-meta {
     display: flex;
@@ -124,15 +113,8 @@
     min-width: 0;
   }
 
-  .hr-source b {
-    color: var(--ink);
-    font-weight: 600;
-    display: block;
-  }
-
-  .hr-source .sc {
-    font-style: italic;
-  }
+  .hr-source b { color: var(--ink); font-weight: 600; display: block; }
+  .hr-source .sc { font-style: italic; }
 
   .hr-marks {
     display: flex;
@@ -142,17 +124,9 @@
     flex-shrink: 0;
   }
 
-  .dots {
-    display: flex;
-  }
-
-  .overlap {
-    margin-left: -5px;
-  }
-
-  .hr-marks :global(.member-dot) {
-    border: 1.5px solid var(--surface);
-  }
+  .dots { display: flex; }
+  .overlap { margin-left: -5px; }
+  .hr-marks :global(.member-dot) { border: 1.5px solid var(--surface); }
 
   .hr-replies {
     font-family: var(--font-mono);
@@ -161,10 +135,7 @@
     letter-spacing: 0.04em;
   }
 
-  .hr-replies b {
-    color: var(--brand-accent);
-    font-weight: 500;
-  }
+  .hr-replies b { color: var(--brand-accent); font-weight: 500; }
 
   .hr-date {
     font-family: var(--font-mono);

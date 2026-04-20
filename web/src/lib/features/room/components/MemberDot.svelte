@@ -1,15 +1,20 @@
 <script lang="ts">
+  import { getContext } from 'svelte';
+  import { USER_CONTEXT_KEY, type UserContext } from '$lib/ndk/ui/user/user.context';
+
   type SizePreset = 'sm' | 'md' | 'lg';
 
   let {
     colorIndex,
     size = 'md',
-    initials,
-    title,
+    pubkey,
+    initials: explicitInitials,
+    title: explicitTitle,
     online = false
   }: {
     colorIndex: number;
     size?: SizePreset | number;
+    pubkey?: string;
     initials?: string;
     title?: string;
     online?: boolean;
@@ -24,15 +29,35 @@
     'var(--h-amber-l)'
   ] as const;
 
-  const PRESET_PX: Record<SizePreset, number> = {
-    sm: 24,
-    md: 36,
-    lg: 48
-  };
+  const PRESET_PX: Record<SizePreset, number> = { sm: 24, md: 36, lg: 48 };
+
+  // If caller is wrapped in <User.Root>, derive initials + title from the profile there.
+  const userCtx = getContext<UserContext | undefined>(USER_CONTEXT_KEY);
 
   const tint = $derived(TINTS[((colorIndex - 1) % 6 + 6) % 6]);
   const px = $derived(typeof size === 'number' ? size : PRESET_PX[size]);
   const fontSize = $derived(Math.max(9, Math.round(px * 0.32)));
+
+  const derivedFromProfile = $derived.by(() => {
+    const name =
+      userCtx?.profile?.displayName ||
+      userCtx?.profile?.name ||
+      userCtx?.profile?.nip05?.split('@')[0] ||
+      '';
+    if (!name) return { initials: '', title: '' };
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    const initials =
+      (parts.length === 1 ? parts[0].slice(0, 2) : (parts[0][0] ?? '') + (parts[1][0] ?? ''))
+        .toUpperCase() || '??';
+    return { initials, title: name };
+  });
+
+  const pubkeyFallback = $derived(pubkey ? pubkey.slice(0, 2).toUpperCase() : '');
+
+  const initials = $derived(
+    explicitInitials ?? (derivedFromProfile.initials || pubkeyFallback)
+  );
+  const title = $derived(explicitTitle ?? (derivedFromProfile.title || undefined));
 </script>
 
 <span

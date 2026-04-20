@@ -117,7 +117,7 @@
         <p>Who want their work to look good the moment someone opens the link.</p>
       </div>
       <div class="definition-row">
-        <span>Communities</span>
+        <span>Rooms</span>
         <p>Who want a public reading surface that feels like a product instead of a test bench.</p>
       </div>
     </div>

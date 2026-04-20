@@ -71,9 +71,7 @@ function extractMembers(memberEvent: NDKEvent): RoomMember[] {
       return [
         {
           pubkey,
-          // Short hex fallback — overwritten once kind:0 profiles arrive client-side
-          name: pubkey.slice(0, 8),
-          colorIndex: (index % 8) + 1,
+          colorIndex: (index % 6) + 1,
           joinedAt: memberEvent.created_at
             ? new Date(memberEvent.created_at * 1000).toLocaleDateString('en-US', {
                 month: 'short',

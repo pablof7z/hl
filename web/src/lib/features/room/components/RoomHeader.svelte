@@ -1,20 +1,20 @@
 <script lang="ts">
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
   import MemberDot from './MemberDot.svelte';
+
+  interface Member {
+    pubkey: string;
+    colorIndex: number;
+  }
 
   let {
     title,
     members
   }: {
     title: string;
-    members: Array<{ colorIndex: number; name?: string; initials?: string }>;
+    members: Member[];
   } = $props();
-
-  function deriveInitials(name?: string, fallbackIndex = 1): string {
-    if (!name) return `M${fallbackIndex}`;
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
 </script>
 
 <section class="room-id">
@@ -22,14 +22,11 @@
 
   <div class="room-members-row">
     <div class="stack">
-      {#each members.slice(0, 6) as member, i (i)}
+      {#each members.slice(0, 6) as member, i (member.pubkey)}
         <span class:overlap={i > 0}>
-          <MemberDot
-            colorIndex={member.colorIndex}
-            initials={member.initials ?? deriveInitials(member.name, i + 1)}
-            size={36}
-            title={member.name}
-          />
+          <User.Root {ndk} pubkey={member.pubkey}>
+            <MemberDot colorIndex={member.colorIndex} pubkey={member.pubkey} size={36} />
+          </User.Root>
         </span>
       {/each}
     </div>
