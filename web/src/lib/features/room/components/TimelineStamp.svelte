@@ -1,35 +1,37 @@
 <script lang="ts">
-  import MemberDot from './MemberDot.svelte';
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
+  import { memberTint } from '../utils/colors';
 
   let {
     timestamp,
+    pubkey,
     memberColorIndex,
-    memberName,
     note = ''
   }: {
     timestamp: string;
+    pubkey: string;
     memberColorIndex: number;
-    memberName: string;
     note?: string;
   } = $props();
 
-  const TINT_VARS = [
-    'var(--h-amber)',
-    'var(--h-sage)',
-    'var(--h-blue)',
-    'var(--h-rose)',
-    'var(--h-lilac)',
-    'var(--h-amber-l)'
-  ] as const;
-
-  const borderColor = $derived(TINT_VARS[((memberColorIndex - 1) % 6 + 6) % 6]);
+  const borderColor = $derived(memberTint(memberColorIndex));
 </script>
 
 <div class="timeline-stamp" style:border-left-color={borderColor}>
-  <div class="stamp-left">
-    <MemberDot colorIndex={memberColorIndex} size="sm" />
-    <span class="stamp-name">{memberName}</span>
-  </div>
+  <User.Root {ndk} {pubkey}>
+    <div class="stamp-left">
+      <span
+        class="room-member-avatar"
+        style:--mav-size="24px"
+        style:--mav-ring={borderColor}
+        style:--mav-ring-width="1.5px"
+      >
+        <User.Avatar />
+      </span>
+      <span class="stamp-name"><User.Name field="displayName" /></span>
+    </div>
+  </User.Root>
   <div class="stamp-right">
     <span class="stamp-time">{timestamp}</span>
     {#if note}

@@ -11,9 +11,8 @@
   import MembersTable from './MembersTable.svelte';
 
   interface Reader {
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name?: string;
   }
 
   interface Stat {
@@ -29,10 +28,8 @@
 
   interface Message {
     id: string;
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name: string;
-    handle: string;
     time: string;
     body: string;
     isReply?: boolean;
@@ -59,7 +56,7 @@
     passageLabel,
     passageSpans,
     threadTitle,
-    threadStarter,
+    threadStarterPubkey,
     threadStartedAt,
     messages,
     highlights,
@@ -81,7 +78,7 @@
     passageLabel?: string;
     passageSpans: Span[];
     threadTitle?: string;
-    threadStarter?: string;
+    threadStarterPubkey?: string;
     threadStartedAt?: string;
     messages: Message[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -170,7 +167,7 @@
       {passageLabel}
       {passageSpans}
       {threadTitle}
-      {threadStarter}
+      {threadStarterPubkey}
       {threadStartedAt}
       {messages}
     />

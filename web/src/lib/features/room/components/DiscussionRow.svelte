@@ -1,12 +1,13 @@
 <script lang="ts">
-  import MemberDot from './MemberDot.svelte';
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
+  import { memberTint } from '../utils/colors';
 
   type Status = 'active' | 'closed';
 
   interface Participant {
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name?: string;
   }
 
   let {
@@ -14,7 +15,7 @@
     status = 'active',
     statusLabel,
     title,
-    source,
+    starterPubkey,
     participants = [],
     replies,
     lastAt,
@@ -24,7 +25,7 @@
     status?: Status;
     statusLabel?: string;
     title: string;
-    source?: string;
+    starterPubkey?: string;
     participants?: Participant[];
     replies: number;
     lastAt: string;
@@ -34,14 +35,18 @@
 
 <a {href} class="disc-row" data-id={id}>
   <div class="dr-dots">
-    {#each participants as p, i (i)}
+    {#each participants as p, i (p.pubkey)}
       <span class:overlap={i > 0}>
-        <MemberDot
-          colorIndex={p.colorIndex}
-          initials={p.initials}
-          size={26}
-          title={p.name}
-        />
+        <User.Root {ndk} pubkey={p.pubkey}>
+          <span
+            class="room-member-avatar"
+            style:--mav-size="26px"
+            style:--mav-ring={memberTint(p.colorIndex)}
+            style:--mav-ring-width="1.5px"
+          >
+            <User.Avatar />
+          </span>
+        </User.Root>
       </span>
     {/each}
   </div>
@@ -49,7 +54,14 @@
   <div class="dr-body">
     <span class="dr-status {status}">{statusLabel ?? (status === 'active' ? 'Active' : 'Closed')}</span>
     <div class="dr-title">{title}</div>
-    {#if source}<div class="dr-source">{@html source}</div>{/if}
+    {#if starterPubkey}
+      <div class="dr-source">
+        started by
+        <User.Root {ndk} pubkey={starterPubkey}>
+          <b><User.Name field="displayName" /></b>
+        </User.Root>
+      </div>
+    {/if}
   </div>
 
   <div class="dr-stats">
@@ -88,8 +100,8 @@
     align-items: center;
   }
 
-  .dr-dots :global(.member-dot) {
-    border: 2px solid var(--surface);
+  .dr-dots :global(.room-member-avatar) {
+    box-shadow: 0 0 0 1px var(--surface);
   }
 
   .overlap {

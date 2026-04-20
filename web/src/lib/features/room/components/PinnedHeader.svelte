@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
   import BookCoverLg from './BookCoverLg.svelte';
-  import MemberDot from './MemberDot.svelte';
+  import { memberTint } from '../utils/colors';
 
   interface Reader {
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name?: string;
   }
 
   interface Stat {
@@ -64,13 +65,17 @@
 
     {#if readers && readers.length}
       <div class="pin-readers">
-        {#each readers as reader, i (i)}
-          <MemberDot
-            colorIndex={reader.colorIndex}
-            initials={reader.initials}
-            size={22}
-            title={reader.name}
-          />
+        {#each readers as reader (reader.pubkey)}
+          <User.Root {ndk} pubkey={reader.pubkey}>
+            <span
+              class="room-member-avatar"
+              style:--mav-size="22px"
+              style:--mav-ring={memberTint(reader.colorIndex)}
+              style:--mav-ring-width="1.5px"
+            >
+              <User.Avatar />
+            </span>
+          </User.Root>
         {/each}
         {#if readersNote}<span class="note">{readersNote}</span>{/if}
       </div>
@@ -158,8 +163,8 @@
     color: var(--ink-fade);
   }
 
-  .pin-readers :global(.member-dot) {
-    border: 2px solid var(--surface);
+  .pin-readers :global(.room-member-avatar) {
+    box-shadow: 0 0 0 1px var(--surface);
   }
 
   .note {

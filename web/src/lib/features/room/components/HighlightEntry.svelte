@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ndk } from '$lib/ndk/client';
   import { User } from '$lib/ndk/ui/user';
-  import MemberDot from './MemberDot.svelte';
+  import { memberTint } from '../utils/colors';
 
   let {
     id,
@@ -27,7 +27,14 @@
 <div class="hl-entry" data-id={id}>
   <User.Root {ndk} pubkey={authorPubkey}>
     <div class="hl-entry-meta">
-      <MemberDot {colorIndex} pubkey={authorPubkey} size={22} />
+      <span
+        class="room-member-avatar"
+        style:--mav-size="22px"
+        style:--mav-ring={memberTint(colorIndex)}
+        style:--mav-ring-width="1.5px"
+      >
+        <User.Avatar />
+      </span>
       {#if location}<span class="hl-loc">{location}</span>{/if}
       {#if date}<span class="hl-date">{date}</span>{/if}
     </div>

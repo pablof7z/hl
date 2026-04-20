@@ -2,7 +2,6 @@ export { default as TopNav } from './TopNav.svelte';
 export { default as RoomHeader } from './RoomHeader.svelte';
 export { default as RoomNav } from './RoomNav.svelte';
 export { default as Footer } from './Footer.svelte';
-export { default as MemberDot } from './MemberDot.svelte';
 export { default as MemberStack } from './MemberStack.svelte';
 export { default as FilterPill } from './FilterPill.svelte';
 export { default as FilterRow } from './FilterRow.svelte';

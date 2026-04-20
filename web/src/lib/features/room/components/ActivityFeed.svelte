@@ -1,11 +1,12 @@
 <script lang="ts">
-  import MemberDot from './MemberDot.svelte';
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
+  import { memberTint } from '../utils/colors';
 
   interface ActivityItem {
     id: string;
+    pubkey: string;
     memberColorIndex: number;
-    memberInitials: string;
-    memberName: string;
     action: string;
     body: string;
     time: string;
@@ -20,20 +21,24 @@
 
 <div class="feed">
   {#each items as item (item.id)}
-    <div class="feed-row">
-      <MemberDot
-        colorIndex={item.memberColorIndex}
-        initials={item.memberInitials}
-        size={24}
-        title={item.memberName}
-      />
-      <div class="f-body">
-        <b>{item.memberName}</b>
-        <span class="f-action">{item.action}</span>
-        {@html item.body}
+    <User.Root {ndk} pubkey={item.pubkey}>
+      <div class="feed-row">
+        <span
+          class="room-member-avatar"
+          style:--mav-size="24px"
+          style:--mav-ring={memberTint(item.memberColorIndex)}
+          style:--mav-ring-width="1.5px"
+        >
+          <User.Avatar />
+        </span>
+        <div class="f-body">
+          <b><User.Name field="displayName" /></b>
+          <span class="f-action">{item.action}</span>
+          {@html item.body}
+        </div>
+        <div class="f-time">{item.time}</div>
       </div>
-      <div class="f-time">{item.time}</div>
-    </div>
+    </User.Root>
   {/each}
 </div>
 

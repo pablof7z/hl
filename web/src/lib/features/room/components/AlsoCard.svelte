@@ -1,18 +1,18 @@
 <script lang="ts">
-  import MemberDot from './MemberDot.svelte';
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
+  import { memberTint } from '../utils/colors';
 
   type MediaType = 'podcast' | 'essay' | 'book' | 'article' | 'paper';
 
   interface Engager {
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name?: string;
   }
 
   interface Reaction {
+    pubkey: string;
     memberColorIndex: number;
-    memberInitials: string;
-    memberName: string;
     text: string;
   }
 
@@ -75,16 +75,20 @@
 
       {#if reactions.length}
         <div class="also-reactions">
-          {#each reactions as r, i (i)}
-            <div class="r-line">
-              <MemberDot
-                colorIndex={r.memberColorIndex}
-                initials={r.memberInitials}
-                size={22}
-                title={r.memberName}
-              />
-              <span><span class="r-name">{r.memberName}</span>{r.text}</span>
-            </div>
+          {#each reactions as r (r.pubkey)}
+            <User.Root {ndk} pubkey={r.pubkey}>
+              <div class="r-line">
+                <span
+                  class="room-member-avatar"
+                  style:--mav-size="22px"
+                  style:--mav-ring={memberTint(r.memberColorIndex)}
+                  style:--mav-ring-width="1.5px"
+                >
+                  <User.Avatar />
+                </span>
+                <span><span class="r-name"><User.Name field="displayName" /></span>{r.text}</span>
+              </div>
+            </User.Root>
           {/each}
         </div>
       {/if}
@@ -93,14 +97,18 @@
 
   <div class="also-foot">
     <div class="dots">
-      {#each engaged as member, i (i)}
+      {#each engaged as member, i (member.pubkey)}
         <span class:overlap={i > 0}>
-          <MemberDot
-            colorIndex={member.colorIndex}
-            initials={member.initials}
-            size={22}
-            title={member.name}
-          />
+          <User.Root {ndk} pubkey={member.pubkey}>
+            <span
+              class="room-member-avatar"
+              style:--mav-size="22px"
+              style:--mav-ring={memberTint(member.colorIndex)}
+              style:--mav-ring-width="1.5px"
+            >
+              <User.Avatar />
+            </span>
+          </User.Root>
         </span>
       {/each}
     </div>
@@ -264,8 +272,8 @@
     margin-left: -8px;
   }
 
-  .also-foot :global(.member-dot) {
-    border: 2px solid var(--surface);
+  .also-foot :global(.room-member-avatar) {
+    box-shadow: 0 0 0 1px var(--surface);
   }
 
   .open-arrow {

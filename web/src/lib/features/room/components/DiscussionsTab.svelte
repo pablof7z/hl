@@ -1,6 +1,6 @@
 <script lang="ts">
   import Passage from './Passage.svelte';
-  import Thread, { } from './Thread.svelte';
+  import Thread from './Thread.svelte';
 
   interface Span {
     text: string;
@@ -10,10 +10,8 @@
 
   interface Message {
     id: string;
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name: string;
-    handle: string;
     time: string;
     body: string;
     isReply?: boolean;
@@ -23,14 +21,14 @@
     passageLabel,
     passageSpans,
     threadTitle,
-    threadStarter,
+    threadStarterPubkey,
     threadStartedAt,
     messages
   }: {
     passageLabel?: string;
     passageSpans: Span[];
     threadTitle?: string;
-    threadStarter?: string;
+    threadStarterPubkey?: string;
     threadStartedAt?: string;
     messages: Message[];
   } = $props();
@@ -41,7 +39,7 @@
   <div class="thread-slot">
     <Thread
       title={threadTitle}
-      starterName={threadStarter}
+      starterPubkey={threadStarterPubkey}
       startedAt={threadStartedAt}
       {messages}
     />

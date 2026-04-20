@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
   import MemberStack from './MemberStack.svelte';
-  import MemberDot from './MemberDot.svelte';
   import PodcastPlayer from './PodcastPlayer.svelte';
   import TimelineStamp from './TimelineStamp.svelte';
+  import { memberTint } from '../utils/colors';
 
   type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
 
@@ -17,6 +19,7 @@
   }
 
   interface Member {
+    pubkey: string;
     colorIndex: number;
     name: string;
     joinedAt?: string;
@@ -32,27 +35,18 @@
     members: Member[];
   } = $props();
 
-  const TINT_VARS = [
-    'var(--h-amber)',
-    'var(--h-sage)',
-    'var(--h-blue)',
-    'var(--h-rose)',
-    'var(--h-lilac)',
-    'var(--h-amber-l)'
-  ] as const;
-
-  function getMemberColor(colorIndex: number): string {
-    return TINT_VARS[((colorIndex - 1) % 6 + 6) % 6];
-  }
-
-  const seedHighlightSpans = [
-    { start: '12:34', end: '13:15', colorIndex: 1, memberName: 'craig_烈日' },
-    { start: '28:15', end: '29:00', colorIndex: 2, memberName: 'dergigi' },
-    { start: '45:02', end: '46:30', colorIndex: 3, memberName: 'nickand' },
-    { start: '1:02:30', end: '1:03:45', colorIndex: 5, memberName: 'Lyn Alden' },
-    { start: '1:18:45', end: '1:20:00', colorIndex: 4, memberName: 'Bob Rocket' },
-    { start: '1:34:20', end: '1:35:30', colorIndex: 6, memberName: 'nick' }
-  ];
+  const seedHighlightSpans = $derived([
+    { start: '12:34', end: '13:15', memberIdx: 0 },
+    { start: '28:15', end: '29:00', memberIdx: 1 },
+    { start: '45:02', end: '46:30', memberIdx: 2 },
+    { start: '1:02:30', end: '1:03:45', memberIdx: 4 },
+    { start: '1:18:45', end: '1:20:00', memberIdx: 3 },
+    { start: '1:34:20', end: '1:35:30', memberIdx: 5 }
+  ].flatMap((s) => {
+    const m = members[s.memberIdx];
+    if (!m) return [];
+    return [{ start: s.start, end: s.end, colorIndex: m.colorIndex, memberName: m.name }];
+  }));
 
   const seedChapters = [
     { time: '00:00', title: 'Introduction — The Sovereign Individual Framework' },
@@ -64,22 +58,26 @@
   ];
 
   const seedTimeline = [
-    { timestamp: '12:34', memberColorIndex: 1, memberName: 'craig_烈日', note: 'The sovereign individual framework here is core to the whole argument.' },
-    { timestamp: '28:15', memberColorIndex: 2, memberName: 'dergigi', note: 'This point about digital governance predates the internet by a decade.' },
-    { timestamp: '45:02', memberColorIndex: 3, memberName: 'nickand', note: "Parallel to Taleb's antifragility concept." },
-    { timestamp: '1:02:30', memberColorIndex: 5, memberName: 'Lyn Alden', note: 'The economic transition analysis is still accurate.' },
-    { timestamp: '1:18:45', memberColorIndex: 4, memberName: 'Bob Rocket', note: 'Technical architecture analogy: sovereign = resilient system.' },
-    { timestamp: '1:34:20', memberColorIndex: 6, memberName: 'nick', note: 'This historical framing is exactly right.' }
+    { timestamp: '12:34', memberIdx: 0, note: 'The sovereign individual framework here is core to the whole argument.' },
+    { timestamp: '28:15', memberIdx: 1, note: 'This point about digital governance predates the internet by a decade.' },
+    { timestamp: '45:02', memberIdx: 2, note: "Parallel to Taleb's antifragility concept." },
+    { timestamp: '1:02:30', memberIdx: 4, note: 'The economic transition analysis is still accurate.' },
+    { timestamp: '1:18:45', memberIdx: 3, note: 'Technical architecture analogy: sovereign = resilient system.' },
+    { timestamp: '1:34:20', memberIdx: 5, note: 'This historical framing is exactly right.' }
   ];
 
   const seedMemberProgress = [
-    { colorIndex: 1, name: 'craig_烈日', progress: 87 },
-    { colorIndex: 2, name: 'dergigi', progress: 64 },
-    { colorIndex: 3, name: 'nickand', progress: 45 },
-    { colorIndex: 4, name: 'Bob Rocket', progress: 92 },
-    { colorIndex: 5, name: 'Lyn Alden', progress: 73 },
-    { colorIndex: 6, name: 'nick', progress: 31 }
+    { memberIdx: 0, progress: 87 },
+    { memberIdx: 1, progress: 64 },
+    { memberIdx: 2, progress: 45 },
+    { memberIdx: 3, progress: 92 },
+    { memberIdx: 4, progress: 73 },
+    { memberIdx: 5, progress: 31 }
   ];
+
+  function memberAt(idx: number): Member | undefined {
+    return members[idx];
+  }
 
   let activeChapter = $state(0);
 
@@ -139,12 +137,15 @@
       <h2 class="section-title">Member Timestamps</h2>
       <div class="timeline-list">
         {#each seedTimeline as stamp, i (i)}
-          <TimelineStamp
-            timestamp={stamp.timestamp}
-            memberColorIndex={stamp.memberColorIndex}
-            memberName={stamp.memberName}
-            note={stamp.note}
-          />
+          {@const m = memberAt(stamp.memberIdx)}
+          {#if m}
+            <TimelineStamp
+              timestamp={stamp.timestamp}
+              pubkey={m.pubkey}
+              memberColorIndex={m.colorIndex}
+              note={stamp.note}
+            />
+          {/if}
         {/each}
       </div>
     </section>
@@ -174,22 +175,34 @@
       <section class="progress-section">
         <h2 class="section-title">Listening Progress</h2>
         <div class="progress-grid">
-          {#each seedMemberProgress as mp (mp.name)}
-            {@const color = getMemberColor(mp.colorIndex)}
-            <div class="progress-item">
-              <MemberDot colorIndex={mp.colorIndex} size="sm" />
-              <div class="progress-info">
-                <span class="progress-name">{mp.name}</span>
-                <div class="progress-bar-track">
-                  <div
-                    class="progress-bar-fill"
-                    style:width="{mp.progress}%"
-                    style:background={color}
-                  ></div>
+          {#each seedMemberProgress as mp (mp.memberIdx)}
+            {@const m = memberAt(mp.memberIdx)}
+            {#if m}
+              {@const color = memberTint(m.colorIndex)}
+              <User.Root {ndk} pubkey={m.pubkey}>
+                <div class="progress-item">
+                  <span
+                    class="room-member-avatar"
+                    style:--mav-size="24px"
+                    style:--mav-ring={color}
+                    style:--mav-ring-width="1.5px"
+                  >
+                    <User.Avatar />
+                  </span>
+                  <div class="progress-info">
+                    <span class="progress-name"><User.Name field="displayName" /></span>
+                    <div class="progress-bar-track">
+                      <div
+                        class="progress-bar-fill"
+                        style:width="{mp.progress}%"
+                        style:background={color}
+                      ></div>
+                    </div>
+                    <span class="progress-pct">{mp.progress}%</span>
+                  </div>
                 </div>
-                <span class="progress-pct">{mp.progress}%</span>
-              </div>
-            </div>
+              </User.Root>
+            {/if}
           {/each}
         </div>
       </section>

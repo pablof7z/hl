@@ -1,12 +1,12 @@
 <script lang="ts">
-  import MemberDot from './MemberDot.svelte';
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
+  import { memberTint } from '../utils/colors';
 
   interface Message {
     id: string;
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name: string;
-    handle: string;
     time: string;
     body: string;
     isReply?: boolean;
@@ -14,13 +14,13 @@
 
   let {
     title,
-    starterName,
+    starterPubkey,
     startedAt,
     messages,
     replyPlaceholder = 'Reply in the thread…'
   }: {
     title?: string;
-    starterName?: string;
+    starterPubkey?: string;
     startedAt?: string;
     messages: Message[];
     replyPlaceholder?: string;
@@ -28,33 +28,42 @@
 </script>
 
 <div class="thread">
-  {#if title || starterName}
+  {#if title || starterPubkey}
     <div class="thread-title">
       {#if title}{title}{/if}
-      {#if starterName} · started by {starterName}{/if}
+      {#if starterPubkey}
+        · started by
+        <User.Root {ndk} pubkey={starterPubkey}>
+          <User.Name field="displayName" />
+        </User.Root>
+      {/if}
       {#if startedAt} · {startedAt}{/if}
     </div>
   {/if}
 
   {#each messages as msg (msg.id)}
-    <div class="msg" class:reply={msg.isReply}>
-      <div class="avatar">
-        <MemberDot
-          colorIndex={msg.colorIndex}
-          initials={msg.initials}
-          size={30}
-          title={msg.name}
-        />
-      </div>
-      <div class="msg-body">
-        <div class="msg-head">
-          <span class="msg-name">{msg.name}</span>
-          <span class="msg-handle">@{msg.handle}</span>
-          <span class="msg-time">{msg.time}</span>
+    <User.Root {ndk} pubkey={msg.pubkey}>
+      <div class="msg" class:reply={msg.isReply}>
+        <div class="avatar">
+          <span
+            class="room-member-avatar"
+            style:--mav-size="30px"
+            style:--mav-ring={memberTint(msg.colorIndex)}
+            style:--mav-ring-width="1.5px"
+          >
+            <User.Avatar />
+          </span>
         </div>
-        <div class="msg-text">{msg.body}</div>
+        <div class="msg-body">
+          <div class="msg-head">
+            <span class="msg-name"><User.Name field="displayName" /></span>
+            <span class="msg-handle"><User.Handle /></span>
+            <span class="msg-time">{msg.time}</span>
+          </div>
+          <div class="msg-text">{msg.body}</div>
+        </div>
       </div>
-    </div>
+    </User.Root>
   {/each}
 
   <div class="thread-reply-box">

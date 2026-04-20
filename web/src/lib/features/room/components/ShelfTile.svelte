@@ -1,5 +1,7 @@
 <script lang="ts">
-  import MemberDot from './MemberDot.svelte';
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
+  import { memberTint } from '../utils/colors';
 
   type MediaType = 'book' | 'podcast' | 'essay' | 'paper' | 'archive';
   type BookVariant = 'dark' | 'red' | 'blue' | 'green' | 'plum';
@@ -7,9 +9,8 @@
   type Status = 'reading' | 'this-week' | 're-read' | 'none';
 
   interface Engager {
+    pubkey: string;
     colorIndex: number;
-    initials: string;
-    name?: string;
   }
 
   let {
@@ -89,14 +90,18 @@
 
   <div class="shelf-tile-foot">
     <div class="dots">
-      {#each engaged as member, i (i)}
+      {#each engaged as member, i (member.pubkey)}
         <span class:overlap={i > 0}>
-          <MemberDot
-            colorIndex={member.colorIndex}
-            initials={member.initials}
-            size={18}
-            title={member.name}
-          />
+          <User.Root {ndk} pubkey={member.pubkey}>
+            <span
+              class="room-member-avatar"
+              style:--mav-size="18px"
+              style:--mav-ring={memberTint(member.colorIndex)}
+              style:--mav-ring-width="1.5px"
+            >
+              <User.Avatar />
+            </span>
+          </User.Root>
         </span>
       {/each}
     </div>
@@ -414,7 +419,7 @@
     margin-left: -5px;
   }
 
-  .shelf-tile-foot :global(.member-dot) {
-    border: 1.5px solid var(--surface);
+  .shelf-tile-foot :global(.room-member-avatar) {
+    box-shadow: 0 0 0 1px var(--surface);
   }
 </style>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ndk } from '$lib/ndk/client';
   import { User } from '$lib/ndk/ui/user';
-  import MemberDot from './MemberDot.svelte';
+  import { memberTint } from '../utils/colors';
 
   interface Member {
     pubkey: string;
@@ -26,7 +26,13 @@
   {#each members as m (m.pubkey)}
     <User.Root {ndk} pubkey={m.pubkey}>
       <div class="mem-row">
-        <MemberDot colorIndex={m.colorIndex} pubkey={m.pubkey} size={32} />
+        <span
+          class="room-member-avatar"
+          style:--mav-size="32px"
+          style:--mav-ring={memberTint(m.colorIndex)}
+        >
+          <User.Avatar />
+        </span>
         <div>
           <div class="mem-name">
             <User.Name field="displayName" />

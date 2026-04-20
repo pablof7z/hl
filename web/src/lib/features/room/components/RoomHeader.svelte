@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ndk } from '$lib/ndk/client';
   import { User } from '$lib/ndk/ui/user';
-  import MemberDot from './MemberDot.svelte';
+  import { memberTint } from '../utils/colors';
 
   interface Member {
     pubkey: string;
@@ -25,7 +25,14 @@
       {#each members.slice(0, 6) as member, i (member.pubkey)}
         <span class:overlap={i > 0}>
           <User.Root {ndk} pubkey={member.pubkey}>
-            <MemberDot colorIndex={member.colorIndex} pubkey={member.pubkey} size={36} />
+            <span
+              class="room-member-avatar"
+              style:--mav-size="36px"
+              style:--mav-ring={memberTint(member.colorIndex)}
+              style:--mav-ring-width="2.5px"
+            >
+              <User.Avatar />
+            </span>
           </User.Root>
         </span>
       {/each}
@@ -63,7 +70,7 @@
     margin-left: -10px;
   }
 
-  .stack > span :global(.member-dot) {
-    border: 2.5px solid var(--bg);
+  .stack > span :global(.room-member-avatar) {
+    box-shadow: 0 0 0 1px var(--bg);
   }
 </style>

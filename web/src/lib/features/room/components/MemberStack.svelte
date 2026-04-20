@@ -1,11 +1,13 @@
 <script lang="ts">
-  import MemberDot from './MemberDot.svelte';
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
+  import { memberTint } from '../utils/colors';
 
   let {
     members,
     max = 6
   }: {
-    members: Array<{ colorIndex: number }>;
+    members: Array<{ pubkey: string; colorIndex: number }>;
     max?: number;
   } = $props();
 
@@ -14,9 +16,18 @@
 </script>
 
 <div class="member-stack">
-  {#each visible as member, i (i)}
+  {#each visible as member, i (member.pubkey)}
     <div class="member-stack-item" style:z-index={i + 1}>
-      <MemberDot colorIndex={member.colorIndex} size="md" />
+      <User.Root {ndk} pubkey={member.pubkey}>
+        <span
+          class="room-member-avatar"
+          style:--mav-size="36px"
+          style:--mav-ring={memberTint(member.colorIndex)}
+          style:--mav-ring-width="2px"
+        >
+          <User.Avatar />
+        </span>
+      </User.Root>
     </div>
   {/each}
 
@@ -34,11 +45,15 @@
 
   .member-stack-item {
     position: relative;
-    margin-left: -18px; /* 50% overlap of 36px diameter */
+    margin-left: -18px;
   }
 
   .member-stack-item:first-child {
     margin-left: 0;
+  }
+
+  .member-stack-item :global(.room-member-avatar) {
+    box-shadow: 0 0 0 1px var(--bg);
   }
 
   .member-stack-badge {

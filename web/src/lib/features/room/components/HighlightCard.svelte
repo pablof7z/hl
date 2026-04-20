@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ndk } from '$lib/ndk/client';
   import { User } from '$lib/ndk/ui/user';
-  import MemberDot from './MemberDot.svelte';
+  import { memberTint } from '../utils/colors';
 
   interface Mark {
     pubkey: string;
@@ -43,7 +43,14 @@
         {#each marks as mark, i (mark.pubkey)}
           <span class:overlap={i > 0}>
             <User.Root {ndk} pubkey={mark.pubkey}>
-              <MemberDot colorIndex={mark.colorIndex} pubkey={mark.pubkey} size={20} />
+              <span
+                class="room-member-avatar"
+                style:--mav-size="20px"
+                style:--mav-ring={memberTint(mark.colorIndex)}
+                style:--mav-ring-width="1.5px"
+              >
+                <User.Avatar />
+              </span>
             </User.Root>
           </span>
         {/each}
@@ -126,7 +133,7 @@
 
   .dots { display: flex; }
   .overlap { margin-left: -5px; }
-  .hr-marks :global(.member-dot) { border: 1.5px solid var(--surface); }
+  .hr-marks :global(.room-member-avatar) { box-shadow: 0 0 0 1px var(--surface); }
 
   .hr-replies {
     font-family: var(--font-mono);

@@ -1,10 +1,13 @@
 <script lang="ts">
   import '$lib/features/room/styles/tokens.css';
-  import MemberDot from '$lib/features/room/components/MemberDot.svelte';
   import MemberStack from '$lib/features/room/components/MemberStack.svelte';
   import FilterPill from '$lib/features/room/components/FilterPill.svelte';
   import FilterRow from '$lib/features/room/components/FilterRow.svelte';
   import Block from '$lib/features/room/components/Block.svelte';
+
+  function placeholderPubkey(i: number): string {
+    return String(i).padStart(64, '0');
+  }
 
   const palette = [
     { name: '--bg',           hex: '#FAFAF7', label: 'Page background' },
@@ -42,9 +45,9 @@
   let activePill = $state<string | undefined>('All');
   const filterPills = ['All', 'Articles', 'Podcasts', 'Highlights', 'Notes'];
 
-  const members3  = [1, 2, 3].map(i => ({ colorIndex: i }));
-  const members6  = [1, 2, 3, 4, 5, 6].map(i => ({ colorIndex: i }));
-  const members9  = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => ({ colorIndex: i }));
+  const members3  = [1, 2, 3].map(i => ({ pubkey: placeholderPubkey(i), colorIndex: i }));
+  const members6  = [1, 2, 3, 4, 5, 6].map(i => ({ pubkey: placeholderPubkey(i), colorIndex: i }));
+  const members9  = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => ({ pubkey: placeholderPubkey(i), colorIndex: i }));
 </script>
 
 <svelte:head>
@@ -135,30 +138,6 @@
         {/each}
       </tbody>
     </table>
-  </Block>
-
-  <!-- ── MemberDot ─────────────────────────────────────────────────────────── -->
-  <Block id="member-dot">
-    <h2>MemberDot</h2>
-    <div class="component-row">
-      <div class="component-group">
-        <span class="type-label-kicker">All 6 colours (size md)</span>
-        <div class="dot-row">
-          {#each [1, 2, 3, 4, 5, 6] as ci (ci)}
-            <MemberDot colorIndex={ci} size="md" />
-          {/each}
-        </div>
-      </div>
-
-      <div class="component-group">
-        <span class="type-label-kicker">3 sizes (colorIndex 1)</span>
-        <div class="dot-row" style="align-items: center;">
-          <MemberDot colorIndex={1} size="sm" />
-          <MemberDot colorIndex={1} size="md" />
-          <MemberDot colorIndex={1} size="lg" />
-        </div>
-      </div>
-    </div>
   </Block>
 
   <!-- ── MemberStack ───────────────────────────────────────────────────────── -->
@@ -430,11 +409,5 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-  }
-
-  .dot-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
   }
 </style>

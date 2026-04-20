@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ndk } from '$lib/ndk/client';
   import { User } from '$lib/ndk/ui/user';
-  import MemberDot from './MemberDot.svelte';
+  import { memberTint } from '../utils/colors';
 
   interface Contribution {
     highlights?: number;
@@ -38,7 +38,13 @@
     <User.Root {ndk} pubkey={m.pubkey}>
       <div class="mt-row">
         <div class="mt-member">
-          <MemberDot colorIndex={m.colorIndex} pubkey={m.pubkey} size={30} />
+          <span
+            class="room-member-avatar"
+            style:--mav-size="30px"
+            style:--mav-ring={memberTint(m.colorIndex)}
+          >
+            <User.Avatar />
+          </span>
           <div>
             <div class="m-n"><User.Name field="displayName" /></div>
             <div class="m-h"><User.Handle /></div>

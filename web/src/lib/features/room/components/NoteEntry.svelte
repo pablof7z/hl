@@ -1,12 +1,12 @@
 <script lang="ts">
-  import MemberDot from './MemberDot.svelte';
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
+  import { memberTint } from '../utils/colors';
 
   let {
     id,
+    pubkey,
     memberColorIndex,
-    memberName,
-    memberInitials,
-    memberHandle,
     title,
     body,
     date,
@@ -14,10 +14,8 @@
     replyHref = '#'
   }: {
     id: string;
+    pubkey: string;
     memberColorIndex: number;
-    memberName: string;
-    memberInitials?: string;
-    memberHandle?: string;
     title?: string;
     body: string;
     date?: string;
@@ -29,27 +27,31 @@
 </script>
 
 <article class="note-entry" data-id={id}>
-  <div class="note-head">
-    <MemberDot
-      colorIndex={memberColorIndex}
-      initials={memberInitials ?? memberName.slice(0, 2).toUpperCase()}
-      size={36}
-      title={memberName}
-    />
-    <div class="note-head-meta">
-      <div class="note-author">
-        {memberName}
-        {#if memberHandle}<span class="handle">@{memberHandle}</span>{/if}
-      </div>
-      {#if date || replies !== undefined}
-        <div class="note-date">
-          {date ?? ''}
-          {#if date && replies !== undefined} · {/if}
-          {#if replies !== undefined}{replies} {replies === 1 ? 'reply' : 'replies'}{/if}
+  <User.Root {ndk} {pubkey}>
+    <div class="note-head">
+      <span
+        class="room-member-avatar"
+        style:--mav-size="36px"
+        style:--mav-ring={memberTint(memberColorIndex)}
+        style:--mav-ring-width="2px"
+      >
+        <User.Avatar />
+      </span>
+      <div class="note-head-meta">
+        <div class="note-author">
+          <User.Name field="displayName" />
+          <span class="handle"><User.Handle /></span>
         </div>
-      {/if}
+        {#if date || replies !== undefined}
+          <div class="note-date">
+            {date ?? ''}
+            {#if date && replies !== undefined} · {/if}
+            {#if replies !== undefined}{replies} {replies === 1 ? 'reply' : 'replies'}{/if}
+          </div>
+        {/if}
+      </div>
     </div>
-  </div>
+  </User.Root>
 
   {#if title}<h4 class="note-title">{title}</h4>{/if}
 

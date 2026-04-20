@@ -3,10 +3,8 @@
 
   interface NoteRow {
     id: string;
+    pubkey: string;
     memberColorIndex: number;
-    memberName: string;
-    memberInitials?: string;
-    memberHandle?: string;
     title?: string;
     content: string;
     date?: string;
@@ -42,10 +40,8 @@
     {#each notes as n (n.id)}
       <NoteEntry
         id={n.id}
+        pubkey={n.pubkey}
         memberColorIndex={n.memberColorIndex}
-        memberName={n.memberName}
-        memberInitials={n.memberInitials}
-        memberHandle={n.memberHandle}
         title={n.title}
         body={n.content}
         date={n.date}

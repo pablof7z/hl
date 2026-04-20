@@ -1,22 +1,33 @@
 <script lang="ts">
-  import MemberDot from './MemberDot.svelte';
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
+  import { memberTint } from '../utils/colors';
 
   let {
-    memberColorIndex,
-    memberName,
+    pubkey,
+    colorIndex,
     highlight
   }: {
-    memberColorIndex: number;
-    memberName: string;
+    pubkey: string;
+    colorIndex: number;
     highlight: string;
   } = $props();
 </script>
 
 <div class="annotation-card">
-  <div class="annotation-header">
-    <MemberDot colorIndex={memberColorIndex} size="sm" />
-    <span class="annotation-name">{memberName}</span>
-  </div>
+  <User.Root {ndk} {pubkey}>
+    <div class="annotation-header">
+      <span
+        class="room-member-avatar"
+        style:--mav-size="22px"
+        style:--mav-ring={memberTint(colorIndex)}
+        style:--mav-ring-width="1.5px"
+      >
+        <User.Avatar />
+      </span>
+      <span class="annotation-name"><User.Name field="displayName" /></span>
+    </div>
+  </User.Root>
   <p class="annotation-text">{highlight}</p>
 </div>
 

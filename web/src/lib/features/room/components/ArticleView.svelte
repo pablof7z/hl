@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { ndk } from '$lib/ndk/client';
+  import { User } from '$lib/ndk/ui/user';
   import MemberStack from './MemberStack.svelte';
-  import MemberDot from './MemberDot.svelte';
   import FilterRow from './FilterRow.svelte';
   import AnnotationCard from './AnnotationCard.svelte';
   import DiscussionRow from './DiscussionRow.svelte';
+  import { memberTint } from '../utils/colors';
 
   type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
 
@@ -18,6 +20,7 @@
   }
 
   interface Member {
+    pubkey: string;
     colorIndex: number;
     name: string;
     joinedAt?: string;
@@ -36,15 +39,6 @@
   const allMemberNames = $derived(['All', ...members.map((m) => m.name)]);
   let activePill = $state('All');
 
-  const TINT_VARS = [
-    'var(--h-amber)',
-    'var(--h-sage)',
-    'var(--h-blue)',
-    'var(--h-rose)',
-    'var(--h-lilac)',
-    'var(--h-amber-l)'
-  ] as const;
-
   const TINT_BG_VARS = [
     'var(--h-amber-bg)',
     'var(--h-sage-bg)',
@@ -54,36 +48,29 @@
     'var(--h-amber-l-bg)'
   ] as const;
 
-  function getMemberColor(colorIndex: number): string {
-    return TINT_VARS[((colorIndex - 1) % 6 + 6) % 6];
-  }
-
   function getMemberBgColor(colorIndex: number): string {
     return TINT_BG_VARS[((colorIndex - 1) % 6 + 6) % 6];
   }
 
   type BodyBlock =
-    | { type: 'paragraph'; text: string; highlightMemberColorIndex?: number; highlightMemberName?: string }
-    | { type: 'annotation'; memberColorIndex: number; memberName: string; highlight: string };
+    | { type: 'paragraph'; text: string; memberIdx?: number }
+    | { type: 'annotation'; memberIdx: number; highlight: string };
 
   const seedArticleBody: BodyBlock[] = [
     {
       type: 'paragraph',
       text: 'The transition from the Industrial Age to the Information Age will be as disruptive as the transition from the Agricultural to the Industrial Age. Those who understand the dynamics of this transformation will thrive; those who resist it will be left behind.',
-      highlightMemberColorIndex: 1,
-      highlightMemberName: 'craig_烈日'
+      memberIdx: 0
     },
     {
       type: 'annotation',
-      memberColorIndex: 1,
-      memberName: 'craig_烈日',
+      memberIdx: 0,
       highlight: '"The death of distance" — communication technology eliminates geographic constraints on economic activity.'
     },
     {
       type: 'paragraph',
       text: 'The sovereign individual will be someone who can earn a living anywhere on earth, unbound by national borders or currency controls. This is not a prediction about the future — it is a description of what is already happening in the most dynamic sectors of the global economy.',
-      highlightMemberColorIndex: 2,
-      highlightMemberName: 'dergigi'
+      memberIdx: 1
     },
     {
       type: 'paragraph',
@@ -91,8 +78,7 @@
     },
     {
       type: 'annotation',
-      memberColorIndex: 2,
-      memberName: 'dergigi',
+      memberIdx: 1,
       highlight: 'Their framework for understanding the transition applies directly to the current era. The signs are everywhere.'
     },
     {
@@ -101,13 +87,12 @@
     }
   ];
 
-  const seedRelatedDiscussions = [
+  const seedRelatedDiscussions = $derived([
     {
       id: 'rd1',
       status: 'active' as const,
       title: 'The chapter on digital governance is the most prescient.',
-      source: 'started by <b>craig_烈日</b>',
-      participants: [{ colorIndex: 1, initials: 'CL' }],
+      starterIdx: 0,
       replies: 12,
       lastAt: '2h ago'
     },
@@ -115,8 +100,7 @@
       id: 'rd2',
       status: 'active' as const,
       title: 'Did anyone else notice the parallel with Taleb?',
-      source: 'started by <b>nickand</b>',
-      participants: [{ colorIndex: 3, initials: 'NA' }],
+      starterIdx: 1,
       replies: 8,
       lastAt: '5h ago'
     },
@@ -124,12 +108,16 @@
       id: 'rd3',
       status: 'closed' as const,
       title: 'The economic predictions held up surprisingly well.',
-      source: 'started by <b>Lyn Alden</b>',
-      participants: [{ colorIndex: 5, initials: 'LA' }],
+      starterIdx: 2,
       replies: 6,
       lastAt: '1d ago'
     }
-  ];
+  ]);
+
+  function memberAt(idx: number | undefined): Member | undefined {
+    if (idx === undefined) return undefined;
+    return members[idx];
+  }
 
   function handleSaveForLater() {
     console.log('save for later:', artifact.id);
@@ -178,28 +166,31 @@
     <div class="article-body">
       {#each seedArticleBody as block, i (i)}
         {#if block.type === 'paragraph'}
-          {#if block.highlightMemberColorIndex && block.highlightMemberName}
-            {@const color = getMemberColor(block.highlightMemberColorIndex)}
-            {@const bg = getMemberBgColor(block.highlightMemberColorIndex)}
-            {@const name = block.highlightMemberName}
+          {@const marker = memberAt(block.memberIdx)}
+          {#if marker}
+            {@const color = memberTint(marker.colorIndex)}
+            {@const bg = getMemberBgColor(marker.colorIndex)}
             <p class="body-paragraph">
               <mark
                 class="inline-mark"
                 style:background={bg}
                 style:border-left="3px solid {color}"
-                title="{name} highlighted this"
+                title="{marker.name} highlighted this"
               >{block.text}</mark>
-              <span class="mark-tooltip" aria-hidden="true">{name}</span>
+              <span class="mark-tooltip" aria-hidden="true">{marker.name}</span>
             </p>
           {:else}
             <p class="body-paragraph">{block.text}</p>
           {/if}
         {:else if block.type === 'annotation'}
-          <AnnotationCard
-            memberColorIndex={block.memberColorIndex}
-            memberName={block.memberName}
-            highlight={block.highlight}
-          />
+          {@const annotator = memberAt(block.memberIdx)}
+          {#if annotator}
+            <AnnotationCard
+              pubkey={annotator.pubkey}
+              colorIndex={annotator.colorIndex}
+              highlight={block.highlight}
+            />
+          {/if}
         {/if}
       {/each}
 
@@ -227,11 +218,20 @@
       <div class="margin-card">
         <h3 class="margin-card-title">Members in this article</h3>
         <div class="members-grid">
-          {#each members as member (member.name)}
-            <div class="member-item">
-              <MemberDot colorIndex={member.colorIndex} size="sm" />
-              <span class="member-item-name">{member.name}</span>
-            </div>
+          {#each members as member (member.pubkey)}
+            <User.Root {ndk} pubkey={member.pubkey}>
+              <div class="member-item">
+                <span
+                  class="room-member-avatar"
+                  style:--mav-size="24px"
+                  style:--mav-ring={memberTint(member.colorIndex)}
+                  style:--mav-ring-width="1.5px"
+                >
+                  <User.Avatar />
+                </span>
+                <span class="member-item-name"><User.Name field="displayName" /></span>
+              </div>
+            </User.Root>
           {/each}
         </div>
       </div>
@@ -240,15 +240,18 @@
         <h3 class="margin-card-title">Related discussions</h3>
         <div class="related-list">
           {#each seedRelatedDiscussions as disc (disc.id)}
-            <DiscussionRow
-              id={disc.id}
-              status={disc.status}
-              title={disc.title}
-              source={disc.source}
-              participants={disc.participants}
-              replies={disc.replies}
-              lastAt={disc.lastAt}
-            />
+            {@const starter = memberAt(disc.starterIdx)}
+            {#if starter}
+              <DiscussionRow
+                id={disc.id}
+                status={disc.status}
+                title={disc.title}
+                starterPubkey={starter.pubkey}
+                participants={[{ pubkey: starter.pubkey, colorIndex: starter.colorIndex }]}
+                replies={disc.replies}
+                lastAt={disc.lastAt}
+              />
+            {/if}
           {/each}
         </div>
       </div>
