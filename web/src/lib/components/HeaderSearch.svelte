@@ -192,10 +192,10 @@
         type="search"
         name="q"
         class="grow"
-        placeholder="Search circles and articles…"
+        placeholder="Search rooms and articles…"
         autocomplete="off"
         spellcheck="false"
-        aria-label="Search circles and articles"
+        aria-label="Search rooms and articles"
         tabindex={expanded ? 0 : -1}
         onfocus={() => { open = true; }}
       />
@@ -213,10 +213,10 @@
         <li class="menu-title text-base-content/50"><span>No results for "{trimmedQuery}"</span></li>
       {:else}
         {#if results.communities.length > 0}
-          <li class="menu-title"><span>Circles</span></li>
+          <li class="menu-title"><span>Rooms</span></li>
           {#each results.communities as community (community.id)}
             <li>
-              <a href={`/community/${community.id}`} onclick={closeDropdown}>
+              <a href={`/room/${community.id}`} onclick={closeDropdown}>
                 <span class="flex-1 truncate font-medium">{community.name}</span>
                 {#if community.about}
                   <span class="text-xs text-base-content/50 truncate max-w-[12rem]">{community.about}</span>

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @plugin "daisyui" {
   themes: highlighter --default;
@@ -6,47 +6,51 @@
 
 
 /* ── DaisyUI highlighter theme ──────────────────────────────── */
+/* Aligned with tokens.css — warm paper + terracotta accent */
 
 [data-theme="highlighter"] {
-  --color-primary: #C47E5E;
+  --color-primary: #C24D2C;         /* --brand-accent (terracotta) */
   --color-primary-content: #ffffff;
-  --color-base-100: #F8F5F0;
-  --color-base-200: #EDE4D8;
-  --color-base-300: #E2D9CD;
-  --color-base-content: #2f3437;
-  --color-neutral: #787774;
+  --color-secondary: #3A362E;       /* --ink-soft */
+  --color-secondary-content: #ffffff;
+  --color-base-100: #FAFAF7;        /* --bg */
+  --color-base-200: #F3F2EE;        /* --surface-muted */
+  --color-base-300: #E5E0D0;        /* --rule */
+  --color-base-content: #15130F;    /* --ink */
+  --color-neutral: #7A7468;         /* --ink-fade */
+  --color-neutral-content: #FAFAF7;
 }
 
 :root {
   color-scheme: light;
-  --canvas: #F8F5F0;
-  --surface: #ffffff;
-  --surface-soft: #EDE4D8;
-  --border: #E2D9CD;
-  --border-light: #EDE4D8;
-  --text: #2f3437;
-  --text-strong: #111111;
-  --muted: #787774;
-  --accent: #C47E5E;
-  --accent-hover: #B06848;
+
+  /* ── Bridge aliases ─────────────────────────────────────────── */
+  /* Old variable names → new design token values from tokens.css  */
+  /* Components still using these names get the correct new palette */
+  --canvas: var(--bg);                         /* #FAFAF7 */
+  --surface-soft: var(--surface-muted);        /* #F3F2EE */
+  --border: var(--rule);                       /* #E5E0D0 */
+  --border-light: var(--rule-soft);            /* #EFEAD9 */
+  --text: var(--ink-soft);                     /* #3A362E */
+  --text-strong: var(--ink);                   /* #15130F */
+  --muted: var(--ink-fade);                    /* #7A7468 */
+  --accent: var(--brand-accent);               /* #C24D2C */
+  --accent-hover: color-mix(in srgb, var(--brand-accent) 82%, black);
+
+  /* ── Semantic tints (kept as-is — used in highlights/onboarding) */
   --pale-red: #fdebec;
   --pale-red-text: #9f2f2d;
-  --pale-blue: #e1f3fe;
+  --pale-blue: #e8f4fd;
   --pale-blue-text: #1f6c9f;
   --pale-green: #edf3ec;
   --pale-green-text: #346538;
-  --pale-yellow: #fbf3db;
+  --pale-yellow: var(--surface-warm);          /* #F5EFE0 */
   --pale-yellow-text: #956400;
-  --font-sans: 'Inter', -apple-system, sans-serif;
-  --font-serif: 'Source Serif 4', 'Charter', 'Georgia', serif;
-  --font-mono:
-    'Geist Mono',
-    'SF Mono',
-    'JetBrains Mono',
-    monospace;
+
+  /* ── Layout ─────────────────────────────────────────────────── */
   --page-width: 1080px;
   --content-width: 680px;
-  --radius-sm: 4px;
+  --radius-sm: var(--radius);                  /* 4px */
   --radius-md: 8px;
 }
 
@@ -58,12 +62,12 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background: var(--canvas);
+  background: var(--bg);
 }
 
 body {
   min-height: 100vh;
-  color: var(--text);
+  color: var(--ink-soft);
   font-family: var(--font-sans);
   line-height: 1.6;
 }
@@ -128,72 +132,6 @@ kbd,
   margin: 0 auto;
 }
 
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: #1c1c1c;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.topbar-inner {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 0.75rem 0;
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.brand-accent {
-  display: inline-block;
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
-}
-
-.brand-name {
-  font-family: var(--font-serif);
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--text-strong);
-  letter-spacing: -0.02em;
-}
-
-.site-navigation {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.site-navigation-link {
-  padding: 0.35rem 0.65rem;
-  color: var(--muted);
-  font-size: 0.88rem;
-  font-weight: 500;
-  text-decoration: none;
-  border-radius: var(--radius-sm);
-  transition: color 120ms ease, background 120ms ease;
-}
-
-.site-navigation-link:hover,
-.site-navigation-link:focus-visible {
-  color: var(--text-strong);
-  outline: none;
-}
-
-.site-navigation-link.active {
-  color: var(--text-strong);
-  font-weight: 600;
-}
 
 /* ── tabs ───────────────────────────────────────────────────── */
 
@@ -1544,42 +1482,12 @@ html.js .reveal.is-visible {
 /* ── responsive ─────────────────────────────────────────────── */
 
 @media (max-width: 980px) {
-  .topbar-inner {
-    gap: 1rem;
-  }
-
   .comment-card {
     margin-left: calc(var(--comment-depth, 0) * 0.55rem);
   }
 }
 
 @media (max-width: 720px) {
-  .topbar-inner {
-    flex-wrap: wrap;
-    gap: 0.5rem 1rem;
-    padding: 0.65rem 0;
-  }
-
-  .brand {
-    flex: 1;
-  }
-
-  .site-navigation {
-    order: 3;
-    width: 100%;
-    gap: 0;
-    border-top: 1px solid var(--border-light);
-    padding-top: 0.4rem;
-    margin-top: 0;
-  }
-
-  .site-navigation-link {
-    flex: 1;
-    text-align: center;
-    padding: 0.4rem 0.3rem;
-    font-size: 0.82rem;
-  }
-
   .ob-shell {
     padding: 2rem 0 4rem;
   }
