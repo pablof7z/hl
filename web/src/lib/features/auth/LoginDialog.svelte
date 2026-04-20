@@ -14,7 +14,11 @@
     type LoginMode
   } from './auth';
 
-  let open = $state(false);
+  let { showTrigger = true, open = $bindable(false) }: {
+    showTrigger?: boolean;
+    open?: boolean;
+  } = $props();
+
   let mode = $state<LoginMode>('extension');
   let pending = $state(false);
   let preparingRemoteSigner = $state(false);
@@ -154,10 +158,12 @@
 
 <div class="auth-panel">
   <Dialog.Root bind:open>
-    <div class="auth-guest-actions">
-      <button class="btn btn-outline" type="button" onclick={startJoin}>Join</button>
-      <Dialog.Trigger class="btn btn-primary">Log in</Dialog.Trigger>
-    </div>
+    {#if showTrigger}
+      <div class="auth-guest-actions">
+        <button class="btn btn-outline" type="button" onclick={startJoin}>Join</button>
+        <Dialog.Trigger class="btn btn-primary">Log in</Dialog.Trigger>
+      </div>
+    {/if}
 
     <Dialog.Content class="auth-dialog">
       <div class="auth-dialog-chrome">

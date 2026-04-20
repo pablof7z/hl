@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import LoginDialog from '$lib/features/auth/LoginDialog.svelte';
 
   type Variant = 'app' | 'marketing';
 
@@ -12,6 +13,8 @@
     activeLink?: string;
     right?: Snippet;
   } = $props();
+
+  let loginOpen = $state(false);
 
   const APP_LINKS = [
     { href: '/rooms', label: 'Your rooms', key: 'rooms' },
@@ -39,7 +42,9 @@
   </div>
   <div class="nav-right">
     {#if variant === 'marketing'}
-      <a href="/onboarding" class="nav-capture">Request a card</a>
+      <button type="button" class="nav-login" onclick={() => (loginOpen = true)}>Log in</button>
+      <a href="/onboarding" class="nav-capture">Join</a>
+      <LoginDialog showTrigger={false} bind:open={loginOpen} />
     {:else if right}
       {@render right()}
     {/if}
@@ -161,6 +166,23 @@
 
   .nav-capture:hover {
     background: var(--brand-accent);
+  }
+
+  .nav-login {
+    padding: 8px 4px;
+    background: transparent;
+    border: 0;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: color 200ms ease;
+  }
+
+  .nav-login:hover {
+    color: var(--brand-accent);
   }
 
   @media (max-width: 780px) {

@@ -278,9 +278,9 @@
   <div class="landing-page">
 
     <!-- ═══ HERO ═══ -->
-    <section class="hero landing-section">
+    <section class="landing-hero landing-section">
       <div class="full">
-        <div class="hero-kicker">— by invitation · on the open internet · 2026</div>
+        <div class="hero-kicker">— rooms by invitation · on the open internet · 2026</div>
       </div>
 
       <div class="main">
@@ -308,8 +308,7 @@
 
       <div class="full">
         <div class="hero-ctas">
-          <a href="/onboarding" class="landing-btn-primary">Request a card</a>
-          <a href="#what" class="landing-btn-secondary">See how a room works ↓</a>
+          <a href="/onboarding" class="landing-btn-primary">Join</a>
         </div>
       </div>
     </section>
@@ -767,28 +766,25 @@
       </div>
 
       <div class="main">
-        <h2 class="sec-head">Rooms open in <em><mark>small waves.</mark></em></h2>
+        <h2 class="sec-head">Start a room. Pick your <em><mark>first three.</mark></em></h2>
       </div>
       <div class="marg">
         <div class="anno">
-          <div class="anno-quote">small waves</div>
-          <div class="anno-pen">ok. i'll wait if i need to.</div>
+          <div class="anno-quote">first three</div>
+          <div class="anno-pen">M. and J. for sure. T. if she's around.</div>
         </div>
       </div>
 
       <div class="main">
         <p class="sec-lead">
-          If a friend sent you this, you already have a way in. If you're here on your own, ask for a card
-          and we'll write back when a wave opens.
+          Set up your key, make your first room, and invite three or four people you'd actually want
+          to read a difficult book with.
         </p>
         <div class="final-cta-buttons">
-          <a href="/onboarding" class="landing-btn-primary">Request a card</a>
-          <a href="#what" class="landing-btn-secondary">Or, read how a room works →</a>
+          <a href="/onboarding" class="landing-btn-primary">Join</a>
         </div>
         <p class="final-fine">
-          You'll get a pairing link. Use it to set up your key and start your first room —
-          with three or four people you'd actually want to read a difficult book with. Not a broadcast list.
-          Not "everyone who's ever read a book with me." The right three.
+          Not a broadcast list. Not "everyone who's ever read a book with me." The right three.
         </p>
       </div>
       <div class="marg">
@@ -1182,7 +1178,7 @@
   }
 
   /* Hero */
-  .hero { padding: 72px 0 96px; }
+  .landing-hero { padding: 72px 0 96px; }
 
   .hero-kicker {
     font-family: 'JetBrains Mono', monospace;

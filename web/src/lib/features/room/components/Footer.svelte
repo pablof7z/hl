@@ -29,7 +29,7 @@
         </div>
         <div>
           <h6>Reach us</h6>
-          <a href="/onboarding">Request a card</a>
+          <a href="/onboarding">Join</a>
           <a href="/onboarding">Bring a room</a>
           <a href="/about">contact</a>
         </div>
