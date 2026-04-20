@@ -5,73 +5,160 @@
     id,
     memberColorIndex,
     memberName,
-    content,
-    timestamp
+    memberInitials,
+    memberHandle,
+    title,
+    body,
+    date,
+    replies,
+    replyHref = '#'
   }: {
     id: string;
     memberColorIndex: number;
     memberName: string;
-    content: string;
-    timestamp: string;
+    memberInitials?: string;
+    memberHandle?: string;
+    title?: string;
+    body: string;
+    date?: string;
+    replies?: number;
+    replyHref?: string;
   } = $props();
+
+  const paragraphs = $derived(body.split(/\n{2,}|\n/).filter((p) => p.trim().length > 0));
 </script>
 
-<div class="note-entry" data-id={id}>
-  <div class="note-header">
-    <div class="note-member" aria-hidden="true">
-      <MemberDot colorIndex={memberColorIndex} size="sm" />
+<article class="note-entry" data-id={id}>
+  <div class="note-head">
+    <MemberDot
+      colorIndex={memberColorIndex}
+      initials={memberInitials ?? memberName.slice(0, 2).toUpperCase()}
+      size={36}
+      title={memberName}
+    />
+    <div class="note-head-meta">
+      <div class="note-author">
+        {memberName}
+        {#if memberHandle}<span class="handle">@{memberHandle}</span>{/if}
+      </div>
+      {#if date || replies !== undefined}
+        <div class="note-date">
+          {date ?? ''}
+          {#if date && replies !== undefined} · {/if}
+          {#if replies !== undefined}{replies} {replies === 1 ? 'reply' : 'replies'}{/if}
+        </div>
+      {/if}
     </div>
-    <span class="note-name">{memberName}</span>
-    <span class="note-timestamp">{timestamp}</span>
   </div>
-  <p class="note-content">{content}</p>
-</div>
+
+  {#if title}<h4 class="note-title">{title}</h4>{/if}
+
+  <div class="note-body">
+    {#each paragraphs as p (p)}
+      <p>{p}</p>
+    {/each}
+  </div>
+
+  {#if replies && replies > 0}
+    <div class="note-foot">
+      <a href={replyHref}>View {replies} {replies === 1 ? 'reply' : 'replies'} →</a>
+    </div>
+  {/if}
+</article>
 
 <style>
   .note-entry {
+    padding: 26px 28px;
+    background: var(--surface-warm);
+    border-radius: var(--radius);
+  }
+
+  @media (max-width: 760px) {
+    .note-entry {
+      padding: 20px;
+    }
+  }
+
+  .note-head {
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 14px;
+    margin-bottom: 16px;
+    align-items: center;
+  }
+
+  .note-head-meta {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 16px 0;
-    border-bottom: 1px solid var(--rule-soft);
+    gap: 2px;
   }
 
-  .note-entry:last-child {
-    border-bottom: none;
-  }
-
-  .note-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .note-member {
-    flex-shrink: 0;
-  }
-
-  .note-name {
+  .note-author {
     font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
+    font-size: 14px;
     color: var(--ink);
-    flex: 1;
-    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
-  .note-timestamp {
+  .handle {
+    font-weight: 400;
+    color: var(--ink-fade);
     font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--ink-fade);
-    flex-shrink: 0;
   }
 
-  .note-content {
+  .note-date {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-fade);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .note-title {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--ink);
+    margin: 0 0 14px;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+  }
+
+  .note-body {
     font-family: var(--font-serif);
-    font-size: 15px;
-    font-weight: 400;
-    color: var(--ink-soft);
-    line-height: 1.6;
-    margin: 0;
+    font-size: 17px;
+    line-height: 1.65;
+    color: var(--ink);
+  }
+
+  .note-body p {
+    margin: 0 0 0.85em;
+  }
+
+  .note-body p:last-child {
+    margin-bottom: 0;
+  }
+
+  .note-foot {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px dashed rgba(21, 19, 15, 0.1);
+  }
+
+  .note-foot a {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--brand-accent);
+    text-decoration: none;
+  }
+
+  .note-foot a:hover {
+    text-decoration: underline;
   }
 </style>

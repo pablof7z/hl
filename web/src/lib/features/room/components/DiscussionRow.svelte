@@ -1,105 +1,190 @@
 <script lang="ts">
   import MemberDot from './MemberDot.svelte';
 
+  type Status = 'active' | 'closed';
+
+  interface Participant {
+    colorIndex: number;
+    initials: string;
+    name?: string;
+  }
+
   let {
     id,
-    memberColorIndex,
-    memberName,
-    preview,
-    replyCount,
-    lastActivity,
-    isLast = false
+    status = 'active',
+    statusLabel,
+    title,
+    source,
+    participants = [],
+    replies,
+    lastAt,
+    href = '#'
   }: {
-    id: string;
-    memberColorIndex: number;
-    memberName: string;
-    preview: string;
-    replyCount: number;
-    lastActivity: string;
-    isLast?: boolean;
+    id?: string;
+    status?: Status;
+    statusLabel?: string;
+    title: string;
+    source?: string;
+    participants?: Participant[];
+    replies: number;
+    lastAt: string;
+    href?: string;
   } = $props();
 </script>
 
-<a class="discussion-row" class:last-row={isLast} href="/room/{id}">
-  <div class="discussion-meta">
-    <div class="discussion-author" aria-hidden="true">
-      <MemberDot colorIndex={memberColorIndex} size="sm" />
-    </div>
-    <span class="discussion-name">{memberName}</span>
-    <span class="discussion-reply-badge">{replyCount} replies</span>
-    <span class="discussion-activity">{lastActivity}</span>
+<a {href} class="disc-row" data-id={id}>
+  <div class="dr-dots">
+    {#each participants as p, i (i)}
+      <span class:overlap={i > 0}>
+        <MemberDot
+          colorIndex={p.colorIndex}
+          initials={p.initials}
+          size={26}
+          title={p.name}
+        />
+      </span>
+    {/each}
   </div>
-  <p class="discussion-preview">{preview}</p>
+
+  <div class="dr-body">
+    <span class="dr-status {status}">{statusLabel ?? (status === 'active' ? 'Active' : 'Closed')}</span>
+    <div class="dr-title">{title}</div>
+    {#if source}<div class="dr-source">{@html source}</div>{/if}
+  </div>
+
+  <div class="dr-stats">
+    <div class="dr-replies">
+      {#if status === 'active'}<span class="hot">●</span> {/if}
+      <b>{replies}</b> {replies === 1 ? 'reply' : 'replies'}
+    </div>
+    <div class="dr-last">{lastAt}</div>
+  </div>
 </a>
 
 <style>
-  .discussion-row {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 14px 0;
+  .disc-row {
+    display: grid;
+    grid-template-columns: 88px 1fr auto;
+    gap: 16px;
+    padding: 18px 22px;
     border-bottom: 1px solid var(--rule-soft);
+    align-items: center;
     text-decoration: none;
     color: inherit;
-    transition: background-color 0s;
+    transition: background 150ms;
   }
 
-  .discussion-row:hover {
-    background-color: var(--surface-muted);
+  .disc-row:hover {
+    background: var(--bg);
   }
 
-  .discussion-row.last-row {
+  .disc-row:last-child {
     border-bottom: none;
   }
 
-  .discussion-meta {
+  .dr-dots {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .dr-dots :global(.member-dot) {
+    border: 2px solid var(--surface);
+  }
+
+  .overlap {
+    margin-left: -8px;
+  }
+
+  .dr-body {
+    min-width: 0;
+  }
+
+  .dr-status {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    font-weight: 500;
+  }
+
+  .dr-status.active {
+    background: rgba(124, 174, 122, 0.18);
+    color: #4A7248;
+  }
+
+  .dr-status.closed {
+    background: var(--surface-muted);
+    color: var(--ink-fade);
+  }
+
+  .dr-title {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 14.5px;
+    color: var(--ink);
+    line-height: 1.3;
+    margin-bottom: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dr-source {
+    font-family: var(--font-sans);
+    font-style: italic;
+    font-size: 12px;
+    color: var(--ink-fade);
+  }
+
+  .dr-source :global(b) {
+    color: var(--ink);
+    font-weight: 600;
+    font-style: normal;
+  }
+
+  .dr-stats {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    min-width: 110px;
+    flex-shrink: 0;
+  }
+
+  .dr-replies {
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
   }
 
-  .discussion-author {
-    flex-shrink: 0;
+  .hot {
+    color: var(--brand-accent);
   }
 
-  .discussion-name {
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--ink);
-  }
-
-  .discussion-reply-badge {
-    font-family: var(--font-sans);
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--ink-fade);
-    background-color: var(--surface-muted);
-    padding: 2px 7px;
-    border-radius: var(--radius-pill, 999px);
-    margin-left: 2px;
-  }
-
-  .discussion-activity {
+  .dr-last {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 10px;
     color: var(--ink-fade);
-    margin-left: auto;
-    flex-shrink: 0;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
-  .discussion-preview {
-    font-family: var(--font-serif);
-    font-size: 14px;
-    font-weight: 400;
-    color: var(--ink-soft);
-    line-height: 1.5;
-    margin: 0;
-    /* max 2 lines */
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  @media (max-width: 760px) {
+    .disc-row {
+      grid-template-columns: 1fr auto;
+    }
+    .dr-dots {
+      display: none;
+    }
   }
 </style>

@@ -5,87 +5,103 @@
     id,
     memberColorIndex,
     memberName,
+    memberInitials,
     quote,
-    timestamp
+    location,
+    date,
+    replies,
+    replyHref = '#'
   }: {
     id: string;
     memberColorIndex: number;
     memberName: string;
+    memberInitials?: string;
     quote: string;
-    timestamp: string;
+    location?: string;
+    date?: string;
+    replies?: number;
+    replyHref?: string;
   } = $props();
 </script>
 
-<div class="highlight-entry" data-id={id}>
-  <div class="highlight-body">
-    <div class="highlight-header">
-      <div class="highlight-member" aria-hidden="true">
-        <MemberDot colorIndex={memberColorIndex} size="sm" />
-      </div>
-      <span class="highlight-name">{memberName}</span>
-      <span class="highlight-timestamp">{timestamp}</span>
-    </div>
-    <p class="highlight-quote">{quote}</p>
+<div class="hl-entry" data-id={id}>
+  <div class="hl-entry-meta">
+    <MemberDot
+      colorIndex={memberColorIndex}
+      initials={memberInitials ?? memberName.slice(0, 2).toUpperCase()}
+      size={22}
+      title={memberName}
+    />
+    {#if location}<span class="hl-loc">{location}</span>{/if}
+    {#if date}<span class="hl-date">{date}</span>{/if}
   </div>
+
+  <p class="hl-entry-quote">{quote}</p>
+
+  {#if replies && replies > 0}
+    <div class="hl-entry-foot">
+      <a class="hl-thread" href={replyHref}>● {replies} {replies === 1 ? 'reply' : 'replies'} →</a>
+    </div>
+  {/if}
 </div>
 
 <style>
-  .highlight-entry {
-    display: flex;
-    padding: 16px 0;
+  .hl-entry {
+    padding: 20px 0;
     border-bottom: 1px solid var(--rule-soft);
   }
 
-  .highlight-entry:hover {
-    background-color: var(--surface-muted);
-  }
-
-  .highlight-entry:last-child {
+  .hl-entry:last-child {
     border-bottom: none;
   }
 
-  .highlight-body {
-    border-left: 3px solid var(--marker-strong);
-    padding-left: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .highlight-header {
+  .hl-entry-meta {
     display: flex;
     align-items: center;
-    gap: 8px;
-  }
-
-  .highlight-member {
-    flex-shrink: 0;
-  }
-
-  .highlight-name {
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--ink);
-    flex: 1;
-    min-width: 0;
-  }
-
-  .highlight-timestamp {
+    gap: 10px;
+    margin-bottom: 10px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 10px;
     color: var(--ink-fade);
-    flex-shrink: 0;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 
-  .highlight-quote {
+  .hl-loc {
+    color: var(--brand-accent);
+    font-weight: 500;
+  }
+
+  .hl-date {
+    margin-left: auto;
+  }
+
+  .hl-entry-quote {
     font-family: var(--font-serif);
     font-style: italic;
-    font-size: 15px;
-    color: var(--ink-soft);
-    line-height: 1.55;
-    margin: 0;
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--ink);
+    margin: 0 0 10px;
+    padding-left: 14px;
+    border-left: 2px solid var(--marker-strong);
+  }
+
+  .hl-entry-foot {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .hl-thread {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--brand-accent);
+    text-decoration: none;
+  }
+
+  .hl-thread:hover {
+    text-decoration: underline;
   }
 </style>

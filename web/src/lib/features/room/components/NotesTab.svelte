@@ -1,67 +1,116 @@
 <script lang="ts">
   import NoteEntry from './NoteEntry.svelte';
 
-  interface NoteEntryProps {
+  interface NoteRow {
     id: string;
     memberColorIndex: number;
     memberName: string;
+    memberInitials?: string;
+    memberHandle?: string;
+    title?: string;
     content: string;
-    timestamp: string;
+    date?: string;
+    replies?: number;
   }
 
   let {
-    notes
+    notes,
+    onWriteNote
   }: {
-    notes: NoteEntryProps[];
+    notes: NoteRow[];
+    onWriteNote?: () => void;
   } = $props();
-
-  function handleAddNote() {
-    console.log('stub — full implementation in M5+');
-  }
-
-  function handleSeeAll() {
-    console.log('see all notes — stub for M5+');
-  }
 </script>
 
-<div class="notes-tab">
-  <div class="notes-list">
-    {#if notes.length === 0}
-      <p class="empty-state">No notes yet. Start a thread.</p>
-    {:else}
-      {#each notes as note (note.id)}
-        <NoteEntry
-          id={note.id}
-          memberColorIndex={note.memberColorIndex}
-          memberName={note.memberName}
-          content={note.content}
-          timestamp={note.timestamp}
-        />
-      {/each}
-    {/if}
+<div class="panel-head">
+  <div class="panel-head-note">
+    Longer-form reflections from the room. {notes.length} so far.
   </div>
+  <button
+    type="button"
+    class="panel-btn"
+    onclick={() => onWriteNote?.()}
+  >
+    ✎ Write a note
+  </button>
+</div>
 
-  <div class="notes-footer">
-    <button class="add-note-btn" type="button" onclick={handleAddNote}>
-      ✎ Write a note
-    </button>
-    <button class="see-all-link" type="button" onclick={handleSeeAll}>
-      See all notes →
-    </button>
-  </div>
+<div class="note-list">
+  {#if notes.length === 0}
+    <p class="empty-state">No notes yet. Start a thread.</p>
+  {:else}
+    {#each notes as n (n.id)}
+      <NoteEntry
+        id={n.id}
+        memberColorIndex={n.memberColorIndex}
+        memberName={n.memberName}
+        memberInitials={n.memberInitials}
+        memberHandle={n.memberHandle}
+        title={n.title}
+        body={n.content}
+        date={n.date}
+        replies={n.replies}
+      />
+    {/each}
+  {/if}
 </div>
 
 <style>
-  .notes-tab {
+  .panel-head {
+    padding: 18px 32px 14px;
+    border-bottom: 1px solid var(--rule);
     display: flex;
-    flex-direction: column;
-    gap: 0;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
   }
 
-  .notes-list {
+  @media (max-width: 760px) {
+    .panel-head {
+      padding: 14px 20px;
+    }
+  }
+
+  .panel-head-note {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: var(--ink-fade);
+    font-weight: 500;
+  }
+
+  .panel-btn {
+    padding: 7px 14px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: var(--radius);
+    transition: all 150ms ease;
+  }
+
+  .panel-btn:hover {
+    border-color: var(--brand-accent);
+    color: var(--brand-accent);
+  }
+
+  .note-list {
+    padding: 24px 32px 32px;
     display: flex;
     flex-direction: column;
-    gap: 0;
+    gap: 20px;
+  }
+
+  @media (max-width: 760px) {
+    .note-list {
+      padding: 20px;
+    }
   }
 
   .empty-state {
@@ -71,55 +120,5 @@
     text-align: center;
     padding: 40px 0;
     margin: 0;
-  }
-
-  .notes-footer {
-    padding: 20px 0 4px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .add-note-btn {
-    font-family: var(--font-sans);
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--brand-accent);
-    background: none;
-    border: 1px solid var(--brand-accent);
-    padding: 6px 12px;
-    border-radius: var(--radius, 4px);
-    cursor: pointer;
-  }
-
-  .add-note-btn:hover {
-    background-color: var(--surface-warm);
-  }
-
-  .add-note-btn:focus-visible {
-    outline: 2px solid var(--brand-accent);
-    outline-offset: 2px;
-  }
-
-  .see-all-link {
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--brand-accent);
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-  }
-
-  .see-all-link:hover {
-    text-decoration: underline;
-  }
-
-  .see-all-link:focus-visible {
-    outline: 2px solid var(--brand-accent);
-    outline-offset: 2px;
-    border-radius: 2px;
   }
 </style>

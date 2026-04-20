@@ -1,137 +1,176 @@
 <script lang="ts">
   import MemberDot from './MemberDot.svelte';
 
-  type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
-
-  interface ArtifactRef {
-    id: string;
-    type: ArtifactType;
-    title: string;
-    author?: string;
-    cover?: string;
+  interface Mark {
+    colorIndex: number;
+    initials: string;
+    name?: string;
   }
 
   let {
     id,
     quote,
-    memberColorIndex,
-    memberName,
-    artifactTitle,
-    artifact,
-    onHighlightClick
+    sourceTitle,
+    sourceSub,
+    marks = [],
+    replies,
+    hot = false,
+    date,
+    href = '#'
   }: {
-    id: string;
+    id?: string;
     quote: string;
-    memberColorIndex: number;
-    memberName: string;
-    artifactTitle: string;
-    artifact?: ArtifactRef;
-    onHighlightClick?: (artifact: ArtifactRef) => void;
+    sourceTitle: string;
+    sourceSub?: string;
+    marks?: Mark[];
+    replies?: number;
+    hot?: boolean;
+    date?: string;
+    href?: string;
   } = $props();
-
-  const isClickable = $derived(!!(onHighlightClick && artifact));
-
-  function handleClick() {
-    if (onHighlightClick && artifact) {
-      onHighlightClick(artifact);
-    }
-  }
 </script>
 
-<div
-  class="highlight-card"
-  class:clickable={isClickable}
-  role="button"
-  tabindex="0"
-  data-id={id}
-  aria-label="{memberName} on {artifactTitle}: {quote}"
-  onclick={handleClick}
-  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } }}
->
-  <p class="highlight-quote">{quote}</p>
-  <div class="highlight-footer">
-    <div class="highlight-member" aria-hidden="true">
-      <MemberDot colorIndex={memberColorIndex} size="sm" />
+<a {href} class="hr-card" data-id={id}>
+  <p class="hr-quote">{quote}</p>
+  <div class="hr-meta">
+    <div class="hr-source">
+      <b>{sourceTitle}</b>
+      {#if sourceSub}<span class="sc">{sourceSub}</span>{/if}
     </div>
-    <span class="highlight-name">{memberName}</span>
-    <span class="highlight-artifact">{artifactTitle}</span>
+    <div class="hr-marks">
+      <div class="dots">
+        {#each marks as mark, i (i)}
+          <span class:overlap={i > 0}>
+            <MemberDot
+              colorIndex={mark.colorIndex}
+              initials={mark.initials}
+              size={20}
+              title={mark.name}
+            />
+          </span>
+        {/each}
+      </div>
+      {#if replies !== undefined}
+        <div class="hr-replies">
+          <b>{replies}</b> {replies === 1 ? 'reply' : 'replies'}{#if hot} · hot{/if}
+        </div>
+      {/if}
+      {#if date}<div class="hr-date">{date}</div>{/if}
+    </div>
   </div>
-</div>
+</a>
 
 <style>
-  .highlight-card {
-    flex-shrink: 0;
-    width: 280px;
-    background-color: var(--surface);
+  .hr-card {
+    background: var(--surface);
     border: 1px solid var(--rule);
-    border-left: 3px solid var(--marker-strong);
-    border-radius: var(--radius, 4px);
-    padding: 16px 18px 14px 16px;
+    border-radius: var(--radius);
+    padding: 20px 22px 16px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    scroll-snap-align: start;
-    text-align: left;
+    gap: 14px;
+    transition: border-color 200ms, transform 200ms;
+    text-decoration: none;
+    color: inherit;
   }
 
-  .highlight-card.clickable {
-    cursor: pointer;
-    transition: background-color var(--transition);
+  .hr-card:hover {
+    border-color: var(--brand-accent);
+    transform: translateY(-2px);
   }
 
-  .highlight-card.clickable:hover {
-    background-color: var(--surface-muted);
-  }
-
-  .highlight-card.clickable:focus-visible {
-    outline: 2px solid var(--brand-accent);
-    outline-offset: 2px;
-  }
-
-  .highlight-quote {
+  .hr-quote {
     font-family: var(--font-serif);
     font-style: italic;
-    font-size: 15px;
-    color: var(--ink-soft);
-    line-height: 1.55;
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--ink);
     margin: 0;
-    /* max 3 lines */
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    flex: 1;
+    padding: 0 4px;
+    background: linear-gradient(180deg, transparent 60%, rgba(245, 216, 150, 0.55) 60%);
+    display: inline;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
   }
 
-  .highlight-footer {
+  .hr-quote::before {
+    content: '\201C';
+    color: var(--brand-accent);
+    margin-right: 1px;
+  }
+
+  .hr-quote::after {
+    content: '\201D';
+    color: var(--brand-accent);
+    margin-left: 1px;
+  }
+
+  .hr-meta {
     display: flex;
-    align-items: center;
-    gap: 7px;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-top: 12px;
+    border-top: 1px dotted rgba(21, 19, 15, 0.08);
+    gap: 10px;
+    margin-top: auto;
   }
 
-  .highlight-member {
+  .hr-source {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: var(--ink-fade);
+    line-height: 1.4;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hr-source b {
+    color: var(--ink);
+    font-weight: 600;
+    display: block;
+  }
+
+  .hr-source .sc {
+    font-style: italic;
+  }
+
+  .hr-marks {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
     flex-shrink: 0;
   }
 
-  .highlight-name {
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--ink);
+  .dots {
+    display: flex;
   }
 
-  .highlight-artifact {
-    font-family: var(--font-sans);
-    font-size: 12px;
-    font-weight: 400;
+  .overlap {
+    margin-left: -5px;
+  }
+
+  .hr-marks :global(.member-dot) {
+    border: 1.5px solid var(--surface);
+  }
+
+  .hr-replies {
+    font-family: var(--font-mono);
+    font-size: 10px;
     color: var(--ink-fade);
-    margin-left: auto;
-    text-align: right;
-    /* truncate long titles */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 120px;
+    letter-spacing: 0.04em;
+  }
+
+  .hr-replies b {
+    color: var(--brand-accent);
+    font-weight: 500;
+  }
+
+  .hr-date {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-fade);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 </style>

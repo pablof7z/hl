@@ -1,13 +1,13 @@
 <script lang="ts">
   import MemberDot from './MemberDot.svelte';
 
-  type ActivityType = 'highlight' | 'note' | 'discussion' | 'joined';
-
   interface ActivityItem {
-    type: ActivityType;
+    id: string;
     memberColorIndex: number;
+    memberInitials: string;
     memberName: string;
-    detail: string;
+    action: string;
+    body: string;
     time: string;
   }
 
@@ -16,88 +16,82 @@
   }: {
     items: ActivityItem[];
   } = $props();
-
-  const ACTION_LABELS: Record<ActivityType, string> = {
-    highlight: 'highlighted',
-    note: 'added a note to',
-    discussion: 'commented on',
-    joined: 'joined the room'
-  };
 </script>
 
-<div class="activity-feed" role="list">
-  {#each items as item, i (i)}
-    <div class="activity-row" class:row-alt={i % 2 !== 0} role="listitem">
-      <div class="activity-member" aria-hidden="true">
-        <MemberDot colorIndex={item.memberColorIndex} size="sm" />
+<div class="feed">
+  {#each items as item (item.id)}
+    <div class="feed-row">
+      <MemberDot
+        colorIndex={item.memberColorIndex}
+        initials={item.memberInitials}
+        size={24}
+        title={item.memberName}
+      />
+      <div class="f-body">
+        <b>{item.memberName}</b>
+        <span class="f-action">{item.action}</span>
+        {@html item.body}
       </div>
-      <span class="activity-name">{item.memberName}</span>
-      <span class="activity-action">{ACTION_LABELS[item.type]}</span>
-      {#if item.type !== 'joined'}
-        <span class="activity-detail">{item.detail}</span>
-      {/if}
-      <span class="activity-time">{item.time}</span>
+      <div class="f-time">{item.time}</div>
     </div>
   {/each}
 </div>
 
 <style>
-  .activity-feed {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .activity-row {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 9px 12px;
-    background-color: var(--surface);
-    flex-wrap: wrap;
-  }
-
-  .activity-row.row-alt {
-    background-color: var(--surface-muted);
-  }
-
-  .activity-member {
-    flex-shrink: 0;
-  }
-
-  .activity-name {
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--ink);
-    flex-shrink: 0;
-  }
-
-  .activity-action {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    font-weight: 400;
-    color: var(--brand-accent);
-    flex-shrink: 0;
-  }
-
-  .activity-detail {
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 400;
-    color: var(--ink-fade);
-    white-space: nowrap;
+  .feed {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
     overflow: hidden;
-    text-overflow: ellipsis;
-    flex: 1;
-    min-width: 0;
   }
 
-  .activity-time {
+  .feed-row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    gap: 12px;
+    padding: 12px 20px;
+    align-items: center;
+    border-bottom: 1px dotted rgba(21, 19, 15, 0.08);
+    font-size: 13.5px;
+  }
+
+  .feed-row:last-child {
+    border-bottom: none;
+  }
+
+  .f-body {
+    color: var(--ink-soft);
+    line-height: 1.45;
+  }
+
+  .f-body b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .f-body :global(.f-ref) {
+    font-style: italic;
+    color: var(--ink);
+  }
+
+  .f-action {
+    display: inline-block;
+    padding: 0 6px;
+    font-size: 10px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--brand-accent);
+    margin-right: 6px;
+  }
+
+  .f-time {
+    font-family: var(--font-mono);
+    font-size: 10px;
     color: var(--ink-fade);
-    flex-shrink: 0;
-    margin-left: auto;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
   }
 </style>

@@ -13,6 +13,11 @@
 
   let { children }: LayoutProps = $props();
   const seo = $derived((page.data as { seo?: SeoMetadata }).seo);
+  const inRoomShell = $derived(page.url.pathname.startsWith('/room/'));
+  const signedIn = $derived(Boolean(ndk.$currentUser));
+  // On the marketing landing, the page renders its own top nav.
+  // Suppress the global app navbar for guests at "/"; signed-in users still get it.
+  const hideGlobalShell = $derived(inRoomShell || (page.url.pathname === '/' && !signedIn));
 
   setContext(NDK_CONTEXT_KEY, ndk);
 
@@ -27,42 +32,55 @@
   <SeoHead {seo} />
 {/if}
 
-<header class="app-navbar-shell">
-  <div class="shell navbar min-h-0 px-0 py-2 gap-4">
-    <div class="navbar-start gap-4">
-      <a class="brand" href="/">
-        <span class="brand-name">Highlighter</span>
-        <span class="brand-dot" aria-hidden="true"></span>
-      </a>
-      <SiteNavigation />
-    </div>
-    <div class="navbar-end gap-2">
-      <HeaderSearch />
-      <AuthPanel />
-    </div>
-  </div>
-</header>
+<svelte:head>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@300;400;500;600;700&family=Caveat:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap"
+    rel="stylesheet"
+  />
+</svelte:head>
 
-<main class="shell page">
+{#if hideGlobalShell}
   {@render children?.()}
-</main>
+{:else}
+  <header class="app-navbar-shell">
+    <div class="shell navbar min-h-0 px-0 py-2 gap-4">
+      <div class="navbar-start gap-4">
+        <a class="brand" href="/">
+          <span class="brand-name">Highlighter</span>
+          <span class="brand-dot" aria-hidden="true"></span>
+        </a>
+        <SiteNavigation />
+      </div>
+      <div class="navbar-end gap-2">
+        <HeaderSearch />
+        <AuthPanel />
+      </div>
+    </div>
+  </header>
 
-<footer class="shell footer">
-  <div class="footer-grid">
-    <div class="footer-logo">
-      <span class="footer-logo-mark"></span>
-      Highlighter
+  <main class="shell page">
+    {@render children?.()}
+  </main>
+
+  <footer class="shell footer">
+    <div class="footer-grid">
+      <div class="footer-logo">
+        <span class="footer-logo-mark"></span>
+        Highlighter
+      </div>
+      <div class="footer-links">
+        <a href="/about">About</a>
+        <a href="/discover">Discover</a>
+      </div>
+      <span class="footer-note">
+        Built on Nostr. Your circles, your data, always.
+        <a href="/changelog" class="commit-hash">{__COMMIT_HASH__}</a>
+      </span>
     </div>
-    <div class="footer-links">
-      <a href="/about">About</a>
-      <a href="/discover">Discover</a>
-    </div>
-    <span class="footer-note">
-      Built on Nostr. Your circles, your data, always.
-      <a href="/changelog" class="commit-hash">{__COMMIT_HASH__}</a>
-    </span>
-  </div>
-</footer>
+  </footer>
+{/if}
 
 <style>
   .app-navbar-shell {

@@ -1,66 +1,124 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
-  import MemberStack from './MemberStack.svelte';
+  import MemberDot from './MemberDot.svelte';
+
+  interface Member {
+    colorIndex: number;
+    initials: string;
+    name: string;
+    handle: string;
+    status?: string;
+  }
 
   let {
     members,
-    children
+    inviteHref = '#'
   }: {
-    members: Array<{ colorIndex: number; name?: string }>;
-    children?: Snippet;
+    members: Member[];
+    inviteHref?: string;
   } = $props();
 </script>
 
-<div class="members-sidebar">
-  {#if children}
-    <div class="sidebar-title">
-      {@render children()}
-    </div>
-  {/if}
-
-  <div class="sidebar-card">
-    <div class="sidebar-stack" aria-hidden="true">
-      <MemberStack {members} max={members.length} />
-    </div>
-    <p class="sidebar-count">{members.length} members</p>
+<div class="sb-card">
+  <div class="sb-head">
+    <span>Members · {members.length}</span>
+    <a href={inviteHref} class="sb-link">invite another →</a>
   </div>
+
+  {#each members as m (m.handle)}
+    <div class="mem-row">
+      <MemberDot
+        colorIndex={m.colorIndex}
+        initials={m.initials}
+        size={32}
+        title={m.name}
+      />
+      <div>
+        <div class="mem-name">
+          {m.name}
+          <span class="handle">@{m.handle}</span>
+        </div>
+        {#if m.status}
+          <div class="mem-status">"{m.status}"</div>
+        {/if}
+      </div>
+    </div>
+  {/each}
 </div>
 
 <style>
-  .members-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  .sidebar-title {
-    font-family: var(--font-serif);
-    font-size: clamp(28px, 3vw, 40px);
-    font-weight: 400;
-    color: var(--ink);
-    line-height: 1.1;
-  }
-
-  .sidebar-card {
+  .sb-card {
     background: var(--surface);
-    border: 4px solid var(--rule);
+    border: 1px solid var(--rule);
     border-radius: var(--radius);
-    padding: 20px;
+    padding: 20px 22px;
+  }
+
+  .sb-head {
     display: flex;
-    flex-direction: column;
-    gap: 14px;
+    align-items: baseline;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-fade);
+    padding-bottom: 12px;
+    border-bottom: 1px dotted var(--rule);
+    margin-bottom: 14px;
   }
 
-  .sidebar-stack {
-    overflow-y: auto;
-    max-height: 200px;
-  }
-
-  .sidebar-count {
+  .sb-link {
+    color: var(--brand-accent);
+    text-transform: none;
+    letter-spacing: 0.02em;
+    font-size: 11px;
+    text-decoration: none;
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .sb-link:hover {
+    text-decoration: underline;
+  }
+
+  .mem-row {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px dotted rgba(21, 19, 15, 0.08);
+    align-items: start;
+  }
+
+  .mem-row:last-child {
+    border-bottom: none;
+  }
+
+  .mem-name {
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.2;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .handle {
     font-weight: 400;
     color: var(--ink-fade);
-    margin: 0;
+    font-size: 12px;
+    font-family: var(--font-mono);
+  }
+
+  .mem-status {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--ink-soft);
+    margin-top: 2px;
   }
 </style>

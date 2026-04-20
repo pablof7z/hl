@@ -163,6 +163,17 @@
   const hasCircles = $derived(membershipGroupIds.length > 0);
   const hasFollows = $derived(followPubkeys.length > 0);
   const isEmpty = $derived(!isLoading && mergedHighlights.length === 0);
+
+  /* ── Landing: generate waveform bars deterministically ── */
+  function buildWaveformBars(): number[] {
+    const bars: number[] = [];
+    for (let i = 0; i < 200; i++) {
+      const seed = Math.sin(i * 0.7) * Math.cos(i * 0.3) + Math.sin(i * 0.13) * 0.5;
+      bars.push(Math.max(8, Math.min(60, 30 + seed * 22)));
+    }
+    return bars;
+  }
+  const waveformBars = buildWaveformBars();
 </script>
 
 {#if signedIn}
@@ -258,314 +269,574 @@
     </aside>
   </section>
 {:else}
-  <!-- ═══ GUEST VIEW — FULL MARKETING ═══ -->
+  <!-- ═══ GUEST — THE ANNOTATION LANDING ═══ -->
 
-  <!-- HERO -->
-  <section class="hero">
-    <div class="hero-inner">
-      <div class="hero-eyebrow">Built on Nostr · Your data, your way</div>
-      <h1 class="hero-headline">
-        Your friends.<br />
-        Your highlights.<br />
-        <em>Real conversations.</em>
-      </h1>
-      <p class="hero-sub">
-        Private circles for the books, podcasts, and articles you actually care about.
-        Share what caught your eye. Watch your circle light up.
-        No algorithm. No noise. Just the eight people whose taste you trust.
-      </p>
-      <div class="hero-ctas">
-        <a href="/onboarding" class="btn-primary">Start Your Circle — Free</a>
-        <a href="#how" class="btn-ghost">See how it works ↓</a>
+  <nav class="landing-topnav">
+    <a href="/" class="topnav-left">Highlighter<em>.</em></a>
+    <div class="topnav-right">
+      <a href="#what">What it is</a>
+      <a href="#media">For everything</a>
+      <a href="#room">Rooms</a>
+      <a href="/onboarding" class="topnav-cta">Request a card</a>
+    </div>
+  </nav>
+
+  <div class="landing-page">
+
+    <!-- ═══ HERO ═══ -->
+    <section class="hero landing-section">
+      <div class="full">
+        <div class="hero-kicker">— by invitation · on the open internet · 2026</div>
       </div>
 
-      <div class="hero-preview">
-        <div class="preview-card">
-          <div class="preview-card-header">
-            <div class="preview-avatar-row">
-              <div class="preview-avatar" style="background:#8A9A7F"></div>
-              <div class="preview-avatar" style="background:#C47E5E;margin-left:-8px"></div>
-              <div class="preview-avatar" style="background:#A36A6A;margin-left:-8px"></div>
-              <div class="preview-avatar" style="background:#6B6B6B;margin-left:-8px"></div>
+      <div class="main">
+        <h1>Read together, <em><mark>quietly.</mark></em></h1>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">quietly</div>
+          <div class="anno-pen">tired of loud. <u>good word.</u></div>
+        </div>
+      </div>
+
+      <div class="main">
+        <p class="hero-dek">
+          Highlighter is a shared spine for the books, essays, and podcasts a small circle of friends
+          are reading this week. One room. A few people. <mark>Every conversation next to the passage it's about.</mark>
+        </p>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">every conversation next to the passage it's about</div>
+          <div class="anno-pen">ok. <u>this is the problem.</u> our whatsapp is 4,000 messages deep and nobody can find anything anjali said about the eliot book anymore.</div>
+        </div>
+      </div>
+
+      <div class="full">
+        <div class="hero-ctas">
+          <a href="/onboarding" class="landing-btn-primary">Request a card</a>
+          <a href="#what" class="landing-btn-secondary">See how a room works ↓</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ WHAT IT IS ═══ -->
+    <section id="what" class="landing-section">
+      <div class="full">
+        <div class="sec-kicker">— what it is</div>
+      </div>
+
+      <div class="main">
+        <h2 class="sec-head">A book club that <em><mark>doesn't die in a group chat.</mark></em></h2>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">doesn't die in a group chat</div>
+          <div class="anno-pen">called out.<br /><span class="strike">1984-2026.</span></div>
+        </div>
+      </div>
+
+      <div class="main">
+        <p class="sec-lead">
+          Six to fifteen people <mark>who share taste</mark>. One shared spine for what you're all reading,
+          watching, or listening to. Highlights sit next to the passage. Conversation attaches to the sentence it's about.
+        </p>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">who share taste</div>
+          <div class="anno-pen">so: M, J, T, S, and probably R if she's free.</div>
+        </div>
+      </div>
+
+      <div class="main">
+        <p class="body-copy">
+          You invite your people. Someone in the room shares the book, the essay, the podcast episode.
+          As each member reads or listens, they mark what catches them — an excerpt, a paragraph,
+          <mark>a timestamp in an audio file</mark>. Everyone sees everyone's marks.
+        </p>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">a timestamp in an audio file</div>
+          <div class="anno-pen">wait — the podcast thing??<br /><span class="anno-pen tiny">(keep reading keep reading)</span></div>
+        </div>
+      </div>
+
+      <div class="main">
+        <p class="body-copy">
+          <strong>No feed.</strong> No discovery tab. <mark>No strangers grading your takes.</mark>
+          No algorithm picking what the room reads. The surface is whatever your six people are into this week, and nothing else.
+        </p>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">No strangers grading your takes</div>
+          <div class="anno-pen"><span class="emph">god yes.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ HOW IT WORKS (BOOK UI) ═══ -->
+    <section class="landing-section">
+      <div class="full">
+        <div class="sec-kicker">— how it works · reading</div>
+      </div>
+
+      <div class="main">
+        <h2 class="sec-head">The book stays <em>pinned.</em> The margins fill up.</h2>
+      </div>
+      <div class="marg"></div>
+
+      <div class="main">
+        <p class="body-copy">
+          Every room anchors to <mark>one artifact at a time</mark> — the piece of content you're all currently reading.
+          Highlights from every member appear against the passages themselves, each in their own color. Comments attach
+          to the excerpt or the sentence — <mark>not a floating thread that scrolls away from what it's about.</mark>
+        </p>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">one artifact at a time</div>
+          <div class="anno-pen">we have four books <u>half-read</u> across the group at once. always.</div>
+        </div>
+        <div style="height:28px;"></div>
+        <div class="anno">
+          <div class="anno-quote">not a floating thread that scrolls away</div>
+          <div class="anno-pen">this is the first screenshot i've seen of a reading app that looks like what reading-with-someone feels like in my head.</div>
+        </div>
+      </div>
+
+      <div class="full">
+        <div class="mock-wrap">
+          <div class="mock-header">
+            <div><span class="mock-dot"></span>The Last Thursday Club · week 3</div>
+            <div>✎ 47 highlights · 12 threads</div>
+          </div>
+          <div class="book-card">
+            <div class="book-cover">
+              <div class="bc-top">— a novel —</div>
+              <div>
+                <div class="bc-title">Middlemarch</div>
+                <div class="bc-author">George Eliot</div>
+              </div>
             </div>
-            <div class="preview-card-meta">
-              <div class="preview-card-name">Non-Fiction 2026</div>
-              <div class="preview-card-count">14 members · private</div>
+            <div class="book-meta-area">
+              <h4>Middlemarch</h4>
+              <div class="author">George Eliot · 1871</div>
+              <div class="book-stats">
+                <span><b>6</b> reading</span>
+                <span><b>47</b> highlights</span>
+                <span><b>12</b> threads</span>
+              </div>
+              <div class="members-row">
+                <span class="member-dot md-1">MC</span>
+                <span class="member-dot md-2 overlap">RT</span>
+                <span class="member-dot md-3 overlap">JO</span>
+                <span class="member-dot md-4 overlap">AN</span>
+                <span class="member-dot md-5 overlap">DL</span>
+                <span class="member-dot md-6 overlap">SK</span>
+                <span class="members-count">all 6 active this week</span>
+              </div>
             </div>
           </div>
-          <div class="hl-card">
-            <div class="hl-label">WHAT CAUGHT OUR EYE</div>
-            <p class="hl-text">"The map is not the territory. And yet we keep mistaking the description of reality for reality itself."</p>
-            <div class="hl-source">Thinking in Systems · Donella Meadows</div>
-          </div>
-          <div class="preview-discussion">
-            <div class="reply"><span class="reply-name">Mara</span><span class="reply-text">This is the thing I keep failing at with roadmaps…</span></div>
-            <div class="reply"><span class="reply-name">James</span><span class="reply-text">Same. Every quarterly plan is technically "a map"</span></div>
-            <div class="reply reply-count">+11 more</div>
-          </div>
-        </div>
 
-        <div class="preview-card preview-card--offset">
-          <div class="preview-card-header">
-            <div class="preview-avatar-row">
-              <div class="preview-avatar" style="background:#C47E5E"></div>
-              <div class="preview-avatar" style="background:#8A9A7F;margin-left:-8px"></div>
-              <div class="preview-avatar" style="background:#6B6B6B;margin-left:-8px"></div>
+          <div class="passage-mock">
+            <div class="passage-meta">From chapter 86 · last page of the novel</div>
+            <p class="passage-text">
+              Her finely touched spirit had still its fine issues, though they were not widely visible.
+              Her full nature, like that river of which Cyrus broke the strength, spent itself in channels
+              which had no great name on the earth. But <span class="hl hl-amber">the effect of her being on those around her was incalculably diffusive</span>:
+              for the growing good of the world is partly dependent on unhistoric acts; and that things are
+              not so ill with you and me as they might have been, is half owing to the number who
+              <span class="hl hl-sage">lived faithfully a hidden life</span>, and rest in unvisited tombs.
+            </p>
+            <div class="thread-mock">
+              <div class="thread-msg">
+                <div class="member-dot md-2">RT</div>
+                <div class="thread-msg-body">
+                  <span class="name">Rhea T.</span>
+                  I've read this paragraph a dozen times since 2012 and only now noticed "unhistoric." Not ahistoric. Unhistoric. Actively kept out of the record.
+                  <span class="time">· Mon 9:12</span>
+                </div>
+              </div>
+              <div class="thread-msg">
+                <div class="member-dot md-1">MC</div>
+                <div class="thread-msg-body">
+                  <span class="name">M. Costa</span>
+                  The thesis of the novel arriving 800 pages late and somehow on time.
+                  <span class="time">· Mon 9:44</span>
+                </div>
+              </div>
+              <div class="thread-msg">
+                <div class="member-dot md-4">AN</div>
+                <div class="thread-msg-body">
+                  <span class="name">Anouk</span>
+                  "that things are not so ill with you and me" — she's <i>addressing</i> you. The pronoun slide is the whole point.
+                  <span class="time">· Tue 6:08</span>
+                </div>
+              </div>
+              <div class="reply-prompt">reply · or highlight the next passage →</div>
             </div>
-            <div class="preview-card-meta">
-              <div class="preview-card-name">Pod Club</div>
-              <div class="preview-card-count">9 members · invite-only</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ NOT JUST BOOKS ═══ -->
+    <section id="media" class="landing-section">
+      <div class="full">
+        <div class="sec-kicker">— for everything you read or listen to</div>
+      </div>
+
+      <div class="main">
+        <h2 class="sec-head">Not <em><mark>just books.</mark></em></h2>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">just books</div>
+          <div class="anno-pen">oh. so podcasts too??</div>
+        </div>
+      </div>
+
+      <div class="full">
+        <div class="chip-grid">
+          <div class="chip">
+            <div class="chip-type"><b>Book</b> · chapter 86</div>
+            <div class="chip-title">Middlemarch</div>
+            <div class="chip-source">George Eliot</div>
+            <div class="chip-excerpt">…the effect of her being on those around her was <span class="inner-hl">incalculably diffusive</span>…</div>
+            <div class="chip-foot">
+              <div class="dots">
+                <span class="member-dot md-1">MC</span>
+                <span class="member-dot md-2 overlap">RT</span>
+                <span class="member-dot md-4 overlap">AN</span>
+              </div>
+              <span class="chip-count">3 marked · 2 replies</span>
             </div>
           </div>
-          <div class="hl-card">
-            <div class="hl-label">WHAT CAUGHT OUR EYE</div>
-            <p class="hl-text">"The companies that survive recessions aren't the ones that cut the most — they're the ones that cut the right things."</p>
-            <div class="hl-source">Acquired · Ep. 182</div>
+
+          <div class="chip">
+            <div class="chip-type"><b>Podcast</b> · 24:11 → 25:40</div>
+            <div class="chip-title">On the Long Now</div>
+            <div class="chip-source">The Ezra Klein Show · ep. 487</div>
+            <div class="chip-excerpt">"…the embarrassing thing about the internet — it behaves as if <span class="inner-hl">each week is the only week</span>."</div>
+            <div class="chip-foot">
+              <div class="dots">
+                <span class="member-dot md-1">MC</span>
+                <span class="member-dot md-2 overlap">RT</span>
+              </div>
+              <span class="chip-count">2 marked · 4 replies</span>
+            </div>
           </div>
-          <div class="preview-discussion">
-            <div class="reply"><span class="reply-name">Dev</span><span class="reply-text">Counterintuitive but makes sense in hindsight</span></div>
-            <div class="reply reply-count">+5 more</div>
+
+          <div class="chip">
+            <div class="chip-type"><b>Essay</b> · dergigi.com · 2023</div>
+            <div class="chip-title">Purple Text, Orange Highlights</div>
+            <div class="chip-source">Dergigi</div>
+            <div class="chip-excerpt">…reading is a solitary act <span class="inner-hl">that yearns to be a social one</span>…</div>
+            <div class="chip-foot">
+              <div class="dots">
+                <span class="member-dot md-1">MC</span>
+                <span class="member-dot md-2 overlap">RT</span>
+                <span class="member-dot md-3 overlap">JO</span>
+                <span class="member-dot md-4 overlap">AN</span>
+                <span class="member-dot md-5 overlap">DL</span>
+                <span class="member-dot md-6 overlap">SK</span>
+              </div>
+              <span class="chip-count">all 6 · 8 replies</span>
+            </div>
+          </div>
+
+          <div class="chip">
+            <div class="chip-type"><b>Video</b> · 47:30 → 48:15</div>
+            <div class="chip-title">At the Long Now Foundation</div>
+            <div class="chip-source">Stewart Brand · lecture · 02:14:00</div>
+            <div class="chip-excerpt">"A civilization is a <span class="inner-hl">slow literature</span>. Every institution is a paragraph…"</div>
+            <div class="chip-foot">
+              <div class="dots">
+                <span class="member-dot md-4">AN</span>
+                <span class="member-dot md-5 overlap">DL</span>
+              </div>
+              <span class="chip-count">2 marked · 1 reply</span>
+            </div>
+          </div>
+
+          <div class="chip">
+            <div class="chip-type"><b>PDF</b> · ch. 2 · pp. 19</div>
+            <div class="chip-title">Working in Public</div>
+            <div class="chip-source">Nadia Eghbal · Stripe Press</div>
+            <div class="chip-excerpt">…<span class="inner-hl">the few who actually contribute</span>, and the many who watch…</div>
+            <div class="chip-foot">
+              <div class="dots">
+                <span class="member-dot md-2">RT</span>
+                <span class="member-dot md-3 overlap">JO</span>
+                <span class="member-dot md-6 overlap">SK</span>
+              </div>
+              <span class="chip-count">3 marked · 2 replies</span>
+            </div>
+          </div>
+
+          <div class="chip">
+            <div class="chip-type"><b>Voice memo</b> · 2:14 → 2:47</div>
+            <div class="chip-title">SK — on the Eliot thing</div>
+            <div class="chip-source">Sun · 2am · recorded to the room</div>
+            <div class="chip-excerpt">"…<span class="inner-hl">unhistoric acts</span> is maybe the most important phrase she wrote and we didn't talk about it enough…"</div>
+            <div class="chip-foot">
+              <div class="dots">
+                <span class="member-dot md-1">MC</span>
+                <span class="member-dot md-2 overlap">RT</span>
+                <span class="member-dot md-3 overlap">JO</span>
+                <span class="member-dot md-4 overlap">AN</span>
+                <span class="member-dot md-5 overlap">DL</span>
+              </div>
+              <span class="chip-count">5 marked · 6 replies</span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </section>
 
-  <!-- PAIN -->
-  <section class="pain">
-    <div class="pain-inner">
-      <div class="pain-label">Sound familiar?</div>
-      <h2 class="pain-headline">Every good conversation<br />dies in a group chat</h2>
-      <div class="pain-quotes">
-        <blockquote>
-          "I want a semi-private space to share links and discuss — but Slack feels like too much and a group chat feels too thin."
-        </blockquote>
-        <blockquote>
-          "The thing that's frustrating about podcasts is that they're not easily shared and discussed."
-        </blockquote>
-        <blockquote>
-          "Book clubs tend to feel like an assignment. I far prefer talking with a few book friends."
-        </blockquote>
+      <div class="main">
+        <p class="body-copy">
+          And here's one of them worked out in full.
+          <mark>Mark the thirty seconds you wanted back. Your friend's reply lives at the timestamp.</mark>
+        </p>
       </div>
-      <p class="pain-closer">
-        WhatsApp buries threads. Discord needs a server. Goodreads is a review site. Readwise stays solo.
-        <strong>No one built the thing for small, trusted, content-centric circles.</strong> Until now.
-      </p>
-    </div>
-  </section>
-
-  <!-- HOW IT WORKS -->
-  <section class="how" id="how">
-    <div class="how-inner">
-      <div class="section-label">Simple by design</div>
-      <h2 class="section-headline">How it works</h2>
-
-      <div class="steps">
-        <div class="step">
-          <div class="step-number">01</div>
-          <div class="step-content">
-            <h3>Create your circle</h3>
-            <p>Start a circle for your friend group, book club, or podcast crew. Choose who can join and who can see it. Invite with a link.</p>
-          </div>
-        </div>
-        <div class="step-connector"></div>
-        <div class="step">
-          <div class="step-number">02</div>
-          <div class="step-content">
-            <h3>Share what you're into</h3>
-            <p>Drop any book, article, podcast episode, or video. Highlighter extracts what's relevant automatically — or paste a passage yourself.</p>
-          </div>
-        </div>
-        <div class="step-connector"></div>
-        <div class="step">
-          <div class="step-number">03</div>
-          <div class="step-content">
-            <h3>Watch highlights spark discussions</h3>
-            <p>Pull out the sentence that made you stop. Your circle responds. The conversation is organized around the content — not lost in a thread.</p>
-          </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">mark the thirty seconds you wanted back</div>
+          <div class="anno-pen big">WAIT.</div>
+          <div class="anno-pen">every tuesday M. and i get on a call and one of us says "do you remember when he said that thing about—" and <u>neither of us does.</u></div>
+          <div class="anno-pen tiny">this solves it.</div>
         </div>
       </div>
-    </div>
-  </section>
 
-  <!-- YOUR CIRCLES -->
-  <section class="circles">
-    <div class="circles-inner">
-      <div class="section-label">Who it's for</div>
-      <h2 class="section-headline">Your circles, your rules</h2>
-
-      <div class="circle-cards">
-        <div class="circle-card">
-          <div class="circle-emoji">📚</div>
-          <h3>The book club that actually talks</h3>
-          <p>Share chapters. Highlight moments. Have the conversation asynchronously, on everyone's schedule — without the logistics of a monthly meeting.</p>
-          <div class="circle-tag">8–20 members</div>
-        </div>
-        <div class="circle-card circle-card--accent">
-          <div class="circle-emoji">🎙️</div>
-          <h3>The podcast circle</h3>
-          <p>Finally — a home for your "We need to talk about that episode" messages. Share episodes, clip the moment, discuss in depth.</p>
-          <div class="circle-tag">Great for 5–15 friends</div>
-        </div>
-        <div class="circle-card">
-          <div class="circle-emoji">🧠</div>
-          <h3>The founder/thinker crew</h3>
-          <p>Share the article that changed your thinking. Highlight the one paragraph that matters. Skip the noise of group chats.</p>
-          <div class="circle-tag">Tight, smart, trusted</div>
-        </div>
-        <div class="circle-card">
-          <div class="circle-emoji">🏠</div>
-          <h3>The family "what we're learning" group</h3>
-          <p>A private space to share what you're reading and watching with the people you love. High trust, zero pressure, completely private.</p>
-          <div class="circle-tag">Invite-only by default</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- FEATURES -->
-  <section class="features">
-    <div class="features-inner">
-      <div class="section-label">What makes it different</div>
-      <h2 class="section-headline">Every word is organized<br />around what you're reading</h2>
-
-      <div class="feature-grid">
-        <div class="feature">
-          <div class="feature-icon">✦</div>
-          <h4>The artifact is the hero</h4>
-          <p>Every conversation lives under the book, episode, or article — not lost in a timeline. Come back to it in a week. Still there, still organized.</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">✦</div>
-          <h4>Highlights, not hot takes</h4>
-          <p>The atomic unit is an excerpt from something real — not a hot take from nothing. Conversations start grounded in the actual content.</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">✦</div>
-          <h4>Private by default</h4>
-          <p>Your circle's conversations belong to your circle. Nothing is public unless you choose. No one can accidentally see your discussion.</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">✦</div>
-          <h4>Share one thing to multiple circles</h4>
-          <p>Post the same article to your book club and your work crew simultaneously. Each circle has its own conversation. Your vault collects everything.</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">✦</div>
-          <h4>Browser extension + mobile capture</h4>
-          <p>One click from any webpage. Snap a Kindle highlight. Share a podcast moment. Getting things into Highlighter is faster than texting a link.</p>
-        </div>
-        <div class="feature">
-          <div class="feature-icon">✦</div>
-          <h4>Your personal vault</h4>
-          <p>Every highlight you've ever made, searchable and yours forever — across all your circles. Never lose something you marked as worth keeping.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- NOSTR -->
-  <section class="nostr">
-    <div class="nostr-inner">
-      <div class="nostr-text">
-        <div class="section-label">Built differently</div>
-        <h2>You own your circles.<br />We just host them.</h2>
-        <p>Highlighter is built on <strong>Nostr</strong> — an open protocol where you control your identity and your data. No email address required. No lock-in. Your circles and highlights are standard events on an open network.</p>
-        <p>If we ever shut down (we won't, but: <em>if</em>), your data goes with you. Your key is your identity.</p>
-        <div class="nostr-pills">
-          <span class="pill">Own your identity</span>
-          <span class="pill">Portable data</span>
-          <span class="pill">No platform lock-in</span>
-          <span class="pill">Open protocol</span>
-        </div>
-      </div>
-      <div class="nostr-visual">
-        <div class="key-card">
-          <div class="key-card-label">Your identity</div>
-          <div class="key-display">
-            <span class="key-prefix">npub</span><span class="key-chars">1qzf…k94m</span>
+      <div class="full">
+        <div class="podcast-card">
+          <div class="mock-header">
+            <div><span class="mock-dot"></span>This week's listen · 4 of 6 members in</div>
+            <div>✎ 11 highlights · 3 threads</div>
           </div>
-          <div class="key-card-sub">Works on every Nostr app. Forever yours.</div>
+          <div class="podcast-head">
+            <div class="podcast-artwork"><em>Long Now</em></div>
+            <div class="podcast-meta">
+              <h5>On the Long Now, deep time, and the civilizational cost of short attention</h5>
+              <div class="show">The Ezra Klein Show · ep. 487 · with Stewart Brand</div>
+              <div class="dur">1 hr 47 min · released Apr 9</div>
+            </div>
+          </div>
+
+          <div class="waveform-wrap">
+            <div class="hl-span s1"><span class="hl-span-label">24:11 → 25:40</span></div>
+            <div class="hl-span s2"><span class="hl-span-label">1:08:22 → 1:09:15</span></div>
+            <div class="waveform">
+              {#each waveformBars as h, i (i)}
+                <span class="bar" style:height="{h}%"></span>
+              {/each}
+            </div>
+          </div>
+          <div class="waveform-timeline">
+            <span>0:00</span><span>30:00</span><span>1:00:00</span><span>1:30:00</span><span>1:47:00</span>
+          </div>
+
+          <div class="podcast-highlight">
+            <div class="ph-stamp"><b>00:24:11 → 00:25:40</b> · marked by M. Costa, Rhea T.</div>
+            <p class="ph-quote">"The thing the 10,000-year clock is trying to teach you is that your generation is not the last generation. It's the embarrassing thing about the internet — the internet behaves as if each week is the only week."</p>
+            <div class="ph-reaction">
+              <div class="member-dot md-2">RT</div>
+              <div class="pr-body">
+                <span class="pr-name">Rhea T.</span>
+                This is the line worth the whole episode. I want to put it on a poster. Also — someone please tell me we aren't going to forget this by Sunday.
+              </div>
+            </div>
+          </div>
+
+          <div class="podcast-highlight">
+            <div class="ph-stamp"><b>01:08:22 → 01:09:15</b> · marked by Anouk</div>
+            <p class="ph-quote">"A civilization is a slow literature. Every institution is a paragraph someone wrote that other people then took seriously."</p>
+            <div class="ph-reaction">
+              <div class="member-dot md-4">AN</div>
+              <div class="pr-body">
+                <span class="pr-name">Anouk</span>
+                The line about "slow literature" rhymes hard with the Middlemarch passage we were on last week that I almost emailed the room. Opening a thread.
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="relay-visual-card">
-          <div class="relay-row">
-            <div class="relay-dot relay-dot--green"></div>
-            <span>highlighter.xyz relay</span>
+      </div>
+    </section>
+
+    <!-- ═══ THE ROOM ═══ -->
+    <section id="room" class="landing-section">
+      <div class="full">
+        <div class="sec-kicker">— the room</div>
+      </div>
+
+      <div class="main">
+        <h2 class="sec-head">Small on purpose. <em><mark>Invitation by design.</mark></em></h2>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">Invitation by design</div>
+          <div class="anno-pen">good. don't want randos.</div>
+        </div>
+      </div>
+
+      <div class="main">
+        <p class="sec-lead">
+          Rooms are closed by default. Six to twenty members. Most rooms stay <mark>around a dozen people.</mark>
+          Big enough that someone is always the interesting one. Small enough that you know every voice.
+        </p>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">around a dozen people</div>
+          <div class="anno-pen">5 feels right for us.<br /><span class="anno-pen tiny">maybe start at 3 and grow. smarter.</span></div>
+        </div>
+      </div>
+
+      <div class="main">
+        <p class="body-copy">
+          You can make a room public for read-only discovery (highlights and threads visible to the world,
+          participation stays invitation-only), or keep it fully private for family, work, or
+          <mark>the kind of conversation that should stay in the room.</mark>
+        </p>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">the kind of conversation that should stay in the room</div>
+          <div class="anno-pen">family book club version = <u>great.</u></div>
+        </div>
+      </div>
+
+      <div class="full">
+        <div class="room-header-mock">
+          <div class="room-label">Room</div>
+          <h5 class="room-name">The Last Thursday Club<em>.</em></h5>
+          <div class="room-stats">
+            <span><b>6</b> members</span>
+            <span><b>Closed</b> — by invitation</span>
+            <span><b>Private</b> — only members</span>
+            <span><b>Reading since</b> Jan 2024</span>
           </div>
-          <div class="relay-row">
-            <div class="relay-dot relay-dot--green"></div>
-            <span>nostr.wine</span>
+          <div class="room-activity"><b>Currently:</b> Middlemarch · week 3 of 4. Also this week's listen: Ezra Klein on the Long Now.</div>
+          <div class="room-activity"><b>Up next:</b> a shortlist the room is voting on — Le Guin's essays, <i>Mrs Dalloway</i>, the Calvino memos. Voting closes Sunday.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ OWNERSHIP ═══ -->
+    <section class="landing-section">
+      <div class="full">
+        <div class="sec-kicker">— ownership</div>
+      </div>
+
+      <div class="main">
+        <h2 class="sec-head">Your rooms <em><mark>aren't trapped here.</mark></em></h2>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">aren't trapped here</div>
+          <div class="anno-pen">last reading app i used shut down in october.<br /><span class="anno-pen tiny">lost everything. still annoyed.</span></div>
+        </div>
+      </div>
+
+      <div class="main">
+        <p class="body-copy">
+          Highlighter runs on Nostr — an open protocol where your identity is a key you own, your rooms live on
+          a host you can change, and your highlights are portable events anyone can read. The technical details only
+          matter if we go dark. If we ever do, <mark>your rooms move to another host and nobody loses a thing.</mark>
+        </p>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">your rooms move to another host and nobody loses a thing</div>
+          <div class="anno-pen">ok. that's <u>unusually honest</u> for a product page.</div>
+        </div>
+      </div>
+
+      <div class="full">
+        <div class="proto-callout">
+          <div class="proto-key">⌇</div>
+          <div class="proto-text">
+            <h5>One key per reader. One protocol. No silo.</h5>
+            <p>Your Nostr keypair is your identity. Your rooms are portable between hosts. Your highlights export to any compatible client. Built on <em>NIP-29</em> groups and <em>NIP-84</em> highlights. Interoperable by default.</p>
           </div>
-          <div class="relay-row">
-            <div class="relay-dot relay-dot--amber"></div>
-            <span>your-own-relay.io</span>
-          </div>
-          <div class="relay-card-note">Run on your relay, or ours.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ FINAL CTA ═══ -->
+    <section class="landing-section">
+      <div class="full">
+        <div class="sec-kicker">— joining</div>
+      </div>
+
+      <div class="main">
+        <h2 class="sec-head">Rooms open in <em><mark>small waves.</mark></em></h2>
+      </div>
+      <div class="marg">
+        <div class="anno">
+          <div class="anno-quote">small waves</div>
+          <div class="anno-pen">ok. i'll wait if i need to.</div>
+        </div>
+      </div>
+
+      <div class="main">
+        <p class="sec-lead">
+          If a friend sent you this, you already have a way in. If you're here on your own, ask for a card
+          and we'll write back when a wave opens.
+        </p>
+        <div class="final-cta-buttons">
+          <a href="/onboarding" class="landing-btn-primary">Request a card</a>
+          <a href="#what" class="landing-btn-secondary">Or, read how a room works →</a>
+        </div>
+        <p class="final-fine">
+          You'll get a pairing link. Use it to set up your key and start your first room —
+          with three or four people you'd actually want to read a difficult book with. Not a broadcast list.
+          Not "everyone who's ever read a book with me." The right three.
+        </p>
+      </div>
+      <div class="marg">
+        <div class="anno free">
+          <div class="anno-pen big">ok.<br />doing it.</div>
+          <div class="anno-pen tiny">texting M. and J. now.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="landing-footer">
+    <div class="footer-inner">
+      <div class="footer-mark">Highlighter<em>.</em></div>
+      <div class="footer-cols">
+        <div>
+          <h6>The product</h6>
+          <a href="#what">What it is</a>
+          <a href="#media">For any medium</a>
+          <a href="#room">Rooms</a>
+        </div>
+        <div>
+          <h6>Read</h6>
+          <a href="/about">How a room works</a>
+          <a href="/about">On the Nostr protocol</a>
+          <a href="/changelog">A note on the old Highlighter</a>
+        </div>
+        <div>
+          <h6>Reach us</h6>
+          <a href="/onboarding">Request a card</a>
+          <a href="/onboarding">Bring a room</a>
+          <a href="/about">contact</a>
         </div>
       </div>
     </div>
-  </section>
-
-  <!-- SOCIAL PROOF -->
-  <section class="proof">
-    <div class="proof-inner">
-      <div class="proof-label">From real people, real frustration</div>
-      <div class="proof-quotes">
-        <div class="proof-quote">
-          <p>"Not having friends with similar interests as you suuuuuucks. Who else am I supposed to discuss podcasts with?"</p>
-          <span>— X user</span>
-        </div>
-        <div class="proof-quote">
-          <p>"Readwise but social private community for highlights."</p>
-          <span>— X user (this is exactly what we built)</span>
-        </div>
-        <div class="proof-quote">
-          <p>"Move over, book clubs! The PodClub is the new way…"</p>
-          <span>— The Guardian, May 2025</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- FINAL CTA -->
-  <section class="final-cta">
-    <div class="final-cta-inner">
-      <h2>Ready for high-signal conversations again?</h2>
-      <p>Invite your 8 friends. Share the first highlight. See what happens.</p>
-      <a href="/onboarding" class="btn-primary btn-large">Start Your Circle — Free</a>
-      <div class="cta-footnote">No credit card. No email address required. Just your Nostr key.</div>
-    </div>
-  </section>
+  </footer>
 {/if}
 
 <style>
-  /* Reset the .page gap/padding for the guest marketing flow */
-  :global(.page:has(.hero)) {
-    gap: 0;
-    padding: 0;
-  }
-
-  /* ═══ SHARED ═══ */
-
-  .section-label {
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 1rem;
-  }
-
-  .section-headline {
-    font-family: var(--font-serif);
-    font-size: clamp(1.75rem, 4vw, 2.75rem);
-    font-weight: 700;
-    line-height: 1.2;
-    color: var(--text-strong);
-    margin-bottom: 3rem;
-  }
-
-  /* ═══ SIGNED-IN FEED ═══ */
+  /* ═══════════════════════════════════════════
+     SIGNED-IN FEED (unchanged)
+     ═══════════════════════════════════════════ */
 
   .dashboard-header {
     display: flex;
@@ -598,9 +869,7 @@
     align-items: start;
   }
 
-  .feed-main {
-    min-width: 0;
-  }
+  .feed-main { min-width: 0; }
 
   .feed-groups {
     display: grid;
@@ -615,18 +884,14 @@
     font-family: inherit;
   }
 
-  .feed-loading-text,
-  .feed-resolving {
+  .feed-loading-text, .feed-resolving {
     margin: 0;
     color: var(--muted);
     font-size: 0.88rem;
   }
 
-  .feed-resolving {
-    margin-top: 0.75rem;
-  }
+  .feed-resolving { margin-top: 0.75rem; }
 
-  /* Skeleton loading */
   .feed-skeleton {
     display: grid;
     gap: 0.9rem;
@@ -635,12 +900,7 @@
   .skeleton-card {
     height: 10rem;
     border-radius: 1rem;
-    background: linear-gradient(
-      110deg,
-      var(--surface-soft) 30%,
-      var(--surface) 50%,
-      var(--surface-soft) 70%
-    );
+    background: linear-gradient(110deg, var(--surface-soft) 30%, var(--surface) 50%, var(--surface-soft) 70%);
     background-size: 200% 100%;
     animation: shimmer 1.5s ease-in-out infinite;
   }
@@ -650,7 +910,6 @@
     100% { background-position: -200% 0; }
   }
 
-  /* Empty states */
   .feed-empty {
     display: grid;
     gap: 0.5rem;
@@ -682,7 +941,6 @@
     margin-top: 1rem;
   }
 
-  /* Sidebar rail */
   .feed-rail {
     display: grid;
     gap: 1.25rem;
@@ -720,9 +978,7 @@
     transition: background 120ms ease;
   }
 
-  .rail-circle-link:hover {
-    background: var(--surface-soft);
-  }
+  .rail-circle-link:hover { background: var(--surface-soft); }
 
   .rail-view-all {
     font-size: 0.813rem;
@@ -731,9 +987,7 @@
     padding-left: 0.625rem;
   }
 
-  .rail-view-all:hover {
-    text-decoration: underline;
-  }
+  .rail-view-all:hover { text-decoration: underline; }
 
   .rail-cta-card {
     display: grid;
@@ -755,8 +1009,6 @@
     color: var(--muted);
     line-height: 1.5;
   }
-
-  /* ═══ BUTTONS ═══ */
 
   .btn-primary {
     display: inline-block;
@@ -786,810 +1038,1108 @@
     padding: 0.85rem 1.75rem;
     border-radius: 9999px;
     border: 1px solid var(--border);
-    transition: box-shadow 0.18s ease, transform 0.12s ease;
     cursor: pointer;
     white-space: nowrap;
     text-decoration: none;
   }
-
-  .btn-secondary:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-    transform: translateY(-1px);
-  }
-
-  .btn-ghost {
-    display: inline-block;
-    color: rgba(248, 245, 240, 0.55);
-    font-size: 0.94rem;
-    font-weight: 400;
-    padding: 0.85rem 0.25rem;
-    border-bottom: 1px solid transparent;
-    transition: color 0.15s, border-color 0.15s;
-    text-decoration: none;
-  }
-
-  .btn-ghost:hover {
-    color: #F8F5F0;
-    border-bottom-color: #F8F5F0;
-  }
-
-  .btn-large {
-    font-size: 1.05rem;
-    padding: 1.1rem 2.5rem;
-  }
-
-  /* ═══ HERO ═══ */
-
-  .hero {
-    background: #1F1F1F;
-    color: #F8F5F0;
-    padding: 5rem 0 0;
-    overflow: hidden;
-    margin: -3rem calc(-1 * (100vw - min(calc(100vw - 2.5rem), var(--page-width))) / 2) 0;
-    width: 100vw;
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-
-  .hero-inner {
-    max-width: var(--page-width);
-    margin: 0 auto;
-    padding: 0 1.5rem;
-    text-align: center;
-  }
-
-  .hero-eyebrow {
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 1.5rem;
-  }
-
-  .hero-headline {
-    font-family: var(--font-serif);
-    font-size: clamp(2.5rem, 7vw, 4.75rem);
-    font-weight: 700;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-    margin-bottom: 1.75rem;
-    color: #F8F5F0;
-  }
-
-  .hero-headline em {
-    font-style: italic;
-    color: var(--accent);
-  }
-
-  .hero-sub {
-    font-size: clamp(1rem, 2vw, 1.25rem);
-    line-height: 1.6;
-    color: rgba(248, 245, 240, 0.7);
-    max-width: 40rem;
-    margin: 0 auto 2.5rem;
-  }
-
-  .hero-ctas {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 1.5rem;
-    margin-bottom: 4.5rem;
-    flex-wrap: wrap;
-  }
-
-  /* Hero preview cards */
-  .hero-preview {
-    display: flex;
-    gap: 1.25rem;
-    justify-content: center;
-    align-items: flex-start;
-    padding-bottom: 0;
-  }
-
-  .preview-card {
-    background: #2A2A2A;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 0.75rem;
-    padding: 1.25rem;
-    width: 20rem;
-    flex-shrink: 0;
-    text-align: left;
-  }
-
-  .preview-card--offset {
-    position: relative;
-    top: 2.5rem;
-  }
-
-  .preview-card-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-  }
-
-  .preview-avatar-row {
-    display: flex;
-  }
-
-  .preview-avatar {
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 50%;
-    border: 2px solid #2A2A2A;
-    flex-shrink: 0;
-  }
-
-  .preview-card-name {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: #F8F5F0;
-  }
-
-  .preview-card-count {
-    font-size: 0.75rem;
-    color: rgba(248, 245, 240, 0.45);
-    margin-top: 0.125rem;
-  }
-
-  .hl-card {
-    background: rgba(196, 126, 94, 0.1);
-    border-left: 2.5px solid var(--accent);
-    padding: 0.875rem 1rem;
-    border-radius: 0 0.5rem 0.5rem 0;
-    margin-bottom: 0.875rem;
-  }
-
-  .hl-label {
-    font-size: 0.625rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 0.5rem;
-  }
-
-  .hl-text {
-    font-size: 0.875rem;
-    line-height: 1.55;
-    color: rgba(248, 245, 240, 0.88);
-    font-style: italic;
-    margin-bottom: 0.5rem;
-  }
-
-  .hl-source {
-    font-size: 0.688rem;
-    color: rgba(248, 245, 240, 0.4);
-  }
-
-  .preview-discussion {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .reply {
-    font-size: 0.813rem;
-    color: rgba(248, 245, 240, 0.65);
-  }
-
-  .reply-name {
-    font-weight: 500;
-    color: rgba(248, 245, 240, 0.85);
-    margin-right: 0.375rem;
-  }
-
-  .reply-count {
-    color: rgba(248, 245, 240, 0.35);
-    font-size: 0.75rem;
-  }
-
-  /* ═══ PAIN ═══ */
-
-  .pain {
-    padding: 6rem 0;
-    text-align: center;
-  }
-
-  .pain-inner {
-    max-width: var(--page-width);
-    margin: 0 auto;
-  }
-
-  .pain-label {
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 1rem;
-  }
-
-  .pain-headline {
-    font-family: var(--font-serif);
-    font-size: clamp(1.75rem, 4vw, 3rem);
-    font-weight: 700;
-    line-height: 1.15;
-    margin-bottom: 3rem;
-    letter-spacing: -0.01em;
-    color: var(--text-strong);
-  }
-
-  .pain-quotes {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-    gap: 1.5rem;
-    max-width: 58rem;
-    margin: 0 auto 3rem;
-    text-align: left;
-  }
-
-  .pain-quotes blockquote {
-    background: var(--surface-soft);
-    border-radius: 0.75rem;
-    padding: 1.5rem;
-    font-size: 0.94rem;
-    line-height: 1.6;
-    color: var(--text);
-    font-style: italic;
-    position: relative;
-    margin: 0;
-  }
-
-  .pain-quotes blockquote::before {
-    content: '\201C';
-    font-family: var(--font-serif);
-    font-size: 3rem;
-    color: var(--accent);
-    opacity: 0.4;
-    position: absolute;
-    top: 0.5rem;
-    left: 1rem;
-    line-height: 1;
-  }
-
-  .pain-closer {
-    font-size: 1.1rem;
-    line-height: 1.6;
-    color: var(--muted);
-    max-width: 36rem;
-    margin: 0 auto;
-  }
-
-  .pain-closer strong {
-    color: var(--text-strong);
-  }
-
-  /* ═══ HOW IT WORKS ═══ */
-
-  .how {
-    background: var(--surface-soft);
-    padding: 6rem 0;
-    margin: 0 calc(-1 * (100vw - min(calc(100vw - 2.5rem), var(--page-width))) / 2);
-    width: 100vw;
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-
-  .how-inner {
-    max-width: var(--page-width);
-    margin: 0 auto;
-    padding: 0 1.5rem;
-  }
-
-  .steps {
-    display: flex;
-    align-items: center;
-    gap: 0;
-  }
-
-  .step {
-    flex: 1;
-    background: var(--surface);
-    border-radius: 0.75rem;
-    padding: 2.25rem 2rem;
-  }
-
-  .step-connector {
-    width: 2.5rem;
-    height: 2px;
-    background: var(--accent);
-    opacity: 0.3;
-    flex-shrink: 0;
-  }
-
-  .step-number {
-    font-size: 0.688rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    color: var(--accent);
-    margin-bottom: 1rem;
-  }
-
-  .step h3 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin-bottom: 0.625rem;
-    line-height: 1.3;
-    color: var(--text-strong);
-  }
-
-  .step p {
-    font-size: 0.94rem;
-    color: var(--muted);
-    line-height: 1.6;
-    margin: 0;
-  }
-
-  /* ═══ CIRCLES ═══ */
-
-  .circles {
-    padding: 6rem 0;
-  }
-
-  .circles-inner {
-    max-width: var(--page-width);
-    margin: 0 auto;
-  }
-
-  .circle-cards {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.25rem;
-  }
-
-  .circle-card {
-    background: var(--surface-soft);
-    border-radius: 0.75rem;
-    padding: 2.25rem 2rem;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .circle-card--accent {
-    background: #1F1F1F;
-    color: #F8F5F0;
-  }
-
-  .circle-card--accent h3 {
-    color: #F8F5F0;
-  }
-
-  .circle-card--accent p {
-    color: rgba(248, 245, 240, 0.65);
-  }
-
-  .circle-emoji {
-    font-size: 2rem;
-    margin-bottom: 1.25rem;
-    display: block;
-  }
-
-  .circle-card h3 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin-bottom: 0.75rem;
-    line-height: 1.3;
-    color: var(--text-strong);
-  }
-
-  .circle-card p {
-    font-size: 0.94rem;
-    color: var(--muted);
-    line-height: 1.6;
-    margin-bottom: 1.25rem;
-  }
-
-  .circle-tag {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--accent);
-    letter-spacing: 0.04em;
-    padding: 0.375rem 0.75rem;
-    background: rgba(196, 126, 94, 0.1);
-    border-radius: 9999px;
-    display: inline-block;
-  }
-
-  .circle-card--accent .circle-tag {
-    background: rgba(196, 126, 94, 0.15);
-  }
-
-  /* ═══ FEATURES ═══ */
-
-  .features {
-    background: var(--surface-soft);
-    padding: 6rem 0;
-    margin: 0 calc(-1 * (100vw - min(calc(100vw - 2.5rem), var(--page-width))) / 2);
-    width: 100vw;
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-
-  .features-inner {
-    max-width: var(--page-width);
-    margin: 0 auto;
-    padding: 0 1.5rem;
-  }
-
-  .feature-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0;
-    border: 1px solid var(--border);
-    border-radius: 0.75rem;
-    overflow: hidden;
-  }
-
-  .feature {
-    padding: 2.25rem 2rem;
-    border-right: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-  }
-
-  .feature:nth-child(3n) {
-    border-right: none;
-  }
-
-  .feature:nth-child(n + 4) {
-    border-bottom: none;
-  }
-
-  .feature-icon {
-    color: var(--accent);
-    font-size: 1.125rem;
-    margin-bottom: 1rem;
-  }
-
-  .feature h4 {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 0.625rem;
-    line-height: 1.3;
-    color: var(--text-strong);
-  }
-
-  .feature p {
-    font-size: 0.875rem;
-    color: var(--muted);
-    line-height: 1.6;
-    margin: 0;
-  }
-
-  /* ═══ NOSTR ═══ */
-
-  .nostr {
-    padding: 6rem 0;
-  }
-
-  .nostr-inner {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4rem;
-    align-items: center;
-    max-width: var(--page-width);
-    margin: 0 auto;
-  }
-
-  .nostr-text h2 {
-    font-family: var(--font-serif);
-    font-size: clamp(1.625rem, 3.5vw, 2.5rem);
-    font-weight: 700;
-    line-height: 1.2;
-    margin-bottom: 1.5rem;
-    color: var(--text-strong);
-  }
-
-  .nostr-text p {
-    font-size: 1rem;
-    color: var(--muted);
-    line-height: 1.7;
-    margin-bottom: 1rem;
-  }
-
-  .nostr-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 1.75rem;
-  }
-
-  .pill {
-    font-size: 0.813rem;
-    font-weight: 500;
-    padding: 0.375rem 0.875rem;
-    background: var(--surface-soft);
-    border-radius: 9999px;
-    color: var(--text);
-  }
-
-  .nostr-visual {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .key-card {
-    background: #1F1F1F;
-    border-radius: 0.75rem;
-    padding: 1.5rem 1.75rem;
-    color: #F8F5F0;
-  }
-
-  .key-card-label {
-    font-size: 0.688rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: rgba(248, 245, 240, 0.4);
-    margin-bottom: 0.625rem;
-  }
-
-  .key-display {
-    font-family: var(--font-mono);
-    font-size: 1.125rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .key-prefix {
-    color: var(--accent);
-    margin-right: 0.125rem;
-  }
-
-  .key-chars {
-    color: rgba(248, 245, 240, 0.8);
-  }
-
-  .key-card-sub {
-    font-size: 0.813rem;
-    color: rgba(248, 245, 240, 0.4);
-  }
-
-  .relay-visual-card {
-    background: var(--surface-soft);
-    border-radius: 0.75rem;
-    padding: 1.25rem 1.5rem;
-  }
-
-  .relay-row {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    padding: 0.5rem 0;
-    font-size: 0.875rem;
-    color: var(--text);
-    border-bottom: 1px solid var(--border);
-  }
-
-  .relay-row:last-of-type {
-    border-bottom: none;
-  }
-
-  .relay-dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .relay-dot--green {
-    background: #8A9A7F;
-  }
-
-  .relay-dot--amber {
-    background: #C9A84C;
-  }
-
-  .relay-card-note {
-    font-size: 0.75rem;
-    color: var(--muted);
-    margin-top: 0.75rem;
-  }
-
-  /* ═══ SOCIAL PROOF ═══ */
-
-  .proof {
-    background: #1F1F1F;
-    padding: 6rem 0;
-    color: #F8F5F0;
-    margin: 0 calc(-1 * (100vw - min(calc(100vw - 2.5rem), var(--page-width))) / 2);
-    width: 100vw;
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-
-  .proof-inner {
-    max-width: var(--page-width);
-    margin: 0 auto;
-    padding: 0 1.5rem;
-  }
-
-  .proof-label {
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: rgba(248, 245, 240, 0.4);
-    margin-bottom: 3rem;
-    text-align: center;
-  }
-
-  .proof-quotes {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 2rem;
-  }
-
-  .proof-quote {
-    padding: 1.75rem 0;
-    border-top: 1px solid rgba(248, 245, 240, 0.12);
-  }
-
-  .proof-quote p {
-    font-size: 1rem;
-    line-height: 1.6;
-    color: rgba(248, 245, 240, 0.85);
-    font-style: italic;
-    margin-bottom: 1rem;
-  }
-
-  .proof-quote span {
-    font-size: 0.813rem;
-    color: rgba(248, 245, 240, 0.35);
-  }
-
-  /* ═══ FINAL CTA ═══ */
-
-  .final-cta {
-    padding: 6rem 0;
-    text-align: center;
-  }
-
-  .final-cta-inner {
-    max-width: var(--page-width);
-    margin: 0 auto;
-  }
-
-  .final-cta h2 {
-    font-family: var(--font-serif);
-    font-size: clamp(1.75rem, 4vw, 3rem);
-    font-weight: 700;
-    margin-bottom: 1rem;
-    letter-spacing: -0.01em;
-    color: var(--text-strong);
-  }
-
-  .final-cta p {
-    font-size: 1.1rem;
-    color: var(--muted);
-    margin-bottom: 2.5rem;
-  }
-
-  .cta-footnote {
-    margin-top: 1.25rem;
-    font-size: 0.813rem;
-    color: var(--muted);
-  }
-
-  /* ═══ RESPONSIVE ═══ */
 
   @media (max-width: 820px) {
     .dashboard-header {
       flex-direction: column;
       align-items: flex-start;
     }
-
-    .dashboard-body {
-      grid-template-columns: 1fr;
-    }
-
-    .feed-rail {
-      order: 1;
-    }
+    .dashboard-body { grid-template-columns: 1fr; }
+    .feed-rail { order: 1; }
   }
 
-  @media (max-width: 600px) {
-    .dashboard-ctas {
-      width: 100%;
-    }
+  /* ═══════════════════════════════════════════
+     LANDING (annotation direction, round 02)
+     ═══════════════════════════════════════════ */
 
-    .dashboard-ctas .btn-primary,
-    .dashboard-ctas .btn-secondary {
-      flex: 1;
-      text-align: center;
-    }
+  :global(.page:has(.landing-topnav)) {
+    gap: 0;
+    padding: 0;
+    max-width: none;
+  }
+
+  .landing-topnav,
+  .landing-page,
+  .landing-footer,
+  .landing-topnav *,
+  .landing-page *,
+  .landing-footer * {
+    box-sizing: border-box;
+  }
+
+  .landing-topnav {
+    --paper: #F7F3EB;
+    --paper-2: #EFE9DC;
+    --paper-card: #FFFEFA;
+    --ink: #15130F;
+    --ink-soft: #3A362E;
+    --ink-fade: #7A7468;
+    --rule: #D9D2BF;
+    --h-sage: #C8D4B5;
+    --h-rose: #EAC6C8;
+    --h-blue: #BCD0E0;
+    --h-lilac: #D0C4E0;
+    --marker: #F5D896;
+    --marker-strong: #E8B96A;
+    --pen: #1F3F78;
+    --pen-soft: #3A5A95;
+    --brand-accent: #C24D2C;
+  }
+
+  .landing-topnav {
+    position: sticky;
+    top: 0;
+    background: #F7F3EB;
+    border-bottom: 1px solid #D9D2BF;
+    padding: 18px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 20;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  .topnav-left {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+    color: #15130F;
+    text-decoration: none;
+  }
+
+  .topnav-left em {
+    font-style: italic;
+    font-weight: 400;
+    color: #C24D2C;
+  }
+
+  .topnav-right {
+    display: flex;
+    gap: 32px;
+    align-items: center;
+    font-size: 14px;
+    color: #3A362E;
+  }
+
+  .topnav-right a {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .topnav-right a:hover {
+    color: #C24D2C;
+  }
+
+  .topnav-cta {
+    padding: 8px 18px;
+    background: #15130F;
+    color: #F7F3EB !important;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none !important;
+    letter-spacing: 0.01em;
+  }
+
+  .topnav-cta:hover {
+    background: #C24D2C !important;
+    color: #F7F3EB !important;
+  }
+
+  @media (max-width: 780px) {
+    .landing-topnav { padding: 14px 20px; }
+    .topnav-right { gap: 16px; font-size: 13px; }
+    .topnav-right a:not(.topnav-cta) { display: none; }
+  }
+
+  .landing-page {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 40px;
+    background: #F7F3EB;
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #15130F;
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  :global(body:has(.landing-topnav)) {
+    background: #F7F3EB;
   }
 
   @media (max-width: 900px) {
-    .hero-preview {
-      display: none;
-    }
+    .landing-page { padding: 0 20px; }
+  }
 
-    .steps {
-      flex-direction: column;
-      gap: 1.25rem;
-    }
+  .landing-section {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 48px;
+    padding: 72px 0;
+    align-items: start;
+    position: relative;
+  }
 
-    .step-connector {
-      width: 2px;
-      height: 1.5rem;
-    }
-
-    .circle-cards {
+  @media (max-width: 900px) {
+    .landing-section {
       grid-template-columns: 1fr;
-    }
-
-    .feature-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-
-    .feature:nth-child(3n) {
-      border-right: 1px solid var(--border);
-    }
-
-    .feature:nth-child(2n) {
-      border-right: none;
-    }
-
-    .feature:nth-last-child(-n + 2) {
-      border-bottom: none;
-    }
-
-    .nostr-inner {
-      grid-template-columns: 1fr;
-      gap: 2.5rem;
-    }
-
-    .proof-quotes {
-      grid-template-columns: 1fr;
-      gap: 0;
+      gap: 16px;
+      padding: 48px 0;
     }
   }
 
-  @media (max-width: 600px) {
-    .hero {
-      padding: 3.75rem 0 0;
-    }
+  .landing-section + .landing-section {
+    border-top: 1px solid #D9D2BF;
+  }
 
-    .hero-ctas {
-      flex-direction: column;
-      gap: 0.75rem;
-    }
+  .full { grid-column: 1 / -1; }
+  .main { grid-column: 1; min-width: 0; }
+  .marg { grid-column: 2; }
 
-    .feature-grid {
-      grid-template-columns: 1fr;
-    }
+  @media (max-width: 900px) {
+    .full, .main, .marg { grid-column: 1; }
+  }
 
-    .feature {
-      border-right: none;
-    }
+  /* marker (highlight-on-page) */
+  .landing-page :global(mark),
+  .landing-page .mark {
+    background: linear-gradient(180deg, transparent 0%, transparent 12%, #F5D896 12%, #F5D896 92%, transparent 92%);
+    color: inherit;
+    padding: 0 2px;
+    margin: 0 -1px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    position: relative;
+  }
 
-    .feature:not(:last-child) {
-      border-bottom: 1px solid var(--border);
-    }
+  /* annotation */
+  .anno {
+    position: relative;
+    padding: 0 0 0 18px;
+    border-left: 1px dotted rgba(31, 63, 120, 0.35);
+    margin-bottom: 0;
+  }
 
-    .pain-quotes {
-      grid-template-columns: 1fr;
-    }
+  .anno::before {
+    content: '◂';
+    position: absolute;
+    left: -6px;
+    top: -2px;
+    color: #1F3F78;
+    font-size: 13px;
+    line-height: 1;
+    background: #F7F3EB;
+    width: 10px;
+    text-align: center;
+  }
 
-    .how,
-    .features,
-    .proof {
-      padding: 3.5rem 0;
-    }
+  .anno-quote {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 13.5px;
+    line-height: 1.45;
+    color: #3A362E;
+    background: linear-gradient(180deg, transparent 55%, rgba(245, 216, 150, 0.55) 55%);
+    padding: 2px 0;
+    margin: 0 0 10px;
+    display: inline;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
 
-    .pain,
-    .circles,
-    .nostr,
-    .final-cta {
-      padding: 3.5rem 0;
+  .anno-quote::before { content: '\201C'; }
+  .anno-quote::after { content: '\201D'; }
+
+  .anno-pen {
+    font-family: 'Caveat', cursive;
+    font-weight: 500;
+    font-size: 22px;
+    line-height: 1.25;
+    color: #1F3F78;
+    margin-top: 6px;
+  }
+
+  .anno-pen u {
+    text-decoration-color: #1F3F78;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 2px;
+  }
+
+  .anno-pen .strike {
+    text-decoration: line-through;
+    text-decoration-color: #1F3F78;
+    color: #3A5A95;
+  }
+
+  .anno-pen.big {
+    font-size: 32px;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+
+  .anno-pen.tiny {
+    display: block;
+    margin-top: 4px;
+    font-size: 18px;
+    font-weight: 400;
+    color: #3A5A95;
+  }
+
+  .anno-pen .emph {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .anno.free {
+    border-left-style: none;
+    padding-left: 0;
+  }
+
+  .anno.free::before {
+    content: none;
+  }
+
+  @media (max-width: 900px) {
+    .anno {
+      border-left: 3px solid #1F3F78;
+      padding: 12px 14px;
+      margin-top: -4px;
+      margin-bottom: 18px;
+      background: rgba(31, 63, 120, 0.04);
+      border-radius: 4px;
     }
+    .anno::before { display: none; }
+  }
+
+  /* Hero */
+  .hero { padding: 72px 0 96px; }
+
+  .hero-kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #C24D2C;
+    margin-bottom: 28px;
+  }
+
+  .landing-page h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: clamp(44px, 7vw, 88px);
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    color: #15130F;
+    margin: 0 0 28px;
+    max-width: 14ch;
+  }
+
+  .landing-page h1 em {
+    font-style: italic;
+    font-weight: 400;
+    color: #C24D2C;
+  }
+
+  .hero-dek {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: clamp(19px, 2vw, 24px);
+    line-height: 1.5;
+    color: #3A362E;
+    max-width: 52ch;
+    margin: 0 0 40px;
+  }
+
+  .hero-ctas {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .landing-btn-primary {
+    padding: 16px 28px;
+    background: #15130F;
+    color: #F7F3EB;
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    transition: background 200ms ease;
+  }
+
+  .landing-btn-primary:hover { background: #C24D2C; }
+
+  .landing-btn-secondary {
+    padding: 16px 0;
+    color: #3A362E;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 17px;
+    text-decoration: underline;
+    text-decoration-color: #D9D2BF;
+    text-underline-offset: 5px;
+  }
+
+  .landing-btn-secondary:hover {
+    color: #C24D2C;
+    text-decoration-color: #C24D2C;
+  }
+
+  .sec-kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #C24D2C;
+    margin-bottom: 18px;
+  }
+
+  .sec-head {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: clamp(32px, 4.5vw, 52px);
+    line-height: 1.08;
+    letter-spacing: -0.018em;
+    color: #15130F;
+    margin: 0 0 28px;
+    max-width: 22ch;
+  }
+
+  .sec-head em {
+    font-style: italic;
+    color: #C24D2C;
+  }
+
+  .sec-lead {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    line-height: 1.55;
+    font-style: italic;
+    color: #3A362E;
+    max-width: 52ch;
+    margin: 0;
+  }
+
+  p.body-copy {
+    font-size: 17px;
+    line-height: 1.7;
+    color: #3A362E;
+    max-width: 58ch;
+    margin: 0;
+  }
+
+  p.body-copy + p.body-copy { margin-top: 1.15em; }
+  p.body-copy strong { color: #15130F; font-weight: 500; }
+
+  /* Mock wrappers */
+  .mock-wrap, .podcast-card {
+    margin-top: 40px;
+    background: #FFFEFA;
+    border: 1px solid #D9D2BF;
+    border-radius: 4px;
+    padding: 28px;
+    box-shadow: 0 20px 48px -24px rgba(21, 19, 15, 0.2);
+  }
+
+  .mock-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #D9D2BF;
+    margin-bottom: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7A7468;
+  }
+
+  .mock-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #C24D2C;
+    margin-right: 8px;
+  }
+
+  .book-card {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .book-cover {
+    aspect-ratio: 2/3;
+    background: linear-gradient(135deg, #3A2416 0%, #5A3A22 100%);
+    border-radius: 2px;
+    padding: 18px 14px;
+    color: #E6D9BC;
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 1.25;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.15);
+    position: relative;
+  }
+
+  .book-cover::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    left: 4px;
+    width: 2px;
+    background: rgba(230, 217, 188, 0.25);
+  }
+
+  .bc-top {
+    font-style: italic;
+    font-size: 11px;
+    opacity: 0.7;
+  }
+
+  .bc-title {
+    font-size: 16px;
+    line-height: 1.1;
+    margin-top: auto;
+    margin-bottom: 12px;
+  }
+
+  .bc-author {
+    font-style: italic;
+    font-size: 11px;
+    opacity: 0.85;
+    border-top: 1px solid rgba(230, 217, 188, 0.3);
+    padding-top: 6px;
+  }
+
+  .book-meta-area h4 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 22px;
+    line-height: 1.2;
+    margin: 0 0 2px;
+    color: #15130F;
+  }
+
+  .book-meta-area .author {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 15px;
+    color: #7A7468;
+    margin-bottom: 16px;
+  }
+
+  .book-stats {
+    display: flex;
+    gap: 20px;
+    font-size: 13px;
+    color: #7A7468;
+    margin-bottom: 18px;
+  }
+
+  .book-stats b {
+    color: #15130F;
+    font-weight: 500;
+  }
+
+  .members-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .member-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    text-align: center;
+    line-height: 28px;
+    color: #15130F;
+    border: 2px solid #FFFEFA;
+    display: inline-block;
+  }
+
+  .members-row .overlap { margin-left: -10px; }
+  .md-1 { background: #F5D896; }
+  .md-2 { background: #C8D4B5; }
+  .md-3 { background: #EAC6C8; }
+  .md-4 { background: #BCD0E0; }
+  .md-5 { background: #D0C4E0; }
+  .md-6 { background: #F5E6A8; }
+
+  .members-count {
+    font-size: 12px;
+    color: #7A7468;
+    margin-left: 6px;
+  }
+
+  .passage-mock {
+    margin-top: 28px;
+    padding: 28px 32px 32px;
+    border-top: 1px solid #D9D2BF;
+    border-bottom: 1px solid #D9D2BF;
+  }
+
+  .passage-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #7A7468;
+    margin-bottom: 12px;
+  }
+
+  .passage-text {
+    font-family: 'Fraunces', serif;
+    font-size: 19px;
+    line-height: 1.7;
+    color: #15130F;
+    margin: 0 0 16px;
+  }
+
+  .passage-text .hl {
+    padding: 2px 4px;
+    margin: 0 -2px;
+    border-radius: 2px;
+  }
+
+  .hl-sage { background: #C8D4B5; }
+  .hl-amber { background: #F5D896; }
+
+  .thread-mock {
+    margin-top: 18px;
+    padding: 16px 18px;
+    background: #EFE9DC;
+    border-left: 3px solid #E8B96A;
+    border-radius: 0 2px 2px 0;
+  }
+
+  .thread-msg {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+
+  .thread-msg:last-of-type { margin-bottom: 0; }
+  .thread-msg .member-dot {
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+    font-size: 10px;
+  }
+
+  .thread-msg-body {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #15130F;
+  }
+
+  .thread-msg-body .name {
+    font-weight: 500;
+    margin-right: 8px;
+  }
+
+  .thread-msg-body .time {
+    color: #7A7468;
+    font-size: 12px;
+    margin-left: 6px;
+  }
+
+  .reply-prompt {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed #D9D2BF;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #7A7468;
+    letter-spacing: 0.05em;
+  }
+
+  /* Chip grid (not just books) */
+  .chip-grid {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  @media (max-width: 900px) {
+    .chip-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 560px) {
+    .chip-grid { grid-template-columns: 1fr; }
+  }
+
+  .chip {
+    background: #FFFEFA;
+    border: 1px solid #D9D2BF;
+    padding: 22px 22px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 214px;
+    position: relative;
+    transition: border-color 200ms ease, transform 200ms ease;
+  }
+
+  .chip:hover {
+    border-color: #E8B96A;
+    transform: translateY(-1px);
+  }
+
+  .chip-type {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #7A7468;
+  }
+
+  .chip-type b {
+    color: #C24D2C;
+    font-weight: 500;
+  }
+
+  .chip-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 19px;
+    line-height: 1.18;
+    color: #15130F;
+    letter-spacing: -0.005em;
+    margin-top: 2px;
+  }
+
+  .chip-source {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 13.5px;
+    color: #7A7468;
+    margin-top: -4px;
+    margin-bottom: 2px;
+  }
+
+  .chip-excerpt {
+    font-family: 'Fraunces', serif;
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: #3A362E;
+    padding: 10px 0 2px;
+    border-top: 1px dotted #D9D2BF;
+    flex: 1;
+  }
+
+  .inner-hl {
+    background: #F5D896;
+    padding: 1px 3px;
+    color: #15130F;
+  }
+
+  .chip-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 10px;
+    border-top: 1px dotted #D9D2BF;
+    gap: 8px;
+  }
+
+  .chip-foot .dots {
+    display: flex;
+    align-items: center;
+  }
+
+  .chip-foot .member-dot {
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+    font-size: 10px;
+  }
+
+  .chip-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: #7A7468;
+    text-transform: uppercase;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* Podcast card */
+  .podcast-head {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 20px;
+    margin-bottom: 22px;
+  }
+
+  .podcast-artwork {
+    aspect-ratio: 1/1;
+    background: linear-gradient(135deg, #2A3E5E 0%, #4A6B9C 100%);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    color: #D8E3F2;
+    font-size: 12px;
+    text-align: center;
+    padding: 8px;
+    line-height: 1.1;
+  }
+
+  .podcast-meta h5 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 20px;
+    line-height: 1.25;
+    margin: 0 0 4px;
+    color: #15130F;
+  }
+
+  .podcast-meta .show {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 14px;
+    color: #7A7468;
+    margin-bottom: 8px;
+  }
+
+  .podcast-meta .dur {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7A7468;
+  }
+
+  .waveform-wrap {
+    position: relative;
+    height: 68px;
+    background: #EFE9DC;
+    border-radius: 4px;
+    margin: 24px 0 20px;
+    overflow: hidden;
+  }
+
+  .waveform {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 100%;
+    padding: 0 12px;
+  }
+
+  .waveform .bar {
+    display: inline-block;
+    width: 2px;
+    background: #7A7468;
+    opacity: 0.35;
+    border-radius: 1px;
+  }
+
+  .hl-span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+  }
+
+  .hl-span.s1 {
+    left: 28%;
+    width: 7%;
+    background: rgba(245, 216, 150, 0.6);
+    border-left: 2px solid #E8B96A;
+    border-right: 2px solid #E8B96A;
+  }
+
+  .hl-span.s2 {
+    left: 62%;
+    width: 5%;
+    background: rgba(200, 212, 181, 0.6);
+    border-left: 2px solid #C8D4B5;
+    border-right: 2px solid #C8D4B5;
+  }
+
+  .hl-span-label {
+    position: absolute;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #15130F;
+    top: -16px;
+    white-space: nowrap;
+    background: #FFFEFA;
+    padding: 0 4px;
+  }
+
+  .waveform-timeline {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 12px;
+    margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #7A7468;
+  }
+
+  .podcast-highlight {
+    padding: 16px 18px;
+    background: #EFE9DC;
+    border-left: 3px solid #E8B96A;
+    margin-bottom: 12px;
+    border-radius: 0 2px 2px 0;
+  }
+
+  .ph-stamp {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: #7A7468;
+    margin-bottom: 8px;
+  }
+
+  .ph-stamp b {
+    color: #C24D2C;
+    font-weight: 500;
+  }
+
+  .ph-quote {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 16px;
+    line-height: 1.55;
+    color: #15130F;
+    margin: 0 0 12px;
+  }
+
+  .ph-reaction {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding-top: 10px;
+    border-top: 1px dashed #D9D2BF;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: #3A362E;
+  }
+
+  .ph-reaction .member-dot {
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+
+  .pr-name {
+    font-weight: 500;
+    margin-right: 6px;
+    color: #15130F;
+  }
+
+  /* Room section */
+  .room-header-mock {
+    margin-top: 36px;
+    background: #FFFEFA;
+    border: 1px solid #D9D2BF;
+    border-radius: 4px;
+    padding: 28px 32px;
+    box-shadow: 0 20px 48px -24px rgba(21, 19, 15, 0.2);
+  }
+
+  .room-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #7A7468;
+    margin-bottom: 12px;
+  }
+
+  .room-name {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 32px;
+    color: #15130F;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+
+  .room-name em {
+    font-style: italic;
+    color: #C24D2C;
+    font-weight: 400;
+  }
+
+  .room-stats {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 13.5px;
+    color: #7A7468;
+    margin-bottom: 20px;
+  }
+
+  .room-stats b {
+    color: #15130F;
+    font-weight: 500;
+  }
+
+  .room-activity {
+    padding-top: 20px;
+    border-top: 1px solid #D9D2BF;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #3A362E;
+  }
+
+  .room-activity b {
+    color: #15130F;
+    font-weight: 500;
+  }
+
+  .room-activity + .room-activity {
+    border-top: 1px dashed #D9D2BF;
+  }
+
+  /* Protocol callout */
+  .proto-callout {
+    margin-top: 36px;
+    padding: 28px 32px;
+    background: #FFFEFA;
+    border: 1px solid #D9D2BF;
+    border-left: 3px solid #C24D2C;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 24px;
+    align-items: center;
+  }
+
+  @media (max-width: 700px) {
+    .proto-callout { grid-template-columns: 1fr; }
+  }
+
+  .proto-key {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 60px;
+    color: #C24D2C;
+    line-height: 1;
+  }
+
+  .proto-text h5 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 22px;
+    margin: 0 0 6px;
+    color: #15130F;
+  }
+
+  .proto-text p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.55;
+    color: #3A362E;
+    max-width: 52ch;
+  }
+
+  .proto-text em { font-style: italic; }
+
+  /* Final CTA */
+  .final-cta-buttons {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    margin-top: 28px;
+    flex-wrap: wrap;
+  }
+
+  .final-fine {
+    margin-top: 24px;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 16px;
+    color: #7A7468;
+    max-width: 48ch;
+  }
+
+  /* Footer */
+  .landing-footer {
+    background: #EFE9DC;
+    border-top: 1px solid #D9D2BF;
+    padding: 48px 40px;
+    margin-top: 40px;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .footer-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 32px;
+  }
+
+  .footer-mark {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 20px;
+    color: #15130F;
+  }
+
+  .footer-mark em {
+    font-style: italic;
+    color: #C24D2C;
+  }
+
+  .footer-cols {
+    display: flex;
+    gap: 48px;
+    font-size: 13px;
+    color: #7A7468;
+  }
+
+  .footer-cols a {
+    display: block;
+    text-decoration: none;
+    margin-bottom: 8px;
+    color: inherit;
+  }
+
+  .footer-cols a:hover {
+    color: #C24D2C;
+  }
+
+  .footer-cols h6 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #15130F;
+    margin: 0 0 12px;
   }
 </style>

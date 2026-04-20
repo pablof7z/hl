@@ -1,218 +1,172 @@
 <script lang="ts">
-  import FilterRow from './FilterRow.svelte';
   import HighlightEntry from './HighlightEntry.svelte';
-  import HighlightCard from './HighlightCard.svelte';
+  import SeeAllLink from './SeeAllLink.svelte';
+  import MemberDot from './MemberDot.svelte';
 
-  type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
-
-  interface ArtifactRef {
-    id: string;
-    type: ArtifactType;
-    title: string;
-    author?: string;
-    cover?: string;
-  }
-
-  const seedHighlightCards = [
-    {
-      id: 'hc1',
-      quote: '"The death of distance" — the communication revolution compresses both time and space.',
-      memberColorIndex: 1,
-      memberName: 'craig_烈日',
-      artifactTitle: 'The Death of Distance',
-      artifact: {
-        id: 'a1',
-        type: 'article' as ArtifactType,
-        title: 'The Death of Distance: How the Communications Revolution Is Changing Our Lives',
-        author: 'Frances Cairncross'
-      }
-    },
-    {
-      id: 'hc2',
-      quote:
-        'The transition from the Industrial Age to the Information Age will be as disruptive as the prior agricultural-to-industrial shift.',
-      memberColorIndex: 2,
-      memberName: 'dergigi',
-      artifactTitle: 'The Death of Distance',
-      artifact: {
-        id: 'a1',
-        type: 'article' as ArtifactType,
-        title: 'The Death of Distance: How the Communications Revolution Is Changing Our Lives',
-        author: 'Frances Cairncross'
-      }
-    },
-    {
-      id: 'hc3',
-      quote: 'Their framework for understanding historical transitions applies directly to the current era.',
-      memberColorIndex: 6,
-      memberName: 'nick',
-      artifactTitle: 'The Sovereign Individual Podcast',
-      artifact: {
-        id: 'a2',
-        type: 'podcast' as ArtifactType,
-        title: 'The Sovereign Individual with James Dale Davidson',
-        author: 'What Bitcoin Did'
-      }
-    }
-  ];
-
-  interface HighlightEntryProps {
+  interface HighlightRow {
     id: string;
     memberColorIndex: number;
     memberName: string;
+    memberInitials?: string;
     quote: string;
-    timestamp: string;
+    location?: string;
+    date?: string;
+    replies?: number;
+  }
+
+  interface MemberFilter {
+    colorIndex: number;
+    initials: string;
+    name: string;
+    count: number;
   }
 
   let {
     highlights,
-    onHighlightClick
+    totalCount,
+    memberFilters = [],
+    seeAllHref = '#'
   }: {
-    highlights: HighlightEntryProps[];
-    onHighlightClick?: (artifact: ArtifactRef) => void;
+    highlights: HighlightRow[];
+    totalCount?: number;
+    memberFilters?: MemberFilter[];
+    seeAllHref?: string;
   } = $props();
 
-  const allNames = $derived([
-    'All',
-    ...Array.from(new Set(highlights.map((h) => h.memberName)))
-  ]);
-
-  let activePill = $state('All');
+  let activeFilter = $state<string>('all');
 
   const filtered = $derived(
-    activePill === 'All'
+    activeFilter === 'all'
       ? highlights
-      : highlights.filter((h) => h.memberName === activePill)
+      : highlights.filter((h) => h.memberName === activeFilter)
   );
 
-  function handleSeeAllHighlights() {
-    console.log('see all highlights — stub for M5+');
-  }
+  const total = $derived(totalCount ?? highlights.length);
 </script>
 
-<div class="highlights-tab">
-  <!-- Highlight card reel -->
-  <div class="reel-section">
-    <div class="highlight-reel" role="list" aria-label="Highlights reel">
-      {#each seedHighlightCards as card (card.id)}
-        <HighlightCard
-          id={card.id}
-          quote={card.quote}
-          memberColorIndex={card.memberColorIndex}
-          memberName={card.memberName}
-          artifactTitle={card.artifactTitle}
-          artifact={card.artifact}
-          {onHighlightClick}
-        />
-      {/each}
-    </div>
-    <div class="reel-footer">
-      <button class="see-all-link" type="button" onclick={handleSeeAllHighlights}>
-        See all highlights →
+<div class="panel-head">
+  <div class="filter-row">
+    <button
+      type="button"
+      class="filter-pill"
+      class:on={activeFilter === 'all'}
+      onclick={() => (activeFilter = 'all')}
+    >
+      All <span class="c">{total}</span>
+    </button>
+    {#each memberFilters as mf (mf.name)}
+      <button
+        type="button"
+        class="filter-pill"
+        class:on={activeFilter === mf.name}
+        onclick={() => (activeFilter = mf.name)}
+      >
+        <span class="dot"><MemberDot colorIndex={mf.colorIndex} size={10} /></span>
+        {mf.initials}
+        <span class="c">{mf.count}</span>
       </button>
-    </div>
+    {/each}
   </div>
+  <div class="panel-sort">By position ↓</div>
+</div>
 
-  <!-- Full highlights list with per-member filter -->
-  <div class="highlights-list-section">
-    <FilterRow
-      pills={allNames}
-      {activePill}
-      onToggle={(label) => (activePill = label)}
-    />
+<div class="hl-list">
+  {#if filtered.length === 0}
+    <p class="empty-state">No highlights yet.</p>
+  {:else}
+    {#each filtered as hl (hl.id)}
+      <HighlightEntry {...hl} />
+    {/each}
+  {/if}
+</div>
 
-    <div class="highlights-list">
-      {#if filtered.length === 0}
-        <p class="empty-state">No highlights yet. Be the first to share a passage.</p>
-      {:else}
-        {#each filtered as highlight (highlight.id)}
-          <HighlightEntry
-            id={highlight.id}
-            memberColorIndex={highlight.memberColorIndex}
-            memberName={highlight.memberName}
-            quote={highlight.quote}
-            timestamp={highlight.timestamp}
-          />
-        {/each}
-      {/if}
-    </div>
-  </div>
+<div class="see-all-wrap">
+  <SeeAllLink label="See all {total} highlights" href={seeAllHref} />
 </div>
 
 <style>
-  .highlights-tab {
+  .panel-head {
+    padding: 18px 32px 14px;
+    border-bottom: 1px solid var(--rule);
     display: flex;
-    flex-direction: column;
-    gap: 28px;
-  }
-
-  .reel-section {
-    display: flex;
-    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
     gap: 12px;
+    flex-wrap: wrap;
   }
 
-  .highlight-reel {
+  @media (max-width: 760px) {
+    .panel-head {
+      padding: 14px 20px;
+    }
+  }
+
+  .filter-row {
     display: flex;
-    flex-direction: row;
-    gap: 12px;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 8px;
-    /* Custom scrollbar */
-    scrollbar-width: thin;
-    scrollbar-color: var(--rule) var(--surface-muted);
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
-  .highlight-reel::-webkit-scrollbar {
-    height: 4px;
-  }
-
-  .highlight-reel::-webkit-scrollbar-track {
-    background: var(--surface-muted);
-  }
-
-  .highlight-reel::-webkit-scrollbar-thumb {
-    background: var(--rule);
-    border-radius: 2px;
-  }
-
-  .reel-footer {
-    padding-top: 2px;
-  }
-
-  .see-all-link {
+  .filter-pill {
+    padding: 6px 12px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
-    color: var(--brand-accent);
-    background: none;
-    border: none;
-    padding: 0;
+    color: var(--ink-soft);
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 150ms ease;
   }
 
-  .see-all-link:hover {
-    text-decoration: underline;
+  .filter-pill.on {
+    background: var(--ink);
+    color: var(--surface);
+    border-color: var(--ink);
   }
 
-  .see-all-link:focus-visible {
-    outline: 2px solid var(--brand-accent);
-    outline-offset: 2px;
-    border-radius: 2px;
+  .filter-pill:hover:not(.on) {
+    border-color: var(--ink);
+    color: var(--ink);
   }
 
-  .highlights-list-section {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+  .filter-pill .c {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    opacity: 0.7;
+    font-weight: 400;
   }
 
-  .highlights-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
+  .filter-pill .dot {
+    display: inline-flex;
+    width: 10px;
+    height: 10px;
+  }
+
+  .filter-pill .dot :global(.member-dot) {
+    width: 10px !important;
+    height: 10px !important;
+  }
+
+  .panel-sort {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: var(--ink-fade);
+    font-weight: 500;
+  }
+
+  .hl-list {
+    padding: 0 32px;
+  }
+
+  @media (max-width: 760px) {
+    .hl-list {
+      padding: 0 20px;
+    }
   }
 
   .empty-state {
@@ -222,5 +176,15 @@
     text-align: center;
     padding: 40px 0;
     margin: 0;
+  }
+
+  .see-all-wrap {
+    padding: 0 32px 28px;
+  }
+
+  @media (max-width: 760px) {
+    .see-all-wrap {
+      padding: 0 20px 24px;
+    }
   }
 </style>

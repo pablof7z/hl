@@ -104,30 +104,30 @@
   const seedRelatedDiscussions = [
     {
       id: 'rd1',
-      memberColorIndex: 1,
-      memberName: 'craig_烈日',
-      preview: 'The chapter on digital governance is the most prescient.',
-      replyCount: 12,
-      lastActivity: '2h ago',
-      isLast: false
+      status: 'active' as const,
+      title: 'The chapter on digital governance is the most prescient.',
+      source: 'started by <b>craig_烈日</b>',
+      participants: [{ colorIndex: 1, initials: 'CL' }],
+      replies: 12,
+      lastAt: '2h ago'
     },
     {
       id: 'rd2',
-      memberColorIndex: 3,
-      memberName: 'nickand',
-      preview: 'Did anyone else notice the parallel with Taleb?',
-      replyCount: 8,
-      lastActivity: '5h ago',
-      isLast: false
+      status: 'active' as const,
+      title: 'Did anyone else notice the parallel with Taleb?',
+      source: 'started by <b>nickand</b>',
+      participants: [{ colorIndex: 3, initials: 'NA' }],
+      replies: 8,
+      lastAt: '5h ago'
     },
     {
       id: 'rd3',
-      memberColorIndex: 5,
-      memberName: 'Lyn Alden',
-      preview: 'The economic predictions held up surprisingly well.',
-      replyCount: 6,
-      lastActivity: '1d ago',
-      isLast: true
+      status: 'closed' as const,
+      title: 'The economic predictions held up surprisingly well.',
+      source: 'started by <b>Lyn Alden</b>',
+      participants: [{ colorIndex: 5, initials: 'LA' }],
+      replies: 6,
+      lastAt: '1d ago'
     }
   ];
 
@@ -242,12 +242,12 @@
           {#each seedRelatedDiscussions as disc (disc.id)}
             <DiscussionRow
               id={disc.id}
-              memberColorIndex={disc.memberColorIndex}
-              memberName={disc.memberName}
-              preview={disc.preview}
-              replyCount={disc.replyCount}
-              lastActivity={disc.lastActivity}
-              isLast={disc.isLast}
+              status={disc.status}
+              title={disc.title}
+              source={disc.source}
+              participants={disc.participants}
+              replies={disc.replies}
+              lastAt={disc.lastAt}
             />
           {/each}
         </div>

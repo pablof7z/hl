@@ -1,176 +1,175 @@
 <script lang="ts">
-  import MemberStack from './MemberStack.svelte';
-
-  interface UpNextItem {
+  interface VoteItem {
     id: string;
     title: string;
-    type: 'book' | 'podcast' | 'article';
-    voterCount: number;
-    voterColors: number[];
+    source?: string;
+    voteCount: number;
   }
 
-  let { items }: { items: UpNextItem[] } = $props();
+  let {
+    items,
+    closesText = 'Voting closes Sunday, 9pm.',
+    castHref = '#',
+    seeAllHref = '#'
+  }: {
+    items: VoteItem[];
+    closesText?: string;
+    castHref?: string;
+    seeAllHref?: string;
+  } = $props();
 
-  // Track which items the current user has voted on
-  let voted = $state<Set<string>>(new Set());
-
-  function toggleVote(item: UpNextItem) {
-    const next = new Set(voted);
-    if (next.has(item.id)) {
-      next.delete(item.id);
-      console.log(`Unvoted for "${item.title}" — stub, real voting in post-M9`);
-    } else {
-      next.add(item.id);
-      console.log(`Voted for "${item.title}" — stub, real voting in post-M9`);
-    }
-    voted = next;
-  }
-
-  function displayCount(item: UpNextItem): number {
-    const delta = voted.has(item.id) ? 1 : 0;
-    return item.voterCount + delta;
-  }
+  const MAX_DOTS = 5;
 </script>
 
-<div class="upnext-card">
-  <p class="kicker">UP NEXT</p>
+<div class="sb-card">
+  <div class="sb-head">
+    <span>Up next · voting</span>
+    <a href={seeAllHref} class="sb-link">see all →</a>
+  </div>
 
-  <ul class="upnext-list" role="list">
-    {#each items as item (item.id)}
-      {@const isVoted = voted.has(item.id)}
-      <li class="upnext-row">
-        <button
-          type="button"
-          class="vote-btn"
-          class:voted={isVoted}
-          onclick={() => toggleVote(item)}
-          aria-pressed={isVoted}
-          aria-label="Vote for {item.title}"
-        >
-          <span class="vote-count">{displayCount(item)}</span>
-        </button>
+  {#each items as item, i (item.id)}
+    <div class="vote-row">
+      <div class="vote-pos">{String(i + 1).padStart(2, '0')}</div>
+      <div class="vote-body">
+        <div class="vt-title">{item.title}</div>
+        {#if item.source}<div class="vt-source">{item.source}</div>{/if}
+      </div>
+      <div class="vote-tally">
+        {#each Array(Math.max(MAX_DOTS, item.voteCount)) as _, i (i)}
+          <span class="dot" class:empty={i >= item.voteCount} class:hide={i >= Math.max(1, item.voteCount) && i >= MAX_DOTS - 1}></span>
+        {/each}
+        <span class="num">{item.voteCount}</span>
+      </div>
+    </div>
+  {/each}
 
-        <div class="item-info">
-          <span class="item-title">{item.title}</span>
-          <div class="item-meta">
-            <span class="item-type">{item.type.toUpperCase()}</span>
-            <MemberStack
-              members={item.voterColors.map((c) => ({ colorIndex: c }))}
-              max={4}
-            />
-          </div>
-        </div>
-      </li>
-    {/each}
-  </ul>
+  <div class="vote-close">
+    <span>{closesText}</span>
+    <a href={castHref}>cast yours →</a>
+  </div>
 </div>
 
 <style>
-  .upnext-card {
+  .sb-card {
     background: var(--surface);
     border: 1px solid var(--rule);
-    border-radius: var(--radius, 4px);
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    border-radius: var(--radius);
+    padding: 20px 22px;
   }
 
-  .kicker {
+  .sb-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
     font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 400;
-    color: var(--ink-fade);
+    font-size: 10px;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin: 0;
-  }
-
-  .upnext-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .upnext-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 8px 6px;
-    border-radius: var(--radius, 4px);
-    transition: none;
-  }
-
-  .upnext-row:hover {
-    background: var(--surface-muted);
-  }
-
-  .vote-btn {
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: var(--surface-muted);
-    border: 1px solid var(--rule);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    padding: 0;
-    transition: none;
-  }
-
-  .vote-btn.voted {
-    background: var(--brand-accent);
-    border-color: var(--brand-accent);
-  }
-
-  .vote-btn:focus-visible {
-    outline: 2px solid var(--brand-accent);
-    outline-offset: 2px;
-  }
-
-  .vote-btn.voted .vote-count {
-    color: var(--surface);
-  }
-
-  .vote-count {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 400;
     color: var(--ink-fade);
-    line-height: 1;
+    padding-bottom: 12px;
+    border-bottom: 1px dotted var(--rule);
+    margin-bottom: 14px;
   }
 
-  .item-info {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-  }
-
-  .item-title {
+  .sb-link {
+    color: var(--brand-accent);
+    text-transform: none;
+    letter-spacing: 0.02em;
+    font-size: 11px;
+    text-decoration: none;
     font-family: var(--font-sans);
-    font-size: 14px;
     font-weight: 500;
-    color: var(--ink);
-    line-height: 1.3;
   }
 
-  .item-meta {
-    display: flex;
+  .sb-link:hover {
+    text-decoration: underline;
+  }
+
+  .vote-row {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px dotted rgba(21, 19, 15, 0.08);
     align-items: center;
-    gap: 8px;
   }
 
-  .item-type {
+  .vote-row:last-of-type {
+    border-bottom: none;
+  }
+
+  .vote-pos {
     font-family: var(--font-mono);
     font-size: 11px;
-    font-weight: 400;
     color: var(--ink-fade);
-    letter-spacing: 0.05em;
+    text-align: center;
+  }
+
+  .vt-title {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.2;
+    color: var(--ink);
+  }
+
+  .vt-source {
+    font-family: var(--font-sans);
+    font-style: italic;
+    font-size: 12px;
+    color: var(--ink-fade);
+    margin-top: 1px;
+  }
+
+  .vote-tally {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--marker);
+  }
+
+  .dot.empty {
+    background: var(--rule);
+  }
+
+  .dot.hide {
+    display: none;
+  }
+
+  .num {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-fade);
+    margin-left: 4px;
+    font-weight: 500;
+  }
+
+  .vote-close {
+    padding-top: 12px;
+    margin-top: 8px;
+    border-top: 1px dashed var(--rule);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: var(--ink-fade);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .vote-close a {
+    color: var(--brand-accent);
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .vote-close a:hover {
+    text-decoration: underline;
   }
 </style>

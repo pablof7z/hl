@@ -1,89 +1,229 @@
 <script lang="ts">
   import MemberDot from './MemberDot.svelte';
 
+  interface Contribution {
+    highlights?: number;
+    messages?: number;
+    notes?: number;
+  }
+
+  interface MemberRow {
+    colorIndex: number;
+    initials: string;
+    name: string;
+    handle: string;
+    progressPct: number;
+    progressLabel: string;
+    progressState?: 'inProgress' | 'done' | 'none';
+    contribution: Contribution;
+    lastHere: string;
+  }
+
   let {
     members
   }: {
-    members: Array<{ colorIndex: number; name: string; joinedAt?: string }>;
+    members: MemberRow[];
   } = $props();
 </script>
 
-<table class="members-table">
-  <thead>
-    <tr>
-      <th class="col-avatar" scope="col" aria-label="Avatar"></th>
-      <th class="col-name" scope="col">Name</th>
-      <th class="col-joined" scope="col">Joined</th>
-    </tr>
-  </thead>
-  <tbody>
-    {#each members as member (member.name)}
-      <tr class="member-row">
-        <td class="cell-avatar">
-          <span aria-hidden="true"><MemberDot colorIndex={member.colorIndex} size="lg" /></span>
-        </td>
-        <td class="cell-name">{member.name}</td>
-        <td class="cell-joined">{member.joinedAt ?? '—'}</td>
-      </tr>
-    {/each}
-  </tbody>
-</table>
+<div class="members-table">
+  <div class="mt-head">
+    <div>Member</div>
+    <div>Progress</div>
+    <div>Contribution</div>
+    <div>Last here</div>
+  </div>
+
+  {#each members as m (m.handle)}
+    <div class="mt-row">
+      <div class="mt-member">
+        <MemberDot
+          colorIndex={m.colorIndex}
+          initials={m.initials}
+          size={30}
+          title={m.name}
+        />
+        <div>
+          <div class="m-n">{m.name}</div>
+          <div class="m-h">@{m.handle}</div>
+        </div>
+      </div>
+
+      <div class="mt-progress">
+        <div class="mt-progress-bar">
+          <div
+            class="mt-progress-fill"
+            class:done={m.progressState === 'done'}
+            class:none={m.progressState === 'none'}
+            style:width="{m.progressPct}%"
+          ></div>
+        </div>
+        <div class="mt-progress-label">{@html m.progressLabel}</div>
+      </div>
+
+      <div class="mt-contribution">
+        {#if m.contribution.highlights !== undefined}
+          <span><b>{m.contribution.highlights}</b> highlights</span>
+        {:else}
+          <span class="none">—</span>
+        {/if}
+        {#if m.contribution.messages !== undefined}
+          <span><b>{m.contribution.messages}</b> messages</span>
+        {:else}
+          <span class="none">—</span>
+        {/if}
+        {#if m.contribution.notes !== undefined}
+          <span><b>{m.contribution.notes}</b> note{m.contribution.notes === 1 ? '' : 's'}</span>
+        {:else}
+          <span class="none">—</span>
+        {/if}
+      </div>
+
+      <div class="mt-last">{m.lastHere}</div>
+    </div>
+  {/each}
+</div>
 
 <style>
   .members-table {
-    width: 100%;
-    border-collapse: collapse;
+    padding: 14px 32px 32px;
   }
 
-  thead th {
-    font-family: var(--font-sans);
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ink-fade);
+  @media (max-width: 760px) {
+    .members-table {
+      padding: 14px 20px 24px;
+    }
+  }
+
+  .mt-head {
+    display: grid;
+    grid-template-columns: 1.5fr 2fr 2fr 90px;
+    gap: 18px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    text-align: left;
-    padding: 0 0 10px 0;
-    border-bottom: 1px solid var(--rule-soft);
+    color: var(--ink-fade);
   }
 
-  .col-avatar {
-    width: 56px;
+  .mt-row {
+    display: grid;
+    grid-template-columns: 1.5fr 2fr 2fr 90px;
+    gap: 18px;
+    padding: 16px 0;
+    align-items: center;
+    border-bottom: 1px dotted rgba(21, 19, 15, 0.08);
+    font-size: 13px;
   }
 
-  .col-joined {
-    width: 120px;
-  }
-
-  .member-row:hover td {
-    background-color: var(--surface-muted);
-  }
-
-  .member-row td {
-    padding: 12px 0;
-    border-bottom: 1px solid var(--rule-soft);
-    vertical-align: middle;
-  }
-
-  .member-row:last-child td {
+  .mt-row:last-child {
     border-bottom: none;
   }
 
-  .cell-avatar {
-    padding-right: 12px;
+  .mt-member {
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
-  .cell-name {
+  .m-n {
     font-family: var(--font-sans);
-    font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--ink);
+    font-size: 13px;
   }
 
-  .cell-joined {
+  .m-h {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 10.5px;
     color: var(--ink-fade);
+    letter-spacing: 0.02em;
+  }
+
+  .mt-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .mt-progress-bar {
+    height: 4px;
+    background: var(--surface-muted);
+    border-radius: 2px;
+    overflow: hidden;
+    max-width: 160px;
+  }
+
+  .mt-progress-fill {
+    height: 100%;
+    background: var(--brand-accent);
+  }
+
+  .mt-progress-fill.done {
+    background: #7CAE7A;
+  }
+
+  .mt-progress-fill.none {
+    background: transparent;
+  }
+
+  .mt-progress-label {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  .mt-progress-label :global(b) {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .mt-progress-label :global(em) {
+    font-style: italic;
+    color: var(--ink-fade);
+    font-family: var(--font-serif);
+  }
+
+  .mt-contribution {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+
+  .mt-contribution b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .mt-contribution .none {
+    color: var(--ink-fade);
+  }
+
+  .mt-last {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-fade);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     text-align: right;
+  }
+
+  @media (max-width: 760px) {
+    .mt-head {
+      display: none;
+    }
+    .mt-row {
+      grid-template-columns: 1fr;
+      gap: 10px;
+      padding: 16px 0;
+    }
+    .mt-last {
+      text-align: left;
+    }
   }
 </style>
