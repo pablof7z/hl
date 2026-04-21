@@ -3,6 +3,7 @@
   import { NDKNip07Signer, NDKNip46Signer, NDKPrivateKeySigner } from '@nostr-dev-kit/ndk';
   import { onDestroy } from 'svelte';
   import * as Dialog from '$lib/components/ui/dialog';
+  import * as Tabs from '$lib/components/ui/tabs';
   import { ndk } from '$lib/ndk/client';
   import ExtensionLoginForm from './ExtensionLoginForm.svelte';
   import PrivateKeyLoginForm from './PrivateKeyLoginForm.svelte';
@@ -184,51 +185,42 @@
       </div>
 
       <div class="auth-dialog-body">
-        <div role="tablist" class="tabs tabs-bordered">
-          <button
-            role="tab"
-            class="tab"
-            class:tab-active={mode === 'extension'}
-            onclick={() => mode = 'extension'}
-          >Extension</button>
-          <button
-            role="tab"
-            class="tab"
-            class:tab-active={mode === 'private-key'}
-            onclick={() => mode = 'private-key'}
-          >Secret key</button>
-          <button
-            role="tab"
-            class="tab"
-            class:tab-active={mode === 'remote'}
-            onclick={() => mode = 'remote'}
-          >Another app</button>
-        </div>
+        <Tabs.Root bind:value={mode}>
+          <Tabs.List>
+            <Tabs.Trigger value="extension">Extension</Tabs.Trigger>
+            <Tabs.Trigger value="private-key">Secret key</Tabs.Trigger>
+            <Tabs.Trigger value="remote">Another app</Tabs.Trigger>
+          </Tabs.List>
 
-        {#if mode === 'extension'}
-          <ExtensionLoginForm
-            hasExtension={extensionAvailable}
-            {pending}
-            onLogin={loginWithExtension}
-          />
-        {:else if mode === 'private-key'}
-          <PrivateKeyLoginForm
-            bind:secretKey={privateKey}
-            {pending}
-            onLogin={loginWithPrivateKey}
-          />
-        {:else if mode === 'remote'}
-          <RemoteLoginForm
-            bind:bunkerUri
-            {connectingBunker}
-            {nostrConnectUri}
-            {preparingRemoteSigner}
-            {qrCodeDataUrl}
-            {remoteSignerReady}
-            onLoginWithBunker={loginWithBunker}
-            onStartRemoteSigner={startRemoteSigner}
-          />
-        {/if}
+          <Tabs.Content value="extension">
+            <ExtensionLoginForm
+              hasExtension={extensionAvailable}
+              {pending}
+              onLogin={loginWithExtension}
+            />
+          </Tabs.Content>
+
+          <Tabs.Content value="private-key">
+            <PrivateKeyLoginForm
+              bind:secretKey={privateKey}
+              {pending}
+              onLogin={loginWithPrivateKey}
+            />
+          </Tabs.Content>
+
+          <Tabs.Content value="remote">
+            <RemoteLoginForm
+              bind:bunkerUri
+              {connectingBunker}
+              {nostrConnectUri}
+              {preparingRemoteSigner}
+              {qrCodeDataUrl}
+              {remoteSignerReady}
+              onLoginWithBunker={loginWithBunker}
+              onStartRemoteSigner={startRemoteSigner}
+            />
+          </Tabs.Content>
+        </Tabs.Root>
 
         {#if error}
           <p class="text-error text-sm" style="margin: 0;">{error}</p>
