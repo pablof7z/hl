@@ -4,7 +4,7 @@
   import MemberStack from './MemberStack.svelte';
   import FilterRow from './FilterRow.svelte';
   import AnnotationCard from './AnnotationCard.svelte';
-  import DiscussionRow from './DiscussionRow.svelte';
+  import SidebarDiscussionRow from './SidebarDiscussionRow.svelte';
   import { memberTint } from '../utils/colors';
 
   type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
@@ -242,12 +242,11 @@
           {#each seedRelatedDiscussions as disc (disc.id)}
             {@const starter = memberAt(disc.starterIdx)}
             {#if starter}
-              <DiscussionRow
+              <SidebarDiscussionRow
                 id={disc.id}
                 status={disc.status}
                 title={disc.title}
                 starterPubkey={starter.pubkey}
-                participants={[{ pubkey: starter.pubkey, colorIndex: starter.colorIndex }]}
                 replies={disc.replies}
                 lastAt={disc.lastAt}
               />
