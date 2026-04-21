@@ -42,10 +42,13 @@
     };
   });
 
-  const highlightsFeed = ndk.$subscribe(() => {
+  const highlightsFeed = ndk.$metaSubscribe(() => {
     if (!browser || !slug) return undefined;
     return {
-      filters: [{ kinds: [NDKKind.Highlight], '#h': [slug], limit: 64 }],
+      filters: [
+        { kinds: [NDKKind.Highlight], '#h': [slug], limit: 64 },
+        { kinds: [16 as number], '#h': [slug], '#k': ["9802"], limit: 64 }
+      ],
       relayUrls: GROUP_RELAY_URLS,
       closeOnEose: false
     };
@@ -68,19 +71,44 @@
 
   const colorByPubkey = $derived(new Map(members.map((m) => [m.pubkey, m.colorIndex])));
 
-  const highlights = $derived<Highlight[]>(
-    [...highlightsFeed.events]
-      .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))
-      .slice(0, 30)
-      .map((event) => ({
-        id: event.id,
-        artifactId: event.tagValue('a') || event.tagValue('e') || '',
-        quote: event.content.trim(),
-        authorPubkey: event.pubkey,
-        authorColorIndex: colorByPubkey.get(event.pubkey) ?? 1,
-        createdAt: event.created_at ?? 0
-      }))
-  );
+  const highlights = $derived.by<Highlight[]>(() => {
+    const events = [...highlightsFeed.events];
+    const highlightMap = new Map<string, any>();
+    const timestampMap = new Map<string, number>();
+
+    for (const event of events) {
+      if (event.kind === NDKKind.Highlight) {
+        highlightMap.set(event.id, event);
+        if (event.tagValue('h') === slug) {
+          const current = timestampMap.get(event.id) || 0;
+          timestampMap.set(event.id, Math.max(current, event.created_at ?? 0));
+        }
+      } else if (event.kind === 16) {
+        const originalId = event.tagValue('e');
+        if (originalId) {
+          const current = timestampMap.get(originalId) || 0;
+          timestampMap.set(originalId, Math.max(current, event.created_at ?? 0));
+        }
+      }
+    }
+
+    return Array.from(timestampMap.entries())
+      .map(([id, timestamp]) => {
+        const event = highlightMap.get(id);
+        if (!event) return null;
+        return {
+          id: event.id,
+          artifactId: event.tagValue('a') || event.tagValue('e') || '',
+          quote: event.content.trim(),
+          authorPubkey: event.pubkey,
+          authorColorIndex: colorByPubkey.get(event.pubkey) ?? 1,
+          createdAt: timestamp
+        };
+      })
+      .filter((h): h is Highlight => h !== null)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 30);
+  });
 
   const pinnedArtifact = $derived.by<Artifact | undefined>(() => {
     const latestPin = [...pinsFeed.events].sort(
