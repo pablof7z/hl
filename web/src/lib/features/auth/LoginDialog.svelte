@@ -161,8 +161,8 @@
   <Dialog.Root bind:open>
     {#if showTrigger}
       <div class="auth-guest-actions">
-        <button class="btn btn-outline" type="button" onclick={startJoin}>Join</button>
-        <Dialog.Trigger class="btn btn-primary">Log in</Dialog.Trigger>
+        <button class="auth-btn-outline" type="button" onclick={startJoin}>Join</button>
+        <Dialog.Trigger class="auth-btn-primary">Log in</Dialog.Trigger>
       </div>
     {/if}
 
@@ -177,7 +177,7 @@
           </Dialog.Description>
         </Dialog.Header>
 
-        <Dialog.Close class="btn btn-sm btn-circle btn-ghost" aria-label="Close login">
+        <Dialog.Close class="dialog-close" aria-label="Close login">
           <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
           </svg>
@@ -223,7 +223,7 @@
         </Tabs.Root>
 
         {#if error}
-          <p class="text-error text-sm" style="margin: 0;">{error}</p>
+          <p class="auth-error">{error}</p>
         {/if}
       </div>
     </Dialog.Content>

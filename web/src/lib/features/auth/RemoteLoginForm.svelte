@@ -22,8 +22,8 @@
   }: Props = $props();
 </script>
 
-<div class="flex flex-col gap-3">
-  <p class="text-base-content/60 text-sm m-0">
+<div class="auth-form">
+  <p class="auth-form-hint">
     Pair with another app. Show a QR code to approve this session, or paste a connection link.
   </p>
 
@@ -38,31 +38,34 @@
       </p>
     </div>
   {:else}
-    <div class="flex flex-col gap-1.5">
+    <div class="auth-form-group">
       <button
-        class="btn btn-primary w-full"
+        class="auth-form-btn-primary"
         type="button"
         onclick={() => void onStartRemoteSigner?.()}
         disabled={preparingRemoteSigner || connectingBunker}
       >
         {preparingRemoteSigner ? 'Preparing QR...' : 'Show QR code'}
       </button>
-      <p class="caption auth-qr-caption">
+      <p class="auth-form-hint auth-form-hint-center">
         This starts a one-time pairing request and waits for approval.
       </p>
     </div>
   {/if}
 
-  <div class="divider text-xs uppercase font-semibold tracking-wider">Or paste a link</div>
+  <div class="auth-form-divider"><span>or paste a link</span></div>
 
-  <label class="form-control w-full">
-    <div class="label">
-      <span class="label-text text-base-content/60">Connection link</span>
-    </div>
-    <input class="input w-full" bind:value={bunkerUri} placeholder="Paste a connection link" />
+  <label class="auth-form-field">
+    <span class="auth-form-label">Connection link</span>
+    <input
+      class="auth-form-input"
+      bind:value={bunkerUri}
+      placeholder="bunker://…"
+    />
   </label>
+
   <button
-    class="btn btn-primary w-full"
+    class="auth-form-btn-primary"
     type="button"
     onclick={() => void onLoginWithBunker?.()}
     disabled={connectingBunker || !bunkerUri.trim().startsWith('bunker://')}
@@ -70,3 +73,97 @@
     {connectingBunker ? 'Connecting...' : 'Continue with link'}
   </button>
 </div>
+
+<style>
+  .auth-form {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .auth-form-hint {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  .auth-form-hint-center {
+    text-align: center;
+  }
+
+  .auth-form-group {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .auth-form-field {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .auth-form-label {
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .auth-form-input {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-soft);
+    color: var(--text-strong);
+    font-size: 0.92rem;
+    transition: border-color 160ms ease;
+    box-sizing: border-box;
+  }
+
+  .auth-form-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .auth-form-btn-primary {
+    width: 100%;
+    padding: 0.72rem 1.25rem;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--accent);
+    color: #ffffff;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 140ms ease, opacity 140ms ease;
+  }
+
+  .auth-form-btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .auth-form-btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .auth-form-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .auth-form-divider::before,
+  .auth-form-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+</style>
