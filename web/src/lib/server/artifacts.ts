@@ -5,6 +5,7 @@ import {
   parseNostrAddress,
   type ArtifactRecord
 } from '$lib/ndk/artifacts';
+import type { NDKFilter } from '@nostr-dev-kit/ndk';
 import type { PodcastArtifactData } from '$lib/features/podcasts/types';
 import { DEFAULT_RELAYS, GROUP_RELAY_URLS } from '$lib/ndk/config';
 import { fetchPodcastExperienceForArtifact as fetchPodcastData } from '$lib/server/podcasts';
@@ -35,6 +36,36 @@ export async function fetchArtifactForGroup(
 
   const event = events[0];
   return event ? artifactFromEvent(event) : undefined;
+}
+
+export async function fetchArtifactRecordByEventId(
+  groupId: string,
+  eventId: string
+): Promise<ArtifactRecord | undefined> {
+  const trimmedGroupId = groupId.trim();
+  const trimmedEventId = eventId.trim();
+  if (!trimmedGroupId || !trimmedEventId) return undefined;
+
+  const filter: NDKFilter = {
+    kinds: [HIGHLIGHTER_ARTIFACT_SHARE_KIND],
+    ids: [trimmedEventId],
+    limit: 1
+  };
+
+  const events = Array.from(
+    (await fetchEventsForSsr(
+      filter,
+      `fetchArtifactRecordByEventId(${trimmedGroupId},${trimmedEventId})`,
+      { relays: GROUP_RELAY_URLS }
+    )) ?? []
+  );
+
+  const event = events[0];
+  if (!event) return undefined;
+
+  const record = artifactFromEvent(event);
+  if (record.groupId && record.groupId !== trimmedGroupId) return undefined;
+  return record;
 }
 
 export async function fetchNostrArticleForArtifact(

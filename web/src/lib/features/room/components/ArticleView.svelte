@@ -1,200 +1,129 @@
 <script lang="ts">
-  import { ndk } from '$lib/ndk/client';
+  import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
+  import type { ArtifactRecord } from '$lib/ndk/artifacts';
+  import { parseNostrAddress } from '$lib/ndk/artifacts';
+  import { ensureClientNdk, ndk } from '$lib/ndk/client';
+  import { buildArtifactHighlightFilters } from '$lib/ndk/highlights';
+  import ArticleMarkdown from '$lib/components/ArticleMarkdown.svelte';
   import { User } from '$lib/ndk/ui/user';
-  import MemberStack from './MemberStack.svelte';
-  import FilterRow from './FilterRow.svelte';
-  import AnnotationCard from './AnnotationCard.svelte';
-  import SidebarDiscussionRow from './SidebarDiscussionRow.svelte';
-  import { memberTint } from '../utils/colors';
-
-  type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
-
-  interface ArtifactCardProps {
-    id: string;
-    type: ArtifactType;
-    title: string;
-    author?: string;
-    cover?: string;
-    highlightCount?: number;
-    discussionCount?: number;
-  }
-
-  interface Member {
-    pubkey: string;
-    colorIndex: number;
-    name: string;
-    joinedAt?: string;
-  }
 
   let {
     artifact,
-    onBack,
-    members
+    roomMemberPubkeys,
+    onBack
   }: {
-    artifact: ArtifactCardProps;
+    artifact: ArtifactRecord;
+    roomMemberPubkeys: string[];
     onBack: () => void;
-    members: Member[];
   } = $props();
 
-  const allMemberNames = $derived(['All', ...members.map((m) => m.name)]);
-  let activePill = $state('All');
+  onMount(() => {
+    void ensureClientNdk();
+  });
 
-  const TINT_BG_VARS = [
-    'var(--h-amber-bg)',
-    'var(--h-sage-bg)',
-    'var(--h-blue-bg)',
-    'var(--h-rose-bg)',
-    'var(--h-lilac-bg)',
-    'var(--h-amber-l-bg)'
-  ] as const;
+  const nostrRef = $derived.by(() => {
+    if (artifact.referenceTagName !== 'a') return undefined;
+    const parsed = parseNostrAddress(artifact.referenceTagValue);
+    if (!parsed || parsed.kind !== 30023) return undefined;
+    return parsed;
+  });
 
-  function getMemberBgColor(colorIndex: number): string {
-    return TINT_BG_VARS[((colorIndex - 1) % 6 + 6) % 6];
-  }
+  const articleSub = ndk.$subscribe(() => {
+    if (!browser || !nostrRef) return undefined;
+    return {
+      filters: [
+        {
+          kinds: [nostrRef.kind],
+          authors: [nostrRef.pubkey],
+          '#d': [nostrRef.identifier],
+          limit: 1
+        }
+      ]
+    };
+  });
 
-  type BodyBlock =
-    | { type: 'paragraph'; text: string; memberIdx?: number }
-    | { type: 'annotation'; memberIdx: number; highlight: string };
+  const articleEvent = $derived(articleSub.events[0]);
 
-  const seedArticleBody: BodyBlock[] = [
-    {
-      type: 'paragraph',
-      text: 'The transition from the Industrial Age to the Information Age will be as disruptive as the transition from the Agricultural to the Industrial Age. Those who understand the dynamics of this transformation will thrive; those who resist it will be left behind.',
-      memberIdx: 0
-    },
-    {
-      type: 'annotation',
-      memberIdx: 0,
-      highlight: '"The death of distance" — communication technology eliminates geographic constraints on economic activity.'
-    },
-    {
-      type: 'paragraph',
-      text: 'The sovereign individual will be someone who can earn a living anywhere on earth, unbound by national borders or currency controls. This is not a prediction about the future — it is a description of what is already happening in the most dynamic sectors of the global economy.',
-      memberIdx: 1
-    },
-    {
-      type: 'paragraph',
-      text: 'The nation-state, as we have known it, emerged from the technological conditions of the Industrial Age. Its institutions — central banks, military establishments, education systems — were designed for a world of physical capital and geographic boundaries. In the Information Age, these institutions will become increasingly obsolete.'
-    },
-    {
-      type: 'annotation',
-      memberIdx: 1,
-      highlight: 'Their framework for understanding the transition applies directly to the current era. The signs are everywhere.'
-    },
-    {
-      type: 'paragraph',
-      text: 'The most important skill for the sovereign individual is not technical knowledge but the capacity to think independently and act decisively in a world of rapid change. The institutions of the Industrial Age reward conformity; the Information Age rewards creativity.'
+  const highlightsSub = ndk.$subscribe(() => {
+    if (!browser) return undefined;
+    const filters = buildArtifactHighlightFilters([artifact], roomMemberPubkeys);
+    if (filters.length === 0) return undefined;
+    return { filters };
+  });
+
+  const highlightEvents = $derived(highlightsSub.events);
+
+  const resolvedTitle = $derived(articleEvent?.tagValue('title') || artifact.title || 'Untitled');
+  const resolvedAuthorPubkey = $derived(articleEvent?.pubkey || '');
+  const resolvedCover = $derived(
+    artifact.image || articleEvent?.tagValue('image') || ''
+  );
+
+  function handleShare() {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      void navigator.share({
+        title: resolvedTitle,
+        url: typeof window !== 'undefined' ? window.location.href : ''
+      });
     }
-  ];
-
-  const seedRelatedDiscussions = $derived([
-    {
-      id: 'rd1',
-      status: 'active' as const,
-      title: 'The chapter on digital governance is the most prescient.',
-      starterIdx: 0,
-      replies: 12,
-      lastAt: '2h ago'
-    },
-    {
-      id: 'rd2',
-      status: 'active' as const,
-      title: 'Did anyone else notice the parallel with Taleb?',
-      starterIdx: 1,
-      replies: 8,
-      lastAt: '5h ago'
-    },
-    {
-      id: 'rd3',
-      status: 'closed' as const,
-      title: 'The economic predictions held up surprisingly well.',
-      starterIdx: 2,
-      replies: 6,
-      lastAt: '1d ago'
-    }
-  ]);
-
-  function memberAt(idx: number | undefined): Member | undefined {
-    if (idx === undefined) return undefined;
-    return members[idx];
   }
 
   function handleSaveForLater() {
     console.log('save for later:', artifact.id);
   }
-
-  function handleShare() {
-    console.log('share:', artifact.id);
-  }
 </script>
 
 <article class="article-view">
-  <!-- Back button -->
   <div class="article-nav">
     <button class="back-btn" type="button" onclick={onBack}>
       ← Back to room
     </button>
   </div>
 
-  <!-- Hero -->
   <header class="article-hero">
-    {#if artifact.cover}
-      <img
-        class="hero-cover"
-        src={artifact.cover}
-        alt=""
-        loading="eager"
-      />
+    {#if resolvedCover}
+      <img class="hero-cover" src={resolvedCover} alt="" loading="eager" />
     {/if}
 
     <div class="hero-meta">
       <span class="article-kicker">ARTICLE</span>
-      <h1 class="article-title">{artifact.title}</h1>
-      {#if artifact.author}
+      <h1 class="article-title">{resolvedTitle}</h1>
+      {#if resolvedAuthorPubkey}
+        <p class="article-author">
+          <User.Root {ndk} pubkey={resolvedAuthorPubkey}>
+            <User.Name field="displayName" />
+          </User.Root>
+        </p>
+      {:else if artifact.author}
         <p class="article-author">{artifact.author}</p>
       {/if}
-      <div class="members-strip">
-        <MemberStack {members} />
-        <span class="members-label">{members.length} members reading</span>
-      </div>
     </div>
   </header>
 
-  <!-- Body + margin column -->
   <div class="article-body-layout">
-    <!-- Main article body -->
     <div class="article-body">
-      {#each seedArticleBody as block, i (i)}
-        {#if block.type === 'paragraph'}
-          {@const marker = memberAt(block.memberIdx)}
-          {#if marker}
-            {@const color = memberTint(marker.colorIndex)}
-            {@const bg = getMemberBgColor(marker.colorIndex)}
-            <p class="body-paragraph">
-              <mark
-                class="inline-mark"
-                style:background={bg}
-                style:border-left="3px solid {color}"
-                title="{marker.name} highlighted this"
-              >{block.text}</mark>
-              <span class="mark-tooltip" aria-hidden="true">{marker.name}</span>
-            </p>
-          {:else}
-            <p class="body-paragraph">{block.text}</p>
-          {/if}
-        {:else if block.type === 'annotation'}
-          {@const annotator = memberAt(block.memberIdx)}
-          {#if annotator}
-            <AnnotationCard
-              pubkey={annotator.pubkey}
-              colorIndex={annotator.colorIndex}
-              highlight={block.highlight}
-            />
-          {/if}
+      {#if nostrRef}
+        {#if articleEvent}
+          <ArticleMarkdown
+            content={articleEvent.content}
+            tags={articleEvent.tags}
+            highlights={highlightEvents}
+          />
+        {:else}
+          <p class="loading-note">Loading article…</p>
         {/if}
-      {/each}
+      {:else if artifact.url}
+        <div class="external-source">
+          <p>This artifact points to an external source.</p>
+          <a class="external-link" href={artifact.url} target="_blank" rel="noreferrer noopener">
+            Read at {artifact.domain || 'source'} ↗
+          </a>
+        </div>
+      {:else}
+        <p class="loading-note">No readable source is attached to this artifact.</p>
+      {/if}
 
-      <!-- Article footer -->
       <div class="article-footer">
         <button class="save-btn" type="button" onclick={handleSaveForLater}>
           Save for later
@@ -205,63 +134,26 @@
       </div>
     </div>
 
-    <!-- Margin column -->
     <aside class="article-margin">
-      <div class="margin-section">
-        <FilterRow
-          pills={allMemberNames}
-          activePill={activePill}
-          onToggle={(label) => (activePill = label)}
-        />
-      </div>
-
       <div class="margin-card">
-        <h3 class="margin-card-title">Members in this article</h3>
-        <div class="members-grid">
-          {#each members as member (member.pubkey)}
-            <User.Root {ndk} pubkey={member.pubkey}>
-              <div class="member-item">
-                <span
-                  class="room-member-avatar"
-                  style:--mav-size="24px"
-                  style:--mav-ring={memberTint(member.colorIndex)}
-                  style:--mav-ring-width="1.5px"
-                >
-                  <User.Avatar />
-                </span>
-                <span class="member-item-name"><User.Name field="displayName" /></span>
-              </div>
-            </User.Root>
-          {/each}
-        </div>
-      </div>
-
-      <div class="margin-card">
-        <h3 class="margin-card-title">Related discussions</h3>
-        <div class="related-list">
-          {#each seedRelatedDiscussions as disc (disc.id)}
-            {@const starter = memberAt(disc.starterIdx)}
-            {#if starter}
-              <SidebarDiscussionRow
-                id={disc.id}
-                status={disc.status}
-                title={disc.title}
-                starterPubkey={starter.pubkey}
-                replies={disc.replies}
-                lastAt={disc.lastAt}
-              />
-            {/if}
-          {/each}
-        </div>
-      </div>
-
-      <div class="margin-card margin-footer-card">
-        <button class="save-btn" type="button" onclick={handleSaveForLater}>
-          Save for later
-        </button>
-        <button class="share-link" type="button" onclick={handleShare}>
-          Share →
-        </button>
+        <h3 class="margin-card-title">
+          {highlightEvents.length}
+          {highlightEvents.length === 1 ? 'highlight' : 'highlights'}
+        </h3>
+        {#if highlightEvents.length === 0}
+          <p class="margin-empty">No highlights from this room yet.</p>
+        {:else}
+          <ul class="highlight-list">
+            {#each highlightEvents.slice(0, 6) as h (h.id)}
+              <li class="highlight-item">
+                <User.Root {ndk} pubkey={h.pubkey}>
+                  <span class="highlight-author"><User.Name field="displayName" /></span>
+                </User.Root>
+                <blockquote>{h.content}</blockquote>
+              </li>
+            {/each}
+          </ul>
+        {/if}
       </div>
     </aside>
   </div>
@@ -302,7 +194,6 @@
     border-radius: var(--radius);
   }
 
-  /* Hero */
   .article-hero {
     display: flex;
     flex-direction: column;
@@ -354,20 +245,6 @@
     margin: 0;
   }
 
-  .members-strip {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 4px;
-  }
-
-  .members-label {
-    font-family: var(--font-sans);
-    font-size: 13px;
-    color: var(--ink-fade);
-  }
-
-  /* Body layout */
   .article-body-layout {
     display: grid;
     grid-template-columns: 1fr;
@@ -383,46 +260,43 @@
     gap: 20px;
   }
 
-  .body-paragraph {
-    font-family: var(--font-serif);
-    font-size: 18px;
-    line-height: 1.65;
-    color: var(--ink);
+  .loading-note {
+    font-family: var(--font-sans);
+    color: var(--ink-fade);
+    font-size: 14px;
     margin: 0;
-    position: relative;
   }
 
-  .inline-mark {
-    padding: 0 4px;
-    background: transparent; /* overridden inline */
-    border-left: 3px solid transparent; /* overridden inline */
-    padding-left: 8px;
-    cursor: default;
-  }
-
-  .mark-tooltip {
-    display: none;
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 0;
-    background-color: var(--surface);
-    border: 1px solid var(--brand-accent);
+  .external-source {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 24px;
+    border: 1px solid var(--rule);
     border-radius: var(--radius);
-    padding: 4px 10px;
-    font-family: var(--font-serif);
-    font-style: italic;
-    font-size: 13px;
-    color: var(--ink);
-    white-space: nowrap;
-    pointer-events: none;
-    z-index: 5;
+    background: var(--surface);
   }
 
-  .body-paragraph:hover .mark-tooltip {
-    display: block;
+  .external-source p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-family: var(--font-sans);
+    font-size: 14px;
   }
 
-  /* Article footer */
+  .external-link {
+    align-self: flex-start;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--brand-accent);
+    text-decoration: none;
+  }
+
+  .external-link:hover {
+    text-decoration: underline;
+  }
+
   .article-footer {
     display: flex;
     align-items: center;
@@ -464,16 +338,11 @@
     text-decoration: underline;
   }
 
-  /* Margin column */
   .article-margin {
     position: static;
     display: flex;
     flex-direction: column;
     gap: 16px;
-  }
-
-  .margin-section {
-    margin-bottom: 4px;
   }
 
   .margin-card {
@@ -496,36 +365,49 @@
     margin: 0;
   }
 
-  .members-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .member-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .member-item-name {
+  .margin-empty {
+    margin: 0;
     font-family: var(--font-sans);
     font-size: 12px;
-    color: var(--ink-soft);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    color: var(--ink-fade);
   }
 
-  .related-list {
+  .highlight-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
     display: flex;
     flex-direction: column;
+    gap: 12px;
   }
 
-  .margin-footer-card {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+  .highlight-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+
+  .highlight-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .highlight-author {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .highlight-item blockquote {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+    line-height: 1.4;
   }
 
   @media (min-width: 768px) {

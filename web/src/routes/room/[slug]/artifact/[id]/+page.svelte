@@ -8,16 +8,10 @@
 
   const artifact = $derived(data.artifact);
   const room = $derived(data.room);
-  const members = $derived(
-    (room?.members ?? []).map((m) => ({
-      pubkey: m.pubkey,
-      colorIndex: m.colorIndex,
-      name: m.pubkey.slice(0, 8),
-      joinedAt: m.joinedAt
-    }))
-  );
+  const podcast = $derived(data.podcast);
+  const roomMemberPubkeys = $derived(room?.members.map((m) => m.pubkey) ?? []);
 
-  const isPodcast = $derived(artifact?.type === 'podcast');
+  const isPodcast = $derived(artifact?.source === 'podcast');
 
   function handleBack() {
     if (room) {
@@ -43,9 +37,9 @@
     {/if}
   </div>
 {:else if isPodcast}
-  <PodcastView {artifact} {members} onBack={handleBack} />
+  <PodcastView {artifact} {podcast} {roomMemberPubkeys} onBack={handleBack} />
 {:else}
-  <ArticleView {artifact} {members} onBack={handleBack} />
+  <ArticleView {artifact} {roomMemberPubkeys} onBack={handleBack} />
 {/if}
 
 <style>

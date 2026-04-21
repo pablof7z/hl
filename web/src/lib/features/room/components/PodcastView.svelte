@@ -1,212 +1,231 @@
 <script lang="ts">
-  import { ndk } from '$lib/ndk/client';
+  import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
+  import type { ArtifactRecord } from '$lib/ndk/artifacts';
+  import type { PodcastArtifactData } from '$lib/features/podcasts/types';
+  import { ensureClientNdk, ndk } from '$lib/ndk/client';
+  import { buildArtifactHighlightFilters } from '$lib/ndk/highlights';
+  import { formatPodcastClock, formatPodcastDuration, formatPodcastReleaseDate } from '$lib/features/podcasts/format';
   import { User } from '$lib/ndk/ui/user';
-  import MemberStack from './MemberStack.svelte';
-  import PodcastPlayer from './PodcastPlayer.svelte';
-  import TimelineStamp from './TimelineStamp.svelte';
-  import { memberTint } from '../utils/colors';
-
-  type ArtifactType = 'book' | 'podcast' | 'article' | 'essay' | 'video';
-
-  interface ArtifactCardProps {
-    id: string;
-    type: ArtifactType;
-    title: string;
-    author?: string;
-    cover?: string;
-    highlightCount?: number;
-    discussionCount?: number;
-  }
-
-  interface Member {
-    pubkey: string;
-    colorIndex: number;
-    name: string;
-    joinedAt?: string;
-  }
 
   let {
     artifact,
-    onBack,
-    members
+    podcast = undefined,
+    roomMemberPubkeys,
+    onBack
   }: {
-    artifact: ArtifactCardProps;
+    artifact: ArtifactRecord;
+    podcast?: PodcastArtifactData | undefined;
+    roomMemberPubkeys: string[];
     onBack: () => void;
-    members: Member[];
   } = $props();
 
-  const seedHighlightSpans = $derived([
-    { start: '12:34', end: '13:15', memberIdx: 0 },
-    { start: '28:15', end: '29:00', memberIdx: 1 },
-    { start: '45:02', end: '46:30', memberIdx: 2 },
-    { start: '1:02:30', end: '1:03:45', memberIdx: 4 },
-    { start: '1:18:45', end: '1:20:00', memberIdx: 3 },
-    { start: '1:34:20', end: '1:35:30', memberIdx: 5 }
-  ].flatMap((s) => {
-    const m = members[s.memberIdx];
-    if (!m) return [];
-    return [{ start: s.start, end: s.end, colorIndex: m.colorIndex, memberName: m.name }];
-  }));
+  let audioEl = $state<HTMLAudioElement | null>(null);
+  let currentTime = $state(0);
+  let audioDuration = $state<number | null>(null);
 
-  const seedChapters = [
-    { time: '00:00', title: 'Introduction — The Sovereign Individual Framework' },
-    { time: '12:34', title: 'The Death of Distance' },
-    { time: '28:15', title: 'Digital Governance & Sovereignty' },
-    { time: '45:02', title: 'Antifragility in the Information Age' },
-    { time: '1:02:30', title: 'Economic Transition Analysis' },
-    { time: '1:18:45', title: 'Technical Architecture & Resilience' }
-  ];
+  onMount(() => {
+    void ensureClientNdk();
+  });
 
-  const seedTimeline = [
-    { timestamp: '12:34', memberIdx: 0, note: 'The sovereign individual framework here is core to the whole argument.' },
-    { timestamp: '28:15', memberIdx: 1, note: 'This point about digital governance predates the internet by a decade.' },
-    { timestamp: '45:02', memberIdx: 2, note: "Parallel to Taleb's antifragility concept." },
-    { timestamp: '1:02:30', memberIdx: 4, note: 'The economic transition analysis is still accurate.' },
-    { timestamp: '1:18:45', memberIdx: 3, note: 'Technical architecture analogy: sovereign = resilient system.' },
-    { timestamp: '1:34:20', memberIdx: 5, note: 'This historical framing is exactly right.' }
-  ];
+  const episodeTitle = $derived(podcast?.episodeTitle || artifact.title || 'Untitled');
+  const showTitle = $derived(podcast?.showTitle || artifact.podcastShowTitle || artifact.author);
+  const description = $derived(podcast?.description || artifact.description);
+  const image = $derived(podcast?.image || artifact.image);
+  const audioUrl = $derived(podcast?.audioUrl || artifact.audioUrl);
+  const publishedAt = $derived(podcast?.publishedAt || artifact.publishedAt);
+  const durationSeconds = $derived.by(() => {
+    const candidate = audioDuration ?? podcast?.durationSeconds ?? artifact.durationSeconds;
+    return typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0 ? candidate : null;
+  });
+  const transcriptSegments = $derived(podcast?.transcriptSegments ?? []);
+  const transcriptAvailable = $derived(transcriptSegments.length > 0);
 
-  const seedMemberProgress = [
-    { memberIdx: 0, progress: 87 },
-    { memberIdx: 1, progress: 64 },
-    { memberIdx: 2, progress: 45 },
-    { memberIdx: 3, progress: 92 },
-    { memberIdx: 4, progress: 73 },
-    { memberIdx: 5, progress: 31 }
-  ];
+  const highlightsSub = ndk.$subscribe(() => {
+    if (!browser) return undefined;
+    const filters = buildArtifactHighlightFilters([artifact], roomMemberPubkeys);
+    if (filters.length === 0) return undefined;
+    return { filters };
+  });
 
-  function memberAt(idx: number): Member | undefined {
-    return members[idx];
+  const highlightMarks = $derived.by(() => {
+    return highlightsSub.events
+      .map((event) => {
+        const startRaw = event.tagValue('start');
+        const start = startRaw ? Number(startRaw) : NaN;
+        if (!Number.isFinite(start) || start < 0) return null;
+        return {
+          id: event.id,
+          pubkey: event.pubkey,
+          startSeconds: start,
+          content: event.content
+        };
+      })
+      .filter((mark): mark is { id: string; pubkey: string; startSeconds: number; content: string } => mark !== null)
+      .toSorted((a, b) => a.startSeconds - b.startSeconds);
+  });
+
+  function seekTo(seconds: number) {
+    if (!audioEl) return;
+    audioEl.currentTime = Math.max(0, seconds);
+    void audioEl.play();
   }
 
-  let activeChapter = $state(0);
+  function syncPlaybackState() {
+    if (!audioEl) return;
+    currentTime = audioEl.currentTime;
+    if (Number.isFinite(audioEl.duration)) {
+      audioDuration = audioEl.duration;
+    }
+  }
 
-  function handleChapterClick(index: number) {
-    activeChapter = index;
-    console.log('seek to chapter:', seedChapters[index].time, seedChapters[index].title);
+  function markerLeft(seconds: number): string {
+    if (!durationSeconds || durationSeconds <= 0) return '0%';
+    return `${(seconds / durationSeconds) * 100}%`;
   }
 </script>
 
 <div class="podcast-view">
-  <!-- Back button -->
   <div class="podcast-nav">
     <button class="back-btn" type="button" onclick={onBack}>
       ← Back to room
     </button>
   </div>
 
-  <!-- Hero -->
   <header class="podcast-hero">
     <div class="hero-cover-wrap">
-      {#if artifact.cover}
-        <img class="hero-cover" src={artifact.cover} alt="" width="200" height="200" />
+      {#if image}
+        <img class="hero-cover" src={image} alt="" width="200" height="200" />
       {:else}
         <div class="hero-cover hero-cover-placeholder">🎙</div>
       {/if}
-      <button class="play-overlay" type="button" aria-label="Play podcast">
-        <span aria-hidden="true">▶</span>
-      </button>
     </div>
 
     <div class="hero-meta">
       <span class="podcast-kicker">PODCAST</span>
-      <h1 class="podcast-title">{artifact.title}</h1>
-      {#if artifact.author}
-        <p class="podcast-author">{artifact.author}</p>
+      <h1 class="podcast-title">{episodeTitle}</h1>
+      {#if showTitle}
+        <p class="podcast-author">{showTitle}</p>
       {/if}
-      <div class="members-strip">
-        <MemberStack {members} />
-        <span class="members-label">{members.length} members listening</span>
+      <div class="meta-row">
+        {#if durationSeconds}
+          <span>{formatPodcastDuration(durationSeconds)}</span>
+        {/if}
+        {#if publishedAt}
+          <span>{formatPodcastReleaseDate(publishedAt)}</span>
+        {/if}
+        <span>
+          {highlightMarks.length}
+          clipped {highlightMarks.length === 1 ? 'moment' : 'moments'}
+        </span>
       </div>
+      {#if description}
+        <p class="podcast-description">{description}</p>
+      {/if}
     </div>
   </header>
 
-  <!-- Player -->
-  <div class="player-section">
-    <PodcastPlayer
-      duration="1:45:20"
-      currentTime="0:00"
-      highlightSpans={seedHighlightSpans}
-    />
-  </div>
+  <section class="player-section">
+    {#if audioUrl}
+      <audio
+        bind:this={audioEl}
+        src={audioUrl}
+        controls
+        preload="metadata"
+        class="audio-element"
+        ontimeupdate={syncPlaybackState}
+        onloadedmetadata={syncPlaybackState}
+      ></audio>
 
-  <!-- Body: Timeline + Chapters/Progress -->
+      {#if durationSeconds && highlightMarks.length > 0}
+        <div class="marker-track" role="presentation">
+          {#each highlightMarks as mark (mark.id)}
+            <button
+              type="button"
+              class="marker"
+              style:left={markerLeft(mark.startSeconds)}
+              aria-label={`Jump to ${formatPodcastClock(mark.startSeconds)}`}
+              title={`Jump to ${formatPodcastClock(mark.startSeconds)}`}
+              onclick={() => seekTo(mark.startSeconds)}
+            ></button>
+          {/each}
+          {#if currentTime > 0}
+            <div
+              class="playhead"
+              style:left={markerLeft(currentTime)}
+              aria-hidden="true"
+            ></div>
+          {/if}
+        </div>
+      {/if}
+    {:else}
+      <div class="audio-unavailable">
+        <p>No playable audio was exposed by this source.</p>
+        {#if artifact.url}
+          <a class="external-link" href={artifact.url} target="_blank" rel="noreferrer noopener">
+            Open source ↗
+          </a>
+        {/if}
+      </div>
+    {/if}
+  </section>
+
   <div class="podcast-body">
-    <!-- Timeline (left 60%) -->
     <section class="timeline-section">
       <h2 class="section-title">Member Timestamps</h2>
-      <div class="timeline-list">
-        {#each seedTimeline as stamp, i (i)}
-          {@const m = memberAt(stamp.memberIdx)}
-          {#if m}
-            <TimelineStamp
-              timestamp={stamp.timestamp}
-              pubkey={m.pubkey}
-              memberColorIndex={m.colorIndex}
-              note={stamp.note}
-            />
-          {/if}
-        {/each}
-      </div>
-    </section>
-
-    <!-- Chapters + Progress (right 40%) -->
-    <div class="podcast-sidebar">
-      <!-- Chapters -->
-      <section class="chapters-section">
-        <h2 class="section-title">Chapters</h2>
-        <ul class="chapters-list" role="list">
-          {#each seedChapters as chapter, i (i)}
-            <li class="chapter-item" class:active={activeChapter === i}>
+      {#if highlightMarks.length === 0}
+        <p class="empty-note">No clipped moments from this room yet.</p>
+      {:else}
+        <ul class="timeline-list">
+          {#each highlightMarks as mark (mark.id)}
+            <li class="timeline-item">
               <button
-                class="chapter-btn"
                 type="button"
-                onclick={() => handleChapterClick(i)}
+                class="timestamp-btn"
+                onclick={() => seekTo(mark.startSeconds)}
+                title={`Jump to ${formatPodcastClock(mark.startSeconds)}`}
               >
-                <span class="chapter-time">{chapter.time}</span>
-                <span class="chapter-title">{chapter.title}</span>
+                {formatPodcastClock(mark.startSeconds)}
               </button>
+              <div class="timeline-body">
+                <User.Root {ndk} pubkey={mark.pubkey}>
+                  <span class="stamp-author"><User.Name field="displayName" /></span>
+                </User.Root>
+                {#if mark.content}
+                  <blockquote>{mark.content}</blockquote>
+                {/if}
+              </div>
             </li>
           {/each}
         </ul>
-      </section>
+      {/if}
+    </section>
 
-      <!-- Member Progress -->
-      <section class="progress-section">
-        <h2 class="section-title">Listening Progress</h2>
-        <div class="progress-grid">
-          {#each seedMemberProgress as mp (mp.memberIdx)}
-            {@const m = memberAt(mp.memberIdx)}
-            {#if m}
-              {@const color = memberTint(m.colorIndex)}
-              <User.Root {ndk} pubkey={m.pubkey}>
-                <div class="progress-item">
-                  <span
-                    class="room-member-avatar"
-                    style:--mav-size="24px"
-                    style:--mav-ring={color}
-                    style:--mav-ring-width="1.5px"
-                  >
-                    <User.Avatar />
-                  </span>
-                  <div class="progress-info">
-                    <span class="progress-name"><User.Name field="displayName" /></span>
-                    <div class="progress-bar-track">
-                      <div
-                        class="progress-bar-fill"
-                        style:width="{mp.progress}%"
-                        style:background={color}
-                      ></div>
-                    </div>
-                    <span class="progress-pct">{mp.progress}%</span>
-                  </div>
-                </div>
-              </User.Root>
-            {/if}
+    {#if transcriptAvailable}
+      <section class="transcript-section">
+        <h2 class="section-title">Transcript</h2>
+        <div class="transcript-list">
+          {#each transcriptSegments as segment (segment.id)}
+            <button
+              type="button"
+              class="transcript-segment"
+              disabled={segment.startSeconds == null}
+              onclick={() => segment.startSeconds != null && seekTo(segment.startSeconds)}
+            >
+              <span class="transcript-time">
+                {segment.startSeconds != null ? formatPodcastClock(segment.startSeconds) : '—'}
+              </span>
+              <span class="transcript-copy">
+                {#if segment.speaker}
+                  <span class="speaker">{segment.speaker}</span>
+                {/if}
+                <span>{segment.text}</span>
+              </span>
+            </button>
           {/each}
         </div>
       </section>
-    </div>
+    {/if}
   </div>
 </div>
 
@@ -245,7 +264,6 @@
     border-radius: var(--radius);
   }
 
-  /* Hero */
   .podcast-hero {
     display: flex;
     flex-direction: column;
@@ -273,26 +291,6 @@
     justify-content: center;
     font-size: 48px;
     border: 1px solid var(--rule);
-  }
-
-  .play-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--overlay-dark);
-    border: none;
-    border-radius: var(--radius);
-    cursor: pointer;
-    font-size: 32px;
-    color: var(--surface);
-    opacity: 0;
-    transition: opacity var(--transition);
-  }
-
-  .hero-cover-wrap:hover .play-overlay {
-    opacity: 1;
   }
 
   .hero-meta {
@@ -325,24 +323,102 @@
   .podcast-author {
     font-family: var(--font-sans);
     font-size: 15px;
-    font-weight: 400;
+    font-weight: 500;
     color: var(--ink-soft);
     margin: 0;
   }
 
-  .members-strip {
+  .meta-row {
     display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .members-label {
+    flex-wrap: wrap;
+    gap: 16px;
     font-family: var(--font-sans);
     font-size: 13px;
     color: var(--ink-fade);
   }
 
-  /* Body grid */
+  .podcast-description {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+
+  .player-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .audio-element {
+    width: 100%;
+  }
+
+  .marker-track {
+    position: relative;
+    height: 14px;
+  }
+
+  .marker {
+    position: absolute;
+    top: 0;
+    width: 3px;
+    height: 14px;
+    transform: translateX(-50%);
+    background-color: var(--brand-accent);
+    border: none;
+    border-radius: 2px;
+    padding: 0;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 120ms ease-out, transform 120ms ease-out;
+  }
+
+  .marker:hover {
+    opacity: 1;
+    transform: translateX(-50%) scaleY(1.25);
+  }
+
+  .playhead {
+    position: absolute;
+    top: -2px;
+    width: 2px;
+    height: 18px;
+    background-color: var(--ink);
+    pointer-events: none;
+  }
+
+  .audio-unavailable {
+    padding: 20px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .audio-unavailable p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-family: var(--font-sans);
+    font-size: 14px;
+  }
+
+  .external-link {
+    align-self: flex-start;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--brand-accent);
+    text-decoration: none;
+  }
+
+  .external-link:hover {
+    text-decoration: underline;
+  }
+
   .podcast-body {
     display: grid;
     grid-template-columns: 1fr;
@@ -360,141 +436,125 @@
     margin: 0 0 14px;
   }
 
-  /* Timeline */
-  .timeline-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  /* Sidebar */
-  .podcast-sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 28px;
-    position: static;
-  }
-
-  /* Chapters */
-  .chapters-list {
-    list-style: none;
+  .empty-note {
     margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .chapter-item {
-    border-bottom: 1px solid var(--rule-soft);
-  }
-
-  .chapter-item:last-child {
-    border-bottom: none;
-  }
-
-  .chapter-btn {
-    display: flex;
-    gap: 12px;
-    align-items: baseline;
-    width: 100%;
-    padding: 10px 0;
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    transition: color var(--transition);
-  }
-
-  .chapter-btn:hover .chapter-title {
-    color: var(--brand-accent);
-  }
-
-  .chapter-btn:focus-visible {
-    outline: 2px solid var(--brand-accent);
-    outline-offset: 2px;
-    border-radius: var(--radius);
-  }
-
-  .play-overlay:focus-visible {
-    outline: 2px solid var(--surface);
-    outline-offset: -4px;
-    opacity: 1;
-  }
-
-  .chapter-item.active .chapter-time,
-  .chapter-item.active .chapter-title {
-    color: var(--brand-accent);
-  }
-
-  .chapter-time {
-    font-family: var(--font-mono);
-    font-size: 11px;
     color: var(--ink-fade);
-    flex-shrink: 0;
-    min-width: 44px;
-  }
-
-  .chapter-item.active .chapter-time {
-    color: var(--brand-accent);
-  }
-
-  .chapter-title {
     font-family: var(--font-sans);
     font-size: 13px;
-    font-weight: 500;
-    color: var(--ink);
-    line-height: 1.4;
   }
 
-  /* Progress */
-  .progress-grid {
+  .timeline-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-  }
-
-  .progress-item {
-    display: flex;
-    align-items: center;
     gap: 10px;
   }
 
-  .progress-info {
-    flex: 1;
-    min-width: 0;
+  .timeline-item {
+    display: flex;
+    gap: 14px;
+    padding: 12px 16px;
+    border-left: 3px solid var(--h-amber);
+    background-color: var(--surface-warm);
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+
+  .timestamp-btn {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--brand-accent);
+    background: none;
+    border: none;
+    padding: 2px 0;
+    cursor: pointer;
+    align-self: flex-start;
+  }
+
+  .timestamp-btn:hover {
+    text-decoration: underline;
+  }
+
+  .timeline-body {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
+    min-width: 0;
   }
 
-  .progress-name {
+  .stamp-author {
     font-family: var(--font-sans);
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .timeline-body blockquote {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 14px;
     color: var(--ink-soft);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.5;
   }
 
-  .progress-bar-track {
-    height: 4px;
-    background-color: var(--surface-muted);
-    border-radius: 2px;
-    overflow: hidden;
+  .transcript-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 560px;
+    overflow-y: auto;
   }
 
-  .progress-bar-fill {
-    height: 100%;
-    border-radius: 2px;
-    transition: width var(--transition);
+  .transcript-segment {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: 12px;
+    padding: 10px 12px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    color: inherit;
   }
 
-  .progress-pct {
+  .transcript-segment:hover:not([disabled]) {
+    background: var(--surface);
+    border-color: var(--rule);
+  }
+
+  .transcript-segment[disabled] {
+    cursor: default;
+  }
+
+  .transcript-time {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--ink-fade);
-    align-self: flex-end;
+  }
+
+  .transcript-copy {
+    font-family: var(--font-serif);
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+
+  .speaker {
+    display: block;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
   }
 
   @media (min-width: 768px) {
@@ -509,11 +569,6 @@
 
     .podcast-body {
       grid-template-columns: 3fr 2fr;
-    }
-
-    .podcast-sidebar {
-      position: sticky;
-      top: 24px;
     }
   }
 </style>
