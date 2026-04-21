@@ -1,4 +1,5 @@
 import type { NDKEvent, NDKKind as NDKKindType } from '@nostr-dev-kit/ndk';
+import { decodeHtmlEntities } from '$lib/utils/html';
 
 export interface RoomMember {
   pubkey: string;
@@ -66,8 +67,12 @@ const ARTIFACT_TYPE_TAG_VALUES: Artifact['type'][] = [
 ];
 
 export function artifactFromThreadEvent(event: NDKEvent): Artifact {
-  const title = event.tagValue('title') || event.tagValue('name') || 'Untitled';
-  const author = event.tagValue('author') || event.tagValue('summary') || '';
+  const title = decodeHtmlEntities(
+    event.tagValue('title') || event.tagValue('name') || 'Untitled'
+  );
+  const author = decodeHtmlEntities(
+    event.tagValue('author') || event.tagValue('summary') || ''
+  );
   const url = event.tagValue('r') || event.tagValue('url') || '';
   const typeRaw = event.tagValue('type') || '';
   const type: Artifact['type'] = ARTIFACT_TYPE_TAG_VALUES.includes(typeRaw as Artifact['type'])

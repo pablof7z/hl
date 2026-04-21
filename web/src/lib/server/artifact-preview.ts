@@ -10,6 +10,7 @@ import {
 } from '$lib/ndk/artifacts';
 import { extractPodcastMetadataFromHtml } from '$lib/server/podcasts';
 import { fetchNoteWithAuthor } from '$lib/server/nostr';
+import { decodeHtmlEntities } from '$lib/utils/html';
 
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_HTML_CHARS = 250_000;
@@ -857,19 +858,7 @@ function resolveUrl(value: string, base: string): string | null {
 }
 
 function decodeHtml(value: string): string {
-  return value
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&uuml;/g, 'ü')
-    .replace(/&Uuml;/g, 'Ü')
-    .replace(/&ouml;/g, 'ö')
-    .replace(/&Ouml;/g, 'Ö')
-    .replace(/&auml;/g, 'ä')
-    .replace(/&Auml;/g, 'Ä')
-    .replace(/&nbsp;/g, ' ');
+  return decodeHtmlEntities(value);
 }
 
 function escapeRegex(value: string): string {

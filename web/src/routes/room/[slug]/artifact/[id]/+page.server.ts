@@ -2,6 +2,7 @@ import { NDKKind } from '@nostr-dev-kit/ndk';
 import { fetchEventsForSsr } from '$lib/server/nostr';
 import { GROUP_RELAY_URLS } from '$lib/ndk/config';
 import { getRoom, type Artifact } from '$lib/features/room/api/room';
+import { decodeHtmlEntities } from '$lib/utils/html';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params }) => {
@@ -23,8 +24,12 @@ export const load: PageServerLoad = async ({ params }) => {
     );
     const event = [...(events ?? [])][0];
     if (event) {
-      const title = event.tagValue('title') || event.tagValue('name') || 'Untitled';
-      const author = event.tagValue('author') || event.tagValue('summary') || '';
+      const title = decodeHtmlEntities(
+        event.tagValue('title') || event.tagValue('name') || 'Untitled'
+      );
+      const author = decodeHtmlEntities(
+        event.tagValue('author') || event.tagValue('summary') || ''
+      );
       const typeRaw = event.tagValue('type') || '';
       const type: Artifact['type'] =
         typeRaw === 'book' ||

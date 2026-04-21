@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { normalizeArtifactUrl, type ArtifactRecord } from '$lib/ndk/artifacts';
 import type { PodcastArtifactData, PodcastTranscriptSegment } from '$lib/features/podcasts/types';
+import { decodeHtmlEntities } from '$lib/utils/html';
 
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_HTML_CHARS = 350_000;
@@ -1245,13 +1246,7 @@ function normalizeWhitespace(value: string): string {
 }
 
 function decodeHtml(value: string): string {
-  return value
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ');
+  return decodeHtmlEntities(value);
 }
 
 function escapeRegex(value: string): string {
