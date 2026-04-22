@@ -25,19 +25,21 @@ export function displayName(profile: NDKUserProfile | undefined, fallback: strin
 }
 
 export function noteTitle(event: Pick<NostrEvent, 'content' | 'tags'>): string {
-  const titleTag = event.tags.find((tag) => tag[0] === 'title')?.[1];
+  const titleTag = event.tags?.find((tag) => tag[0] === 'title')?.[1];
   const fromTag = cleanText(titleTag);
   if (fromTag) return fromTag;
 
-  const firstLine = cleanText(event.content.split('\n').find((line) => line.trim().length > 0));
+  const content = typeof event.content === 'string' ? event.content : '';
+  const firstLine = cleanText(content.split('\n').find((line) => line.trim().length > 0));
   if (firstLine) return truncate(firstLine, 84);
 
   return 'Untitled note';
 }
 
 export function noteExcerpt(content: string, maxLength = 220): string {
+  const safeContent = typeof content === 'string' ? content : '';
   const normalized = cleanText(
-    content
+    safeContent
       .replace(/```[\s\S]*?```/g, ' ')
       .replace(/^\s{0,3}#{1,6}\s+/gm, '')
       .replace(/^\s*>\s?/gm, '')
@@ -144,6 +146,6 @@ export function profileIdentifier(profile: NDKUserProfile | undefined, fallback:
   return nip05 || fallback;
 }
 
-function tagValue(tags: string[][], name: string): string | undefined {
-  return tags.find((tag) => tag[0] === name)?.[1];
+function tagValue(tags: string[][] | undefined, name: string): string | undefined {
+  return tags?.find((tag) => tag[0] === name)?.[1];
 }

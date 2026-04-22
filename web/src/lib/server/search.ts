@@ -70,7 +70,15 @@ export async function searchRelayContent(
   const articleList = Array.from(articleEvents ?? []);
   const profilesByPubkey = await fetchProfilesByPubkeys(articleList.map((event) => event.pubkey));
   const articles = articleList
-    .map((event) => buildSearchArticleResult(event, profilesByPubkey[event.pubkey]))
+    .map((event) => {
+      try {
+        return buildSearchArticleResult(event, profilesByPubkey[event.pubkey]);
+      } catch (error) {
+        console.warn(`searchRelayContent: failed to build article ${event.id}`, error);
+        return null;
+      }
+    })
+    .filter((article): article is SearchArticleResult => Boolean(article))
     .slice(0, articleLimit);
 
   return {
