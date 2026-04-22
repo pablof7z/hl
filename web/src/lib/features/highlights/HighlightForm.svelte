@@ -73,7 +73,7 @@
     <fieldset class="fieldset">
       <legend class="fieldset-legend">Highlighted text</legend>
       <textarea
-        class="textarea w-full"
+        class="field-input"
         bind:value={quote}
         rows="5"
         maxlength="1200"
@@ -84,7 +84,7 @@
     <fieldset class="fieldset">
       <legend class="fieldset-legend">Context</legend>
       <textarea
-        class="textarea w-full"
+        class="field-input"
         bind:value={context}
         rows="3"
         maxlength="500"
@@ -95,7 +95,7 @@
     <fieldset class="fieldset">
       <legend class="fieldset-legend">Note</legend>
       <textarea
-        class="textarea w-full"
+        class="field-input"
         bind:value={note}
         rows="3"
         maxlength="280"
@@ -121,6 +121,23 @@
 </section>
 
 <style>
+  .field-input {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface-soft);
+    color: var(--text-strong);
+    font-size: 0.875rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 120ms ease;
+    resize: vertical;
+  }
+
+  .field-input::placeholder { color: var(--muted); }
+  .field-input:focus { border-color: var(--accent); }
+
   .highlight-form-shell {
     display: grid;
     gap: 1rem;

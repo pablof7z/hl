@@ -177,7 +177,7 @@
           type="text"
           bind:value={displayName}
           placeholder="Your name"
-          class="input w-full"
+          class="field-input"
           maxlength="64"
           autocomplete="name"
         />
@@ -189,7 +189,7 @@
           id="setup-bio"
           bind:value={bio}
           placeholder="Tell people a bit about yourself…"
-          class="textarea w-full"
+          class="field-input"
           rows="3"
           maxlength="500"
         ></textarea>
@@ -223,6 +223,23 @@
 </div>
 
 <style>
+  .field-input {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface-soft);
+    color: var(--text-strong);
+    font-size: 0.875rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 120ms ease;
+    resize: vertical;
+  }
+
+  .field-input::placeholder { color: var(--muted); }
+  .field-input:focus { border-color: var(--accent); }
+
   .setup-page {
     display: flex;
     justify-content: center;

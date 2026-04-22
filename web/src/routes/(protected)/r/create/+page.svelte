@@ -102,7 +102,7 @@
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Name</legend>
         <input
-          class="input w-full"
+          class="field-input"
           bind:value={name}
           placeholder="Signal over noise"
           maxlength="80"
@@ -128,7 +128,7 @@
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Description</legend>
         <textarea
-          class="textarea w-full"
+          class="field-input"
           bind:value={about}
           rows="5"
           maxlength="280"
@@ -139,7 +139,7 @@
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Cover image URL</legend>
         <input
-          class="input w-full"
+          class="field-input"
           bind:value={picture}
           placeholder="https://..."
           inputmode="url"
@@ -276,6 +276,28 @@
   .option-row small {
     color: var(--muted);
     font-size: 0.8rem;
+  }
+
+  .field-input {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface-soft);
+    color: var(--text-strong);
+    font-size: 0.875rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 120ms ease;
+    resize: vertical;
+  }
+
+  .field-input::placeholder {
+    color: var(--muted);
+  }
+
+  .field-input:focus {
+    border-color: var(--accent);
   }
 
   .slug-input {

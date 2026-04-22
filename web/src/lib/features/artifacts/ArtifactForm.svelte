@@ -154,7 +154,7 @@
   <form class="artifact-form" onsubmit={handlePreview}>
     <fieldset class="fieldset">
       <legend class="fieldset-legend">Type</legend>
-      <select class="select w-full" bind:value={source} onchange={(event) => handleSourceChange((event.currentTarget as HTMLSelectElement).value as typeof source)}>
+      <select class="field-select" bind:value={source} onchange={(event) => handleSourceChange((event.currentTarget as HTMLSelectElement).value as typeof source)}>
         <option value="article">Article</option>
         <option value="book">Book</option>
         <option value="podcast">Podcast</option>
@@ -167,7 +167,7 @@
     <fieldset class="fieldset">
       <legend class="fieldset-legend">URL or Nostr article</legend>
       <input
-        class="input w-full"
+        class="field-input"
         bind:value={reference}
         type="text"
         inputmode="url"
@@ -179,7 +179,7 @@
     <fieldset class="fieldset">
       <legend class="fieldset-legend">Why share it?</legend>
       <textarea
-        class="textarea w-full"
+        class="field-input"
         bind:value={note}
         rows="4"
         maxlength="280"
@@ -249,6 +249,39 @@
 </Dialog.Root>
 
 <style>
+  .field-input {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface-soft);
+    color: var(--text-strong);
+    font-size: 0.875rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 120ms ease;
+    resize: vertical;
+  }
+
+  .field-input::placeholder { color: var(--muted); }
+  .field-input:focus { border-color: var(--accent); }
+
+  .field-select {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface-soft);
+    color: var(--text-strong);
+    font-size: 0.875rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 120ms ease;
+    cursor: pointer;
+  }
+
+  .field-select:focus { border-color: var(--accent); }
+
   :global(.artifact-form-dialog) {
     padding: 1.15rem;
     background:

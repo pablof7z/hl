@@ -168,7 +168,7 @@
         <div class="panel-fields">
           <fieldset class="fieldset">
             <legend class="fieldset-legend">Community</legend>
-            <select class="select w-full" bind:value={selectedGroupId}>
+            <select class="field-select" bind:value={selectedGroupId}>
               {#each rooms as room (room.id)}
                 <option value={room.id}>{room.name}</option>
               {/each}
@@ -178,7 +178,7 @@
           <fieldset class="fieldset">
             <legend class="fieldset-legend">Why share it?</legend>
             <textarea
-              class="textarea w-full"
+              class="field-input"
               bind:value={note}
               rows="3"
               maxlength="280"
@@ -215,6 +215,39 @@
 </Dialog.Root>
 
 <style>
+  .field-input {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface-soft);
+    color: var(--text-strong);
+    font-size: 0.875rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 120ms ease;
+    resize: vertical;
+  }
+
+  .field-input::placeholder { color: var(--muted); }
+  .field-input:focus { border-color: var(--accent); }
+
+  .field-select {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface-soft);
+    color: var(--text-strong);
+    font-size: 0.875rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 120ms ease;
+    cursor: pointer;
+  }
+
+  .field-select:focus { border-color: var(--accent); }
+
   :global(.community-share-trigger) {
     display: inline-flex;
     align-items: center;

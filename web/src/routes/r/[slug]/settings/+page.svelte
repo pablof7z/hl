@@ -233,17 +233,17 @@
         <section class="form-card">
           <fieldset class="fieldset">
             <legend class="fieldset-legend">Name</legend>
-            <input class="input w-full" bind:value={genName} maxlength="80" autocomplete="off" />
+            <input class="field-input" bind:value={genName} maxlength="80" autocomplete="off" />
           </fieldset>
 
           <fieldset class="fieldset">
             <legend class="fieldset-legend">Description</legend>
-            <textarea class="textarea w-full" bind:value={genAbout} rows="4" maxlength="280"></textarea>
+            <textarea class="field-input" bind:value={genAbout} rows="4" maxlength="280"></textarea>
           </fieldset>
 
           <fieldset class="fieldset">
             <legend class="fieldset-legend">Cover image URL</legend>
-            <input class="input w-full" bind:value={genPicture} placeholder="https://…" inputmode="url" autocomplete="off" />
+            <input class="field-input" bind:value={genPicture} placeholder="https://…" inputmode="url" autocomplete="off" />
           </fieldset>
         </section>
 
@@ -354,7 +354,7 @@
             <legend class="fieldset-legend">Pubkey or npub</legend>
             <div class="invite-row">
               <input
-                class="input"
+                class="field-input"
                 bind:value={inviteInput}
                 placeholder="npub1… or hex pubkey"
                 autocomplete="off"
@@ -396,6 +396,23 @@
 {/if}
 
 <style>
+  .field-input {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface-soft);
+    color: var(--text-strong);
+    font-size: 0.875rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 120ms ease;
+    resize: vertical;
+  }
+
+  .field-input::placeholder { color: var(--muted); }
+  .field-input:focus { border-color: var(--accent); }
+
   .settings-wrap {
     display: grid;
     gap: 1.5rem;
