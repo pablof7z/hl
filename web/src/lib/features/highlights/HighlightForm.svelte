@@ -107,7 +107,7 @@
       <button class="btn btn-primary" type="submit" disabled={!canPublish}>
         {publishing ? 'Saving…' : 'Save highlight'}
       </button>
-      <span class="share-target">Sharing into `/community/{groupId}`</span>
+      <span class="share-target">Sharing into `/r/{groupId}`</span>
     </div>
 
     {#if errorMessage}

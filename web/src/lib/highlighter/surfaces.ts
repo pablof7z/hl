@@ -27,7 +27,7 @@ export type LaunchCard = {
 
 export const launchCards: LaunchCard[] = [
   {
-    href: '/community',
+    href: '/rooms',
     label: 'Circles',
     description: 'Your NIP-29 circles, creation flow, and circle-specific reading surfaces.',
     status: 'Foundation'
@@ -74,7 +74,7 @@ export const artifactSpec: SurfaceSpec = {
     'This route will become the place where metadata, highlights, discussion, and saving flows converge around one shared source.',
   status: 'Milestone 1 scaffold',
   actions: [
-    { href: '/community', label: 'Back to circles', tone: 'secondary' },
+    { href: '/rooms', label: 'Back to rooms', tone: 'secondary' },
     { href: '/r/create', label: 'Create a test group' }
   ],
   sections: [
@@ -103,7 +103,7 @@ export const discussionSpec: SurfaceSpec = {
     'Artifact and highlight discussion both resolve to NIP-22 comment threads, with root scope and parent scope kept separate.',
   status: 'Milestone 1 scaffold',
   actions: [
-    { href: '/community', label: 'Back to circles', tone: 'secondary' },
+    { href: '/rooms', label: 'Back to rooms', tone: 'secondary' },
     { href: '/discover', label: 'See public surfaces' }
   ],
   sections: [
@@ -132,7 +132,7 @@ export const discoverSpec: SurfaceSpec = {
     'This route is the guest-friendly entrance to Highlighter and the future seed for recommendations, search, and public circle growth loops.',
   status: 'Milestone 1 scaffold',
   actions: [
-    { href: '/community', label: 'View circle home', tone: 'secondary' },
+    { href: '/rooms', label: 'Back to rooms', tone: 'secondary' },
     { href: '/onboarding', label: 'Create a profile' }
   ],
   sections: [

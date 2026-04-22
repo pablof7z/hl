@@ -104,7 +104,7 @@
       <a class="primary-action" href="/onboarding">{primaryActionLabel()}</a>
     {/if}
 
-    <a class="secondary-action" href="/community">All communities</a>
+    <a class="secondary-action" href="/rooms">All communities</a>
   </div>
 
   {#if joinError}

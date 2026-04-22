@@ -42,7 +42,7 @@
       {#if highlightCount > 0}
         <span>{highlightCount} highlight{highlightCount === 1 ? '' : 's'}</span>
       {/if}
-      <span>/community/{artifact.groupId}/content/{artifact.id}</span>
+      <span>/r/{artifact.groupId}/e/{artifact.id}</span>
     </div>
   </div>
 </a>

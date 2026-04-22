@@ -109,7 +109,7 @@ export function artifactIdFromReferenceKey(referenceKey: string): string {
 }
 
 export function artifactPath(groupId: string, artifactId: string): string {
-  return `/community/${encodeURIComponent(groupId)}/content/${encodeURIComponent(artifactId)}`;
+  return `/r/${encodeURIComponent(groupId)}/e/${encodeURIComponent(artifactId)}`;
 }
 
 export function artifactHighlightReferenceKey(

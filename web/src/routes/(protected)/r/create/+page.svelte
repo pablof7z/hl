@@ -72,7 +72,7 @@
         visibility
       });
 
-      await goto(`/community/${result.id}`, { invalidateAll: true });
+      await goto(`/r/${result.id}`, { invalidateAll: true });
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : 'Could not create the community.';
     } finally {
@@ -113,7 +113,7 @@
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Community URL</legend>
         <div class="slug-input">
-          <span>/community/</span>
+          <span>/r/</span>
           <input
             value={communityId}
             oninput={handleCommunityIdInput}

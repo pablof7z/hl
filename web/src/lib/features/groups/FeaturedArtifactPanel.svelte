@@ -65,7 +65,7 @@
   </a>
 
   <div class="featured-actions">
-    <a href={`/community/${artifact.groupId}/content/${artifact.id}/discussion`}>Discussion</a>
+    <a href={`/r/${artifact.groupId}/e/${artifact.id}`}>Discussion</a>
     <a href={artifact.url} target="_blank" rel="noreferrer">Visit source</a>
   </div>
 </article>

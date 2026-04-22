@@ -582,7 +582,7 @@
 
       <div class="actions">
         <a class="primary-link" href={artifact.url} target="_blank" rel="noreferrer">Open source</a>
-        <a href={`/community/${community.id}`}>Back to {community.name}</a>
+        <a href={`/r/${community.id}`}>Back to {community.name}</a>
         <button
           type="button"
           class:active={viewMode === 'discussion'}
