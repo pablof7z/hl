@@ -79,11 +79,17 @@
   }
 </script>
 
-<div class="discussion-panel" class:compact>
+<div class="grid gap-4" class:!gap-3={compact} class:text-[0.92em]={compact}>
   {#if showHeader}
-    <div class="discussion-header">
-      <h3>Discussion</h3>
-      <span class="comment-count">{allComments.length} comment{allComments.length === 1 ? '' : 's'}</span>
+    <div class="flex flex-wrap items-baseline gap-2.5">
+      <h3
+        class="m-0 font-serif leading-tight tracking-tight text-base-content"
+        class:text-[1.35rem]={!compact}
+        class:text-[1.05rem]={compact}
+      >Discussion</h3>
+      <span class="inline-flex min-h-7 items-center rounded-full bg-base-200 px-2.5 text-xs font-semibold text-base-content/60">
+        {allComments.length} comment{allComments.length === 1 ? '' : 's'}
+      </span>
     </div>
   {/if}
 
@@ -98,94 +104,22 @@
   {#if visibleThreads.length > 0}
     <CommentThreadRenderer threads={visibleThreads} onReply={handleReply} />
   {:else if commentFeed.eosed}
-    <div class="discussion-empty">
-      <p>No comments yet. Start the conversation.</p>
+    <div class="rounded-2xl border border-base-300 bg-base-200 px-4 py-3.5">
+      <p class="m-0 text-sm text-base-content/60">No comments yet. Start the conversation.</p>
     </div>
   {:else}
-    <div class="discussion-empty">
-      <p>Loading comments…</p>
+    <div class="rounded-2xl border border-base-300 bg-base-200 px-4 py-3.5">
+      <p class="m-0 text-sm text-base-content/60">Loading comments…</p>
     </div>
   {/if}
 
   {#if hiddenCount > 0}
-    <button type="button" class="view-all" onclick={() => (showAll = true)}>
+    <button
+      type="button"
+      class="inline-flex min-h-8 w-fit cursor-pointer items-center rounded-full border-0 bg-base-200 px-3.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+      onclick={() => (showAll = true)}
+    >
       View all ({threads.length} threads)
     </button>
   {/if}
 </div>
-
-<style>
-  .discussion-panel {
-    display: grid;
-    gap: 1rem;
-  }
-
-  .discussion-panel.compact {
-    gap: 0.7rem;
-    font-size: 0.92em;
-  }
-
-  .discussion-header {
-    display: flex;
-    align-items: baseline;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-  }
-
-  h3 {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 1.35rem;
-    line-height: 1.15;
-    letter-spacing: -0.02em;
-  }
-
-  .compact h3 {
-    font-size: 1.05rem;
-  }
-
-  .comment-count {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.8rem;
-    padding: 0 0.65rem;
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--muted);
-    font-size: 0.76rem;
-    font-weight: 600;
-  }
-
-  .discussion-empty {
-    padding: 0.85rem 1rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 1rem;
-    background: var(--surface-soft);
-  }
-
-  .discussion-empty p {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.88rem;
-  }
-
-  .view-all {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2rem;
-    padding: 0 0.85rem;
-    border: 0;
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--accent);
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    width: fit-content;
-  }
-
-  .view-all:hover {
-    background: color-mix(in srgb, var(--accent) 10%, white);
-  }
-</style>
