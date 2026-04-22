@@ -88,8 +88,7 @@
     { href: '/me/highlights', label: 'Highlights' },
     { href: '/me/communities', label: 'Communities' },
     { href: '/me/for-later', label: 'For Later' },
-    { href: '/me/recommended', label: 'Recommended' },
-    { href: '/me/synthesis', label: 'Synthesis' }
+    { href: '/me/recommended', label: 'Recommended' }
   ];
 
   function isActive(href: string): boolean {

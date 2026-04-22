@@ -13,11 +13,17 @@
 </svelte:head>
 
 <section class="discover-page">
-  <header class="discover-hero">
-    <h1>Discover rooms</h1>
-    <a class="create-link" href="/community/create">
-      {currentUser ? 'Create a room' : 'Sign in to create'}
-    </a>
+  <header class="discover-header">
+    <div class="page-kicker">— discover</div>
+    <h1 class="page-title">Public <em>rooms.</em></h1>
+    <p class="page-lead">
+      Open reading groups anyone can join — find a room that matches your interests.
+    </p>
+    <div class="header-actions">
+      <a class="btn-create" href="/community/create">
+        {currentUser ? 'Create a room' : 'Sign in to create'}
+      </a>
+    </div>
   </header>
 
   <CommunityGrid
@@ -33,40 +39,72 @@
 
 <style>
   .discover-page {
-    display: grid;
-    gap: 1.5rem;
-    padding: 1.5rem 0 3rem;
+    padding: 56px 0 80px;
   }
 
-  .discover-hero {
-    max-width: 44rem;
+  .discover-header {
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 44px;
   }
 
-  h1 {
-    margin: 0;
-    color: var(--text-strong);
+  .page-kicker {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--brand-accent);
+    margin-bottom: 14px;
+  }
+
+  .page-title {
     font-family: var(--font-serif);
-    font-size: clamp(2.2rem, 5vw, 3.8rem);
-    line-height: 0.98;
-    letter-spacing: -0.04em;
+    font-weight: 400;
+    font-size: clamp(44px, 6vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    margin: 0 0 14px;
   }
 
-  .create-link {
+  .page-title em {
+    font-style: italic;
+    color: var(--brand-accent);
+  }
+
+  .page-lead {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 19px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 52ch;
+    margin: 0 0 24px;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .btn-create {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 2.9rem;
-    margin-top: 1.2rem;
-    padding: 0 1rem;
+    padding: 10px 22px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
     border-radius: 999px;
-    background: var(--accent);
-    color: white;
-    font-weight: 600;
-    transition: background 120ms ease;
+    background: var(--ink);
+    color: var(--surface);
+    transition: background 200ms ease;
   }
 
-  .create-link:hover,
-  .create-link:focus-visible {
-    background: var(--accent-hover);
+  .btn-create:hover,
+  .btn-create:focus-visible {
+    background: var(--brand-accent);
   }
 </style>

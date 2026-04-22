@@ -17,39 +17,42 @@
 
 <section class="search-page">
   <header class="search-header">
+    <div class="search-kicker">— search</div>
     {#if data.results.query.length < MIN_SEARCH_QUERY_LENGTH}
-      <h1>Search</h1>
+      <h1 class="search-title">Search.</h1>
     {:else}
-      <h1>Results for "{data.results.query}"</h1>
-      <p class="search-summary">
-        {totalCount} result{totalCount === 1 ? '' : 's'} · {communityCount} room{communityCount === 1
-          ? ''
-          : 's'} · {articleCount} article{articleCount === 1 ? '' : 's'}
-      </p>
+      <h1 class="search-title">Results for <em>"{data.results.query}"</em></h1>
     {/if}
+    <p class="search-lead">Find rooms and articles across Highlighter.</p>
   </header>
 
   {#if data.results.query.length < MIN_SEARCH_QUERY_LENGTH}
-    <section class="search-message">
+    <div class="search-message">
       <p class="message-title">Type at least {MIN_SEARCH_QUERY_LENGTH} characters in the header search.</p>
       <p class="message-copy">
         Room names, route slugs, article titles, summaries, and article body text are all searchable.
       </p>
-    </section>
+    </div>
   {:else if !hasResults}
-    <section class="search-message">
+    <div class="search-message">
       <p class="message-title">Nothing matched "{data.results.query}".</p>
       <p class="message-copy">
         Try a broader phrase, a room route slug, or a few words from the article title or body.
       </p>
-    </section>
+    </div>
   {:else}
+    <p class="search-summary">
+      {totalCount} result{totalCount === 1 ? '' : 's'} · {communityCount} room{communityCount === 1
+        ? ''
+        : 's'} · {articleCount} article{articleCount === 1 ? '' : 's'}
+    </p>
+
     {#if data.results.communities.length > 0}
       <section class="result-section">
         <div class="result-section-head">
-          <div>
-            <h2>{data.results.communities.length} public room{data.results.communities.length === 1 ? '' : 's'}</h2>
-          </div>
+          <h2 class="result-section-title">
+            {data.results.communities.length} public room{data.results.communities.length === 1 ? '' : 's'}
+          </h2>
         </div>
 
         <div class="community-grid">
@@ -63,9 +66,9 @@
     {#if data.results.articles.length > 0}
       <section class="result-section">
         <div class="result-section-head">
-          <div>
-            <h2>{data.results.articles.length} Nostr article{data.results.articles.length === 1 ? '' : 's'}</h2>
-          </div>
+          <h2 class="result-section-title">
+            {data.results.articles.length} Nostr article{data.results.articles.length === 1 ? '' : 's'}
+          </h2>
         </div>
 
         <div class="article-results">
@@ -77,8 +80,8 @@
                   <span>By {article.authorName}</span>
                 </div>
 
-                <h3>{article.title}</h3>
-                <p>{article.summary}</p>
+                <h3 class="article-result-title">{article.title}</h3>
+                <p class="article-result-summary">{article.summary}</p>
               </div>
 
               {#if article.image}
@@ -95,59 +98,90 @@
 <style>
   .search-page {
     display: grid;
-    gap: 1.5rem;
-    padding: 1.25rem 0 3rem;
+    gap: 2rem;
+    padding: 56px 0 80px;
   }
+
+  /* ── Header ── */
 
   .search-header {
-    display: grid;
-    gap: 0.35rem;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 12px;
   }
 
-  h1,
-  h2,
-  h3 {
+  .search-kicker {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--brand-accent);
+    margin-bottom: 14px;
+  }
+
+  .search-title {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: clamp(44px, 6vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    margin: 0 0 14px;
+  }
+
+  .search-title em {
+    font-style: italic;
+    color: var(--brand-accent);
+  }
+
+  .search-lead {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 19px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 52ch;
     margin: 0;
-    color: var(--text-strong);
   }
 
-  h1 {
-    font-size: clamp(1.8rem, 3vw, 2.5rem);
-    line-height: 1.08;
-    letter-spacing: -0.03em;
-  }
+  /* ── Summary line ── */
 
-  h2 {
-    font-size: 1.5rem;
-    line-height: 1.15;
-  }
-
-  h3 {
-    font-size: 1.1rem;
-    line-height: 1.3;
-  }
-
-  .search-summary,
-  .message-copy {
+  .search-summary {
     margin: 0;
-    color: var(--muted);
-    line-height: 1.55;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-fade);
   }
+
+  /* ── Empty / message states ── */
 
   .search-message {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 44px 32px;
     max-width: 40rem;
-    padding: 1.5rem;
-    border: 1px solid var(--border);
-    border-radius: 1.3rem;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent);
   }
 
   .message-title {
-    margin: 0;
-    color: var(--text-strong);
-    font-size: 1.05rem;
-    font-weight: 700;
+    margin: 0 0 8px;
+    font-family: var(--font-serif);
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--ink);
   }
+
+  .message-copy {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+
+  /* ── Result sections ── */
 
   .result-section {
     display: grid;
@@ -162,14 +196,29 @@
     flex-wrap: wrap;
   }
 
-  .community-grid,
-  .article-results {
-    display: grid;
-    gap: 1rem;
+  .result-section-title {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    font-size: clamp(1.5rem, 2.5vw, 1.8rem);
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+    margin: 0;
   }
 
+  /* ── Community grid ── */
+
   .community-grid {
+    display: grid;
+    gap: 1rem;
     grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  }
+
+  /* ── Article results ── */
+
+  .article-results {
+    display: grid;
+    gap: 0;
   }
 
   .article-result-card {
@@ -177,28 +226,26 @@
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 1rem;
     align-items: start;
-    padding: 1rem 0;
-    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--rule);
     color: inherit;
     text-decoration: none;
     transition: background 120ms ease;
   }
 
+  .article-result-card:first-child {
+    border-top: 1px solid var(--rule);
+  }
+
   .article-result-card:hover,
   .article-result-card:focus-visible {
-    background: color-mix(in srgb, var(--accent) 5%, transparent);
+    background: color-mix(in srgb, var(--brand-accent) 4%, transparent);
   }
 
   .article-result-copy {
     display: grid;
-    gap: 0.6rem;
+    gap: 0.5rem;
     min-width: 0;
-  }
-
-  .article-result-copy p {
-    margin: 0;
-    color: var(--muted);
-    line-height: 1.6;
   }
 
   .article-result-meta {
@@ -212,18 +259,39 @@
     align-items: center;
     min-height: 1.8rem;
     padding: 0 0.65rem;
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--muted);
-    font-size: 0.78rem;
-    font-weight: 600;
+    border-radius: var(--radius-pill, 999px);
+    background: var(--surface-muted, var(--surface));
+    border: 1px solid var(--rule);
+    color: var(--ink-fade);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .article-result-title {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    font-size: 1.15rem;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .article-result-summary {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--ink-soft);
   }
 
   .article-result-card img {
     width: 6rem;
     height: 4.5rem;
     object-fit: cover;
-    border-radius: 0.6rem;
+    border-radius: var(--radius);
   }
 
   @media (max-width: 760px) {
