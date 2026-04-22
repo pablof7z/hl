@@ -161,8 +161,8 @@
   <Dialog.Root bind:open>
     {#if showTrigger}
       <div class="auth-guest-actions">
-        <button class="auth-btn-outline" type="button" onclick={startJoin}>Join</button>
-        <Dialog.Trigger class="auth-btn-primary">Log in</Dialog.Trigger>
+        <button class="btn btn-ghost" type="button" onclick={startJoin}>Join</button>
+        <Dialog.Trigger class="btn btn-primary">Log in</Dialog.Trigger>
       </div>
     {/if}
 

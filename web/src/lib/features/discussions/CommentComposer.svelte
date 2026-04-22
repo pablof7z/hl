@@ -74,6 +74,7 @@
     {/if}
 
     <textarea
+      class="textarea w-full"
       bind:value={content}
       rows="3"
       maxlength="2000"
@@ -84,7 +85,7 @@
     <div class="composer-footer">
       <button
         type="button"
-        class="submit-button"
+        class="btn btn-primary btn-sm"
         disabled={!content.trim() || publishing}
         onclick={handleSubmit}
       >
@@ -142,21 +143,8 @@
   }
 
   textarea {
-    width: 100%;
     min-height: 5rem;
-    padding: 0.75rem 0.9rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 0.85rem;
-    background: white;
-    color: var(--text);
-    font-size: 0.9rem;
-    line-height: 1.55;
     resize: vertical;
-  }
-
-  textarea:focus {
-    border-color: var(--accent);
-    outline: none;
   }
 
   .composer-footer {
@@ -164,25 +152,6 @@
     align-items: center;
     gap: 0.6rem;
     flex-wrap: wrap;
-  }
-
-  .submit-button {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.2rem;
-    padding: 0 1rem;
-    border: 0;
-    border-radius: 999px;
-    background: var(--accent);
-    color: white;
-    font-size: 0.84rem;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
-  .submit-button:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
 
   .composer-error {

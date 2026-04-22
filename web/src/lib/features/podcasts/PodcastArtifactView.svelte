@@ -565,14 +565,14 @@
 
       <div class="meta-row">
         {#if durationSeconds}
-          <span>{formatPodcastDuration(durationSeconds)}</span>
+          <span class="badge badge-ghost badge-sm">{formatPodcastDuration(durationSeconds)}</span>
         {/if}
         {#if publishedAt}
-          <span>{formatPodcastReleaseDate(publishedAt)}</span>
+          <span class="badge badge-ghost badge-sm">{formatPodcastReleaseDate(publishedAt)}</span>
         {/if}
-        <span>{highlights.length} clipped moment{highlights.length === 1 ? '' : 's'}</span>
+        <span class="badge badge-ghost badge-sm">{highlights.length} clipped moment{highlights.length === 1 ? '' : 's'}</span>
         {#if clippedPeopleCount > 0}
-          <span>{clippedPeopleCount} people</span>
+          <span class="badge badge-ghost badge-sm">{clippedPeopleCount} people</span>
         {/if}
       </div>
 
@@ -581,16 +581,17 @@
       {/if}
 
       <div class="actions">
-        <a class="primary-link" href={artifact.url} target="_blank" rel="noreferrer">Open source</a>
-        <a href={`/r/${room.id}`}>Back to {room.name}</a>
+        <a class="btn btn-primary btn-xs" href={artifact.url} target="_blank" rel="noreferrer">Open source</a>
+        <a class="btn btn-ghost btn-xs" href={`/r/${room.id}`}>Back to {room.name}</a>
         <button
           type="button"
-          class:active={viewMode === 'discussion'}
+          class="btn btn-ghost btn-xs"
+          class:btn-active={viewMode === 'discussion'}
           onclick={() => (viewMode = viewMode === 'discussion' ? 'listen' : 'discussion')}
         >
           Discussion
         </button>
-        <button type="button" class:active={savedForLater} disabled={savingForLater} onclick={onToggleForLater}>
+        <button type="button" class="btn btn-ghost btn-xs" class:btn-active={savedForLater} disabled={savingForLater} onclick={onToggleForLater}>
           {savingForLater
             ? 'Updating…'
             : !currentUser
@@ -629,21 +630,21 @@
     {#if clipMode === 'preview'}
       <div class="preview-badge">
         <span>Previewing clip</span>
-        <button type="button" class="secondary-button" onclick={stopPreview}>Stop preview</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick={stopPreview}>Stop preview</button>
       </div>
     {/if}
 
     <div class="player-topline">
-      <button type="button" class="play-button" disabled={!playbackAvailable} onclick={togglePlayback}>
+      <button type="button" class="btn btn-primary" disabled={!playbackAvailable} onclick={togglePlayback}>
         {isPlaying ? 'Pause' : 'Play'}
       </button>
 
       {#if playbackAvailable}
         <div class="mark-buttons">
-          <button type="button" class="mark-button" onclick={handleMarkIn} title="Mark clip start (I)">
+          <button type="button" class="btn btn-ghost btn-sm mark-button" onclick={handleMarkIn} title="Mark clip start (I)">
             Mark In
           </button>
-          <button type="button" class="mark-button" onclick={handleMarkOut} title="Mark clip end (O)">
+          <button type="button" class="btn btn-ghost btn-sm mark-button" onclick={handleMarkOut} title="Mark clip end (O)">
             Mark Out
           </button>
         </div>
@@ -793,6 +794,7 @@
 
     <div class="composer-actions">
       <textarea
+        class="textarea w-full"
         bind:value={note}
         rows="3"
         maxlength="280"
@@ -804,10 +806,10 @@
       {/if}
 
       <div class="composer-buttons">
-        <button class="primary-button" type="button" disabled={!canPublishClip} onclick={publishClip}>
+        <button class="btn btn-primary btn-sm" type="button" disabled={!canPublishClip} onclick={publishClip}>
           {publishing ? 'Saving…' : 'Save clip'}
         </button>
-        <button class="secondary-button" type="button" onclick={clearClip}>Clear selection</button>
+        <button class="btn btn-ghost btn-sm" type="button" onclick={clearClip}>Clear selection</button>
       </div>
 
       {#if publishError}
@@ -827,7 +829,7 @@
         <h2>{transcriptAvailable ? 'Follow the episode in text' : 'Transcript unavailable'}</h2>
       </div>
       {#if transcriptUrl}
-        <a href={transcriptUrl} target="_blank" rel="noreferrer">Open transcript source</a>
+        <a class="btn btn-ghost btn-xs" href={transcriptUrl} target="_blank" rel="noreferrer">Open transcript source</a>
       {/if}
     </div>
 
@@ -875,9 +877,9 @@
       </div>
 
       <div class="sort-group">
-        <button type="button" class:active={sortMode === 'top'} onclick={() => (sortMode = 'top')}>Most clipped</button>
-        <button type="button" class:active={sortMode === 'newest'} onclick={() => (sortMode = 'newest')}>Newest</button>
-        <button type="button" class:active={sortMode === 'timeline'} onclick={() => (sortMode = 'timeline')}>Timeline</button>
+        <button type="button" class="btn btn-ghost btn-xs" class:btn-active={sortMode === 'top'} onclick={() => (sortMode = 'top')}>Most clipped</button>
+        <button type="button" class="btn btn-ghost btn-xs" class:btn-active={sortMode === 'newest'} onclick={() => (sortMode = 'newest')}>Newest</button>
+        <button type="button" class="btn btn-ghost btn-xs" class:btn-active={sortMode === 'timeline'} onclick={() => (sortMode = 'timeline')}>Timeline</button>
       </div>
     </div>
 
@@ -998,43 +1000,9 @@
     flex-wrap: wrap;
   }
 
-  .meta-row span,
-  .actions a,
-  .actions button,
-  .section-head a,
-  .sort-group button,
-  .primary-button,
-  .secondary-button {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2rem;
-    padding: 0 0.75rem;
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--text);
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-decoration: none;
-    border: 0;
-  }
-
-  .actions button,
-  .sort-group button,
-  .primary-button,
-  .secondary-button,
-  .play-button,
   .clip-marker,
   .transcript-segment {
     cursor: pointer;
-  }
-
-  .primary-link,
-  .actions button.active,
-  .sort-group button.active,
-  .primary-button,
-  .play-button {
-    background: var(--accent);
-    color: white;
   }
 
   .player-shell,
@@ -1049,19 +1017,6 @@
     gap: 1rem;
     align-items: center;
     flex-wrap: wrap;
-  }
-
-  .play-button {
-    min-height: 3rem;
-    padding: 0 1.2rem;
-    border-radius: 999px;
-    border: 0;
-    font-weight: 700;
-  }
-
-  .play-button:disabled {
-    opacity: 0.55;
-    cursor: default;
   }
 
   .clock-row {
@@ -1138,13 +1093,7 @@
   }
 
   textarea {
-    width: 100%;
     min-height: 7rem;
-    padding: 0.9rem 1rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 1rem;
-    background: white;
-    color: var(--text);
     resize: vertical;
   }
 
@@ -1157,10 +1106,6 @@
     color: var(--text-strong);
     font-family: var(--font-serif);
     line-height: 1.6;
-  }
-
-  .secondary-button {
-    background: var(--surface-soft);
   }
 
   .feedback.error {
@@ -1272,23 +1217,9 @@
     gap: 0.4rem;
   }
 
-  .mark-button {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.4rem;
-    padding: 0 0.85rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--text);
-    font-size: 0.8rem;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
   .mark-button:hover {
-    border-color: var(--accent);
-    color: var(--accent);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
   }
 
   .zoomed-timeline-shell {

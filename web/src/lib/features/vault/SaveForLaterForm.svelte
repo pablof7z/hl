@@ -108,7 +108,7 @@
   <form class="save-form" onsubmit={handlePreview}>
     <fieldset class="fieldset">
       <legend class="fieldset-legend">Type</legend>
-      <select class="field-select" bind:value={source} onchange={(event) => handleSourceChange((event.currentTarget as HTMLSelectElement).value as typeof source)}>
+      <select class="select w-full" bind:value={source} onchange={(event) => handleSourceChange((event.currentTarget as HTMLSelectElement).value as typeof source)}>
         <option value="article">Article</option>
         <option value="book">Book</option>
         <option value="podcast">Podcast</option>
@@ -121,7 +121,7 @@
     <fieldset class="fieldset">
       <legend class="fieldset-legend">URL or Nostr article</legend>
       <input
-        class="field-input"
+        class="input w-full"
         bind:value={reference}
         type="text"
         inputmode="url"
@@ -188,39 +188,6 @@
 </section>
 
 <style>
-  .field-input {
-    width: 100%;
-    padding: 0.625rem 0.75rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 0.75rem;
-    background: var(--surface-soft);
-    color: var(--text-strong);
-    font-size: 0.875rem;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 120ms ease;
-    resize: vertical;
-  }
-
-  .field-input::placeholder { color: var(--muted); }
-  .field-input:focus { border-color: var(--accent); }
-
-  .field-select {
-    width: 100%;
-    padding: 0.625rem 0.75rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 0.75rem;
-    background: var(--surface-soft);
-    color: var(--text-strong);
-    font-size: 0.875rem;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 120ms ease;
-    cursor: pointer;
-  }
-
-  .field-select:focus { border-color: var(--accent); }
-
   .save-form-shell {
     display: grid;
     gap: 1rem;

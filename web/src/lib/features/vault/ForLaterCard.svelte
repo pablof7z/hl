@@ -99,9 +99,9 @@
   <div class="card-copy">
     <div class="card-topline">
       <div class="card-tags">
-        <span class="meta-chip">{bookmarkLabel}</span>
-        <span class="meta-chip">{item.source}</span>
-        <span class="meta-chip">{item.domain}</span>
+        <span class="badge badge-ghost">{bookmarkLabel}</span>
+        <span class="badge badge-ghost">{item.source}</span>
+        <span class="badge badge-ghost">{item.domain}</span>
       </div>
 
       <div class="card-links">
@@ -128,17 +128,17 @@
 
       <div class="card-actions card-actions-share">
         {#if communities.length > 0}
-          <select bind:value={selectedGroupId} disabled={sharing}>
+          <select class="select w-full" bind:value={selectedGroupId} disabled={sharing}>
             {#each rooms as room (room.id)}
               <option value={room.id}>{room.name}</option>
             {/each}
           </select>
 
-          <button type="button" class="primary" disabled={!canShare} onclick={handleMoveToRoom}>
+          <button type="button" class="btn btn-primary btn-sm" disabled={!canShare} onclick={handleMoveToRoom}>
             {sharing ? 'Sharing…' : 'Share to room'}
           </button>
         {/if}
-        <button type="button" class="ghost" disabled={removing} onclick={handleRemove}>
+        <button type="button" class="btn btn-ghost btn-sm" disabled={removing} onclick={handleRemove}>
           {removing ? 'Removing…' : 'Remove bookmark'}
         </button>
       </div>
@@ -216,22 +216,12 @@
     align-items: start;
   }
 
-  .meta-chip,
   .card-links a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.85rem;
-    padding: 0 0.65rem;
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--muted);
-    font-size: 0.74rem;
-    font-weight: 700;
     text-decoration: none;
   }
 
   .card-links a:hover {
-    color: var(--accent);
+    color: var(--color-primary);
   }
 
   h2 {
@@ -255,49 +245,6 @@
     color: var(--text-strong);
     font-size: 0.88rem;
     font-weight: 700;
-  }
-
-  button,
-  select {
-    font: inherit;
-  }
-
-  select {
-    width: 100%;
-    min-width: min(22rem, 100%);
-    border: 1px solid var(--color-base-300);
-    border-radius: 0.95rem;
-    background: white;
-    color: var(--text);
-    padding: 0.8rem 0.9rem;
-  }
-
-  button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 2.8rem;
-    padding: 0 1rem;
-    border-radius: 999px;
-    border: 1px solid var(--color-base-300);
-    cursor: pointer;
-    font-weight: 700;
-  }
-
-  button.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: white;
-  }
-
-  button.ghost {
-    background: var(--surface);
-    color: var(--text);
-  }
-
-  button:disabled {
-    opacity: 0.6;
-    cursor: default;
   }
 
   .feedback.error {

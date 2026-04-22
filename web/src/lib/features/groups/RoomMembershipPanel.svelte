@@ -78,8 +78,8 @@
 
 <aside class="membership-panel">
   <div class="membership-badges">
-    <span>{accessLabel(community.access)}</span>
-    <span>{visibilityLabel(community.visibility)}</span>
+    <span class="badge badge-ghost">{accessLabel(community.access)}</span>
+    <span class="badge badge-ghost">{visibilityLabel(community.visibility)}</span>
   </div>
 
   <p class="panel-label">{joined ? 'Member' : 'Join'}</p>
@@ -88,12 +88,12 @@
 
   <div class="membership-actions">
     {#if joined}
-      <button class="primary-action" type="button" onclick={() => onShare?.()}>{primaryActionLabel()}</button>
+      <button class="btn btn-primary btn-sm" type="button" onclick={() => onShare?.()}>{primaryActionLabel()}</button>
     {:else if checkingMembership}
-      <span class="pending-pill">Checking access...</span>
+      <span class="badge badge-ghost">Checking access...</span>
     {:else if signedIn}
       <button
-        class="primary-action"
+        class="btn btn-primary btn-sm"
         type="button"
         disabled={joinPending || joinRequested}
         onclick={() => void onJoin?.()}
@@ -101,10 +101,10 @@
         {primaryActionLabel()}
       </button>
     {:else}
-      <a class="primary-action" href="/onboarding">{primaryActionLabel()}</a>
+      <a class="btn btn-primary btn-sm" href="/onboarding">{primaryActionLabel()}</a>
     {/if}
 
-    <a class="secondary-action" href="/rooms">All communities</a>
+    <a class="btn btn-sm" href="/rooms">All communities</a>
   </div>
 
   {#if joinError}
@@ -134,19 +134,6 @@
     flex-wrap: wrap;
   }
 
-  .membership-badges span,
-  .pending-pill {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.9rem;
-    padding: 0 0.7rem;
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--muted);
-    font-size: 0.78rem;
-    font-weight: 700;
-  }
-
   .panel-label {
     margin: 0;
     color: var(--accent);
@@ -170,34 +157,6 @@
     margin: 0;
     color: var(--muted);
     line-height: 1.6;
-  }
-
-  .primary-action,
-  .secondary-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 2.6rem;
-    padding: 0 1rem;
-    border-radius: 999px;
-    border: 1px solid var(--color-base-300);
-    font-weight: 700;
-  }
-
-  .primary-action {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: white;
-  }
-
-  button.primary-action:disabled {
-    cursor: default;
-    opacity: 0.7;
-  }
-
-  .secondary-action {
-    background: var(--surface);
-    color: var(--text);
   }
 
   .status {
