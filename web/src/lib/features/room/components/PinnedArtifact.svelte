@@ -49,6 +49,10 @@
     coverAuthor,
     coverKicker,
     coverVariant = 'dark',
+    image,
+    openHref = '#',
+    continueHref = '#',
+    continueLabel = 'Continue reading',
     stats,
     readers,
     readersNote,
@@ -71,6 +75,10 @@
     coverAuthor?: string;
     coverKicker?: string;
     coverVariant?: 'dark' | 'red' | 'blue' | 'green' | 'plum';
+    image?: string;
+    openHref?: string;
+    continueHref?: string;
+    continueLabel?: string;
     stats?: Stat[];
     readers?: Reader[];
     readersNote?: string;
@@ -130,6 +138,10 @@
     {coverAuthor}
     {coverKicker}
     {coverVariant}
+    {image}
+    {openHref}
+    {continueHref}
+    {continueLabel}
     {stats}
     {readers}
     {readersNote}

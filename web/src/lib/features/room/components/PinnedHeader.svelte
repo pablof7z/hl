@@ -21,11 +21,13 @@
     coverAuthor,
     coverKicker,
     coverVariant = 'dark',
+    image,
     stats,
     readers,
     readersNote,
     openHref = '#',
-    continueHref = '#'
+    continueHref = '#',
+    continueLabel = 'Continue reading'
   }: {
     title: string;
     subtitle?: string;
@@ -33,22 +35,30 @@
     coverAuthor?: string;
     coverKicker?: string;
     coverVariant?: 'dark' | 'red' | 'blue' | 'green' | 'plum';
+    image?: string;
     stats?: Stat[];
     readers?: Reader[];
     readersNote?: string;
     openHref?: string;
     continueHref?: string;
+    continueLabel?: string;
   } = $props();
 </script>
 
 <div class="pinned-top">
   <div class="cover-slot">
-    <BookCoverLg
-      title={coverTitle}
-      author={coverAuthor}
-      kicker={coverKicker}
-      variant={coverVariant}
-    />
+    {#if image}
+      <div class="cover-image">
+        <img src={image} alt={coverTitle} />
+      </div>
+    {:else}
+      <BookCoverLg
+        title={coverTitle}
+        author={coverAuthor}
+        kicker={coverKicker}
+        variant={coverVariant}
+      />
+    {/if}
   </div>
 
   <div class="pin-meta">
@@ -84,7 +94,7 @@
 
   <div class="pin-actions">
     <a href={openHref} class="pin-action">Open artifact</a>
-    <a href={continueHref} class="pin-action filled">Continue reading</a>
+    <a href={continueHref} class="pin-action filled">{continueLabel}</a>
   </div>
 </div>
 
@@ -118,6 +128,20 @@
     .cover-slot {
       width: 100px;
     }
+  }
+
+  .cover-image {
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: 3px 3px 14px rgba(0, 0, 0, 0.18);
+  }
+
+  .cover-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .pin-meta h3 {

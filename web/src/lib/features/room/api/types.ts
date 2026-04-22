@@ -79,7 +79,7 @@ export function artifactFromThreadEvent(event: NDKEvent): Artifact {
     event.tagValue('author') || event.tagValue('summary') || ''
   );
   const url = event.tagValue('r') || event.tagValue('url') || '';
-  const typeRaw = event.tagValue('type') || '';
+  const typeRaw = event.tagValue('source') || event.tagValue('type') || '';
   const type: Artifact['type'] = ARTIFACT_TYPE_TAG_VALUES.includes(typeRaw as Artifact['type'])
     ? (typeRaw as Artifact['type'])
     : 'article';

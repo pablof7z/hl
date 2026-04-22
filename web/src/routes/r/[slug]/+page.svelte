@@ -340,6 +340,10 @@
                 coverTitle={pinnedArtifact.title}
                 coverAuthor={pinnedArtifact.author}
                 coverVariant={pinnedCoverVariant(pinnedArtifact.type)}
+                image={pinnedArtifact.cover || undefined}
+                openHref={pinnedArtifact.url || '#'}
+                continueHref={artifactHref(pinnedArtifact.id)}
+                continueLabel={pinnedArtifact.type === 'podcast' ? 'Continue listening' : 'Continue reading'}
                 stats={[
                   { value: String(members.length), label: 'members' },
                   { value: String(pinnedHighlights.length), label: 'highlights' }
