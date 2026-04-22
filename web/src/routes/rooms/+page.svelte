@@ -72,7 +72,12 @@
 
 <section class="rooms-page">
   <header class="rooms-header">
-    <div class="rooms-kicker">— your rooms</div>
+    <div class="rooms-header-top">
+      <div class="rooms-kicker">— your rooms</div>
+      {#if signedIn}
+        <a href="/r/create" class="btn-create">+ Create a room</a>
+      {/if}
+    </div>
     <h1 class="rooms-title">Your <em>rooms.</em></h1>
     <p class="rooms-lead">
       Rooms you're a member of — small, invitation-only reading groups.
@@ -124,6 +129,34 @@
     padding-bottom: 32px;
     border-bottom: 1px solid var(--rule);
     margin-bottom: 44px;
+  }
+
+  .rooms-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .rooms-header-top .rooms-kicker {
+    margin-bottom: 0;
+  }
+
+  .btn-create {
+    display: inline-block;
+    padding: 7px 16px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    border-radius: var(--radius);
+    background: var(--ink);
+    color: var(--surface);
+    transition: background 200ms ease;
+  }
+
+  .btn-create:hover {
+    background: var(--brand-accent);
   }
 
   .rooms-kicker {
