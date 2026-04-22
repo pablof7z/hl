@@ -11,13 +11,15 @@
     closesText = 'Voting closes Sunday, 9pm.',
     castHref = '#',
     seeAllHref = '#',
-    showCast = false
+    showCast = false,
+    onCast
   }: {
     items: VoteItem[];
     closesText?: string;
     castHref?: string;
     seeAllHref?: string;
     showCast?: boolean;
+    onCast?: () => void;
   } = $props();
 
   const MAX_DOTS = 5;
@@ -47,7 +49,13 @@
 
   <div class="vote-close">
     <span>{closesText}</span>
-    {#if showCast}<a href={castHref}>cast yours →</a>{/if}
+    {#if showCast}
+      {#if onCast}
+        <button type="button" class="cast-btn" onclick={onCast}>cast yours →</button>
+      {:else}
+        <a href={castHref}>cast yours →</a>
+      {/if}
+    {/if}
   </div>
 </div>
 
@@ -164,14 +172,21 @@
     align-items: center;
   }
 
-  .vote-close a {
+  .vote-close a,
+  .vote-close .cast-btn {
     color: var(--brand-accent);
     font-size: 12px;
     font-weight: 500;
     text-decoration: none;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
   }
 
-  .vote-close a:hover {
+  .vote-close a:hover,
+  .vote-close .cast-btn:hover {
     text-decoration: underline;
   }
 </style>

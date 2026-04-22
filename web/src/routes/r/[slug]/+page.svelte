@@ -4,8 +4,9 @@
   import { ndk } from '$lib/ndk/client';
   import { GROUP_RELAY_URLS } from '$lib/ndk/config';
   import RoomHeader from '$lib/features/room/components/RoomHeader.svelte';
-  import RoomNav from '$lib/features/room/components/RoomNav.svelte';
   import Block from '$lib/features/room/components/Block.svelte';
+  import * as Tabs from '$lib/components/ui/tabs';
+  import ArtifactForm from '$lib/features/artifacts/ArtifactForm.svelte';
   import PinnedArtifact from '$lib/features/room/components/PinnedArtifact.svelte';
   import AlsoCard from '$lib/features/room/components/AlsoCard.svelte';
   import ShelfTile from '$lib/features/room/components/ShelfTile.svelte';
@@ -140,6 +141,9 @@
     { id: 'lately', label: 'Lately' }
   ]);
 
+  let activeTab = $state('pinned');
+  let castDialogOpen = $state(false);
+
   // Highlights filtered to the pinned artifact — for the pinned card Highlights tab
   const pinnedHighlights = $derived(
     pinnedArtifact
@@ -239,133 +243,168 @@
   </div>
 {:else}
   <RoomHeader title={roomTitle} {members} />
-  <RoomNav {sections} />
 
-  <div class="room-main">
-    <div class="room-content">
-      <Block id="pinned" title="Currently pinned." accent="pinned.">
-        {#if pinnedArtifact}
-          <PinnedArtifact
-            title={pinnedArtifact.title}
-            subtitle={pinnedArtifact.author}
-            coverTitle={pinnedArtifact.title}
-            coverAuthor={pinnedArtifact.author}
-            coverVariant={pinnedCoverVariant(pinnedArtifact.type)}
-            stats={[
-              { value: String(members.length), label: 'members' },
-              { value: String(pinnedHighlights.length), label: 'highlights' }
-            ]}
-            readers={[]}
-            tabCounts={{
-              discussions: 0,
-              highlights: pinnedHighlights.length,
-              notes: 0,
-              members: members.length
-            }}
-            passageSpans={[]}
-            messages={[]}
-            highlights={pinnedHighlights}
-            memberFilters={pinnedMemberFilters}
-            notes={[]}
-            membersTableRows={membersTableRows}
-            defaultTab="Highlights"
-          />
-        {:else}
-          <div class="empty-card">
-            <p>No artifact has been pinned yet. Share the first read.</p>
-          </div>
-        {/if}
-      </Block>
-
-      <Block id="this-week" title="Also this week." accent="week.">
-        {#if thisWeek.length === 0}
-          <div class="empty-card"><p>Nothing else shared this week.</p></div>
-        {:else}
-          <div class="also-grid">
-            {#each thisWeek as art (art.id)}
-              <AlsoCard
-                href={artifactHref(art.id)}
-                type={alsoType(art.type)}
-                sharedBy=""
-                when=""
-                artworkLabel={art.title.slice(0, 4).toUpperCase()}
-                title={art.title}
-                source={art.author}
-                engaged={[]}
-              />
-            {/each}
-          </div>
-        {/if}
-      </Block>
-
-      <Block id="shelf" title="The shelf." accent="shelf.">
-        {#if shelfItems.length === 0}
-          <div class="empty-card"><p>The shelf is empty. Share something to read.</p></div>
-        {:else}
-          <div class="shelf-grid">
-            {#each shelfItems as art (art.id)}
-              <ShelfTile
-                id={art.id}
-                href={artifactHref(art.id)}
-                type={shelfType(art.type)}
-                typeChipLabel={art.type}
-                title={art.title}
-                author={art.author}
-                engaged={[]}
-                stats={`${art.highlightCount} hl`}
-              />
-            {/each}
-          </div>
-          {#if shelfItems.length >= 12}
-            <SeeAllLink label="See all {shelfItems.length} on the shelf" href="#" />
-          {/if}
-        {/if}
-      </Block>
-
-      <Block id="highlights" title="The room's highlights." accent="highlights.">
-        {#if highlightReel.length === 0}
-          <div class="empty-card"><p>No highlights yet. Be the first.</p></div>
-        {:else}
-          <div class="hl-reel">
-            {#each highlightReel as hl (hl.id)}
-              <HighlightCard
-                id={hl.id}
-                quote={hl.quote}
-                sourceTitle={hl.sourceTitle}
-                sourceSub={hl.sourceSub}
-                marks={hl.marks}
-                date={hl.date}
-                href={hl.href}
-              />
-            {/each}
-          </div>
-          {#if highlights.length > highlightReel.length}
-            <SeeAllLink label="See all {highlights.length} highlights" href="#" />
-          {/if}
-        {/if}
-      </Block>
-
-      <Block id="discussions" title="Every discussion." accent="discussion.">
-        <div class="empty-card">
-          <p>No discussions yet. Start one on a highlighted passage.</p>
-        </div>
-      </Block>
-
-      <Block id="lately" title="Lately in the room." accent="room.">
-        <div class="empty-card">
-          <p>Nothing has happened yet.</p>
-        </div>
-      </Block>
+  <Tabs.Root bind:value={activeTab} class="room-tabs">
+    <div class="roomtabs-bar">
+      <Tabs.List class="roomtabs-list">
+        {#each sections as section (section.id)}
+          <Tabs.Trigger value={section.id} class="roomtab-trigger">
+            {section.label}
+            {#if section.count !== undefined}
+              <span class="roomtab-count">{section.count}</span>
+            {/if}
+          </Tabs.Trigger>
+        {/each}
+      </Tabs.List>
     </div>
 
-    <aside class="sidebar">
-      {#if members.length > 0}
-        <MembersSidebar members={members.map((m) => ({ pubkey: m.pubkey, colorIndex: m.colorIndex }))} slug={data.room?.id ?? ''} {isAdmin} />
-      {/if}
-      <UpNextVoting items={[]} closesText="Nothing proposed yet." showCast={isMember} />
-      {#if isMember}<CaptureCta />{/if}
-    </aside>
-  </div>
+    <div class="room-main">
+      <div class="room-content">
+        <Tabs.Content value="pinned">
+          <Block id="pinned" title="Currently pinned." accent="pinned.">
+            {#if pinnedArtifact}
+              <PinnedArtifact
+                title={pinnedArtifact.title}
+                subtitle={pinnedArtifact.author}
+                coverTitle={pinnedArtifact.title}
+                coverAuthor={pinnedArtifact.author}
+                coverVariant={pinnedCoverVariant(pinnedArtifact.type)}
+                stats={[
+                  { value: String(members.length), label: 'members' },
+                  { value: String(pinnedHighlights.length), label: 'highlights' }
+                ]}
+                readers={[]}
+                tabCounts={{
+                  discussions: 0,
+                  highlights: pinnedHighlights.length,
+                  notes: 0,
+                  members: members.length
+                }}
+                passageSpans={[]}
+                messages={[]}
+                highlights={pinnedHighlights}
+                memberFilters={pinnedMemberFilters}
+                notes={[]}
+                membersTableRows={membersTableRows}
+                defaultTab="Highlights"
+              />
+            {:else}
+              <div class="empty-card">
+                <p>No artifact has been pinned yet. Share the first read.</p>
+              </div>
+            {/if}
+          </Block>
+        </Tabs.Content>
+
+        <Tabs.Content value="this-week">
+          <Block id="this-week" title="Also this week." accent="week.">
+            {#if thisWeek.length === 0}
+              <div class="empty-card"><p>Nothing else shared this week.</p></div>
+            {:else}
+              <div class="also-grid">
+                {#each thisWeek as art (art.id)}
+                  <AlsoCard
+                    href={artifactHref(art.id)}
+                    type={alsoType(art.type)}
+                    sharedBy=""
+                    when=""
+                    artworkLabel={art.title.slice(0, 4).toUpperCase()}
+                    title={art.title}
+                    source={art.author}
+                    engaged={[]}
+                  />
+                {/each}
+              </div>
+            {/if}
+          </Block>
+        </Tabs.Content>
+
+        <Tabs.Content value="shelf">
+          <Block id="shelf" title="The shelf." accent="shelf.">
+            {#if shelfItems.length === 0}
+              <div class="empty-card"><p>The shelf is empty. Share something to read.</p></div>
+            {:else}
+              <div class="shelf-grid">
+                {#each shelfItems as art (art.id)}
+                  <ShelfTile
+                    id={art.id}
+                    href={artifactHref(art.id)}
+                    type={shelfType(art.type)}
+                    typeChipLabel={art.type}
+                    title={art.title}
+                    author={art.author}
+                    engaged={[]}
+                    stats={`${art.highlightCount} hl`}
+                  />
+                {/each}
+              </div>
+              {#if shelfItems.length >= 12}
+                <SeeAllLink label="See all {shelfItems.length} on the shelf" href="#" />
+              {/if}
+            {/if}
+          </Block>
+        </Tabs.Content>
+
+        <Tabs.Content value="highlights">
+          <Block id="highlights" title="The room's highlights." accent="highlights.">
+            {#if highlightReel.length === 0}
+              <div class="empty-card"><p>No highlights yet. Be the first.</p></div>
+            {:else}
+              <div class="hl-reel">
+                {#each highlightReel as hl (hl.id)}
+                  <HighlightCard
+                    id={hl.id}
+                    quote={hl.quote}
+                    sourceTitle={hl.sourceTitle}
+                    sourceSub={hl.sourceSub}
+                    marks={hl.marks}
+                    date={hl.date}
+                    href={hl.href}
+                  />
+                {/each}
+              </div>
+              {#if highlights.length > highlightReel.length}
+                <SeeAllLink label="See all {highlights.length} highlights" href="#" />
+              {/if}
+            {/if}
+          </Block>
+        </Tabs.Content>
+
+        <Tabs.Content value="discussions">
+          <Block id="discussions" title="Every discussion." accent="discussion.">
+            <div class="empty-card">
+              <p>No discussions yet. Start one on a highlighted passage.</p>
+            </div>
+          </Block>
+        </Tabs.Content>
+
+        <Tabs.Content value="lately">
+          <Block id="lately" title="Lately in the room." accent="room.">
+            <div class="empty-card">
+              <p>Nothing has happened yet.</p>
+            </div>
+          </Block>
+        </Tabs.Content>
+      </div>
+
+      <aside class="sidebar">
+        {#if members.length > 0}
+          <MembersSidebar members={members.map((m) => ({ pubkey: m.pubkey, colorIndex: m.colorIndex }))} slug={data.room?.id ?? ''} {isAdmin} />
+        {/if}
+        <UpNextVoting
+          items={[]}
+          closesText="Nothing proposed yet."
+          showCast={isMember}
+          onCast={() => (castDialogOpen = true)}
+        />
+        {#if isMember}<CaptureCta />{/if}
+      </aside>
+    </div>
+  </Tabs.Root>
+
+  {#if slug}
+    <ArtifactForm groupId={slug} bind:open={castDialogOpen} />
+  {/if}
 {/if}
 
 <style>
@@ -406,6 +445,70 @@
   }
 
   .btn:hover { background: var(--brand-accent); }
+
+  .roomtabs-bar {
+    position: sticky;
+    top: 62px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--rule);
+    z-index: 15;
+    margin: 0 calc(var(--container-px) * -1);
+    padding: 0 var(--container-px);
+    overflow-x: auto;
+  }
+
+  :global(.roomtabs-list) {
+    display: flex;
+    gap: 0;
+    max-width: var(--container-max);
+    margin: 0 auto;
+    background: transparent;
+    border: 0;
+    padding: 0;
+  }
+
+  :global(.roomtab-trigger) {
+    padding: 14px 18px 12px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-fade);
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: color 150ms ease;
+  }
+
+  :global(.roomtab-trigger:first-child) {
+    padding-left: 0;
+  }
+
+  :global(.roomtab-trigger:hover) {
+    color: var(--ink);
+  }
+
+  :global(.roomtab-trigger[data-state="active"]) {
+    color: var(--ink);
+    border-bottom-color: var(--brand-accent);
+  }
+
+  :global(.roomtab-count) {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-fade);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+  }
+
+  :global(.roomtab-trigger[data-state="active"] .roomtab-count) {
+    color: var(--brand-accent);
+  }
 
   .room-main {
     display: grid;
