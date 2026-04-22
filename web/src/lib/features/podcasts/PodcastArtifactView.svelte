@@ -557,7 +557,7 @@
     </div>
 
     <div class="podcast-copy">
-      <p class="eyebrow">Podcast Episode</p>
+      <p class="badge badge-ghost uppercase tracking-wider">Podcast Episode</p>
       <h1>{episodeTitle}</h1>
       {#if showTitle}
         <p class="show-title">{showTitle}</p>
@@ -775,7 +775,7 @@
 
   <section class="composer-shell">
     <div class="composer-copy">
-      <p class="eyebrow">Create Clip</p>
+      <p class="badge badge-ghost uppercase tracking-wider">Create Clip</p>
       <h2>Capture the moment worth replaying.</h2>
       {#if clipRange}
         <p class="selection-label">
@@ -823,7 +823,7 @@
   <section class="transcript-shell">
     <div class="section-head">
       <div>
-        <p class="eyebrow">Transcript</p>
+        <p class="badge badge-ghost uppercase tracking-wider">Transcript</p>
         <h2>{transcriptAvailable ? 'Follow the episode in text' : 'Transcript unavailable'}</h2>
       </div>
       {#if transcriptUrl}
@@ -870,7 +870,7 @@
   <section class="clips-shell">
     <div class="section-head">
       <div>
-        <p class="eyebrow">Clipped Moments</p>
+        <p class="badge badge-ghost uppercase tracking-wider">Clipped Moments</p>
         <h2>{highlights.length} moment{highlights.length === 1 ? '' : 's'} from this community</h2>
       </div>
 
@@ -949,15 +949,6 @@
     display: grid;
     align-content: start;
     gap: 0.8rem;
-  }
-
-  .eyebrow {
-    margin: 0;
-    color: var(--accent);
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
   }
 
   h1,

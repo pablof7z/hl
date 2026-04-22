@@ -42,7 +42,7 @@
   </div>
   <div class="nav-right">
     {#if variant === 'marketing'}
-      <button type="button" class="nav-login" onclick={() => (loginOpen = true)}>Log in</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick={() => (loginOpen = true)}>Log in</button>
       <a href="/onboarding" class="nav-capture">Join</a>
       <LoginDialog showTrigger={false} bind:open={loginOpen} />
     {:else if right}
@@ -166,23 +166,6 @@
 
   .nav-capture:hover {
     background: var(--brand-accent);
-  }
-
-  .nav-login {
-    padding: 8px 4px;
-    background: transparent;
-    border: 0;
-    color: var(--ink);
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-    cursor: pointer;
-    transition: color 200ms ease;
-  }
-
-  .nav-login:hover {
-    color: var(--brand-accent);
   }
 
   @media (max-width: 780px) {

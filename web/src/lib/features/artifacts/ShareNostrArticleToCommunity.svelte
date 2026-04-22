@@ -146,7 +146,7 @@
         <Dialog.Title>Share to a community</Dialog.Title>
       </Dialog.Header>
 
-      <Dialog.Close class="dialog-close" aria-label="Close community share dialog">
+      <Dialog.Close class="btn btn-circle btn-ghost btn-sm" aria-label="Close community share dialog">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M6 6l12 12M18 6L6 18" />
         </svg>
@@ -166,24 +166,25 @@
         </div>
       {:else}
         <div class="panel-fields">
-          <label class="field">
-            <span>Community</span>
-            <select bind:value={selectedGroupId}>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Community</legend>
+            <select class="select w-full" bind:value={selectedGroupId}>
               {#each communities as community (community.id)}
                 <option value={community.id}>{community.name}</option>
               {/each}
             </select>
-          </label>
+          </fieldset>
 
-          <label class="field">
-            <span>Why share it?</span>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Why share it?</legend>
             <textarea
+              class="textarea w-full"
               bind:value={note}
               rows="3"
               maxlength="280"
               placeholder="Optional framing for this community."
             ></textarea>
-          </label>
+          </fieldset>
 
           <div class="preview-strip">
             <span>{preview.source}</span>
@@ -313,33 +314,6 @@
   .panel-fields {
     display: grid;
     gap: 0.9rem;
-  }
-
-  .field {
-    display: grid;
-    gap: 0.4rem;
-  }
-
-  .field span {
-    color: var(--text-strong);
-    font-size: 0.88rem;
-    font-weight: 700;
-  }
-
-  .field select,
-  .field textarea {
-    width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 0.95rem;
-    background: white;
-    color: var(--text);
-    padding: 0.85rem 0.95rem;
-    box-sizing: border-box;
-    font: inherit;
-  }
-
-  .field textarea {
-    resize: vertical;
   }
 
   .preview-strip {

@@ -26,7 +26,7 @@
   </div>
   <button
     type="button"
-    class="panel-btn"
+    class="btn btn-sm"
     onclick={() => onWriteNote?.()}
   >
     ✎ Write a note
@@ -73,27 +73,6 @@
     font-size: 12px;
     color: var(--ink-fade);
     font-weight: 500;
-  }
-
-  .panel-btn {
-    padding: 7px 14px;
-    background: var(--surface);
-    border: 1px solid var(--rule);
-    font-family: var(--font-sans);
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--ink-soft);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-radius: var(--radius);
-    transition: all 150ms ease;
-  }
-
-  .panel-btn:hover {
-    border-color: var(--brand-accent);
-    color: var(--brand-accent);
   }
 
   .note-list {

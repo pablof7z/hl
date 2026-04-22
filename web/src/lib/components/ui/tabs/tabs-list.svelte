@@ -8,6 +8,6 @@
   > = $props();
 </script>
 
-<TabsPrimitive.List {...restProps} class={cn('tabs-list', className)}>
+<TabsPrimitive.List {...restProps} class={cn('tabs tabs-border w-full', className)}>
   {@render children?.()}
 </TabsPrimitive.List>

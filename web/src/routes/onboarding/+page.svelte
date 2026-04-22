@@ -774,7 +774,7 @@
 
       <div class="ob-step-footer">
         <button
-          class="button ob-next"
+          class="btn btn-primary ob-next"
           type="button"
           disabled={!step1Valid}
           onclick={() => {
@@ -815,7 +815,7 @@
             placeholder="Add your own topic…"
             onkeydown={handleCustomInterestKeydown}
           />
-          <button class="button-secondary" type="button" onclick={addCustomInterest} disabled={!customInterest.trim()}>
+          <button class="btn" type="button" onclick={addCustomInterest} disabled={!customInterest.trim()}>
             Add
           </button>
         </div>
@@ -840,9 +840,9 @@
 
       <div class="ob-step-footer">
         <div class="ob-footer-row">
-          <button class="button-secondary" type="button" onclick={() => { step = 1; }}>Back</button>
+          <button class="btn" type="button" onclick={() => { step = 1; }}>Back</button>
           <button
-            class="button ob-next"
+            class="btn btn-primary ob-next"
             type="button"
             disabled={!canPublish}
             onclick={() => void publish()}

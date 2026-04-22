@@ -32,7 +32,7 @@
       <a class="auth-qr-button" href={nostrConnectUri} title="Open in app">
         <img class="auth-qr-image" src={qrCodeDataUrl} alt="Connection QR code" />
       </a>
-      <div class="status-pill status-blue auth-qr-status">Waiting for approval</div>
+      <div class="badge badge-info auth-qr-status">Waiting for approval</div>
       <p class="caption auth-qr-caption">
         Open the QR in another app on this device, or scan it from another one.
       </p>

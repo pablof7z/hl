@@ -10,6 +10,6 @@
   let { children, class: className = '' }: Props = $props();
 </script>
 
-<div class={cn('dialog-header', className)}>
+<div class={cn('grid gap-2', className)}>
   {@render children?.()}
 </div>

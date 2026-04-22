@@ -5,6 +5,9 @@
   let { class: className = '', children, ...restProps }: DialogTitleProps = $props();
 </script>
 
-<DialogPrimitive.Title {...restProps} class={cn('dialog-title', className)}>
+<DialogPrimitive.Title
+  {...restProps}
+  class={cn('m-0 font-serif text-2xl font-bold leading-tight tracking-tight text-base-content', className)}
+>
   {@render children?.()}
 </DialogPrimitive.Title>

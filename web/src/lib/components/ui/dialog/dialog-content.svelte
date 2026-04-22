@@ -6,8 +6,14 @@
 </script>
 
 <DialogPrimitive.Portal>
-  <DialogPrimitive.Overlay class="dialog-overlay" />
-  <DialogPrimitive.Content {...restProps} class={cn('dialog-content', className)}>
+  <DialogPrimitive.Overlay class="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" />
+  <DialogPrimitive.Content
+    {...restProps}
+    class={cn(
+      'modal-box fixed left-1/2 top-1/2 z-50 w-[min(32rem,calc(100vw-2rem))] max-h-[min(85vh,42rem)] -translate-x-1/2 -translate-y-1/2 overflow-auto',
+      className
+    )}
+  >
     {@render children?.()}
   </DialogPrimitive.Content>
 </DialogPrimitive.Portal>

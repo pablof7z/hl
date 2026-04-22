@@ -8,6 +8,6 @@
   > = $props();
 </script>
 
-<TabsPrimitive.Content {...restProps} class={cn('tabs-content', className)}>
+<TabsPrimitive.Content {...restProps} class={cn(className)}>
   {@render children?.()}
 </TabsPrimitive.Content>

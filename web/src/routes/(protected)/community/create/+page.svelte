@@ -99,18 +99,19 @@
 
   <form class="community-form" onsubmit={handleSubmit}>
     <section class="form-card">
-      <label class="field">
-        <span>Name</span>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Name</legend>
         <input
+          class="input w-full"
           bind:value={name}
           placeholder="Signal over noise"
           maxlength="80"
           autocomplete="off"
         />
-      </label>
+      </fieldset>
 
-      <label class="field">
-        <span>Community URL</span>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Community URL</legend>
         <div class="slug-input">
           <span>/community/</span>
           <input
@@ -121,33 +122,35 @@
             autocomplete="off"
           />
         </div>
-        <small>Lowercase letters, numbers, and hyphens only.</small>
-      </label>
+        <p class="fieldset-label">Lowercase letters, numbers, and hyphens only.</p>
+      </fieldset>
 
-      <label class="field">
-        <span>Description</span>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Description</legend>
         <textarea
+          class="textarea w-full"
           bind:value={about}
           rows="5"
           maxlength="280"
           placeholder="What kind of reading and conversation belongs here?"
         ></textarea>
-      </label>
+      </fieldset>
 
-      <label class="field">
-        <span>Cover image URL</span>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Cover image URL</legend>
         <input
+          class="input w-full"
           bind:value={picture}
           placeholder="https://..."
           inputmode="url"
           autocomplete="off"
         />
-      </label>
+      </fieldset>
     </section>
 
     <section class="form-card">
-      <div class="field">
-        <span>Access</span>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Access</legend>
         <div class="option-row">
           <label class:active={access === 'open'}>
             <input type="radio" bind:group={access} value="open" disabled={visibility === 'private'} />
@@ -161,10 +164,10 @@
             <small>Membership requires approval or invite codes.</small>
           </label>
         </div>
-      </div>
+      </fieldset>
 
-      <div class="field">
-        <span>Visibility</span>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Visibility</legend>
         <div class="option-row">
           <label class:active={visibility === 'public'}>
             <input type="radio" bind:group={visibility} value="public" />
@@ -178,7 +181,7 @@
             <small>Content is members-only and forces closed membership.</small>
           </label>
         </div>
-      </div>
+      </fieldset>
 
       <div class="preview-card">
         <p class="preview-label">Preview</p>
@@ -198,7 +201,7 @@
         </p>
       {/if}
 
-      <button class="submit-button" type="submit" disabled={!canSubmit}>
+      <button class="btn btn-primary" type="submit" disabled={!canSubmit}>
         {saving ? 'Publishing…' : 'Create community'}
       </button>
     </section>
@@ -270,41 +273,6 @@
     background: var(--surface);
   }
 
-  .field {
-    display: grid;
-    gap: 0.45rem;
-  }
-
-  .field > span {
-    color: var(--text-strong);
-    font-size: 0.9rem;
-    font-weight: 700;
-  }
-
-  .field input,
-  .field textarea {
-    width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 0.95rem;
-    background: white;
-    color: var(--text);
-    padding: 0.85rem 0.95rem;
-    transition: border-color 120ms ease, box-shadow 120ms ease;
-  }
-
-  .field input:focus,
-  .field textarea:focus {
-    outline: none;
-    border-color: rgba(255, 103, 25, 0.38);
-    box-shadow: 0 0 0 4px rgba(255, 103, 25, 0.08);
-  }
-
-  .field textarea {
-    min-height: 8rem;
-    resize: vertical;
-  }
-
-  .field small,
   .option-row small {
     color: var(--muted);
     font-size: 0.8rem;
@@ -404,30 +372,6 @@
   .read-only-note {
     background: var(--pale-yellow);
     color: var(--pale-yellow-text);
-  }
-
-  .submit-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 3rem;
-    padding: 0 1.1rem;
-    border: 0;
-    border-radius: 999px;
-    background: var(--accent);
-    color: white;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background 120ms ease, opacity 120ms ease;
-  }
-
-  .submit-button:hover:enabled {
-    background: var(--accent-hover);
-  }
-
-  .submit-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
   }
 
   @media (max-width: 860px) {

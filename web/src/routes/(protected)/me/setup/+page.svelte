@@ -168,28 +168,32 @@
 
     <!-- Fields -->
     <div class="setup-fields">
-      <label class="field-label" for="setup-display-name">
-        Display name <span class="field-required" aria-hidden="true">*</span>
-      </label>
-      <input
-        id="setup-display-name"
-        type="text"
-        bind:value={displayName}
-        placeholder="Your name"
-        class="field-input"
-        maxlength="64"
-        autocomplete="name"
-      />
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">
+          Display name <span class="text-primary" aria-hidden="true">*</span>
+        </legend>
+        <input
+          id="setup-display-name"
+          type="text"
+          bind:value={displayName}
+          placeholder="Your name"
+          class="input w-full"
+          maxlength="64"
+          autocomplete="name"
+        />
+      </fieldset>
 
-      <label class="field-label" for="setup-bio">Bio <span class="field-optional">(optional)</span></label>
-      <textarea
-        id="setup-bio"
-        bind:value={bio}
-        placeholder="Tell people a bit about yourself…"
-        class="field-textarea"
-        rows="3"
-        maxlength="500"
-      ></textarea>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Bio <span class="opacity-60 font-normal">(optional)</span></legend>
+        <textarea
+          id="setup-bio"
+          bind:value={bio}
+          placeholder="Tell people a bit about yourself…"
+          class="textarea w-full"
+          rows="3"
+          maxlength="500"
+        ></textarea>
+      </fieldset>
     </div>
 
     <!-- Errors -->
@@ -204,14 +208,14 @@
     <div class="setup-actions">
       <button
         type="button"
-        class="btn-primary"
+        class="btn btn-primary w-full"
         onclick={handleSave}
         disabled={!canSave}
         aria-busy={saving}
       >
         {saving ? 'Saving…' : 'Save profile'}
       </button>
-      <button type="button" class="btn-ghost" onclick={handleSkip}>
+      <button type="button" class="btn btn-ghost w-full" onclick={handleSkip}>
         Skip for now
       </button>
     </div>
@@ -317,48 +321,6 @@
     gap: 0.5rem;
   }
 
-  .field-label {
-    font-size: 0.88rem;
-    font-weight: 600;
-    color: var(--text-strong);
-    margin-top: 0.5rem;
-  }
-
-  .field-required {
-    color: var(--accent);
-  }
-
-  .field-optional {
-    color: var(--muted);
-    font-weight: 400;
-  }
-
-  .field-input,
-  .field-textarea {
-    width: 100%;
-    padding: 0.65rem 0.85rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 0.95rem;
-    line-height: 1.5;
-    transition: border-color 140ms ease;
-    box-sizing: border-box;
-  }
-
-  .field-input:focus,
-  .field-textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(255, 103, 25, 0.12);
-  }
-
-  .field-textarea {
-    resize: vertical;
-    min-height: 5rem;
-  }
-
   /* Errors */
   .setup-error {
     margin: 0;
@@ -374,43 +336,6 @@
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
-  }
-
-  .btn-primary {
-    width: 100%;
-    padding: 0.75rem 1.25rem;
-    border: none;
-    border-radius: var(--radius-md);
-    background: var(--accent);
-    color: #ffffff;
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 140ms ease, opacity 140ms ease;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--accent-hover);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
-  .btn-ghost {
-    width: 100%;
-    padding: 0.65rem;
-    border: none;
-    background: none;
-    color: var(--muted);
-    font-size: 0.88rem;
-    cursor: pointer;
-    transition: color 120ms ease;
-  }
-
-  .btn-ghost:hover {
-    color: var(--text);
   }
 
   .sr-only {

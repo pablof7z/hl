@@ -32,7 +32,7 @@
 
     <div class="featured-copy">
       <div class="featured-topline">
-        <p class="eyebrow">Featured Conversation</p>
+        <p class="badge badge-ghost uppercase tracking-wider">Featured Conversation</p>
         <div class="featured-badges">
           <span>{artifact.source}</span>
           <span>{artifact.domain}</span>
@@ -147,15 +147,6 @@
 
   .featured-topline {
     justify-content: space-between;
-  }
-
-  .eyebrow {
-    margin: 0;
-    color: var(--accent);
-    font-size: 0.76rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
   }
 
   .featured-badges span,

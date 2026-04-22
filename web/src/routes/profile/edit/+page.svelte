@@ -579,7 +579,7 @@
               </button>
             </div>
           {/each}
-          <button type="button" class="button-secondary" onclick={addCustomField}>
+          <button type="button" class="btn" onclick={addCustomField}>
             Add field
           </button>
         </div>
@@ -591,10 +591,10 @@
           <p class="ob-error">{saveError}</p>
         {/if}
         <div class="pe-footer-actions">
-          <button class="button" type="button" disabled={!canPublish} onclick={() => void publish()}>
+          <button class="btn btn-primary" type="button" disabled={!canPublish} onclick={() => void publish()}>
             {saving ? 'Saving…' : uploadingAvatar || uploadingBanner ? 'Uploading…' : 'Save profile'}
           </button>
-          <a href="/profile/{profileIdentifier(currentUser.profile, currentUser.npub)}" class="button-secondary">
+          <a href="/profile/{profileIdentifier(currentUser.profile, currentUser.npub)}" class="btn">
             View profile
           </a>
         </div>

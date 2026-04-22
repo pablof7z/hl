@@ -8,6 +8,9 @@
   > = $props();
 </script>
 
-<TabsPrimitive.Trigger {...restProps} class={cn('tabs-trigger', className)}>
+<TabsPrimitive.Trigger
+  {...restProps}
+  class={cn('tab data-[state=active]:tab-active', className)}
+>
   {@render children?.()}
 </TabsPrimitive.Trigger>

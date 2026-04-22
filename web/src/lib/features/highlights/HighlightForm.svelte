@@ -70,38 +70,41 @@
   </div>
 
   <form class="highlight-form" onsubmit={handlePublish}>
-    <label class="field">
-      <span>Highlighted text</span>
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">Highlighted text</legend>
       <textarea
+        class="textarea w-full"
         bind:value={quote}
         rows="5"
         maxlength="1200"
         placeholder="Paste the excerpt or quote you want to keep."
       ></textarea>
-    </label>
+    </fieldset>
 
-    <label class="field">
-      <span>Context</span>
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">Context</legend>
       <textarea
+        class="textarea w-full"
         bind:value={context}
         rows="3"
         maxlength="500"
         placeholder="Optional surrounding text, chapter, timestamp, or location."
       ></textarea>
-    </label>
+    </fieldset>
 
-    <label class="field">
-      <span>Note</span>
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">Note</legend>
       <textarea
+        class="textarea w-full"
         bind:value={note}
         rows="3"
         maxlength="280"
         placeholder="Optional note about why this stands out."
       ></textarea>
-    </label>
+    </fieldset>
 
     <div class="highlight-actions">
-      <button class="primary" type="submit" disabled={!canPublish}>
+      <button class="btn btn-primary" type="submit" disabled={!canPublish}>
         {publishing ? 'Saving…' : 'Save highlight'}
       </button>
       <span class="share-target">Sharing into `/community/{groupId}`</span>
@@ -143,49 +146,11 @@
     gap: 0.95rem;
   }
 
-  .field {
-    display: grid;
-    gap: 0.45rem;
-  }
-
-  .field span {
-    color: var(--text-strong);
-    font-size: 0.88rem;
-    font-weight: 700;
-  }
-
-  .field textarea {
-    width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 0.95rem;
-    background: white;
-    color: var(--text);
-    padding: 0.85rem 0.95rem;
-    resize: vertical;
-  }
-
   .highlight-actions {
     display: flex;
     gap: 0.75rem;
     flex-wrap: wrap;
     align-items: center;
-  }
-
-  .primary {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 2.75rem;
-    padding: 0 1rem;
-    border: 0;
-    border-radius: 999px;
-    background: var(--accent);
-    color: white;
-    font-weight: 700;
-  }
-
-  .primary:disabled {
-    opacity: 0.55;
   }
 
   .share-target,

@@ -243,7 +243,7 @@
         </Tabs.List>
 
         <Tabs.Content value="article" class="article-tab-panel">
-          <div class="article-content-surface" bind:this={articleContentEl}>
+          <div class="card card-border bg-base-100 p-6" bind:this={articleContentEl}>
             <ArticleMarkdown content={event.content} tags={event.tags} highlights={highlightEvents} />
           </div>
           <div class="share-footer">
@@ -306,7 +306,7 @@
                   ></textarea>
                   <div class="comment-compose-actions">
                     <button
-                      class="button"
+                      class="btn btn-primary"
                       disabled={submitting || !replyText.trim()}
                       onclick={() => submitComment(null)}
                     >
@@ -366,7 +366,7 @@
                             ></textarea>
                             <div class="comment-compose-actions">
                               <button
-                                class="button"
+                                class="btn btn-primary"
                                 disabled={submitting || !replyText.trim()}
                                 onclick={() => submitComment(node.event)}
                               >
@@ -400,7 +400,7 @@
           {#if highlightEvents.length > 0}
             <div class="highlight-stack">
               {#each highlightEvents as highlight (highlight.id)}
-                <article class="highlight-card">
+                <article class="card card-border bg-base-100 p-4 gap-3">
                   <EventAuthorHeader
                     {ndk}
                     pubkey={highlight.pubkey}

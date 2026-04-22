@@ -10,7 +10,7 @@
       links carry a useful preview when they travel.
     </p>
     <div class="actions">
-      <a class="button" href="/">Start reading</a>
+      <a class="btn btn-primary" href="/">Start reading</a>
     </div>
     <p class="caption">
       Built for readers first: clear typography, portable identity, and writing that feels at home on
@@ -129,7 +129,7 @@
       Highlighter keeps the experience focused on people and writing, not protocol trivia.
     </p>
     <div class="actions">
-      <a class="button" href="/">Browse stories</a>
+      <a class="btn btn-primary" href="/">Browse stories</a>
     </div>
   </div>
 </section>

@@ -106,9 +106,9 @@
   </div>
 
   <form class="save-form" onsubmit={handlePreview}>
-    <label class="field">
-      <span>Type</span>
-      <select bind:value={source} onchange={(event) => handleSourceChange((event.currentTarget as HTMLSelectElement).value as typeof source)}>
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">Type</legend>
+      <select class="select w-full" bind:value={source} onchange={(event) => handleSourceChange((event.currentTarget as HTMLSelectElement).value as typeof source)}>
         <option value="article">Article</option>
         <option value="book">Book</option>
         <option value="podcast">Podcast</option>
@@ -116,24 +116,25 @@
         <option value="paper">Paper</option>
         <option value="web">Web page</option>
       </select>
-    </label>
+    </fieldset>
 
-    <label class="field">
-      <span>URL or Nostr article</span>
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">URL or Nostr article</legend>
       <input
+        class="input w-full"
         bind:value={reference}
         type="text"
         inputmode="url"
         placeholder="https://example.com/article or naddr1..."
         autocomplete="off"
       />
-    </label>
+    </fieldset>
 
     <div class="save-actions">
-      <button class="secondary" type="submit" disabled={!canPreview}>
+      <button class="btn" type="submit" disabled={!canPreview}>
         {previewing ? 'Previewing…' : 'Preview'}
       </button>
-      <button class="primary" type="button" disabled={!canSave} onclick={handleSave}>
+      <button class="btn btn-primary" type="button" disabled={!canSave} onclick={handleSave}>
         {saving ? 'Saving…' : 'Save to For Later'}
       </button>
     </div>
@@ -225,60 +226,11 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .field {
-    display: grid;
-    gap: 0.45rem;
-  }
-
-  .field span {
-    color: var(--text-strong);
-    font-size: 0.88rem;
-    font-weight: 700;
-  }
-
-  .field input,
-  .field select {
-    width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 0.95rem;
-    background: white;
-    color: var(--text);
-    padding: 0.85rem 0.95rem;
-  }
-
   .save-actions {
     grid-column: 1 / -1;
     display: flex;
     gap: 0.65rem;
     flex-wrap: wrap;
-  }
-
-  button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 2.85rem;
-    padding: 0 1rem;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  button.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: white;
-  }
-
-  button.secondary {
-    background: var(--surface);
-    color: var(--text);
-  }
-
-  button:disabled {
-    opacity: 0.6;
-    cursor: default;
   }
 
   .error,

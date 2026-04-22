@@ -10,6 +10,6 @@
   let { children, class: className = '' }: Props = $props();
 </script>
 
-<div class={cn('dialog-footer', className)}>
+<div class={cn('modal-action', className)}>
   {@render children?.()}
 </div>

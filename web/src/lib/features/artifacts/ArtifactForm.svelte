@@ -143,7 +143,7 @@
         <Dialog.Title>Share a source</Dialog.Title>
       </Dialog.Header>
 
-      <Dialog.Close class="dialog-close" aria-label="Close share dialog">
+      <Dialog.Close class="btn btn-circle btn-ghost btn-sm" aria-label="Close share dialog">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M6 6l12 12M18 6L6 18" />
         </svg>
@@ -152,9 +152,9 @@
 
     <div class="artifact-form-body">
   <form class="artifact-form" onsubmit={handlePreview}>
-    <label class="field">
-      <span>Type</span>
-      <select bind:value={source} onchange={(event) => handleSourceChange((event.currentTarget as HTMLSelectElement).value as typeof source)}>
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">Type</legend>
+      <select class="select w-full" bind:value={source} onchange={(event) => handleSourceChange((event.currentTarget as HTMLSelectElement).value as typeof source)}>
         <option value="article">Article</option>
         <option value="book">Book</option>
         <option value="podcast">Podcast</option>
@@ -162,34 +162,36 @@
         <option value="paper">Paper</option>
         <option value="web">Web page</option>
       </select>
-    </label>
+    </fieldset>
 
-    <label class="field">
-      <span>URL or Nostr article</span>
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">URL or Nostr article</legend>
       <input
+        class="input w-full"
         bind:value={reference}
         type="text"
         inputmode="url"
         placeholder="https://example.com/article or naddr1..."
         autocomplete="off"
       />
-    </label>
+    </fieldset>
 
-    <label class="field">
-      <span>Why share it?</span>
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend">Why share it?</legend>
       <textarea
+        class="textarea w-full"
         bind:value={note}
         rows="4"
         maxlength="280"
         placeholder="Optional note for the community."
       ></textarea>
-    </label>
+    </fieldset>
 
     <div class="artifact-actions">
-      <button class="secondary" type="submit" disabled={!canPreview}>
+      <button class="btn" type="submit" disabled={!canPreview}>
         {previewing ? 'Previewing…' : 'Preview'}
       </button>
-      <button class="primary" type="button" disabled={!canPublish} onclick={handlePublish}>
+      <button class="btn btn-primary" type="button" disabled={!canPublish} onclick={handlePublish}>
         {publishing ? 'Sharing…' : 'Share with community'}
       </button>
     </div>
@@ -274,24 +276,6 @@
     gap: 0.35rem;
   }
 
-  :global(.dialog-close) {
-    display: grid;
-    place-items: center;
-    width: 2.2rem;
-    height: 2.2rem;
-    border-radius: 9999px;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  :global(.dialog-close svg) {
-    width: 1rem;
-    height: 1rem;
-  }
-
   .artifact-form-body {
     margin-top: 1rem;
   }
@@ -307,65 +291,10 @@
     gap: 0.95rem;
   }
 
-  .field {
-    display: grid;
-    gap: 0.45rem;
-  }
-
-  .field span {
-    color: var(--text-strong);
-    font-size: 0.88rem;
-    font-weight: 700;
-  }
-
-  .field input,
-  .field textarea,
-  .field select {
-    width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 0.95rem;
-    background: white;
-    color: var(--text);
-    padding: 0.85rem 0.95rem;
-  }
-
-  .field textarea {
-    min-height: 6rem;
-    resize: vertical;
-  }
-
   .artifact-actions {
     display: flex;
     gap: 0.6rem;
     flex-wrap: wrap;
-  }
-
-  .artifact-actions button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 2.8rem;
-    padding: 0 1rem;
-    border-radius: 999px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
-  .artifact-actions button.secondary {
-    border: 1px solid var(--border);
-    background: white;
-    color: var(--text-strong);
-  }
-
-  .artifact-actions button.primary {
-    border: 0;
-    background: var(--accent);
-    color: white;
-  }
-
-  .artifact-actions button:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
   }
 
   .error,

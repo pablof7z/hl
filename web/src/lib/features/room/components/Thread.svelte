@@ -68,7 +68,7 @@
 
   <div class="thread-reply-box">
     <span>{replyPlaceholder}</span>
-    <button type="button" class="send">Send</button>
+    <button type="button" class="btn btn-sm btn-neutral ml-auto">Send</button>
   </div>
 </div>
 
@@ -165,19 +165,4 @@
     font-family: var(--font-sans);
   }
 
-  .send {
-    margin-left: auto;
-    padding: 6px 14px;
-    background: var(--ink);
-    border: none;
-    color: var(--surface);
-    font-family: var(--font-sans);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-  }
-
-  .send:hover {
-    background: var(--brand-accent);
-  }
 </style>

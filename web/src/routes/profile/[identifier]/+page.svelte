@@ -280,7 +280,7 @@
           </button>
         {/if}
         {#if isOwnProfile}
-          <a href="/profile/edit" class="button-secondary profile-edit-btn">Edit profile</a>
+          <a href="/profile/edit" class="btn profile-edit-btn">Edit profile</a>
         {/if}
       </div>
     </div>
