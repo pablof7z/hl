@@ -16,7 +16,6 @@
   import UpNextVoting from '$lib/features/room/components/UpNextVoting.svelte';
   import CaptureCta from '$lib/features/room/components/CaptureCta.svelte';
   import DiscussionRow from '$lib/features/room/components/DiscussionRow.svelte';
-  import DiscussionComposer from '$lib/features/discussions/DiscussionComposer.svelte';
   import {
     discussionFromEvent,
     discussionPath,
@@ -213,7 +212,6 @@
 
   let activeTab = $state('pinned');
   let castDialogOpen = $state(false);
-  let discussionDialogOpen = $state(false);
 
   // Highlights filtered to the pinned artifact — for the pinned card Highlights tab
   const pinnedHighlights = $derived(

@@ -13,31 +13,33 @@
     spans: Span[];
   } = $props();
 
-  const MEMBER_CLASSES = [
-    'hl-1',
-    'hl-2',
-    'hl-3',
-    'hl-4',
-    'hl-5',
-    'hl-6'
+  const HIGHLIGHT_COLORS = [
+    'bg-[var(--h-amber)]',
+    'bg-[var(--h-sage)]',
+    'bg-[var(--h-rose)]',
+    'bg-[var(--h-blue)]',
+    'bg-[var(--h-lilac)]',
+    'bg-[var(--h-amber-l)]'
   ];
 
-  function memberClass(colorIndex?: number): string {
+  function highlightBg(colorIndex?: number): string {
     if (!colorIndex) return '';
-    return MEMBER_CLASSES[((colorIndex - 1) % 6 + 6) % 6];
+    return HIGHLIGHT_COLORS[((colorIndex - 1) % 6 + 6) % 6];
   }
 </script>
 
-<div class="passage-wrap">
+<div class="px-8 pb-9 pt-8 max-md:px-5 max-md:pb-7 max-md:pt-6">
   {#if label}
-    <div class="passage-label"><span class="pin-ico">⎙</span> {label}</div>
+    <div class="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-base-content/60">
+      <span class="text-primary">⎙</span> {label}
+    </div>
   {/if}
 
-  <p class="passage">
+  <p class="m-0 mb-7 max-w-[62ch] font-serif text-[22px] leading-[1.65] text-base-content">
     {#each spans as span, i (i)}
       {#if span.colorIndex}
         <span
-          class="hl {memberClass(span.colorIndex)}"
+          class="relative -mx-0.5 cursor-pointer rounded-sm px-1 py-0.5 after:pointer-events-none after:absolute after:bottom-[calc(100%+6px)] after:left-1/2 after:-translate-x-1/2 after:whitespace-nowrap after:rounded-sm after:border after:border-base-300 after:bg-white after:px-2 after:py-0.5 after:font-mono after:text-[9px] after:uppercase after:tracking-[0.1em] after:text-base-content after:opacity-0 after:transition-opacity after:content-[attr(data-by)] hover:after:opacity-100 {highlightBg(span.colorIndex)}"
           data-by={span.markedBy ?? ''}
         >{span.text}</span>
       {:else}
@@ -46,80 +48,3 @@
     {/each}
   </p>
 </div>
-
-<style>
-  .passage-wrap {
-    padding: 32px 32px 36px;
-  }
-
-  @media (max-width: 760px) {
-    .passage-wrap {
-      padding: 24px 20px 28px;
-    }
-  }
-
-  .passage-label {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-fade);
-    margin-bottom: 12px;
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .pin-ico {
-    color: var(--brand-accent);
-  }
-
-  .passage {
-    font-family: var(--font-serif);
-    font-size: 22px;
-    line-height: 1.65;
-    color: var(--ink);
-    margin: 0 0 28px;
-    max-width: 62ch;
-  }
-
-  .passage :global(.hl) {
-    padding: 2px 4px;
-    margin: 0 -2px;
-    border-radius: 2px;
-    position: relative;
-    cursor: pointer;
-  }
-
-  .passage :global(.hl::after) {
-    content: attr(data-by);
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--ink);
-    white-space: nowrap;
-    background: var(--surface);
-    padding: 3px 8px;
-    border: 1px solid var(--rule);
-    border-radius: 2px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 150ms ease;
-  }
-
-  .passage :global(.hl:hover::after) {
-    opacity: 1;
-  }
-
-  .passage :global(.hl-1) { background: var(--h-amber); }
-  .passage :global(.hl-2) { background: var(--h-sage); }
-  .passage :global(.hl-3) { background: var(--h-rose); }
-  .passage :global(.hl-4) { background: var(--h-blue); }
-  .passage :global(.hl-5) { background: var(--h-lilac); }
-  .passage :global(.hl-6) { background: var(--h-amber-l); }
-</style>

@@ -24,9 +24,9 @@
   } = $props();
 </script>
 
-<div class="hl-entry" data-id={id}>
+<div class="border-b border-base-300/50 py-5 last:border-b-0" data-id={id}>
   <User.Root {ndk} pubkey={authorPubkey}>
-    <div class="hl-entry-meta">
+    <div class="mb-2.5 flex items-center gap-2.5 font-mono text-[10px] uppercase tracking-wider text-base-content/60">
       <span
         class="room-member-avatar"
         style:--mav-size="22px"
@@ -35,67 +35,20 @@
       >
         <User.Avatar />
       </span>
-      {#if location}<span class="hl-loc">{location}</span>{/if}
-      {#if date}<span class="hl-date">{date}</span>{/if}
+      {#if location}<span class="font-medium text-primary">{location}</span>{/if}
+      {#if date}<span class="ml-auto">{date}</span>{/if}
     </div>
   </User.Root>
 
-  <p class="hl-entry-quote">{quote}</p>
+  <p class="m-0 mb-2.5 border-l-2 border-accent pl-3.5 font-serif text-lg italic leading-normal text-base-content">
+    {quote}
+  </p>
 
   {#if replies && replies > 0}
-    <div class="hl-entry-foot">
-      <a class="hl-thread" href={replyHref}>● {replies} {replies === 1 ? 'reply' : 'replies'} →</a>
+    <div class="flex items-center gap-3.5">
+      <a class="text-xs font-medium text-primary no-underline hover:underline" href={replyHref}>
+        ● {replies} {replies === 1 ? 'reply' : 'replies'} →
+      </a>
     </div>
   {/if}
 </div>
-
-<style>
-  .hl-entry {
-    padding: 20px 0;
-    border-bottom: 1px solid var(--rule-soft);
-  }
-
-  .hl-entry:last-child { border-bottom: none; }
-
-  .hl-entry-meta {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--ink-fade);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
-  .hl-loc { color: var(--brand-accent); font-weight: 500; }
-  .hl-date { margin-left: auto; }
-
-  .hl-entry-quote {
-    font-family: var(--font-serif);
-    font-style: italic;
-    font-size: 18px;
-    line-height: 1.5;
-    color: var(--ink);
-    margin: 0 0 10px;
-    padding-left: 14px;
-    border-left: 2px solid var(--marker-strong);
-  }
-
-  .hl-entry-foot {
-    display: flex;
-    gap: 14px;
-    align-items: center;
-  }
-
-  .hl-thread {
-    font-family: var(--font-sans);
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--brand-accent);
-    text-decoration: none;
-  }
-
-  .hl-thread:hover { text-decoration: underline; }
-</style>

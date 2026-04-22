@@ -39,38 +39,48 @@
   );
 
   const total = $derived(totalCount ?? highlights.length);
+
+  const DOT_COLORS: Record<number, string> = {
+    1: 'bg-[var(--h-amber)]',
+    2: 'bg-[var(--h-sage)]',
+    3: 'bg-[var(--h-blue)]',
+    4: 'bg-[var(--h-rose)]',
+    5: 'bg-[var(--h-lilac)]',
+    6: 'bg-[var(--h-amber-l)]'
+  };
+
+  function dotClass(colorIndex: number): string {
+    return DOT_COLORS[((colorIndex - 1) % 6 + 6) % 6 + 1] ?? '';
+  }
 </script>
 
-<div class="panel-head">
-  <div class="filter-row">
-    <button
-      type="button"
-      class="filter-pill"
-      class:on={activePubkey === 'all'}
-      onclick={() => (activePubkey = 'all')}
-    >
-      All <span class="c">{total}</span>
-    </button>
-    {#each memberFilters as mf (mf.pubkey)}
+<div class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-8 pb-3.5 pt-4 max-md:px-5 max-md:py-3.5">
+  <div class="flex flex-wrap gap-2">
+    {#each [{ key: 'all', label: 'All', count: total, color: '' }, ...memberFilters.map((mf) => ({ key: mf.pubkey, label: mf.pubkey.slice(0, 4), count: mf.count, color: dotClass(mf.colorIndex), aria: `Filter by ${mf.pubkey.slice(0, 8)}` }))] as f (f.key)}
+      {@const isOn = activePubkey === f.key}
       <button
         type="button"
-        class="filter-pill"
-        class:on={activePubkey === mf.pubkey}
-        onclick={() => (activePubkey = mf.pubkey)}
-        aria-label="Filter by {mf.pubkey.slice(0, 8)}"
+        class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-base-300 bg-base-100 px-3 py-1.5 text-xs font-medium text-base-content/80 transition-all hover:border-base-content hover:text-base-content"
+        class:!bg-base-content={isOn}
+        class:!text-base-100={isOn}
+        class:!border-base-content={isOn}
+        onclick={() => (activePubkey = f.key)}
+        aria-label={'aria' in f ? f.aria : undefined}
       >
-        <span class="dot dot-{mf.colorIndex}"></span>
-        {mf.pubkey.slice(0, 4)}
-        <span class="c">{mf.count}</span>
+        {#if f.color}
+          <span class="size-2.5 rounded-full {f.color}"></span>
+        {/if}
+        {f.label}
+        <span class="font-mono text-[10px] font-normal opacity-70">{f.count}</span>
       </button>
     {/each}
   </div>
-  <div class="panel-sort">By position ↓</div>
+  <div class="text-xs font-medium text-base-content/60">By position ↓</div>
 </div>
 
-<div class="hl-list">
+<div class="px-8 max-md:px-5">
   {#if filtered.length === 0}
-    <p class="empty-state">No highlights yet.</p>
+    <p class="m-0 py-10 text-center text-[15px] text-base-content/60">No highlights yet.</p>
   {:else}
     {#each filtered as hl (hl.id)}
       <HighlightEntry
@@ -86,103 +96,6 @@
   {/if}
 </div>
 
-<div class="see-all-wrap">
+<div class="px-8 pb-7 max-md:px-5 max-md:pb-6">
   <SeeAllLink label="See all {total} highlights" href={seeAllHref} />
 </div>
-
-<style>
-  .panel-head {
-    padding: 18px 32px 14px;
-    border-bottom: 1px solid var(--rule);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-
-  @media (max-width: 760px) {
-    .panel-head { padding: 14px 20px; }
-  }
-
-  .filter-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .filter-pill {
-    padding: 6px 12px;
-    background: var(--surface);
-    border: 1px solid var(--rule);
-    border-radius: 999px;
-    font-family: var(--font-sans);
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--ink-soft);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 150ms ease;
-  }
-
-  .filter-pill.on {
-    background: var(--ink);
-    color: var(--surface);
-    border-color: var(--ink);
-  }
-
-  .filter-pill:hover:not(.on) {
-    border-color: var(--ink);
-    color: var(--ink);
-  }
-
-  .filter-pill .c {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    opacity: 0.7;
-    font-weight: 400;
-  }
-
-  .dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-  }
-
-  .dot-1 { background: var(--h-amber); }
-  .dot-2 { background: var(--h-sage); }
-  .dot-3 { background: var(--h-blue); }
-  .dot-4 { background: var(--h-rose); }
-  .dot-5 { background: var(--h-lilac); }
-  .dot-6 { background: var(--h-amber-l); }
-
-  .panel-sort {
-    font-family: var(--font-sans);
-    font-size: 12px;
-    color: var(--ink-fade);
-    font-weight: 500;
-  }
-
-  .hl-list {
-    padding: 0 32px;
-  }
-
-  @media (max-width: 760px) { .hl-list { padding: 0 20px; } }
-
-  .empty-state {
-    font-family: var(--font-sans);
-    font-size: 15px;
-    color: var(--ink-fade);
-    text-align: center;
-    padding: 40px 0;
-    margin: 0;
-  }
-
-  .see-all-wrap {
-    padding: 0 32px 28px;
-  }
-
-  @media (max-width: 760px) { .see-all-wrap { padding: 0 20px 24px; } }
-</style>
