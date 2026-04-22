@@ -305,30 +305,30 @@
 </svelte:head>
 
 {#if !data.room}
-  <div class="room-missing">
-    <h1>Room not found</h1>
-    <p>No room was found at this address, or the relay doesn't hold its metadata yet.</p>
+  <div class="flex flex-col items-center text-center py-20 gap-4">
+    <h1 class="font-serif text-4xl font-normal text-base-content m-0">Room not found</h1>
+    <p class="text-base-content/80 text-[15px] max-w-[44ch] m-0">No room was found at this address, or the relay doesn't hold its metadata yet.</p>
     <a href="/rooms" class="btn">Back to your rooms</a>
   </div>
 {:else}
   <RoomHeader title={roomTitle} {members} />
 
-  <Tabs.Root bind:value={activeTab} class="room-tabs">
+  <Tabs.Root bind:value={activeTab}>
     <div class="roomtabs-bar">
-      <Tabs.List class="roomtabs-list">
+      <Tabs.List>
         {#each sections as section (section.id)}
-          <Tabs.Trigger value={section.id} class="roomtab-trigger">
+          <Tabs.Trigger value={section.id}>
             {section.label}
             {#if section.count !== undefined}
-              <span class="roomtab-count">{section.count}</span>
+              <span class="font-mono text-[10.5px] opacity-50">{section.count}</span>
             {/if}
           </Tabs.Trigger>
         {/each}
       </Tabs.List>
     </div>
 
-    <div class="room-main">
-      <div class="room-content">
+    <div class="grid grid-cols-[minmax(0,1fr)_380px] gap-11 py-11 pb-20 max-[1060px]:grid-cols-1 max-[1060px]:gap-8">
+      <div class="min-w-0">
         <Tabs.Content value="pinned">
           <Block id="pinned" title="Currently pinned." accent="pinned.">
             {#if pinnedArtifact}
@@ -362,7 +362,7 @@
                 defaultTab="Highlights"
               />
             {:else}
-              <div class="empty-card">
+              <div class="py-9 px-7 text-center bg-base-100 border border-dashed border-base-300 rounded text-base-content/50 text-sm [&_p]:m-0 [&_p]:italic">
                 <p>No artifact has been pinned yet. Share the first read.</p>
               </div>
             {/if}
@@ -372,9 +372,9 @@
         <Tabs.Content value="this-week">
           <Block id="this-week" title="Shared this week." accent="this week.">
             {#if thisWeek.length === 0}
-              <div class="empty-card"><p>Nothing else shared this week.</p></div>
+              <div class="py-9 px-7 text-center bg-base-100 border border-dashed border-base-300 rounded text-base-content/50 text-sm [&_p]:m-0 [&_p]:italic"><p>Nothing else shared this week.</p></div>
             {:else}
-              <div class="also-grid">
+              <div class="grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
                 {#each thisWeek as art (art.id)}
                   <AlsoCard
                     href={artifactHref(art.id)}
@@ -395,9 +395,9 @@
         <Tabs.Content value="shelf">
           <Block id="shelf" title="Your library." accent="library.">
             {#if shelfItems.length === 0}
-              <div class="empty-card"><p>The library is empty. Share something to read.</p></div>
+              <div class="py-9 px-7 text-center bg-base-100 border border-dashed border-base-300 rounded text-base-content/50 text-sm [&_p]:m-0 [&_p]:italic"><p>The library is empty. Share something to read.</p></div>
             {:else}
-              <div class="shelf-grid">
+              <div class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3.5">
                 {#each shelfItems as art (art.id)}
                   <ShelfTile
                     id={art.id}
@@ -421,9 +421,9 @@
         <Tabs.Content value="highlights">
           <Block id="highlights" title="The room's highlights." accent="highlights.">
             {#if highlightReel.length === 0}
-              <div class="empty-card"><p>No highlights yet. Be the first.</p></div>
+              <div class="py-9 px-7 text-center bg-base-100 border border-dashed border-base-300 rounded text-base-content/50 text-sm [&_p]:m-0 [&_p]:italic"><p>No highlights yet. Be the first.</p></div>
             {:else}
-              <div class="hl-reel">
+              <div class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3.5">
                 {#each highlightReel as hl (hl.id)}
                   <HighlightCard
                     id={hl.id}
@@ -447,7 +447,7 @@
           <Block id="discussions" title="Discussions">
             {#snippet filters()}
               {#if isMember}
-                <div class="disc-toolbar">
+                <div class="flex justify-end ml-auto">
                   <a class="btn btn-primary btn-sm" href="/r/{slug}/discussions/new">
                     New discussion
                   </a>
@@ -456,7 +456,7 @@
             {/snippet}
 
             {#if discussionRows.length === 0}
-              <div class="empty-card">
+              <div class="py-9 px-7 text-center bg-base-100 border border-dashed border-base-300 rounded text-base-content/50 text-sm [&_p]:m-0 [&_p]:italic">
                 <p>
                   {#if isMember}
                     No discussions yet.
@@ -466,7 +466,7 @@
                 </p>
               </div>
             {:else}
-              <div class="disc-list">
+              <div class="bg-base-100 border border-base-300 rounded overflow-hidden mt-4">
                 {#each discussionRows as row (row.eventId)}
                   <DiscussionRow
                     id={row.id}
@@ -486,14 +486,14 @@
 
         <Tabs.Content value="lately">
           <Block id="lately" title="Recent activity." accent="activity.">
-            <div class="empty-card">
+            <div class="py-9 px-7 text-center bg-base-100 border border-dashed border-base-300 rounded text-base-content/50 text-sm [&_p]:m-0 [&_p]:italic">
               <p>Nothing has happened yet.</p>
             </div>
           </Block>
         </Tabs.Content>
       </div>
 
-      <aside class="sidebar">
+      <aside class="flex flex-col gap-6 max-[1060px]:flex-none min-[1060px]:sticky min-[1060px]:top-[112px] min-[1060px]:self-start min-[1060px]:max-h-[calc(100vh-140px)] min-[1060px]:overflow-y-auto">
         {#if members.length > 0}
           <MembersSidebar members={members.map((m) => ({ pubkey: m.pubkey, colorIndex: m.colorIndex }))} slug={data.room?.id ?? ''} {isAdmin} />
         {/if}
@@ -514,190 +514,13 @@
 {/if}
 
 <style>
-  .room-missing {
-    padding: 80px 0;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    align-items: center;
-  }
-
-  .room-missing h1 {
-    font-family: var(--font-serif);
-    font-size: 36px;
-    font-weight: 400;
-    color: var(--ink);
-    margin: 0;
-  }
-
-  .room-missing p {
-    color: var(--ink-soft);
-    font-size: 15px;
-    max-width: 44ch;
-    margin: 0;
-  }
-
-  .btn {
-    padding: 10px 20px;
-    background: var(--ink);
-    color: var(--surface);
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    text-decoration: none;
-    border-radius: var(--radius);
-    transition: background 200ms ease;
-  }
-
-  .btn:hover { background: var(--brand-accent); }
-
   .roomtabs-bar {
     position: sticky;
     top: 62px;
     background: var(--bg);
-    border-bottom: 1px solid var(--rule);
     z-index: 15;
     margin: 0 calc(var(--container-px) * -1);
     padding: 0 var(--container-px);
     overflow-x: auto;
-  }
-
-  :global(.roomtabs-list) {
-    display: flex;
-    gap: 0;
-    max-width: var(--container-max);
-    margin: 0 auto;
-    background: transparent;
-    border: 0;
-    padding: 0;
-  }
-
-  :global(.roomtab-trigger) {
-    padding: 14px 18px 12px;
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--ink-fade);
-    background: transparent;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    border-radius: 0;
-    cursor: pointer;
-    white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    transition: color 150ms ease;
-  }
-
-  :global(.roomtab-trigger:first-child) {
-    padding-left: 0;
-  }
-
-  :global(.roomtab-trigger:hover) {
-    color: var(--ink);
-  }
-
-  :global(.roomtab-trigger[data-state="active"]) {
-    color: var(--ink);
-    border-bottom-color: var(--brand-accent);
-  }
-
-  :global(.roomtab-count) {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    color: var(--ink-fade);
-    font-weight: 400;
-    letter-spacing: 0.02em;
-  }
-
-  :global(.roomtab-trigger[data-state="active"] .roomtab-count) {
-    color: var(--brand-accent);
-  }
-
-  .room-main {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--grid-sidebar);
-    gap: var(--grid-gap);
-    padding: 44px 0 80px;
-  }
-
-  @media (max-width: 1060px) {
-    .room-main { grid-template-columns: 1fr; gap: 32px; }
-  }
-
-  .room-content { min-width: 0; }
-
-  .sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-
-  @media (min-width: 1060px) {
-    .sidebar {
-      position: sticky;
-      top: 112px;
-      align-self: start;
-      max-height: calc(100vh - 140px);
-      overflow-y: auto;
-    }
-  }
-
-  .also-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-  }
-
-  @media (max-width: 760px) {
-    .also-grid { grid-template-columns: 1fr; }
-  }
-
-  .shelf-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 14px;
-  }
-
-  .hl-reel {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 14px;
-  }
-
-  .disc-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    margin-left: auto;
-  }
-
-  .disc-list {
-    background: var(--surface);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    overflow: hidden;
-    margin-top: 16px;
-  }
-
-  .disc-composer-wrap {
-    margin-top: 16px;
-  }
-
-  .empty-card {
-    padding: 36px 28px;
-    text-align: center;
-    background: var(--surface);
-    border: 1px dashed var(--rule);
-    border-radius: var(--radius);
-    color: var(--ink-fade);
-    font-family: var(--font-sans);
-    font-size: 14px;
-  }
-
-  .empty-card p {
-    margin: 0;
-    font-style: italic;
   }
 </style>

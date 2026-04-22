@@ -118,22 +118,22 @@
   <title>Bookmarks — Highlighter</title>
 </svelte:head>
 
-<div class="bookmarks-layout">
-  <div class="bookmarks-main">
+<div class="max-w-[var(--page-width)]">
+  <div class="grid gap-14">
     {#if currentUser}
-      <section class="bookmarks-section">
-        <div class="bookmarks-section-header">
-          <h2 class="bookmarks-section-title">My Reading List</h2>
-          <p class="bookmarks-section-desc">Articles you've saved for later</p>
+      <section class="grid gap-6">
+        <div class="grid gap-1.5">
+          <h2 class="m-0 font-serif text-[clamp(1.6rem,3.5vw,2.2rem)] font-bold text-base-content tracking-tight leading-[1.1]">My Reading List</h2>
+          <p class="m-0 text-base-content/50 text-[0.95rem]">Articles you've saved for later</p>
         </div>
 
         {#if orderedMyArticles.length > 0}
-          <div class="article-feed">
+          <div class="max-w-[var(--content-width)] grid">
             {#each orderedMyArticles as event (event.id)}
-              <div class="bookmark-feed-item">
+              <div class="relative group">
                 <ArticleCard {event} showAuthor />
                 <button
-                  class="bookmark-remove-btn"
+                  class="absolute top-6 right-0 inline-flex items-center justify-center w-8 h-8 p-0 border-none rounded bg-transparent text-primary cursor-pointer opacity-0 group-hover:opacity-100 sm:opacity-100 transition-opacity duration-[160ms] ease hover:bg-error/10 hover:text-error"
                   title="Remove from reading list"
                   onclick={() => removeBookmark(event.tagId())}
                 >
@@ -143,57 +143,57 @@
             {/each}
           </div>
         {:else if myBookmarkedAddresses.length > 0}
-          <p class="muted">Loading your saved articles...</p>
+          <p class="text-base-content/50">Loading your saved articles...</p>
         {:else}
-          <div class="bookmarks-empty">
-            <div class="bookmarks-empty-icon">
+          <div class="grid gap-2 justify-items-center py-12 px-4 border border-dashed border-base-300 rounded-box text-center">
+            <div class="text-base-300 mb-1">
               <BookmarkIcon size={32} />
             </div>
-            <p>Your reading list is empty</p>
-            <p class="muted">Bookmark articles to save them here for later</p>
+            <p class="m-0">Your reading list is empty</p>
+            <p class="m-0 text-base-content/50">Bookmark articles to save them here for later</p>
           </div>
         {/if}
       </section>
     {:else}
-      <section class="bookmarks-section">
-        <div class="bookmarks-section-header">
-          <h2 class="bookmarks-section-title">My Reading List</h2>
-          <p class="bookmarks-section-desc">Log in to save and manage your bookmarks</p>
+      <section class="grid gap-6">
+        <div class="grid gap-1.5">
+          <h2 class="m-0 font-serif text-[clamp(1.6rem,3.5vw,2.2rem)] font-bold text-base-content tracking-tight leading-[1.1]">My Reading List</h2>
+          <p class="m-0 text-base-content/50 text-[0.95rem]">Log in to save and manage your bookmarks</p>
         </div>
       </section>
     {/if}
 
-    <section class="bookmarks-section">
-      <div class="bookmarks-section-header">
-        <h2 class="bookmarks-section-title">What Readers Are Saving</h2>
-        <p class="bookmarks-section-desc">Discover articles readers find worth keeping</p>
+    <section class="grid gap-6">
+      <div class="grid gap-1.5">
+        <h2 class="m-0 font-serif text-[clamp(1.6rem,3.5vw,2.2rem)] font-bold text-base-content tracking-tight leading-[1.1]">What Readers Are Saving</h2>
+        <p class="m-0 text-base-content/50 text-[0.95rem]">Discover articles readers find worth keeping</p>
       </div>
 
       {#if orderedTrending.length > 0}
-        <div class="trending-grid">
+        <div class="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(min(100%,20rem),1fr))]">
           {#each orderedTrending as { article, saveCount } (article.id)}
-            <a class="trending-card" href={`/note/${article.encode()}`}>
+            <a class="grid gap-0 border border-base-300 rounded-box overflow-hidden text-inherit no-underline transition-[border-color,box-shadow] duration-200 ease hover:border-base-300 hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] group" href={`/note/${article.encode()}`}>
               {#if articleImageUrl(article.rawEvent())}
                 <img
-                  class="trending-card-image"
+                  class="w-full aspect-video object-cover"
                   src={articleImageUrl(article.rawEvent())}
                   alt=""
                   loading="lazy"
                 />
               {:else}
-                <div class="trending-card-image-placeholder"></div>
+                <div class="w-full aspect-video bg-gradient-to-br from-base-200 to-base-300"></div>
               {/if}
-              <div class="trending-card-body">
-                <h3 class="trending-card-title">{articleTitle(article.rawEvent())}</h3>
-                <p class="trending-card-summary">{articleSummary(article.rawEvent(), 120)}</p>
-                <div class="trending-card-meta">
+              <div class="grid gap-2.5 px-5 pt-[1.1rem] pb-5">
+                <h3 class="m-0 font-serif text-[1.15rem] font-bold text-base-content leading-[1.25] tracking-[-0.01em] line-clamp-2 transition-colors duration-[160ms] ease group-hover:text-primary">{articleTitle(article.rawEvent())}</h3>
+                <p class="m-0 text-base-content/50 text-[0.88rem] leading-[1.5] line-clamp-2">{articleSummary(article.rawEvent(), 120)}</p>
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-[0.35rem]">
                   <StoryAuthor
                     {ndk}
                     pubkey={article.pubkey}
                     avatarClass="article-author-avatar article-author-avatar-compact"
                     compact
                   />
-                  <span class="trending-save-count">
+                  <span class="inline-flex items-center gap-1 text-primary text-[0.8rem] font-semibold">
                     <BookmarkIcon size={14} filled />
                     {saveCount} {saveCount === 1 ? 'save' : 'saves'}
                   </span>
@@ -203,211 +203,10 @@
           {/each}
         </div>
       {:else if networkBookmarks.events.length > 0}
-        <p class="muted">Analyzing what people are saving...</p>
+        <p class="text-base-content/50">Analyzing what people are saving...</p>
       {:else}
-        <p class="muted">Discovering bookmarks from the network...</p>
+        <p class="text-base-content/50">Discovering bookmarks from the network...</p>
       {/if}
     </section>
   </div>
 </div>
-
-<style>
-  .bookmarks-layout {
-    max-width: var(--page-width);
-  }
-
-  .bookmarks-main {
-    display: grid;
-    gap: 3.5rem;
-  }
-
-  .bookmarks-section {
-    display: grid;
-    gap: 1.5rem;
-  }
-
-  .bookmarks-section-header {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .bookmarks-section-title {
-    margin: 0;
-    font-family: var(--font-serif);
-    font-size: clamp(1.6rem, 3.5vw, 2.2rem);
-    font-weight: 700;
-    color: var(--text-strong);
-    letter-spacing: -0.02em;
-    line-height: 1.1;
-  }
-
-  .bookmarks-section-desc {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.95rem;
-  }
-
-  /* ── my reading list feed ─────────────────────────────────── */
-
-  .article-feed {
-    max-width: var(--content-width);
-    display: grid;
-  }
-
-  .bookmark-feed-item {
-    position: relative;
-  }
-
-  .bookmark-remove-btn {
-    position: absolute;
-    top: 1.5rem;
-    right: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    padding: 0;
-    border: none;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--accent);
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 160ms ease, color 160ms ease, background 160ms ease;
-  }
-
-  .bookmark-feed-item:hover .bookmark-remove-btn {
-    opacity: 1;
-  }
-
-  .bookmark-remove-btn:hover {
-    background: var(--pale-red);
-    color: var(--pale-red-text);
-  }
-
-  /* ── empty state ──────────────────────────────────────────── */
-
-  .bookmarks-empty {
-    display: grid;
-    gap: 0.5rem;
-    justify-items: center;
-    padding: 3rem 1rem;
-    border: 1px dashed var(--color-base-300);
-    border-radius: var(--radius-md);
-    text-align: center;
-  }
-
-  .bookmarks-empty-icon {
-    color: var(--color-base-300);
-    margin-bottom: 0.25rem;
-  }
-
-  .bookmarks-empty p {
-    margin: 0;
-  }
-
-  /* ── trending grid ────────────────────────────────────────── */
-
-  .trending-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
-    gap: 1.5rem;
-  }
-
-  .trending-card {
-    display: grid;
-    gap: 0;
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-    color: inherit;
-    text-decoration: none;
-    transition: border-color 200ms ease, box-shadow 200ms ease;
-  }
-
-  .trending-card:hover {
-    border-color: var(--color-base-300);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-  }
-
-  .trending-card-image {
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    object-fit: cover;
-  }
-
-  .trending-card-image-placeholder {
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    background: linear-gradient(135deg, var(--surface-soft) 0%, var(--border-light) 100%);
-  }
-
-  .trending-card-body {
-    display: grid;
-    gap: 0.6rem;
-    padding: 1.1rem 1.25rem 1.25rem;
-  }
-
-  .trending-card-title {
-    margin: 0;
-    font-family: var(--font-serif);
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: var(--text-strong);
-    line-height: 1.25;
-    letter-spacing: -0.01em;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    transition: color 160ms ease;
-  }
-
-  .trending-card:hover .trending-card-title {
-    color: var(--accent);
-  }
-
-  .trending-card-summary {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.88rem;
-    line-height: 1.5;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .trending-card-meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding-top: 0.35rem;
-  }
-
-  .trending-save-count {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    color: var(--accent);
-    font-size: 0.8rem;
-    font-weight: 600;
-  }
-
-  /* ── responsive ───────────────────────────────────────────── */
-
-  @media (max-width: 720px) {
-    .trending-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .bookmark-remove-btn {
-      opacity: 1;
-    }
-  }
-</style>

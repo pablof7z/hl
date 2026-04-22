@@ -75,9 +75,9 @@
 </svelte:head>
 
 {#if !artifact}
-  <div class="artifact-missing">
-    <h1>Artifact not available</h1>
-    <p>The event for this artifact wasn't found on the relays we queried.</p>
+  <div class="py-20 text-center flex flex-col gap-4 items-center">
+    <h1 class="font-serif text-4xl font-normal text-base-content m-0">Artifact not available</h1>
+    <p class="text-base-content/80 text-[15px] max-w-[44ch] m-0">The event for this artifact wasn't found on the relays we queried.</p>
     {#if room}
       <a href={`/r/${room.id}`} class="btn">Back to {room.name}</a>
     {:else}
@@ -94,95 +94,15 @@
       {roomContext}
     />
   {:else}
-    <p class="loading-note">Loading article…</p>
+    <p class="text-base-content/50 text-sm py-10 text-center">Loading article…</p>
   {/if}
 {:else if artifact.url}
-  <div class="external-source">
-    <p>This artifact links to an external source.</p>
-    <a class="external-link" href={artifact.url} target="_blank" rel="noreferrer noopener">
+  <div class="p-10 flex flex-col gap-3 items-start border border-base-300 rounded bg-base-100">
+    <p class="m-0 text-base-content/80 text-sm">This artifact links to an external source.</p>
+    <a class="text-sm font-medium text-primary no-underline hover:underline" href={artifact.url} target="_blank" rel="noreferrer noopener">
       Read at {artifact.domain || 'source'} ↗
     </a>
   </div>
 {:else}
-  <p class="loading-note">No readable source is attached to this artifact.</p>
+  <p class="text-base-content/50 text-sm py-10 text-center">No readable source is attached to this artifact.</p>
 {/if}
-
-<style>
-  .artifact-missing {
-    padding: 80px 0;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    align-items: center;
-  }
-
-  .artifact-missing h1 {
-    font-family: var(--font-serif);
-    font-size: 36px;
-    font-weight: 400;
-    color: var(--ink);
-    margin: 0;
-  }
-
-  .artifact-missing p {
-    color: var(--ink-soft);
-    font-size: 15px;
-    max-width: 44ch;
-    margin: 0;
-  }
-
-  .btn {
-    padding: 10px 20px;
-    background: var(--ink);
-    color: var(--surface);
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    text-decoration: none;
-    border-radius: var(--radius);
-    transition: background 200ms ease;
-  }
-
-  .btn:hover {
-    background: var(--brand-accent);
-  }
-
-  .loading-note {
-    font-family: var(--font-sans);
-    color: var(--ink-fade);
-    font-size: 14px;
-    padding: 40px 0;
-    text-align: center;
-  }
-
-  .external-source {
-    padding: 40px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    background: var(--surface);
-  }
-
-  .external-source p {
-    margin: 0;
-    color: var(--ink-soft);
-    font-family: var(--font-sans);
-    font-size: 14px;
-  }
-
-  .external-link {
-    font-family: var(--font-sans);
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--brand-accent);
-    text-decoration: none;
-  }
-
-  .external-link:hover {
-    text-decoration: underline;
-  }
-</style>

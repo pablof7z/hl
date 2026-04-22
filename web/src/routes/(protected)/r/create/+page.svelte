@@ -109,24 +109,28 @@
   <title>New room — Highlighter</title>
 </svelte:head>
 
-<section class="wizard">
-  <header class="wizard-head">
-    <div class="wizard-step">0{step} / 03</div>
-    <div class="wizard-dots" role="tablist" aria-label="Wizard progress">
+<section class="grid gap-8 max-w-[38rem] mx-auto py-12 pb-16">
+  <header class="flex items-center justify-between">
+    <div class="font-mono text-[0.72rem] tracking-[0.2em] uppercase text-base-content/50">0{step} / 03</div>
+    <div class="inline-flex gap-[0.4rem]" role="tablist" aria-label="Wizard progress">
       {#each [1, 2, 3] as s}
-        <span class="dot" class:active={step === s} class:done={step > s} aria-hidden="true"></span>
+        <span
+          class="w-[6px] h-[6px] rounded-full {step === s ? 'bg-primary' : step > s ? 'bg-base-content' : 'bg-base-300'}"
+          aria-hidden="true"
+        ></span>
       {/each}
     </div>
   </header>
 
   {#if step === 1}
-    <div class="pane">
-      <h1 class="pane-head">What do you want to call it?</h1>
+    <div class="grid gap-6 min-h-[18rem]">
+      <h1 class="m-0 text-base-content font-serif text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">What do you want to call it?</h1>
 
-      <label class="big-field">
-        <span class="big-label">Room name</span>
+      <label class="grid gap-[0.4rem]">
+        <span class="font-mono text-[0.72rem] tracking-[0.18em] uppercase text-base-content/50">Room name</span>
         <!-- svelte-ignore a11y_autofocus -->
         <input
+          class="w-full py-[0.9rem] border-0 border-b border-base-300 bg-transparent text-base-content font-serif text-[clamp(1.5rem,3.5vw,2rem)] leading-[1.15] tracking-[-0.02em] outline-none transition-[border-color] duration-[120ms] ease-in-out placeholder:text-base-content/50 focus:border-primary"
           type="text"
           bind:value={name}
           placeholder="Signal over noise"
@@ -136,10 +140,10 @@
         />
       </label>
 
-      <div class="slug-row">
-        <span class="slug-prefix">highlighter.com/r/</span>
+      <div class="grid grid-cols-[auto_1fr] items-baseline py-[0.65rem] border-b border-dotted border-base-300">
+        <span class="text-base-content/50 font-mono text-[0.82rem]">highlighter.com/r/</span>
         <input
-          class="slug-input"
+          class="min-w-0 p-0 border-0 bg-transparent text-base-content font-mono text-[0.82rem] outline-none"
           value={roomId}
           oninput={handleSlugInput}
           placeholder="signal-over-noise"
@@ -149,55 +153,55 @@
         />
       </div>
       {#if roomId && !slugIsValid}
-        <p class="slug-warn">Use 3–48 lowercase letters, numbers, and hyphens.</p>
+        <p class="m-0 text-[0.8rem] leading-[1.5] text-error">Use 3–48 lowercase letters, numbers, and hyphens.</p>
       {:else}
-        <p class="slug-hint">Lowercase letters, numbers, and hyphens. The room's address.</p>
+        <p class="m-0 text-[0.8rem] leading-[1.5] text-base-content/50">Lowercase letters, numbers, and hyphens. The room's address.</p>
       {/if}
     </div>
   {/if}
 
   {#if step === 2}
-    <div class="pane">
-      <h1 class="pane-head">Who can read and join?</h1>
+    <div class="grid gap-6 min-h-[18rem]">
+      <h1 class="m-0 text-base-content font-serif text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">Who can read and join?</h1>
 
-      <div class="presets">
-        <label class="preset" class:active={preset === 'invite'}>
-          <input type="radio" bind:group={preset} value="invite" />
-          <div class="preset-body">
-            <strong>By invitation</strong>
-            <p>Only people you invite can join. Anyone with the link can read along.</p>
+      <div class="grid gap-3">
+        <label class="grid grid-cols-[auto_1fr] gap-4 items-start px-5 py-[1.1rem] border border-base-300 rounded-2xl bg-base-100 cursor-pointer transition-[border-color,background] duration-[120ms] ease-in-out hover:border-base-content {preset === 'invite' ? 'border-primary bg-primary/[0.04]' : ''}">
+          <input class="mt-[0.35rem]" type="radio" bind:group={preset} value="invite" />
+          <div class="grid gap-1">
+            <strong class="text-base-content font-serif text-[1.15rem] font-medium tracking-[-0.01em]">By invitation</strong>
+            <p class="m-0 text-base-content/50 text-[0.9rem] leading-[1.55]">Only people you invite can join. Anyone with the link can read along.</p>
           </div>
         </label>
 
-        <label class="preset" class:active={preset === 'open'}>
-          <input type="radio" bind:group={preset} value="open" />
-          <div class="preset-body">
-            <strong>Open to anyone</strong>
-            <p>Anyone can join. Anyone can read.</p>
+        <label class="grid grid-cols-[auto_1fr] gap-4 items-start px-5 py-[1.1rem] border border-base-300 rounded-2xl bg-base-100 cursor-pointer transition-[border-color,background] duration-[120ms] ease-in-out hover:border-base-content {preset === 'open' ? 'border-primary bg-primary/[0.04]' : ''}">
+          <input class="mt-[0.35rem]" type="radio" bind:group={preset} value="open" />
+          <div class="grid gap-1">
+            <strong class="text-base-content font-serif text-[1.15rem] font-medium tracking-[-0.01em]">Open to anyone</strong>
+            <p class="m-0 text-base-content/50 text-[0.9rem] leading-[1.55]">Anyone can join. Anyone can read.</p>
           </div>
         </label>
 
-        <label class="preset" class:active={preset === 'members'}>
-          <input type="radio" bind:group={preset} value="members" />
-          <div class="preset-body">
-            <strong>Members only</strong>
-            <p>Only members can join. Only members can see what's inside.</p>
+        <label class="grid grid-cols-[auto_1fr] gap-4 items-start px-5 py-[1.1rem] border border-base-300 rounded-2xl bg-base-100 cursor-pointer transition-[border-color,background] duration-[120ms] ease-in-out hover:border-base-content {preset === 'members' ? 'border-primary bg-primary/[0.04]' : ''}">
+          <input class="mt-[0.35rem]" type="radio" bind:group={preset} value="members" />
+          <div class="grid gap-1">
+            <strong class="text-base-content font-serif text-[1.15rem] font-medium tracking-[-0.01em]">Members only</strong>
+            <p class="m-0 text-base-content/50 text-[0.9rem] leading-[1.55]">Only members can join. Only members can see what's inside.</p>
           </div>
         </label>
       </div>
 
-      <p class="pane-note">You can change this later in room settings.</p>
+      <p class="m-0 text-base-content/50 text-[0.9rem] leading-[1.55]">You can change this later in room settings.</p>
     </div>
   {/if}
 
   {#if step === 3}
-    <div class="pane">
-      <h1 class="pane-head">Describe it.</h1>
+    <div class="grid gap-6 min-h-[18rem]">
+      <h1 class="m-0 text-base-content font-serif text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">Describe it.</h1>
 
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">What's this room about?</legend>
+      <fieldset class="grid gap-2 border-none p-0 m-0">
+        <legend class="font-mono text-[0.72rem] tracking-[0.18em] uppercase text-base-content/50">What's this room about?</legend>
         <textarea
-          class="field-input"
+          class="w-full px-3 py-[0.625rem] border border-base-300 rounded-xl bg-base-100 text-base-content text-[0.9rem] font-[inherit] outline-none transition-[border-color] duration-[120ms] ease-in-out resize-y placeholder:text-base-content/50 focus:border-primary"
           bind:value={about}
           rows="4"
           maxlength="280"
@@ -205,10 +209,10 @@
         ></textarea>
       </fieldset>
 
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">Cover image URL</legend>
+      <fieldset class="grid gap-2 border-none p-0 m-0">
+        <legend class="font-mono text-[0.72rem] tracking-[0.18em] uppercase text-base-content/50">Cover image URL</legend>
         <input
-          class="field-input"
+          class="w-full px-3 py-[0.625rem] border border-base-300 rounded-xl bg-base-100 text-base-content text-[0.9rem] font-[inherit] outline-none transition-[border-color] duration-[120ms] ease-in-out placeholder:text-base-content/50 focus:border-primary"
           bind:value={picture}
           placeholder="https://..."
           inputmode="url"
@@ -216,21 +220,21 @@
         />
       </fieldset>
 
-      <p class="pane-note">Both are optional — you can add them after the room is live.</p>
+      <p class="m-0 text-base-content/50 text-[0.9rem] leading-[1.55]">Both are optional — you can add them after the room is live.</p>
     </div>
   {/if}
 
   {#if errorMessage}
-    <p class="error-banner">{errorMessage}</p>
+    <p class="m-0 px-4 py-[0.85rem] rounded-[0.9rem] text-[0.9rem] leading-[1.5] bg-error/10 text-error">{errorMessage}</p>
   {/if}
 
   {#if isReadOnly}
-    <p class="warn-banner">
+    <p class="m-0 px-4 py-[0.85rem] rounded-[0.9rem] text-[0.9rem] leading-[1.5] bg-warning/10 text-warning">
       This signer is read-only. Switch to a writable signer to create a room.
     </p>
   {/if}
 
-  <footer class="wizard-foot">
+  <footer class="flex justify-between items-center gap-4 pt-4 border-t border-base-300">
     {#if step > 1}
       <button type="button" class="btn btn-ghost" onclick={goBack} disabled={publishing}>
         Back
@@ -260,264 +264,3 @@
     {/if}
   </footer>
 </section>
-
-<style>
-  .wizard {
-    display: grid;
-    gap: 2rem;
-    max-width: 38rem;
-    margin: 0 auto;
-    padding: 3rem 0 4rem;
-  }
-
-  .wizard-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .wizard-step {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-
-  .wizard-dots {
-    display: inline-flex;
-    gap: 0.4rem;
-  }
-
-  .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-base-300);
-  }
-
-  .dot.active {
-    background: var(--accent);
-  }
-
-  .dot.done {
-    background: var(--text-strong);
-  }
-
-  .pane {
-    display: grid;
-    gap: 1.5rem;
-    min-height: 18rem;
-  }
-
-  .pane-head {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: clamp(2rem, 5vw, 2.8rem);
-    line-height: 1.05;
-    letter-spacing: -0.03em;
-  }
-
-  .pane-note {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.9rem;
-    line-height: 1.55;
-  }
-
-  .big-field {
-    display: grid;
-    gap: 0.4rem;
-  }
-
-  .big-label {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-
-  .big-field input {
-    width: 100%;
-    padding: 0.9rem 0;
-    border: 0;
-    border-bottom: 1px solid var(--color-base-300);
-    background: transparent;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: clamp(1.5rem, 3.5vw, 2rem);
-    line-height: 1.15;
-    letter-spacing: -0.02em;
-    outline: none;
-    transition: border-color 120ms ease;
-  }
-
-  .big-field input::placeholder {
-    color: var(--muted);
-    opacity: 0.55;
-  }
-
-  .big-field input:focus {
-    border-color: var(--accent);
-  }
-
-  .slug-row {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: baseline;
-    gap: 0;
-    padding: 0.65rem 0;
-    border-bottom: 1px dotted var(--color-base-300);
-  }
-
-  .slug-prefix {
-    color: var(--muted);
-    font-family: var(--font-mono);
-    font-size: 0.82rem;
-  }
-
-  .slug-input {
-    min-width: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--text-strong);
-    font-family: var(--font-mono);
-    font-size: 0.82rem;
-    outline: none;
-  }
-
-  .slug-hint,
-  .slug-warn {
-    margin: 0;
-    font-size: 0.8rem;
-    line-height: 1.5;
-  }
-
-  .slug-hint {
-    color: var(--muted);
-  }
-
-  .slug-warn {
-    color: var(--pale-red-text);
-  }
-
-  .presets {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .preset {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 1rem;
-    align-items: start;
-    padding: 1.1rem 1.25rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 1rem;
-    background: var(--surface);
-    cursor: pointer;
-    transition: border-color 120ms ease, background 120ms ease;
-  }
-
-  .preset:hover {
-    border-color: var(--text-strong);
-  }
-
-  .preset.active {
-    border-color: var(--accent);
-    background: rgba(255, 103, 25, 0.04);
-  }
-
-  .preset input {
-    margin: 0.35rem 0 0;
-  }
-
-  .preset-body {
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .preset-body strong {
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 1.15rem;
-    font-weight: 500;
-    letter-spacing: -0.01em;
-  }
-
-  .preset-body p {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.9rem;
-    line-height: 1.55;
-  }
-
-  .field-input {
-    width: 100%;
-    padding: 0.625rem 0.75rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 0.75rem;
-    background: var(--surface-soft);
-    color: var(--text-strong);
-    font-size: 0.9rem;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 120ms ease;
-    resize: vertical;
-  }
-
-  .field-input::placeholder {
-    color: var(--muted);
-  }
-
-  .field-input:focus {
-    border-color: var(--accent);
-  }
-
-  .fieldset {
-    display: grid;
-    gap: 0.5rem;
-    border: none;
-    padding: 0;
-    margin: 0;
-  }
-
-  .fieldset-legend {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-
-  .error-banner,
-  .warn-banner {
-    margin: 0;
-    padding: 0.85rem 1rem;
-    border-radius: 0.9rem;
-    font-size: 0.9rem;
-    line-height: 1.5;
-  }
-
-  .error-banner {
-    background: var(--pale-red);
-    color: var(--pale-red-text);
-  }
-
-  .warn-banner {
-    background: var(--pale-yellow);
-    color: var(--pale-yellow-text);
-  }
-
-  .wizard-foot {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--color-base-300);
-  }
-</style>

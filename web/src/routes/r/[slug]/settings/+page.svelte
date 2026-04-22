@@ -1,6 +1,5 @@
 <script lang="ts">
   import { browser } from '$app/environment';
-  import { goto } from '$app/navigation';
   import { NDKKind } from '@nostr-dev-kit/ndk';
   import { ndk, ensureClientNdk } from '$lib/ndk/client';
   import { GROUP_RELAY_URLS } from '$lib/ndk/config';
@@ -195,30 +194,28 @@
 </svelte:head>
 
 {#if !data.room}
-  <div class="room-missing">
-    <h1>Room not found</h1>
-    <a href="/rooms" class="btn">Back to your rooms</a>
+  <div class="py-15 text-center text-base-content/80 font-sans text-[14px]">
+    <h1 class="font-serif text-[32px] font-normal text-base-content m-0 mb-3">Room not found</h1>
+    <a href="/rooms" class="inline-flex items-center px-5 py-2.5 bg-base-content text-base-100 font-sans text-[13px] font-medium no-underline rounded hover:bg-primary transition-colors duration-200">Back to your rooms</a>
   </div>
-{:else if currentUser && !isAdmin && adminFeed.events.size > 0}
-  <div class="room-missing">
-    <h1>Not authorized</h1>
-    <p>Only room admins can access settings.</p>
-    <a href="/r/{slug}" class="btn">Back to room</a>
+{:else if currentUser && !isAdmin && adminFeed.events.length > 0}
+  <div class="py-15 text-center text-base-content/80 font-sans text-[14px]">
+    <h1 class="font-serif text-[32px] font-normal text-base-content m-0 mb-3">Not authorized</h1>
+    <p class="m-0 mb-3">Only room admins can access settings.</p>
+    <a href="/r/{slug}" class="inline-flex items-center px-5 py-2.5 bg-base-content text-base-100 font-sans text-[13px] font-medium no-underline rounded hover:bg-primary transition-colors duration-200">Back to room</a>
   </div>
 {:else}
-  <div class="settings-wrap">
-    <header class="settings-header">
-      <a href="/r/{slug}" class="back-link">← {data.room.name}</a>
-      <h1>Room settings</h1>
+  <div class="grid gap-6 py-8 pb-12">
+    <header class="grid gap-[0.35rem]">
+      <a href="/r/{slug}" class="text-primary font-sans text-[0.85rem] font-medium no-underline hover:underline">← {data.room.name}</a>
+      <h1 class="m-0 text-base-content font-serif text-[clamp(1.8rem,4vw,2.6rem)] leading-[1.05] tracking-[-0.03em]">Room settings</h1>
     </header>
 
-    <!-- Tab strip -->
-    <div class="tab-strip" role="tablist">
+    <div class="flex gap-0 border-b border-base-300" role="tablist">
       {#each (['general', 'members', 'invite'] as const) as tab}
         <button
           role="tab"
-          class="tab-btn"
-          class:active={activeTab === tab}
+          class="px-[1.1rem] py-[0.6rem] bg-none border-none border-b-2 border-transparent -mb-px cursor-pointer font-sans text-[0.88rem] font-medium text-base-content/50 transition-[color,border-color] duration-[120ms] {activeTab === tab ? 'text-base-content border-b-primary' : ''}"
           aria-selected={activeTab === tab}
           onclick={() => { activeTab = tab; }}
         >
@@ -227,78 +224,76 @@
       {/each}
     </div>
 
-    <!-- General tab -->
     {#if activeTab === 'general'}
-      <form class="settings-form" onsubmit={saveGeneral}>
-        <section class="form-card">
-          <fieldset class="fieldset">
-            <legend class="fieldset-legend">Name</legend>
-            <input class="field-input" bind:value={genName} maxlength="80" autocomplete="off" />
+      <form class="grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] gap-4 items-start max-[860px]:grid-cols-1" onsubmit={saveGeneral}>
+        <section class="grid gap-4 p-5 border border-base-300 rounded-[1.35rem] bg-base-100">
+          <fieldset class="grid gap-[0.45rem] border-none p-0 m-0">
+            <legend class="font-sans text-[0.78rem] font-bold tracking-[0.07em] uppercase text-base-content/50">Name</legend>
+            <input class="w-full px-3 py-[0.625rem] border border-base-300 rounded-xl bg-base-200 text-base-content text-[0.875rem] font-[inherit] outline-none transition-[border-color] duration-[120ms] focus:border-primary resize-y placeholder:text-base-content/50" bind:value={genName} maxlength="80" autocomplete="off" />
           </fieldset>
 
-          <fieldset class="fieldset">
-            <legend class="fieldset-legend">Description</legend>
-            <textarea class="field-input" bind:value={genAbout} rows="4" maxlength="280"></textarea>
+          <fieldset class="grid gap-[0.45rem] border-none p-0 m-0">
+            <legend class="font-sans text-[0.78rem] font-bold tracking-[0.07em] uppercase text-base-content/50">Description</legend>
+            <textarea class="w-full px-3 py-[0.625rem] border border-base-300 rounded-xl bg-base-200 text-base-content text-[0.875rem] font-[inherit] outline-none transition-[border-color] duration-[120ms] focus:border-primary resize-y placeholder:text-base-content/50" bind:value={genAbout} rows="4" maxlength="280"></textarea>
           </fieldset>
 
-          <fieldset class="fieldset">
-            <legend class="fieldset-legend">Cover image URL</legend>
-            <input class="field-input" bind:value={genPicture} placeholder="https://…" inputmode="url" autocomplete="off" />
+          <fieldset class="grid gap-[0.45rem] border-none p-0 m-0">
+            <legend class="font-sans text-[0.78rem] font-bold tracking-[0.07em] uppercase text-base-content/50">Cover image URL</legend>
+            <input class="w-full px-3 py-[0.625rem] border border-base-300 rounded-xl bg-base-200 text-base-content text-[0.875rem] font-[inherit] outline-none transition-[border-color] duration-[120ms] focus:border-primary resize-y placeholder:text-base-content/50" bind:value={genPicture} placeholder="https://…" inputmode="url" autocomplete="off" />
           </fieldset>
         </section>
 
-        <section class="form-card">
-          <fieldset class="fieldset">
-            <legend class="fieldset-legend">Access</legend>
-            <div class="option-row">
-              <label class:active={genAccess === 'open'}>
-                <input type="radio" bind:group={genAccess} value="open" disabled={genVisibility === 'private'} />
+        <section class="grid gap-4 p-5 border border-base-300 rounded-[1.35rem] bg-base-100">
+          <fieldset class="grid gap-[0.45rem] border-none p-0 m-0">
+            <legend class="font-sans text-[0.78rem] font-bold tracking-[0.07em] uppercase text-base-content/50">Access</legend>
+            <div class="grid gap-[0.65rem]">
+              <label class="grid gap-[0.25rem] p-[0.95rem_1rem] border border-base-300 rounded-2xl bg-base-200 cursor-pointer transition-[border-color,background] duration-[120ms] {genAccess === 'open' ? 'border-primary/30 bg-primary/5' : ''}">
+                <input type="radio" bind:group={genAccess} value="open" disabled={genVisibility === 'private'} class="m-0" />
                 <strong>Open</strong>
-                <small>Anyone can join without an invite.</small>
+                <small class="text-base-content/50 text-[0.8rem]">Anyone can join without an invite.</small>
               </label>
-              <label class:active={genAccess === 'closed'}>
-                <input type="radio" bind:group={genAccess} value="closed" />
+              <label class="grid gap-[0.25rem] p-[0.95rem_1rem] border border-base-300 rounded-2xl bg-base-200 cursor-pointer transition-[border-color,background] duration-[120ms] {genAccess === 'closed' ? 'border-primary/30 bg-primary/5' : ''}">
+                <input type="radio" bind:group={genAccess} value="closed" class="m-0" />
                 <strong>Closed</strong>
-                <small>Membership requires approval or an invite.</small>
+                <small class="text-base-content/50 text-[0.8rem]">Membership requires approval or an invite.</small>
               </label>
             </div>
           </fieldset>
 
-          <fieldset class="fieldset">
-            <legend class="fieldset-legend">Visibility</legend>
-            <div class="option-row">
-              <label class:active={genVisibility === 'public'}>
-                <input type="radio" bind:group={genVisibility} value="public" />
+          <fieldset class="grid gap-[0.45rem] border-none p-0 m-0">
+            <legend class="font-sans text-[0.78rem] font-bold tracking-[0.07em] uppercase text-base-content/50">Visibility</legend>
+            <div class="grid gap-[0.65rem]">
+              <label class="grid gap-[0.25rem] p-[0.95rem_1rem] border border-base-300 rounded-2xl bg-base-200 cursor-pointer transition-[border-color,background] duration-[120ms] {genVisibility === 'public' ? 'border-primary/30 bg-primary/5' : ''}">
+                <input type="radio" bind:group={genVisibility} value="public" class="m-0" />
                 <strong>Public</strong>
-                <small>Room metadata can be browsed openly.</small>
+                <small class="text-base-content/50 text-[0.8rem]">Room metadata can be browsed openly.</small>
               </label>
-              <label class:active={genVisibility === 'private'}>
-                <input type="radio" bind:group={genVisibility} value="private" />
+              <label class="grid gap-[0.25rem] p-[0.95rem_1rem] border border-base-300 rounded-2xl bg-base-200 cursor-pointer transition-[border-color,background] duration-[120ms] {genVisibility === 'private' ? 'border-primary/30 bg-primary/5' : ''}">
+                <input type="radio" bind:group={genVisibility} value="private" class="m-0" />
                 <strong>Private</strong>
-                <small>Content is members-only and forces closed membership.</small>
+                <small class="text-base-content/50 text-[0.8rem]">Content is members-only and forces closed membership.</small>
               </label>
             </div>
           </fieldset>
 
-          {#if genError}<p class="error-message">{genError}</p>{/if}
-          {#if genSuccess}<p class="success-message">Settings saved.</p>{/if}
+          {#if genError}<p class="m-0 p-[0.8rem_0.95rem] rounded-[0.95rem] text-[0.88rem] leading-[1.55] bg-error/10 text-error">{genError}</p>{/if}
+          {#if genSuccess}<p class="m-0 p-[0.8rem_0.95rem] rounded-[0.95rem] text-[0.88rem] leading-[1.55] bg-success/10 text-success">Settings saved.</p>{/if}
 
-          <button class="btn btn-primary" type="submit" disabled={genSaving || !isAdmin}>
+          <button class="inline-flex items-center px-5 py-2.5 bg-primary text-primary-content font-sans text-[13px] font-medium no-underline rounded transition-[background] duration-200 disabled:opacity-50 disabled:cursor-not-allowed" type="submit" disabled={genSaving || !isAdmin}>
             {genSaving ? 'Saving…' : 'Save changes'}
           </button>
         </section>
       </form>
     {/if}
 
-    <!-- Members tab -->
     {#if activeTab === 'members'}
-      <div class="form-card members-card">
+      <div class="grid gap-4 p-5 border border-base-300 rounded-[1.35rem] bg-base-100">
         {#if members.length === 0}
-          <p class="empty-note">No members yet.</p>
+          <p class="py-15 text-center text-base-content/80 font-sans text-[14px] m-0">No members yet.</p>
         {:else}
           {#each members as m (m.pubkey)}
             {@const state = memberState(m.pubkey)}
-            <div class="member-row">
+            <div class="grid grid-cols-[36px_1fr_auto] gap-3 items-center py-[10px] border-b border-dotted border-black/8 last:border-b-0">
               <span
                 class="room-member-avatar"
                 style:--mav-size="34px"
@@ -309,32 +304,32 @@
                 </User.Root>
               </span>
 
-              <div class="member-info">
+              <div class="flex items-center gap-2 flex-wrap">
                 <User.Root {ndk} pubkey={m.pubkey}>
-                  <span class="member-name"><User.Name field="displayName" /></span>
-                  <span class="member-handle"><User.Handle /></span>
+                  <span class="font-sans text-[13.5px] font-semibold text-base-content"><User.Name field="displayName" /></span>
+                  <span class="font-mono text-[12px] font-normal text-base-content/50"><User.Handle /></span>
                 </User.Root>
-                {#if m.isAdmin}<span class="admin-badge">admin</span>{/if}
+                {#if m.isAdmin}<span class="font-mono text-[10px] tracking-[0.1em] uppercase text-primary bg-primary/10 px-[6px] py-[2px] rounded-[4px]">admin</span>{/if}
               </div>
 
               {#if isAdmin && m.pubkey !== currentUser?.pubkey}
-                <div class="member-actions">
-                  {#if state.error}<span class="action-error">{state.error}</span>{/if}
+                <div class="flex gap-[6px] items-center">
+                  {#if state.error}<span class="text-[11px] text-error">{state.error}</span>{/if}
                   {#if m.isAdmin}
                     <button
-                      class="btn-action"
+                      class="px-[10px] py-[5px] font-sans text-[12px] font-medium bg-base-200 border border-base-300 rounded-[6px] cursor-pointer transition-[background] duration-[120ms] hover:bg-base-300 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                       disabled={state.pending}
                       onclick={() => handleRemoveAdmin(m.pubkey)}
                     >Remove admin</button>
                   {:else}
                     <button
-                      class="btn-action"
+                      class="px-[10px] py-[5px] font-sans text-[12px] font-medium bg-base-200 border border-base-300 rounded-[6px] cursor-pointer transition-[background] duration-[120ms] hover:bg-base-300 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                       disabled={state.pending}
                       onclick={() => handleMakeAdmin(m.pubkey)}
                     >Make admin</button>
                   {/if}
                   <button
-                    class="btn-action btn-action--danger"
+                    class="px-[10px] py-[5px] font-sans text-[12px] font-medium text-[#c0392b] border border-[rgba(192,57,43,0.25)] bg-[rgba(192,57,43,0.05)] rounded-[6px] cursor-pointer transition-[background] duration-[120ms] hover:bg-[rgba(192,57,43,0.12)] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                     disabled={state.pending}
                     onclick={() => handleRemove(m.pubkey)}
                   >Remove</button>
@@ -346,28 +341,25 @@
       </div>
     {/if}
 
-    <!-- Invite tab -->
     {#if activeTab === 'invite'}
-      <div class="settings-form">
-        <section class="form-card">
-          <fieldset class="fieldset">
-            <legend class="fieldset-legend">Invite links</legend>
-            <p class="fieldset-label">
+      <div class="grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] gap-4 items-start max-[860px]:grid-cols-1">
+        <section class="grid gap-4 p-5 border border-base-300 rounded-[1.35rem] bg-base-100">
+          <fieldset class="grid gap-[0.45rem] border-none p-0 m-0">
+            <legend class="font-sans text-[0.78rem] font-bold tracking-[0.07em] uppercase text-base-content/50">Invite links</legend>
+            <p class="m-0 text-[0.8rem] text-base-content/50 leading-[1.5]">
               Create invite links for people you want in the room. Each link
               works once.
             </p>
-            <a class="btn btn-primary" href="/r/{slug}/invite">Manage invite links</a>
+            <a class="inline-flex items-center px-5 py-2.5 bg-primary text-primary-content font-sans text-[13px] font-medium no-underline rounded transition-[background] duration-200" href="/r/{slug}/invite">Manage invite links</a>
           </fieldset>
         </section>
-      </div>
 
-      <form class="settings-form" onsubmit={handleInvite}>
-        <section class="form-card">
-          <fieldset class="fieldset">
-            <legend class="fieldset-legend">Add someone by pubkey</legend>
-            <div class="invite-row">
+        <form class="grid gap-4 p-5 border border-base-300 rounded-[1.35rem] bg-base-100" onsubmit={handleInvite}>
+          <fieldset class="grid gap-[0.45rem] border-none p-0 m-0">
+            <legend class="font-sans text-[0.78rem] font-bold tracking-[0.07em] uppercase text-base-content/50">Add someone by pubkey</legend>
+            <div class="grid grid-cols-[1fr_auto] gap-2 items-center">
               <input
-                class="field-input"
+                class="w-full px-3 py-[0.625rem] border border-base-300 rounded-xl bg-base-200 text-base-content text-[0.875rem] font-[inherit] outline-none transition-[border-color] duration-[120ms] focus:border-primary resize-y placeholder:text-base-content/50"
                 bind:value={inviteInput}
                 placeholder="npub1… or hex pubkey"
                 autocomplete="off"
@@ -375,344 +367,35 @@
               />
               <button
                 type="button"
-                class="btn btn-ghost"
+                class="px-[10px] py-[5px] font-sans text-[12px] font-medium bg-base-200 border border-base-300 rounded-[6px] cursor-pointer transition-[background] duration-[120ms] hover:bg-base-300 whitespace-nowrap"
                 onclick={resolveInviteInput}
               >Resolve</button>
             </div>
-            <p class="fieldset-label">Paste a Nostr npub or hex pubkey to add a member directly, without an invite link.</p>
+            <p class="m-0 text-[0.8rem] text-base-content/50 leading-[1.5]">Paste a Nostr npub or hex pubkey to add a member directly, without an invite link.</p>
           </fieldset>
 
           {#if invitePubkey}
-            <div class="invite-preview">
+            <div class="flex items-center gap-3 p-[10px_12px] bg-base-200 border border-base-300 rounded-2xl">
               <User.Root {ndk} pubkey={invitePubkey}>
                 <span class="room-member-avatar" style:--mav-size="36px" style:--mav-ring="var(--h-sage)">
                   <User.Avatar />
                 </span>
                 <div>
-                  <div class="member-name"><User.Name field="displayName" /></div>
-                  <div class="member-handle"><User.Handle /></div>
+                  <div class="font-sans text-[13.5px] font-semibold text-base-content"><User.Name field="displayName" /></div>
+                  <div class="font-mono text-[12px] font-normal text-base-content/50"><User.Handle /></div>
                 </div>
               </User.Root>
             </div>
           {/if}
 
-          {#if inviteError}<p class="error-message">{inviteError}</p>{/if}
-          {#if inviteSuccess}<p class="success-message">Member added successfully.</p>{/if}
+          {#if inviteError}<p class="m-0 p-[0.8rem_0.95rem] rounded-[0.95rem] text-[0.88rem] leading-[1.55] bg-error/10 text-error">{inviteError}</p>{/if}
+          {#if inviteSuccess}<p class="m-0 p-[0.8rem_0.95rem] rounded-[0.95rem] text-[0.88rem] leading-[1.55] bg-success/10 text-success">Member added successfully.</p>{/if}
 
-          <button class="btn btn-primary" type="submit" disabled={invitePending || !invitePubkey || !isAdmin}>
+          <button class="inline-flex items-center px-5 py-2.5 bg-primary text-primary-content font-sans text-[13px] font-medium no-underline rounded transition-[background] duration-200 disabled:opacity-50 disabled:cursor-not-allowed" type="submit" disabled={invitePending || !invitePubkey || !isAdmin}>
             {invitePending ? 'Adding…' : 'Add to room'}
           </button>
-        </section>
-      </form>
+        </form>
+      </div>
     {/if}
   </div>
 {/if}
-
-<style>
-  .field-input {
-    width: 100%;
-    padding: 0.625rem 0.75rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 0.75rem;
-    background: var(--surface-soft);
-    color: var(--text-strong);
-    font-size: 0.875rem;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 120ms ease;
-    resize: vertical;
-  }
-
-  .field-input::placeholder { color: var(--muted); }
-  .field-input:focus { border-color: var(--accent); }
-
-  .settings-wrap {
-    display: grid;
-    gap: 1.5rem;
-    padding: 2rem 0 3rem;
-  }
-
-  .settings-header {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .back-link {
-    color: var(--brand-accent);
-    font-family: var(--font-sans);
-    font-size: 0.85rem;
-    font-weight: 500;
-    text-decoration: none;
-  }
-
-  .back-link:hover { text-decoration: underline; }
-
-  h1 {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: clamp(1.8rem, 4vw, 2.6rem);
-    line-height: 1.05;
-    letter-spacing: -0.03em;
-  }
-
-  .tab-strip {
-    display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--color-base-300);
-  }
-
-  .tab-btn {
-    padding: 0.6rem 1.1rem;
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    cursor: pointer;
-    font-family: var(--font-sans);
-    font-size: 0.88rem;
-    font-weight: 500;
-    color: var(--muted);
-    transition: color 120ms ease, border-color 120ms ease;
-    margin-bottom: -1px;
-  }
-
-  .tab-btn.active {
-    color: var(--text-strong);
-    border-bottom-color: var(--brand-accent);
-  }
-
-  .settings-form {
-    display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr);
-    gap: 1rem;
-    align-items: start;
-  }
-
-  @media (max-width: 860px) {
-    .settings-form { grid-template-columns: 1fr; }
-  }
-
-  .form-card {
-    display: grid;
-    gap: 1rem;
-    padding: 1.25rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 1.35rem;
-    background: var(--surface);
-  }
-
-  .members-card {
-    grid-template-columns: 1fr;
-  }
-
-  .fieldset {
-    display: grid;
-    gap: 0.45rem;
-    border: none;
-    padding: 0;
-    margin: 0;
-  }
-
-  .fieldset-legend {
-    font-family: var(--font-sans);
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-
-  .fieldset-label {
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--muted);
-    line-height: 1.5;
-  }
-
-  .option-row {
-    display: grid;
-    gap: 0.65rem;
-  }
-
-  .option-row label {
-    display: grid;
-    gap: 0.25rem;
-    padding: 0.95rem 1rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 1rem;
-    background: var(--surface-soft);
-    cursor: pointer;
-    transition: border-color 120ms ease, background 120ms ease;
-  }
-
-  .option-row label.active {
-    border-color: rgba(255, 103, 25, 0.32);
-    background: rgba(255, 103, 25, 0.05);
-  }
-
-  .option-row label:has(input:disabled) { opacity: 0.65; }
-
-  .option-row small {
-    color: var(--muted);
-    font-size: 0.8rem;
-  }
-
-  .option-row input { margin: 0; }
-
-  .member-row {
-    display: grid;
-    grid-template-columns: 36px 1fr auto;
-    gap: 12px;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px dotted rgba(21, 19, 15, 0.08);
-  }
-
-  .member-row:last-child { border-bottom: none; }
-
-  .member-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .member-name {
-    font-family: var(--font-sans);
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--ink);
-  }
-
-  .member-handle {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    font-weight: 400;
-    color: var(--ink-fade);
-  }
-
-  .admin-badge {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--brand-accent);
-    background: rgba(255, 103, 25, 0.1);
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-
-  .member-actions {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .action-error {
-    font-size: 11px;
-    color: var(--pale-red-text);
-  }
-
-  .btn-action {
-    padding: 5px 10px;
-    font-family: var(--font-sans);
-    font-size: 12px;
-    font-weight: 500;
-    background: var(--surface-soft);
-    border: 1px solid var(--color-base-300);
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background 120ms ease;
-    white-space: nowrap;
-  }
-
-  .btn-action:hover { background: var(--color-base-300); }
-  .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
-
-  .btn-action--danger {
-    color: #c0392b;
-    border-color: rgba(192, 57, 43, 0.25);
-    background: rgba(192, 57, 43, 0.05);
-  }
-
-  .btn-action--danger:hover { background: rgba(192, 57, 43, 0.12); }
-
-  .invite-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .invite-preview {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    background: var(--surface-soft);
-    border: 1px solid var(--color-base-300);
-    border-radius: 1rem;
-  }
-
-  .error-message, .success-message {
-    margin: 0;
-    padding: 0.8rem 0.95rem;
-    border-radius: 0.95rem;
-    font-size: 0.88rem;
-    line-height: 1.55;
-  }
-
-  .error-message {
-    background: var(--pale-red);
-    color: var(--pale-red-text);
-  }
-
-  .success-message {
-    background: rgba(25, 160, 90, 0.1);
-    color: #176b42;
-  }
-
-  .room-missing, .empty-note {
-    padding: 60px 0;
-    text-align: center;
-    color: var(--ink-soft);
-    font-family: var(--font-sans);
-    font-size: 14px;
-  }
-
-  .room-missing h1 {
-    font-family: var(--font-serif);
-    font-size: 32px;
-    font-weight: 400;
-    color: var(--ink);
-    margin: 0 0 12px;
-  }
-
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    padding: 10px 20px;
-    background: var(--ink);
-    color: var(--surface);
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    text-decoration: none;
-    border-radius: var(--radius);
-    transition: background 200ms ease;
-  }
-
-  .btn:hover { background: var(--brand-accent); }
-
-  /* room-member-avatar ring pattern (mirrors room page) */
-  :global(.room-member-avatar) {
-    display: inline-flex;
-    width: var(--mav-size, 34px);
-    height: var(--mav-size, 34px);
-    border-radius: 50%;
-    outline: 2.5px solid var(--mav-ring, transparent);
-    outline-offset: 1px;
-    flex-shrink: 0;
-    overflow: hidden;
-  }
-</style>

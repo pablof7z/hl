@@ -128,31 +128,40 @@
   <title>Set up your profile — Highlighter</title>
 </svelte:head>
 
-<div class="setup-page">
-  <div class="setup-card">
-    <div class="setup-header">
-      <h1 class="setup-title">Set up your profile</h1>
-      <p class="setup-subtitle">Let readers know who you are.</p>
+<div class="flex justify-center px-5 py-16">
+  <div class="grid w-full max-w-[28rem] gap-7">
+    <div class="grid gap-[0.35rem]">
+      <h1 class="m-0 font-serif text-[1.65rem] font-bold text-base-content leading-[1.2] tracking-[-0.02em]">
+        Set up your profile
+      </h1>
+      <p class="m-0 text-base-content/50 text-[0.95rem]">Let readers know who you are.</p>
     </div>
 
     <!-- Avatar -->
-    <div class="avatar-section">
+    <div class="flex justify-center">
       <button
         type="button"
-        class="avatar-pick"
+        class="flex flex-col items-center gap-[0.6rem] bg-transparent border-none cursor-pointer p-0 group"
         onclick={handleAvatarClick}
         aria-label="Choose avatar image"
       >
         {#if avatarDisplayUrl}
-          <img src={avatarDisplayUrl} alt="Avatar preview" class="avatar-img" />
+          <img
+            src={avatarDisplayUrl}
+            alt="Avatar preview"
+            class="w-24 h-24 rounded-full object-cover border-2 border-base-300"
+          />
         {:else}
-          <div class="avatar-placeholder" aria-hidden="true">
-            <svg viewBox="0 0 24 24" class="avatar-placeholder-icon">
+          <div
+            class="w-24 h-24 rounded-full bg-base-200 border-2 border-dashed border-base-300 flex items-center justify-center transition-colors duration-[140ms] group-hover:border-primary"
+            aria-hidden="true"
+          >
+            <svg viewBox="0 0 24 24" class="w-10 h-10 text-base-content/50 fill-none stroke-current stroke-[1.5] [stroke-linecap:round] [stroke-linejoin:round]">
               <path d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
             </svg>
           </div>
         {/if}
-        <span class="avatar-pick-label">
+        <span class="text-[0.82rem] text-primary font-semibold">
           {uploadingAvatar ? 'Uploading…' : 'Choose photo'}
         </span>
       </button>
@@ -167,7 +176,7 @@
     </div>
 
     <!-- Fields -->
-    <div class="setup-fields">
+    <div class="grid gap-2">
       <fieldset class="fieldset">
         <legend class="fieldset-legend">
           Display name <span class="text-primary" aria-hidden="true">*</span>
@@ -177,7 +186,7 @@
           type="text"
           bind:value={displayName}
           placeholder="Your name"
-          class="field-input"
+          class="w-full px-3 py-[0.625rem] border border-base-300 rounded-[0.75rem] bg-base-200 text-base-content text-sm font-[inherit] outline-none transition-colors duration-[120ms] ease placeholder:text-base-content/50 focus:border-primary resize-y"
           maxlength="64"
           autocomplete="name"
         />
@@ -189,7 +198,7 @@
           id="setup-bio"
           bind:value={bio}
           placeholder="Tell people a bit about yourself…"
-          class="field-input"
+          class="w-full px-3 py-[0.625rem] border border-base-300 rounded-[0.75rem] bg-base-200 text-base-content text-sm font-[inherit] outline-none transition-colors duration-[120ms] ease placeholder:text-base-content/50 focus:border-primary resize-y"
           rows="3"
           maxlength="500"
         ></textarea>
@@ -198,14 +207,14 @@
 
     <!-- Errors -->
     {#if uploadError}
-      <p class="setup-error" role="alert">{uploadError}</p>
+      <p class="m-0 px-[0.85rem] py-[0.65rem] rounded-box bg-error/10 text-error text-[0.88rem]" role="alert">{uploadError}</p>
     {/if}
     {#if saveError}
-      <p class="setup-error" role="alert">{saveError}</p>
+      <p class="m-0 px-[0.85rem] py-[0.65rem] rounded-box bg-error/10 text-error text-[0.88rem]" role="alert">{saveError}</p>
     {/if}
 
     <!-- Actions -->
-    <div class="setup-actions">
+    <div class="flex flex-col gap-[0.6rem]">
       <button
         type="button"
         class="btn btn-primary w-full"
@@ -221,149 +230,3 @@
     </div>
   </div>
 </div>
-
-<style>
-  .field-input {
-    width: 100%;
-    padding: 0.625rem 0.75rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 0.75rem;
-    background: var(--surface-soft);
-    color: var(--text-strong);
-    font-size: 0.875rem;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 120ms ease;
-    resize: vertical;
-  }
-
-  .field-input::placeholder { color: var(--muted); }
-  .field-input:focus { border-color: var(--accent); }
-
-  .setup-page {
-    display: flex;
-    justify-content: center;
-    padding: 4rem 1.25rem;
-  }
-
-  .setup-card {
-    width: 100%;
-    max-width: 28rem;
-    display: grid;
-    gap: 1.75rem;
-  }
-
-  .setup-header {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .setup-title {
-    margin: 0;
-    font-family: var(--font-serif);
-    font-size: 1.65rem;
-    font-weight: 700;
-    color: var(--text-strong);
-    line-height: 1.2;
-    letter-spacing: -0.02em;
-  }
-
-  .setup-subtitle {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.95rem;
-  }
-
-  /* Avatar */
-  .avatar-section {
-    display: flex;
-    justify-content: center;
-  }
-
-  .avatar-pick {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.6rem;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-  }
-
-  .avatar-img {
-    width: 6rem;
-    height: 6rem;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid var(--color-base-300);
-  }
-
-  .avatar-placeholder {
-    width: 6rem;
-    height: 6rem;
-    border-radius: 50%;
-    background: var(--surface-soft);
-    border: 2px dashed var(--color-base-300);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: border-color 140ms ease;
-  }
-
-  .avatar-pick:hover .avatar-placeholder {
-    border-color: var(--accent);
-  }
-
-  .avatar-placeholder-icon {
-    width: 2.5rem;
-    height: 2.5rem;
-    color: var(--muted);
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.5;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .avatar-pick-label {
-    font-size: 0.82rem;
-    color: var(--accent);
-    font-weight: 600;
-  }
-
-  /* Fields */
-  .setup-fields {
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  /* Errors */
-  .setup-error {
-    margin: 0;
-    padding: 0.65rem 0.85rem;
-    border-radius: var(--radius-md);
-    background: var(--pale-red);
-    color: var(--pale-red-text);
-    font-size: 0.88rem;
-  }
-
-  /* Actions */
-  .setup-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-  }
-
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border-width: 0;
-  }
-</style>

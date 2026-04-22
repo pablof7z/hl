@@ -143,33 +143,37 @@
   <title>My Highlights — Highlighter</title>
 </svelte:head>
 
-<section class="me-highlights-page">
-  <header class="page-copy">
-    <h2>Your highlights</h2>
+<section class="grid gap-6">
+  <header class="grid gap-[0.35rem]">
+    <h2 class="m-0 font-serif text-base-content leading-[1.1] tracking-[-0.02em]" style="font-size: clamp(1.6rem, 3vw, 2.2rem);">
+      Your highlights
+    </h2>
   </header>
 
-  <section class="me-summary">
-    <div class="summary-card">
-      <p class="summary-label">Saved highlights</p>
-      <strong>{highlights.length}</strong>
-      <span>You can share the same highlight into more than one room.</span>
+  <section class="grid gap-[0.9rem]" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+    <div class="grid gap-[0.4rem] p-4 border border-base-300 rounded-[1.1rem] bg-base-100">
+      <p class="m-0 text-primary text-[0.8rem] font-bold tracking-[0.08em] uppercase">Saved highlights</p>
+      <strong class="font-serif text-[2rem] leading-none text-base-content">{highlights.length}</strong>
+      <span class="m-0 text-base-content/50 leading-relaxed">You can share the same highlight into more than one room.</span>
     </div>
-    <div class="summary-card">
-      <p class="summary-label">Loaded rooms</p>
-      <strong>{rooms.length}</strong>
-      <span>Available as share-again targets on each card.</span>
+    <div class="grid gap-[0.4rem] p-4 border border-base-300 rounded-[1.1rem] bg-base-100">
+      <p class="m-0 text-primary text-[0.8rem] font-bold tracking-[0.08em] uppercase">Loaded rooms</p>
+      <strong class="font-serif text-[2rem] leading-none text-base-content">{rooms.length}</strong>
+      <span class="m-0 text-base-content/50 leading-relaxed">Available as share-again targets on each card.</span>
     </div>
-    <div class="summary-card">
-      <p class="summary-label">Sources checked</p>
-      <strong>{highlightRelayUrls.length}</strong>
-      <span>Loaded from the places where your highlights are stored, plus Highlighter’s fallback.</span>
+    <div class="grid gap-[0.4rem] p-4 border border-base-300 rounded-[1.1rem] bg-base-100">
+      <p class="m-0 text-primary text-[0.8rem] font-bold tracking-[0.08em] uppercase">Sources checked</p>
+      <strong class="font-serif text-[2rem] leading-none text-base-content">{highlightRelayUrls.length}</strong>
+      <span class="m-0 text-base-content/50 leading-relaxed">Loaded from the places where your highlights are stored, plus Highlighter's fallback.</span>
     </div>
   </section>
 
   {#if highlightGroups.length === 0}
-    <section class="empty-state">
-      <p>{resolvingRelayList ? 'Looking for your highlights…' : 'No highlights found yet.'}</p>
-      <p>
+    <section class="grid gap-[0.4rem] p-4 border border-base-300 rounded-[1.1rem] bg-base-100">
+      <p class="m-0 font-bold text-base-content">
+        {resolvingRelayList ? 'Looking for your highlights…' : 'No highlights found yet.'}
+      </p>
+      <p class="m-0 text-base-content/50 leading-relaxed">
         {#if resolvingRelayList}
           Checking the relays where your highlights live.
         {:else}
@@ -178,7 +182,7 @@
       </p>
     </section>
   {:else}
-    <section class="highlight-groups">
+    <section class="grid gap-[0.9rem]">
       {#each highlightGroups as group (group.referenceKey)}
         <HighlightSourceGroup {group} {rooms} showShareControl={true} />
       {/each}
@@ -186,81 +190,6 @@
   {/if}
 
   {#if resolvingArtifacts}
-    <p class="loading">Resolving source details…</p>
+    <p class="m-0 text-base-content/50 leading-relaxed text-[0.88rem]">Resolving source details…</p>
   {/if}
 </section>
-
-<style>
-  .me-highlights-page {
-    display: grid;
-    gap: 1.5rem;
-  }
-
-  .page-copy {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .summary-label {
-    margin: 0;
-    color: var(--accent);
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  h2 {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: clamp(1.6rem, 3vw, 2.2rem);
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-  }
-
-  .summary-card span,
-  .empty-state p,
-  .loading {
-    margin: 0;
-    color: var(--muted);
-    line-height: 1.65;
-  }
-
-  .me-summary {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 0.9rem;
-  }
-
-  .summary-card,
-  .empty-state {
-    display: grid;
-    gap: 0.4rem;
-    padding: 1rem 1.1rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 1.1rem;
-    background: var(--surface);
-  }
-
-  .summary-card strong {
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 2rem;
-    line-height: 1;
-  }
-
-  .highlight-groups {
-    display: grid;
-    gap: 0.9rem;
-  }
-
-  .empty-state p:first-child {
-    color: var(--text-strong);
-    font-weight: 700;
-  }
-
-  .loading {
-    font-size: 0.88rem;
-  }
-</style>

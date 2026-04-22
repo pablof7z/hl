@@ -4,16 +4,16 @@
   let { data }: PageProps = $props();
 </script>
 
-<section class="changelog">
-  <h1>Changelog</h1>
-  <p class="subtitle">Recent commits deployed to beta</p>
+<section class="max-w-3xl">
+  <h1 class="font-serif text-4xl font-bold text-base-content mb-1">Changelog</h1>
+  <p class="text-base-content/50 text-sm mb-8">Recent commits deployed to beta</p>
 
-  <ul class="commit-list">
+  <ul class="list-none p-0 flex flex-col">
     {#each data.commits as commit}
-      <li class="commit-item">
-        <code class="commit-hash">{commit.shortHash}</code>
-        <span class="commit-message">{commit.message}</span>
-        <time class="commit-date" datetime={commit.date}>
+      <li class="flex items-baseline gap-3 py-2.5 border-b border-base-300">
+        <code class="text-xs text-primary shrink-0">{commit.shortHash}</code>
+        <span class="flex-1 text-sm text-base-content">{commit.message}</span>
+        <time class="text-xs text-base-content/50 shrink-0" datetime={commit.date}>
           {new Date(commit.date).toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
@@ -24,57 +24,3 @@
     {/each}
   </ul>
 </section>
-
-<style>
-  .changelog {
-    max-width: 48rem;
-  }
-
-  h1 {
-    font-family: var(--font-serif);
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--text-strong);
-    margin-bottom: 0.25rem;
-  }
-
-  .subtitle {
-    color: var(--muted);
-    font-size: 0.95rem;
-    margin-bottom: 2rem;
-  }
-
-  .commit-list {
-    list-style: none;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .commit-item {
-    display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-    padding: 0.6rem 0;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .commit-hash {
-    font-size: 0.82rem;
-    color: var(--accent);
-    flex-shrink: 0;
-  }
-
-  .commit-message {
-    flex: 1;
-    font-size: 0.92rem;
-    color: var(--text-strong);
-  }
-
-  .commit-date {
-    font-size: 0.8rem;
-    color: var(--muted);
-    flex-shrink: 0;
-  }
-</style>

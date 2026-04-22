@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PageProps } from './$types';
+  import { browser } from '$app/environment';
   import { page } from '$app/state';
   import { createFetchEvent, createFetchUser } from '@nostr-dev-kit/svelte';
   import { NDKEvent, type NostrEvent } from '@nostr-dev-kit/ndk';
@@ -39,9 +40,9 @@
 </script>
 
 {#if missing}
-  <section class="article-container">
+  <section class="max-w-[var(--content-width)] mx-auto grid gap-5">
     <h1>{browser && fetchedEvent.loading ? 'Loading this post...' : 'This post is not available right now'}</h1>
-    <p class="muted" style="margin: 0;">
+    <p class="text-base-content/50" style="margin: 0;">
       {browser && fetchedEvent.loading
         ? 'Trying to load it directly from relays.'
         : 'It may have moved, been deleted, or not synced yet.'}
@@ -57,12 +58,3 @@
     {seedHighlights}
   />
 {/if}
-
-<style>
-  .article-container {
-    max-width: var(--content-width);
-    margin: 0 auto;
-    display: grid;
-    gap: 1.35rem;
-  }
-</style>

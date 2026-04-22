@@ -1,8 +1,8 @@
 <script lang="ts">
 </script>
 
-<section class="about-container">
-  <div class="about-hero">
+<section class="max-w-[var(--content-width)] mx-auto grid gap-12">
+  <div class="grid gap-5">
     <h1>A calmer way to read and share long-form writing from Nostr.</h1>
     <p class="lede">
       Highlighter turns posts into clean, readable pages that are easy to share, revisit, and pass
@@ -18,9 +18,9 @@
     </p>
   </div>
 
-  <div class="about-section">
+  <div class="grid gap-4">
     <h2>Writing deserves pages that feel finished.</h2>
-    <p class="muted">
+    <p class="text-base-content/80">
       A good reading app should disappear behind the work. Highlighter keeps the focus on the
       story, the author, and the link you can send to someone else.
     </p>
@@ -41,7 +41,7 @@
     </div>
   </div>
 
-  <div class="about-section">
+  <div class="grid gap-4">
     <h3>The experience stays simple.</h3>
     <div class="definition-list">
       <div class="definition-row">
@@ -59,30 +59,30 @@
     </div>
   </div>
 
-  <div class="about-section">
+  <div class="grid gap-4">
     <h3>Clear hierarchy, generous spacing, and room for the writing to breathe.</h3>
-    <p class="muted">
+    <p class="text-base-content/80">
       Highlighter avoids pushing readers into raw identifiers, implementation details, or cluttered
       layouts.
     </p>
   </div>
 
-  <div class="about-section">
+  <div class="grid gap-4">
     <h3>Bring the Nostr account you already use without giving up a familiar reading flow.</h3>
-    <p class="muted">
+    <p class="text-base-content/80">
       Log in from a browser extension, a secret key, or another app when you want to personalize
       the experience.
     </p>
   </div>
 
-  <div class="about-section">
+  <div class="grid gap-4">
     <h3>Posts and profiles keep looking good when they travel outside the app.</h3>
-    <p class="muted">
+    <p class="text-base-content/80">
       The first impression is a finished page, not a loading state waiting for context.
     </p>
   </div>
 
-  <div class="about-section">
+  <div class="grid gap-4">
     <h2>Highlighter is built around a few simple reading habits.</h2>
 
     <div class="definition-list">
@@ -105,7 +105,7 @@
     </div>
   </div>
 
-  <div class="about-section">
+  <div class="grid gap-4">
     <h3>Use Highlighter when writing should feel linkable, legible, and easy to follow.</h3>
     <div class="definition-list">
       <div class="definition-row">
@@ -123,7 +123,7 @@
     </div>
   </div>
 
-  <div class="about-cta">
+  <div class="grid gap-4 py-8 border-t border-base-300">
     <h2>Start reading, open a profile, or share a story.</h2>
     <p class="lede" style="margin: 0;">
       Highlighter keeps the experience focused on people and writing, not protocol trivia.
@@ -133,29 +133,3 @@
     </div>
   </div>
 </section>
-
-<style>
-  .about-container {
-    max-width: var(--content-width);
-    margin: 0 auto;
-    display: grid;
-    gap: 3rem;
-  }
-
-  .about-hero {
-    display: grid;
-    gap: 1.25rem;
-  }
-
-  .about-section {
-    display: grid;
-    gap: 1rem;
-  }
-
-  .about-cta {
-    display: grid;
-    gap: 1rem;
-    padding: 2rem 0;
-    border-top: 1px solid var(--border-light);
-  }
-</style>

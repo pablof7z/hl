@@ -207,43 +207,43 @@
 </script>
 
 {#if missing}
-  <section class="profile-container">
+  <section class="max-w-[var(--content-width)] mx-auto rounded-box pb-4">
     <h1>We could not find that profile</h1>
-    <p class="muted" style="margin: 0;">Try a different profile link or come back in a moment.</p>
+    <p class="text-base-content/50 m-0">Try a different profile link or come back in a moment.</p>
   </section>
 {:else}
-  <section class="profile-container">
+  <section class="max-w-[var(--content-width)] mx-auto rounded-box pb-4">
     {#if bannerUrl}
-      <div class="profile-banner">
-        <img src={bannerUrl} alt="" class="profile-banner-img" />
+      <div class="w-full aspect-[4/1] overflow-hidden rounded-t-box">
+        <img src={bannerUrl} alt="" class="w-full h-full object-cover" />
       </div>
     {/if}
 
-    <div class="profile-header">
+    <div class="grid justify-items-center gap-3 text-center px-4 pb-6" class:-mt-10={!!bannerUrl}>
       <User.Root {ndk} pubkey={pubkey} profile={profile}>
         <User.Avatar class="profile-avatar author-avatar-centered" />
       </User.Root>
 
       <h1>{name}</h1>
-      <p class="profile-bio">{bio}</p>
+      <p class="m-0 text-[1.02rem] max-w-[48ch]">{bio}</p>
 
-      <div class="profile-meta-row">
+      <div class="flex flex-wrap justify-center gap-3 text-[0.85rem]">
         {#if nip05}
-          <span class="muted">{nip05}</span>
+          <span class="text-base-content/50">{nip05}</span>
         {/if}
-        <span class="muted">{storyCountLabel}</span>
+        <span class="text-base-content/50">{storyCountLabel}</span>
         {#if latestDateLabel}
-          <span class="muted">Latest: {latestDateLabel}</span>
+          <span class="text-base-content/50">Latest: {latestDateLabel}</span>
         {/if}
         {#if website}
-          <a class="profile-website-link" href={website} target="_blank" rel="noopener noreferrer">
+          <a class="text-primary hover:text-primary/80" href={website} target="_blank" rel="noopener noreferrer">
             {websiteLabel(website)}
           </a>
         {/if}
       </div>
 
       {#if nipF1CustomFields.length > 0}
-        <div class="definition-list profile-custom-fields">
+        <div class="definition-list w-full max-w-[24rem]">
           {#each nipF1CustomFields as field (field.key)}
             <div class="definition-row">
               <span>{field.key}</span>
@@ -254,9 +254,13 @@
       {/if}
 
       {#if nipF1Music}
-        <div class="profile-music">
+        <div class="flex justify-center">
           <audio bind:this={audioEl} src={nipF1Music} loop muted></audio>
-          <button class="profile-music-btn" type="button" onclick={toggleMusic}>
+          <button
+            class="inline-flex items-center gap-1.5 px-[0.85rem] py-[0.35rem] border border-base-300 rounded-full bg-base-200 text-base-content/50 text-[0.8rem] cursor-pointer transition-colors hover:text-base-content hover:border-base-content [&_svg]:w-4 [&_svg]:h-4"
+            type="button"
+            onclick={toggleMusic}
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               {#if musicPlaying}
                 <rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />
@@ -269,312 +273,98 @@
         </div>
       {/if}
 
-      <div class="profile-actions">
+      <div class="flex gap-3 items-center">
         {#if pubkey && ndk.$currentUser && ndk.$currentUser.pubkey !== pubkey}
           <button
-            class="follow-btn"
-            class:following={ndk.$follows.has(pubkey)}
+            class={ndk.$follows.has(pubkey) ? 'btn btn-outline btn-primary rounded-full' : 'btn btn-primary rounded-full'}
             onclick={() => ndk.$follows.has(pubkey) ? ndk.$follows.remove(pubkey) : ndk.$follows.add(pubkey)}
           >
             {ndk.$follows.has(pubkey) ? 'Following' : 'Follow'}
           </button>
         {/if}
         {#if isOwnProfile}
-          <a href="/profile/edit" class="btn profile-edit-btn">Edit profile</a>
+          <a href="/profile/edit" class="btn text-[0.88rem] no-underline">Edit profile</a>
         {/if}
       </div>
     </div>
   </section>
 
-  <nav class="profile-tabs">
+  <nav class="flex justify-center max-w-[var(--content-width)] mx-auto border-b border-base-300">
     <button
-      class="profile-tab"
-      class:active={activeTab === 'writing'}
+      class="px-6 py-[0.65rem] border-none border-b-2 bg-transparent text-[0.9rem] font-medium cursor-pointer transition-colors {activeTab === 'writing' ? 'text-base-content border-b-primary' : 'text-base-content/50 border-b-transparent hover:text-base-content'}"
       onclick={() => activeTab = 'writing'}
     >Writing</button>
     <button
-      class="profile-tab"
-      class:active={activeTab === 'highlights'}
+      class="px-6 py-[0.65rem] border-none border-b-2 bg-transparent text-[0.9rem] font-medium cursor-pointer transition-colors {activeTab === 'highlights' ? 'text-base-content border-b-primary' : 'text-base-content/50 border-b-transparent hover:text-base-content'}"
       onclick={() => activeTab = 'highlights'}
     >Highlights</button>
     <button
-      class="profile-tab"
-      class:active={activeTab === 'bookmarks'}
+      class="px-6 py-[0.65rem] border-none border-b-2 bg-transparent text-[0.9rem] font-medium cursor-pointer transition-colors {activeTab === 'bookmarks' ? 'text-base-content border-b-primary' : 'text-base-content/50 border-b-transparent hover:text-base-content'}"
       onclick={() => activeTab = 'bookmarks'}
     >Bookmarks</button>
   </nav>
 
   {#if activeTab === 'writing'}
     {#if articles.length > 0}
-      <section class="article-feed profile-feed">
+      <section class="grid max-w-[var(--content-width)] mx-auto">
         {#each articles as event (event.id)}
           <ArticleCard {event} />
         {/each}
       </section>
     {:else}
-      <section class="profile-container">
-        <p class="muted" style="margin: 0;">No long-form articles loaded for this author yet.</p>
+      <section class="max-w-[var(--content-width)] mx-auto rounded-box pb-4">
+        <p class="text-base-content/50 m-0">No long-form articles loaded for this author yet.</p>
       </section>
     {/if}
   {:else if activeTab === 'highlights'}
     {#if sortedHighlights.length > 0}
-      <section class="profile-feed profile-highlights">
+      <section class="grid max-w-[var(--content-width)] mx-auto">
         {#each sortedHighlights as highlight (highlight.id)}
           {@const source = highlightSourceLink(highlight)}
-          <div class="highlight-item">
-            <blockquote class="highlight-quote">
+          <div class="grid gap-1.5 py-5 border-b border-base-300 first:pt-0 last:border-b-0">
+            <blockquote class="m-0 py-3 px-4 border-l-[3px] border-l-[rgba(31,108,159,0.35)] rounded-r font-serif text-[0.95rem] leading-relaxed text-base-content" style="background: var(--pale-blue)">
               {noteExcerpt(highlight.content, 400)}
             </blockquote>
             {#if source}
               {#if source.href.startsWith('/')}
-                <a class="highlight-source" href={source.href}>{source.label}</a>
+                <a class="text-[0.78rem] pl-4 text-primary no-underline hover:text-primary/80 hover:underline" href={source.href}>{source.label}</a>
               {:else}
-                <a class="highlight-source" href={source.href} target="_blank" rel="noopener noreferrer">{source.label}</a>
+                <a class="text-[0.78rem] pl-4 text-primary no-underline hover:text-primary/80 hover:underline" href={source.href} target="_blank" rel="noopener noreferrer">{source.label}</a>
               {/if}
             {/if}
           </div>
         {/each}
       </section>
     {:else}
-      <section class="profile-container">
-        <p class="muted" style="margin: 0;">No highlights yet.</p>
+      <section class="max-w-[var(--content-width)] mx-auto rounded-box pb-4">
+        <p class="text-base-content/50 m-0">No highlights yet.</p>
       </section>
     {/if}
   {:else if activeTab === 'bookmarks'}
     {#if orderedBookmarks.length > 0}
-      <section class="article-feed profile-feed">
+      <section class="grid max-w-[var(--content-width)] mx-auto">
         {#each orderedBookmarks as event (event.id)}
           <ArticleCard {event} showAuthor />
         {/each}
       </section>
     {:else if bookmarkedAddresses.length > 0}
-      <section class="profile-container">
-        <p class="muted" style="margin: 0;">Loading bookmarked articles...</p>
+      <section class="max-w-[var(--content-width)] mx-auto rounded-box pb-4">
+        <p class="text-base-content/50 m-0">Loading bookmarked articles...</p>
       </section>
     {:else}
-      <section class="profile-container">
-        <p class="muted" style="margin: 0;">No bookmarked articles yet.</p>
+      <section class="max-w-[var(--content-width)] mx-auto rounded-box pb-4">
+        <p class="text-base-content/50 m-0">No bookmarked articles yet.</p>
       </section>
     {/if}
   {/if}
 {/if}
 
 <style>
-  .profile-container {
-    max-width: var(--content-width);
-    margin: 0 auto;
-    border-radius: var(--radius-md);
-    padding: 0 0 1rem;
-  }
-
-  .profile-banner {
-    width: 100%;
-    aspect-ratio: 4 / 1;
-    overflow: hidden;
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
-  }
-
-  .profile-banner-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .profile-banner + .profile-header {
-    margin-top: -2.5rem;
-  }
-
-  .profile-header {
-    display: grid;
-    justify-items: center;
-    gap: 0.75rem;
-    text-align: center;
-    padding: 0 1rem 1.5rem;
-  }
-
   :global(.author-avatar-centered) {
     width: 5rem;
     height: 5rem;
     border: 3px solid var(--canvas);
     position: relative;
     z-index: 1;
-  }
-
-  .profile-bio {
-    margin: 0;
-    color: inherit;
-    font-size: 1.02rem;
-    max-width: 48ch;
-  }
-
-  .profile-meta-row {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.75rem;
-    font-size: 0.85rem;
-  }
-
-  .profile-custom-fields {
-    width: 100%;
-    max-width: 24rem;
-  }
-
-  .profile-music {
-    display: flex;
-    justify-content: center;
-  }
-
-  .profile-music-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.35rem 0.85rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 9999px;
-    background: var(--surface-soft);
-    color: var(--muted);
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: color 120ms, border-color 120ms;
-  }
-
-  .profile-music-btn:hover {
-    color: var(--text-strong);
-    border-color: var(--text);
-  }
-
-  .profile-music-btn svg {
-    width: 1rem;
-    height: 1rem;
-  }
-
-  .profile-actions {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-  }
-
-  .profile-edit-btn {
-    font-size: 0.88rem;
-    text-decoration: none;
-  }
-
-  .profile-website-link {
-    color: var(--accent);
-  }
-
-  .profile-website-link:hover {
-    color: var(--accent-hover);
-  }
-
-  .follow-btn {
-    padding: 0.4rem 1.2rem;
-    border-radius: 999px;
-    border: 1px solid var(--accent);
-    background: var(--accent);
-    color: white;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-  }
-
-  .follow-btn.following {
-    background: transparent;
-    color: var(--accent);
-  }
-
-  .follow-btn:hover {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
-    color: white;
-  }
-
-  /* ── tabs ──────────────────────────────────────────────────── */
-
-  .profile-tabs {
-    display: flex;
-    justify-content: center;
-    gap: 0;
-    max-width: var(--content-width);
-    margin: 0 auto;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .profile-tab {
-    padding: 0.65rem 1.5rem;
-    border: none;
-    border-bottom: 2px solid transparent;
-    background: none;
-    color: var(--muted);
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: color 160ms ease, border-color 160ms ease;
-  }
-
-  .profile-tab:hover {
-    color: var(--text);
-  }
-
-  .profile-tab.active {
-    color: var(--text-strong);
-    border-bottom-color: var(--accent);
-  }
-
-  /* ── highlights tab ──────────────────────────────────────── */
-
-  .profile-highlights {
-    display: grid;
-    gap: 0;
-  }
-
-  .highlight-item {
-    display: grid;
-    gap: 0.4rem;
-    padding: 1.25rem 0;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .highlight-item:first-child {
-    padding-top: 0;
-  }
-
-  .highlight-item:last-child {
-    border-bottom: none;
-  }
-
-  .highlight-quote {
-    margin: 0;
-    padding: 0.75rem 1rem;
-    border-left: 3px solid rgba(31, 108, 159, 0.35);
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    background: var(--pale-blue);
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 0.95rem;
-    line-height: 1.6;
-  }
-
-  .highlight-source {
-    font-size: 0.78rem;
-    padding-left: 1rem;
-    color: var(--accent);
-    text-decoration: none;
-  }
-
-  .highlight-source:hover {
-    color: var(--accent-hover);
-    text-decoration: underline;
-  }
-
-  .profile-feed {
-    max-width: var(--content-width);
-    margin: 0 auto;
-  }
-
-  .article-feed {
-    display: grid;
   }
 </style>

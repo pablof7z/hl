@@ -12,14 +12,17 @@
   <title>Discover — Highlighter</title>
 </svelte:head>
 
-<section class="discover-page">
-  <header class="discover-header">
-    <h1 class="page-title">Public <em>rooms.</em></h1>
-    <p class="page-lead">
+<section class="pt-14 pb-20">
+  <header class="pb-8 border-b border-base-300 mb-11">
+    <h1 class="font-serif font-normal text-[clamp(44px,6vw,68px)] leading-[1.02] tracking-[-0.025em] text-base-content m-0 mb-3.5">Public <em class="italic text-primary">rooms.</em></h1>
+    <p class="font-serif italic text-[19px] leading-[1.5] text-base-content/80 max-w-[52ch] m-0 mb-6">
       Open reading groups anyone can join — find a room that matches your interests.
     </p>
-    <div class="header-actions">
-      <a class="btn-create" href="/r/create">
+    <div class="flex gap-3 flex-wrap">
+      <a
+        class="inline-flex items-center justify-center px-[22px] py-[10px] text-[13px] font-medium no-underline rounded-full bg-base-content text-base-100 transition-colors duration-200 ease hover:bg-primary focus-visible:bg-primary"
+        href="/r/create"
+      >
         {currentUser ? 'Create a room' : 'Sign in to create'}
       </a>
     </div>
@@ -35,66 +38,3 @@
     emptyCtaLabel="Create a room"
   />
 </section>
-
-<style>
-  .discover-page {
-    padding: 56px 0 80px;
-  }
-
-  .discover-header {
-    padding-bottom: 32px;
-    border-bottom: 1px solid var(--rule);
-    margin-bottom: 44px;
-  }
-
-  .page-title {
-    font-family: var(--font-serif);
-    font-weight: 400;
-    font-size: clamp(44px, 6vw, 68px);
-    line-height: 1.02;
-    letter-spacing: -0.025em;
-    color: var(--ink);
-    margin: 0 0 14px;
-  }
-
-  .page-title em {
-    font-style: italic;
-    color: var(--brand-accent);
-  }
-
-  .page-lead {
-    font-family: var(--font-serif);
-    font-style: italic;
-    font-size: 19px;
-    line-height: 1.5;
-    color: var(--ink-soft);
-    max-width: 52ch;
-    margin: 0 0 24px;
-  }
-
-  .header-actions {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-
-  .btn-create {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10px 22px;
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    text-decoration: none;
-    border-radius: 999px;
-    background: var(--ink);
-    color: var(--surface);
-    transition: background 200ms ease;
-  }
-
-  .btn-create:hover,
-  .btn-create:focus-visible {
-    background: var(--brand-accent);
-  }
-</style>

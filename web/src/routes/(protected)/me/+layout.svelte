@@ -99,51 +99,68 @@
 {#if hideVaultChrome}
   {@render children?.()}
 {:else}
-  <section class="me-shell">
-    <header class="vault-header">
-      <div class="vault-identity">
+  <section class="grid gap-6 py-4 pb-12">
+    <header
+      class="grid grid-cols-[minmax(0,1fr)_auto] gap-5 py-5 max-[820px]:grid-cols-1"
+      style="background: radial-gradient(circle at top left, rgba(255,103,25,0.08), transparent 38%), transparent;"
+    >
+      <div class="flex flex-wrap items-start gap-3">
         {#if profileImage}
-          <img class="vault-avatar" src={profileImage} alt="" />
+          <img
+            class="h-[4.75rem] w-[4.75rem] rounded-[1.2rem] object-cover bg-base-200"
+            src={profileImage}
+            alt=""
+          />
         {:else}
-          <div class="vault-avatar vault-avatar-fallback" aria-hidden="true">
+          <div
+            class="grid h-[4.75rem] w-[4.75rem] place-items-center rounded-[1.2rem] bg-base-200 text-primary text-2xl font-extrabold"
+            aria-hidden="true"
+          >
             {displayLabel.charAt(0).toUpperCase() || '#'}
           </div>
         {/if}
 
-        <div class="vault-copy">
-          <h1>{displayLabel}</h1>
-          <div class="vault-meta">
+        <div class="grid gap-[0.45rem] max-w-[42rem]">
+          <h1 class="m-0 font-serif text-base-content leading-none tracking-[-0.04em]" style="font-size: clamp(2.1rem, 5vw, 3rem);">
+            {displayLabel}
+          </h1>
+          <div class="flex flex-wrap gap-[0.7rem]">
             {#if profileNip05}
-              <span>{profileNip05}</span>
+              <span class="inline-flex items-center min-h-[1.9rem] px-3 rounded-full bg-base-200 text-base-content/50 text-xs font-bold">
+                {profileNip05}
+              </span>
             {/if}
             {#if currentUser}
-              <span>{shortPubkey(currentUser.pubkey)}</span>
+              <span class="inline-flex items-center min-h-[1.9rem] px-3 rounded-full bg-base-200 text-base-content/50 text-xs font-bold">
+                {shortPubkey(currentUser.pubkey)}
+              </span>
             {/if}
           </div>
-          <p class="vault-bio">
+          <p class="m-0 text-base-content/50 leading-relaxed">
             {profileBio || 'Highlights, saved items, and rooms in one place.'}
           </p>
         </div>
       </div>
 
-      <div class="vault-stats">
-        <div class="stat-card">
-          <span>Highlights</span>
-          <strong>{authoredHighlightFeed.events.length}</strong>
+      <div class="flex flex-wrap gap-[0.7rem] content-start justify-end max-[820px]:justify-start">
+        <div class="grid gap-1 min-w-[5rem] text-center">
+          <span class="text-base-content/50 text-[0.72rem] font-semibold uppercase tracking-[0.06em]">Highlights</span>
+          <strong class="font-serif text-[1.9rem] leading-none text-base-content">{authoredHighlightFeed.events.length}</strong>
         </div>
-        <div class="stat-card">
-          <span>Rooms</span>
-          <strong>{roomCount}</strong>
+        <div class="grid gap-1 min-w-[5rem] text-center">
+          <span class="text-base-content/50 text-[0.72rem] font-semibold uppercase tracking-[0.06em]">Rooms</span>
+          <strong class="font-serif text-[1.9rem] leading-none text-base-content">{roomCount}</strong>
         </div>
       </div>
     </header>
 
-    <nav class="me-tabs">
+    <nav class="flex flex-wrap gap-2">
       {#each meTabs as tab (tab.href)}
         <a
           href={tab.href}
-          class="me-tab"
-          class:active={isActive(tab.href)}
+          class="px-4 py-[0.45rem] rounded-box border border-base-300 bg-base-100 text-base-content text-[0.88rem] font-medium no-underline transition-colors duration-[140ms] hover:border-primary hover:text-primary"
+          class:border-primary={isActive(tab.href)}
+          class:text-primary={isActive(tab.href)}
           aria-current={isActive(tab.href) ? 'page' : undefined}
         >
           {tab.label}
@@ -151,151 +168,8 @@
       {/each}
     </nav>
 
-    <div class="me-slot">
+    <div class="grid">
       {@render children?.()}
     </div>
   </section>
 {/if}
-
-<style>
-  .me-shell {
-    display: grid;
-    gap: 1.4rem;
-    padding: 1rem 0 3rem;
-  }
-
-  .vault-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 1.25rem;
-    padding: 1.25rem 0;
-    background:
-      radial-gradient(circle at top left, rgba(255, 103, 25, 0.08), transparent 38%),
-      transparent;
-  }
-
-  .vault-identity,
-  .vault-meta,
-  .vault-stats,
-  .me-tabs {
-    display: flex;
-    gap: 0.7rem;
-    flex-wrap: wrap;
-  }
-
-  .vault-identity {
-    align-items: start;
-  }
-
-  .vault-avatar {
-    width: 4.75rem;
-    height: 4.75rem;
-    border-radius: 1.2rem;
-    object-fit: cover;
-    background: var(--surface-soft);
-  }
-
-  .vault-avatar-fallback {
-    display: grid;
-    place-items: center;
-    color: var(--accent);
-    font-size: 1.5rem;
-    font-weight: 800;
-  }
-
-  .vault-copy {
-    display: grid;
-    gap: 0.45rem;
-    max-width: 42rem;
-  }
-
-  h1 {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: clamp(2.1rem, 5vw, 3rem);
-    line-height: 1;
-    letter-spacing: -0.04em;
-  }
-
-  .vault-meta span {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.9rem;
-    padding: 0 0.7rem;
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--muted);
-    font-size: 0.75rem;
-    font-weight: 700;
-  }
-
-  .stat-card span {
-    color: var(--muted);
-    font-size: 0.72rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  .vault-bio {
-    margin: 0;
-    color: var(--muted);
-    line-height: 1.6;
-  }
-
-  .vault-stats {
-    align-content: start;
-    justify-content: end;
-  }
-
-  .stat-card {
-    display: grid;
-    gap: 0.2rem;
-    min-width: 5rem;
-    text-align: center;
-  }
-
-  .stat-card strong {
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 1.9rem;
-    line-height: 1;
-  }
-
-  .me-tabs {
-    gap: 0.5rem;
-  }
-
-  .me-tab {
-    padding: 0.45rem 1rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-base-300);
-    background: var(--surface);
-    color: var(--text);
-    font-size: 0.88rem;
-    font-weight: 500;
-    text-decoration: none;
-    transition: border-color 140ms, color 140ms;
-  }
-
-  .me-tab:hover,
-  .me-tab.active {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  .me-slot {
-    display: grid;
-  }
-
-  @media (max-width: 820px) {
-    .vault-header {
-      grid-template-columns: 1fr;
-    }
-
-    .vault-stats {
-      justify-content: start;
-    }
-  }
-</style>

@@ -180,15 +180,15 @@
 
 {#if signedIn}
   <!-- ═══ SIGNED-IN FEED ═══ -->
-  <section class="dashboard-header">
-    <div class="dashboard-header-copy">
-      <h1 class="dashboard-headline">Your feed</h1>
+  <section class="flex items-end justify-between gap-4 pt-6 max-sm:flex-col max-sm:items-start">
+    <div>
+      <h1 class="m-0 text-base-content font-serif text-[clamp(1.5rem,3.5vw,2rem)] leading-[1.15] tracking-[-0.02em]">Your feed</h1>
     </div>
-    <div class="dashboard-ctas">
+    <div class="flex flex-wrap gap-[0.625rem] shrink-0">
       {#each memberActions as action (action.href)}
         <a
           href={action.href}
-          class={action.tone === 'secondary' ? 'btn-secondary' : 'btn-primary'}
+          class={action.tone === 'secondary' ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}
         >
           {action.label}
         </a>
@@ -196,77 +196,77 @@
     </div>
   </section>
 
-  <section class="dashboard-body">
-    <div class="feed-main">
+  <section class="grid grid-cols-[1fr_22rem] gap-8 items-start max-[820px]:grid-cols-1">
+    <div class="min-w-0">
       {#if isLoading}
-        <div class="feed-skeleton">
+        <div class="grid gap-[0.9rem]">
           <div class="skeleton-card"></div>
           <div class="skeleton-card"></div>
           <div class="skeleton-card"></div>
         </div>
-        <p class="feed-loading-text">Loading your feed...</p>
+        <p class="m-0 text-base-content/50 text-[0.88rem]">Loading your feed...</p>
       {:else if isEmpty && !hasRooms && !hasFollows}
-        <div class="feed-empty">
-          <h2>Your feed starts here.</h2>
-          <p>Join a room or follow someone to see highlights appear in your feed.</p>
-          <div class="feed-empty-actions">
-            <a href="/discover" class="btn-primary">Discover rooms</a>
-            <a href="/r/create" class="btn-secondary">Create a room</a>
+        <div class="grid gap-2 px-8 py-10 border border-base-300 rounded-2xl bg-base-100 text-center">
+          <h2 class="m-0 text-base-content font-serif text-[1.35rem]">Your feed starts here.</h2>
+          <p class="m-0 text-base-content/50 text-[0.95rem] leading-relaxed">Join a room or follow someone to see highlights appear in your feed.</p>
+          <div class="flex justify-center gap-3 mt-4">
+            <a href="/discover" class="btn btn-primary btn-sm">Discover rooms</a>
+            <a href="/r/create" class="btn btn-ghost btn-sm">Create a room</a>
           </div>
         </div>
       {:else if isEmpty && hasRooms}
-        <div class="feed-empty">
-          <h2>Your rooms are quiet.</h2>
-          <p>No highlights have been shared yet. Be the first.</p>
-          <div class="feed-empty-actions">
-            <a href="/rooms" class="btn-primary">Visit your rooms</a>
+        <div class="grid gap-2 px-8 py-10 border border-base-300 rounded-2xl bg-base-100 text-center">
+          <h2 class="m-0 text-base-content font-serif text-[1.35rem]">Your rooms are quiet.</h2>
+          <p class="m-0 text-base-content/50 text-[0.95rem] leading-relaxed">No highlights have been shared yet. Be the first.</p>
+          <div class="flex justify-center gap-3 mt-4">
+            <a href="/rooms" class="btn btn-primary btn-sm">Visit your rooms</a>
           </div>
         </div>
       {:else if isEmpty && hasFollows}
-        <div class="feed-empty">
-          <h2>Nothing new from your network.</h2>
-          <p>The people you follow haven't shared highlights recently.</p>
-          <div class="feed-empty-actions">
-            <a href="/discover" class="btn-primary">Discover rooms</a>
+        <div class="grid gap-2 px-8 py-10 border border-base-300 rounded-2xl bg-base-100 text-center">
+          <h2 class="m-0 text-base-content font-serif text-[1.35rem]">Nothing new from your network.</h2>
+          <p class="m-0 text-base-content/50 text-[0.95rem] leading-relaxed">The people you follow haven't shared highlights recently.</p>
+          <div class="flex justify-center gap-3 mt-4">
+            <a href="/discover" class="btn btn-primary btn-sm">Discover rooms</a>
           </div>
         </div>
       {:else}
-        <div class="feed-groups">
+        <div class="grid gap-[0.9rem]">
           {#each visibleGroups as group (group.referenceKey)}
             <HighlightSourceGroup {group} {rooms} showShareControl={true} />
           {/each}
         </div>
         {#if !showAll && feedGroups.length > INITIAL_GROUP_COUNT}
-          <button class="btn-secondary feed-show-more" onclick={() => showAll = true}>
+          <button class="btn btn-ghost mt-4 w-full text-center border-none" onclick={() => showAll = true}>
             Show more ({feedGroups.length - INITIAL_GROUP_COUNT} remaining)
           </button>
         {/if}
         {#if resolvingArtifacts}
-          <p class="feed-resolving">Resolving source details...</p>
+          <p class="mt-3 m-0 text-base-content/50 text-[0.88rem]">Resolving source details...</p>
         {/if}
       {/if}
     </div>
 
-    <aside class="feed-rail">
+    <aside class="grid gap-5 max-[820px]:order-1">
       {#if rooms.length > 0}
-        <div class="rail-section">
-          <h3 class="rail-heading">Your rooms</h3>
-          <ul class="rail-circle-list">
+        <div class="grid gap-2">
+          <h3 class="m-0 text-[0.75rem] font-medium tracking-[0.08em] uppercase text-base-content/50">Your rooms</h3>
+          <ul class="list-none m-0 p-0 grid gap-0.5">
             {#each rooms.slice(0, 6) as room (room.id)}
               <li>
-                <a href="/r/{room.id}" class="rail-circle-link">{room.name}</a>
+                <a href="/r/{room.id}" class="block py-[0.45rem] px-[0.625rem] rounded-lg text-base-content text-[0.9rem] no-underline transition-[background] duration-[120ms] ease hover:bg-base-200">{room.name}</a>
               </li>
             {/each}
           </ul>
           {#if rooms.length > 6}
-            <a href="/rooms" class="rail-view-all">View all rooms</a>
+            <a href="/rooms" class="text-[0.813rem] text-primary no-underline pl-[0.625rem] hover:underline">View all rooms</a>
           {/if}
         </div>
       {/if}
-      <div class="rail-cta-card">
-        <h3>Start a new room</h3>
-        <p>Gather your people around the content you care about.</p>
-        <a href="/r/create" class="btn-primary">Create a room</a>
+      <div class="grid gap-2 pt-5 border-t border-base-300">
+        <h3 class="m-0 text-base text-base-content font-semibold">Start a new room</h3>
+        <p class="m-0 text-[0.875rem] text-base-content/50 leading-[1.5]">Gather your people around the content you care about.</p>
+        <a href="/r/create" class="btn btn-primary btn-sm">Create a room</a>
       </div>
     </aside>
   </section>
@@ -772,73 +772,11 @@
 {/if}
 
 <style>
-  /* ═══════════════════════════════════════════
-     SIGNED-IN FEED (unchanged)
-     ═══════════════════════════════════════════ */
-
-  .dashboard-header {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1.5rem 0 0;
-  }
-
-  .dashboard-headline {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: clamp(1.5rem, 3.5vw, 2rem);
-    line-height: 1.15;
-    letter-spacing: -0.02em;
-  }
-
-  .dashboard-ctas {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.625rem;
-    flex-shrink: 0;
-  }
-
-  .dashboard-body {
-    display: grid;
-    grid-template-columns: 1fr 22rem;
-    gap: 2rem;
-    align-items: start;
-  }
-
-  .feed-main { min-width: 0; }
-
-  .feed-groups {
-    display: grid;
-    gap: 0.9rem;
-  }
-
-  .feed-show-more {
-    margin-top: 1rem;
-    width: 100%;
-    text-align: center;
-    border: none;
-    font-family: inherit;
-  }
-
-  .feed-loading-text, .feed-resolving {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.88rem;
-  }
-
-  .feed-resolving { margin-top: 0.75rem; }
-
-  .feed-skeleton {
-    display: grid;
-    gap: 0.9rem;
-  }
-
+  /* ── Skeleton shimmer animation ── */
   .skeleton-card {
     height: 10rem;
     border-radius: 1rem;
-    background: linear-gradient(110deg, var(--surface-soft) 30%, var(--surface) 50%, var(--surface-soft) 70%);
+    background: linear-gradient(110deg, var(--color-base-200) 30%, var(--color-base-100) 50%, var(--color-base-200) 70%);
     background-size: 200% 100%;
     animation: shimmer 1.5s ease-in-out infinite;
   }
@@ -848,159 +786,11 @@
     100% { background-position: -200% 0; }
   }
 
-  .feed-empty {
-    display: grid;
-    gap: 0.5rem;
-    padding: 2.5rem 2rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 1rem;
-    background: var(--surface);
-    text-align: center;
-  }
-
-  .feed-empty h2 {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 1.35rem;
-  }
-
-  .feed-empty p {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.95rem;
-    line-height: 1.6;
-  }
-
-  .feed-empty-actions {
-    display: flex;
-    justify-content: center;
-    gap: 0.75rem;
-    margin-top: 1rem;
-  }
-
-  .feed-rail {
-    display: grid;
-    gap: 1.25rem;
-  }
-
-  .rail-section {
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  .rail-heading {
-    margin: 0;
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-
-  .rail-circle-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 0.125rem;
-  }
-
-  .rail-circle-link {
-    display: block;
-    padding: 0.45rem 0.625rem;
-    border-radius: 0.5rem;
-    color: var(--text-strong);
-    font-size: 0.9rem;
-    text-decoration: none;
-    transition: background 120ms ease;
-  }
-
-  .rail-circle-link:hover { background: var(--surface-soft); }
-
-  .rail-view-all {
-    font-size: 0.813rem;
-    color: var(--accent);
-    text-decoration: none;
-    padding-left: 0.625rem;
-  }
-
-  .rail-view-all:hover { text-decoration: underline; }
-
-  .rail-cta-card {
-    display: grid;
-    gap: 0.5rem;
-    padding: 1.25rem 0 0;
-    border-top: 1px solid var(--color-base-300);
-  }
-
-  .rail-cta-card h3 {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-strong);
-  }
-
-  .rail-cta-card p {
-    margin: 0;
-    font-size: 0.875rem;
-    color: var(--muted);
-    line-height: 1.5;
-  }
-
-  .btn-primary {
-    display: inline-block;
-    background: var(--accent);
-    color: #fff;
-    font-size: 0.94rem;
-    font-weight: 500;
-    padding: 0.85rem 1.75rem;
-    border-radius: 9999px;
-    transition: background 0.18s ease, transform 0.12s ease;
-    cursor: pointer;
-    white-space: nowrap;
-    text-decoration: none;
-  }
-
-  .btn-primary:hover {
-    background: var(--accent-hover);
-    transform: translateY(-1px);
-  }
-
-  .btn-secondary {
-    display: inline-block;
-    background: var(--surface);
-    color: var(--text-strong);
-    font-size: 0.94rem;
-    font-weight: 500;
-    padding: 0.85rem 1.75rem;
-    border-radius: 9999px;
-    border: 1px solid var(--color-base-300);
-    cursor: pointer;
-    white-space: nowrap;
-    text-decoration: none;
-  }
-
-  @media (max-width: 820px) {
-    .dashboard-header {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-    .dashboard-body { grid-template-columns: 1fr; }
-    .feed-rail { order: 1; }
-  }
-
-  /* ═══════════════════════════════════════════
-     LANDING (annotation direction, round 02)
-     ═══════════════════════════════════════════ */
-
+  /* ── Landing page layout ── */
   .landing-page {
     max-width: 1280px;
     margin: 0 auto;
     padding: 0 40px;
-    background: var(--bg);
-    font-family: var(--font-sans);
-    color: var(--ink);
     font-size: 17px;
     line-height: 1.6;
   }
@@ -1038,9 +828,8 @@
     .full, .main, .marg { grid-column: 1; }
   }
 
-  /* marker (highlight-on-page) */
-  .landing-page :global(mark),
-  .landing-page .mark {
+  /* ── Marker / highlight-on-page ── */
+  .landing-page :global(mark) {
     background: linear-gradient(180deg, transparent 0%, transparent 12%, #F5D896 12%, #F5D896 92%, transparent 92%);
     color: inherit;
     padding: 0 2px;
@@ -1050,7 +839,7 @@
     position: relative;
   }
 
-  /* annotation */
+  /* ── Annotation ── */
   .anno {
     position: relative;
     padding: 0 0 0 18px;
@@ -1133,9 +922,7 @@
     padding-left: 0;
   }
 
-  .anno.free::before {
-    content: none;
-  }
+  .anno.free::before { content: none; }
 
   @media (max-width: 900px) {
     .anno {
@@ -1149,7 +936,7 @@
     .anno::before { display: none; }
   }
 
-  /* Hero */
+  /* ── Hero ── */
   .landing-hero { padding: 72px 0 96px; }
 
   .landing-page h1 {
@@ -1200,22 +987,6 @@
 
   .landing-btn-primary:hover { background: #C24D2C; }
 
-  .landing-btn-secondary {
-    padding: 16px 0;
-    color: #3A362E;
-    font-family: 'Fraunces', serif;
-    font-style: italic;
-    font-size: 17px;
-    text-decoration: underline;
-    text-decoration-color: #D9D2BF;
-    text-underline-offset: 5px;
-  }
-
-  .landing-btn-secondary:hover {
-    color: #C24D2C;
-    text-decoration-color: #C24D2C;
-  }
-
   .sec-head {
     font-family: 'Fraunces', serif;
     font-weight: 400;
@@ -1250,10 +1021,9 @@
     margin: 0;
   }
 
-  p.body-copy + p.body-copy { margin-top: 1.15em; }
   p.body-copy strong { color: #15130F; font-weight: 500; }
 
-  /* Mock wrappers */
+  /* ── Mock wrappers ── */
   .mock-wrap, .podcast-card {
     margin-top: 40px;
     background: #FFFEFA;
@@ -1366,10 +1136,7 @@
     margin-bottom: 18px;
   }
 
-  .book-stats b {
-    color: #15130F;
-    font-weight: 500;
-  }
+  .book-stats b { color: #15130F; font-weight: 500; }
 
   .members-row {
     display: flex;
@@ -1454,6 +1221,7 @@
   }
 
   .thread-msg:last-of-type { margin-bottom: 0; }
+
   .thread-msg .member-dot {
     width: 22px;
     height: 22px;
@@ -1488,7 +1256,7 @@
     letter-spacing: 0.05em;
   }
 
-  /* Chip grid (not just books) */
+  /* ── Chip grid ── */
   .chip-grid {
     margin-top: 20px;
     display: grid;
@@ -1529,10 +1297,7 @@
     color: #7A7468;
   }
 
-  .chip-type b {
-    color: #C24D2C;
-    font-weight: 500;
-  }
+  .chip-type b { color: #C24D2C; font-weight: 500; }
 
   .chip-title {
     font-family: 'Fraunces', serif;
@@ -1600,7 +1365,7 @@
     flex-shrink: 0;
   }
 
-  /* Podcast card */
+  /* ── Podcast card ── */
   .podcast-head {
     display: grid;
     grid-template-columns: 80px 1fr;
@@ -1735,10 +1500,7 @@
     margin-bottom: 8px;
   }
 
-  .ph-stamp b {
-    color: #C24D2C;
-    font-weight: 500;
-  }
+  .ph-stamp b { color: #C24D2C; font-weight: 500; }
 
   .ph-quote {
     font-family: 'Fraunces', serif;
@@ -1768,13 +1530,9 @@
     flex-shrink: 0;
   }
 
-  .pr-name {
-    font-weight: 500;
-    margin-right: 6px;
-    color: #15130F;
-  }
+  .pr-name { font-weight: 500; margin-right: 6px; color: #15130F; }
 
-  /* Room section */
+  /* ── Room mock ── */
   .room-header-mock {
     margin-top: 36px;
     background: #FFFEFA;
@@ -1802,11 +1560,7 @@
     letter-spacing: -0.01em;
   }
 
-  .room-name em {
-    font-style: italic;
-    color: #C24D2C;
-    font-weight: 400;
-  }
+  .room-name em { font-style: italic; color: #C24D2C; font-weight: 400; }
 
   .room-stats {
     display: flex;
@@ -1817,10 +1571,7 @@
     margin-bottom: 20px;
   }
 
-  .room-stats b {
-    color: #15130F;
-    font-weight: 500;
-  }
+  .room-stats b { color: #15130F; font-weight: 500; }
 
   .room-activity {
     padding-top: 20px;
@@ -1830,16 +1581,11 @@
     color: #3A362E;
   }
 
-  .room-activity b {
-    color: #15130F;
-    font-weight: 500;
-  }
+  .room-activity b { color: #15130F; font-weight: 500; }
 
-  .room-activity + .room-activity {
-    border-top: 1px dashed #D9D2BF;
-  }
+  .room-activity + .room-activity { border-top: 1px dashed #D9D2BF; }
 
-  /* Protocol callout */
+  /* ── Protocol callout ── */
   .proto-callout {
     margin-top: 36px;
     padding: 28px 32px;
@@ -1883,7 +1629,7 @@
 
   .proto-text em { font-style: italic; }
 
-  /* Final CTA */
+  /* ── Final CTA ── */
   .final-cta-buttons {
     display: flex;
     gap: 18px;
@@ -1900,5 +1646,4 @@
     color: #7A7468;
     max-width: 48ch;
   }
-
 </style>

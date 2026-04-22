@@ -120,28 +120,31 @@
 </svelte:head>
 
 {#if !room}
-  <div class="empty-state">
-    <h1>This room isn't here.</h1>
-    <p>The link might be broken, or the room may have been removed.</p>
+  <div class="grid gap-3 justify-items-center py-20 px-4 text-center">
+    <h1 class="m-0 text-base-content font-serif text-[1.8rem] tracking-[-0.02em]">This room isn't here.</h1>
+    <p class="m-0 text-base-content/50">The link might be broken, or the room may have been removed.</p>
     <a href="/" class="btn">Back to Highlighter</a>
   </div>
 {:else}
-  <section class="join-page">
-    <div class="calling-card">
+  <section class="grid place-items-center pt-12 pb-16 px-4">
+    <div class="grid gap-0 w-full max-w-[32rem] bg-base-100 border border-base-300 rounded-[1.25rem] overflow-hidden">
       {#if room.picture}
-        <div class="cover" style:background-image="url({room.picture})"></div>
+        <div
+          class="aspect-[3/1] bg-cover bg-center bg-base-200 border-b border-base-300"
+          style:background-image="url({room.picture})"
+        ></div>
       {/if}
 
-      <div class="card-body">
-        <h1 class="room-name">{room.name}</h1>
+      <div class="grid gap-4 p-[1.75rem_1.75rem_2rem]">
+        <h1 class="m-0 text-base-content font-serif text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">{room.name}</h1>
 
         {#if inviterPubkey}
-          <div class="inviter">
+          <div class="inline-flex items-center gap-2 text-base-content/50 text-[0.92rem]">
             <User.Root ndk={ndk} pubkey={inviterPubkey}>
-              <span class="inviter-avatar">
+              <span class="inline-flex w-7 h-7 rounded-full overflow-hidden shrink-0 [&_:global(img)]:w-full [&_:global(img)]:h-full [&_:global(img)]:object-cover">
                 <User.Avatar />
               </span>
-              <span class="inviter-text">
+              <span class="text-base-content">
                 From <User.Name field="displayName" />
               </span>
             </User.Root>
@@ -149,18 +152,18 @@
         {/if}
 
         {#if room.about}
-          <p class="about">{room.about}</p>
+          <p class="m-0 text-base-content text-[1.02rem] leading-[1.55]">{room.about}</p>
         {/if}
 
         {#if !isPrivate}
-          <div class="room-stats">
+          <div class="text-base-content/50 text-[0.85rem] font-mono tracking-[0.04em]">
             {liveMemberPubkeys.length} member{liveMemberPubkeys.length === 1 ? '' : 's'}
           </div>
         {/if}
 
-        <div class="actions">
+        <div class="flex gap-[0.6rem] items-center pt-2">
           {#if accepted && !alreadyMember}
-            <span class="status-ok">Joining…</span>
+            <span class="text-base-content/50 italic">Joining…</span>
           {:else if alreadyMember}
             <a class="btn btn-primary" href="/r/{slug}">Enter the room</a>
           {:else if currentUser}
@@ -184,15 +187,15 @@
         </div>
 
         {#if acceptError}
-          <p class="error-banner">{acceptError}</p>
+          <p class="m-0 px-[0.85rem] py-[0.7rem] rounded-[0.65rem] bg-error/10 text-error text-[0.9rem] leading-[1.5]">{acceptError}</p>
         {/if}
 
         {#if isPrivate && !alreadyMember}
-          <p class="private-note">
+          <p class="m-0 text-base-content/50 text-[0.85rem] leading-[1.55]">
             This is a members-only room. You'll see what's inside after you accept.
           </p>
         {:else if isOpen && !alreadyMember}
-          <p class="quiet-note">
+          <p class="m-0 text-base-content/50 text-[0.85rem] leading-[1.55]">
             This room is open — you can also enter without this link.
           </p>
         {/if}
@@ -200,143 +203,3 @@
     </div>
   </section>
 {/if}
-
-<style>
-  .join-page {
-    display: grid;
-    place-items: center;
-    padding: 3rem 1rem 4rem;
-  }
-
-  .calling-card {
-    display: grid;
-    gap: 0;
-    width: 100%;
-    max-width: 32rem;
-    background: var(--surface);
-    border: 1px solid var(--color-base-300);
-    border-radius: 1.25rem;
-    overflow: hidden;
-  }
-
-  .cover {
-    aspect-ratio: 3 / 1;
-    background-size: cover;
-    background-position: center;
-    background-color: var(--surface-soft);
-    border-bottom: 1px solid var(--color-base-300);
-  }
-
-  .card-body {
-    display: grid;
-    gap: 1rem;
-    padding: 1.75rem 1.75rem 2rem;
-  }
-
-  .room-name {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: clamp(2rem, 5vw, 2.8rem);
-    line-height: 1.05;
-    letter-spacing: -0.03em;
-  }
-
-  .inviter {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: var(--muted);
-    font-size: 0.92rem;
-  }
-
-  .inviter-avatar {
-    display: inline-flex;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-
-  .inviter-avatar :global(img) {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .inviter-text {
-    color: var(--text-strong);
-  }
-
-  .about {
-    margin: 0;
-    color: var(--text-strong);
-    font-size: 1.02rem;
-    line-height: 1.55;
-  }
-
-  .room-stats {
-    color: var(--muted);
-    font-size: 0.85rem;
-    font-family: var(--font-mono);
-    letter-spacing: 0.04em;
-  }
-
-  .actions {
-    display: flex;
-    gap: 0.6rem;
-    align-items: center;
-    padding-top: 0.5rem;
-  }
-
-  .btn-primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: white;
-  }
-
-  .status-ok {
-    color: var(--muted);
-    font-style: italic;
-  }
-
-  .error-banner {
-    margin: 0;
-    padding: 0.7rem 0.85rem;
-    border-radius: 0.65rem;
-    background: var(--pale-red);
-    color: var(--pale-red-text);
-    font-size: 0.9rem;
-    line-height: 1.5;
-  }
-
-  .private-note,
-  .quiet-note {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.85rem;
-    line-height: 1.55;
-  }
-
-  .empty-state {
-    display: grid;
-    gap: 0.75rem;
-    justify-items: center;
-    padding: 5rem 1rem;
-    text-align: center;
-  }
-
-  .empty-state h1 {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 1.8rem;
-    letter-spacing: -0.02em;
-  }
-
-  .empty-state p {
-    margin: 0;
-    color: var(--muted);
-  }
-</style>

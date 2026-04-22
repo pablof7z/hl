@@ -144,27 +144,27 @@
 </svelte:head>
 
 {#if !room}
-  <div class="empty-state">
-    <h1>Room not found</h1>
+  <div class="grid gap-4 justify-items-center py-20 text-center">
+    <h1 class="text-[1.6rem]">Room not found</h1>
     <a href="/rooms" class="btn">Back to your rooms</a>
   </div>
 {:else if !currentUser}
-  <div class="empty-state">
-    <h1>Sign in to manage invites</h1>
+  <div class="grid gap-4 justify-items-center py-20 text-center">
+    <h1 class="text-[1.6rem]">Sign in to manage invites</h1>
     <a href="/onboarding" class="btn">Sign in</a>
   </div>
 {:else if !isAdmin}
-  <div class="empty-state">
-    <h1>Only admins can manage invites</h1>
+  <div class="grid gap-4 justify-items-center py-20 text-center">
+    <h1 class="text-[1.6rem]">Only admins can manage invites</h1>
     <a href="/r/{slug}" class="btn">Back to the room</a>
   </div>
 {:else}
-  <section class="invite-page">
-    <header class="invite-head">
-      <a class="back-link" href="/r/{slug}">← {room.name}</a>
+  <section class="grid gap-8 max-w-[42rem] mx-auto pt-10 pb-16">
+    <header class="grid gap-[0.65rem]">
+      <a class="text-primary text-[0.85rem] font-medium no-underline hover:underline" href="/r/{slug}">← {room.name}</a>
       {#if isFresh}
-        <h1>Your room is live.</h1>
-        <p class="lead">
+        <h1 class="m-0 text-base-content font-serif text-[clamp(1.8rem,4vw,2.6rem)] leading-[1.05] tracking-[-0.03em]">Your room is live.</h1>
+        <p class="m-0 text-base-content/50 text-base leading-[1.55]">
           {#if isOpen}
             It's open — anyone with the link below can join and read along.
           {:else}
@@ -172,8 +172,8 @@
           {/if}
         </p>
       {:else}
-        <h1>Invites</h1>
-        <p class="lead">
+        <h1 class="m-0 text-base-content font-serif text-[clamp(1.8rem,4vw,2.6rem)] leading-[1.05] tracking-[-0.03em]">Invites</h1>
+        <p class="m-0 text-base-content/50 text-base leading-[1.55]">
           {#if isOpen}
             This room is open — anyone with the room link can join.
           {:else}
@@ -184,10 +184,10 @@
     </header>
 
     {#if isOpen}
-      <section class="open-room-card">
-        <div class="invite-label">Shareable link</div>
-        <div class="invite-link-row">
-          <code class="invite-link">{origin}/r/{slug}</code>
+      <section class="grid gap-[0.85rem] p-[1.25rem_1.35rem] border border-base-300 rounded-[1.1rem] bg-base-100">
+        <div class="font-mono text-[0.72rem] tracking-[0.18em] uppercase text-base-content/50">Shareable link</div>
+        <div class="grid [grid-template-columns:1fr_auto] gap-[0.6rem] items-center">
+          <code class="block px-[0.7rem] py-[0.55rem] border border-dashed border-base-300 rounded-lg bg-base-200 text-base-content font-mono text-[0.8rem] whitespace-nowrap overflow-hidden text-ellipsis">{origin}/r/{slug}</code>
           <button
             type="button"
             class="btn btn-ghost btn-sm"
@@ -205,20 +205,19 @@
             {copiedCode === 'open' ? 'Copied' : 'Copy'}
           </button>
         </div>
-        <p class="hint">
+        <p class="m-0 text-base-content/50 text-[0.85rem] leading-[1.55]">
           Anyone with this link can read and join without approval. Change this
-          in <a href="/r/{slug}/settings">room settings</a>.
+          in <a href="/r/{slug}/settings" class="text-primary underline underline-offset-[2px]">room settings</a>.
         </p>
       </section>
     {:else}
-      <section class="create-card">
+      <section class="grid gap-[0.85rem] p-[1.25rem_1.35rem] border border-base-300 rounded-[1.1rem] bg-base-100">
         <form onsubmit={submitCreate}>
-          <div class="mode-switch" role="tablist">
+          <div class="inline-flex gap-0 border border-base-300 rounded-full p-[3px] bg-base-200 justify-self-start" role="tablist">
             <button
               type="button"
               role="tab"
-              class="mode-btn"
-              class:active={mode === 'single'}
+              class="px-[0.9rem] py-[0.45rem] border-0 rounded-full text-[0.82rem] font-medium cursor-pointer transition-colors {mode === 'single' ? 'bg-base-content text-base-100' : 'bg-transparent text-base-content/50'}"
               aria-selected={mode === 'single'}
               onclick={() => (mode = 'single')}
             >
@@ -227,8 +226,7 @@
             <button
               type="button"
               role="tab"
-              class="mode-btn"
-              class:active={mode === 'multiple'}
+              class="px-[0.9rem] py-[0.45rem] border-0 rounded-full text-[0.82rem] font-medium cursor-pointer transition-colors {mode === 'multiple' ? 'bg-base-content text-base-100' : 'bg-transparent text-base-content/50'}"
               aria-selected={mode === 'multiple'}
               onclick={() => (mode = 'multiple')}
             >
@@ -237,9 +235,9 @@
           </div>
 
           {#if mode === 'single'}
-            <div class="create-row">
+            <div class="grid [grid-template-columns:1fr_auto] gap-[0.6rem] items-center mt-[0.85rem]">
               <input
-                class="field-input"
+                class="w-full px-[0.8rem] py-[0.625rem] border border-base-300 rounded-[0.65rem] bg-base-200 text-base-content text-[0.9rem] outline-none transition-colors duration-[120ms] ease focus:border-primary"
                 type="text"
                 bind:value={singleLabel}
                 placeholder="Who's it for? (e.g. Maria)"
@@ -254,64 +252,64 @@
                 {mintPending ? 'Creating…' : 'Create invite'}
               </button>
             </div>
-            <p class="hint">
+            <p class="m-0 text-base-content/50 text-[0.85rem] leading-[1.55] mt-[0.85rem]">
               The label is just for your own list. Each link works once.
             </p>
           {:else}
-            <div class="create-row">
+            <div class="grid [grid-template-columns:6rem_auto_1fr] gap-[0.6rem] items-center mt-[0.85rem]">
               <input
-                class="field-input field-count"
+                class="w-full px-[0.8rem] py-[0.625rem] border border-base-300 rounded-[0.65rem] bg-base-200 text-base-content text-[0.9rem] outline-none transition-colors duration-[120ms] ease focus:border-primary text-center"
                 type="number"
                 min="1"
                 max={MAX_CODES_PER_INVITE_EVENT}
                 bind:value={batchCount}
               />
-              <span class="count-label">links</span>
+              <span class="text-base-content/50 text-[0.9rem] justify-self-start">links</span>
               <button
                 type="submit"
-                class="btn btn-primary"
+                class="btn btn-primary justify-self-end"
                 disabled={mintPending}
               >
                 {mintPending ? 'Creating…' : 'Create'}
               </button>
             </div>
-            <p class="hint">
+            <p class="m-0 text-base-content/50 text-[0.85rem] leading-[1.55] mt-[0.85rem]">
               Up to {MAX_CODES_PER_INVITE_EVENT} at a time. Each link works once.
             </p>
           {/if}
 
           {#if mintError}
-            <p class="error-banner">{mintError}</p>
+            <p class="m-0 mt-[0.85rem] px-[0.85rem] py-[0.7rem] rounded-[0.65rem] bg-error/10 text-error text-[0.85rem]">{mintError}</p>
           {/if}
         </form>
       </section>
 
-      <section class="list-card">
+      <section class="grid gap-[0.85rem] p-[1.25rem_1.35rem] border border-base-300 rounded-[1.1rem] bg-base-100">
         {#if !loaded}
-          <p class="muted">Loading…</p>
+          <p class="m-0 text-base-content/50 text-[0.85rem] leading-[1.55]">Loading…</p>
         {:else if invites.length === 0}
-          <p class="muted">No invite links yet. Create one above.</p>
+          <p class="m-0 text-base-content/50 text-[0.85rem] leading-[1.55]">No invite links yet. Create one above.</p>
         {:else}
-          <div class="list-head">
-            <span class="list-count">
+          <div class="flex justify-between items-baseline">
+            <span class="font-mono text-[0.72rem] tracking-[0.18em] uppercase text-base-content/50">
               {invites.length} invite{invites.length === 1 ? '' : 's'}
             </span>
           </div>
-          <ul class="invite-list">
+          <ul class="list-none m-0 p-0 grid gap-[0.1rem]">
             {#each invites as invite (invite.code)}
-              <li class="invite-row">
-                <div class="row-body">
-                  <div class="row-top">
+              <li class="grid [grid-template-columns:1fr_auto] gap-[0.9rem] items-center py-3 border-t border-dotted border-base-300 first:border-t-0">
+                <div class="grid gap-[0.35rem] min-w-0">
+                  <div class="flex items-baseline gap-[0.35rem] flex-wrap">
                     {#if invite.label}
-                      <strong class="row-label">{invite.label}</strong>
+                      <strong class="text-base-content font-serif text-base font-medium">{invite.label}</strong>
                     {:else}
-                      <span class="row-label row-label-muted">Shareable link</span>
+                      <span class="text-base-content/50 font-serif text-base font-normal italic">Shareable link</span>
                     {/if}
-                    <span class="row-date">· {formatDate(invite.createdAt)}</span>
+                    <span class="text-base-content/50 text-[0.82rem]">· {formatDate(invite.createdAt)}</span>
                   </div>
-                  <code class="invite-link">{urlFor(invite.code)}</code>
+                  <code class="block px-[0.7rem] py-[0.55rem] border border-dashed border-base-300 rounded-lg bg-base-200 text-base-content font-mono text-[0.8rem] whitespace-nowrap overflow-hidden text-ellipsis">{urlFor(invite.code)}</code>
                 </div>
-                <div class="row-actions">
+                <div class="flex gap-[0.35rem]">
                   <button
                     type="button"
                     class="btn btn-ghost btn-sm"
@@ -321,7 +319,7 @@
                   </button>
                   <button
                     type="button"
-                    class="btn btn-ghost btn-sm btn-quiet"
+                    class="btn btn-ghost btn-sm text-base-content/50"
                     onclick={() => handleDelete(invite.code)}
                     title="Remove from your list"
                     aria-label="Remove from your list"
@@ -332,7 +330,7 @@
               </li>
             {/each}
           </ul>
-          <p class="hint">
+          <p class="m-0 text-base-content/50 text-[0.85rem] leading-[1.55]">
             Removing a link only hides it from your list. The code stays valid
             on the relay until it's used.
           </p>
@@ -340,282 +338,8 @@
       </section>
     {/if}
 
-    <footer class="invite-foot">
+    <footer class="flex justify-end pt-2">
       <a class="btn btn-ghost" href="/r/{slug}">Enter the room →</a>
     </footer>
   </section>
 {/if}
-
-<style>
-  .invite-page {
-    display: grid;
-    gap: 2rem;
-    max-width: 42rem;
-    margin: 0 auto;
-    padding: 2.5rem 0 4rem;
-  }
-
-  .invite-head {
-    display: grid;
-    gap: 0.65rem;
-  }
-
-  .back-link {
-    color: var(--accent);
-    font-family: var(--font-sans);
-    font-size: 0.85rem;
-    font-weight: 500;
-    text-decoration: none;
-  }
-
-  .back-link:hover {
-    text-decoration: underline;
-  }
-
-  h1 {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: clamp(1.8rem, 4vw, 2.6rem);
-    line-height: 1.05;
-    letter-spacing: -0.03em;
-  }
-
-  .lead {
-    margin: 0;
-    color: var(--muted);
-    font-size: 1rem;
-    line-height: 1.55;
-  }
-
-  .create-card,
-  .list-card,
-  .open-room-card {
-    display: grid;
-    gap: 0.85rem;
-    padding: 1.25rem 1.35rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 1.1rem;
-    background: var(--surface);
-  }
-
-  .mode-switch {
-    display: inline-flex;
-    gap: 0;
-    border: 1px solid var(--color-base-300);
-    border-radius: 999px;
-    padding: 3px;
-    background: var(--surface-soft);
-    justify-self: start;
-  }
-
-  .mode-btn {
-    padding: 0.45rem 0.9rem;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--muted);
-    font-family: var(--font-sans);
-    font-size: 0.82rem;
-    font-weight: 500;
-    cursor: pointer;
-  }
-
-  .mode-btn.active {
-    background: var(--text-strong);
-    color: var(--surface);
-  }
-
-  .create-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 0.6rem;
-    align-items: center;
-  }
-
-  .create-row:has(.field-count) {
-    grid-template-columns: 6rem auto 1fr;
-  }
-
-  .field-input {
-    width: 100%;
-    padding: 0.625rem 0.8rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 0.65rem;
-    background: var(--surface-soft);
-    color: var(--text-strong);
-    font-size: 0.9rem;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 120ms ease;
-  }
-
-  .field-input:focus {
-    border-color: var(--accent);
-  }
-
-  .field-count {
-    text-align: center;
-  }
-
-  .count-label {
-    color: var(--muted);
-    font-size: 0.9rem;
-    justify-self: start;
-  }
-
-  .create-row:has(.field-count) .btn {
-    grid-column: 3;
-    justify-self: end;
-  }
-
-  .hint,
-  .muted {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.85rem;
-    line-height: 1.55;
-  }
-
-  .hint a {
-    color: var(--accent);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-
-  .invite-label {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-
-  .invite-link-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 0.6rem;
-    align-items: center;
-  }
-
-  .invite-link {
-    display: block;
-    padding: 0.55rem 0.7rem;
-    border: 1px dashed var(--color-base-300);
-    border-radius: 0.5rem;
-    background: var(--surface-soft);
-    color: var(--text-strong);
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .list-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-  }
-
-  .list-count {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-
-  .invite-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 0.1rem;
-  }
-
-  .invite-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 0.9rem;
-    align-items: center;
-    padding: 0.75rem 0;
-    border-top: 1px dotted var(--color-base-300);
-  }
-
-  .invite-list .invite-row:first-child {
-    border-top: none;
-  }
-
-  .row-body {
-    display: grid;
-    gap: 0.35rem;
-    min-width: 0;
-  }
-
-  .row-top {
-    display: flex;
-    align-items: baseline;
-    gap: 0.35rem;
-    flex-wrap: wrap;
-  }
-
-  .row-label {
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 1rem;
-    font-weight: 500;
-  }
-
-  .row-label-muted {
-    color: var(--muted);
-    font-weight: 400;
-    font-style: italic;
-  }
-
-  .row-date {
-    color: var(--muted);
-    font-size: 0.82rem;
-  }
-
-  .row-actions {
-    display: flex;
-    gap: 0.35rem;
-  }
-
-  .btn-sm {
-    padding: 0.35rem 0.7rem;
-    font-size: 0.78rem;
-  }
-
-  .btn-quiet {
-    color: var(--muted);
-  }
-
-  .error-banner {
-    margin: 0;
-    padding: 0.7rem 0.85rem;
-    border-radius: 0.65rem;
-    background: var(--pale-red);
-    color: var(--pale-red-text);
-    font-size: 0.85rem;
-  }
-
-  .invite-foot {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: 0.5rem;
-  }
-
-  .empty-state {
-    display: grid;
-    gap: 1rem;
-    justify-items: center;
-    padding: 5rem 0;
-    text-align: center;
-  }
-
-  .empty-state h1 {
-    font-size: 1.6rem;
-  }
-</style>

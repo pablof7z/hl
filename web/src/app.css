@@ -491,15 +491,14 @@ mark.inline-highlight:hover {
 /* ── room member avatar (ring-tinted User.Avatar) ───────────── */
 
 .room-member-avatar {
-  display: inline-block;
+  display: inline-flex;
   width: var(--mav-size, 32px);
   height: var(--mav-size, 32px);
   border-radius: 50%;
-  background: var(--mav-ring, transparent);
-  padding: var(--mav-ring-width, 2px);
-  box-sizing: border-box;
+  outline: var(--mav-ring-width, 2px) solid var(--mav-ring, transparent);
+  outline-offset: 1px;
   flex-shrink: 0;
-  vertical-align: middle;
+  overflow: hidden;
 }
 
 .room-member-avatar .registry-user-avatar {

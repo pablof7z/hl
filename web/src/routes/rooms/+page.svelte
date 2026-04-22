@@ -70,244 +70,57 @@
   <title>Your rooms · Highlighter</title>
 </svelte:head>
 
-<section class="rooms-page">
-  <header class="rooms-header">
-    <div class="rooms-header-top">
-      <h1 class="rooms-title">Your <em>rooms.</em></h1>
+<section class="pt-14 pb-20">
+  <header class="pb-8 border-b border-base-300 mb-11">
+    <div class="flex items-baseline justify-between gap-6 mb-3.5">
+      <h1 class="font-serif font-normal text-[clamp(44px,6vw,68px)] leading-[1.02] tracking-[-0.025em] text-base-content m-0">Your <em class="italic text-primary">rooms.</em></h1>
       {#if signedIn}
-        <a href="/r/create" class="btn-create">+ Create a room</a>
+        <a
+          href="/r/create"
+          class="inline-block px-4 py-[7px] text-[13px] font-medium no-underline rounded bg-base-content text-base-100 transition-colors duration-200 ease hover:bg-primary"
+        >+ Create a room</a>
       {/if}
     </div>
-    <p class="rooms-lead">
+    <p class="font-serif italic text-[19px] leading-[1.5] text-base-content/80 max-w-[52ch] m-0">
       Rooms you're a member of — small, invitation-only reading groups.
     </p>
   </header>
 
   {#if !signedIn}
-    <div class="empty">
-      <p>Log in to see your rooms.</p>
+    <div class="bg-base-100 border border-base-300 rounded px-8 py-11 text-center">
+      <p class="text-base-content/80 text-[15px] m-0 mx-auto max-w-[44ch]">Log in to see your rooms.</p>
     </div>
   {:else if loading}
-    <div class="empty">
-      <p>Loading your rooms…</p>
+    <div class="bg-base-100 border border-base-300 rounded px-8 py-11 text-center">
+      <p class="text-base-content/80 text-[15px] m-0 mx-auto max-w-[44ch]">Loading your rooms…</p>
     </div>
   {:else if rooms.length === 0}
-    <div class="empty">
-      <h2>You're not in any rooms yet.</h2>
-      <p>Rooms are closed by default. Either bring one of your own, or find a public one to read along with.</p>
-      <div class="empty-actions">
-        <a href="/discover" class="btn-primary">Discover rooms</a>
-        <a href="/onboarding" class="btn-secondary">Bring a room</a>
+    <div class="bg-base-100 border border-base-300 rounded px-8 py-11 text-center">
+      <h2 class="font-serif text-[26px] font-medium text-base-content m-0 mb-2">You're not in any rooms yet.</h2>
+      <p class="text-base-content/80 text-[15px] m-0 mx-auto max-w-[44ch]">Rooms are closed by default. Either bring one of your own, or find a public one to read along with.</p>
+      <div class="flex gap-3 justify-center mt-6 flex-wrap">
+        <a href="/discover" class="inline-block px-5 py-[10px] text-[13px] font-medium no-underline rounded bg-base-content text-base-100 transition-all duration-200 ease hover:bg-primary">Discover rooms</a>
+        <a href="/onboarding" class="inline-block px-5 py-[10px] text-[13px] font-medium no-underline rounded bg-base-100 text-base-content/80 border border-base-300 transition-all duration-200 ease hover:border-primary hover:text-primary">Bring a room</a>
       </div>
     </div>
   {:else}
-    <div class="rooms-grid">
+    <div class="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
       {#each rooms as room (room.id)}
-        <a href="/r/{room.id}" class="room-card">
-          <div class="rc-kicker">
+        <a
+          href="/r/{room.id}"
+          class="bg-base-100 border border-base-300 rounded px-6 py-[22px] flex flex-col gap-2.5 no-underline text-inherit transition-[border-color,transform] duration-200 ease hover:border-primary hover:-translate-y-0.5"
+        >
+          <div class="font-mono text-[10px] tracking-[0.14em] uppercase text-base-content/50">
             {#if room.visibility === 'private'}Private{:else}Public{/if} ·
             {room.memberCount ?? '?'} members
           </div>
-          <h3 class="rc-name">{room.name}</h3>
+          <h3 class="font-serif font-medium text-[24px] leading-[1.1] text-base-content m-0 tracking-[-0.01em]">{room.name}</h3>
           {#if room.about}
-            <p class="rc-about">{room.about}</p>
+            <p class="text-[13.5px] leading-[1.5] text-base-content/80 m-0 flex-1 line-clamp-3">{room.about}</p>
           {/if}
-          <div class="rc-foot">Open →</div>
+          <div class="font-mono text-[10px] tracking-[0.1em] uppercase text-primary pt-2.5 border-t border-dotted border-base-300 mt-auto">Open →</div>
         </a>
       {/each}
     </div>
   {/if}
 </section>
-
-<style>
-  .rooms-page {
-    padding: 56px 0 80px;
-  }
-
-  .rooms-header {
-    padding-bottom: 32px;
-    border-bottom: 1px solid var(--rule);
-    margin-bottom: 44px;
-  }
-
-  .rooms-header-top {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 24px;
-    margin-bottom: 14px;
-  }
-
-  .btn-create {
-    display: inline-block;
-    padding: 7px 16px;
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    text-decoration: none;
-    border-radius: var(--radius);
-    background: var(--ink);
-    color: var(--surface);
-    transition: background 200ms ease;
-  }
-
-  .btn-create:hover {
-    background: var(--brand-accent);
-  }
-
-  .rooms-title {
-    font-family: var(--font-serif);
-    font-weight: 400;
-    font-size: clamp(44px, 6vw, 68px);
-    line-height: 1.02;
-    letter-spacing: -0.025em;
-    color: var(--ink);
-    margin: 0;
-  }
-
-  .rooms-title em {
-    font-style: italic;
-    color: var(--brand-accent);
-  }
-
-  .rooms-lead {
-    font-family: var(--font-serif);
-    font-style: italic;
-    font-size: 19px;
-    line-height: 1.5;
-    color: var(--ink-soft);
-    max-width: 52ch;
-    margin: 0;
-  }
-
-  .empty {
-    background: var(--surface);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    padding: 44px 32px;
-    text-align: center;
-  }
-
-  .empty h2 {
-    font-family: var(--font-serif);
-    font-size: 26px;
-    font-weight: 500;
-    color: var(--ink);
-    margin: 0 0 8px;
-  }
-
-  .empty p {
-    font-family: var(--font-sans);
-    color: var(--ink-soft);
-    font-size: 15px;
-    margin: 0 auto;
-    max-width: 44ch;
-  }
-
-  .empty-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-    margin-top: 24px;
-    flex-wrap: wrap;
-  }
-
-  .btn-primary,
-  .btn-secondary {
-    display: inline-block;
-    padding: 10px 20px;
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 500;
-    text-decoration: none;
-    border-radius: var(--radius);
-    transition: all 200ms ease;
-  }
-
-  .btn-primary {
-    background: var(--ink);
-    color: var(--surface);
-  }
-
-  .btn-primary:hover {
-    background: var(--brand-accent);
-  }
-
-  .btn-secondary {
-    background: var(--surface);
-    color: var(--ink-soft);
-    border: 1px solid var(--rule);
-  }
-
-  .btn-secondary:hover {
-    border-color: var(--brand-accent);
-    color: var(--brand-accent);
-  }
-
-  .rooms-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
-  }
-
-  .room-card {
-    background: var(--surface);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    padding: 22px 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    text-decoration: none;
-    color: inherit;
-    transition: border-color 200ms ease, transform 200ms ease;
-  }
-
-  .room-card:hover {
-    border-color: var(--brand-accent);
-    transform: translateY(-2px);
-  }
-
-  .rc-kicker {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-fade);
-  }
-
-  .rc-name {
-    font-family: var(--font-serif);
-    font-weight: 500;
-    font-size: 24px;
-    line-height: 1.1;
-    color: var(--ink);
-    margin: 0;
-    letter-spacing: -0.01em;
-  }
-
-  .rc-about {
-    font-family: var(--font-sans);
-    font-size: 13.5px;
-    line-height: 1.5;
-    color: var(--ink-soft);
-    margin: 0;
-    flex: 1;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .rc-foot {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--brand-accent);
-    padding-top: 10px;
-    border-top: 1px dotted var(--rule);
-    margin-top: auto;
-  }
-</style>
