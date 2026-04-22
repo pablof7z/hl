@@ -591,60 +591,91 @@
   });
 </script>
 
-<div class="ob-shell">
-  <nav class="ob-progress" aria-label="Setup steps">
+<div class="mx-auto grid max-w-2xl gap-10 px-0 pb-24 pt-12">
+  <nav class="flex items-center" aria-label="Setup steps">
     {#each [1, 2] as s (s)}
       <button
-        class="ob-progress-step"
-        class:active={step === s}
-        class:done={step > s}
+        class="group flex flex-1 items-center gap-2.5 border-0 bg-transparent p-0 text-xs font-medium text-base-content/60 not-last:after:mx-3 not-last:after:h-px not-last:after:flex-1 not-last:after:bg-base-300 not-last:after:content-['']"
+        class:!text-base-content={step === s}
+        class:text-base-content={step > s}
         type="button"
         onclick={() => {
           if (s < step || (s === 2 && step1Valid)) step = s as 1 | 2;
         }}
         aria-current={step === s ? 'step' : undefined}
       >
-        <span class="ob-progress-dot"></span>
-        <span class="ob-progress-label">{['About you', 'Interests'][s - 1]}</span>
+        <span
+          class="size-2.5 shrink-0 rounded-full border-2 border-base-300 transition-colors"
+          class:!border-base-content={step === s}
+          class:!bg-base-content={step === s}
+          class:!border-success={step > s}
+          class:!bg-success={step > s}
+        ></span>
+        <span>{['About you', 'Interests'][s - 1]}</span>
       </button>
     {/each}
   </nav>
 
   {#if step === 1}
-    <div class="ob-step reveal">
-      <div class="ob-step-head">
-        <h1>Tell us about yourself</h1>
-        <p>This is your public author profile. You can change it anytime.</p>
+    <div class="grid gap-8">
+      <div class="grid gap-2">
+        <h1 class="m-0 text-[clamp(1.6rem,4vw,2.2rem)] font-bold leading-tight tracking-tight text-base-content">
+          Tell us about yourself
+        </h1>
+        <p class="m-0 text-base text-base-content/60">
+          This is your public author profile. You can change it anytime.
+        </p>
       </div>
 
-      <div class="ob-step-body">
-        <div class="ob-avatar-zone">
-          <button class="ob-avatar-btn" type="button" onclick={handleAvatarClick} aria-label="Upload your own photo">
+      <div class="grid gap-6">
+        <div class="flex w-full flex-col items-center gap-3">
+          <button
+            class="group relative size-28 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-base-300 bg-base-200 transition-colors hover:border-base-content/70"
+            type="button"
+            onclick={handleAvatarClick}
+            aria-label="Upload your own photo"
+          >
             {#if avatarDisplayUrl}
-              <img src={avatarDisplayUrl} alt="Your avatar" class="ob-avatar-img" />
+              <img src={avatarDisplayUrl} alt="Your avatar" class="block size-full object-cover" />
             {:else}
-              <div class="ob-avatar-placeholder">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <div class="flex h-full flex-col items-center justify-center gap-1.5 text-xs font-medium text-base-content/60">
+                <svg class="size-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                   <circle cx="12" cy="8" r="4" />
                   <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
                 </svg>
               </div>
             {/if}
-            <div class="ob-avatar-overlay" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <div
+              class="absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100"
+              aria-hidden="true"
+            >
+              <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
               </svg>
             </div>
           </button>
-          <input bind:this={fileInput} type="file" accept="image/*" onchange={handleAvatarSelection} class="ob-file-input" tabindex="-1" />
+          <input
+            bind:this={fileInput}
+            type="file"
+            accept="image/*"
+            onchange={handleAvatarSelection}
+            class="pointer-events-none absolute size-0 opacity-0"
+            tabindex="-1"
+          />
 
-          <div class="ob-dicebear-wrap">
-            <p class="ob-dicebear-label">Or pick one</p>
-            <div class="ob-dicebear-track" role="listbox" aria-label="Avatar options">
+          <div class="grid w-full gap-2.5">
+            <p class="m-0 text-center text-xs font-medium text-base-content/60">Or pick one</p>
+            <div
+              class="flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 py-2 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              role="listbox"
+              aria-label="Avatar options"
+            >
               {#each DICEBEAR_AVATARS as avatar (avatar.url)}
                 <button
-                  class="ob-dicebear-item"
-                  class:selected={selectedDicebear === avatar.url}
+                  class="size-16 shrink-0 cursor-pointer snap-start overflow-hidden rounded-full border-2 border-transparent bg-base-200 p-0 transition-all hover:scale-110 hover:border-base-content/70"
+                  class:!border-base-content={selectedDicebear === avatar.url}
+                  class:!scale-110={selectedDicebear === avatar.url}
+                  class:!shadow-[0_0_0_3px_rgba(17,17,17,0.12)]={selectedDicebear === avatar.url}
                   type="button"
                   role="option"
                   aria-selected={selectedDicebear === avatar.url}
@@ -657,7 +688,7 @@
                     profileTouched = true;
                   }}
                 >
-                  <img src={avatar.url} alt={avatar.seed} loading="lazy" />
+                  <img class="block size-full object-cover" src={avatar.url} alt={avatar.seed} loading="lazy" />
                 </button>
               {/each}
             </div>
@@ -665,7 +696,7 @@
 
           {#if avatarDisplayUrl}
             <button
-              class="ob-avatar-remove"
+              class="link link-hover cursor-pointer border-0 bg-transparent p-0 text-xs text-base-content/60"
               type="button"
               onclick={() => {
                 avatarUrl = '';
@@ -679,15 +710,16 @@
             </button>
           {/if}
           {#if uploadError}
-            <p class="ob-error">{uploadError}</p>
+            <p class="m-0 text-sm text-error">{uploadError}</p>
           {/if}
         </div>
 
-        <div class="ob-fields">
-          <div class="ob-field-row">
-            <label class="ob-field">
-              <span>Username</span>
+        <div class="grid gap-4">
+          <div class="grid grid-cols-2 gap-4">
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Username</legend>
               <input
+                class="input w-full"
                 bind:value={name}
                 oninput={() => {
                   profileTouched = true;
@@ -695,10 +727,11 @@
                 placeholder={namePlaceholder}
                 autocomplete="username"
               />
-            </label>
-            <label class="ob-field">
-              <span>Name <em>(optional)</em></span>
+            </fieldset>
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Name <span class="font-normal opacity-70">(optional)</span></legend>
               <input
+                class="input w-full"
                 bind:value={display}
                 oninput={() => {
                   profileTouched = true;
@@ -706,14 +739,15 @@
                 placeholder="Your full name"
                 autocomplete="name"
               />
-            </label>
+            </fieldset>
           </div>
 
           {#if managedNip05Enabled && managedNip05Domain}
-            <label class="ob-field">
-              <span>Verified handle <em>(optional)</em></span>
-              <div class="ob-managed-nip05-input">
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Verified handle <span class="font-normal opacity-70">(optional)</span></legend>
+              <div class="join w-full">
                 <input
+                  class="input join-item w-full"
                   bind:value={managedNip05Name}
                   oninput={() => {
                     managedNip05Touched = true;
@@ -724,40 +758,43 @@
                   autocorrect="off"
                   spellcheck="false"
                 />
-                <span class="ob-managed-nip05-domain">@{managedNip05Domain}</span>
+                <span class="btn btn-ghost join-item pointer-events-none font-mono text-sm normal-case">
+                  @{managedNip05Domain}
+                </span>
               </div>
-              <p class="ob-managed-nip05-note">
+              <p class="mt-2 text-sm leading-relaxed text-base-content/70">
                 Reserve a NIP-05 handle on @{managedNip05Domain}. Leave it blank to skip.
               </p>
               {#if existingExternalNip05}
-                <p class="ob-managed-nip05-note">
+                <p class="mt-1 text-sm leading-relaxed text-base-content/70">
                   Your current profile already advertises {existingExternalNip05}. Leaving this blank keeps that value.
                 </p>
               {/if}
               {#if !data.nip05Persistent}
-                <p class="ob-managed-nip05-note">
+                <p class="mt-1 text-sm leading-relaxed text-base-content/70">
                   This deployment is using the in-memory fallback. Add `KV_REST_API_URL` and `KV_REST_API_TOKEN` for durable registrations.
                 </p>
               {/if}
               {#if normalizedManagedNip05Name && !managedNip05Valid}
-                <p class="ob-error">Use 1-64 lowercase letters, numbers, hyphens, or underscores.</p>
+                <p class="mt-1 text-sm text-error">Use 1-64 lowercase letters, numbers, hyphens, or underscores.</p>
               {:else if managedNip05Status === 'checking'}
-                <p class="ob-managed-nip05-status">Checking {managedNip05Identifier}…</p>
+                <p class="mt-1 text-sm text-base-content/70">Checking {managedNip05Identifier}…</p>
               {:else if managedNip05Status === 'available'}
-                <p class="ob-managed-nip05-status success">{managedNip05Identifier} is available.</p>
+                <p class="mt-1 text-sm text-success">{managedNip05Identifier} is available.</p>
               {:else if managedNip05Status === 'owned'}
-                <p class="ob-managed-nip05-status success">{managedNip05Identifier} is already linked to this session.</p>
+                <p class="mt-1 text-sm text-success">{managedNip05Identifier} is already linked to this session.</p>
               {:else if managedNip05Status === 'taken'}
-                <p class="ob-managed-nip05-status">That handle is already registered.</p>
+                <p class="mt-1 text-sm text-base-content/70">That handle is already registered.</p>
               {:else if managedNip05Status === 'error'}
-                <p class="ob-error">Couldn't check that handle right now.</p>
+                <p class="mt-1 text-sm text-error">Couldn't check that handle right now.</p>
               {/if}
-            </label>
+            </fieldset>
           {/if}
 
-          <label class="ob-field">
-            <span>Bio <em>(optional)</em></span>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Bio <span class="font-normal opacity-70">(optional)</span></legend>
             <textarea
+              class="textarea w-full"
               bind:value={about}
               oninput={() => {
                 profileTouched = true;
@@ -765,11 +802,12 @@
               placeholder="What do you write about?"
               rows="3"
             ></textarea>
-          </label>
+          </fieldset>
 
-          <label class="ob-field">
-            <span>Website <em>(optional)</em></span>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Website <span class="font-normal opacity-70">(optional)</span></legend>
             <input
+              class="input w-full"
               bind:value={website}
               oninput={() => {
                 profileTouched = true;
@@ -777,13 +815,13 @@
               placeholder="https://yoursite.com"
               type="url"
             />
-          </label>
+          </fieldset>
         </div>
       </div>
 
-      <div class="ob-step-footer">
+      <div class="grid gap-2">
         <button
-          class="btn btn-primary ob-next"
+          class="btn btn-primary w-full"
           type="button"
           disabled={!step1Valid}
           onclick={() => {
@@ -793,23 +831,27 @@
           Next — pick your interests
         </button>
         {#if !step1Valid}
-          <p class="ob-hint">Add a name and resolve any handle conflicts to continue.</p>
+          <p class="m-0 text-sm text-base-content/60">Add a name and resolve any handle conflicts to continue.</p>
         {/if}
       </div>
     </div>
   {:else if step === 2}
-    <div class="ob-step reveal">
-      <div class="ob-step-head">
-        <h1>What do you write about?</h1>
-        <p>Pick as many as you like. This shapes your feed and helps readers find you.</p>
+    <div class="grid gap-8">
+      <div class="grid gap-2">
+        <h1 class="m-0 text-[clamp(1.6rem,4vw,2.2rem)] font-bold leading-tight tracking-tight text-base-content">
+          What do you write about?
+        </h1>
+        <p class="m-0 text-base text-base-content/60">
+          Pick as many as you like. This shapes your feed and helps readers find you.
+        </p>
       </div>
 
-      <div class="ob-step-body">
-        <div class="ob-interests">
+      <div class="grid gap-6">
+        <div class="flex flex-wrap gap-2.5">
           {#each INTEREST_SUGGESTIONS as interest (interest)}
+            {@const isSelected = normalizedInterests.includes(interest)}
             <button
-              class="ob-interest-chip"
-              class:selected={normalizedInterests.includes(interest)}
+              class={isSelected ? 'btn btn-sm rounded-full btn-primary' : 'btn btn-sm btn-outline rounded-full'}
               type="button"
               onclick={() => toggleInterest(interest)}
             >
@@ -818,8 +860,9 @@
           {/each}
         </div>
 
-        <div class="ob-custom-interest">
+        <div class="grid grid-cols-[1fr_auto] items-end gap-2.5">
           <input
+            class="input w-full"
             bind:value={customInterest}
             placeholder="Add your own topic…"
             onkeydown={handleCustomInterestKeydown}
@@ -830,10 +873,10 @@
         </div>
 
         {#if normalizedInterests.length > 0}
-          <div class="ob-selected-interests">
+          <div class="flex flex-wrap gap-1.5">
             {#each normalizedInterests as interest (interest)}
               <button
-                class="ob-selected-chip"
+                class="badge badge-ghost badge-lg cursor-pointer gap-1 rounded-full transition-colors hover:bg-error/10 hover:text-error"
                 type="button"
                 onclick={() => {
                   interestsTouched = true;
@@ -847,11 +890,11 @@
         {/if}
       </div>
 
-      <div class="ob-step-footer">
-        <div class="ob-footer-row">
+      <div class="grid gap-2">
+        <div class="flex items-center gap-3">
           <button class="btn" type="button" onclick={() => { step = 1; }}>Back</button>
           <button
-            class="btn btn-primary ob-next"
+            class="btn btn-primary flex-1"
             type="button"
             disabled={!canPublish}
             onclick={() => void publish()}
@@ -860,47 +903,12 @@
           </button>
         </div>
         {#if !step2Valid}
-          <p class="ob-hint">Pick at least one topic to continue.</p>
+          <p class="m-0 text-sm text-base-content/60">Pick at least one topic to continue.</p>
         {/if}
         {#if saveError}
-          <p class="ob-error">{saveError}</p>
+          <p class="m-0 text-sm text-error">{saveError}</p>
         {/if}
       </div>
     </div>
   {/if}
 </div>
-
-<style>
-  .ob-managed-nip05-input {
-    align-items: center;
-    display: grid;
-    gap: 0.75rem;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .ob-managed-nip05-domain {
-    color: rgba(255, 255, 255, 0.62);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
-    font-size: 0.95rem;
-    white-space: nowrap;
-  }
-
-  .ob-managed-nip05-note,
-  .ob-managed-nip05-status {
-    color: rgba(255, 255, 255, 0.68);
-    font-size: 0.92rem;
-    line-height: 1.5;
-    margin: 0.55rem 0 0;
-  }
-
-  .ob-managed-nip05-status.success {
-    color: #9ed0ad;
-  }
-
-  @media (max-width: 720px) {
-    .ob-managed-nip05-input {
-      gap: 0.5rem;
-      grid-template-columns: 1fr;
-    }
-  }
-</style>
