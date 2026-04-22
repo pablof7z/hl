@@ -393,24 +393,30 @@
 </script>
 
 {#if !currentUser}
-  <section class="profile-container">
-    <p class="muted">Log in to edit your profile.</p>
+  <section class="mx-auto max-w-2xl px-4 py-12">
+    <p class="m-0 text-base-content/60">Log in to edit your profile.</p>
   </section>
 {:else}
-  <div class="pe-shell">
-    <div class="pe-form">
-      <h1 class="pe-title">Edit profile</h1>
+  <div class="mx-auto grid max-w-[var(--page-width)] grid-cols-[1fr_360px] gap-10 px-0 pb-24 pt-10 max-md:grid-cols-1 max-md:pb-16 max-md:pt-8">
+    <div class="grid min-w-0 gap-8">
+      <h1 class="m-0 text-[clamp(1.6rem,4vw,2.2rem)] font-bold leading-tight tracking-tight text-base-content">Edit profile</h1>
 
       <!-- Section: Identity -->
-      <div class="pe-section">
-        <div class="pe-section-label">Identity</div>
+      <div class="grid gap-4">
+        <div class="border-b border-base-300 pb-2 text-xs font-semibold uppercase tracking-wider text-base-content/60">Identity</div>
 
-        <div class="pe-banner-zone" role="button" tabindex="0" onclick={handleBannerClick} onkeydown={(e) => e.key === 'Enter' && handleBannerClick()}>
+        <div
+          class="group relative aspect-[3/1] w-full cursor-pointer overflow-hidden rounded-lg border-2 border-dashed border-base-300 bg-base-200 transition-colors hover:border-base-content/70"
+          role="button"
+          tabindex="0"
+          onclick={handleBannerClick}
+          onkeydown={(e) => e.key === 'Enter' && handleBannerClick()}
+        >
           {#if bannerDisplayUrl}
-            <img src={bannerDisplayUrl} alt="Banner" class="pe-banner-img" />
+            <img src={bannerDisplayUrl} alt="Banner" class="size-full object-cover" />
           {:else}
-            <div class="pe-banner-placeholder">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <div class="flex h-full flex-col items-center justify-center gap-1.5 text-sm text-base-content/60">
+              <svg class="size-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                 <rect x="3" y="3" width="18" height="18" rx="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <path d="m21 15-5-5L5 21" />
@@ -418,179 +424,237 @@
               <span>Upload banner</span>
             </div>
           {/if}
-          <input bind:this={bannerFileInput} type="file" accept="image/*" onchange={handleBannerSelection} class="ob-file-input" tabindex="-1" />
+          <input
+            bind:this={bannerFileInput}
+            type="file"
+            accept="image/*"
+            onchange={handleBannerSelection}
+            class="pointer-events-none absolute size-0 opacity-0"
+            tabindex="-1"
+          />
         </div>
 
-        <div class="pe-avatar-row">
-          <button class="ob-avatar-btn" type="button" onclick={handleAvatarClick} aria-label="Upload avatar">
+        <div class="-mt-6 flex items-center gap-4 pl-4 max-md:-mt-4">
+          <button
+            class="group relative size-28 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-base-300 bg-base-200 transition-colors hover:border-base-content/70"
+            type="button"
+            onclick={handleAvatarClick}
+            aria-label="Upload avatar"
+          >
             {#if avatarDisplayUrl}
-              <img src={avatarDisplayUrl} alt="Your avatar" class="ob-avatar-img" />
+              <img src={avatarDisplayUrl} alt="Your avatar" class="block size-full object-cover" />
             {:else}
-              <div class="ob-avatar-placeholder">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <div class="flex h-full flex-col items-center justify-center gap-1.5 text-xs font-medium text-base-content/60">
+                <svg class="size-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                   <circle cx="12" cy="8" r="4" />
                   <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
                 </svg>
               </div>
             {/if}
-            <div class="ob-avatar-overlay" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <div
+              class="absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100"
+              aria-hidden="true"
+            >
+              <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
               </svg>
             </div>
           </button>
-          <input bind:this={avatarFileInput} type="file" accept="image/*" onchange={handleAvatarSelection} class="ob-file-input" tabindex="-1" />
+          <input
+            bind:this={avatarFileInput}
+            type="file"
+            accept="image/*"
+            onchange={handleAvatarSelection}
+            class="pointer-events-none absolute size-0 opacity-0"
+            tabindex="-1"
+          />
 
           {#if avatarDisplayUrl}
-            <button class="ob-avatar-remove" type="button" onclick={() => {
-              avatarUrl = '';
-              avatarFile = null;
-              clearAvatarPreview();
-              if (avatarFileInput) avatarFileInput.value = '';
-              profileTouched = true;
-            }}>Remove avatar</button>
+            <button
+              class="link link-hover cursor-pointer border-0 bg-transparent p-0 text-xs text-base-content/60"
+              type="button"
+              onclick={() => {
+                avatarUrl = '';
+                avatarFile = null;
+                clearAvatarPreview();
+                if (avatarFileInput) avatarFileInput.value = '';
+                profileTouched = true;
+              }}
+            >Remove avatar</button>
           {/if}
           {#if bannerDisplayUrl}
-            <button class="ob-avatar-remove" type="button" onclick={() => {
-              bannerUrl = '';
-              bannerFile = null;
-              clearBannerPreview();
-              if (bannerFileInput) bannerFileInput.value = '';
-              profileTouched = true;
-            }}>Remove banner</button>
+            <button
+              class="link link-hover cursor-pointer border-0 bg-transparent p-0 text-xs text-base-content/60"
+              type="button"
+              onclick={() => {
+                bannerUrl = '';
+                bannerFile = null;
+                clearBannerPreview();
+                if (bannerFileInput) bannerFileInput.value = '';
+                profileTouched = true;
+              }}
+            >Remove banner</button>
           {/if}
         </div>
 
         {#if uploadError}
-          <p class="ob-error">{uploadError}</p>
+          <p class="m-0 text-sm text-error">{uploadError}</p>
         {/if}
 
-        <div class="ob-fields">
-          <div class="ob-field-row">
-            <label class="ob-field">
-              <span>Display name</span>
-              <input bind:value={display} oninput={() => { profileTouched = true; }} placeholder="Your full name" />
-            </label>
-            <label class="ob-field">
-              <span>Username</span>
-              <input bind:value={name} oninput={() => { profileTouched = true; }} placeholder="username" />
-            </label>
+        <div class="grid gap-4">
+          <div class="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Display name</legend>
+              <input class="input w-full" bind:value={display} oninput={() => { profileTouched = true; }} placeholder="Your full name" />
+            </fieldset>
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Username</legend>
+              <input class="input w-full" bind:value={name} oninput={() => { profileTouched = true; }} placeholder="username" />
+            </fieldset>
           </div>
 
-          <label class="ob-field">
-            <span>Bio</span>
-            <textarea bind:value={about} oninput={() => { profileTouched = true; }} placeholder="Tell people about yourself" rows="3"></textarea>
-          </label>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Bio</legend>
+            <textarea class="textarea w-full" bind:value={about} oninput={() => { profileTouched = true; }} placeholder="Tell people about yourself" rows="3"></textarea>
+          </fieldset>
         </div>
       </div>
 
       <!-- Section: Links & Verification -->
-      <div class="pe-section">
-        <div class="pe-section-label">Links & Verification</div>
+      <div class="grid gap-4">
+        <div class="border-b border-base-300 pb-2 text-xs font-semibold uppercase tracking-wider text-base-content/60">Links & Verification</div>
 
-        <div class="ob-fields">
-          <label class="ob-field">
-            <span>NIP-05</span>
-            <input bind:value={nip05} oninput={() => { profileTouched = true; }} placeholder="you@example.com" />
-          </label>
+        <div class="grid gap-4">
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">NIP-05</legend>
+            <input class="input w-full" bind:value={nip05} oninput={() => { profileTouched = true; }} placeholder="you@example.com" />
+          </fieldset>
 
-          <label class="ob-field">
-            <span>Lightning address</span>
-            <input bind:value={lud16} oninput={() => { profileTouched = true; }} placeholder="you@wallet.com" />
-          </label>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Lightning address</legend>
+            <input class="input w-full" bind:value={lud16} oninput={() => { profileTouched = true; }} placeholder="you@wallet.com" />
+          </fieldset>
 
-          <label class="ob-field">
-            <span>Website</span>
-            <input bind:value={website} oninput={() => { profileTouched = true; }} placeholder="https://yoursite.com" type="url" />
-          </label>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Website</legend>
+            <input class="input w-full" bind:value={website} oninput={() => { profileTouched = true; }} placeholder="https://yoursite.com" type="url" />
+          </fieldset>
         </div>
       </div>
 
       <!-- Section: Appearance (NIP-F1) -->
-      <div class="pe-section">
-        <div class="pe-section-label">Appearance</div>
+      <div class="grid gap-4">
+        <div class="border-b border-base-300 pb-2 text-xs font-semibold uppercase tracking-wider text-base-content/60">Appearance</div>
 
-        <div class="ob-fields">
-          <div class="ob-field-row">
-            <label class="ob-field">
-              <span>Background color</span>
-              <div class="pe-color-field">
-                <input type="color" value={backgroundColor || '#ffffff'} oninput={(e) => { backgroundColor = (e.currentTarget as HTMLInputElement).value; nipF1Touched = true; }} />
-                <input type="text" bind:value={backgroundColor} oninput={() => { nipF1Touched = true; }} placeholder="#ffffff" />
+        <div class="grid gap-4">
+          <div class="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Background color</legend>
+              <div class="grid grid-cols-[2.5rem_1fr] items-center gap-2">
+                <input
+                  class="size-10 cursor-pointer rounded-md border border-base-300 bg-base-100 p-0.5"
+                  type="color"
+                  value={backgroundColor || '#ffffff'}
+                  oninput={(e) => { backgroundColor = (e.currentTarget as HTMLInputElement).value; nipF1Touched = true; }}
+                />
+                <input
+                  class="input w-full font-mono"
+                  type="text"
+                  bind:value={backgroundColor}
+                  oninput={() => { nipF1Touched = true; }}
+                  placeholder="#ffffff"
+                />
               </div>
-            </label>
-            <label class="ob-field">
-              <span>Text color</span>
-              <div class="pe-color-field">
-                <input type="color" value={foregroundColor || '#000000'} oninput={(e) => { foregroundColor = (e.currentTarget as HTMLInputElement).value; nipF1Touched = true; }} />
-                <input type="text" bind:value={foregroundColor} oninput={() => { nipF1Touched = true; }} placeholder="#000000" />
+            </fieldset>
+            <fieldset class="fieldset">
+              <legend class="fieldset-legend">Text color</legend>
+              <div class="grid grid-cols-[2.5rem_1fr] items-center gap-2">
+                <input
+                  class="size-10 cursor-pointer rounded-md border border-base-300 bg-base-100 p-0.5"
+                  type="color"
+                  value={foregroundColor || '#000000'}
+                  oninput={(e) => { foregroundColor = (e.currentTarget as HTMLInputElement).value; nipF1Touched = true; }}
+                />
+                <input
+                  class="input w-full font-mono"
+                  type="text"
+                  bind:value={foregroundColor}
+                  oninput={() => { nipF1Touched = true; }}
+                  placeholder="#000000"
+                />
               </div>
-            </label>
+            </fieldset>
           </div>
 
-          <label class="ob-field">
-            <span>Background music URL</span>
-            <input bind:value={backgroundMusic} oninput={() => { nipF1Touched = true; }} placeholder="https://example.com/ambient.mp3" type="url" />
-          </label>
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Background music URL</legend>
+            <input class="input w-full" bind:value={backgroundMusic} oninput={() => { nipF1Touched = true; }} placeholder="https://example.com/ambient.mp3" type="url" />
+          </fieldset>
 
-          <div class="ob-field">
-            <span>Priority kinds</span>
-            <div class="pe-kind-checks">
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Priority kinds</legend>
+            <div class="flex flex-wrap gap-4">
               {#each PRIORITY_KIND_OPTIONS as opt (opt.kind)}
-                <label class="pe-kind-check">
+                <label class="label cursor-pointer gap-2">
                   <input
                     type="checkbox"
+                    class="checkbox checkbox-sm"
                     checked={priorityKinds.includes(opt.kind)}
                     onchange={() => togglePriorityKind(opt.kind)}
                   />
-                  <span>{opt.label} <em class="muted">(kind:{opt.kind})</em></span>
+                  <span class="label-text">{opt.label} <span class="text-base-content/60">(kind:{opt.kind})</span></span>
                 </label>
               {/each}
             </div>
-          </div>
+          </fieldset>
         </div>
       </div>
 
       <!-- Section: Custom Fields (NIP-F1) -->
-      <div class="pe-section">
-        <div class="pe-section-label">Custom Fields</div>
+      <div class="grid gap-4">
+        <div class="border-b border-base-300 pb-2 text-xs font-semibold uppercase tracking-wider text-base-content/60">Custom Fields</div>
 
-        <div class="pe-custom-fields">
+        <div class="grid gap-2.5">
           {#each customFields as field, index (index)}
-            <div class="pe-custom-field-row">
+            <div class="grid grid-cols-[8rem_1fr_auto] items-center gap-2 max-md:grid-cols-[1fr_1fr_auto]">
               <input
                 type="text"
                 placeholder="Key"
                 bind:value={field.key}
                 oninput={() => { nipF1Touched = true; }}
-                class="pe-custom-key-input"
+                class="input w-full"
               />
               <input
                 type="text"
                 placeholder="Value"
                 bind:value={field.value}
                 oninput={() => { nipF1Touched = true; }}
-                class="pe-custom-value-input"
+                class="input w-full"
               />
-              <button type="button" class="pe-custom-remove" onclick={() => removeCustomField(index)} aria-label="Remove field">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <button
+                type="button"
+                class="btn btn-square btn-ghost btn-sm text-base-content/60 hover:text-error"
+                onclick={() => removeCustomField(index)}
+                aria-label="Remove field"
+              >
+                <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M18 6 6 18M6 6l12 12" />
                 </svg>
               </button>
             </div>
           {/each}
-          <button type="button" class="btn" onclick={addCustomField}>
+          <button type="button" class="btn btn-outline btn-sm w-fit" onclick={addCustomField}>
             Add field
           </button>
         </div>
       </div>
 
       <!-- Sticky footer -->
-      <div class="pe-footer">
+      <div class="sticky bottom-0 z-10 grid gap-2 border-t border-base-300 bg-base-100/90 py-4 backdrop-blur-md">
         {#if saveError}
-          <p class="ob-error">{saveError}</p>
+          <p class="m-0 text-sm text-error">{saveError}</p>
         {/if}
-        <div class="pe-footer-actions">
+        <div class="flex items-center gap-3">
           <button class="btn btn-primary" type="button" disabled={!canPublish} onclick={() => void publish()}>
             {saving ? 'Saving…' : uploadingAvatar || uploadingBanner ? 'Uploading…' : 'Save profile'}
           </button>
@@ -602,11 +666,18 @@
     </div>
 
     <!-- Live Preview -->
-    <div class="pe-preview-wrap">
-      <button class="pe-preview-toggle" type="button" onclick={() => { previewOpen = !previewOpen; }}>
+    <div class="relative">
+      <button
+        class="btn btn-outline btn-sm hidden w-full max-md:flex"
+        type="button"
+        onclick={() => { previewOpen = !previewOpen; }}
+      >
         {previewOpen ? 'Hide preview' : 'Show preview'}
       </button>
-      <div class="pe-preview" class:pe-preview-open={previewOpen}>
+      <div
+        class="sticky top-20 max-md:static"
+        class:max-md:hidden={!previewOpen}
+      >
         <ProfilePreview
           name={previewName}
           bio={cleanText(about)}
