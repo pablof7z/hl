@@ -8,6 +8,14 @@ import NDK, {
 } from '@nostr-dev-kit/ndk';
 import { GROUP_RELAY_URLS, HIGHLIGHTER_RELAY_URL } from '$lib/ndk/config';
 
+// NIP-29 kind for admin-minted invite codes. NDK doesn't expose a constant
+// (it has GroupAdminCreateGroup=9007 and GroupAdminRequestJoin=9021 but no 9009).
+const KIND_GROUP_ADMIN_CREATE_INVITE = 9009;
+
+// Maximum number of `code` tags the relay accepts on a single kind:9009 event.
+// See relay29/nip29 moderation_actions.go — it rejects >10 codes per event.
+export const MAX_CODES_PER_INVITE_EVENT = 10;
+
 export type CommunityAccess = 'open' | 'closed';
 export type CommunityVisibility = 'public' | 'private';
 
@@ -168,6 +176,101 @@ export async function requestToJoinCommunity(
     await group.requestToJoin(user.pubkey, message);
   } catch (error) {
     throw new Error(describePublishError(error, 'Could not send the join request.'));
+  }
+}
+
+const INVITE_CODE_ALPHABET =
+  'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+
+// 24 chars from a 56-glyph alphabet is ~139 bits of entropy. Omits look-alikes
+// (0/O, 1/I/l) so codes survive being dictated verbally.
+export function generateInviteCode(length = 24): string {
+  const chars = INVITE_CODE_ALPHABET;
+  const values = new Uint32Array(length);
+  const crypto = globalThis.crypto;
+  if (!crypto?.getRandomValues) {
+    throw new Error('Secure random not available in this environment.');
+  }
+  crypto.getRandomValues(values);
+  let out = '';
+  for (let i = 0; i < length; i++) {
+    out += chars[values[i] % chars.length];
+  }
+  return out;
+}
+
+export type CreateInviteCodesResult = {
+  codes: string[];
+  eventId: string;
+};
+
+/**
+ * Mint one or more invite codes for a closed group by publishing kind:9009.
+ * Relay29 consumes codes on use (single-use), so creators mint more as needed.
+ * The relay caps each kind:9009 at 10 codes; this helper fans out if needed.
+ */
+export async function createInviteCodes(
+  ndk: NDK,
+  groupId: string,
+  opts: { count?: number } = {}
+): Promise<CreateInviteCodesResult[]> {
+  const normalizedGroupId = groupId.trim();
+  if (!normalizedGroupId) throw new Error('Missing room id.');
+  if (!ndk.signer) throw new Error('Connect a signer before creating invites.');
+
+  const count = Math.max(1, Math.min(opts.count ?? 1, 100));
+  const relaySet = buildCommunityRelaySet(ndk);
+  const results: CreateInviteCodesResult[] = [];
+
+  for (let i = 0; i < count; i += MAX_CODES_PER_INVITE_EVENT) {
+    const batchSize = Math.min(MAX_CODES_PER_INVITE_EVENT, count - i);
+    const codes = Array.from({ length: batchSize }, () => generateInviteCode());
+
+    const event = new NDKEvent(ndk);
+    event.kind = KIND_GROUP_ADMIN_CREATE_INVITE;
+    event.tags.push(['h', normalizedGroupId]);
+    for (const code of codes) {
+      event.tags.push(['code', code]);
+    }
+
+    try {
+      await event.sign();
+      await event.publish(relaySet);
+    } catch (error) {
+      throw new Error(describePublishError(error, 'Could not create invite codes.'));
+    }
+
+    results.push({ codes, eventId: event.id });
+  }
+
+  return results;
+}
+
+/**
+ * Consume an invite code by publishing a kind:9021 join request carrying the
+ * `code` tag. The relay validates the code against the group's live pool and,
+ * on success, auto-adds the requester as a member and removes the code.
+ */
+export async function acceptInviteCode(
+  ndk: NDK,
+  groupId: string,
+  code: string
+): Promise<void> {
+  const normalizedGroupId = groupId.trim();
+  const normalizedCode = code.trim();
+  if (!normalizedGroupId) throw new Error('Missing room id.');
+  if (!normalizedCode) throw new Error('Missing invite code.');
+  if (!ndk.signer) throw new Error('Connect a signer before accepting.');
+
+  const event = new NDKEvent(ndk);
+  event.kind = NDKKind.GroupAdminRequestJoin;
+  event.tags.push(['h', normalizedGroupId], ['code', normalizedCode]);
+
+  try {
+    await event.sign();
+    await event.publish(buildCommunityRelaySet(ndk));
+  } catch (error) {
+    throw new Error(describePublishError(error, 'Could not accept the invitation.'));
   }
 }
 

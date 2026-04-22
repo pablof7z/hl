@@ -47,6 +47,10 @@ export interface UpNextItem {
 export interface Room {
   id: string;
   name: string;
+  about?: string;
+  picture?: string;
+  access?: 'open' | 'closed';
+  visibility?: 'public' | 'private';
   members: RoomMember[];
   adminPubkeys: string[];
   pinnedArtifact?: Artifact;

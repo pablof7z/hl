@@ -55,9 +55,21 @@ export async function getRoom(slug: string): Promise<Room | null> {
     ? adminEvent.getMatchingTags('p').map((tag) => tag[1]).filter(Boolean)
     : [];
 
+  const visibility: 'public' | 'private' = metadataEvent.tags.some((t) => t[0] === 'private')
+    ? 'private'
+    : 'public';
+  const access: 'open' | 'closed' =
+    visibility === 'private' || metadataEvent.tags.some((t) => t[0] === 'closed')
+      ? 'closed'
+      : 'open';
+
   return {
     id: trimmedSlug,
     name: metadata.name || trimmedSlug,
+    about: (metadata.about ?? '').trim() || undefined,
+    picture: (metadata.picture ?? '').trim() || undefined,
+    access,
+    visibility,
     members,
     adminPubkeys,
     // Heavier collections are empty at SSR time; client subscriptions hydrate them

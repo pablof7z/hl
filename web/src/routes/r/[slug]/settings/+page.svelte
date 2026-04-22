@@ -348,10 +348,23 @@
 
     <!-- Invite tab -->
     {#if activeTab === 'invite'}
+      <div class="settings-form">
+        <section class="form-card">
+          <fieldset class="fieldset">
+            <legend class="fieldset-legend">Invite links</legend>
+            <p class="fieldset-label">
+              Create invite links for people you want in the room. Each link
+              works once.
+            </p>
+            <a class="btn btn-primary" href="/r/{slug}/invite">Manage invite links</a>
+          </fieldset>
+        </section>
+      </div>
+
       <form class="settings-form" onsubmit={handleInvite}>
         <section class="form-card">
           <fieldset class="fieldset">
-            <legend class="fieldset-legend">Pubkey or npub</legend>
+            <legend class="fieldset-legend">Add someone by pubkey</legend>
             <div class="invite-row">
               <input
                 class="field-input"
@@ -366,7 +379,7 @@
                 onclick={resolveInviteInput}
               >Resolve</button>
             </div>
-            <p class="fieldset-label">Paste a Nostr npub or hex pubkey. The user will be added immediately.</p>
+            <p class="fieldset-label">Paste a Nostr npub or hex pubkey to add a member directly, without an invite link.</p>
           </fieldset>
 
           {#if invitePubkey}

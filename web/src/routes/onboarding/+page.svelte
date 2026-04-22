@@ -15,6 +15,10 @@
   import { ndk, ensureClientNdk } from '$lib/ndk/client';
   import { cleanText, displayName, profileIdentifier } from '$lib/ndk/format';
   import {
+    getPendingInvite,
+    pendingInviteUrl
+  } from '$lib/features/groups/pendingInvite';
+  import {
     NIP05_REGISTRATION_AUTH_KIND,
     formatManagedNip05Identifier,
     isValidManagedNip05Name,
@@ -453,7 +457,12 @@
       await nextInterestEvent.publish();
       currentSession?.events.set(NDKKind.InterestList, nextInterestEvent);
 
-      await goto(`/profile/${profileIdentifier(nextProfile, publishingUser.npub)}`);
+      const pending = getPendingInvite();
+      if (pending) {
+        await goto(pendingInviteUrl(pending));
+      } else {
+        await goto(`/profile/${profileIdentifier(nextProfile, publishingUser.npub)}`);
+      }
     } catch (caught) {
       saveError = caught instanceof Error ? caught.message : "Couldn't publish your profile.";
     } finally {
