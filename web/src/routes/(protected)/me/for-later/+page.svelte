@@ -131,7 +131,7 @@
       <p>Join or create a room to move saved items out of this queue.</p>
       <div class="community-actions">
         <a href="/discover">Browse rooms</a>
-        <a href="/community/create">Create a room</a>
+        <a href="/r/create">Create a room</a>
       </div>
     </div>
   {/if}

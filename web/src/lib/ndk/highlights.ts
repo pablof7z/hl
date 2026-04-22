@@ -50,7 +50,7 @@ export type HydratedHighlight = HighlightRecord & {
 };
 
 export function highlightPath(groupId: string, highlightId: string): string {
-  return `/g/${encodeURIComponent(groupId)}/e/${encodeURIComponent(highlightId)}`;
+  return `/r/${encodeURIComponent(groupId)}/e/${encodeURIComponent(highlightId)}`;
 }
 
 export function highlightFromEvent(event: NDKEventType): HighlightRecord {

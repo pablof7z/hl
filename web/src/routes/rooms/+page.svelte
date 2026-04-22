@@ -99,7 +99,7 @@
   {:else}
     <div class="rooms-grid">
       {#each rooms as room (room.id)}
-        <a href="/room/{room.id}" class="room-card">
+        <a href="/r/{room.id}" class="room-card">
           <div class="rc-kicker">
             {#if room.visibility === 'private'}Private{:else}Public{/if} ·
             {room.memberCount ?? '?'} members

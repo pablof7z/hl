@@ -20,7 +20,7 @@
       Open reading groups anyone can join — find a room that matches your interests.
     </p>
     <div class="header-actions">
-      <a class="btn-create" href="/community/create">
+      <a class="btn-create" href="/r/create">
         {currentUser ? 'Create a room' : 'Sign in to create'}
       </a>
     </div>
@@ -32,7 +32,7 @@
     searchPlaceholder="Search rooms by name, URL, or description"
     emptyLabel="No public rooms are visible yet."
     emptyCopy="Create the first room or check back soon."
-    emptyCtaHref="/community/create"
+    emptyCtaHref="/r/create"
     emptyCtaLabel="Create a room"
   />
 </section>

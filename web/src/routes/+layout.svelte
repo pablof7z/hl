@@ -23,7 +23,7 @@
   const isGuestLanding = $derived(pathname === '/' && !signedIn);
 
   const activeLink = $derived(
-    pathname.startsWith('/rooms') || pathname.startsWith('/room/') ? 'rooms' :
+    pathname.startsWith('/rooms') || pathname.startsWith('/r/') ? 'rooms' :
     pathname.startsWith('/discover') ? 'discover' :
     pathname.startsWith('/vault') || pathname.startsWith('/me/highlights') ? 'vault' :
     undefined

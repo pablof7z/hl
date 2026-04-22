@@ -51,7 +51,7 @@ export const launchCards: LaunchCard[] = [
     status: 'Stub'
   },
   {
-    href: '/g/demo-group/e/demo-highlight',
+    href: '/r/demo-group/e/demo-highlight',
     label: 'Public Highlight',
     description: 'New canonical share shape for highlights: circle context plus canonical highlight event.',
     status: 'New route'
@@ -64,7 +64,7 @@ export const guestActions: SurfaceAction[] = [
 ];
 
 export const memberActions: SurfaceAction[] = [
-  { href: '/community/create', label: 'Create a circle' },
+  { href: '/r/create', label: 'Create a circle' },
   { href: '/me', label: 'Open my vault', tone: 'secondary' }
 ];
 
@@ -75,7 +75,7 @@ export const artifactSpec: SurfaceSpec = {
   status: 'Milestone 1 scaffold',
   actions: [
     { href: '/community', label: 'Back to circles', tone: 'secondary' },
-    { href: '/community/create', label: 'Create a test group' }
+    { href: '/r/create', label: 'Create a test group' }
   ],
   sections: [
     {
@@ -187,7 +187,7 @@ export const shareCommunitySpec: SurfaceSpec = {
 export const shareHighlightSpec: SurfaceSpec = {
   title: 'Highlight sharing now uses group context in the URL.',
   description:
-    'The share route is `/g/[group-id]/e/[highlight-id]`, which keeps a canonical highlight event tied to the circle context it was shared into.',
+    'The share route is `/r/[slug]/e/[id]`, which keeps a canonical highlight event tied to the circle context it was shared into.',
   status: 'Milestone 1 scaffold',
   actions: [
     { href: '/share/community/demo-group', label: 'View public circle', tone: 'secondary' },

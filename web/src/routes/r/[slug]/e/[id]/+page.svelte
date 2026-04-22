@@ -15,7 +15,7 @@
 
   function handleBack() {
     if (room) {
-      void goto(`/room/${room.id}`);
+      void goto(`/r/${room.id}`);
     } else {
       void goto('/rooms');
     }
@@ -31,7 +31,7 @@
     <h1>Artifact not available</h1>
     <p>The event for this artifact wasn't found on the relays we queried.</p>
     {#if room}
-      <a href={`/room/${room.id}`} class="btn">Back to {room.name}</a>
+      <a href={`/r/${room.id}`} class="btn">Back to {room.name}</a>
     {:else}
       <a href="/rooms" class="btn">Back to your rooms</a>
     {/if}

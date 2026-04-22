@@ -216,7 +216,7 @@
           <li class="menu-title"><span>Rooms</span></li>
           {#each results.communities as community (community.id)}
             <li>
-              <a href={`/room/${community.id}`} onclick={closeDropdown}>
+              <a href={`/r/${community.id}`} onclick={closeDropdown}>
                 <span class="flex-1 truncate font-medium">{community.name}</span>
                 {#if community.about}
                   <span class="text-xs text-base-content/50 truncate max-w-[12rem]">{community.about}</span>

@@ -211,7 +211,7 @@
           <p>Join a room or follow someone to see highlights appear in your feed.</p>
           <div class="feed-empty-actions">
             <a href="/discover" class="btn-primary">Discover rooms</a>
-            <a href="/community/create" class="btn-secondary">Create a room</a>
+            <a href="/r/create" class="btn-secondary">Create a room</a>
           </div>
         </div>
       {:else if isEmpty && hasCircles}
@@ -254,7 +254,7 @@
           <ul class="rail-circle-list">
             {#each communities.slice(0, 6) as community (community.id)}
               <li>
-                <a href="/room/{community.id}" class="rail-circle-link">{community.name}</a>
+                <a href="/r/{community.id}" class="rail-circle-link">{community.name}</a>
               </li>
             {/each}
           </ul>
@@ -266,7 +266,7 @@
       <div class="rail-cta-card">
         <h3>Start a new room</h3>
         <p>Gather your people around the content you care about.</p>
-        <a href="/community/create" class="btn-primary">Create a room</a>
+        <a href="/r/create" class="btn-primary">Create a room</a>
       </div>
     </aside>
   </section>

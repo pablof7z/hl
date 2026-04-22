@@ -187,7 +187,7 @@
         sourceSub: relativeTime(h.createdAt),
         marks: [{ pubkey: h.authorPubkey, colorIndex: h.authorColorIndex }],
         date: relativeTime(h.createdAt),
-        href: art ? `/room/${data.room?.id}/artifact/${art.id}` : '#'
+        href: art ? `/r/${data.room?.id}/e/${art.id}` : '#'
       };
     })
   );
@@ -204,7 +204,7 @@
   }
 
   function artifactHref(id: string): string {
-    return `/room/${data.room?.id}/artifact/${id}`;
+    return `/r/${data.room?.id}/e/${id}`;
   }
 
   function alsoType(

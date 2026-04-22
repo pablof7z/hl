@@ -161,7 +161,7 @@
           <p class="panel-message">No memberships loaded yet. Join or create a community first.</p>
           <div class="panel-empty-actions">
             <a href="/discover">Browse public communities</a>
-            <a href="/community/create">Create a community</a>
+            <a href="/r/create">Create a community</a>
           </div>
         </div>
       {:else}
