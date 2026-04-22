@@ -40,9 +40,12 @@
   import ShareNostrArticleToRoom from '$lib/features/artifacts/ShareNostrArticleToRoom.svelte';
   import DiscussionPanel from '$lib/features/discussions/DiscussionPanel.svelte';
   import RoomContextBar from './RoomContextBar.svelte';
+  import { mergeUniqueEvents } from '$lib/ndk/events';
   import {
     type CommentNode,
-    buildArticleCommentTree
+    buildArticleCommentTree,
+    targetReferences,
+    buildReferenceFilters
   } from './comments';
 
   interface CommunityContext {
@@ -58,16 +61,18 @@
     authorPubkey: authorPubkeyProp = undefined,
     authorProfile: authorProfileProp = undefined,
     authorLinkIdentifier: authorLinkIdentifierProp = undefined,
-    commentEvents = undefined,
-    highlightEvents = [],
+    seedComments = [],
+    seedHighlights = [],
+    highlightEvents: highlightEventsProp = undefined,
     roomContext = undefined
   }: {
     event: NDKEvent;
     authorPubkey?: string;
     authorProfile?: NDKUserProfile;
     authorLinkIdentifier?: string;
-    commentEvents?: NDKEvent[];
-    highlightEvents: NDKEvent[];
+    seedComments?: NDKEvent[];
+    seedHighlights?: NDKEvent[];
+    highlightEvents?: NDKEvent[];
     roomContext?: CommunityContext;
   } = $props();
 
@@ -76,6 +81,35 @@
   const authorProfile = $derived(authorProfileProp ?? internalAuthor.profile);
   const authorLinkIdentifier = $derived(
     authorLinkIdentifierProp ?? profileIdentifier(authorProfile, safeUserIdentifier(internalAuthor, authorPubkey))
+  );
+
+  // In standalone mode, subscribe to comments and highlights from the network.
+  // In room mode, highlights come in via highlightEventsProp; DiscussionPanel handles comments.
+  const liveComments = ndk.$subscribe(() => {
+    if (!browser || roomContext || event.kind !== 30023) return undefined;
+    const filters = buildReferenceFilters(targetReferences(event), [1111], {
+      addressTag: 'A', idTag: 'E', limit: 120
+    });
+    return filters.length > 0 ? { filters } : undefined;
+  });
+
+  const liveHighlights = ndk.$subscribe(() => {
+    if (!browser || roomContext || highlightEventsProp || event.kind !== 30023) return undefined;
+    const filters = buildReferenceFilters(targetReferences(event), [9802], {
+      addressTag: 'a', idTag: 'e', limit: 80
+    });
+    return filters.length > 0 ? { filters } : undefined;
+  });
+
+  const commentEvents = $derived(
+    roomContext
+      ? undefined
+      : mergeUniqueEvents(liveComments.events.filter((e) => e.kind === 1111), seedComments)
+  );
+
+  const highlightEvents = $derived(
+    highlightEventsProp ??
+    mergeUniqueEvents(liveHighlights.events.filter((e) => e.kind === 9802), seedHighlights)
   );
 
   type Lens = 'room' | 'rooms' | 'network';
