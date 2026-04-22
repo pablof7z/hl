@@ -64,7 +64,7 @@
           return true;
         }
 
-        const haystack = `${room.name} ${community.about} ${room.id}`.toLowerCase();
+        const haystack = `${community.name} ${community.about} ${community.id}`.toLowerCase();
         return haystack.includes(normalizedQuery);
       })
       .toSorted((left, right) => {
