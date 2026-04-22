@@ -49,7 +49,7 @@
   );
   const sharedGroupIds = $derived(new Set(allShares.map((share) => share.groupId)));
   const shareableCommunities = $derived(
-    rooms.filter((room) => !sharedGroupIds.has(room.id))
+    communities.filter((room) => !sharedGroupIds.has(room.id))
   );
   const canShareAgain = $derived(
     Boolean(showShareControl && currentUser && !isReadOnly && selectedGroupId && !sharing)
