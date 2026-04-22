@@ -23,7 +23,7 @@
 </script>
 
 <article class="community-card">
-  <a class="community-card-link" href={`/community/${community.id}`} aria-label={community.name}>
+  <a class="community-card-link" href={`/room/${community.id}`} aria-label={community.name}>
     <div class="community-card-media">
       {#if community.picture}
         <img src={community.picture} alt="" loading="lazy" />
@@ -51,7 +51,7 @@
       <div class="community-card-meta">
         <span>{memberLabel(community.memberCount)}</span>
         {#if showRoute}
-          <span>/community/{community.id}</span>
+          <span>/room/{community.id}</span>
         {/if}
       </div>
     </div>

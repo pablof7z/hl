@@ -25,7 +25,8 @@
   const MARKETING_LINKS = [
     { href: '#what', label: 'What it is', key: 'what' },
     { href: '#media', label: 'For everything', key: 'media' },
-    { href: '#room', label: 'Rooms', key: 'room' }
+    { href: '#room', label: 'Rooms', key: 'room' },
+    { href: '/discover', label: 'Discover', key: 'discover' }
   ];
 
   const links = $derived(variant === 'marketing' ? MARKETING_LINKS : APP_LINKS);

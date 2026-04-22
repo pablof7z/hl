@@ -39,11 +39,15 @@
 {:else}
   <footer class="room-footer">
     <div class="brand">Highlighter<em>.</em></div>
-    {#if roomMeta}
-      <div class="meta">{roomMeta}</div>
-    {:else}
-      <div class="meta">Built on Nostr · Your rooms, your data, always.</div>
-    {/if}
+    <div class="meta">
+      {#if roomMeta}
+        {roomMeta}
+      {:else}
+        Built on Nostr · Your rooms, your data, always.
+      {/if}
+      <span class="sep" aria-hidden="true">·</span>
+      <a class="version" href="/changelog">{__COMMIT_HASH__}</a>
+    </div>
   </footer>
 {/if}
 
@@ -76,6 +80,21 @@
 
   .brand em {
     font-style: normal;
+    color: var(--brand-accent);
+  }
+
+  .sep {
+    margin: 0 0.5em;
+    opacity: 0.5;
+  }
+
+  .version {
+    color: inherit;
+    text-decoration: none;
+    font-family: var(--font-mono);
+  }
+
+  .version:hover {
     color: var(--brand-accent);
   }
 
