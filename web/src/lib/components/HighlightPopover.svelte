@@ -9,7 +9,7 @@
     articleEvent: NDKEvent;
     /** The container element to listen for selections in */
     containerEl?: HTMLElement | null;
-    /** Community id to share into after creating the highlight */
+    /** Room id to share into after creating the highlight */
     groupId?: string;
     /** Artifact metadata used to create a canonical highlight */
     artifact?: ArtifactRecord;

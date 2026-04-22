@@ -4,7 +4,7 @@
 </script>
 
 <svelte:head>
-  <title>Share Community — Highlighter</title>
+  <title>Share Room — Highlighter</title>
 </svelte:head>
 
 <SurfacePlaceholder spec={shareCommunitySpec} />

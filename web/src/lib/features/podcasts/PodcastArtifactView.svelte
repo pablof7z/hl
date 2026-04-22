@@ -17,7 +17,7 @@
 
   let {
     artifact,
-    community,
+    room,
     podcast = undefined,
     highlights = [],
     savedForLater = false,
@@ -27,7 +27,7 @@
     onToggleForLater
   }: {
     artifact: ArtifactRecord;
-    community: { id: string; name: string };
+    room: { id: string; name: string };
     podcast?: PodcastArtifactData | undefined;
     highlights?: HydratedHighlight[];
     savedForLater?: boolean;
@@ -459,7 +459,7 @@
       await ensureClientNdk();
 
       const result = await publishAndShareHighlight(ndk, {
-        groupId: community.id,
+        groupId: room.id,
         artifact,
         quote: selectedTranscriptQuote,
         context: selectedTranscriptContext,
@@ -473,8 +473,8 @@
       });
 
       publishStatus = result.shareExisting
-        ? 'Clip saved. This community already had a share for it.'
-        : 'Clip saved and shared to this community.';
+        ? 'Clip saved. This room already had a share for it.'
+        : 'Clip saved and shared to this room.';
       note = '';
       clipStart = null;
       clipEnd = null;
@@ -582,7 +582,7 @@
 
       <div class="actions">
         <a class="primary-link" href={artifact.url} target="_blank" rel="noreferrer">Open source</a>
-        <a href={`/r/${community.id}`}>Back to {community.name}</a>
+        <a href={`/r/${room.id}`}>Back to {room.name}</a>
         <button
           type="button"
           class:active={viewMode === 'discussion'}
@@ -871,7 +871,7 @@
     <div class="section-head">
       <div>
         <p class="badge badge-ghost uppercase tracking-wider">Clipped Moments</p>
-        <h2>{highlights.length} moment{highlights.length === 1 ? '' : 's'} from this community</h2>
+        <h2>{highlights.length} moment{highlights.length === 1 ? '' : 's'} in this room</h2>
       </div>
 
       <div class="sort-group">
@@ -889,14 +889,14 @@
     {:else}
       <div class="highlight-stack">
         {#each sortedHighlights as highlight (highlight.eventId)}
-          <HighlightCard {highlight} {artifact} seekTo={seekToTime} groupId={community.id} showDiscussAction />
+          <HighlightCard {highlight} {artifact} seekTo={seekToTime} groupId={room.id} showDiscussAction />
         {/each}
       </div>
     {/if}
   </section>
   {:else}
   <section class="podcast-discussion">
-    <DiscussionPanel groupId={community.id} rootContext={podcastRootContext} />
+    <DiscussionPanel groupId={room.id} rootContext={podcastRootContext} />
   </section>
   {/if}
 </article>

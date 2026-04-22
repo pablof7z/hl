@@ -166,7 +166,7 @@
     <section class="bookmarks-section">
       <div class="bookmarks-section-header">
         <h2 class="bookmarks-section-title">What Readers Are Saving</h2>
-        <p class="bookmarks-section-desc">Discover articles the community finds worth keeping</p>
+        <p class="bookmarks-section-desc">Discover articles readers find worth keeping</p>
       </div>
 
       {#if orderedTrending.length > 0}

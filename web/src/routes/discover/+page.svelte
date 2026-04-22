@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PageProps } from './$types';
   import { ndk } from '$lib/ndk/client';
-  import CommunityGrid from '$lib/features/groups/CommunityGrid.svelte';
+  import RoomGrid from '$lib/features/groups/RoomGrid.svelte';
 
   let { data }: PageProps = $props();
 
@@ -26,7 +26,7 @@
     </div>
   </header>
 
-  <CommunityGrid
+  <RoomGrid
     communities={data.communities}
     showVisibilityFilter={false}
     searchPlaceholder="Search rooms by name, URL, or description"

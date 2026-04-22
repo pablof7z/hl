@@ -46,14 +46,14 @@
     event.preventDefault();
 
     if (!currentUser) {
-      errorMessage = 'Sign in before creating a community.';
+      errorMessage = 'Sign in before creating a room.';
       return;
     }
 
     if (!canSubmit) {
       errorMessage = isReadOnly
         ? 'Read-only sessions cannot create communities.'
-        : 'Enter a name and a valid community URL.';
+        : 'Enter a name and a valid room URL.';
       return;
     }
 
@@ -74,7 +74,7 @@
 
       await goto(`/r/${result.id}`, { invalidateAll: true });
     } catch (error) {
-      errorMessage = error instanceof Error ? error.message : 'Could not create the community.';
+      errorMessage = error instanceof Error ? error.message : 'Could not create the room.';
     } finally {
       saving = false;
     }
@@ -82,13 +82,13 @@
 </script>
 
 <svelte:head>
-  <title>Create Community — Highlighter</title>
+  <title>Create Room — Highlighter</title>
 </svelte:head>
 
 <section class="community-create">
   <header class="community-create-header">
     <div>
-      <h1>Create a community</h1>
+      <h1>Create a room</h1>
     </div>
 
     <div class="relay-note">
@@ -111,7 +111,7 @@
       </fieldset>
 
       <fieldset class="fieldset">
-        <legend class="fieldset-legend">Community URL</legend>
+        <legend class="fieldset-legend">Room URL</legend>
         <div class="slug-input">
           <span>/r/</span>
           <input
@@ -172,7 +172,7 @@
           <label class:active={visibility === 'public'}>
             <input type="radio" bind:group={visibility} value="public" />
             <strong>Public</strong>
-            <small>Community metadata can be browsed openly.</small>
+            <small>Room metadata can be browsed openly.</small>
           </label>
 
           <label class:active={visibility === 'private'}>
@@ -185,7 +185,7 @@
 
       <div class="preview-card">
         <p class="preview-label">Preview</p>
-        <p class="preview-route">/community/{normalizedCommunityId || 'your-community'}</p>
+        <p class="preview-route">/r/{normalizedCommunityId || 'your-room'}</p>
         <p class="preview-copy">
           {about || 'Add a short description so people know what belongs here.'}
         </p>
@@ -197,12 +197,12 @@
 
       {#if isReadOnly}
         <p class="read-only-note">
-          This signer is read-only. Switch to a writable signer to create a community.
+          This signer is read-only. Switch to a writable signer to create a room.
         </p>
       {/if}
 
       <button class="btn btn-primary" type="submit" disabled={!canSubmit}>
-        {saving ? 'Publishing…' : 'Create community'}
+        {saving ? 'Publishing…' : 'Create room'}
       </button>
     </section>
   </form>

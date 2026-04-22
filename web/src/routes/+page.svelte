@@ -27,7 +27,7 @@
   const signedIn = $derived(Boolean(currentUser));
   const actions = $derived((signedIn ? memberActions : guestActions) as SurfaceAction[]);
 
-  /* ── Circle membership ── */
+  /* ── Room membership ── */
   const membershipFeed = ndk.$subscribe(() => {
     if (!browser || !currentUser) return undefined;
     return {
@@ -61,8 +61,8 @@
       : []
   );
 
-  /* ── Circle highlight shares ── */
-  const circleShareFeed = ndk.$subscribe(() => {
+  /* ── Room highlight shares ── */
+  const roomShareFeed = ndk.$subscribe(() => {
     if (!browser || membershipGroupIds.length === 0) return undefined;
     return {
       filters: [{ kinds: [HIGHLIGHTER_HIGHLIGHT_REPOST_KIND], '#h': membershipGroupIds, limit: 256 }],
@@ -71,26 +71,26 @@
     };
   });
 
-  let circleHighlights = $state<HydratedHighlight[]>([]);
-  let fetchingCircleHighlights = $state(false);
+  let roomHighlights = $state<HydratedHighlight[]>([]);
+  let fetchingRoomHighlights = $state(false);
 
   $effect(() => {
-    const shareEvents = [...circleShareFeed.events];
+    const shareEvents = [...roomShareFeed.events];
     if (!browser || shareEvents.length === 0) {
-      circleHighlights = [];
-      fetchingCircleHighlights = false;
+      roomHighlights = [];
+      fetchingRoomHighlights = false;
       return;
     }
 
     let cancelled = false;
-    fetchingCircleHighlights = true;
+    fetchingRoomHighlights = true;
 
     void fetchHighlightsForShares(ndk, shareEvents)
       .then((highlights) => {
-        if (!cancelled) circleHighlights = highlights;
+        if (!cancelled) roomHighlights = highlights;
       })
       .finally(() => {
-        if (!cancelled) fetchingCircleHighlights = false;
+        if (!cancelled) fetchingRoomHighlights = false;
       });
 
     return () => { cancelled = true; };
@@ -118,7 +118,7 @@
   /* ── Merge + deduplicate ── */
   const mergedHighlights = $derived.by(() => {
     const byEventId = new Map<string, HydratedHighlight>();
-    for (const hl of circleHighlights) {
+    for (const hl of roomHighlights) {
       byEventId.set(hl.eventId, hl);
     }
     for (const hl of followHighlights) {
@@ -161,8 +161,8 @@
   const visibleGroups = $derived(showAll ? feedGroups : feedGroups.slice(0, INITIAL_GROUP_COUNT));
 
   /* ── State helpers ── */
-  const isLoading = $derived(!membershipFeed.eosed || fetchingCircleHighlights);
-  const hasCircles = $derived(membershipGroupIds.length > 0);
+  const isLoading = $derived(!membershipFeed.eosed || fetchingRoomHighlights);
+  const hasRooms = $derived(membershipGroupIds.length > 0);
   const hasFollows = $derived(followPubkeys.length > 0);
   const isEmpty = $derived(!isLoading && mergedHighlights.length === 0);
 
@@ -205,7 +205,7 @@
           <div class="skeleton-card"></div>
         </div>
         <p class="feed-loading-text">Loading your feed...</p>
-      {:else if isEmpty && !hasCircles && !hasFollows}
+      {:else if isEmpty && !hasRooms && !hasFollows}
         <div class="feed-empty">
           <h2>Your feed starts here.</h2>
           <p>Join a room or follow someone to see highlights appear in your feed.</p>
@@ -214,7 +214,7 @@
             <a href="/r/create" class="btn-secondary">Create a room</a>
           </div>
         </div>
-      {:else if isEmpty && hasCircles}
+      {:else if isEmpty && hasRooms}
         <div class="feed-empty">
           <h2>Your rooms are quiet.</h2>
           <p>No highlights have been shared yet. Be the first.</p>
@@ -254,7 +254,7 @@
           <ul class="rail-circle-list">
             {#each communities.slice(0, 6) as community (community.id)}
               <li>
-                <a href="/r/{community.id}" class="rail-circle-link">{community.name}</a>
+                <a href="/r/{room.id}" class="rail-circle-link">{room.name}</a>
               </li>
             {/each}
           </ul>

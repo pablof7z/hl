@@ -51,8 +51,8 @@
       });
 
       statusMessage = result.shareExisting
-        ? 'Highlight saved. This community already had a share for it.'
-        : 'Highlight saved and shared to this community.';
+        ? 'Highlight saved. This room already had a share for it.'
+        : 'Highlight saved and shared to this room.';
       quote = '';
       context = '';
       note = '';

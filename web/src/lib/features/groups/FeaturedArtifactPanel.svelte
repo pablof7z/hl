@@ -6,12 +6,12 @@
   let {
     artifact,
     highlight = undefined,
-    communityName,
+    roomName,
     highlightCount = 0
   }: {
     artifact: ArtifactRecord;
     highlight?: HydratedHighlight | undefined;
-    communityName: string;
+    roomName: string;
     highlightCount?: number;
   } = $props();
 
@@ -44,7 +44,7 @@
 
       <h2>{artifact.title}</h2>
 
-      <p class="featured-community">In {communityName}</p>
+      <p class="featured-community">In {roomName}</p>
 
       {#if artifact.author}
         <p class="featured-author">{artifact.author}</p>

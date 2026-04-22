@@ -49,7 +49,7 @@
   );
   const sharedGroupIds = $derived(new Set(allShares.map((share) => share.groupId)));
   const shareableCommunities = $derived(
-    communities.filter((community) => !sharedGroupIds.has(community.id))
+    rooms.filter((room) => !sharedGroupIds.has(room.id))
   );
   const canShareAgain = $derived(
     Boolean(showShareControl && currentUser && !isReadOnly && selectedGroupId && !sharing)
@@ -124,11 +124,11 @@
         optimisticShares = [result.share, ...optimisticShares];
       }
 
-      const selectedCommunity =
-        communities.find((community) => community.id === selectedGroupId)?.name ?? selectedGroupId;
+      const selectedRoom =
+        rooms.find((room) => room.id === selectedGroupId)?.name ?? selectedGroupId;
       shareStatus = result.existing
-        ? `${selectedCommunity} already has this highlight.`
-        : `Shared to ${selectedCommunity}.`;
+        ? `${selectedRoom} already has this highlight.`
+        : `Shared to ${selectedRoom}.`;
       selectedGroupId = '';
     } catch (error) {
       shareError = error instanceof Error ? error.message : 'Could not share the highlight.';
@@ -289,14 +289,14 @@
         {#if shareableCommunities.length === 0}
           <option value="">Already shared everywhere loaded here</option>
         {:else}
-          {#each shareableCommunities as community (community.id)}
-            <option value={community.id}>{community.name}</option>
+          {#each shareableRooms as room (room.id)}
+            <option value={room.id}>{room.name}</option>
           {/each}
         {/if}
       </select>
 
       <button type="button" disabled={!canShareAgain} onclick={handleShareAgain}>
-        {sharing ? 'Sharing…' : 'Share to community'}
+        {sharing ? 'Sharing…' : 'Share to room'}
       </button>
     </div>
 

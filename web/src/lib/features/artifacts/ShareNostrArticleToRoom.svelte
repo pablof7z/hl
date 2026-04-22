@@ -115,7 +115,7 @@
       });
 
       statusMessage = result.existing
-        ? 'That article is already shared in this community. Opening it now.'
+        ? 'That article is already shared in this room. Opening it now.'
         : 'Article shared to the community.';
       await goto(artifactPath(selectedGroupId, result.artifact.id), { invalidateAll: true });
     } catch (error) {
@@ -161,7 +161,7 @@
           <p class="panel-message">No memberships loaded yet. Join or create a community first.</p>
           <div class="panel-empty-actions">
             <a href="/discover">Browse public communities</a>
-            <a href="/r/create">Create a community</a>
+            <a href="/r/create">Create a room</a>
           </div>
         </div>
       {:else}
@@ -169,8 +169,8 @@
           <fieldset class="fieldset">
             <legend class="fieldset-legend">Community</legend>
             <select class="select w-full" bind:value={selectedGroupId}>
-              {#each communities as community (community.id)}
-                <option value={community.id}>{community.name}</option>
+              {#each rooms as room (room.id)}
+                <option value={room.id}>{room.name}</option>
               {/each}
             </select>
           </fieldset>
@@ -182,7 +182,7 @@
               bind:value={note}
               rows="3"
               maxlength="280"
-              placeholder="Optional framing for this community."
+              placeholder="Optional framing for this room."
             ></textarea>
           </fieldset>
 

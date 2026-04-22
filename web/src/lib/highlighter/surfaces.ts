@@ -28,43 +28,43 @@ export type LaunchCard = {
 export const launchCards: LaunchCard[] = [
   {
     href: '/rooms',
-    label: 'Circles',
-    description: 'Your NIP-29 circles, creation flow, and circle-specific reading surfaces.',
+    label: 'Rooms',
+    description: 'Your NIP-29 rooms, creation flow, and room-specific reading surfaces.',
     status: 'Foundation'
   },
   {
     href: '/discover',
     label: 'Discover',
-    description: 'Public circle browsing for guests and future recommendation entry points.',
+    description: 'Public room browsing for guests and future recommendation entry points.',
     status: 'Foundation'
   },
   {
     href: '/me',
     label: 'Me',
-    description: 'Personal vault, circle membership list, and a standard NIP-51 For Later queue.',
+    description: 'Personal vault, room membership list, and a standard NIP-51 For Later queue.',
     status: 'Protected'
   },
   {
     href: '/share/community/demo-group',
-    label: 'Public Circle',
-    description: 'Shareable SSR page for a circle landing page before full relay-backed data arrives.',
+    label: 'Public Room',
+    description: 'Shareable SSR page for a room landing page before full relay-backed data arrives.',
     status: 'Stub'
   },
   {
     href: '/r/demo-group/e/demo-highlight',
     label: 'Public Highlight',
-    description: 'New canonical share shape for highlights: circle context plus canonical highlight event.',
+    description: 'New canonical share shape for highlights: room context plus canonical highlight event.',
     status: 'New route'
   }
 ];
 
 export const guestActions: SurfaceAction[] = [
-  { href: '/discover', label: 'Explore public circles' },
-  { href: '/onboarding', label: 'Start your circle', tone: 'secondary' }
+  { href: '/discover', label: 'Explore public rooms' },
+  { href: '/onboarding', label: 'Start a room', tone: 'secondary' }
 ];
 
 export const memberActions: SurfaceAction[] = [
-  { href: '/r/create', label: 'Create a circle' },
+  { href: '/r/create', label: 'Create a room' },
   { href: '/me', label: 'Open my vault', tone: 'secondary' }
 ];
 
@@ -127,9 +127,9 @@ export const discussionSpec: SurfaceSpec = {
 };
 
 export const discoverSpec: SurfaceSpec = {
-  title: 'Public circle discovery starts here.',
+  title: 'Public room discovery starts here.',
   description:
-    'This route is the guest-friendly entrance to Highlighter and the future seed for recommendations, search, and public circle growth loops.',
+    'This route is the guest-friendly entrance to Highlighter and the future seed for recommendations, search, and public room growth loops.',
   status: 'Milestone 1 scaffold',
   actions: [
     { href: '/rooms', label: 'Back to rooms', tone: 'secondary' },
@@ -139,7 +139,7 @@ export const discoverSpec: SurfaceSpec = {
     {
       title: 'Planned content',
       items: [
-        'Public cards for open and visible circles.',
+        'Public cards for open and visible rooms.',
         'Context about why a group is worth joining before a user signs in.',
         'Entry points into public share pages and onboarding.'
       ]
@@ -148,7 +148,7 @@ export const discoverSpec: SurfaceSpec = {
       title: 'Out of scope for this slice',
       items: [
         'Ranking and recommendation logic.',
-        'Full-text search across public circles.',
+        'Full-text search across public rooms.',
         'Any authenticated group content.'
       ]
     }
@@ -158,7 +158,7 @@ export const discoverSpec: SurfaceSpec = {
 export const shareCommunitySpec: SurfaceSpec = {
   title: 'This route becomes the shareable group landing page.',
   description:
-    'It should render without JavaScript, surface only public-safe metadata, and make circle joins legible to someone seeing Highlighter for the first time.',
+    'It should render without JavaScript, surface only public-safe metadata, and make room joins legible to someone seeing Highlighter for the first time.',
   status: 'Milestone 1 scaffold',
   actions: [
     { href: '/discover', label: 'Back to discover', tone: 'secondary' },
@@ -169,14 +169,14 @@ export const shareCommunitySpec: SurfaceSpec = {
       title: 'SSR expectations',
       items: [
         'Load public-safe kind:39000 metadata on the server.',
-        'Hide or reject private and closed circle data when appropriate.',
+        'Hide or reject private and closed room data when appropriate.',
         'Emit clean metadata for search engines and social previews.'
       ]
     },
     {
       title: 'Growth role',
       items: [
-        'This is the public invitation layer for circles.',
+        'This is the public invitation layer for rooms.',
         'The page should clearly explain the group, not just mirror the app UI.',
         'Join and request-invite CTAs should reflect group access rules.'
       ]
@@ -187,18 +187,18 @@ export const shareCommunitySpec: SurfaceSpec = {
 export const shareHighlightSpec: SurfaceSpec = {
   title: 'Highlight sharing now uses group context in the URL.',
   description:
-    'The share route is `/r/[slug]/e/[id]`, which keeps a canonical highlight event tied to the circle context it was shared into.',
+    'The share route is `/r/[slug]/e/[id]`, which keeps a canonical highlight event tied to the room context it was shared into.',
   status: 'Milestone 1 scaffold',
   actions: [
-    { href: '/share/community/demo-group', label: 'View public circle', tone: 'secondary' },
+    { href: '/share/community/demo-group', label: 'View public room', tone: 'secondary' },
     { href: '/discover', label: 'Explore more public surfaces' }
   ],
   sections: [
     {
       title: 'Route semantics',
       items: [
-        'The same kind:9802 highlight can be shared into multiple circles.',
-        'The group id disambiguates which circle context this public card represents.',
+        'The same kind:9802 highlight can be shared into multiple rooms.',
+        'The group id disambiguates which room context this public card represents.',
         'The loader should resolve the kind:16 repost first, then fetch the referenced highlight.'
       ]
     },
@@ -206,7 +206,7 @@ export const shareHighlightSpec: SurfaceSpec = {
       title: 'Protocol notes',
       items: [
         'Canonical highlights stay group-neutral and carry no h tag.',
-        'Circle sharing uses a kind:16 repost with an h tag.',
+        'Room sharing uses a kind:16 repost with an h tag.',
         'Public cards should resolve source context from the highlight a tag.'
       ]
     }
@@ -216,11 +216,11 @@ export const shareHighlightSpec: SurfaceSpec = {
 export const meHighlightsSpec: SurfaceSpec = {
   title: 'Your personal highlight vault will live here.',
   description:
-    'This view becomes the canonical list of highlights you authored, independent of which circles they were shared into.',
+    'This view becomes the canonical list of highlights you authored, independent of which rooms they were shared into.',
   status: 'Milestone 1 scaffold',
   actions: [
     { href: '/me', label: 'Back to my vault', tone: 'secondary' },
-    { href: '/discover', label: 'Find a circle' }
+    { href: '/discover', label: 'Find a room' }
   ],
   sections: [
     {
@@ -241,14 +241,14 @@ export const meForLaterSpec: SurfaceSpec = {
   status: 'Milestone 1 scaffold',
   actions: [
     { href: '/me', label: 'Back to my vault', tone: 'secondary' },
-    { href: '/discover', label: 'Browse public circles' }
+    { href: '/discover', label: 'Browse public rooms' }
   ],
   sections: [
     {
       title: 'Planned content',
       items: [
         'Plain NIP-51 a, e, and r bookmarks.',
-        'Quick actions for moving an item into a circle.',
+        'Quick actions for moving an item into a room.',
         'Portable saved sources across clients that understand bookmark lists.'
       ]
     }
@@ -258,7 +258,7 @@ export const meForLaterSpec: SurfaceSpec = {
 export const meRecommendedSpec: SurfaceSpec = {
   title: 'Recommendations are reserved for a later milestone.',
   description:
-    'This route exists now so navigation is stable before recommendation logic and circle discovery ranking arrive.',
+    'This route exists now so navigation is stable before recommendation logic and room discovery ranking arrive.',
   status: 'Placeholder',
   actions: [
     { href: '/discover', label: 'Use discover instead' },
@@ -268,7 +268,7 @@ export const meRecommendedSpec: SurfaceSpec = {
     {
       title: 'Planned content',
       items: [
-        'Discovery suggestions based on circles and sources you interact with.',
+        'Discovery suggestions based on rooms and sources you interact with.',
         'A bridge from public discovery into your personal vault.',
         'Low-noise recommendations that feel useful rather than feed-like.'
       ]

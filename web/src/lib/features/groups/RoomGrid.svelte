@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { CommunitySummary } from '$lib/ndk/groups';
-  import CommunityCard from '$lib/features/groups/CommunityCard.svelte';
+  import RoomCard from '$lib/features/groups/RoomCard.svelte';
 
   type SortMode = 'featured' | 'name' | 'newest';
   type AccessFilter = 'all' | 'open' | 'closed';
@@ -64,7 +64,7 @@
           return true;
         }
 
-        const haystack = `${community.name} ${community.about} ${community.id}`.toLowerCase();
+        const haystack = `${room.name} ${community.about} ${room.id}`.toLowerCase();
         return haystack.includes(normalizedQuery);
       })
       .toSorted((left, right) => {
@@ -155,7 +155,7 @@
   {:else}
     <div class="community-grid">
       {#each filteredCommunities as community (community.id)}
-        <CommunityCard community={community} joined={joinedSet.has(community.id)} />
+        <RoomCard community={community} joined={joinedSet.has(community.id)} />
       {/each}
     </div>
   {/if}

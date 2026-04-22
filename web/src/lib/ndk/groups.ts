@@ -150,11 +150,11 @@ export async function requestToJoinCommunity(
   const normalizedGroupId = groupId.trim();
 
   if (!normalizedGroupId) {
-    throw new Error('Missing community id.');
+    throw new Error('Missing room id.');
   }
 
   if (!ndk.signer) {
-    throw new Error('Connect a signer before joining a community.');
+    throw new Error('Connect a signer before joining a room.');
   }
 
   const user = await ndk.signer.user();
@@ -178,15 +178,15 @@ export async function createCommunity(
   const normalized = normalizeCreateCommunityInput(input);
 
   if (!normalized.name) {
-    throw new Error('Enter a community name.');
+    throw new Error('Enter a room name.');
   }
 
   if (!isValidCommunityId(normalized.id)) {
-    throw new Error('Community URL must use 3-48 lowercase letters, numbers, and hyphens.');
+    throw new Error('Room URL must use 3-48 lowercase letters, numbers, and hyphens.');
   }
 
   if (!ndk.signer) {
-    throw new Error('Connect a signer before creating a community.');
+    throw new Error('Connect a signer before creating a room.');
   }
 
   const relaySet = buildCommunityRelaySet(ndk);
@@ -195,7 +195,7 @@ export async function createCommunity(
   try {
     await group.createGroup();
   } catch (error) {
-    throw new Error(describePublishError(error, 'Could not create the community.'));
+    throw new Error(describePublishError(error, 'Could not create the room.'));
   }
 
   const metadataEvent = new NDKEvent(ndk);
@@ -220,7 +220,7 @@ export async function createCommunity(
     throw new Error(
       describePublishError(
         error,
-        'The community was created, but its metadata did not sync cleanly. Retry with a new URL only if this one does not appear on the relay.'
+        'The room was created, but its metadata did not sync cleanly. Retry with a new URL only if this one does not appear on the relay.'
       )
     );
   }

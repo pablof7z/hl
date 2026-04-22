@@ -2,7 +2,7 @@
   import type { CommunitySummary } from '$lib/ndk/groups';
 
   let {
-    community,
+    room,
     joined = false,
     showRoute = true
   }: {
@@ -23,7 +23,7 @@
 </script>
 
 <article class="community-card">
-  <a class="community-card-link" href={`/r/${community.id}`} aria-label={community.name}>
+  <a class="community-card-link" href={`/r/${room.id}`} aria-label={room.name}>
     <div class="community-card-media">
       {#if community.picture}
         <img src={community.picture} alt="" loading="lazy" />
@@ -34,7 +34,7 @@
 
     <div class="community-card-body">
       <div class="community-card-topline">
-        <p class="community-card-title">{community.name}</p>
+        <p class="community-card-title">{room.name}</p>
         <div class="community-badges">
           {#if joined}
             <span class="joined-badge">Joined</span>
@@ -51,7 +51,7 @@
       <div class="community-card-meta">
         <span>{memberLabel(community.memberCount)}</span>
         {#if showRoute}
-          <span>/r/{community.id}</span>
+          <span>/r/{room.id}</span>
         {/if}
       </div>
     </div>

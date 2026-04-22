@@ -1,32 +1,32 @@
 <script lang="ts">
-  type Lens = 'community' | 'circles' | 'network';
+  type Lens = 'room' | 'rooms' | 'network';
 
   let {
-    communityName,
-    communityUrl,
-    activeLens = 'community',
+    roomName,
+    roomUrl,
+    activeLens = 'room',
     onLensChange
   }: {
-    communityName: string;
-    communityUrl: string;
+    roomName: string;
+    roomUrl: string;
     activeLens?: Lens;
     onLensChange?: (lens: Lens) => void;
   } = $props();
 
   const lenses = $derived<{ id: Lens; label: string }[]>([
-    { id: 'community', label: communityName },
-    { id: 'circles', label: 'All my circles' },
+    { id: 'room', label: roomName },
+    { id: 'rooms', label: 'All my rooms' },
     { id: 'network', label: 'My network' }
   ]);
 </script>
 
 <div class="context-bar">
-  <a href={communityUrl} class="context-back">
+  <a href={roomUrl} class="context-back">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M19 12H5" />
       <path d="M12 19l-7-7 7-7" />
     </svg>
-    Back to {communityName}
+    Back to {roomName}
   </a>
 
   <div class="context-lenses">

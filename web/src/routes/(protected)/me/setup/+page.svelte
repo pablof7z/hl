@@ -132,7 +132,7 @@
   <div class="setup-card">
     <div class="setup-header">
       <h1 class="setup-title">Set up your profile</h1>
-      <p class="setup-subtitle">Let the community know who you are.</p>
+      <p class="setup-subtitle">Let readers know who you are.</p>
     </div>
 
     <!-- Avatar -->

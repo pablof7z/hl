@@ -34,9 +34,9 @@
   import BookmarkIcon from '$lib/components/BookmarkIcon.svelte';
   import HighlightPopover from '$lib/components/HighlightPopover.svelte';
   import SharePopover from '$lib/components/SharePopover.svelte';
-  import ShareNostrArticleToCommunity from '$lib/features/artifacts/ShareNostrArticleToCommunity.svelte';
+  import ShareNostrArticleToRoom from '$lib/features/artifacts/ShareNostrArticleToRoom.svelte';
   import DiscussionPanel from '$lib/features/discussions/DiscussionPanel.svelte';
-  import CommunityContextBar from './CommunityContextBar.svelte';
+  import RoomContextBar from './RoomContextBar.svelte';
   import {
     type CommentNode,
     buildArticleCommentTree
@@ -44,8 +44,8 @@
 
   interface CommunityContext {
     groupId: string;
-    communityName: string;
-    communityUrl: string;
+    roomName: string;
+    roomUrl: string;
     artifact?: ArtifactRecord;
     rootContext: DiscussionRootContext;
   }
@@ -57,7 +57,7 @@
     authorLinkIdentifier,
     commentEvents = undefined,
     highlightEvents = [],
-    communityContext = undefined
+    roomContext = undefined
   }: {
     event: NDKEvent;
     authorPubkey: string;
@@ -65,12 +65,12 @@
     authorLinkIdentifier: string;
     commentEvents?: NDKEvent[];
     highlightEvents: NDKEvent[];
-    communityContext?: CommunityContext;
+    roomContext?: CommunityContext;
   } = $props();
 
-  type Lens = 'community' | 'circles' | 'network';
+  type Lens = 'room' | 'rooms' | 'network';
   let activeTab = $state<'article' | 'comments' | 'highlights'>('article');
-  let activeLens = $state<Lens>('community');
+  let activeLens = $state<Lens>('room');
   let replyingTo = $state<string | null>(null);
   let replyText = $state('');
   let submitting = $state(false);
@@ -150,7 +150,7 @@
     }
   }
 
-  // Check for ?tab=discussion on mount (community mode)
+  // Check for ?tab=discussion on mount (room mode)
   onMount(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('tab') === 'discussion' || params.get('tab') === 'comments') {
@@ -161,10 +161,10 @@
 </script>
 
 <section class="article-container">
-  {#if communityContext}
-    <CommunityContextBar
-      communityName={communityContext.communityName}
-      communityUrl={communityContext.communityUrl}
+  {#if roomContext}
+    <RoomContextBar
+      roomName={roomContext.roomName}
+      roomUrl={roomContext.roomUrl}
       {activeLens}
       onLensChange={(lens) => (activeLens = lens)}
     />
@@ -206,7 +206,7 @@
             url={shareUrl}
             title={isArticle ? articleTitle(event.rawEvent()) : noteTitle(event.rawEvent())}
           />
-          <ShareNostrArticleToCommunity {event} authorName={authorName} />
+          <ShareNostrArticleToRoom {event} authorName={authorName} />
         {/if}
         {#if currentUser && isArticle}
           <button
@@ -232,7 +232,7 @@
           <Tabs.Trigger value="article">Article</Tabs.Trigger>
           <Tabs.Trigger value="comments">
             <span>Comments</span>
-            {#if !communityContext}
+            {#if !roomContext}
               <span class="article-tab-count">{commentCount}</span>
             {/if}
           </Tabs.Trigger>
@@ -287,10 +287,10 @@
         </Tabs.Content>
 
         <Tabs.Content value="comments" class="article-tab-panel">
-          {#if communityContext}
+          {#if roomContext}
             <DiscussionPanel
-              groupId={communityContext.groupId}
-              rootContext={communityContext.rootContext}
+              groupId={roomContext.groupId}
+              rootContext={roomContext.rootContext}
               showHeader={false}
             />
           {:else}
@@ -434,8 +434,8 @@
     <HighlightPopover
       articleEvent={event}
       containerEl={articleContentEl}
-      groupId={communityContext?.groupId ?? ''}
-      artifact={communityContext?.artifact}
+      groupId={roomContext?.groupId ?? ''}
+      artifact={roomContext?.artifact}
     />
   {/if}
 </section>

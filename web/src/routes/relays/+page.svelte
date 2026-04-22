@@ -114,7 +114,7 @@
     <section class="bookmarks-section">
       <div class="bookmarks-section-header">
         <h2 class="bookmarks-section-title">Relays Readers Are Exploring</h2>
-        <p class="bookmarks-section-desc">Discover relays the community is reading from</p>
+        <p class="bookmarks-section-desc">Discover relays readers are exploring</p>
       </div>
 
       {#if trendingRelays.length > 0}

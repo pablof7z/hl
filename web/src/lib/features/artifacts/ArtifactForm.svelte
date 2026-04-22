@@ -115,7 +115,7 @@
       });
 
       statusMessage = result.existing
-        ? 'That source is already shared in this community. Opening the existing entry.'
+        ? 'That source is already shared in this room. Opening the existing entry.'
         : 'Content shared. Opening the detail page.';
 
       await goto(artifactPath(groupId, result.artifact.id), { invalidateAll: true });
@@ -183,7 +183,7 @@
         bind:value={note}
         rows="4"
         maxlength="280"
-        placeholder="Optional note for the community."
+        placeholder="Optional note for the room."
       ></textarea>
     </fieldset>
 
@@ -192,7 +192,7 @@
         {previewing ? 'Previewing…' : 'Preview'}
       </button>
       <button class="btn btn-primary" type="button" disabled={!canPublish} onclick={handlePublish}>
-        {publishing ? 'Sharing…' : 'Share with community'}
+        {publishing ? 'Sharing…' : 'Share with room'}
       </button>
     </div>
 

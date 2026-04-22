@@ -2,7 +2,7 @@
   import type { CommunitySummary } from '$lib/ndk/groups';
 
   let {
-    community,
+    room,
     signedIn,
     joined,
     checkingMembership = false,
@@ -37,7 +37,7 @@
     if (joined) return 'You can jump straight into the shelf.';
     if (checkingMembership) return 'Checking your access.';
     if (joinRequested) return community.access === 'open' ? 'Your join request is in.' : 'Your request is waiting.';
-    if (!signedIn) return community.access === 'open' ? 'Join this community.' : 'Request access to this community.';
+    if (!signedIn) return community.access === 'open' ? 'Join this room.' : 'Request access to this room.';
     return community.access === 'open' ? 'Join the conversation here.' : 'Ask to join this room.';
   }
 
@@ -47,7 +47,7 @@
     }
 
     if (checkingMembership) {
-      return 'We are checking whether this community already has you on the member list.';
+      return 'We are checking whether this room already has you on the member list.';
     }
 
     if (joinRequested) {
@@ -72,7 +72,7 @@
     if (joinPending) return community.access === 'open' ? 'Joining...' : 'Sending...';
     if (joinRequested) return 'Request sent';
     if (!signedIn) return 'Set up a profile';
-    return community.access === 'open' ? 'Join this community' : 'Request to join';
+    return community.access === 'open' ? 'Join this room' : 'Request to join';
   }
 </script>
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PageProps } from './$types';
-  import CommunityCard from '$lib/features/groups/CommunityCard.svelte';
+  import RoomCard from '$lib/features/groups/RoomCard.svelte';
   import { MIN_SEARCH_QUERY_LENGTH } from '$lib/search';
 
   let { data }: PageProps = $props();
@@ -57,7 +57,7 @@
 
         <div class="community-grid">
           {#each data.results.communities as community (community.id)}
-            <CommunityCard {community} showRoute={true} />
+            <RoomCard {community} showRoute={true} />
           {/each}
         </div>
       </section>
@@ -206,7 +206,7 @@
     margin: 0;
   }
 
-  /* ── Community grid ── */
+  /* ── Room grid ── */
 
   .community-grid {
     display: grid;

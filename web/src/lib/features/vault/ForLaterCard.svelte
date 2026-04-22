@@ -39,7 +39,7 @@
     }
   });
 
-  async function handleMoveToCommunity() {
+  async function handleMoveToRoom() {
     if (!canShare) {
       return;
     }
@@ -57,11 +57,11 @@
         note: ''
       });
 
-      const communityName =
-        communities.find((community) => community.id === selectedGroupId)?.name ?? selectedGroupId;
+      const roomName =
+        rooms.find((room) => room.id === selectedGroupId)?.name ?? selectedGroupId;
       statusMessage = result.existing
-        ? `${communityName} already had this source.`
-        : `Shared into ${communityName}.`;
+        ? `${roomName} already has this source.`
+        : `Shared into ${roomName}.`;
     } catch (error) {
       actionError = error instanceof Error ? error.message : 'Could not move this item yet.';
     } finally {
@@ -129,13 +129,13 @@
       <div class="card-actions card-actions-share">
         {#if communities.length > 0}
           <select bind:value={selectedGroupId} disabled={sharing}>
-            {#each communities as community (community.id)}
-              <option value={community.id}>{community.name}</option>
+            {#each rooms as room (room.id)}
+              <option value={room.id}>{room.name}</option>
             {/each}
           </select>
 
-          <button type="button" class="primary" disabled={!canShare} onclick={handleMoveToCommunity}>
-            {sharing ? 'Sharing…' : 'Share to community'}
+          <button type="button" class="primary" disabled={!canShare} onclick={handleMoveToRoom}>
+            {sharing ? 'Sharing…' : 'Share to room'}
           </button>
         {/if}
         <button type="button" class="ghost" disabled={removing} onclick={handleRemove}>

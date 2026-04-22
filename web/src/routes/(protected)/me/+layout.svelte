@@ -132,7 +132,7 @@
           <strong>{authoredHighlightFeed.events.length}</strong>
         </div>
         <div class="stat-card">
-          <span>Communities</span>
+          <span>Rooms</span>
           <strong>{communityCount}</strong>
         </div>
       </div>
