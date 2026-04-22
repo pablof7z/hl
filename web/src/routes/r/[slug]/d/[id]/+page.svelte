@@ -266,11 +266,11 @@
   }
 
   .d-attachment-copy strong {
-    font-family: var(--font-serif);
-    font-size: 16px;
+    font-family: var(--font-sans);
+    font-size: 14.5px;
     line-height: 1.3;
     color: var(--ink);
-    font-weight: 500;
+    font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
@@ -286,8 +286,8 @@
   }
 
   .d-body {
-    font-family: var(--font-serif);
-    font-size: 18px;
+    font-family: var(--font-sans);
+    font-size: 15.5px;
     line-height: 1.62;
     color: var(--ink-soft);
     display: flex;
@@ -322,7 +322,7 @@
 
   @media (max-width: 560px) {
     .d-head h1 { font-size: 26px; }
-    .d-body { font-size: 16.5px; }
+    .d-body { font-size: 14.5px; }
     .d-attachment { grid-template-columns: 1fr; }
     .d-attachment img,
     .d-attachment-placeholder { aspect-ratio: 16 / 9; }

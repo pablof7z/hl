@@ -204,10 +204,10 @@
   const sections = $derived([
     { id: 'pinned', label: 'Pinned' },
     { id: 'this-week', label: 'This week' },
-    { id: 'shelf', label: 'The shelf', count: artifacts.length },
+    { id: 'shelf', label: 'Library', count: artifacts.length },
     { id: 'highlights', label: 'Highlights', count: highlights.length },
     { id: 'discussions', label: 'Discussions', count: discussions.length },
-    { id: 'lately', label: 'Lately' }
+    { id: 'lately', label: 'Activity' }
   ]);
 
   let activeTab = $state('pinned');
@@ -370,7 +370,7 @@
         </Tabs.Content>
 
         <Tabs.Content value="this-week">
-          <Block id="this-week" title="Also this week." accent="week.">
+          <Block id="this-week" title="Shared this week." accent="this week.">
             {#if thisWeek.length === 0}
               <div class="empty-card"><p>Nothing else shared this week.</p></div>
             {:else}
@@ -393,9 +393,9 @@
         </Tabs.Content>
 
         <Tabs.Content value="shelf">
-          <Block id="shelf" title="The shelf." accent="shelf.">
+          <Block id="shelf" title="Your library." accent="library.">
             {#if shelfItems.length === 0}
-              <div class="empty-card"><p>The shelf is empty. Share something to read.</p></div>
+              <div class="empty-card"><p>The library is empty. Share something to read.</p></div>
             {:else}
               <div class="shelf-grid">
                 {#each shelfItems as art (art.id)}
@@ -412,7 +412,7 @@
                 {/each}
               </div>
               {#if shelfItems.length >= 12}
-                <SeeAllLink label="See all {shelfItems.length} on the shelf" href="#" />
+                <SeeAllLink label="See all {shelfItems.length} in the library" href="#" />
               {/if}
             {/if}
           </Block>
@@ -485,7 +485,7 @@
         </Tabs.Content>
 
         <Tabs.Content value="lately">
-          <Block id="lately" title="Lately in the room." accent="room.">
+          <Block id="lately" title="Recent activity." accent="activity.">
             <div class="empty-card">
               <p>Nothing has happened yet.</p>
             </div>
