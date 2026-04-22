@@ -31,25 +31,35 @@ export async function getRoom(slug: string): Promise<Room | null> {
 
   const metadata = NDKSimpleGroupMetadata.from(metadataEvent);
 
-  // 2. Fetch kind:39002 member list for the same group
-  const memberEvents = Array.from(
-    (await fetchEventsForSsr(
-      {
-        kinds: [NDKKind.GroupMembers],
-        '#d': [trimmedSlug]
-      },
+  // 2. Fetch kind:39002 member list and kind:39001 admin list in parallel
+  const [rawMemberEvents, rawAdminEvents] = await Promise.all([
+    fetchEventsForSsr(
+      { kinds: [NDKKind.GroupMembers], '#d': [trimmedSlug] },
       `getRoom:members(${trimmedSlug})`,
       { relays: GROUP_RELAY_URLS }
-    )) ?? []
-  ).sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+    ),
+    fetchEventsForSsr(
+      { kinds: [NDKKind.GroupAdmins], '#d': [trimmedSlug] },
+      `getRoom:admins(${trimmedSlug})`,
+      { relays: GROUP_RELAY_URLS }
+    )
+  ]);
+  const memberEvents = Array.from(rawMemberEvents ?? []).sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+  const adminEvents = Array.from(rawAdminEvents ?? []).sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
 
   const memberEvent = memberEvents[0];
   const members: RoomMember[] = memberEvent ? extractMembers(memberEvent) : [];
+
+  const adminEvent = adminEvents[0];
+  const adminPubkeys: string[] = adminEvent
+    ? adminEvent.getMatchingTags('p').map((tag) => tag[1]).filter(Boolean)
+    : [];
 
   return {
     id: trimmedSlug,
     name: metadata.name || trimmedSlug,
     members,
+    adminPubkeys,
     // Heavier collections are empty at SSR time; client subscriptions hydrate them
     artifacts: [],
     highlights: [],

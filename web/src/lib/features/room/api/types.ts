@@ -48,6 +48,7 @@ export interface Room {
   id: string;
   name: string;
   members: RoomMember[];
+  adminPubkeys: string[];
   pinnedArtifact?: Artifact;
   artifacts: Artifact[];
   highlights: Highlight[];

@@ -28,7 +28,7 @@ export async function getRoom(slug: string): Promise<Room | null> {
   const groupId = slug.trim();
   if (!groupId) return null;
 
-  const [metadataEvents, memberEvents, artifactEvents, highlightEvents] = await Promise.all([
+  const [metadataEvents, memberEvents, adminEvents, artifactEvents, highlightEvents] = await Promise.all([
     fetchEventsForSsr(
       { kinds: [NDKKind.GroupMetadata], '#d': [groupId] },
       `getRoom:metadata(${groupId})`,
@@ -37,6 +37,11 @@ export async function getRoom(slug: string): Promise<Room | null> {
     fetchEventsForSsr(
       { kinds: [NDKKind.GroupMembers], '#d': [groupId] },
       `getRoom:members(${groupId})`,
+      { relays: GROUP_RELAY_URLS }
+    ),
+    fetchEventsForSsr(
+      { kinds: [NDKKind.GroupAdmins], '#d': [groupId] },
+      `getRoom:admins(${groupId})`,
       { relays: GROUP_RELAY_URLS }
     ),
     fetchEventsForSsr(
@@ -60,6 +65,11 @@ export async function getRoom(slug: string): Promise<Room | null> {
   const memberEvent = sortByCreatedAtDesc([...(memberEvents ?? [])])[0];
   const memberPubkeys = memberEvent
     ? memberEvent.getMatchingTags('p').map((tag) => tag[1]).filter(Boolean)
+    : [];
+
+  const adminEvent = sortByCreatedAtDesc([...(adminEvents ?? [])])[0];
+  const adminPubkeys = adminEvent
+    ? adminEvent.getMatchingTags('p').map((tag) => tag[1]).filter(Boolean)
     : [];
 
   const members: RoomMember[] = memberPubkeys.map((pubkey, index) => ({
@@ -102,6 +112,7 @@ export async function getRoom(slug: string): Promise<Room | null> {
     id: groupId,
     name: roomName,
     members,
+    adminPubkeys,
     pinnedArtifact,
     artifacts,
     highlights,

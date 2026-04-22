@@ -274,6 +274,98 @@ function includesPubkey(event: NDKEventType | undefined, pubkey: string): boolea
   return event.getMatchingTags('p').some((tag) => tag[1] === pubkey);
 }
 
+export type EditRoomMetadataInput = {
+  name: string;
+  about?: string;
+  picture?: string;
+  visibility: CommunityVisibility;
+  access: CommunityAccess;
+};
+
+export async function editRoomMetadata(
+  ndk: NDK,
+  groupId: string,
+  input: EditRoomMetadataInput
+): Promise<void> {
+  const normalizedGroupId = groupId.trim();
+  if (!normalizedGroupId) throw new Error('Missing room id.');
+  if (!ndk.signer) throw new Error('Connect a signer before editing room settings.');
+
+  const visibility = input.visibility === 'private' ? 'private' : 'public';
+  const access = visibility === 'private' ? 'closed' : input.access === 'closed' ? 'closed' : 'open';
+
+  const event = new NDKEvent(ndk);
+  event.kind = NDKKind.GroupAdminEditMetadata;
+  event.tags.push(['h', normalizedGroupId]);
+
+  const name = cleanText(input.name);
+  if (name) event.tags.push(['name', name]);
+
+  const about = cleanText(input.about);
+  if (about) event.tags.push(['about', about]);
+
+  const picture = cleanText(input.picture);
+  if (picture) event.tags.push(['picture', picture]);
+
+  event.tags.push([visibility, '']);
+  event.tags.push([access, '']);
+
+  try {
+    await event.sign();
+    await event.publish(buildCommunityRelaySet(ndk));
+  } catch (error) {
+    throw new Error(describePublishError(error, 'Could not update room settings.'));
+  }
+}
+
+export async function addRoomMember(
+  ndk: NDK,
+  groupId: string,
+  pubkey: string,
+  role?: 'admin'
+): Promise<void> {
+  const normalizedGroupId = groupId.trim();
+  const normalizedPubkey = pubkey.trim();
+  if (!normalizedGroupId) throw new Error('Missing room id.');
+  if (!normalizedPubkey) throw new Error('Missing pubkey.');
+  if (!ndk.signer) throw new Error('Connect a signer before managing room members.');
+
+  const event = new NDKEvent(ndk);
+  event.kind = NDKKind.GroupAdminAddUser;
+  event.tags.push(['h', normalizedGroupId], ['p', normalizedPubkey]);
+  if (role === 'admin') event.tags.push(['role', 'admin']);
+
+  try {
+    await event.sign();
+    await event.publish(buildCommunityRelaySet(ndk));
+  } catch (error) {
+    throw new Error(describePublishError(error, 'Could not add member to room.'));
+  }
+}
+
+export async function removeRoomMember(
+  ndk: NDK,
+  groupId: string,
+  pubkey: string
+): Promise<void> {
+  const normalizedGroupId = groupId.trim();
+  const normalizedPubkey = pubkey.trim();
+  if (!normalizedGroupId) throw new Error('Missing room id.');
+  if (!normalizedPubkey) throw new Error('Missing pubkey.');
+  if (!ndk.signer) throw new Error('Connect a signer before managing room members.');
+
+  const event = new NDKEvent(ndk);
+  event.kind = NDKKind.GroupAdminRemoveUser;
+  event.tags.push(['h', normalizedGroupId], ['p', normalizedPubkey]);
+
+  try {
+    await event.sign();
+    await event.publish(buildCommunityRelaySet(ndk));
+  } catch (error) {
+    throw new Error(describePublishError(error, 'Could not remove member from room.'));
+  }
+}
+
 function describePublishError(error: unknown, fallback: string): string {
   if (error && typeof error === 'object' && 'relayErrors' in error) {
     const relayErrors = error.relayErrors;
