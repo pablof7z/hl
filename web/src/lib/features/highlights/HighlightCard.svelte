@@ -191,35 +191,45 @@
   }
 </script>
 
-<article class="highlight-card">
-  <div class="highlight-header">
-    <div class="highlight-byline">
+<article class="grid gap-3.5 border-b border-base-300/50 pb-4 last:border-b-0 last:pb-0">
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div class="flex flex-wrap items-baseline gap-2">
       <User.Root {ndk} pubkey={highlight.pubkey}>
-        <a class="author-link" href={`/profile/${highlight.pubkey}`}>
+        <a class="text-sm font-bold text-base-content no-underline hover:text-primary" href={`/profile/${highlight.pubkey}`}>
           <User.Name fallback={shortPubkey(highlight.pubkey)} />
         </a>
       </User.Root>
 
       {#if createdLabel}
-        <span class="created-at">{createdLabel}</span>
+        <span class="inline-flex min-h-7 items-center rounded-full bg-base-200 px-2.5 text-xs font-semibold text-base-content/60">
+          {createdLabel}
+        </span>
       {/if}
 
       {#if clipLabel}
-        <button type="button" class="clip-chip" onclick={handleSeek} disabled={!canSeek}>
+        <button
+          type="button"
+          class="inline-flex min-h-7 cursor-pointer items-center rounded-full border-0 bg-base-200 px-2.5 text-xs font-semibold text-base-content/60 disabled:cursor-default"
+          onclick={handleSeek}
+          disabled={!canSeek}
+        >
           {clipLabel}
         </button>
       {/if}
     </div>
 
     {#if primaryShare}
-      <a class="share-link" href={highlightPath(primaryShare.groupId, highlight.eventId)}>
+      <a
+        class="inline-flex min-h-7 items-center rounded-full bg-base-200 px-2.5 text-xs font-semibold text-primary no-underline"
+        href={highlightPath(primaryShare.groupId, highlight.eventId)}
+      >
         Public card
       </a>
     {/if}
   </div>
 
-  <blockquote class="highlight-excerpt">
-    <p>
+  <blockquote class="m-0 border-l-2 border-primary pl-4">
+    <p class="m-0 font-serif text-lg leading-snug text-base-content [&_mark]:rounded-sm [&_mark]:bg-primary/15 [&_mark]:px-0.5 [&_mark]:text-inherit">
       {#each excerptSegments as segment (segment.text)}
         {#if segment.marked}
           <mark>{segment.text}</mark>
@@ -231,48 +241,58 @@
   </blockquote>
 
   {#if highlight.note}
-    <p class="highlight-note">{highlight.note}</p>
+    <p class="m-0 leading-relaxed text-base-content">{highlight.note}</p>
   {/if}
 
   {#if highlight.clipSpeaker}
-    <p class="highlight-speaker">Speaker: {highlight.clipSpeaker}</p>
+    <p class="m-0 text-sm font-semibold leading-relaxed text-base-content/60">Speaker: {highlight.clipSpeaker}</p>
   {/if}
 
-  <div class="highlight-footer">
-    <div class="highlight-source">
+  <div class="flex flex-wrap items-start justify-between gap-2 max-sm:flex-col max-sm:items-stretch">
+    <div class="flex flex-wrap items-center gap-2">
       {#if artifactPageHref}
-        <a class="artifact-link" href={artifactPageHref}>{sourceTitle}</a>
+        <a class="text-sm font-bold text-base-content no-underline hover:text-primary" href={artifactPageHref}>{sourceTitle}</a>
       {:else if sourceHref}
-        <a class="artifact-link" href={sourceHref} target="_blank" rel="noreferrer">{sourceTitle}</a>
+        <a class="text-sm font-bold text-base-content no-underline hover:text-primary" href={sourceHref} target="_blank" rel="noreferrer">{sourceTitle}</a>
       {:else}
-        <span class="artifact-link static">{sourceTitle}</span>
+        <span class="pointer-events-none text-sm font-bold text-base-content">{sourceTitle}</span>
       {/if}
 
       {#each sourceMeta as item (item)}
-        <span class="meta-chip">{item}</span>
+        <span class="inline-flex min-h-7 items-center rounded-full bg-base-200 px-2.5 text-xs font-semibold text-base-content/60">{item}</span>
       {/each}
 
       {#if highlight.shareCount > 0}
-        <span class="meta-chip">
+        <span class="inline-flex min-h-7 items-center rounded-full bg-base-200 px-2.5 text-xs font-semibold text-base-content/60">
           {highlight.shareCount} communit{highlight.shareCount === 1 ? 'y' : 'ies'}
         </span>
       {/if}
     </div>
 
     {#if sourceHref}
-      <a class="source-link" href={sourceHref} target="_blank" rel="noreferrer">Open source</a>
+      <a
+        class="inline-flex min-h-7 items-center rounded-full bg-base-200 px-2.5 text-xs font-semibold text-base-content/60 no-underline"
+        href={sourceHref}
+        target="_blank"
+        rel="noreferrer"
+      >Open source</a>
     {/if}
   </div>
 
   {#if canDiscuss}
-    <div class="discuss-action">
-      <button type="button" class="discuss-button" class:active={showThread} onclick={() => (showThread = !showThread)}>
+    <div class="flex gap-1.5">
+      <button
+        type="button"
+        class="inline-flex min-h-7 cursor-pointer items-center rounded-full border-0 bg-base-200 px-2.5 text-xs font-semibold text-base-content/60 hover:text-primary"
+        class:!text-primary={showThread}
+        onclick={() => (showThread = !showThread)}
+      >
         {showThread ? 'Hide discussion' : 'Discuss'}
       </button>
     </div>
 
     {#if showThread}
-      <div class="inline-discussion">
+      <div class="border-t border-base-300 pt-3.5">
         <DiscussionPanel
           {groupId}
           rootContext={{ type: 'highlight', highlightEventId: highlight.eventId }}
@@ -284,8 +304,12 @@
   {/if}
 
   {#if showShareControl && rooms.length > 0}
-    <div class="share-again">
-      <select bind:value={selectedGroupId} disabled={shareableCommunities.length === 0 || sharing}>
+    <div class="flex flex-wrap items-center gap-2 max-sm:flex-col max-sm:items-stretch">
+      <select
+        class="select select-bordered max-sm:w-full"
+        bind:value={selectedGroupId}
+        disabled={shareableCommunities.length === 0 || sharing}
+      >
         {#if shareableCommunities.length === 0}
           <option value="">Already shared everywhere loaded here</option>
         {:else}
@@ -295,240 +319,22 @@
         {/if}
       </select>
 
-      <button type="button" disabled={!canShareAgain} onclick={handleShareAgain}>
+      <button
+        type="button"
+        class="btn btn-primary rounded-full max-sm:w-full"
+        disabled={!canShareAgain}
+        onclick={handleShareAgain}
+      >
         {sharing ? 'Sharing…' : 'Share to room'}
       </button>
     </div>
 
     {#if shareError}
-      <p class="error">{shareError}</p>
+      <p class="m-0 text-sm leading-relaxed text-error">{shareError}</p>
     {/if}
 
     {#if shareStatus}
-      <p class="status">{shareStatus}</p>
+      <p class="m-0 text-sm leading-relaxed text-success">{shareStatus}</p>
     {/if}
   {/if}
 </article>
-
-<style>
-  .highlight-card {
-    display: grid;
-    gap: 0.9rem;
-    padding: 0 0 1.1rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--color-base-300) 50%, transparent);
-  }
-
-  .highlight-card:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
-  }
-
-  .highlight-header,
-  .highlight-footer,
-  .highlight-source,
-  .share-again {
-    display: flex;
-    gap: 0.55rem;
-    align-items: center;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
-
-  .highlight-header {
-    justify-content: space-between;
-  }
-
-  .highlight-byline {
-    display: flex;
-    gap: 0.5rem;
-    align-items: baseline;
-    flex-wrap: wrap;
-  }
-
-  .author-link {
-    color: var(--text-strong);
-    font-size: 0.84rem;
-    font-weight: 700;
-    text-decoration: none;
-  }
-
-  .author-link:hover {
-    color: var(--accent);
-  }
-
-  .created-at,
-  .share-link,
-  .meta-chip,
-  .source-link,
-  .clip-chip {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.9rem;
-    padding: 0 0.65rem;
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--muted);
-    font-size: 0.76rem;
-    font-weight: 600;
-    text-decoration: none;
-  }
-
-  .share-link {
-    color: var(--accent);
-  }
-
-  .clip-chip {
-    border: 0;
-    cursor: pointer;
-  }
-
-  .clip-chip:disabled {
-    cursor: default;
-  }
-
-  .highlight-excerpt {
-    margin: 0;
-    padding: 0 0 0 1rem;
-    border-left: 2px solid var(--accent);
-  }
-
-  .highlight-excerpt p {
-    margin: 0;
-    color: var(--text-strong);
-    font-family: var(--font-serif);
-    font-size: 1.15rem;
-    line-height: 1.55;
-  }
-
-  .highlight-excerpt mark {
-    background: color-mix(in srgb, var(--accent) 18%, white);
-    color: inherit;
-    padding: 0.06em 0.14em;
-    border-radius: 0.2em;
-  }
-
-  .highlight-note,
-  .highlight-speaker,
-  .error,
-  .status {
-    margin: 0;
-    line-height: 1.6;
-  }
-
-  .highlight-note {
-    color: var(--text);
-  }
-
-  .highlight-speaker {
-    color: var(--muted);
-    font-size: 0.84rem;
-    font-weight: 600;
-  }
-
-  .highlight-footer {
-    justify-content: space-between;
-    align-items: start;
-  }
-
-  .highlight-source {
-    justify-content: flex-start;
-  }
-
-  .artifact-link {
-    color: var(--text-strong);
-    font-size: 0.86rem;
-    font-weight: 700;
-    text-decoration: none;
-  }
-
-  .artifact-link:hover {
-    color: var(--accent);
-  }
-
-  .artifact-link.static {
-    pointer-events: none;
-  }
-
-  .discuss-action {
-    display: flex;
-    gap: 0.4rem;
-  }
-
-  .discuss-button {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.9rem;
-    padding: 0 0.65rem;
-    border: 0;
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--muted);
-    font-size: 0.76rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .discuss-button:hover,
-  .discuss-button.active {
-    color: var(--accent);
-  }
-
-  .inline-discussion {
-    padding: 0.85rem 0 0;
-    border-top: 1px solid var(--color-base-300);
-  }
-
-  .share-again select {
-    min-height: 2.5rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 0.9rem;
-    background: white;
-    color: var(--text);
-    padding: 0 0.85rem;
-    min-width: min(100%, 16rem);
-  }
-
-  .share-again button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 2.5rem;
-    padding: 0 0.95rem;
-    border: 0;
-    border-radius: 999px;
-    background: var(--accent);
-    color: white;
-    font-weight: 700;
-  }
-
-  .share-again button:disabled {
-    opacity: 0.55;
-  }
-
-  .error {
-    color: #b42318;
-    font-size: 0.88rem;
-  }
-
-  .status {
-    color: #0f766e;
-    font-size: 0.88rem;
-  }
-
-  @media (max-width: 640px) {
-    .highlight-footer {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .share-again {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .share-again button,
-    .share-again select {
-      width: 100%;
-    }
-  }
-</style>

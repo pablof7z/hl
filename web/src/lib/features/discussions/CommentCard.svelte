@@ -21,81 +21,35 @@
   }
 </script>
 
-<div class="card card-border bg-base-100 p-4 gap-2" class:nested={depth > 0}>
-  <div class="comment-header">
+<div
+  class="card card-border bg-base-100 gap-2 p-4"
+  class:border-l-2={depth > 0}
+  class:border-l-primary={depth > 0}
+  class:rounded-l-none={depth > 0}
+>
+  <div class="flex flex-wrap items-center gap-2">
     <User.Root {ndk} pubkey={comment.pubkey}>
-      <a class="comment-author" href={`/profile/${comment.pubkey}`}>
-        <User.Avatar class="comment-avatar" />
+      <a
+        class="flex items-center gap-1.5 text-sm font-bold text-base-content no-underline hover:text-primary"
+        href={`/profile/${comment.pubkey}`}
+      >
+        <User.Avatar class="!size-6 rounded-full object-cover" />
         <User.Name fallback={shortPubkey(comment.pubkey)} />
       </a>
     </User.Root>
 
     {#if timeLabel}
-      <span class="comment-time">{timeLabel}</span>
+      <span class="text-xs font-semibold text-base-content/60">{timeLabel}</span>
     {/if}
   </div>
 
-  <p class="comment-content">{comment.content}</p>
+  <p class="m-0 leading-relaxed whitespace-pre-wrap text-base-content [overflow-wrap:anywhere]">{comment.content}</p>
 
   {#if onReply}
-    <div class="comment-actions">
+    <div class="flex gap-1.5">
       <button type="button" class="btn btn-ghost btn-sm" onclick={() => onReply?.(comment)}>
         Reply
       </button>
     </div>
   {/if}
 </div>
-
-<style>
-  .nested {
-    border-left: 2px solid var(--accent);
-    border-radius: 0 var(--radius-box) var(--radius-box) 0;
-  }
-
-  .comment-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .comment-author {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    color: var(--text-strong);
-    font-size: 0.84rem;
-    font-weight: 700;
-    text-decoration: none;
-  }
-
-  .comment-author:hover {
-    color: var(--accent);
-  }
-
-  :global(.comment-avatar) {
-    width: 1.6rem;
-    height: 1.6rem;
-    border-radius: 50%;
-    object-fit: cover;
-  }
-
-  .comment-time {
-    color: var(--muted);
-    font-size: 0.76rem;
-    font-weight: 600;
-  }
-
-  .comment-content {
-    margin: 0;
-    color: var(--text);
-    line-height: 1.6;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-
-  .comment-actions {
-    display: flex;
-    gap: 0.4rem;
-  }
-</style>
