@@ -124,7 +124,7 @@
   .field-input {
     width: 100%;
     padding: 0.625rem 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.75rem;
     background: var(--surface-soft);
     color: var(--text-strong);
@@ -142,7 +142,7 @@
     display: grid;
     gap: 1rem;
     padding: 1.2rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1.35rem;
     background:
       radial-gradient(circle at top left, rgba(255, 103, 25, 0.08), transparent 36%),

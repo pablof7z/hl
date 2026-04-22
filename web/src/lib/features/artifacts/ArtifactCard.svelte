@@ -53,7 +53,7 @@
     grid-template-columns: minmax(96px, 132px) minmax(0, 1fr);
     gap: 1rem;
     padding: 1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1.25rem;
     background: var(--surface);
     color: inherit;

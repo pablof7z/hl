@@ -39,7 +39,7 @@
     gap: 0.35rem;
     width: min(100%, 24rem);
     padding: 0.85rem 0.95rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 10px;
     background: var(--surface-soft);
     color: var(--text);

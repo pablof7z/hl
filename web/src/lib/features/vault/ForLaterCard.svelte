@@ -160,7 +160,7 @@
     grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
     gap: 1.1rem;
     padding: 1.1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1.35rem;
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, white), var(--surface));
@@ -265,7 +265,7 @@
   select {
     width: 100%;
     min-width: min(22rem, 100%);
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.95rem;
     background: white;
     color: var(--text);
@@ -279,7 +279,7 @@
     min-height: 2.8rem;
     padding: 0 1rem;
     border-radius: 999px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     cursor: pointer;
     font-weight: 700;
   }

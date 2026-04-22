@@ -914,7 +914,7 @@
   .transcript-shell,
   .clips-shell {
     padding: 1.25rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1.35rem;
     background:
       radial-gradient(circle at top left, rgba(255, 103, 25, 0.08), transparent 34%),
@@ -1141,7 +1141,7 @@
     width: 100%;
     min-height: 7rem;
     padding: 0.9rem 1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1rem;
     background: white;
     color: var(--text);
@@ -1199,7 +1199,7 @@
     grid-template-columns: 5.5rem minmax(0, 1fr);
     gap: 0.9rem;
     padding: 0.9rem 1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1rem;
     background: white;
     color: inherit;
@@ -1207,7 +1207,7 @@
   }
 
   .transcript-segment.active {
-    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--color-base-300));
     background: color-mix(in srgb, white 85%, rgba(255, 103, 25, 0.12));
   }
 
@@ -1239,7 +1239,7 @@
 
   .podcast-discussion {
     padding: 1.25rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1.35rem;
     background:
       radial-gradient(circle at top left, rgba(255, 103, 25, 0.08), transparent 34%),
@@ -1250,7 +1250,7 @@
     display: grid;
     gap: 0.35rem;
     padding: 1rem 1.05rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1rem;
     background: color-mix(in srgb, var(--surface-soft) 78%, white);
   }
@@ -1277,7 +1277,7 @@
     align-items: center;
     min-height: 2.4rem;
     padding: 0 0.85rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 999px;
     background: var(--surface-soft);
     color: var(--text);
@@ -1384,7 +1384,7 @@
     min-height: 2rem;
     min-width: 2.8rem;
     padding: 0 0.5rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.55rem;
     background: white;
     color: var(--text);
@@ -1402,7 +1402,7 @@
     width: 5.5rem;
     min-height: 2rem;
     padding: 0 0.55rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.55rem;
     background: white;
     color: var(--text);

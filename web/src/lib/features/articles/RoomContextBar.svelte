@@ -79,7 +79,7 @@
     align-items: center;
     min-height: 2rem;
     padding: 0 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 9999px;
     background: var(--surface);
     color: var(--muted);

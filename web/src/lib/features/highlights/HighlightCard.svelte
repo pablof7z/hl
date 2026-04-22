@@ -315,7 +315,7 @@
     display: grid;
     gap: 0.9rem;
     padding: 0 0 1.1rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-base-300) 50%, transparent);
   }
 
   .highlight-card:last-child {
@@ -475,12 +475,12 @@
 
   .inline-discussion {
     padding: 0.85rem 0 0;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--color-base-300);
   }
 
   .share-again select {
     min-height: 2.5rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.9rem;
     background: white;
     color: var(--text);

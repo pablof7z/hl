@@ -207,7 +207,7 @@
     display: grid;
     gap: 0.35rem;
     padding: 1rem 1.1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1.1rem;
     background: var(--surface);
   }
@@ -232,7 +232,7 @@
     min-height: 2.6rem;
     padding: 0 0.95rem;
     border-radius: 999px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     background: var(--surface-soft);
     color: var(--text);
     font-weight: 600;

@@ -238,7 +238,7 @@
     display: grid;
     gap: 0.4rem;
     padding: 1rem 1.1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1.1rem;
     background: var(--surface);
   }

@@ -75,7 +75,7 @@
     display: grid;
     gap: 0.95rem;
     padding: 1.35rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1.6rem;
     background:
       radial-gradient(circle at top left, rgba(255, 103, 25, 0.12), transparent 34%),

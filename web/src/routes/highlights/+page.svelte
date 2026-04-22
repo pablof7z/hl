@@ -276,7 +276,7 @@
   }
 
   .hl-card:hover {
-    border-color: var(--border);
+    border-color: var(--color-base-300);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
   }
 
@@ -440,7 +440,7 @@
   }
 
   .hl-sidebar-dot {
-    color: var(--border);
+    color: var(--color-base-300);
   }
 
   .hl-sidebar-count {

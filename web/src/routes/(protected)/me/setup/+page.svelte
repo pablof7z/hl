@@ -226,7 +226,7 @@
   .field-input {
     width: 100%;
     padding: 0.625rem 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.75rem;
     background: var(--surface-soft);
     color: var(--text-strong);
@@ -296,7 +296,7 @@
     height: 6rem;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid var(--border);
+    border: 2px solid var(--color-base-300);
   }
 
   .avatar-placeholder {
@@ -304,7 +304,7 @@
     height: 6rem;
     border-radius: 50%;
     background: var(--surface-soft);
-    border: 2px dashed var(--border);
+    border: 2px dashed var(--color-base-300);
     display: flex;
     align-items: center;
     justify-content: center;

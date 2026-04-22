@@ -189,7 +189,7 @@
   .article-markdown :global(.article-markdown__content blockquote) {
     margin: 2rem 0;
     padding-left: 1.2rem;
-    border-left: 3px solid var(--border);
+    border-left: 3px solid var(--color-base-300);
     color: var(--muted);
     font-style: italic;
   }
@@ -197,7 +197,7 @@
   .article-markdown :global(.article-markdown__content pre) {
     margin: 1.5rem 0;
     padding: 1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: var(--radius-sm);
     background: var(--surface-soft);
     overflow-x: auto;
@@ -228,13 +228,13 @@
     height: auto;
     margin: 1.75rem 0;
     border-radius: var(--radius-md);
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
   }
 
   .article-markdown :global(.article-markdown__content hr) {
     margin: 2rem 0;
     border: 0;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--color-base-300);
   }
 
   .article-markdown :global(.article-markdown__content table) {
@@ -247,7 +247,7 @@
   .article-markdown :global(.article-markdown__content th),
   .article-markdown :global(.article-markdown__content td) {
     padding: 0.65rem 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     text-align: left;
   }
 

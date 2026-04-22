@@ -880,7 +880,7 @@
     display: grid;
     gap: 0.5rem;
     padding: 2.5rem 2rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1rem;
     background: var(--surface);
     text-align: center;
@@ -959,7 +959,7 @@
     display: grid;
     gap: 0.5rem;
     padding: 1.25rem 0 0;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--color-base-300);
   }
 
   .rail-cta-card h3 {
@@ -1003,7 +1003,7 @@
     font-weight: 500;
     padding: 0.85rem 1.75rem;
     border-radius: 9999px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     cursor: pointer;
     white-space: nowrap;
     text-decoration: none;

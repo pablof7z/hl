@@ -270,7 +270,7 @@
   .me-tab {
     padding: 0.45rem 1rem;
     border-radius: var(--radius-md);
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     background: var(--surface);
     color: var(--text);
     font-size: 0.88rem;

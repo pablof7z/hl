@@ -252,7 +252,7 @@
   .field-input {
     width: 100%;
     padding: 0.625rem 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.75rem;
     background: var(--surface-soft);
     color: var(--text-strong);
@@ -269,7 +269,7 @@
   .field-select {
     width: 100%;
     padding: 0.625rem 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.75rem;
     background: var(--surface-soft);
     color: var(--text-strong);
@@ -354,7 +354,7 @@
     grid-template-columns: minmax(110px, 140px) minmax(0, 1fr);
     gap: 1rem;
     padding: 0.95rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1rem;
     background: var(--surface-soft);
   }

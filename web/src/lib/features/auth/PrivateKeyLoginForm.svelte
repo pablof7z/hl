@@ -50,7 +50,7 @@
     width: 100%;
     min-height: 5.5rem;
     padding: 0.6rem 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: var(--radius-md);
     background: var(--surface-soft);
     color: var(--text-strong);

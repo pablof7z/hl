@@ -194,7 +194,7 @@
     width: 100%;
     min-height: 2.85rem;
     padding: 0 0.85rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.9rem;
     background: var(--surface);
     color: var(--text);
@@ -216,7 +216,7 @@
     gap: 0.75rem;
     max-width: 42rem;
     padding: 1.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1.4rem;
     background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent);
   }

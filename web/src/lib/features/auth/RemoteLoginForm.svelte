@@ -112,7 +112,7 @@
   .auth-form-input {
     width: 100%;
     padding: 0.6rem 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: var(--radius-md);
     background: var(--surface-soft);
     color: var(--text-strong);
@@ -164,6 +164,6 @@
     content: '';
     flex: 1;
     height: 1px;
-    background: var(--border);
+    background: var(--color-base-300);
   }
 </style>

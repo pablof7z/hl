@@ -88,7 +88,7 @@
 
 <style>
   .pp-card {
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: var(--radius-md);
     overflow: hidden;
     background: var(--surface);
@@ -170,7 +170,7 @@
 
   .pp-custom-fields {
     width: 100%;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--color-base-300);
     margin-top: 0.5rem;
     padding-top: 0.5rem;
   }

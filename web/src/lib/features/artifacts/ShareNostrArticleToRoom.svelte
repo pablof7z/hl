@@ -218,7 +218,7 @@
   .field-input {
     width: 100%;
     padding: 0.625rem 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.75rem;
     background: var(--surface-soft);
     color: var(--text-strong);
@@ -235,7 +235,7 @@
   .field-select {
     width: 100%;
     padding: 0.625rem 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.75rem;
     background: var(--surface-soft);
     color: var(--text-strong);
@@ -255,7 +255,7 @@
     width: 2.5rem;
     height: 2.5rem;
     padding: 0;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 9999px;
     background: var(--surface);
     color: var(--muted);
@@ -336,7 +336,7 @@
     justify-content: center;
     min-height: 2.5rem;
     padding: 0 0.9rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 999px;
     color: var(--text);
     font-size: 0.88rem;

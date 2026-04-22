@@ -84,7 +84,7 @@
     align-items: center;
     min-height: 1.8rem;
     padding: 0 0.6rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 9999px;
     background: var(--surface-soft);
     color: var(--muted);

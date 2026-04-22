@@ -399,7 +399,7 @@
   .field-input {
     width: 100%;
     padding: 0.625rem 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.75rem;
     background: var(--surface-soft);
     color: var(--text-strong);
@@ -446,7 +446,7 @@
   .tab-strip {
     display: flex;
     gap: 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--color-base-300);
   }
 
   .tab-btn {
@@ -483,7 +483,7 @@
     display: grid;
     gap: 1rem;
     padding: 1.25rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1.35rem;
     background: var(--surface);
   }
@@ -525,7 +525,7 @@
     display: grid;
     gap: 0.25rem;
     padding: 0.95rem 1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1rem;
     background: var(--surface-soft);
     cursor: pointer;
@@ -606,14 +606,14 @@
     font-size: 12px;
     font-weight: 500;
     background: var(--surface-soft);
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 6px;
     cursor: pointer;
     transition: background 120ms ease;
     white-space: nowrap;
   }
 
-  .btn-action:hover { background: var(--border); }
+  .btn-action:hover { background: var(--color-base-300); }
   .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .btn-action--danger {
@@ -637,7 +637,7 @@
     gap: 12px;
     padding: 10px 12px;
     background: var(--surface-soft);
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1rem;
   }
 

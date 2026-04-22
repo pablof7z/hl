@@ -119,7 +119,7 @@
     display: grid;
     gap: 0.95rem;
     padding: 1.1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1.25rem;
     background:
       radial-gradient(circle at top right, rgba(255, 103, 25, 0.12), transparent 42%),
@@ -180,7 +180,7 @@
     min-height: 2.6rem;
     padding: 0 1rem;
     border-radius: 999px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     font-weight: 700;
   }
 

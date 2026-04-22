@@ -117,7 +117,7 @@
     width: 2.5rem;
     height: 2.5rem;
     padding: 0;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 9999px;
     background: var(--surface);
     color: var(--muted);
@@ -142,7 +142,7 @@
     right: 0;
     z-index: 100;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: var(--radius-md);
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
     min-width: 160px;
@@ -194,7 +194,7 @@
 
   .share-popover-divider {
     height: 1px;
-    background: var(--border-light, var(--border));
+    background: var(--border-light, var(--color-base-300));
     margin: 0.25rem 0;
   }
 </style>

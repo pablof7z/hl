@@ -293,13 +293,13 @@
     gap: 0.5rem;
     justify-items: center;
     padding: 3rem 1rem;
-    border: 1px dashed var(--border);
+    border: 1px dashed var(--color-base-300);
     border-radius: var(--radius-md);
     text-align: center;
   }
 
   .bookmarks-empty-icon {
-    color: var(--border);
+    color: var(--color-base-300);
     margin-bottom: 0.25rem;
   }
 
@@ -327,7 +327,7 @@
   }
 
   .trending-card:hover {
-    border-color: var(--border);
+    border-color: var(--color-base-300);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
   }
 

@@ -106,7 +106,7 @@
 
   .composer-guest {
     padding: 0.85rem 1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 1rem;
     background: var(--surface-soft);
   }
@@ -145,7 +145,7 @@
     width: 100%;
     min-height: 5rem;
     padding: 0.75rem 0.9rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 0.85rem;
     background: white;
     color: var(--text);

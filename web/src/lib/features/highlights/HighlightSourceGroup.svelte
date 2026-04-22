@@ -94,7 +94,7 @@
     display: grid;
     gap: 0.9rem;
     padding: 1.25rem 0 0;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--color-base-300);
   }
 
   .highlight-source-group:first-child {

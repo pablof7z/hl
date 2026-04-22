@@ -477,7 +477,7 @@
     width: 2.5rem;
     height: 2.5rem;
     padding: 0;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 9999px;
     background: var(--surface);
     color: var(--muted);
@@ -523,7 +523,7 @@
     width: 100%;
     box-sizing: border-box;
     padding: 0.75rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--text);
@@ -677,7 +677,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.55rem 1.1rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--color-base-300);
     border-radius: 9999px;
     background: var(--surface);
     color: var(--text);
