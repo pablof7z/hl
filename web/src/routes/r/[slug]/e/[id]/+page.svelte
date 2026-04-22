@@ -1,12 +1,9 @@
 <script lang="ts">
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
-  import { createFetchUser } from '@nostr-dev-kit/svelte';
   import { ndk } from '$lib/ndk/client';
   import { parseNostrAddress } from '$lib/ndk/artifacts';
   import { buildArtifactHighlightFilters } from '$lib/ndk/highlights';
-  import { profileIdentifier } from '$lib/ndk/format';
-  import { safeUserIdentifier } from '$lib/ndk/user';
   import ArticleView from '$lib/features/articles/ArticleView.svelte';
   import PodcastView from '$lib/features/room/components/PodcastView.svelte';
   import type { PageData } from './$types';
@@ -52,14 +49,6 @@
 
   const highlightEvents = $derived(highlightsSub.events);
 
-  // Author info derived from the article event
-  const authorPubkey = $derived(articleEvent?.pubkey ?? '');
-  const author = createFetchUser(ndk, () => authorPubkey);
-  const authorProfile = $derived(author.profile);
-  const authorLinkIdentifier = $derived(
-    profileIdentifier(authorProfile, safeUserIdentifier(author, authorPubkey))
-  );
-
   // Room context feeds RoomContextBar and DiscussionPanel inside ArticleView
   const roomContext = $derived.by(() => {
     if (!room || !artifact) return undefined;
@@ -101,9 +90,6 @@
   {#if articleEvent}
     <ArticleView
       event={articleEvent}
-      {authorPubkey}
-      {authorProfile}
-      {authorLinkIdentifier}
       {highlightEvents}
       {roomContext}
     />

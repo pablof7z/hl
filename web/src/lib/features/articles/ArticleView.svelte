@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { browser } from '$app/environment';
   import { page } from '$app/state';
+  import { createFetchUser } from '@nostr-dev-kit/svelte';
   import type { NDKEvent, NDKUserProfile } from '@nostr-dev-kit/ndk';
   import type { ArtifactRecord } from '$lib/ndk/artifacts';
   import type { DiscussionRootContext } from '$lib/features/discussions/discussion';
@@ -17,8 +18,10 @@
     displayName,
     formatDisplayDate,
     noteExcerpt,
-    noteTitle
+    noteTitle,
+    profileIdentifier
   } from '$lib/ndk/format';
+  import { safeUserIdentifier } from '$lib/ndk/user';
   import { ndk } from '$lib/ndk/client';
   import {
     BOOKMARK_LIST_KIND,
@@ -52,21 +55,28 @@
 
   let {
     event,
-    authorPubkey,
-    authorProfile = undefined,
-    authorLinkIdentifier,
+    authorPubkey: authorPubkeyProp = undefined,
+    authorProfile: authorProfileProp = undefined,
+    authorLinkIdentifier: authorLinkIdentifierProp = undefined,
     commentEvents = undefined,
     highlightEvents = [],
     roomContext = undefined
   }: {
     event: NDKEvent;
-    authorPubkey: string;
+    authorPubkey?: string;
     authorProfile?: NDKUserProfile;
-    authorLinkIdentifier: string;
+    authorLinkIdentifier?: string;
     commentEvents?: NDKEvent[];
     highlightEvents: NDKEvent[];
     roomContext?: CommunityContext;
   } = $props();
+
+  const authorPubkey = $derived(authorPubkeyProp ?? event.pubkey ?? '');
+  const internalAuthor = createFetchUser(ndk, () => (authorProfileProp ? '' : authorPubkey));
+  const authorProfile = $derived(authorProfileProp ?? internalAuthor.profile);
+  const authorLinkIdentifier = $derived(
+    authorLinkIdentifierProp ?? profileIdentifier(authorProfile, safeUserIdentifier(internalAuthor, authorPubkey))
+  );
 
   type Lens = 'room' | 'rooms' | 'network';
   let activeTab = $state<'article' | 'comments' | 'highlights'>('article');
