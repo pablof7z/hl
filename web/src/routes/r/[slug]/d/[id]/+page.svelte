@@ -112,9 +112,9 @@
   }
 
   .missing h1 {
-    font-family: var(--font-serif);
-    font-size: 34px;
-    font-weight: 400;
+    font-family: var(--font-sans);
+    font-size: 26px;
+    font-weight: 700;
     color: var(--ink);
     margin: 0;
   }
@@ -202,13 +202,13 @@
   }
 
   .d-head h1 {
-    font-family: var(--font-serif);
-    font-size: 34px;
-    line-height: 1.15;
+    font-family: var(--font-sans);
+    font-size: 26px;
+    line-height: 1.2;
     letter-spacing: -0.015em;
     color: var(--ink);
     margin: 0;
-    font-weight: 400;
+    font-weight: 700;
   }
 
   .d-attachment {
@@ -321,7 +321,7 @@
   .btn:hover { background: var(--brand-accent); }
 
   @media (max-width: 560px) {
-    .d-head h1 { font-size: 26px; }
+    .d-head h1 { font-size: 22px; }
     .d-body { font-size: 14.5px; }
     .d-attachment { grid-template-columns: 1fr; }
     .d-attachment img,

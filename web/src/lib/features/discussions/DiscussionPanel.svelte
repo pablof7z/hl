@@ -83,9 +83,9 @@
   {#if showHeader}
     <div class="flex flex-wrap items-baseline gap-2.5">
       <h3
-        class="m-0 font-serif leading-tight tracking-tight text-base-content"
-        class:text-[1.35rem]={!compact}
-        class:text-[1.05rem]={compact}
+        class="m-0 font-sans font-bold leading-tight tracking-tight text-base-content"
+        class:text-[1.15rem]={!compact}
+        class:text-[0.95rem]={compact}
       >Discussion</h3>
       <span class="inline-flex min-h-7 items-center rounded-full bg-base-200 px-2.5 text-xs font-semibold text-base-content/60">
         {allComments.length} comment{allComments.length === 1 ? '' : 's'}
