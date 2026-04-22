@@ -1,4 +1,5 @@
 .vercel
+.DS_Store
 
 # Git worktrees
 .worktrees/

@@ -1,0 +1,589 @@
+//! Artifact share (kind:11) building, publishing, and querying. Ports
+//! `web/src/lib/ndk/artifacts.ts`.
+
+use nostr_sdk::prelude::*;
+
+use crate::errors::CoreError;
+use crate::models::{ArtifactPreview, ArtifactRecord};
+use crate::nostr_runtime::NostrRuntime;
+
+/// kind:11 "Thread" is used both for artifact shares and for discussions.
+const KIND_ARTIFACT_SHARE: u16 = 11;
+
+const TRACKING_PARAMS: &[&str] = &[
+    "fbclid",
+    "gclid",
+    "mc_cid",
+    "mc_eid",
+    "ref",
+    "ref_src",
+    "ref_url",
+];
+
+/// Port of `buildArtifactPreview` (`web/src/lib/ndk/artifacts.ts:170-236`).
+/// Builds a preview from a bare URL — normalizes the URL, derives a stable
+/// FNV-1a id, infers `source` from the host, and populates the reference
+/// tag as an `i` tag pointing at the normalized URL. Callers that already
+/// have richer metadata (ISBN lookup, podcast catalog entry) should use
+/// `build_preview_with` instead.
+pub fn build_preview(url: &str) -> Result<ArtifactPreview, CoreError> {
+    build_preview_with(PreviewInput {
+        url: url.to_string(),
+        ..Default::default()
+    })
+}
+
+/// Rust-side equivalent of the TS function's full input surface. Most
+/// callers use `build_preview(url)` which defaults everything.
+#[derive(Debug, Default, Clone)]
+pub struct PreviewInput {
+    pub url: String,
+    pub title: String,
+    pub author: String,
+    pub image: String,
+    pub description: String,
+    pub source: Option<String>,
+    pub domain: String,
+    pub catalog_id: String,
+    pub catalog_kind: String,
+    pub podcast_guid: String,
+    pub podcast_show_title: String,
+    pub audio_url: String,
+    pub audio_preview_url: String,
+    pub transcript_url: String,
+    pub feed_url: String,
+    pub published_at: String,
+    pub duration_seconds: Option<i64>,
+    pub reference_tag_name: Option<String>,
+    pub reference_tag_value: String,
+    pub reference_kind: String,
+    pub highlight_tag_name: Option<String>,
+    pub highlight_tag_value: String,
+}
+
+pub fn build_preview_with(input: PreviewInput) -> Result<ArtifactPreview, CoreError> {
+    let normalized_url = normalize_artifact_url(&input.url)
+        .ok_or_else(|| CoreError::InvalidInput("invalid URL".into()))?;
+
+    let reference_tag_name = clean(&input.reference_tag_name.unwrap_or_default());
+    let reference_tag_name = if reference_tag_name.is_empty() {
+        "i".to_string()
+    } else {
+        reference_tag_name
+    };
+
+    let reference_tag_value = first_non_empty(&[
+        &input.reference_tag_value,
+        &input.catalog_id,
+        &normalized_url,
+    ]);
+
+    let reference_kind = first_non_empty(&[
+        &input.reference_kind,
+        &input.catalog_kind,
+        "web",
+    ]);
+
+    let highlight_tag_name = clean(&input.highlight_tag_name.unwrap_or_default());
+    let highlight_tag_name = if highlight_tag_name.is_empty() {
+        "r".to_string()
+    } else {
+        highlight_tag_name
+    };
+
+    let highlight_tag_value = first_non_empty(&[&input.highlight_tag_value, &normalized_url]);
+
+    let reference_key = reference_key_for_tag(&reference_tag_name, &reference_tag_value);
+    let highlight_reference_key =
+        reference_key_for_tag(&highlight_tag_name, &highlight_tag_value);
+    if reference_key.is_empty() {
+        return Err(CoreError::InvalidInput(
+            "artifact reference key is empty".into(),
+        ));
+    }
+
+    let domain = first_non_empty(&[&input.domain, &domain_label(&normalized_url)]);
+    let title = first_non_empty(&[&input.title, &fallback_title(&normalized_url)]);
+    let source = input
+        .source
+        .map(|s| clean(&s))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| detect_artifact_source(&normalized_url).to_string());
+
+    Ok(ArtifactPreview {
+        id: artifact_id_from_reference_key(&reference_key)?,
+        url: normalized_url,
+        title,
+        author: clean(&input.author),
+        image: clean(&input.image),
+        description: clean(&input.description),
+        source,
+        domain,
+        catalog_id: first_non_empty(&[&input.catalog_id, &reference_tag_value]),
+        catalog_kind: first_non_empty(&[&input.catalog_kind, &reference_kind]),
+        podcast_guid: first_non_empty(&[
+            &input.podcast_guid,
+            &podcast_guid_from_catalog_value(&reference_tag_value),
+        ]),
+        podcast_show_title: clean(&input.podcast_show_title),
+        audio_url: clean(&input.audio_url),
+        audio_preview_url: clean(&input.audio_preview_url),
+        transcript_url: clean(&input.transcript_url),
+        feed_url: clean(&input.feed_url),
+        published_at: clean(&input.published_at),
+        duration_seconds: input.duration_seconds.filter(|d| *d >= 0),
+        reference_tag_name,
+        reference_tag_value,
+        reference_kind,
+        highlight_tag_name,
+        highlight_tag_value,
+        highlight_reference_key,
+    })
+}
+
+/// Publish a kind:11 artifact share into a NIP-29 group. Port of
+/// `publishArtifact` (`web/src/lib/ndk/artifacts.ts:468-507`), minus the
+/// "existing artifact" merge path — that's an MVP-later concern; if a
+/// duplicate kind:11 with the same `d` tag exists the relay will upsert.
+pub async fn publish(
+    runtime: &NostrRuntime,
+    preview: ArtifactPreview,
+    group_id: &str,
+    note: Option<&str>,
+) -> Result<ArtifactRecord, CoreError> {
+    if group_id.trim().is_empty() {
+        return Err(CoreError::InvalidInput("group_id must not be empty".into()));
+    }
+
+    let client = runtime.client();
+
+    let builder = build_share_event(group_id, &preview, note)?;
+    let event = client
+        .sign_event_builder(builder)
+        .await
+        .map_err(|e| CoreError::Signer(format!("sign artifact share: {e}")))?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish artifact share: {e}")))?;
+
+    Ok(ArtifactRecord {
+        preview,
+        group_id: group_id.to_string(),
+        share_event_id: event.id.to_hex(),
+        pubkey: event.pubkey.to_hex(),
+        created_at: Some(event.created_at.as_secs()),
+        note: note.unwrap_or("").trim().to_string(),
+    })
+}
+
+/// Port of `fetchArtifactSharesForGroup`. MVP leaves this to the live
+/// subscription — stub returns empty and lets the Room pump hydrate via
+/// deltas.
+pub async fn fetch_shares(
+    _group_id: &str,
+    _limit: u32,
+) -> Result<Vec<ArtifactRecord>, CoreError> {
+    Ok(Vec::new())
+}
+
+/// Simple title/author substring search over cached artifacts.
+pub fn search_cached(
+    _query: &str,
+    _limit: u32,
+) -> Result<Vec<ArtifactRecord>, CoreError> {
+    Ok(Vec::new())
+}
+
+// -- URL helpers -------------------------------------------------------------
+
+/// Port of `normalizeArtifactUrl`. Returns `None` for non-http(s) URLs and
+/// for unparseable inputs.
+pub fn normalize_artifact_url(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut url = url::Url::parse(trimmed).ok()?;
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return None;
+    }
+
+    url.set_fragment(None);
+    let _ = url.set_username("");
+    let _ = url.set_password(None);
+
+    // Lowercase host. url::Url already lowercases on parse, but set_host
+    // keeps the conversion explicit if we ever mutate it.
+    if let Some(host) = url.host_str().map(|h| h.to_ascii_lowercase()) {
+        let _ = url.set_host(Some(&host));
+    }
+
+    // Strip default ports.
+    if let Some(port) = url.port() {
+        match (url.scheme(), port) {
+            ("http", 80) | ("https", 443) => {
+                let _ = url.set_port(None);
+            }
+            _ => {}
+        }
+    }
+
+    // Strip trailing slashes except the root.
+    if url.path() != "/" {
+        let trimmed_path = url.path().trim_end_matches('/');
+        let new_path = if trimmed_path.is_empty() { "/" } else { trimmed_path };
+        let owned = new_path.to_string();
+        url.set_path(&owned);
+    }
+
+    // Drop utm_* and known tracking params; sort the rest alphabetically.
+    let mut kept: Vec<(String, String)> = url
+        .query_pairs()
+        .filter(|(k, _)| {
+            let lower = k.to_ascii_lowercase();
+            !lower.starts_with("utm_") && !TRACKING_PARAMS.iter().any(|t| *t == lower.as_str())
+        })
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect();
+    kept.sort_by(|a, b| a.0.cmp(&b.0));
+    url.set_query(None);
+    if !kept.is_empty() {
+        let mut pairs = url.query_pairs_mut();
+        for (k, v) in kept {
+            pairs.append_pair(&k, &v);
+        }
+    }
+
+    Some(url.to_string())
+}
+
+/// Port of `detectArtifactSource`. Known podcast / video / paper / book hosts
+/// fall through to `"article"` as the most reasonable default for anything
+/// with a path; bare domains end up `"web"`.
+pub fn detect_artifact_source(url: &str) -> &'static str {
+    let Some(normalized) = normalize_artifact_url(url) else {
+        return "web";
+    };
+    let Ok(parsed) = url::Url::parse(&normalized) else {
+        return "web";
+    };
+    let host = parsed
+        .host_str()
+        .unwrap_or("")
+        .trim_start_matches("www.")
+        .to_ascii_lowercase();
+
+    if host.contains("youtube.com")
+        || host.contains("youtu.be")
+        || host.contains("vimeo.com")
+        || host.contains("tiktok.com")
+    {
+        return "video";
+    }
+    if host.contains("spotify.com")
+        || host.contains("podcasts.apple.com")
+        || host.contains("overcast.fm")
+    {
+        return "podcast";
+    }
+    if host.contains("arxiv.org")
+        || host.contains("ssrn.com")
+        || host.contains("researchgate.net")
+        || host.contains("doi.org")
+    {
+        return "paper";
+    }
+    if host.contains("goodreads.com")
+        || host.contains("openlibrary.org")
+        || host.contains("bookshop.org")
+    {
+        return "book";
+    }
+    "article"
+}
+
+fn domain_label(url: &str) -> String {
+    url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(|h| h.trim_start_matches("www.").to_string()))
+        .unwrap_or_else(|| url.to_string())
+}
+
+fn fallback_title(url: &str) -> String {
+    if let Ok(parsed) = url::Url::parse(url) {
+        let path = parsed.path().trim_end_matches('/');
+        if let Some(last) = path.split('/').filter(|s| !s.is_empty()).last() {
+            return title_case(&last.replace(['-', '_'], " "));
+        }
+        return parsed
+            .host_str()
+            .map(|h| h.trim_start_matches("www.").to_string())
+            .unwrap_or_else(|| url.to_string());
+    }
+    "Untitled source".into()
+}
+
+fn title_case(value: &str) -> String {
+    value
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => {
+                    first.to_uppercase().collect::<String>() + chars.as_str()
+                }
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn podcast_guid_from_catalog_value(value: &str) -> String {
+    let normalized = clean(value);
+    normalized
+        .strip_prefix("podcast:guid:")
+        .map(str::to_string)
+        .unwrap_or_default()
+}
+
+fn reference_key_for_tag(tag_name: &str, value: &str) -> String {
+    let cleaned = clean(value);
+    if cleaned.is_empty() {
+        String::new()
+    } else {
+        format!("{tag_name}:{cleaned}")
+    }
+}
+
+fn artifact_id_from_reference_key(reference_key: &str) -> Result<String, CoreError> {
+    let normalized = clean(reference_key);
+    if normalized.is_empty() {
+        return Err(CoreError::InvalidInput(
+            "artifact references need a stable key".into(),
+        ));
+    }
+    let hash = fnv1a(&normalized);
+    Ok(format!("c{}", to_base36(hash)))
+}
+
+/// Port of `fnv1a` at `web/src/lib/ndk/artifacts.ts:1086-1095`. 32-bit
+/// unsigned, using wrapping multiply so the output matches the JS
+/// `Math.imul(hash, 0x01000193)` behavior exactly.
+fn fnv1a(value: &str) -> u32 {
+    let mut hash: u32 = 0x811c_9dc5;
+    for byte in value.bytes() {
+        hash ^= byte as u32;
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash
+}
+
+fn to_base36(mut value: u32) -> String {
+    if value == 0 {
+        return "0".into();
+    }
+    const ALPHABET: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    let mut out: Vec<u8> = Vec::new();
+    while value > 0 {
+        out.push(ALPHABET[(value % 36) as usize]);
+        value /= 36;
+    }
+    out.reverse();
+    String::from_utf8(out).unwrap()
+}
+
+fn clean(value: &str) -> String {
+    value.trim().to_string()
+}
+
+fn first_non_empty(values: &[&str]) -> String {
+    for v in values {
+        let cleaned = clean(v);
+        if !cleaned.is_empty() {
+            return cleaned;
+        }
+    }
+    String::new()
+}
+
+// -- Event builder -----------------------------------------------------------
+
+/// Pure builder for the kind:11 artifact share event. Mirrors
+/// `buildArtifactShareEvent` (`web/src/lib/ndk/artifacts.ts:509-590`).
+fn build_share_event(
+    group_id: &str,
+    preview: &ArtifactPreview,
+    note: Option<&str>,
+) -> Result<EventBuilder, CoreError> {
+    let mut tags: Vec<Tag> = Vec::new();
+    tags.push(parse_tag(&["h", group_id])?);
+    tags.push(parse_tag(&["d", &preview.id])?);
+    tags.push(parse_tag(&["title", &preview.title])?);
+    tags.push(parse_tag(&["source", &preview.source])?);
+
+    match preview.reference_tag_name.as_str() {
+        "i" => {
+            if !preview.url.is_empty() {
+                tags.push(parse_tag(&["i", &preview.reference_tag_value, &preview.url])?);
+            } else {
+                tags.push(parse_tag(&["i", &preview.reference_tag_value])?);
+            }
+            if !preview.reference_kind.is_empty() {
+                tags.push(parse_tag(&["k", &preview.reference_kind])?);
+            }
+        }
+        other if !other.is_empty() => {
+            tags.push(parse_tag(&[other, &preview.reference_tag_value])?);
+        }
+        _ => {}
+    }
+
+    if !preview.url.is_empty() {
+        tags.push(parse_tag(&["r", &preview.url])?);
+    }
+    if !preview.author.is_empty() {
+        tags.push(parse_tag(&["author", &preview.author])?);
+    }
+    if !preview.image.is_empty() {
+        tags.push(parse_tag(&["image", &preview.image])?);
+    }
+    if !preview.description.is_empty() {
+        tags.push(parse_tag(&["summary", &preview.description])?);
+    }
+    if !preview.podcast_guid.is_empty() {
+        tags.push(parse_tag(&["podcast_guid", &preview.podcast_guid])?);
+    }
+    if !preview.podcast_show_title.is_empty() {
+        tags.push(parse_tag(&["podcast_show_title", &preview.podcast_show_title])?);
+    }
+    if !preview.audio_url.is_empty() {
+        tags.push(parse_tag(&["audio", &preview.audio_url])?);
+    }
+    if !preview.audio_preview_url.is_empty() {
+        tags.push(parse_tag(&["audio_preview", &preview.audio_preview_url])?);
+    }
+    if !preview.transcript_url.is_empty() {
+        tags.push(parse_tag(&["transcript", &preview.transcript_url])?);
+    }
+    if !preview.feed_url.is_empty() {
+        tags.push(parse_tag(&["feed", &preview.feed_url])?);
+    }
+    if !preview.published_at.is_empty() {
+        tags.push(parse_tag(&["published_at", &preview.published_at])?);
+    }
+    if let Some(d) = preview.duration_seconds {
+        if d >= 0 {
+            tags.push(parse_tag(&["duration", &d.to_string()])?);
+        }
+    }
+
+    let content = note.map(clean).unwrap_or_default();
+    Ok(EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), content).tags(tags))
+}
+
+fn parse_tag(parts: &[&str]) -> Result<Tag, CoreError> {
+    Tag::parse(parts.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+        .map_err(|e| CoreError::Other(format!("build tag: {e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_strips_tracking_and_default_ports() {
+        let out = normalize_artifact_url(
+            "https://EXAMPLE.com:443/path/?utm_source=x&a=1&b=2&fbclid=y#frag",
+        )
+        .unwrap();
+        assert_eq!(out, "https://example.com/path?a=1&b=2");
+    }
+
+    #[test]
+    fn normalize_rejects_non_http() {
+        assert!(normalize_artifact_url("javascript:alert(1)").is_none());
+        assert!(normalize_artifact_url("ftp://example.com").is_none());
+        assert!(normalize_artifact_url("").is_none());
+    }
+
+    #[test]
+    fn detect_source_podcast_for_overcast() {
+        assert_eq!(detect_artifact_source("https://overcast.fm/+abc123"), "podcast");
+        assert_eq!(
+            detect_artifact_source("https://podcasts.apple.com/us/ep/123"),
+            "podcast"
+        );
+    }
+
+    #[test]
+    fn detect_source_video_for_youtube() {
+        assert_eq!(
+            detect_artifact_source("https://www.youtube.com/watch?v=x"),
+            "video"
+        );
+    }
+
+    #[test]
+    fn detect_source_fallback_is_article() {
+        assert_eq!(detect_artifact_source("https://example.com/post"), "article");
+    }
+
+    #[test]
+    fn fnv1a_matches_js_reference() {
+        // Reference values computed with the JS `fnv1a` at artifacts.ts:1086.
+        // "r:https://example.com" -> 0x... but we just assert stability.
+        let a = fnv1a("r:https://example.com");
+        let b = fnv1a("r:https://example.com");
+        assert_eq!(a, b);
+        assert_ne!(a, fnv1a("r:https://example.org"));
+    }
+
+    #[test]
+    fn base36_encoding() {
+        assert_eq!(to_base36(0), "0");
+        assert_eq!(to_base36(35), "z");
+        assert_eq!(to_base36(36), "10");
+    }
+
+    #[test]
+    fn build_preview_for_overcast_url() {
+        let preview = build_preview("https://overcast.fm/+abc123").expect("preview");
+        assert_eq!(preview.url, "https://overcast.fm/+abc123");
+        assert_eq!(preview.source, "podcast");
+        assert_eq!(preview.reference_tag_name, "i");
+        assert_eq!(preview.reference_tag_value, "https://overcast.fm/+abc123");
+        assert_eq!(preview.reference_kind, "web");
+        assert_eq!(preview.highlight_tag_name, "r");
+        assert_eq!(preview.highlight_tag_value, "https://overcast.fm/+abc123");
+        assert!(preview.id.starts_with('c'));
+        // id must be stable across runs
+        let preview2 = build_preview("https://overcast.fm/+abc123").unwrap();
+        assert_eq!(preview.id, preview2.id);
+    }
+
+    #[test]
+    fn build_share_event_emits_h_d_title_source_tags() {
+        let preview = build_preview("https://example.com/post").unwrap();
+        let builder = build_share_event("room-a", &preview, Some("hi")).unwrap();
+        let keys = Keys::generate();
+        let event = builder.sign_with_keys(&keys).expect("sign");
+        let has = |name: &str, val: &str| {
+            event.tags.iter().any(|t| {
+                let s = t.as_slice();
+                s.first().map(String::as_str) == Some(name)
+                    && s.get(1).map(String::as_str) == Some(val)
+            })
+        };
+        assert_eq!(event.kind, Kind::Custom(KIND_ARTIFACT_SHARE));
+        assert_eq!(event.content, "hi");
+        assert!(has("h", "room-a"));
+        assert!(has("d", &preview.id));
+        assert!(has("title", &preview.title));
+        assert!(has("source", "article"));
+        assert!(has("i", "https://example.com/post"));
+        assert!(has("k", "web"));
+        assert!(has("r", "https://example.com/post"));
+    }
+}

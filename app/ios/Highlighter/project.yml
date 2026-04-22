@@ -1,0 +1,127 @@
+name: Highlighter
+options:
+  bundleIdPrefix: com.highlighter
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    DEVELOPMENT_TEAM: "456SHKPP26"
+    CODE_SIGN_STYLE: "Automatic"
+
+packages:
+  Kingfisher:
+    url: https://github.com/onevcat/Kingfisher.git
+    from: 8.1.0
+  swift-markdown:
+    url: https://github.com/swiftlang/swift-markdown.git
+    from: 0.6.0
+
+targets:
+  Highlighter:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Sources/Highlighter
+        excludes:
+          - "**/.DS_Store"
+      - path: Sources/Shared
+    resources:
+      - path: Sources/Highlighter/Resources
+        optional: true
+    dependencies:
+      - package: Kingfisher
+      - package: swift-markdown
+        product: Markdown
+      - target: HighlighterShareExtension
+    preBuildScripts:
+      - name: Generate Swift bindings + build Rust static lib
+        basedOnDependencyAnalysis: false
+        script: |
+          bash "${SRCROOT}/../../core/scripts/generate-swift-bindings.sh"
+    entitlements:
+      path: Sources/Highlighter/Highlighter.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.highlighter.app
+    info:
+      path: Sources/Highlighter/Info.plist
+      properties:
+        CFBundleDisplayName: Highlighter
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        LSApplicationQueriesSchemes:
+          - nostrsigner
+          - primal
+          - nostrconnect
+        CFBundleURLTypes:
+          - CFBundleURLName: com.highlighter.nip46
+            CFBundleURLSchemes:
+              - highlighter
+        NSCameraUsageDescription: Highlighter uses the camera to capture passages from physical books for OCR.
+        NSPhotoLibraryUsageDescription: Highlighter uses photos to extract text from page images you've already saved.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.highlighter.app
+        TARGETED_DEVICE_FAMILY: "1"
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/Vendor
+        SWIFT_INCLUDE_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/Vendor
+        "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]":
+          - $(inherited)
+          - $(SRCROOT)/../../core/target/universal-ios-sim/release
+        "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]":
+          - $(inherited)
+          - $(SRCROOT)/../../core/target/aarch64-apple-ios/release
+        "OTHER_LDFLAGS[sdk=iphonesimulator*]":
+          - $(inherited)
+          - $(SRCROOT)/../../core/target/universal-ios-sim/release/libhighlighter_core.a
+        "OTHER_LDFLAGS[sdk=iphoneos*]":
+          - $(inherited)
+          - $(SRCROOT)/../../core/target/aarch64-apple-ios/release/libhighlighter_core.a
+
+  HighlighterShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Sources/ShareExtension
+      - path: Sources/Shared
+    entitlements:
+      path: Sources/ShareExtension/HighlighterShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.highlighter.app
+    info:
+      path: Sources/ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Share to Highlighter
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsWebPageWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.highlighter.app.share
+        TARGETED_DEVICE_FAMILY: "1"

@@ -1,0 +1,56 @@
+import SwiftUI
+
+/// A single highlight rendered as a blockquote: accent-colored left bar, pale
+/// background, serif quote body, source hint underneath.
+struct HighlightQuoteView: View {
+    let highlight: HighlightRecord
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            Rectangle()
+                .fill(Color.highlighterAccent)
+                .frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(highlight.quote)
+                    .font(.system(.body, design: .serif))
+                    .foregroundStyle(Color.highlighterInkStrong)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+
+                if !highlight.note.isEmpty {
+                    Text(highlight.note)
+                        .font(.footnote)
+                        .foregroundStyle(Color.highlighterInkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let source = sourceHint {
+                    Text(source)
+                        .font(.caption)
+                        .foregroundStyle(Color.highlighterAccent)
+                        .lineLimit(1)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Color.highlighterTintPale.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var sourceHint: String? {
+        if !highlight.sourceUrl.isEmpty {
+            return URL(string: highlight.sourceUrl)?.host ?? highlight.sourceUrl
+        }
+        if !highlight.artifactAddress.isEmpty {
+            // NIP-33 address like `30023:<pubkey>:<d>` — keep a short prefix.
+            let parts = highlight.artifactAddress.split(separator: ":")
+            return parts.first.map { "Article · \($0)" }
+        }
+        if !highlight.eventReference.isEmpty {
+            return "Note"
+        }
+        return nil
+    }
+}
