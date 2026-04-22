@@ -18,6 +18,6 @@ export type SearchArticleResult = {
 
 export type SearchResponse = {
   query: string;
-  communities: CommunitySummary[];
+  rooms: CommunitySummary[];
   articles: SearchArticleResult[];
 };

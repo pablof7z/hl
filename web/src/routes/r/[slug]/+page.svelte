@@ -506,9 +506,9 @@
         {/if}
         <UpNextVoting
           items={[]}
-          closesText="Nothing proposed yet."
-          showCast={isMember}
-          onCast={() => (castDialogOpen = true)}
+          closesText="Nothing suggested yet."
+          showSuggest={isMember}
+          onSuggest={() => (castDialogOpen = true)}
         />
         {#if isMember}<CaptureCta />{/if}
       </aside>

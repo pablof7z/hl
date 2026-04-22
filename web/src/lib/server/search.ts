@@ -37,7 +37,7 @@ export async function searchRelayContent(
   if (normalizedQuery.length < MIN_SEARCH_QUERY_LENGTH) {
     return {
       query: normalizedQuery,
-      communities: [],
+      rooms: [],
       articles: []
     };
   }
@@ -63,7 +63,7 @@ export async function searchRelayContent(
     )
   ]);
 
-  const communities = (await buildCommunitySummariesFromMetadataEvents(Array.from(communityEvents ?? [])))
+  const rooms = (await buildCommunitySummariesFromMetadataEvents(Array.from(communityEvents ?? [])))
     .filter((community) => community.visibility === 'public')
     .slice(0, communityLimit);
 

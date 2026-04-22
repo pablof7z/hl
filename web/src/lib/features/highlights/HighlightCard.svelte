@@ -16,7 +16,7 @@
   let {
     highlight,
     artifact = undefined,
-    communities = [],
+    rooms = [],
     showShareControl = false,
     showDiscussAction = false,
     groupId = '',
@@ -24,7 +24,7 @@
   }: {
     highlight: HydratedHighlight;
     artifact?: ArtifactRecord | undefined;
-    communities?: CommunitySummary[];
+    rooms?: CommunitySummary[];
     showShareControl?: boolean;
     showDiscussAction?: boolean;
     groupId?: string;
@@ -49,7 +49,7 @@
   );
   const sharedGroupIds = $derived(new Set(allShares.map((share) => share.groupId)));
   const shareableCommunities = $derived(
-    communities.filter((room) => !sharedGroupIds.has(room.id))
+    rooms.filter((room) => !sharedGroupIds.has(room.id))
   );
   const canShareAgain = $derived(
     Boolean(showShareControl && currentUser && !isReadOnly && selectedGroupId && !sharing)
@@ -283,13 +283,13 @@
     {/if}
   {/if}
 
-  {#if showShareControl && communities.length > 0}
+  {#if showShareControl && rooms.length > 0}
     <div class="share-again">
       <select bind:value={selectedGroupId} disabled={shareableCommunities.length === 0 || sharing}>
         {#if shareableCommunities.length === 0}
           <option value="">Already shared everywhere loaded here</option>
         {:else}
-          {#each shareableRooms as room (room.id)}
+          {#each shareableCommunities as room (room.id)}
             <option value={room.id}>{room.name}</option>
           {/each}
         {/if}

@@ -17,7 +17,6 @@
 
 <section class="search-page">
   <header class="search-header">
-    <div class="search-kicker">— search</div>
     {#if data.results.query.length < MIN_SEARCH_QUERY_LENGTH}
       <h1 class="search-title">Search.</h1>
     {:else}
@@ -108,15 +107,6 @@
     padding-bottom: 32px;
     border-bottom: 1px solid var(--rule);
     margin-bottom: 12px;
-  }
-
-  .search-kicker {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--brand-accent);
-    margin-bottom: 14px;
   }
 
   .search-title {

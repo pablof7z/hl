@@ -6,11 +6,11 @@
 
   let {
     group,
-    communities = [],
+    rooms = [],
     showShareControl = false
   }: {
     group: HighlightSourceGroup;
-    communities?: CommunitySummary[];
+    rooms?: CommunitySummary[];
     showShareControl?: boolean;
   } = $props();
 
@@ -84,7 +84,7 @@
 
   <div class="group-stack">
     {#each group.highlights as highlight (highlight.eventId)}
-      <HighlightCard {highlight} {artifact} {communities} {showShareControl} />
+      <HighlightCard {highlight} {artifact} {rooms} {showShareControl} />
     {/each}
   </div>
 </section>

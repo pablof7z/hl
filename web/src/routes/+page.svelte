@@ -55,7 +55,7 @@
     };
   });
 
-  const communities = $derived(
+  const rooms = $derived(
     currentUser
       ? buildJoinedCommunities(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events])
       : []
@@ -233,7 +233,7 @@
       {:else}
         <div class="feed-groups">
           {#each visibleGroups as group (group.referenceKey)}
-            <HighlightSourceGroup {group} {communities} showShareControl={true} />
+            <HighlightSourceGroup {group} {rooms} showShareControl={true} />
           {/each}
         </div>
         {#if !showAll && feedGroups.length > INITIAL_GROUP_COUNT}
@@ -248,17 +248,17 @@
     </div>
 
     <aside class="feed-rail">
-      {#if communities.length > 0}
+      {#if rooms.length > 0}
         <div class="rail-section">
           <h3 class="rail-heading">Your rooms</h3>
           <ul class="rail-circle-list">
-            {#each communities.slice(0, 6) as community (community.id)}
+            {#each rooms.slice(0, 6) as room (room.id)}
               <li>
                 <a href="/r/{room.id}" class="rail-circle-link">{room.name}</a>
               </li>
             {/each}
           </ul>
-          {#if communities.length > 6}
+          {#if rooms.length > 6}
             <a href="/rooms" class="rail-view-all">View all rooms</a>
           {/if}
         </div>
@@ -279,10 +279,6 @@
 
     <!-- ═══ HERO ═══ -->
     <section class="landing-hero landing-section">
-      <div class="full">
-        <div class="hero-kicker">— rooms by invitation · on the open internet · 2026</div>
-      </div>
-
       <div class="main">
         <h1>Read together, <em><mark>quietly.</mark></em></h1>
       </div>
@@ -315,10 +311,6 @@
 
     <!-- ═══ WHAT IT IS ═══ -->
     <section id="what" class="landing-section">
-      <div class="full">
-        <div class="sec-kicker">— what it is</div>
-      </div>
-
       <div class="main">
         <h2 class="sec-head">A book club that <em><mark>doesn't die in a group chat.</mark></em></h2>
       </div>
@@ -372,10 +364,6 @@
 
     <!-- ═══ HOW IT WORKS (BOOK UI) ═══ -->
     <section class="landing-section">
-      <div class="full">
-        <div class="sec-kicker">— how it works · reading</div>
-      </div>
-
       <div class="main">
         <h2 class="sec-head">The book stays <em>pinned.</em> The margins fill up.</h2>
       </div>
@@ -478,10 +466,6 @@
 
     <!-- ═══ NOT JUST BOOKS ═══ -->
     <section id="media" class="landing-section">
-      <div class="full">
-        <div class="sec-kicker">— for everything you read or listen to</div>
-      </div>
-
       <div class="main">
         <h2 class="sec-head">Not <em><mark>just books.</mark></em></h2>
       </div>

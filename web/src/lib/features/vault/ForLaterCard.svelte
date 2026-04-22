@@ -9,11 +9,11 @@
 
   let {
     item,
-    communities = [],
+    rooms = [],
     onRemoved = undefined
   }: {
     item: ForLaterItem;
-    communities?: CommunitySummary[];
+    rooms?: CommunitySummary[];
     onRemoved?: ((id: string) => void) | undefined;
   } = $props();
 
@@ -30,12 +30,12 @@
   );
   const bookmarkLabel = $derived(`${item.bookmarkTagName} tag`);
   const canShare = $derived(
-    Boolean(currentUser && !isReadOnly && selectedGroupId && !sharing && communities.length > 0)
+    Boolean(currentUser && !isReadOnly && selectedGroupId && !sharing && rooms.length > 0)
   );
 
   $effect(() => {
-    if (!selectedGroupId && communities.length > 0) {
-      selectedGroupId = communities[0].id;
+    if (!selectedGroupId && rooms.length > 0) {
+      selectedGroupId = rooms[0].id;
     }
   });
 
@@ -58,7 +58,7 @@
       });
 
       const roomName =
-        communities.find((c) => c.id === selectedGroupId)?.name ?? selectedGroupId;
+        rooms.find((c) => c.id === selectedGroupId)?.name ?? selectedGroupId;
       statusMessage = result.existing
         ? `${roomName} already has this source.`
         : `Shared into ${roomName}.`;
@@ -127,10 +127,10 @@
       </div>
 
       <div class="card-actions card-actions-share">
-        {#if communities.length > 0}
+        {#if rooms.length > 0}
           <select class="select w-full" bind:value={selectedGroupId} disabled={sharing}>
-            {#each communities as community (community.id)}
-              <option value={community.id}>{community.name}</option>
+            {#each rooms as room (room.id)}
+              <option value={room.id}>{room.name}</option>
             {/each}
           </select>
 

@@ -7,7 +7,7 @@
   type VisibilityFilter = 'all' | 'public' | 'private';
 
   let {
-    communities,
+    rooms,
     joinedGroupIds = [],
     emptyLabel = 'No communities found.',
     emptyCopy = '',
@@ -17,7 +17,7 @@
     defaultSort = 'featured',
     showVisibilityFilter = true
   }: {
-    communities: CommunitySummary[];
+    rooms: CommunitySummary[];
     joinedGroupIds?: string[];
     emptyLabel?: string;
     emptyCopy?: string;
@@ -39,18 +39,18 @@
 
   const joinedSet = $derived(new Set(joinedGroupIds));
   const showAccessControl = $derived(
-    communities.some((community) => community.access === 'open') &&
-      communities.some((community) => community.access === 'closed')
+    rooms.some((community) => community.access === 'open') &&
+      rooms.some((community) => community.access === 'closed')
   );
   const showVisibilityControl = $derived(
     showVisibilityFilter &&
-      communities.some((community) => community.visibility === 'private') &&
-      communities.some((community) => community.visibility === 'public')
+      rooms.some((community) => community.visibility === 'private') &&
+      rooms.some((community) => community.visibility === 'public')
   );
-  const filteredCommunities = $derived.by(() => {
+  const filteredRooms = $derived.by(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    return communities
+    return rooms
       .filter((community) => {
         if (accessFilter !== 'all' && community.access !== accessFilter) {
           return false;
@@ -139,10 +139,10 @@
   </div>
 
   <p class="result-label">
-    Showing {filteredCommunities.length} of {communities.length} circle{communities.length === 1 ? '' : 's'}
+    Showing {filteredRooms.length} of {rooms.length} circle{rooms.length === 1 ? '' : 's'}
   </p>
 
-  {#if filteredCommunities.length === 0}
+  {#if filteredRooms.length === 0}
     <section class="empty-state">
       <p class="empty-label">{emptyLabel}</p>
       {#if emptyCopy}
@@ -154,8 +154,8 @@
     </section>
   {:else}
     <div class="community-grid">
-      {#each filteredCommunities as community (community.id)}
-        <RoomCard community={community} joined={joinedSet.has(community.id)} />
+      {#each filteredRooms as room (room.id)}
+        <RoomCard community={room} joined={joinedSet.has(room.id)} />
       {/each}
     </div>
   {/if}

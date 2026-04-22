@@ -65,7 +65,7 @@
     })
   );
 
-  const communities = $derived.by(() => {
+  const rooms = $derived.by(() => {
     if (!currentUser) return [];
 
     return buildJoinedCommunities(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events]);
@@ -73,8 +73,8 @@
   const canShare = $derived(Boolean(currentUser && selectedGroupId && !publishing && !isReadOnly));
 
   $effect(() => {
-    if (!selectedGroupId && communities.length > 0) {
-      selectedGroupId = communities[0].id;
+    if (!selectedGroupId && rooms.length > 0) {
+      selectedGroupId = rooms[0].id;
     }
   });
 
@@ -156,7 +156,7 @@
     <div class="share-community-body">
       {#if !currentUser}
         <p class="panel-message">Sign in to share this article into one of your communities.</p>
-      {:else if communities.length === 0}
+      {:else if rooms.length === 0}
         <div class="panel-empty">
           <p class="panel-message">No memberships loaded yet. Join or create a community first.</p>
           <div class="panel-empty-actions">

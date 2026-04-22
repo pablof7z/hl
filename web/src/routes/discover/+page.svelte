@@ -14,7 +14,6 @@
 
 <section class="discover-page">
   <header class="discover-header">
-    <div class="page-kicker">— discover</div>
     <h1 class="page-title">Public <em>rooms.</em></h1>
     <p class="page-lead">
       Open reading groups anyone can join — find a room that matches your interests.
@@ -46,15 +45,6 @@
     padding-bottom: 32px;
     border-bottom: 1px solid var(--rule);
     margin-bottom: 44px;
-  }
-
-  .page-kicker {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--brand-accent);
-    margin-bottom: 14px;
   }
 
   .page-title {

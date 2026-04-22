@@ -97,7 +97,7 @@
       closeOnEose: true
     };
   });
-  const communities = $derived(
+  const rooms = $derived(
     currentUser
       ? buildJoinedCommunities(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events])
       : []
@@ -156,7 +156,7 @@
     </div>
     <div class="summary-card">
       <p class="summary-label">Loaded rooms</p>
-      <strong>{communities.length}</strong>
+      <strong>{rooms.length}</strong>
       <span>Available as share-again targets on each card.</span>
     </div>
     <div class="summary-card">
@@ -180,7 +180,7 @@
   {:else}
     <section class="highlight-groups">
       {#each highlightGroups as group (group.referenceKey)}
-        <HighlightSourceGroup {group} {communities} showShareControl={true} />
+        <HighlightSourceGroup {group} {rooms} showShareControl={true} />
       {/each}
     </section>
   {/if}

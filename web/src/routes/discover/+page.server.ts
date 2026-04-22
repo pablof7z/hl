@@ -7,6 +7,6 @@ export const load: PageServerLoad = async ({ setHeaders }) => {
   });
 
   return {
-    communities: await fetchCommunities({ limit: 64, visibility: 'public' })
+    rooms: await fetchCommunities({ limit: 64, visibility: 'public' })
   };
 };

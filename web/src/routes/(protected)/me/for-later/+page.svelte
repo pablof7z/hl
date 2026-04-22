@@ -44,7 +44,7 @@
     };
   });
 
-  const communities = $derived(
+  const rooms = $derived(
     currentUser
       ? buildJoinedCommunities(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events])
       : []
@@ -126,7 +126,7 @@
 
   <SaveForLaterForm onSaved={upsertItem} />
 
-  {#if communities.length === 0}
+  {#if rooms.length === 0}
     <div class="community-note">
       <p>Join or create a room to move saved items out of this queue.</p>
       <div class="community-actions">
@@ -150,7 +150,7 @@
   {:else}
     <section class="for-later-list">
       {#each items as item (item.bookmarkKey)}
-        <ForLaterCard {item} {communities} onRemoved={removeItem} />
+        <ForLaterCard {item} {rooms} onRemoved={removeItem} />
       {/each}
     </section>
   {/if}

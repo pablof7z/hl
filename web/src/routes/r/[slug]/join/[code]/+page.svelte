@@ -133,7 +133,6 @@
       {/if}
 
       <div class="card-body">
-        <div class="kicker">— an invitation</div>
         <h1 class="room-name">{room.name}</h1>
 
         {#if inviterPubkey}
@@ -232,14 +231,6 @@
     display: grid;
     gap: 1rem;
     padding: 1.75rem 1.75rem 2rem;
-  }
-
-  .kicker {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--muted);
   }
 
   .room-name {

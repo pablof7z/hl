@@ -8,18 +8,18 @@
 
   let {
     items,
-    closesText = 'Voting closes Sunday, 9pm.',
-    castHref = '#',
+    closesText = 'Voting ends Sunday, 9pm.',
+    suggestHref = '#',
     seeAllHref = '#',
-    showCast = false,
-    onCast
+    showSuggest = false,
+    onSuggest
   }: {
     items: VoteItem[];
     closesText?: string;
-    castHref?: string;
+    suggestHref?: string;
     seeAllHref?: string;
-    showCast?: boolean;
-    onCast?: () => void;
+    showSuggest?: boolean;
+    onSuggest?: () => void;
   } = $props();
 
   const MAX_DOTS = 5;
@@ -27,8 +27,8 @@
 
 <div class="sb-card">
   <div class="sb-head">
-    <span>Up next · voting</span>
-    <a href={seeAllHref} class="sb-link">see all →</a>
+    <span>Up next</span>
+    <a href={seeAllHref} class="sb-link">See all →</a>
   </div>
 
   {#each items as item, i (item.id)}
@@ -49,11 +49,11 @@
 
   <div class="vote-close">
     <span>{closesText}</span>
-    {#if showCast}
-      {#if onCast}
-        <button type="button" class="cast-btn" onclick={onCast}>cast yours →</button>
+    {#if showSuggest}
+      {#if onSuggest}
+        <button type="button" class="suggest-btn" onclick={onSuggest}>Suggest one →</button>
       {:else}
-        <a href={castHref}>cast yours →</a>
+        <a href={suggestHref}>Suggest one →</a>
       {/if}
     {/if}
   </div>
@@ -173,7 +173,7 @@
   }
 
   .vote-close a,
-  .vote-close .cast-btn {
+  .vote-close .suggest-btn {
     color: var(--brand-accent);
     font-size: 12px;
     font-weight: 500;
@@ -186,7 +186,7 @@
   }
 
   .vote-close a:hover,
-  .vote-close .cast-btn:hover {
+  .vote-close .suggest-btn:hover {
     text-decoration: underline;
   }
 </style>
