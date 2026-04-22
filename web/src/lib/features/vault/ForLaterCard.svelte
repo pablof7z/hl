@@ -58,7 +58,7 @@
       });
 
       const roomName =
-        rooms.find((room) => room.id === selectedGroupId)?.name ?? selectedGroupId;
+        communities.find((c) => c.id === selectedGroupId)?.name ?? selectedGroupId;
       statusMessage = result.existing
         ? `${roomName} already has this source.`
         : `Shared into ${roomName}.`;
@@ -129,8 +129,8 @@
       <div class="card-actions card-actions-share">
         {#if communities.length > 0}
           <select class="select w-full" bind:value={selectedGroupId} disabled={sharing}>
-            {#each rooms as room (room.id)}
-              <option value={room.id}>{room.name}</option>
+            {#each communities as community (community.id)}
+              <option value={community.id}>{community.name}</option>
             {/each}
           </select>
 
