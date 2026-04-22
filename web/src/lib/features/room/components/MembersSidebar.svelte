@@ -10,17 +10,19 @@
 
   let {
     members,
-    inviteHref = '#'
+    inviteHref = '#',
+    showInvite = false
   }: {
     members: Member[];
     inviteHref?: string;
+    showInvite?: boolean;
   } = $props();
 </script>
 
 <div class="sb-card">
   <div class="sb-head">
     <span>Members · {members.length}</span>
-    <a href={inviteHref} class="sb-link">invite another →</a>
+    {#if showInvite}<a href={inviteHref} class="sb-link">invite another →</a>{/if}
   </div>
 
   {#each members as m (m.pubkey)}

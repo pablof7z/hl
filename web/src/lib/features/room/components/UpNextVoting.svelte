@@ -10,12 +10,14 @@
     items,
     closesText = 'Voting closes Sunday, 9pm.',
     castHref = '#',
-    seeAllHref = '#'
+    seeAllHref = '#',
+    showCast = false
   }: {
     items: VoteItem[];
     closesText?: string;
     castHref?: string;
     seeAllHref?: string;
+    showCast?: boolean;
   } = $props();
 
   const MAX_DOTS = 5;
@@ -45,7 +47,7 @@
 
   <div class="vote-close">
     <span>{closesText}</span>
-    <a href={castHref}>cast yours →</a>
+    {#if showCast}<a href={castHref}>cast yours →</a>{/if}
   </div>
 </div>
 

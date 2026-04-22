@@ -29,6 +29,10 @@
   const roomTitle = $derived(data.room?.name ?? data.room?.id ?? '');
   const members = $derived<RoomMember[]>(data.room?.members ?? []);
   const slug = $derived(data.room?.id);
+  const currentUser = $derived(ndk.$currentUser);
+  const isMember = $derived(
+    !!currentUser && members.some((m) => m.pubkey === currentUser.pubkey)
+  );
 
   // Client-side subscriptions for NIP-29 room content, scoped by `#h` tag.
   // SSR currently ships only metadata + members; this hydrates the shelf,
@@ -353,10 +357,10 @@
 
     <aside class="sidebar">
       {#if members.length > 0}
-        <MembersSidebar members={members.map((m) => ({ pubkey: m.pubkey, colorIndex: m.colorIndex }))} />
+        <MembersSidebar members={members.map((m) => ({ pubkey: m.pubkey, colorIndex: m.colorIndex }))} showInvite={isMember} />
       {/if}
-      <UpNextVoting items={[]} closesText="Nothing proposed yet." />
-      <CaptureCta />
+      <UpNextVoting items={[]} closesText="Nothing proposed yet." showCast={isMember} />
+      {#if isMember}<CaptureCta />{/if}
     </aside>
   </div>
 {/if}
