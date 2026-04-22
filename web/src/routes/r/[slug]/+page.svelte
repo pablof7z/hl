@@ -446,27 +446,22 @@
         </Tabs.Content>
 
         <Tabs.Content value="discussions">
-          <Block id="discussions" title="Every discussion." accent="discussion.">
-            {#if isMember}
-              <button
-                type="button"
-                class="disc-new"
-                onclick={() => (discussionDialogOpen = true)}
-              >
-                <span class="disc-new-mark" aria-hidden="true">＋</span>
-                <span class="disc-new-copy">
-                  <span class="disc-new-title">Start a discussion</span>
-                  <span class="disc-new-sub">Propose a read, unpack an idea, ask the room a question.</span>
-                </span>
-                <span class="disc-new-arrow" aria-hidden="true">→</span>
-              </button>
-            {/if}
+          <Block id="discussions" title="Discussions">
+            {#snippet filters()}
+              {#if isMember}
+                <div class="disc-toolbar">
+                  <a class="btn btn-primary btn-sm" href="/r/{slug}/discussions/new">
+                    New discussion
+                  </a>
+                </div>
+              {/if}
+            {/snippet}
 
             {#if discussionRows.length === 0}
               <div class="empty-card">
                 <p>
                   {#if isMember}
-                    No discussions yet. Be the first to start one.
+                    No discussions yet.
                   {:else}
                     No discussions yet. Join the room to start one.
                   {/if}
@@ -517,7 +512,6 @@
 
   {#if slug}
     <ArtifactForm groupId={slug} bind:open={castDialogOpen} />
-    <DiscussionComposer groupId={slug} bind:open={discussionDialogOpen} />
   {/if}
 {/if}
 
@@ -675,73 +669,10 @@
     gap: 14px;
   }
 
-  .disc-new {
-    width: 100%;
+  .disc-toolbar {
     display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 18px 22px;
-    margin-bottom: 18px;
-    background: var(--surface);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    cursor: pointer;
-    text-align: left;
-    color: inherit;
-    font-family: inherit;
-    transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
-  }
-
-  .disc-new:hover {
-    border-color: var(--brand-accent);
-    background: color-mix(in srgb, var(--brand-accent) 5%, var(--surface));
-  }
-
-  .disc-new:hover .disc-new-arrow {
-    transform: translateX(3px);
-    color: var(--brand-accent);
-  }
-
-  .disc-new-mark {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--brand-accent);
-    color: #fff;
-    font-size: 20px;
-    font-weight: 400;
-    flex-shrink: 0;
-  }
-
-  .disc-new-copy {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    gap: 2px;
-  }
-
-  .disc-new-title {
-    font-family: var(--font-sans);
-    font-weight: 600;
-    font-size: 14.5px;
-    color: var(--ink);
-  }
-
-  .disc-new-sub {
-    font-family: var(--font-sans);
-    font-style: italic;
-    font-size: 12.5px;
-    color: var(--ink-fade);
-  }
-
-  .disc-new-arrow {
+    justify-content: flex-end;
     margin-left: auto;
-    color: var(--ink-fade);
-    font-size: 15px;
-    transition: transform 150ms ease, color 150ms ease;
   }
 
   .disc-list {
@@ -749,6 +680,11 @@
     border: 1px solid var(--rule);
     border-radius: var(--radius);
     overflow: hidden;
+    margin-top: 16px;
+  }
+
+  .disc-composer-wrap {
+    margin-top: 16px;
   }
 
   .empty-card {

@@ -130,7 +130,7 @@
   });
 </script>
 
-<div class="pinned">
+<div class="overflow-hidden rounded border border-base-300 bg-base-100 shadow-[0_18px_40px_-22px_rgba(21,19,15,0.12)]">
   <PinnedHeader
     {title}
     {subtitle}
@@ -147,33 +147,42 @@
     {readersNote}
   />
 
-  <div class="pin-tabs" role="tablist" aria-label="Pinned artifact sections">
+  <div
+    class="flex gap-1 overflow-x-auto border-b border-base-300 px-8 max-md:px-5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    role="tablist"
+    aria-label="Pinned artifact sections"
+  >
     {#each PINNED_TABS as tab (tab)}
+      {@const isActive = activeTab === tab}
       <button
         type="button"
         id={`pin-tab-${tab.toLowerCase()}`}
-        class="pin-tab"
-        class:active={activeTab === tab}
+        class="flex cursor-pointer items-center gap-2 whitespace-nowrap border-0 border-b-2 border-transparent bg-transparent px-5 pb-3 pt-3.5 text-[13px] font-medium text-base-content/60 transition-colors hover:text-base-content focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-primary"
+        class:!border-primary={isActive}
+        class:!text-base-content={isActive}
         role="tab"
-        aria-selected={activeTab === tab}
+        aria-selected={isActive}
         aria-controls={`pin-panel-${tab.toLowerCase()}`}
-        tabindex={activeTab === tab ? 0 : -1}
+        tabindex={isActive ? 0 : -1}
         onclick={() => (activeTab = tab)}
         onkeydown={handleTabKeydown}
       >
         {tab}
-        <span class="count">{countFor[tab]}</span>
+        <span
+          class="rounded-full bg-base-200 px-1.5 py-px font-mono text-[11px] text-base-content/60"
+          class:!bg-accent={isActive}
+          class:!text-base-content={isActive}
+        >{countFor[tab]}</span>
       </button>
     {/each}
   </div>
 
   <div
     id="pin-panel-discussions"
-    class="pin-panel"
-    class:active={activeTab === 'Discussions'}
     role="tabpanel"
     aria-labelledby="pin-tab-discussions"
     hidden={activeTab !== 'Discussions'}
+    class:hidden={activeTab !== 'Discussions'}
   >
     <DiscussionsTab
       {passageLabel}
@@ -187,11 +196,10 @@
 
   <div
     id="pin-panel-highlights"
-    class="pin-panel"
-    class:active={activeTab === 'Highlights'}
     role="tabpanel"
     aria-labelledby="pin-tab-highlights"
     hidden={activeTab !== 'Highlights'}
+    class:hidden={activeTab !== 'Highlights'}
   >
     <HighlightsTab
       {highlights}
@@ -202,105 +210,21 @@
 
   <div
     id="pin-panel-notes"
-    class="pin-panel"
-    class:active={activeTab === 'Notes'}
     role="tabpanel"
     aria-labelledby="pin-tab-notes"
     hidden={activeTab !== 'Notes'}
+    class:hidden={activeTab !== 'Notes'}
   >
     <NotesTab {notes} />
   </div>
 
   <div
     id="pin-panel-members"
-    class="pin-panel"
-    class:active={activeTab === 'Members'}
     role="tabpanel"
     aria-labelledby="pin-tab-members"
     hidden={activeTab !== 'Members'}
+    class:hidden={activeTab !== 'Members'}
   >
     <MembersTable members={membersTableRows} />
   </div>
 </div>
-
-<style>
-  .pinned {
-    background: var(--surface);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    box-shadow: 0 18px 40px -22px rgba(21, 19, 15, 0.12);
-    overflow: hidden;
-  }
-
-  .pin-tabs {
-    display: flex;
-    border-bottom: 1px solid var(--rule);
-    padding: 0 32px;
-    gap: 4px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .pin-tabs::-webkit-scrollbar {
-    display: none;
-  }
-
-  @media (max-width: 760px) {
-    .pin-tabs {
-      padding: 0 20px;
-    }
-  }
-
-  .pin-tab {
-    padding: 14px 20px 12px;
-    font-size: 13px;
-    font-family: var(--font-sans);
-    font-weight: 500;
-    color: var(--ink-fade);
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: color 150ms ease;
-  }
-
-  .pin-tab.active {
-    color: var(--ink);
-    border-bottom-color: var(--brand-accent);
-  }
-
-  .pin-tab:hover {
-    color: var(--ink);
-  }
-
-  .pin-tab:focus-visible {
-    outline: 2px solid var(--brand-accent);
-    outline-offset: -2px;
-  }
-
-  .count {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--ink-fade);
-    background: var(--surface-muted);
-    padding: 1px 6px;
-    border-radius: 999px;
-  }
-
-  .pin-tab.active .count {
-    background: var(--marker);
-    color: var(--ink);
-  }
-
-  .pin-panel {
-    display: none;
-  }
-
-  .pin-panel.active {
-    display: block;
-  }
-</style>

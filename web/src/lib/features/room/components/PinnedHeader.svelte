@@ -45,11 +45,11 @@
   } = $props();
 </script>
 
-<div class="pinned-top">
-  <div class="cover-slot">
+<div class="grid grid-cols-[140px_1fr_auto] items-start gap-7 border-b border-base-300 px-8 pb-6 pt-7 max-md:grid-cols-[100px_1fr] max-md:gap-5 max-md:p-5">
+  <div class="w-[140px] max-md:w-[100px]">
     {#if image}
-      <div class="cover-image">
-        <img src={image} alt={coverTitle} />
+      <div class="aspect-[2/3] w-full overflow-hidden rounded shadow-[3px_3px_14px_rgba(0,0,0,0.18)]">
+        <img class="size-full object-cover" src={image} alt={coverTitle} />
       </div>
     {:else}
       <BookCoverLg
@@ -61,20 +61,22 @@
     {/if}
   </div>
 
-  <div class="pin-meta">
-    <h3>{title}</h3>
-    {#if subtitle}<div class="subt">{subtitle}</div>{/if}
+  <div>
+    <h3 class="m-0 mb-1 text-[26px] font-semibold leading-tight tracking-tight text-base-content">{title}</h3>
+    {#if subtitle}
+      <div class="mb-4 text-sm italic text-base-content/60">{subtitle}</div>
+    {/if}
 
     {#if stats && stats.length}
-      <div class="pin-stats">
+      <div class="flex flex-wrap gap-5 text-[13px] text-base-content/60">
         {#each stats as stat (stat.label)}
-          <span><b>{stat.value}</b> {stat.label}</span>
+          <span><b class="text-sm font-semibold text-base-content">{stat.value}</b> {stat.label}</span>
         {/each}
       </div>
     {/if}
 
     {#if readers && readers.length}
-      <div class="pin-readers">
+      <div class="mt-4 flex items-center gap-1.5 text-xs text-base-content/60 [&_.room-member-avatar]:shadow-[0_0_0_1px_white]">
         {#each readers as reader (reader.pubkey)}
           <User.Root {ndk} pubkey={reader.pubkey}>
             <span
@@ -87,152 +89,15 @@
             </span>
           </User.Root>
         {/each}
-        {#if readersNote}<span class="note">{readersNote}</span>{/if}
+        {#if readersNote}
+          <span class="ml-2 text-[12.5px] italic text-base-content/60">{readersNote}</span>
+        {/if}
       </div>
     {/if}
   </div>
 
-  <div class="pin-actions">
-    <a href={openHref} class="pin-action">Open artifact</a>
-    <a href={continueHref} class="pin-action filled">{continueLabel}</a>
+  <div class="flex items-start gap-2.5 max-md:col-span-full max-md:justify-self-start">
+    <a class="btn btn-sm btn-outline rounded-none whitespace-nowrap text-xs font-medium" href={openHref}>Open artifact</a>
+    <a class="btn btn-sm btn-neutral rounded-none whitespace-nowrap text-xs font-medium" href={continueHref}>{continueLabel}</a>
   </div>
 </div>
-
-<style>
-  .pinned-top {
-    display: grid;
-    grid-template-columns: 140px 1fr auto;
-    gap: 28px;
-    padding: 28px 32px 24px;
-    align-items: start;
-    border-bottom: 1px solid var(--rule);
-  }
-
-  @media (max-width: 760px) {
-    .pinned-top {
-      grid-template-columns: 100px 1fr;
-      gap: 20px;
-      padding: 20px;
-    }
-    .pin-actions {
-      grid-column: 1 / -1;
-      justify-self: start;
-    }
-  }
-
-  .cover-slot {
-    width: 140px;
-  }
-
-  @media (max-width: 760px) {
-    .cover-slot {
-      width: 100px;
-    }
-  }
-
-  .cover-image {
-    width: 100%;
-    aspect-ratio: 2 / 3;
-    border-radius: 4px;
-    overflow: hidden;
-    box-shadow: 3px 3px 14px rgba(0, 0, 0, 0.18);
-  }
-
-  .cover-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .pin-meta h3 {
-    font-family: var(--font-sans);
-    font-weight: 600;
-    font-size: 26px;
-    line-height: 1.15;
-    margin: 0 0 4px;
-    color: var(--ink);
-    letter-spacing: -0.01em;
-  }
-
-  .subt {
-    font-family: var(--font-sans);
-    font-style: italic;
-    font-weight: 400;
-    font-size: 14px;
-    color: var(--ink-fade);
-    margin-bottom: 18px;
-  }
-
-  .pin-stats {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-    font-family: var(--font-sans);
-    font-size: 13px;
-    color: var(--ink-fade);
-  }
-
-  .pin-stats b {
-    color: var(--ink);
-    font-weight: 600;
-    font-size: 14px;
-  }
-
-  .pin-readers {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 16px;
-    font-size: 12px;
-    color: var(--ink-fade);
-  }
-
-  .pin-readers :global(.room-member-avatar) {
-    box-shadow: 0 0 0 1px var(--surface);
-  }
-
-  .note {
-    font-family: var(--font-sans);
-    font-size: 12.5px;
-    color: var(--ink-fade);
-    margin-left: 8px;
-    font-style: italic;
-  }
-
-  .pin-actions {
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-  }
-
-  .pin-action {
-    padding: 8px 14px;
-    border: 1px solid var(--rule);
-    background: var(--surface);
-    color: var(--ink-soft);
-    font-size: 12px;
-    letter-spacing: 0.01em;
-    font-family: var(--font-sans);
-    text-decoration: none;
-    font-weight: 500;
-    transition: all var(--transition);
-    white-space: nowrap;
-  }
-
-  .pin-action:hover {
-    border-color: var(--brand-accent);
-    color: var(--brand-accent);
-  }
-
-  .pin-action.filled {
-    background: var(--ink);
-    color: var(--surface);
-    border-color: var(--ink);
-  }
-
-  .pin-action.filled:hover {
-    background: var(--brand-accent);
-    border-color: var(--brand-accent);
-    color: var(--surface);
-  }
-</style>
