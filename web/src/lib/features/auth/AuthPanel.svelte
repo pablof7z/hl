@@ -1,5 +1,4 @@
 <script lang="ts">
-  import './auth.css';
   import { goto } from '$app/navigation';
   import { NDKKind, type NDKUserProfile } from '@nostr-dev-kit/ndk';
   import { ndk } from '$lib/ndk/client';
@@ -14,7 +13,6 @@
   const currentUser = $derived(ndk.$currentUser);
   const currentProfile = $derived(resolvedProfile ?? currentUser?.profile ?? undefined);
   const isReadOnly = $derived(Boolean(ndk.$sessions?.isReadOnly()));
-  // Show setup prompt when user is logged in (not read-only) and has no kind:0 profile basics
   const shouldFinishOnboarding = $derived(
     Boolean(currentUser && !isReadOnly && !profileHasBasics(currentProfile))
   );

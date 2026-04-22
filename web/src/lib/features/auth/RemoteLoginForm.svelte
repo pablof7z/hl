@@ -22,50 +22,58 @@
   }: Props = $props();
 </script>
 
-<div class="auth-form">
-  <p class="auth-form-hint">
+<div class="grid gap-3.5">
+  <p class="m-0 text-sm leading-relaxed text-base-content/60">
     Pair with another app. Show a QR code to approve this session, or paste a connection link.
   </p>
 
   {#if remoteSignerReady}
-    <div class="auth-qr-shell">
-      <a class="auth-qr-button" href={nostrConnectUri} title="Open in app">
-        <img class="auth-qr-image" src={qrCodeDataUrl} alt="Connection QR code" />
+    <div class="grid justify-items-center gap-3.5 rounded-2xl border border-base-300 bg-base-200 p-4">
+      <a
+        class="inline-flex rounded-2xl border border-base-300 bg-white p-3.5 transition-all hover:border-base-content hover:shadow-lg active:scale-[0.98]"
+        href={nostrConnectUri}
+        title="Open in app"
+      >
+        <img class="block h-auto w-[min(100%,15rem)] rounded-md" src={qrCodeDataUrl} alt="Connection QR code" />
       </a>
-      <div class="badge badge-info auth-qr-status">Waiting for approval</div>
-      <p class="caption auth-qr-caption">
+      <div class="badge badge-info justify-self-center">Waiting for approval</div>
+      <p class="m-0 text-center text-sm text-base-content/60">
         Open the QR in another app on this device, or scan it from another one.
       </p>
     </div>
   {:else}
-    <div class="auth-form-group">
+    <div class="grid gap-2">
       <button
-        class="auth-form-btn-primary"
+        class="btn btn-primary w-full"
         type="button"
         onclick={() => void onStartRemoteSigner?.()}
         disabled={preparingRemoteSigner || connectingBunker}
       >
         {preparingRemoteSigner ? 'Preparing QR...' : 'Show QR code'}
       </button>
-      <p class="auth-form-hint auth-form-hint-center">
+      <p class="m-0 text-center text-sm leading-relaxed text-base-content/60">
         This starts a one-time pairing request and waits for approval.
       </p>
     </div>
   {/if}
 
-  <div class="auth-form-divider"><span>or paste a link</span></div>
+  <div class="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-base-content/60">
+    <span class="h-px flex-1 bg-base-300"></span>
+    <span>or paste a link</span>
+    <span class="h-px flex-1 bg-base-300"></span>
+  </div>
 
-  <label class="auth-form-field">
-    <span class="auth-form-label">Connection link</span>
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Connection link</legend>
     <input
-      class="auth-form-input"
+      class="input w-full"
       bind:value={bunkerUri}
       placeholder="bunker://…"
     />
-  </label>
+  </fieldset>
 
   <button
-    class="auth-form-btn-primary"
+    class="btn btn-primary w-full"
     type="button"
     onclick={() => void onLoginWithBunker?.()}
     disabled={connectingBunker || !bunkerUri.trim().startsWith('bunker://')}
@@ -73,97 +81,3 @@
     {connectingBunker ? 'Connecting...' : 'Continue with link'}
   </button>
 </div>
-
-<style>
-  .auth-form {
-    display: grid;
-    gap: 0.85rem;
-  }
-
-  .auth-form-hint {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.88rem;
-    line-height: 1.5;
-  }
-
-  .auth-form-hint-center {
-    text-align: center;
-  }
-
-  .auth-form-group {
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  .auth-form-field {
-    display: grid;
-    gap: 0.4rem;
-  }
-
-  .auth-form-label {
-    color: var(--muted);
-    font-size: 0.82rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  .auth-form-input {
-    width: 100%;
-    padding: 0.6rem 0.75rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: var(--radius-md);
-    background: var(--surface-soft);
-    color: var(--text-strong);
-    font-size: 0.92rem;
-    transition: border-color 160ms ease;
-    box-sizing: border-box;
-  }
-
-  .auth-form-input:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-
-  .auth-form-btn-primary {
-    width: 100%;
-    padding: 0.72rem 1.25rem;
-    border: none;
-    border-radius: var(--radius-md);
-    background: var(--accent);
-    color: #ffffff;
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 140ms ease, opacity 140ms ease;
-  }
-
-  .auth-form-btn-primary:hover:not(:disabled) {
-    background: var(--accent-hover);
-  }
-
-  .auth-form-btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .auth-form-divider {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    color: var(--muted);
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .auth-form-divider::before,
-  .auth-form-divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--color-base-300);
-  }
-</style>

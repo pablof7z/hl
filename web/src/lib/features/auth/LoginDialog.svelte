@@ -157,20 +157,23 @@
   });
 </script>
 
-<div class="auth-panel">
+<div class="grid justify-items-end gap-3">
   <Dialog.Root bind:open>
     {#if showTrigger}
-      <div class="auth-guest-actions">
+      <div class="flex flex-nowrap justify-end gap-2 sm:gap-3">
         <button class="btn btn-ghost" type="button" onclick={startJoin}>Join</button>
         <Dialog.Trigger class="btn btn-primary">Log in</Dialog.Trigger>
       </div>
     {/if}
 
-    <Dialog.Content class="auth-dialog">
-      <div class="auth-dialog-chrome">
-        <div class="auth-dialog-handle" aria-hidden="true"></div>
+    <Dialog.Content>
+      <div class="grid grid-cols-[1fr_auto] items-start gap-4 px-5 pt-5 max-md:pt-4">
+        <div
+          class="hidden max-md:col-span-full max-md:block max-md:h-1 max-md:w-12 max-md:justify-self-center max-md:rounded-full max-md:bg-base-300"
+          aria-hidden="true"
+        ></div>
 
-        <Dialog.Header class="auth-dialog-header">
+        <Dialog.Header class="pt-0.5">
           <Dialog.Title>Log in</Dialog.Title>
           <Dialog.Description>
             Choose how you want to log in. Your session stays on this device.
@@ -184,7 +187,7 @@
         </Dialog.Close>
       </div>
 
-      <div class="auth-dialog-body">
+      <div class="grid gap-4 px-5 pb-5 pt-4">
         <Tabs.Root bind:value={mode}>
           <Tabs.List>
             <Tabs.Trigger value="extension">Extension</Tabs.Trigger>
@@ -223,7 +226,7 @@
         </Tabs.Root>
 
         {#if error}
-          <p class="auth-error">{error}</p>
+          <p class="m-0 text-sm text-error">{error}</p>
         {/if}
       </div>
     </Dialog.Content>

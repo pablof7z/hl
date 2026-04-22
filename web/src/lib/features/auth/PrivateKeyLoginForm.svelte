@@ -8,17 +8,18 @@
   let { pending, secretKey = $bindable(''), onLogin }: Props = $props();
 </script>
 
-<div class="auth-form">
-  <label class="auth-form-field">
-    <span class="auth-form-label">Secret key</span>
+<div class="grid gap-3.5">
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Secret key</legend>
     <textarea
-      class="auth-form-textarea"
+      class="textarea w-full font-mono text-sm"
+      rows="3"
       bind:value={secretKey}
       placeholder="Paste your secret key (nsec… or hex)"
     ></textarea>
-  </label>
+  </fieldset>
   <button
-    class="auth-form-btn-primary"
+    class="btn btn-primary w-full"
     type="button"
     onclick={() => void onLogin?.()}
     disabled={pending || !secretKey.trim()}
@@ -26,66 +27,3 @@
     {pending ? 'Signing in...' : 'Continue with key'}
   </button>
 </div>
-
-<style>
-  .auth-form {
-    display: grid;
-    gap: 0.85rem;
-  }
-
-  .auth-form-field {
-    display: grid;
-    gap: 0.4rem;
-  }
-
-  .auth-form-label {
-    color: var(--muted);
-    font-size: 0.82rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  .auth-form-textarea {
-    width: 100%;
-    min-height: 5.5rem;
-    padding: 0.6rem 0.75rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: var(--radius-md);
-    background: var(--surface-soft);
-    color: var(--text-strong);
-    font-family: var(--font-mono);
-    font-size: 0.82rem;
-    line-height: 1.5;
-    resize: vertical;
-    transition: border-color 160ms ease;
-    box-sizing: border-box;
-  }
-
-  .auth-form-textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-
-  .auth-form-btn-primary {
-    width: 100%;
-    padding: 0.72rem 1.25rem;
-    border: none;
-    border-radius: var(--radius-md);
-    background: var(--accent);
-    color: #ffffff;
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 140ms ease, opacity 140ms ease;
-  }
-
-  .auth-form-btn-primary:hover:not(:disabled) {
-    background: var(--accent-hover);
-  }
-
-  .auth-form-btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-</style>
