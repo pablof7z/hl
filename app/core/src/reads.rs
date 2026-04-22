@@ -79,10 +79,9 @@ pub fn query_following_reads(
 
     // -- Stream A: articles authored by follows. ------------------------------
     let follow_bytes: Vec<[u8; 32]> = follows_pks.iter().map(|pk| pk.to_bytes()).collect();
-    let follow_byte_refs: Vec<&[u8; 32]> = follow_bytes.iter().collect();
     let articles_filter = NdbFilter::new()
         .kinds([KIND_LONG_FORM as u64])
-        .authors(follow_byte_refs.iter().copied())
+        .authors(follow_bytes.iter())
         .build();
 
     let article_results = ndb
@@ -107,7 +106,7 @@ pub fn query_following_reads(
     // follows-authored events are a small slice of the cache.
     let interactions_filter = NdbFilter::new()
         .kinds(INTERACTION_KINDS.iter().map(|k| *k as u64))
-        .authors(follow_byte_refs.iter().copied())
+        .authors(follow_bytes.iter())
         .build();
     let interaction_results = ndb
         .query(&txn, &[interactions_filter], per_stream_cap)

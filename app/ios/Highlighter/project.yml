@@ -72,6 +72,11 @@ targets:
               - highlighter
         NSCameraUsageDescription: Highlighter uses the camera to capture passages from physical books for OCR.
         NSPhotoLibraryUsageDescription: Highlighter uses photos to extract text from page images you've already saved.
+        # AVFoundation podcast playback: many podcast feeds still serve audio
+        # via plain HTTP. Scope the ATS exception to AVFoundation media loads
+        # only — the rest of the app still requires HTTPS.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsForMedia: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.highlighter.app
