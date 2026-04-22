@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { CommunitySummary } from '$lib/ndk/groups';
+  import type { RoomSummary } from '$lib/ndk/groups';
 
   let {
     room,
     joined = false,
     showRoute = true
   }: {
-    community: CommunitySummary;
+    room: RoomSummary;
     joined?: boolean;
     showRoute?: boolean;
   } = $props();
@@ -22,34 +22,34 @@
   }
 </script>
 
-<article class="community-card">
-  <a class="community-card-link" href={`/r/${room.id}`} aria-label={room.name}>
-    <div class="community-card-media">
-      {#if community.picture}
-        <img src={community.picture} alt="" loading="lazy" />
+<article class="room-card">
+  <a class="room-card-link" href={`/r/${room.id}`} aria-label={room.name}>
+    <div class="room-card-media">
+      {#if room.picture}
+        <img src={room.picture} alt="" loading="lazy" />
       {:else}
-        <span>{initialFor(community.name)}</span>
+        <span>{initialFor(room.name)}</span>
       {/if}
     </div>
 
-    <div class="community-card-body">
-      <div class="community-card-topline">
-        <p class="community-card-title">{room.name}</p>
-        <div class="community-badges">
+    <div class="room-card-body">
+      <div class="room-card-topline">
+        <p class="room-card-title">{room.name}</p>
+        <div class="room-badges">
           {#if joined}
             <span class="joined-badge">Joined</span>
           {/if}
-          <span>{community.visibility}</span>
-          <span>{community.access}</span>
+          <span>{room.visibility}</span>
+          <span>{room.access}</span>
         </div>
       </div>
 
-      <p class="community-card-about">
-        {community.about || 'No description yet. This group is live on the relay and ready for sources, highlights, and discussion.'}
+      <p class="room-card-about">
+        {room.about || 'No description yet. This group is live on the relay and ready for sources, highlights, and discussion.'}
       </p>
 
-      <div class="community-card-meta">
-        <span>{memberLabel(community.memberCount)}</span>
+      <div class="room-card-meta">
+        <span>{memberLabel(room.memberCount)}</span>
         {#if showRoute}
           <span>/r/{room.id}</span>
         {/if}
@@ -59,21 +59,21 @@
 </article>
 
 <style>
-  .community-card {
+  .room-card {
     border: 1px solid var(--color-base-300);
     border-radius: 1.4rem;
     background: var(--surface);
     transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
   }
 
-  .community-card:hover,
-  .community-card:focus-within {
+  .room-card:hover,
+  .room-card:focus-within {
     border-color: color-mix(in srgb, var(--accent) 30%, transparent);
     transform: translateY(-1px);
     box-shadow: 0 16px 40px rgba(17, 17, 17, 0.06);
   }
 
-  .community-card-link {
+  .room-card-link {
     display: grid;
     grid-template-columns: auto 1fr;
     gap: 1rem;
@@ -83,7 +83,7 @@
     text-decoration: none;
   }
 
-  .community-card-media {
+  .room-card-media {
     display: grid;
     place-items: center;
     width: 3.25rem;
@@ -96,26 +96,26 @@
     font-weight: 700;
   }
 
-  .community-card-media img {
+  .room-card-media img {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
 
-  .community-card-body {
+  .room-card-body {
     display: grid;
     gap: 0.7rem;
     min-width: 0;
   }
 
-  .community-card-topline {
+  .room-card-topline {
     display: flex;
     justify-content: space-between;
     align-items: start;
     gap: 0.75rem;
   }
 
-  .community-card-title {
+  .room-card-title {
     margin: 0;
     color: var(--text-strong);
     font-size: 1rem;
@@ -123,15 +123,15 @@
     line-height: 1.3;
   }
 
-  .community-badges {
+  .room-badges {
     display: flex;
     gap: 0.35rem;
     flex-wrap: wrap;
     justify-content: end;
   }
 
-  .community-badges span,
-  .community-card-meta span {
+  .room-badges span,
+  .room-card-meta span {
     display: inline-flex;
     align-items: center;
     min-height: 1.75rem;
@@ -143,19 +143,19 @@
     font-weight: 600;
   }
 
-  .community-badges .joined-badge {
+  .room-badges .joined-badge {
     background: color-mix(in srgb, var(--accent) 12%, transparent);
     color: var(--accent);
   }
 
-  .community-card-about {
+  .room-card-about {
     margin: 0;
     color: var(--muted);
     font-size: 0.92rem;
     line-height: 1.55;
   }
 
-  .community-card-meta {
+  .room-card-meta {
     display: flex;
     gap: 0.45rem;
     flex-wrap: wrap;

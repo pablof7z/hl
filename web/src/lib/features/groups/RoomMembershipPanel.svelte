@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CommunitySummary } from '$lib/ndk/groups';
+  import type { RoomSummary } from '$lib/ndk/groups';
 
   let {
     room,
@@ -13,7 +13,7 @@
     onJoin,
     onShare
   }: {
-    community: CommunitySummary;
+    room: RoomSummary;
     signedIn: boolean;
     joined: boolean;
     checkingMembership?: boolean;
@@ -25,20 +25,20 @@
     onShare?: () => void;
   } = $props();
 
-  function accessLabel(access: CommunitySummary['access']): string {
+  function accessLabel(access: RoomSummary['access']): string {
     return access === 'open' ? 'Open to join' : 'Invite only';
   }
 
-  function visibilityLabel(visibility: CommunitySummary['visibility']): string {
+  function visibilityLabel(visibility: RoomSummary['visibility']): string {
     return visibility === 'public' ? 'Public preview' : 'Private inside';
   }
 
   function titleForState(): string {
     if (joined) return 'You can jump straight into the shelf.';
     if (checkingMembership) return 'Checking your access.';
-    if (joinRequested) return community.access === 'open' ? 'Your join request is in.' : 'Your request is waiting.';
-    if (!signedIn) return community.access === 'open' ? 'Join this room.' : 'Request access to this room.';
-    return community.access === 'open' ? 'Join the conversation here.' : 'Ask to join this room.';
+    if (joinRequested) return room.access === 'open' ? 'Your join request is in.' : 'Your request is waiting.';
+    if (!signedIn) return room.access === 'open' ? 'Join this room.' : 'Request access to this room.';
+    return room.access === 'open' ? 'Join the conversation here.' : 'Ask to join this room.';
   }
 
   function bodyForState(): string {
@@ -51,35 +51,35 @@
     }
 
     if (joinRequested) {
-      return community.access === 'open'
-        ? 'This page will update as soon as the community adds you.'
+      return room.access === 'open'
+        ? 'This page will update as soon as the room adds you.'
         : 'A moderator can let you in as soon as they review the request.';
     }
 
     if (!signedIn) {
-      return community.access === 'open'
+      return room.access === 'open'
         ? 'Create a profile to join, save highlights, and share your own picks.'
         : 'Create a profile first so you can ask to join and come back into the room.';
     }
 
-    return community.access === 'open'
+    return room.access === 'open'
       ? 'Join now and you can start sharing into the shelf right away.'
-      : 'This community is invite-only. Send a request and a moderator can open the door.';
+      : 'This room is invite-only. Send a request and a moderator can open the door.';
   }
 
   function primaryActionLabel(): string {
     if (joined) return 'Share something';
-    if (joinPending) return community.access === 'open' ? 'Joining...' : 'Sending...';
+    if (joinPending) return room.access === 'open' ? 'Joining...' : 'Sending...';
     if (joinRequested) return 'Request sent';
     if (!signedIn) return 'Set up a profile';
-    return community.access === 'open' ? 'Join this room' : 'Request to join';
+    return room.access === 'open' ? 'Join this room' : 'Request to join';
   }
 </script>
 
 <aside class="membership-panel">
   <div class="membership-badges">
-    <span class="badge badge-ghost">{accessLabel(community.access)}</span>
-    <span class="badge badge-ghost">{visibilityLabel(community.visibility)}</span>
+    <span class="badge badge-ghost">{accessLabel(room.access)}</span>
+    <span class="badge badge-ghost">{visibilityLabel(room.visibility)}</span>
   </div>
 
   <p class="panel-label">{joined ? 'Member' : 'Join'}</p>
@@ -104,7 +104,7 @@
       <a class="btn btn-primary btn-sm" href="/onboarding">{primaryActionLabel()}</a>
     {/if}
 
-    <a class="btn btn-sm" href="/rooms">All communities</a>
+    <a class="btn btn-sm" href="/rooms">All rooms</a>
   </div>
 
   {#if joinError}

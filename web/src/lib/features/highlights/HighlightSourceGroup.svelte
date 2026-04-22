@@ -1,6 +1,6 @@
 <script lang="ts">
   import { artifactPath, buildFallbackNostrUrl } from '$lib/ndk/artifacts';
-  import type { CommunitySummary } from '$lib/ndk/groups';
+  import type { RoomSummary } from '$lib/ndk/groups';
   import type { HighlightSourceGroup } from './grouping';
   import HighlightCard from './HighlightCard.svelte';
 
@@ -10,7 +10,7 @@
     showShareControl = false
   }: {
     group: HighlightSourceGroup;
-    rooms?: CommunitySummary[];
+    rooms?: RoomSummary[];
     showShareControl?: boolean;
   } = $props();
 

@@ -45,7 +45,7 @@ export const launchCards: LaunchCard[] = [
     status: 'Protected'
   },
   {
-    href: '/share/community/demo-group',
+    href: '/share/room/demo-group',
     label: 'Public Room',
     description: 'Shareable SSR page for a room landing page before full relay-backed data arrives.',
     status: 'Stub'
@@ -155,7 +155,7 @@ export const discoverSpec: SurfaceSpec = {
   ]
 };
 
-export const shareCommunitySpec: SurfaceSpec = {
+export const shareRoomSpec: SurfaceSpec = {
   title: 'This route becomes the shareable group landing page.',
   description:
     'It should render without JavaScript, surface only public-safe metadata, and make room joins legible to someone seeing Highlighter for the first time.',
@@ -190,7 +190,7 @@ export const shareHighlightSpec: SurfaceSpec = {
     'The share route is `/r/[slug]/e/[id]`, which keeps a canonical highlight event tied to the room context it was shared into.',
   status: 'Milestone 1 scaffold',
   actions: [
-    { href: '/share/community/demo-group', label: 'View public room', tone: 'secondary' },
+    { href: '/share/room/demo-group', label: 'View public room', tone: 'secondary' },
     { href: '/discover', label: 'Explore more public surfaces' }
   ],
   sections: [

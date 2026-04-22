@@ -13,7 +13,7 @@
     hydrateHighlights,
     resolveUserHighlightRelayUrls
   } from '$lib/ndk/highlights';
-  import { buildJoinedCommunities, groupIdFromEvent } from '$lib/ndk/groups';
+  import { buildJoinedRooms, groupIdFromEvent } from '$lib/ndk/groups';
 
   const currentUser = $derived(ndk.$currentUser);
   let highlightRelayUrls = $state<string[]>(DEFAULT_RELAYS);
@@ -99,7 +99,7 @@
   });
   const rooms = $derived(
     currentUser
-      ? buildJoinedCommunities(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events])
+      ? buildJoinedRooms(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events])
       : []
   );
 

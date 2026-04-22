@@ -10,7 +10,7 @@
     publishArtifact
   } from '$lib/ndk/artifacts';
   import { GROUP_RELAY_URLS } from '$lib/ndk/config';
-  import { buildJoinedCommunities, groupIdFromEvent } from '$lib/ndk/groups';
+  import { buildJoinedRooms, groupIdFromEvent } from '$lib/ndk/groups';
 
   let {
     event,
@@ -68,7 +68,7 @@
   const rooms = $derived.by(() => {
     if (!currentUser) return [];
 
-    return buildJoinedCommunities(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events]);
+    return buildJoinedRooms(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events]);
   });
   const canShare = $derived(Boolean(currentUser && selectedGroupId && !publishing && !isReadOnly));
 
@@ -87,17 +87,17 @@
 
   async function handleShare() {
     if (!currentUser) {
-      errorMessage = 'Sign in before sharing articles into a community.';
+      errorMessage = 'Sign in before sharing articles into a room.';
       return;
     }
 
     if (isReadOnly) {
-      errorMessage = 'Read-only sessions cannot publish community share threads.';
+      errorMessage = 'Read-only sessions cannot publish room share threads.';
       return;
     }
 
     if (!selectedGroupId) {
-      errorMessage = 'Pick a community first.';
+      errorMessage = 'Pick a room first.';
       return;
     }
 
@@ -116,7 +116,7 @@
 
       statusMessage = result.existing
         ? 'That article is already shared in this room. Opening it now.'
-        : 'Article shared to the community.';
+        : 'Article shared to the room.';
       await goto(artifactPath(selectedGroupId, result.artifact.id), { invalidateAll: true });
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : 'Could not share the article.';
@@ -128,9 +128,9 @@
 
 <Dialog.Root bind:open>
   <Dialog.Trigger
-    class="community-share-trigger"
-    title="Share into a community"
-    aria-label="Share this article into a community"
+    class="room-share-trigger"
+    title="Share into a room"
+    aria-label="Share this article into a room"
   >
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
       <path d="M12 5v14" />
@@ -138,36 +138,36 @@
     </svg>
   </Dialog.Trigger>
 
-  <Dialog.Content class="share-community-dialog">
-    <div class="share-community-chrome">
-      <div class="share-community-handle" aria-hidden="true"></div>
+  <Dialog.Content class="share-room-dialog">
+    <div class="share-room-chrome">
+      <div class="share-room-handle" aria-hidden="true"></div>
 
-      <Dialog.Header class="share-community-header">
-        <Dialog.Title>Share to a community</Dialog.Title>
+      <Dialog.Header class="share-room-header">
+        <Dialog.Title>Share to a room</Dialog.Title>
       </Dialog.Header>
 
-      <Dialog.Close class="btn btn-circle btn-ghost btn-sm" aria-label="Close community share dialog">
+      <Dialog.Close class="btn btn-circle btn-ghost btn-sm" aria-label="Close room share dialog">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M6 6l12 12M18 6L6 18" />
         </svg>
       </Dialog.Close>
     </div>
 
-    <div class="share-community-body">
+    <div class="share-room-body">
       {#if !currentUser}
-        <p class="panel-message">Sign in to share this article into one of your communities.</p>
+        <p class="panel-message">Sign in to share this article into one of your rooms.</p>
       {:else if rooms.length === 0}
         <div class="panel-empty">
-          <p class="panel-message">No memberships loaded yet. Join or create a community first.</p>
+          <p class="panel-message">No memberships loaded yet. Join or create a room first.</p>
           <div class="panel-empty-actions">
-            <a href="/discover">Browse public communities</a>
+            <a href="/discover">Browse public rooms</a>
             <a href="/r/create">Create a room</a>
           </div>
         </div>
       {:else}
         <div class="panel-fields">
           <fieldset class="fieldset">
-            <legend class="fieldset-legend">Community</legend>
+            <legend class="fieldset-legend">Room</legend>
             <select class="field-select" bind:value={selectedGroupId}>
               {#each rooms as room (room.id)}
                 <option value={room.id}>{room.name}</option>
@@ -198,7 +198,7 @@
             disabled={!canShare}
             onclick={handleShare}
           >
-            {publishing ? 'Sharing…' : 'Share Into Community'}
+            {publishing ? 'Sharing…' : 'Share Into Room'}
           </button>
 
           {#if errorMessage}
@@ -248,7 +248,7 @@
 
   .field-select:focus { border-color: var(--accent); }
 
-  :global(.community-share-trigger) {
+  :global(.room-share-trigger) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -268,31 +268,31 @@
       transform 160ms ease;
   }
 
-  :global(.community-share-trigger:hover) {
+  :global(.room-share-trigger:hover) {
     color: var(--accent);
     border-color: var(--accent);
     background: rgba(255, 103, 25, 0.06);
   }
 
-  :global(.community-share-trigger:active) {
+  :global(.room-share-trigger:active) {
     transform: scale(0.92);
   }
 
-  :global(.share-community-dialog) {
+  :global(.share-room-dialog) {
     padding: 1.15rem;
     background:
       radial-gradient(circle at top left, rgba(255, 103, 25, 0.08), transparent 36%),
       #ffffff;
   }
 
-  .share-community-chrome {
+  .share-room-chrome {
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: start;
     gap: 0.9rem;
   }
 
-  .share-community-handle {
+  .share-room-handle {
     grid-column: 1 / -1;
     width: 3rem;
     height: 0.3rem;
@@ -301,11 +301,11 @@
     margin: 0 auto 0.15rem;
   }
 
-  :global(.share-community-header) {
+  :global(.share-room-header) {
     gap: 0.35rem;
   }
 
-  .share-community-body {
+  .share-room-body {
     display: grid;
     gap: 1rem;
     margin-top: 1rem;
@@ -393,7 +393,7 @@
   }
 
   @media (max-width: 640px) {
-    :global(.share-community-dialog) {
+    :global(.share-room-dialog) {
       width: min(32rem, calc(100vw - 1rem));
       padding: 1rem;
     }

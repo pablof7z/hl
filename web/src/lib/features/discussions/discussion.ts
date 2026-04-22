@@ -4,7 +4,7 @@ import NDK, {
   type NDKEvent as NDKEventType,
   type NDKFilter
 } from '@nostr-dev-kit/ndk';
-import { buildCommunityRelaySet } from '$lib/ndk/groups';
+import { buildRoomRelaySet } from '$lib/ndk/groups';
 
 export const HIGHLIGHTER_COMMENT_KIND = NDKKind.GenericReply as number;
 
@@ -205,7 +205,7 @@ export async function publishComment(
   }
 
   const rootEvent = buildRootEventForReply(ndkInstance, input.rootContext);
-  const relaySet = buildCommunityRelaySet(ndkInstance);
+  const relaySet = buildRoomRelaySet(ndkInstance);
 
   let commentEvent: NDKEvent;
 

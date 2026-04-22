@@ -2,16 +2,16 @@
   import { goto } from '$app/navigation';
   import { ndk, ensureClientNdk } from '$lib/ndk/client';
   import {
-    createCommunity,
-    slugifyCommunityId,
-    isValidCommunityId,
-    type CommunityAccess,
-    type CommunityVisibility
+    createRoom,
+    slugifyRoomId,
+    isValidRoomId,
+    type RoomAccess,
+    type RoomVisibility
   } from '$lib/ndk/groups';
 
   type Preset = 'invite' | 'open' | 'members';
 
-  const PRESET_MAP: Record<Preset, { access: CommunityAccess; visibility: CommunityVisibility }> = {
+  const PRESET_MAP: Record<Preset, { access: RoomAccess; visibility: RoomVisibility }> = {
     invite: { access: 'closed', visibility: 'public' },
     open: { access: 'open', visibility: 'public' },
     members: { access: 'closed', visibility: 'private' }
@@ -20,8 +20,8 @@
   let step = $state<1 | 2 | 3>(1);
 
   let name = $state('');
-  let communityId = $state('');
-  let communityIdEdited = $state(false);
+  let roomId = $state('');
+  let roomIdEdited = $state(false);
   let preset = $state<Preset>('invite');
   let about = $state('');
   let picture = $state('');
@@ -31,19 +31,19 @@
 
   const currentUser = $derived(ndk.$currentUser);
   const isReadOnly = $derived(Boolean(ndk.$sessions?.isReadOnly()));
-  const slug = $derived(slugifyCommunityId(communityId));
-  const slugIsValid = $derived(isValidCommunityId(slug));
+  const slug = $derived(slugifyRoomId(roomId));
+  const slugIsValid = $derived(isValidRoomId(slug));
   const step1Complete = $derived(name.trim().length > 0 && slugIsValid);
 
   $effect(() => {
-    if (!communityIdEdited) {
-      communityId = slugifyCommunityId(name);
+    if (!roomIdEdited) {
+      roomId = slugifyRoomId(name);
     }
   });
 
   function handleSlugInput(event: Event) {
-    communityIdEdited = true;
-    communityId = slugifyCommunityId((event.currentTarget as HTMLInputElement).value);
+    roomIdEdited = true;
+    roomId = slugifyRoomId((event.currentTarget as HTMLInputElement).value);
   }
 
   function goNext() {
@@ -88,7 +88,7 @@
       errorMessage = '';
       await ensureClientNdk();
       const { access, visibility } = PRESET_MAP[preset];
-      const result = await createCommunity(ndk, {
+      const result = await createRoom(ndk, {
         id: slug,
         name,
         about,
@@ -140,7 +140,7 @@
         <span class="slug-prefix">highlighter.com/r/</span>
         <input
           class="slug-input"
-          value={communityId}
+          value={roomId}
           oninput={handleSlugInput}
           placeholder="signal-over-noise"
           maxlength="48"
@@ -148,7 +148,7 @@
           spellcheck="false"
         />
       </div>
-      {#if communityId && !slugIsValid}
+      {#if roomId && !slugIsValid}
         <p class="slug-warn">Use 3–48 lowercase letters, numbers, and hyphens.</p>
       {:else}
         <p class="slug-hint">Lowercase letters, numbers, and hyphens. The room's address.</p>

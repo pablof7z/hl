@@ -4,9 +4,9 @@
   import { ndk } from '$lib/ndk/client';
   import { GROUP_RELAY_URLS } from '$lib/ndk/config';
   import {
-    buildJoinedCommunities,
+    buildJoinedRooms,
     groupIdFromEvent,
-    type CommunitySummary
+    type RoomSummary
   } from '$lib/ndk/groups';
 
   const currentUser = $derived(ndk.$currentUser);
@@ -53,9 +53,9 @@
     };
   });
 
-  const rooms: CommunitySummary[] = $derived(
+  const rooms: RoomSummary[] = $derived(
     currentUser
-      ? buildJoinedCommunities(
+      ? buildJoinedRooms(
           currentUser.pubkey,
           [...metadataFeed.events],
           [...membershipFeed.events]

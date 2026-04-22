@@ -44,7 +44,7 @@
 
       <h2>{artifact.title}</h2>
 
-      <p class="featured-community">In {roomName}</p>
+      <p class="featured-room">In {roomName}</p>
 
       {#if artifact.author}
         <p class="featured-author">{artifact.author}</p>
@@ -181,7 +181,7 @@
     letter-spacing: -0.03em;
   }
 
-  .featured-community,
+  .featured-room,
   .featured-author,
   .featured-note,
   .featured-highlight blockquote p {
@@ -189,7 +189,7 @@
     line-height: 1.6;
   }
 
-  .featured-community {
+  .featured-room {
     color: var(--text-strong);
     font-weight: 700;
   }

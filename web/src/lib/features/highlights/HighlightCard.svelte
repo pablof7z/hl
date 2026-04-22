@@ -7,11 +7,11 @@
   import { User } from '$lib/ndk/ui/user';
   import {
     highlightPath,
-    shareHighlightToCommunity,
+    shareHighlightToRoom,
     type HydratedHighlight,
     type HighlightShareRecord
   } from '$lib/ndk/highlights';
-  import type { CommunitySummary } from '$lib/ndk/groups';
+  import type { RoomSummary } from '$lib/ndk/groups';
 
   let {
     highlight,
@@ -24,7 +24,7 @@
   }: {
     highlight: HydratedHighlight;
     artifact?: ArtifactRecord | undefined;
-    rooms?: CommunitySummary[];
+    rooms?: RoomSummary[];
     showShareControl?: boolean;
     showDiscussAction?: boolean;
     groupId?: string;
@@ -48,7 +48,7 @@
     )
   );
   const sharedGroupIds = $derived(new Set(allShares.map((share) => share.groupId)));
-  const shareableCommunities = $derived(
+  const shareableRooms = $derived(
     rooms.filter((room) => !sharedGroupIds.has(room.id))
   );
   const canShareAgain = $derived(
@@ -100,8 +100,8 @@
   });
 
   $effect(() => {
-    if (!selectedGroupId && shareableCommunities.length > 0) {
-      selectedGroupId = shareableCommunities[0].id;
+    if (!selectedGroupId && shareableRooms.length > 0) {
+      selectedGroupId = shareableRooms[0].id;
     }
   });
 
@@ -115,7 +115,7 @@
     try {
       await ensureClientNdk();
 
-      const result = await shareHighlightToCommunity(ndk, {
+      const result = await shareHighlightToRoom(ndk, {
         groupId: selectedGroupId,
         highlight
       });
@@ -264,7 +264,7 @@
 
       {#if highlight.shareCount > 0}
         <span class="inline-flex min-h-7 items-center rounded-full bg-base-200 px-2.5 text-xs font-semibold text-base-content/60">
-          {highlight.shareCount} communit{highlight.shareCount === 1 ? 'y' : 'ies'}
+          {highlight.shareCount} room{highlight.shareCount === 1 ? '' : 's'}
         </span>
       {/if}
     </div>
@@ -308,12 +308,12 @@
       <select
         class="select select-bordered max-sm:w-full"
         bind:value={selectedGroupId}
-        disabled={shareableCommunities.length === 0 || sharing}
+        disabled={shareableRooms.length === 0 || sharing}
       >
-        {#if shareableCommunities.length === 0}
+        {#if shareableRooms.length === 0}
           <option value="">Already shared everywhere loaded here</option>
         {:else}
-          {#each shareableCommunities as room (room.id)}
+          {#each shareableRooms as room (room.id)}
             <option value={room.id}>{room.name}</option>
           {/each}
         {/if}

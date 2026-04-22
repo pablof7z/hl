@@ -1,6 +1,6 @@
 export const APP_NAME = 'Highlighter';
 export const APP_TAGLINE =
-  'Nostr-native reading communities built around sources, highlights, and discussion.';
+  'Nostr-native reading rooms built around sources, highlights, and discussion.';
 
 const FALLBACK_PUBLIC_RELAYS = [
   'wss://relay.damus.io',

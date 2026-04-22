@@ -1,7 +1,120 @@
 import { NDKKind, NDKSimpleGroupMetadata, type NDKEvent } from '@nostr-dev-kit/ndk';
 import { GROUP_RELAY_URLS } from '$lib/ndk/config';
+import {
+  buildRoomSummary,
+  type RoomSummary,
+  type RoomVisibility
+} from '$lib/ndk/groups';
 import { fetchEventsForSsr } from '$lib/server/nostr';
 import type { Room, RoomMember } from '$lib/features/room/api/room';
+
+type FetchRoomsOptions = {
+  limit?: number;
+  visibility?: RoomVisibility | 'all';
+};
+
+export async function fetchRooms(
+  options: number | FetchRoomsOptions = 32
+): Promise<RoomSummary[]> {
+  const {
+    limit,
+    visibility
+  } = typeof options === 'number' ? { limit: options, visibility: 'all' as const } : {
+    limit: options.limit ?? 32,
+    visibility: options.visibility ?? 'all'
+  };
+  const fetchLimit = visibility === 'all' ? limit : Math.max(limit * 4, 96);
+  const metadataEvents = Array.from(
+    (await fetchEventsForSsr(
+      {
+        kinds: [NDKKind.GroupMetadata],
+        limit: fetchLimit
+      },
+      `fetchRooms(${fetchLimit})`,
+      { relays: GROUP_RELAY_URLS }
+    )) ?? []
+  )
+    .sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0))
+    .slice(0, fetchLimit);
+
+  return (await buildRoomSummariesFromMetadataEvents(metadataEvents))
+    .filter((room): room is RoomSummary => Boolean(room))
+    .filter((room) => visibility === 'all' || room.visibility === visibility)
+    .slice(0, limit);
+}
+
+export async function buildRoomSummariesFromMetadataEvents(
+  metadataEvents: NDKEvent[]
+): Promise<RoomSummary[]> {
+  if (metadataEvents.length === 0) {
+    return [];
+  }
+
+  const groupIds = uniqueValues(metadataEvents.map((event) => event.tagValue('d') ?? '').filter(Boolean));
+  const [adminEvents, memberEvents] = await Promise.all([
+    fetchReplaceableGroupEvents(NDKKind.GroupAdmins, groupIds),
+    fetchReplaceableGroupEvents(NDKKind.GroupMembers, groupIds)
+  ]);
+
+  return metadataEvents
+    .map((event) => {
+      const id = event.tagValue('d') ?? '';
+      if (!id) return null;
+
+      try {
+        return buildRoomSummary(event, {
+          adminEvent: adminEvents.get(id),
+          memberEvent: memberEvents.get(id)
+        });
+      } catch {
+        return null;
+      }
+    })
+    .filter((room): room is RoomSummary => Boolean(room));
+}
+
+async function fetchReplaceableGroupEvents(
+  kind: NDKKind.GroupAdmins | NDKKind.GroupMembers,
+  groupIds: string[]
+): Promise<Map<string, NDKEvent>> {
+  if (groupIds.length === 0) {
+    return new Map();
+  }
+
+  const events = Array.from(
+    (await fetchEventsForSsr(
+      {
+        kinds: [kind],
+        '#d': groupIds,
+        limit: Math.max(groupIds.length * 2, 32)
+      },
+      `fetchReplaceableGroupEvents(${kind},${groupIds.length})`,
+      { relays: GROUP_RELAY_URLS }
+    )) ?? []
+  );
+
+  return latestEventsByGroupId(events);
+}
+
+function latestEventsByGroupId(events: NDKEvent[]): Map<string, NDKEvent> {
+  const latest = new Map<string, NDKEvent>();
+
+  for (const event of events) {
+    const groupId = event.tagValue('d');
+    if (!groupId) continue;
+
+    const existing = latest.get(groupId);
+    if (!existing || (event.created_at ?? 0) > (existing.created_at ?? 0)) {
+      latest.set(groupId, event);
+    }
+  }
+
+  return latest;
+}
+
+function uniqueValues(values: string[]): string[] {
+  return [...new Set(values)];
+}
 
 /**
  * Fetch a NIP-29 room by its group identifier (slug).

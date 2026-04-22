@@ -8,7 +8,7 @@ export const load: PageServerLoad = async ({ setHeaders, url }) => {
 
   return {
     results: await searchRelayContent(url.searchParams.get('q') ?? '', {
-      communityLimit: 12,
+      roomLimit: 12,
       articleLimit: 12
     })
   };

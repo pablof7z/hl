@@ -16,25 +16,25 @@ const KIND_GROUP_ADMIN_CREATE_INVITE = 9009;
 // See relay29/nip29 moderation_actions.go — it rejects >10 codes per event.
 export const MAX_CODES_PER_INVITE_EVENT = 10;
 
-export type CommunityAccess = 'open' | 'closed';
-export type CommunityVisibility = 'public' | 'private';
+export type RoomAccess = 'open' | 'closed';
+export type RoomVisibility = 'public' | 'private';
 
-export type CreateCommunityInput = {
+export type CreateRoomInput = {
   id: string;
   name: string;
   about?: string;
   picture?: string;
-  access: CommunityAccess;
-  visibility: CommunityVisibility;
+  access: RoomAccess;
+  visibility: RoomVisibility;
 };
 
-export type CommunitySummary = {
+export type RoomSummary = {
   id: string;
   name: string;
   about: string;
   picture: string;
-  access: CommunityAccess;
-  visibility: CommunityVisibility;
+  access: RoomAccess;
+  visibility: RoomVisibility;
   adminPubkeys: string[];
   memberCount: number | null;
   relayUrl: string;
@@ -42,9 +42,9 @@ export type CommunitySummary = {
   createdAt: number | null;
 };
 
-const COMMUNITY_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const ROOM_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-export function slugifyCommunityId(value: string): string {
+export function slugifyRoomId(value: string): string {
   return value
     .trim()
     .toLowerCase()
@@ -56,22 +56,22 @@ export function slugifyCommunityId(value: string): string {
     .slice(0, 48);
 }
 
-export function isValidCommunityId(value: string): boolean {
-  return value.length >= 3 && value.length <= 48 && COMMUNITY_ID_PATTERN.test(value);
+export function isValidRoomId(value: string): boolean {
+  return value.length >= 3 && value.length <= 48 && ROOM_ID_PATTERN.test(value);
 }
 
-export function buildCommunityRelaySet(ndk: NDK): NDKRelaySet {
+export function buildRoomRelaySet(ndk: NDK): NDKRelaySet {
   return NDKRelaySet.fromRelayUrls(GROUP_RELAY_URLS, ndk);
 }
 
-export function buildCommunitySummary(
+export function buildRoomSummary(
   metadataEvent: NDKEventType,
   options?: {
     adminEvent?: NDKEventType | null;
     memberEvent?: NDKEventType | null;
     relayUrl?: string;
   }
-): CommunitySummary {
+): RoomSummary {
   const metadata = NDKSimpleGroupMetadata.from(metadataEvent);
   const id = metadata.tagValue('d')?.trim();
 
@@ -103,15 +103,16 @@ export function buildCommunitySummary(
   };
 }
 
+
 export function groupIdFromEvent(event: Pick<NDKEventType, 'tagValue'>): string {
   return event.tagValue('d')?.trim() || event.tagValue('h')?.trim() || '';
 }
 
-export function buildJoinedCommunities(
+export function buildJoinedRooms(
   currentPubkey: string,
   metadataEvents: NDKEventType[],
   membershipEvents: NDKEventType[]
-): CommunitySummary[] {
+): RoomSummary[] {
   if (!currentPubkey.trim()) {
     return [];
   }
@@ -123,7 +124,7 @@ export function buildJoinedCommunities(
   const memberByGroupId = latestEventsByGroupId(
     membershipEvents.filter((event) => event.kind === NDKKind.GroupMembers)
   );
-  const joined: CommunitySummary[] = [];
+  const joined: RoomSummary[] = [];
 
   for (const [groupId, metadataEvent] of metadataByGroupId) {
     const adminEvent = adminByGroupId.get(groupId);
@@ -137,7 +138,7 @@ export function buildJoinedCommunities(
 
     try {
       joined.push(
-        buildCommunitySummary(metadataEvent, {
+        buildRoomSummary(metadataEvent, {
           adminEvent,
           memberEvent
         })
@@ -150,7 +151,7 @@ export function buildJoinedCommunities(
   return joined.toSorted((left, right) => left.name.localeCompare(right.name));
 }
 
-export async function requestToJoinCommunity(
+export async function requestToJoinRoom(
   ndk: NDK,
   groupId: string,
   message?: string
@@ -170,7 +171,7 @@ export async function requestToJoinCommunity(
     throw new Error('Could not resolve the current account.');
   }
 
-  const group = new NDKSimpleGroup(ndk, buildCommunityRelaySet(ndk), normalizedGroupId);
+  const group = new NDKSimpleGroup(ndk, buildRoomRelaySet(ndk), normalizedGroupId);
 
   try {
     await group.requestToJoin(user.pubkey, message);
@@ -219,7 +220,7 @@ export async function createInviteCodes(
   if (!ndk.signer) throw new Error('Connect a signer before creating invites.');
 
   const count = Math.max(1, Math.min(opts.count ?? 1, 100));
-  const relaySet = buildCommunityRelaySet(ndk);
+  const relaySet = buildRoomRelaySet(ndk);
   const results: CreateInviteCodesResult[] = [];
 
   for (let i = 0; i < count; i += MAX_CODES_PER_INVITE_EVENT) {
@@ -268,23 +269,23 @@ export async function acceptInviteCode(
 
   try {
     await event.sign();
-    await event.publish(buildCommunityRelaySet(ndk));
+    await event.publish(buildRoomRelaySet(ndk));
   } catch (error) {
     throw new Error(describePublishError(error, 'Could not accept the invitation.'));
   }
 }
 
-export async function createCommunity(
+export async function createRoom(
   ndk: NDK,
-  input: CreateCommunityInput
+  input: CreateRoomInput
 ): Promise<{ id: string }> {
-  const normalized = normalizeCreateCommunityInput(input);
+  const normalized = normalizeCreateRoomInput(input);
 
   if (!normalized.name) {
     throw new Error('Enter a room name.');
   }
 
-  if (!isValidCommunityId(normalized.id)) {
+  if (!isValidRoomId(normalized.id)) {
     throw new Error('Room URL must use 3-48 lowercase letters, numbers, and hyphens.');
   }
 
@@ -292,7 +293,7 @@ export async function createCommunity(
     throw new Error('Connect a signer before creating a room.');
   }
 
-  const relaySet = buildCommunityRelaySet(ndk);
+  const relaySet = buildRoomRelaySet(ndk);
   const group = new NDKSimpleGroup(ndk, relaySet, normalized.id);
 
   try {
@@ -331,12 +332,12 @@ export async function createCommunity(
   return { id: normalized.id };
 }
 
-function normalizeCreateCommunityInput(input: CreateCommunityInput): CreateCommunityInput {
+function normalizeCreateRoomInput(input: CreateRoomInput): CreateRoomInput {
   const visibility = input.visibility === 'private' ? 'private' : 'public';
   const access = visibility === 'private' ? 'closed' : input.access === 'closed' ? 'closed' : 'open';
 
   return {
-    id: slugifyCommunityId(input.id),
+    id: slugifyRoomId(input.id),
     name: cleanText(input.name),
     about: cleanText(input.about),
     picture: cleanText(input.picture),
@@ -381,8 +382,8 @@ export type EditRoomMetadataInput = {
   name: string;
   about?: string;
   picture?: string;
-  visibility: CommunityVisibility;
-  access: CommunityAccess;
+  visibility: RoomVisibility;
+  access: RoomAccess;
 };
 
 export async function editRoomMetadata(
@@ -415,7 +416,7 @@ export async function editRoomMetadata(
 
   try {
     await event.sign();
-    await event.publish(buildCommunityRelaySet(ndk));
+    await event.publish(buildRoomRelaySet(ndk));
   } catch (error) {
     throw new Error(describePublishError(error, 'Could not update room settings.'));
   }
@@ -440,7 +441,7 @@ export async function addRoomMember(
 
   try {
     await event.sign();
-    await event.publish(buildCommunityRelaySet(ndk));
+    await event.publish(buildRoomRelaySet(ndk));
   } catch (error) {
     throw new Error(describePublishError(error, 'Could not add member to room.'));
   }
@@ -463,7 +464,7 @@ export async function removeRoomMember(
 
   try {
     await event.sign();
-    await event.publish(buildCommunityRelaySet(ndk));
+    await event.publish(buildRoomRelaySet(ndk));
   } catch (error) {
     throw new Error(describePublishError(error, 'Could not remove member from room.'));
   }

@@ -54,9 +54,9 @@
           </h2>
         </div>
 
-        <div class="community-grid">
+        <div class="room-grid">
           {#each data.results.rooms as room (room.id)}
-            <RoomCard community={room} showRoute={true} />
+            <RoomCard {room} showRoute={true} />
           {/each}
         </div>
       </section>
@@ -198,7 +198,7 @@
 
   /* ── Room grid ── */
 
-  .community-grid {
+  .room-grid {
     display: grid;
     gap: 1rem;
     grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));

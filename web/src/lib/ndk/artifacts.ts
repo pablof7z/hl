@@ -8,7 +8,7 @@ import NDK, {
 } from '@nostr-dev-kit/ndk';
 import { articleImageUrl, articleSummary, articleTitle, displayName, shortPubkey } from '$lib/ndk/format';
 import { DEFAULT_RELAYS } from '$lib/ndk/config';
-import { buildCommunityRelaySet } from '$lib/ndk/groups';
+import { buildRoomRelaySet } from '$lib/ndk/groups';
 
 export const HIGHLIGHTER_ARTIFACT_SHARE_KIND = NDKKind.Thread as NDKKind;
 
@@ -242,7 +242,7 @@ export function buildNostrArticleArtifactPreview(input: {
 }): ArtifactPreview {
   const address = eventAddress(input.event);
   if (!address) {
-    throw new Error('Only addressable Nostr articles can be shared into communities right now.');
+    throw new Error('Only addressable Nostr articles can be shared into rooms right now.');
   }
 
   const normalizedUrl = normalizeArtifactUrl(input.canonicalUrl);
@@ -373,7 +373,7 @@ export async function fetchArtifactsByHighlightReferenceKeys(
     return new Map();
   }
 
-  const relaySet = buildCommunityRelaySet(ndk);
+  const relaySet = buildRoomRelaySet(ndk);
   const events = Array.from((await ndk.fetchEvents(filters, { closeOnEose: true }, relaySet)) ?? []).sort(
     (left, right) => (right.created_at ?? 0) - (left.created_at ?? 0)
   );
@@ -418,7 +418,7 @@ export async function fetchArtifactSharesForGroup(
   groupId: string,
   limit = 32
 ): Promise<ArtifactRecord[]> {
-  const relaySet = buildCommunityRelaySet(ndk);
+  const relaySet = buildRoomRelaySet(ndk);
   const events = Array.from(
     (await ndk.fetchEvents(
       {
@@ -447,7 +447,7 @@ export async function findExistingArtifact(
   groupId: string,
   artifactId: string
 ): Promise<ArtifactRecord | undefined> {
-  const relaySet = buildCommunityRelaySet(ndk);
+  const relaySet = buildRoomRelaySet(ndk);
   const events = Array.from(
     (await ndk.fetchEvents(
       {
@@ -478,7 +478,7 @@ export async function publishArtifact(
   }
 
   const existing = await findExistingArtifact(ndk, input.groupId, input.preview.id);
-  const relaySet = buildCommunityRelaySet(ndk);
+  const relaySet = buildRoomRelaySet(ndk);
 
   if (existing) {
     const mergedPreview = mergeArtifactPreview(existing, input.preview);

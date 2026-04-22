@@ -13,7 +13,7 @@
     fetchHighlightsForShares,
     hydrateStandaloneHighlights
   } from '$lib/ndk/highlights';
-  import { buildJoinedCommunities, groupIdFromEvent } from '$lib/ndk/groups';
+  import { buildJoinedRooms, groupIdFromEvent } from '$lib/ndk/groups';
   import {
     guestActions,
     memberActions,
@@ -57,7 +57,7 @@
 
   const rooms = $derived(
     currentUser
-      ? buildJoinedCommunities(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events])
+      ? buildJoinedRooms(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events])
       : []
   );
 

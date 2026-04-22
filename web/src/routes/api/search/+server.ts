@@ -16,7 +16,7 @@ export const GET: RequestHandler = async ({ setHeaders, url }) => {
 
   return json(
     await searchRelayContent(query, {
-      communityLimit: limit,
+      roomLimit: limit,
       articleLimit: limit
     })
   );

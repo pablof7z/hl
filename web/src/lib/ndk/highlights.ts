@@ -11,7 +11,7 @@ import NDK, {
 import type { ArtifactRecord } from '$lib/ndk/artifacts';
 import { artifactHighlightReferenceKey } from '$lib/ndk/artifacts';
 import { DEFAULT_RELAYS, HIGHLIGHTER_RELAY_URL } from '$lib/ndk/config';
-import { buildCommunityRelaySet } from '$lib/ndk/groups';
+import { buildRoomRelaySet } from '$lib/ndk/groups';
 
 export const HIGHLIGHTER_HIGHLIGHT_KIND = NDKKind.Highlight as NDKKindType;
 export const HIGHLIGHTER_HIGHLIGHT_REPOST_KIND = NDKKind.GenericRepost as NDKKindType;
@@ -306,7 +306,7 @@ export async function publishAndShareHighlight(
   shareExisting: boolean;
 }> {
   const highlight = await publishCanonicalHighlight(ndk, input);
-  const shared = await shareHighlightToCommunity(ndk, {
+  const shared = await shareHighlightToRoom(ndk, {
     groupId: input.groupId,
     highlight
   });
@@ -318,7 +318,7 @@ export async function publishAndShareHighlight(
   };
 }
 
-export async function shareHighlightToCommunity(
+export async function shareHighlightToRoom(
   ndk: NDK,
   input: {
     groupId: string;
@@ -334,7 +334,7 @@ export async function shareHighlightToCommunity(
     return { share: existing, existing: true };
   }
 
-  const relaySet = buildCommunityRelaySet(ndk);
+  const relaySet = buildRoomRelaySet(ndk);
   const event = new NDKEvent(ndk);
   event.kind = HIGHLIGHTER_HIGHLIGHT_REPOST_KIND;
   event.content = '';
@@ -427,7 +427,7 @@ async function findExistingHighlightShare(
   groupId: string,
   highlightEventId: string
 ): Promise<HighlightShareRecord | undefined> {
-  const relaySet = buildCommunityRelaySet(ndk);
+  const relaySet = buildRoomRelaySet(ndk);
   const events = Array.from(
     (await ndk.fetchEvents(
       {

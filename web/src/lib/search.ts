@@ -1,4 +1,4 @@
-import type { CommunitySummary } from '$lib/ndk/groups';
+import type { RoomSummary } from '$lib/ndk/groups';
 
 export const MIN_SEARCH_QUERY_LENGTH = 2;
 export const DEFAULT_SEARCH_SECTION_LIMIT = 6;
@@ -18,6 +18,6 @@ export type SearchArticleResult = {
 
 export type SearchResponse = {
   query: string;
-  rooms: CommunitySummary[];
+  rooms: RoomSummary[];
   articles: SearchArticleResult[];
 };

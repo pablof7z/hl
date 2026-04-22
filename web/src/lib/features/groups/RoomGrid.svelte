@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CommunitySummary } from '$lib/ndk/groups';
+  import type { RoomSummary } from '$lib/ndk/groups';
   import RoomCard from '$lib/features/groups/RoomCard.svelte';
 
   type SortMode = 'featured' | 'name' | 'newest';
@@ -9,15 +9,15 @@
   let {
     rooms,
     joinedGroupIds = [],
-    emptyLabel = 'No communities found.',
+    emptyLabel = 'No rooms found.',
     emptyCopy = '',
     emptyCtaHref = '',
     emptyCtaLabel = '',
-    searchPlaceholder = 'Search communities',
+    searchPlaceholder = 'Search rooms',
     defaultSort = 'featured',
     showVisibilityFilter = true
   }: {
-    rooms: CommunitySummary[];
+    rooms: RoomSummary[];
     joinedGroupIds?: string[];
     emptyLabel?: string;
     emptyCopy?: string;
@@ -39,24 +39,24 @@
 
   const joinedSet = $derived(new Set(joinedGroupIds));
   const showAccessControl = $derived(
-    rooms.some((community) => community.access === 'open') &&
-      rooms.some((community) => community.access === 'closed')
+    rooms.some((room) => room.access === 'open') &&
+      rooms.some((room) => room.access === 'closed')
   );
   const showVisibilityControl = $derived(
     showVisibilityFilter &&
-      rooms.some((community) => community.visibility === 'private') &&
-      rooms.some((community) => community.visibility === 'public')
+      rooms.some((room) => room.visibility === 'private') &&
+      rooms.some((room) => room.visibility === 'public')
   );
   const filteredRooms = $derived.by(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
     return rooms
-      .filter((community) => {
-        if (accessFilter !== 'all' && community.access !== accessFilter) {
+      .filter((room) => {
+        if (accessFilter !== 'all' && room.access !== accessFilter) {
           return false;
         }
 
-        if (showVisibilityControl && visibilityFilter !== 'all' && community.visibility !== visibilityFilter) {
+        if (showVisibilityControl && visibilityFilter !== 'all' && room.visibility !== visibilityFilter) {
           return false;
         }
 
@@ -64,7 +64,7 @@
           return true;
         }
 
-        const haystack = `${community.name} ${community.about} ${community.id}`.toLowerCase();
+        const haystack = `${room.name} ${room.about} ${room.id}`.toLowerCase();
         return haystack.includes(normalizedQuery);
       })
       .toSorted((left, right) => {
@@ -97,8 +97,8 @@
   });
 </script>
 
-<section class="community-browser">
-  <div class="community-browser-toolbar">
+<section class="room-browser">
+  <div class="room-browser-toolbar">
     <label class="search-field">
       <span>Search</span>
       <input bind:value={query} type="search" placeholder={searchPlaceholder} />
@@ -153,21 +153,21 @@
       {/if}
     </section>
   {:else}
-    <div class="community-grid">
+    <div class="room-grid">
       {#each filteredRooms as room (room.id)}
-        <RoomCard community={room} joined={joinedSet.has(room.id)} />
+        <RoomCard {room} joined={joinedSet.has(room.id)} />
       {/each}
     </div>
   {/if}
 </section>
 
 <style>
-  .community-browser {
+  .room-browser {
     display: grid;
     gap: 1rem;
   }
 
-  .community-browser-toolbar {
+  .room-browser-toolbar {
     display: grid;
     gap: 0.9rem;
   }
@@ -252,14 +252,14 @@
     background: var(--accent-hover);
   }
 
-  .community-grid {
+  .room-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1rem;
   }
 
   @media (min-width: 760px) {
-    .community-browser-toolbar {
+    .room-browser-toolbar {
       grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
       align-items: end;
     }

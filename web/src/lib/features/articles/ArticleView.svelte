@@ -48,7 +48,7 @@
     buildReferenceFilters
   } from './comments';
 
-  interface CommunityContext {
+  interface RoomContext {
     groupId: string;
     roomName: string;
     roomUrl: string;
@@ -73,7 +73,7 @@
     seedComments?: NDKEvent[];
     seedHighlights?: NDKEvent[];
     highlightEvents?: NDKEvent[];
-    roomContext?: CommunityContext;
+    roomContext?: RoomContext;
   } = $props();
 
   const authorPubkey = $derived(authorPubkeyProp ?? event.pubkey ?? '');

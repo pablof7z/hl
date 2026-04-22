@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ensureClientNdk, ndk } from '$lib/ndk/client';
   import { buildFallbackNostrUrl, publishArtifact } from '$lib/ndk/artifacts';
-  import type { CommunitySummary } from '$lib/ndk/groups';
+  import type { RoomSummary } from '$lib/ndk/groups';
   import {
     removeForLaterArtifact,
     type ForLaterItem
@@ -13,7 +13,7 @@
     onRemoved = undefined
   }: {
     item: ForLaterItem;
-    rooms?: CommunitySummary[];
+    rooms?: RoomSummary[];
     onRemoved?: ((id: string) => void) | undefined;
   } = $props();
 

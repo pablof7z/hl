@@ -9,8 +9,8 @@
     editRoomMetadata,
     addRoomMember,
     removeRoomMember,
-    type CommunityAccess,
-    type CommunityVisibility
+    type RoomAccess,
+    type RoomVisibility
   } from '$lib/ndk/groups';
   import { memberTint } from '$lib/features/room/utils/colors';
   import type { PageData } from './$types';
@@ -76,8 +76,8 @@
   let genName = $state(data.room?.name ?? '');
   let genAbout = $state('');
   let genPicture = $state('');
-  let genVisibility = $state<CommunityVisibility>('public');
-  let genAccess = $state<CommunityAccess>('open');
+  let genVisibility = $state<RoomVisibility>('public');
+  let genAccess = $state<RoomAccess>('open');
   let genSaving = $state(false);
   let genError = $state('');
   let genSuccess = $state(false);

@@ -11,7 +11,7 @@ import {
   shortPubkey
 } from '$lib/ndk/format';
 import { GROUP_RELAY_URLS } from '$lib/ndk/config';
-import { buildCommunitySummariesFromMetadataEvents } from '$lib/server/communities';
+import { buildRoomSummariesFromMetadataEvents } from '$lib/server/rooms';
 import { fetchEventsForSsr, fetchProfilesByPubkeys } from '$lib/server/nostr';
 import {
   DEFAULT_SEARCH_SECTION_LIMIT,
@@ -22,7 +22,7 @@ import {
 } from '$lib/search';
 
 type SearchRelayContentOptions = {
-  communityLimit?: number;
+  roomLimit?: number;
   articleLimit?: number;
 };
 
@@ -31,7 +31,7 @@ export async function searchRelayContent(
   options: SearchRelayContentOptions = {}
 ): Promise<SearchResponse> {
   const normalizedQuery = cleanText(query);
-  const communityLimit = normalizeLimit(options.communityLimit);
+  const roomLimit = normalizeLimit(options.roomLimit);
   const articleLimit = normalizeLimit(options.articleLimit);
 
   if (normalizedQuery.length < MIN_SEARCH_QUERY_LENGTH) {
@@ -42,14 +42,14 @@ export async function searchRelayContent(
     };
   }
 
-  const [communityEvents, articleEvents] = await Promise.all([
+  const [roomEvents, articleEvents] = await Promise.all([
     fetchEventsForSsr(
       {
         kinds: [NDKKind.GroupMetadata],
         search: normalizedQuery,
-        limit: Math.max(communityLimit * 3, DEFAULT_SEARCH_SECTION_LIMIT)
+        limit: Math.max(roomLimit * 3, DEFAULT_SEARCH_SECTION_LIMIT)
       },
-      `searchRelayContent:communities(${normalizedQuery})`,
+      `searchRelayContent:rooms(${normalizedQuery})`,
       { relays: GROUP_RELAY_URLS }
     ),
     fetchEventsForSsr(
@@ -63,9 +63,9 @@ export async function searchRelayContent(
     )
   ]);
 
-  const rooms = (await buildCommunitySummariesFromMetadataEvents(Array.from(communityEvents ?? [])))
-    .filter((community) => community.visibility === 'public')
-    .slice(0, communityLimit);
+  const rooms = (await buildRoomSummariesFromMetadataEvents(Array.from(roomEvents ?? [])))
+    .filter((room) => room.visibility === 'public')
+    .slice(0, roomLimit);
 
   const articleList = Array.from(articleEvents ?? []);
   const profilesByPubkey = await fetchProfilesByPubkeys(articleList.map((event) => event.pubkey));

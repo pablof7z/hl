@@ -6,7 +6,7 @@
   import SaveForLaterForm from '$lib/features/vault/SaveForLaterForm.svelte';
   import { listForLaterArtifacts, type ForLaterItem } from '$lib/features/vault/vault';
   import { GROUP_RELAY_URLS } from '$lib/ndk/config';
-  import { buildJoinedCommunities, groupIdFromEvent } from '$lib/ndk/groups';
+  import { buildJoinedRooms, groupIdFromEvent } from '$lib/ndk/groups';
 
   const currentUser = $derived(ndk.$currentUser);
   let items = $state<ForLaterItem[]>([]);
@@ -46,7 +46,7 @@
 
   const rooms = $derived(
     currentUser
-      ? buildJoinedCommunities(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events])
+      ? buildJoinedRooms(currentUser.pubkey, [...metadataFeed.events], [...membershipFeed.events])
       : []
   );
   const nostrBookmarkCount = $derived(items.filter((item) => item.bookmarkTagName !== 'r').length);
@@ -127,9 +127,9 @@
   <SaveForLaterForm onSaved={upsertItem} />
 
   {#if rooms.length === 0}
-    <div class="community-note">
+    <div class="room-note">
       <p>Join or create a room to move saved items out of this queue.</p>
-      <div class="community-actions">
+      <div class="room-actions">
         <a href="/discover">Browse rooms</a>
         <a href="/r/create">Create a room</a>
       </div>
@@ -189,7 +189,7 @@
   .summary-card span,
   .feedback,
   .empty-state p,
-  .community-note p {
+  .room-note p {
     margin: 0;
     color: var(--muted);
     line-height: 1.65;
@@ -203,7 +203,7 @@
 
   .summary-card,
   .empty-state,
-  .community-note {
+  .room-note {
     display: grid;
     gap: 0.35rem;
     padding: 1rem 1.1rem;
@@ -219,13 +219,13 @@
     line-height: 1;
   }
 
-  .community-actions {
+  .room-actions {
     display: flex;
     gap: 0.55rem;
     flex-wrap: wrap;
   }
 
-  .community-actions a {
+  .room-actions a {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -239,7 +239,7 @@
     text-decoration: none;
   }
 
-  .community-actions a:last-child {
+  .room-actions a:last-child {
     background: var(--accent);
     border-color: var(--accent);
     color: white;

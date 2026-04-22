@@ -4,7 +4,7 @@ import NDK, {
   type NDKEvent as NDKEventType,
   type NDKFilter
 } from '@nostr-dev-kit/ndk';
-import { buildCommunityRelaySet } from '$lib/ndk/groups';
+import { buildRoomRelaySet } from '$lib/ndk/groups';
 import {
   type ArtifactPreview,
   type ArtifactSource
@@ -185,7 +185,7 @@ export async function publishRoomDiscussion(
   }
 
   await event.sign();
-  await event.publish(buildCommunityRelaySet(ndk));
+  await event.publish(buildRoomRelaySet(ndk));
 
   return discussionFromEvent(event);
 }

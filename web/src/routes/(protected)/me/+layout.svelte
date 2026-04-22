@@ -73,7 +73,7 @@
     };
   });
 
-  const communityCount = $derived.by(() => {
+  const roomCount = $derived.by(() => {
     const ids = new Set<string>();
 
     for (const event of membershipFeed.events) {
@@ -86,7 +86,7 @@
 
   const meTabs = [
     { href: '/me/highlights', label: 'Highlights' },
-    { href: '/me/communities', label: 'Communities' },
+    { href: '/me/rooms', label: 'Rooms' },
     { href: '/me/for-later', label: 'For Later' },
     { href: '/me/recommended', label: 'Recommended' }
   ];
@@ -121,7 +121,7 @@
             {/if}
           </div>
           <p class="vault-bio">
-            {profileBio || 'Highlights, saved items, and communities in one place.'}
+            {profileBio || 'Highlights, saved items, and rooms in one place.'}
           </p>
         </div>
       </div>
@@ -133,7 +133,7 @@
         </div>
         <div class="stat-card">
           <span>Rooms</span>
-          <strong>{communityCount}</strong>
+          <strong>{roomCount}</strong>
         </div>
       </div>
     </header>
