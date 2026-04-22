@@ -15,6 +15,14 @@
   import MembersSidebar from '$lib/features/room/components/MembersSidebar.svelte';
   import UpNextVoting from '$lib/features/room/components/UpNextVoting.svelte';
   import CaptureCta from '$lib/features/room/components/CaptureCta.svelte';
+  import DiscussionRow from '$lib/features/room/components/DiscussionRow.svelte';
+  import DiscussionComposer from '$lib/features/discussions/DiscussionComposer.svelte';
+  import {
+    discussionFromEvent,
+    discussionPath,
+    isDiscussionThread
+  } from '$lib/features/discussions/roomDiscussion';
+  import { HIGHLIGHTER_COMMENT_KIND } from '$lib/features/discussions/discussion';
   import { relativeTime } from '$lib/utils/time';
   import {
     KIND_PIN,
@@ -71,10 +79,72 @@
     };
   });
 
+  const sortedThreads = $derived(
+    [...threadsFeed.events].sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))
+  );
+
   const artifacts = $derived<Artifact[]>(
-    [...threadsFeed.events]
-      .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))
-      .map(artifactFromThreadEvent)
+    sortedThreads.filter((e) => !isDiscussionThread(e)).map(artifactFromThreadEvent)
+  );
+
+  const discussions = $derived(
+    sortedThreads.filter((e) => isDiscussionThread(e)).map(discussionFromEvent)
+  );
+
+  const discussionRepliesFeed = ndk.$subscribe(() => {
+    if (!browser || !slug || discussions.length === 0) return undefined;
+    return {
+      filters: [
+        {
+          kinds: [HIGHLIGHTER_COMMENT_KIND],
+          '#E': discussions.map((d) => d.eventId),
+          '#h': [slug],
+          limit: 200
+        }
+      ],
+      relayUrls: GROUP_RELAY_URLS,
+      closeOnEose: false
+    };
+  });
+
+  const replyStatsByThread = $derived.by(() => {
+    const stats = new Map<string, { count: number; lastAt: number; pubkeys: Set<string> }>();
+    for (const ev of discussionRepliesFeed.events) {
+      const rootId = ev.getMatchingTags('E')[0]?.[1];
+      if (!rootId) continue;
+      const entry = stats.get(rootId) ?? { count: 0, lastAt: 0, pubkeys: new Set<string>() };
+      entry.count += 1;
+      entry.lastAt = Math.max(entry.lastAt, ev.created_at ?? 0);
+      entry.pubkeys.add(ev.pubkey);
+      stats.set(rootId, entry);
+    }
+    return stats;
+  });
+
+  const discussionRows = $derived(
+    discussions.map((d) => {
+      const stats = replyStatsByThread.get(d.eventId);
+      const replyCount = stats?.count ?? 0;
+      const lastTimestamp = stats && stats.lastAt > 0 ? stats.lastAt : d.createdAt;
+      const participantPubkeys = new Set<string>([d.pubkey, ...(stats?.pubkeys ?? [])]);
+      const participants = [...participantPubkeys].slice(0, 4).map((pubkey) => ({
+        pubkey,
+        colorIndex: colorByPubkey.get(pubkey) ?? 1
+      }));
+      return {
+        id: d.id,
+        eventId: d.eventId,
+        title: d.title,
+        starterPubkey: d.pubkey,
+        participants,
+        replyCount,
+        lastAt: relativeTime(lastTimestamp),
+        href: discussionPath(slug ?? '', d.id),
+        status: (Date.now() / 1000 - lastTimestamp < 60 * 60 * 24 * 7 ? 'active' : 'closed') as
+          | 'active'
+          | 'closed'
+      };
+    })
   );
 
   const colorByPubkey = $derived(new Map(members.map((m) => [m.pubkey, m.colorIndex])));
@@ -137,12 +207,13 @@
     { id: 'this-week', label: 'This week' },
     { id: 'shelf', label: 'The shelf', count: artifacts.length },
     { id: 'highlights', label: 'Highlights', count: highlights.length },
-    { id: 'discussions', label: 'Discussions' },
+    { id: 'discussions', label: 'Discussions', count: discussions.length },
     { id: 'lately', label: 'Lately' }
   ]);
 
   let activeTab = $state('pinned');
   let castDialogOpen = $state(false);
+  let discussionDialogOpen = $state(false);
 
   // Highlights filtered to the pinned artifact — for the pinned card Highlights tab
   const pinnedHighlights = $derived(
@@ -372,9 +443,47 @@
 
         <Tabs.Content value="discussions">
           <Block id="discussions" title="Every discussion." accent="discussion.">
-            <div class="empty-card">
-              <p>No discussions yet. Start one on a highlighted passage.</p>
-            </div>
+            {#if isMember}
+              <button
+                type="button"
+                class="disc-new"
+                onclick={() => (discussionDialogOpen = true)}
+              >
+                <span class="disc-new-mark" aria-hidden="true">＋</span>
+                <span class="disc-new-copy">
+                  <span class="disc-new-title">Start a discussion</span>
+                  <span class="disc-new-sub">Propose a read, unpack an idea, ask the room a question.</span>
+                </span>
+                <span class="disc-new-arrow" aria-hidden="true">→</span>
+              </button>
+            {/if}
+
+            {#if discussionRows.length === 0}
+              <div class="empty-card">
+                <p>
+                  {#if isMember}
+                    No discussions yet. Be the first to start one.
+                  {:else}
+                    No discussions yet. Join the room to start one.
+                  {/if}
+                </p>
+              </div>
+            {:else}
+              <div class="disc-list">
+                {#each discussionRows as row (row.eventId)}
+                  <DiscussionRow
+                    id={row.id}
+                    status={row.status}
+                    title={row.title}
+                    starterPubkey={row.starterPubkey}
+                    participants={row.participants}
+                    replies={row.replyCount}
+                    lastAt={row.lastAt}
+                    href={row.href}
+                  />
+                {/each}
+              </div>
+            {/if}
           </Block>
         </Tabs.Content>
 
@@ -404,6 +513,7 @@
 
   {#if slug}
     <ArtifactForm groupId={slug} bind:open={castDialogOpen} />
+    <DiscussionComposer groupId={slug} bind:open={discussionDialogOpen} />
   {/if}
 {/if}
 
@@ -559,6 +669,82 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 14px;
+  }
+
+  .disc-new {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 22px;
+    margin-bottom: 18px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+    font-family: inherit;
+    transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+  }
+
+  .disc-new:hover {
+    border-color: var(--brand-accent);
+    background: color-mix(in srgb, var(--brand-accent) 5%, var(--surface));
+  }
+
+  .disc-new:hover .disc-new-arrow {
+    transform: translateX(3px);
+    color: var(--brand-accent);
+  }
+
+  .disc-new-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--brand-accent);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 400;
+    flex-shrink: 0;
+  }
+
+  .disc-new-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .disc-new-title {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 14.5px;
+    color: var(--ink);
+  }
+
+  .disc-new-sub {
+    font-family: var(--font-sans);
+    font-style: italic;
+    font-size: 12.5px;
+    color: var(--ink-fade);
+  }
+
+  .disc-new-arrow {
+    margin-left: auto;
+    color: var(--ink-fade);
+    font-size: 15px;
+    transition: transform 150ms ease, color 150ms ease;
+  }
+
+  .disc-list {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    overflow: hidden;
   }
 
   .empty-card {
