@@ -83,7 +83,7 @@ export async function searchRelayContent(
 
   return {
     query: normalizedQuery,
-    communities,
+    rooms,
     articles
   };
 }

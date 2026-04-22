@@ -645,10 +645,6 @@
 
     <!-- ═══ THE ROOM ═══ -->
     <section id="room" class="landing-section">
-      <div class="full">
-        <div class="sec-kicker">— the room</div>
-      </div>
-
       <div class="main">
         <h2 class="sec-head">Small on purpose. <em><mark>Invitation by design.</mark></em></h2>
       </div>
@@ -704,10 +700,6 @@
 
     <!-- ═══ OWNERSHIP ═══ -->
     <section class="landing-section">
-      <div class="full">
-        <div class="sec-kicker">— ownership</div>
-      </div>
-
       <div class="main">
         <h2 class="sec-head">Your rooms <em><mark>aren't trapped here.</mark></em></h2>
       </div>
@@ -745,10 +737,6 @@
 
     <!-- ═══ FINAL CTA ═══ -->
     <section class="landing-section">
-      <div class="full">
-        <div class="sec-kicker">— joining</div>
-      </div>
-
       <div class="main">
         <h2 class="sec-head">Start a room. Pick your <em><mark>first three.</mark></em></h2>
       </div>
@@ -1164,15 +1152,6 @@
   /* Hero */
   .landing-hero { padding: 72px 0 96px; }
 
-  .hero-kicker {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: #C24D2C;
-    margin-bottom: 28px;
-  }
-
   .landing-page h1 {
     font-family: 'Fraunces', serif;
     font-weight: 300;
@@ -1235,15 +1214,6 @@
   .landing-btn-secondary:hover {
     color: #C24D2C;
     text-decoration-color: #C24D2C;
-  }
-
-  .sec-kicker {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: #C24D2C;
-    margin-bottom: 18px;
   }
 
   .sec-head {

@@ -20,7 +20,7 @@
   let requestVersion = 0;
 
   const trimmedQuery = $derived(query.trim());
-  const hasResults = $derived(results.communities.length > 0 || results.articles.length > 0);
+  const hasResults = $derived(results.rooms.length > 0 || results.articles.length > 0);
   const showEmptyState = $derived(
     trimmedQuery.length >= MIN_SEARCH_QUERY_LENGTH &&
       !loading &&
@@ -158,7 +158,7 @@
   function emptySearch(searchQuery: string): SearchResponse {
     return {
       query: searchQuery,
-      communities: [],
+      rooms: [],
       articles: []
     };
   }
@@ -212,14 +212,14 @@
       {:else if showEmptyState}
         <li class="menu-title text-base-content/50"><span>No results for "{trimmedQuery}"</span></li>
       {:else}
-        {#if results.communities.length > 0}
+        {#if results.rooms.length > 0}
           <li class="menu-title"><span>Rooms</span></li>
-          {#each results.communities as community (community.id)}
+          {#each results.rooms as room (room.id)}
             <li>
               <a href={`/r/${room.id}`} onclick={closeDropdown}>
                 <span class="flex-1 truncate font-medium">{room.name}</span>
-                {#if community.about}
-                  <span class="text-xs text-base-content/50 truncate max-w-[12rem]">{community.about}</span>
+                {#if room.about}
+                  <span class="text-xs text-base-content/50 truncate max-w-[12rem]">{room.about}</span>
                 {/if}
               </a>
             </li>

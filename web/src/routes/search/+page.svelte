@@ -5,10 +5,10 @@
 
   let { data }: PageProps = $props();
 
-  const communityCount = $derived(data.results.communities.length);
+  const roomCount = $derived(data.results.rooms.length);
   const articleCount = $derived(data.results.articles.length);
-  const totalCount = $derived(communityCount + articleCount);
-  const hasResults = $derived(data.results.communities.length > 0 || data.results.articles.length > 0);
+  const totalCount = $derived(roomCount + articleCount);
+  const hasResults = $derived(data.results.rooms.length > 0 || data.results.articles.length > 0);
 </script>
 
 <svelte:head>
@@ -41,22 +41,22 @@
     </div>
   {:else}
     <p class="search-summary">
-      {totalCount} result{totalCount === 1 ? '' : 's'} · {communityCount} room{communityCount === 1
+      {totalCount} result{totalCount === 1 ? '' : 's'} · {roomCount} room{roomCount === 1
         ? ''
         : 's'} · {articleCount} article{articleCount === 1 ? '' : 's'}
     </p>
 
-    {#if data.results.communities.length > 0}
+    {#if data.results.rooms.length > 0}
       <section class="result-section">
         <div class="result-section-head">
           <h2 class="result-section-title">
-            {data.results.communities.length} public room{data.results.communities.length === 1 ? '' : 's'}
+            {data.results.rooms.length} public room{data.results.rooms.length === 1 ? '' : 's'}
           </h2>
         </div>
 
         <div class="community-grid">
-          {#each data.results.communities as community (community.id)}
-            <RoomCard {community} showRoute={true} />
+          {#each data.results.rooms as room (room.id)}
+            <RoomCard community={room} showRoute={true} />
           {/each}
         </div>
       </section>

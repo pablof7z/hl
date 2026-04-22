@@ -26,7 +26,7 @@
   </header>
 
   <RoomGrid
-    communities={data.communities}
+    rooms={data.rooms}
     showVisibilityFilter={false}
     searchPlaceholder="Search rooms by name, URL, or description"
     emptyLabel="No public rooms are visible yet."
