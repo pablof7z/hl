@@ -29,11 +29,21 @@ struct RoomLanesView: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(Lane.build(artifacts: artifacts, highlights: highlights)) { lane in
-                        LaneView(lane: lane, onShareToCommunity: onShareToCommunity)
+                        laneView(for: lane)
                     }
                 }
             }
             .background(Color.highlighterPaper.ignoresSafeArea())
+        }
+    }
+
+    @ViewBuilder
+    private func laneView(for lane: Lane) -> some View {
+        switch lane.artifact.preview.source {
+        case "book":
+            BookLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
+        default:
+            LaneView(lane: lane, onShareToCommunity: onShareToCommunity)
         }
     }
 }

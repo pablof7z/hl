@@ -45,4 +45,19 @@ extension Color {
             ? UIColor(red: 0.106, green: 0.145, blue: 0.192, alpha: 1)
             : UIColor(red: 0.91, green: 0.955, blue: 0.992, alpha: 1)
     })
+
+    /// Book-lane surface — a warmer paper leaf that reads distinctly from
+    /// `highlighterPaper` when stacked next to other lane atmospheres.
+    static let laneBookPaper = Color(uiColor: UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.110, green: 0.094, blue: 0.075, alpha: 1)
+            : UIColor(red: 0.965, green: 0.945, blue: 0.902, alpha: 1)
+    })
+
+    /// Gutter rule shown down the margin of a book-lane pull-quote.
+    static let laneBookGutter = Color(uiColor: UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.35, green: 0.30, blue: 0.24, alpha: 1)
+            : UIColor(red: 0.78, green: 0.74, blue: 0.65, alpha: 1)
+    })
 }
