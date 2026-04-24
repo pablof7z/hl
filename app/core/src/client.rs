@@ -909,6 +909,74 @@ impl HighlighterCore {
         let _ = self.require_user_pubkey()?;
         crate::pictures::publish_picture(&self.runtime, draft).await
     }
+
+    // -- Relay config (NIP-65 read/write + NIP-78 rooms/indexer) --
+
+    /// Return the user's effective relay list, merging NIP-65 (read/write)
+    /// with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
+    /// when neither has been cached yet (first login).
+    pub async fn get_relays(&self) -> Result<Vec<crate::relays::RelayConfig>, CoreError> {
+        let user = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .ok_or(CoreError::NotAuthenticated)?;
+        crate::relays::query_relays(self.runtime.ndb(), &user.pubkey)
+    }
+
+    /// Insert-or-update a single relay. Replaces the row with matching URL or
+    /// appends a new one, then re-publishes kind:10002 + kind:30078.
+    pub async fn upsert_relay(
+        &self,
+        cfg: crate::relays::RelayConfig,
+    ) -> Result<(), CoreError> {
+        let user = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .ok_or(CoreError::NotAuthenticated)?;
+        crate::relays::upsert_relay(&self.runtime, &user.pubkey, cfg).await
+    }
+
+    /// Remove a relay by URL.
+    pub async fn remove_relay(&self, url: String) -> Result<(), CoreError> {
+        let user = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .ok_or(CoreError::NotAuthenticated)?;
+        crate::relays::remove_relay(&self.runtime, &user.pubkey, url).await
+    }
+
+    /// Atomically update a single relay's role flags.
+    pub async fn set_relay_roles(
+        &self,
+        url: String,
+        read: bool,
+        write: bool,
+        rooms: bool,
+        indexer: bool,
+    ) -> Result<(), CoreError> {
+        let user = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .ok_or(CoreError::NotAuthenticated)?;
+        crate::relays::set_relay_roles(
+            &self.runtime,
+            &user.pubkey,
+            url,
+            read,
+            write,
+            rooms,
+            indexer,
+        )
+        .await
+    }
 }
 
 impl HighlighterCore {

@@ -262,4 +262,34 @@ actor SafeHighlighterCore {
     func publishPicture(_ draft: PictureDraft) async throws -> PictureRecord {
         try await core.publishPicture(draft: draft)
     }
+
+    // MARK: - Relay config (NIP-65 read/write + NIP-78 rooms/indexer)
+
+    func getRelays() async throws -> [RelayConfig] {
+        try await core.getRelays()
+    }
+
+    func upsertRelay(_ cfg: RelayConfig) async throws {
+        try await core.upsertRelay(cfg: cfg)
+    }
+
+    func removeRelay(_ url: String) async throws {
+        try await core.removeRelay(url: url)
+    }
+
+    func setRelayRoles(
+        url: String,
+        read: Bool,
+        write: Bool,
+        rooms: Bool,
+        indexer: Bool
+    ) async throws {
+        try await core.setRelayRoles(
+            url: url,
+            read: read,
+            write: write,
+            rooms: rooms,
+            indexer: indexer
+        )
+    }
 }

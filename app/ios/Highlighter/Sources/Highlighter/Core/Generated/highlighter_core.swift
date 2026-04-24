@@ -809,6 +809,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getRecentBooks(limit: UInt32) async throws  -> [ArtifactRecord]
     
     /**
+     * Return the user's effective relay list, merging NIP-65 (read/write)
+     * with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
+     * when neither has been cached yet (first login).
+     */
+    func getRelays() async throws  -> [RelayConfig]
+    
+    /**
      * Rooms where authors of articles the user has highlighted post
      * artifacts. Empty when the user hasn't highlighted any articles yet.
      */
@@ -871,6 +878,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func publishPicture(draft: PictureDraft) async throws  -> PictureRecord
     
     /**
+     * Remove a relay by URL.
+     */
+    func removeRelay(url: String) async throws 
+    
+    /**
      * Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
      * event id on success. The UI treats this as fire-and-forget: a
      * subsequent `MembershipChanged` delta for this group with the user's
@@ -895,6 +907,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * state (no republish).
      */
     func setFollow(targetPubkeyHex: String, follow: Bool) async throws  -> String?
+    
+    /**
+     * Atomically update a single relay's role flags.
+     */
+    func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async throws 
     
     /**
      * Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
@@ -1011,6 +1028,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `alt` is the recognized OCR text, or empty if none.
      */
     func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async throws  -> BlossomUpload
+    
+    /**
+     * Insert-or-update a single relay. Replaces the row with matching URL or
+     * appends a new one, then re-publishes kind:10002 + kind:30078.
+     */
+    func upsertRelay(cfg: RelayConfig) async throws 
     
 }
 open class HighlighterCore: HighlighterCoreProtocol, @unchecked Sendable {
@@ -1383,6 +1406,28 @@ open func getRecentBooks(limit: UInt32)async throws  -> [ArtifactRecord]  {
 }
     
     /**
+     * Return the user's effective relay list, merging NIP-65 (read/write)
+     * with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
+     * when neither has been cached yet (first login).
+     */
+open func getRelays()async throws  -> [RelayConfig]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_relays(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeRelayConfig.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Rooms where authors of articles the user has highlighted post
      * artifacts. Empty when the user hasn't highlighted any articles yet.
      */
@@ -1680,6 +1725,26 @@ open func publishPicture(draft: PictureDraft)async throws  -> PictureRecord  {
 }
     
     /**
+     * Remove a relay by URL.
+     */
+open func removeRelay(url: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_remove_relay(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(url)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
      * event id on success. The UI treats this as fire-and-forget: a
      * subsequent `MembershipChanged` delta for this group with the user's
@@ -1766,6 +1831,26 @@ open func setFollow(targetPubkeyHex: String, follow: Bool)async throws  -> Strin
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Atomically update a single relay's role flags.
+     */
+open func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_set_relay_roles(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(url),FfiConverterBool.lower(read),FfiConverterBool.lower(write),FfiConverterBool.lower(rooms),FfiConverterBool.lower(indexer)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -2098,6 +2183,27 @@ open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, 
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeBlossomUpload_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Insert-or-update a single relay. Replaces the row with matching URL or
+     * appends a new one, then re-publishes kind:10002 + kind:30078.
+     */
+open func upsertRelay(cfg: RelayConfig)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_upsert_relay(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeRelayConfig_lower(cfg)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -4425,6 +4531,103 @@ public func FfiConverterTypeReadingFeedItem_lower(_ value: ReadingFeedItem) -> R
 
 
 /**
+ * A single row in the user's relay list, carrying all four roles.
+ */
+public struct RelayConfig {
+    public var url: String
+    public var read: Bool
+    public var write: Bool
+    public var rooms: Bool
+    public var indexer: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) {
+        self.url = url
+        self.read = read
+        self.write = write
+        self.rooms = rooms
+        self.indexer = indexer
+    }
+}
+
+#if compiler(>=6)
+extension RelayConfig: Sendable {}
+#endif
+
+
+extension RelayConfig: Equatable, Hashable {
+    public static func ==(lhs: RelayConfig, rhs: RelayConfig) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.read != rhs.read {
+            return false
+        }
+        if lhs.write != rhs.write {
+            return false
+        }
+        if lhs.rooms != rhs.rooms {
+            return false
+        }
+        if lhs.indexer != rhs.indexer {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(read)
+        hasher.combine(write)
+        hasher.combine(rooms)
+        hasher.combine(indexer)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayConfig {
+        return
+            try RelayConfig(
+                url: FfiConverterString.read(from: &buf), 
+                read: FfiConverterBool.read(from: &buf), 
+                write: FfiConverterBool.read(from: &buf), 
+                rooms: FfiConverterBool.read(from: &buf), 
+                indexer: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayConfig, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterBool.write(value.read, into: &buf)
+        FfiConverterBool.write(value.write, into: &buf)
+        FfiConverterBool.write(value.rooms, into: &buf)
+        FfiConverterBool.write(value.indexer, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayConfig_lift(_ buf: RustBuffer) throws -> RelayConfig {
+    return try FfiConverterTypeRelayConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayConfig_lower(_ value: RelayConfig) -> RustBuffer {
+    return FfiConverterTypeRelayConfig.lower(value)
+}
+
+
+/**
  * A single explorer row: a room plus the signal that surfaced it. The
  * iOS side uses `reason_pubkeys` to render an avatar cluster and
  * `reason_kind` to render the subtitle.
@@ -5447,6 +5650,31 @@ fileprivate struct FfiConverterSequenceTypeReadingFeedItem: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRelayConfig: FfiConverterRustBuffer {
+    typealias SwiftType = [RelayConfig]
+
+    public static func write(_ value: [RelayConfig], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRelayConfig.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RelayConfig] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RelayConfig]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRelayConfig.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRoomRecommendation: FfiConverterRustBuffer {
     typealias SwiftType = [RoomRecommendation]
 
@@ -5581,6 +5809,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 33628) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_relays() != 12364) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_rooms_from_read_authors() != 47912) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5632,6 +5863,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_picture() != 8020) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 27189) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_request_join_room() != 22012) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5645,6 +5879,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_follow() != 22034) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_relay_roles() != 25561) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_sign_nip98_auth() != 43473) {
@@ -5690,6 +5927,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 51840) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 52902) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_constructor_highlightercore_new() != 37739) {
