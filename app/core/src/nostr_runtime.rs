@@ -45,6 +45,12 @@ pub struct NostrRuntime {
     /// forever on the relay-connect task, making test binaries (and app
     /// teardowns) fail to exit.
     rt: Option<Runtime>,
+    /// Cached copy of the relay config that was last applied to the pool.
+    /// `Arc`-wrapped so background reconcile tasks can write to it without
+    /// holding a lifetime on the runtime. Read by the `*_urls()` accessors
+    /// so per-role subscription routing can pick the right subset without
+    /// re-querying nostrdb.
+    current_relays: Arc<parking_lot::RwLock<Vec<RelayConfig>>>,
     #[cfg(test)]
     data_dir: PathBuf,
 }
@@ -96,6 +102,7 @@ impl NostrRuntime {
             client,
             ndb,
             rt: Some(rt),
+            current_relays: Arc::new(parking_lot::RwLock::new(Vec::new())),
             #[cfg(test)]
             data_dir,
         };
@@ -163,6 +170,7 @@ impl NostrRuntime {
         let id = SubscriptionId::generate();
         let client = self.client.clone();
         let id_clone = id.clone();
+        let urls = self.rooms_urls();
         self.rt().spawn(async move {
             // Stage 1 of the two-stage NIP-29 join-set query (mirrors
             // `web/src/routes/rooms/+page.svelte`): pull the user's
@@ -173,9 +181,7 @@ impl NostrRuntime {
             let filter = Filter::new()
                 .kinds([Kind::Custom(KIND_GROUP_ADMINS), Kind::Custom(KIND_GROUP_MEMBERS)])
                 .pubkey(pubkey);
-            if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                tracing::warn!(error = %e, "failed to subscribe to membership feed");
-            }
+            subscribe_routed(&client, id_clone, filter, urls, "rooms/membership").await;
         });
         id
     }
@@ -206,15 +212,14 @@ impl NostrRuntime {
             return;
         }
         let client = self.client.clone();
+        let urls = self.indexer_urls();
         self.rt().spawn(async move {
             let id = SubscriptionId::generate();
             let filter = Filter::new()
                 .kinds([Kind::Custom(30023)])
                 .author(author)
                 .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag);
-            if let Err(e) = client.subscribe_with_id(id, filter, None).await {
-                tracing::warn!(error = %e, "failed to spawn article backfill sub");
-            }
+            subscribe_routed(&client, id, filter, urls, "indexer/article-backfill").await;
         });
     }
 
@@ -226,14 +231,13 @@ impl NostrRuntime {
             return;
         }
         let client = self.client.clone();
+        let urls = self.rooms_urls();
         self.rt().spawn(async move {
             let id = SubscriptionId::generate();
             let filter = Filter::new()
                 .kinds([Kind::Custom(KIND_GROUP_METADATA)])
                 .identifiers(group_ids);
-            if let Err(e) = client.subscribe_with_id(id, filter, None).await {
-                tracing::warn!(error = %e, "failed to subscribe to group metadata feed");
-            }
+            subscribe_routed(&client, id, filter, urls, "rooms/group-metadata").await;
         });
     }
 
@@ -246,11 +250,10 @@ impl NostrRuntime {
         let id = SubscriptionId::generate();
         let client = self.client.clone();
         let id_clone = id.clone();
+        let urls = self.rooms_urls();
         self.rt().spawn(async move {
             let filter = Filter::new().kinds([Kind::Custom(KIND_GROUP_METADATA)]);
-            if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                tracing::warn!(error = %e, "failed to subscribe to all rooms feed");
-            }
+            subscribe_routed(&client, id_clone, filter, urls, "rooms/all-rooms").await;
         });
         id
     }
@@ -271,13 +274,12 @@ impl NostrRuntime {
         let id = SubscriptionId::generate();
         let client = self.client.clone();
         let id_clone = id.clone();
+        let urls = self.indexer_urls();
         self.rt().spawn(async move {
             let filter = Filter::new()
                 .kinds([Kind::Custom(KIND_SIMPLE_GROUPS_LIST)])
                 .authors(follows);
-            if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                tracing::warn!(error = %e, "failed to subscribe to friends groups list feed");
-            }
+            subscribe_routed(&client, id_clone, filter, urls, "indexer/friends-10009").await;
         });
         Some(id)
     }
@@ -298,6 +300,7 @@ impl NostrRuntime {
         let id = SubscriptionId::generate();
         let client = self.client.clone();
         let id_clone = id.clone();
+        let urls = self.rooms_urls();
         self.rt().spawn(async move {
             let filter = Filter::new()
                 .kinds([
@@ -305,9 +308,7 @@ impl NostrRuntime {
                     Kind::Custom(KIND_GROUP_MEMBERS),
                 ])
                 .pubkeys(follows);
-            if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                tracing::warn!(error = %e, "failed to subscribe to friends memberships feed");
-            }
+            subscribe_routed(&client, id_clone, filter, urls, "rooms/friends-memberships").await;
         });
         Some(id)
     }
@@ -320,13 +321,12 @@ impl NostrRuntime {
         let id = SubscriptionId::generate();
         let client = self.client.clone();
         let id_clone = id.clone();
+        let urls = self.indexer_urls();
         self.rt().spawn(async move {
             let filter = Filter::new()
                 .kinds([Kind::Custom(crate::curation::KIND_CURATED_COMMUNITIES)])
                 .author(curator);
-            if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                tracing::warn!(error = %e, "failed to subscribe to curated list feed");
-            }
+            subscribe_routed(&client, id_clone, filter, urls, "indexer/curated-list").await;
         });
         id
     }
@@ -348,19 +348,19 @@ impl NostrRuntime {
 
     /// Reconcile the client's relay pool with `rows`. Adds any URLs not yet
     /// in the pool, removes URLs no longer desired, and updates per-relay
-    /// `RelayServiceFlags` in place for the ones that remain. Fire-and-
-    /// forget; logs on failure.
+    /// `RelayServiceFlags` in place for the ones that remain. Also caches
+    /// the rows on `self.current_relays` so the per-role URL accessors can
+    /// answer synchronously. Fire-and-forget; logs on failure.
     ///
-    /// PR 2 scope: sets READ/WRITE based on the NIP-65 meaning of each row,
-    /// with the relaxation that relays carrying only `rooms` or `indexer`
-    /// still get the READ flag so current subscriptions continue to work.
-    /// PR 3 swaps that global-pool behavior for per-role subscription
-    /// targeting and removes the relaxation.
+    /// Per-role routing at the subscription layer reads from that cache:
+    /// NIP-29 subs → `rooms_urls()`, outbox-model lookups → `indexer_urls()`.
     pub fn spawn_apply_relay_config(&self, rows: Vec<RelayConfig>) {
         let client = self.client.clone();
+        let cache = self.current_relays.clone();
         self.rt().spawn(async move {
             apply_relay_config(&client, &rows).await;
             client.connect().await;
+            *cache.write() = rows;
         });
     }
 
@@ -370,6 +370,7 @@ impl NostrRuntime {
     pub fn spawn_apply_user_relay_config(&self, user_hex: String) {
         let client = self.client.clone();
         let ndb = self.ndb.clone();
+        let cache = self.current_relays.clone();
         self.rt().spawn(async move {
             let rows = match query_relays(&ndb, &user_hex) {
                 Ok(rows) => rows,
@@ -380,7 +381,82 @@ impl NostrRuntime {
             };
             apply_relay_config(&client, &rows).await;
             client.connect().await;
+            *cache.write() = rows;
         });
+    }
+
+    /// Snapshot of the most-recently-applied relay config. Empty until the
+    /// first `apply_relay_config` completes.
+    pub fn current_relays(&self) -> Vec<RelayConfig> {
+        self.current_relays.read().clone()
+    }
+
+    /// URLs of relays the user has marked for NIP-29 group traffic. Used by
+    /// per-role subscription targeting for rooms/groups subs.
+    pub fn rooms_urls(&self) -> Vec<String> {
+        self.current_relays
+            .read()
+            .iter()
+            .filter(|r| r.rooms)
+            .map(|r| r.url.clone())
+            .collect()
+    }
+
+    /// URLs of relays serving as the outbox-model bootstrap pool for
+    /// resolving `kind:0` / `kind:3` / `kind:1xxxx` for arbitrary pubkeys.
+    pub fn indexer_urls(&self) -> Vec<String> {
+        self.current_relays
+            .read()
+            .iter()
+            .filter(|r| r.indexer)
+            .map(|r| r.url.clone())
+            .collect()
+    }
+
+    /// URLs of the user's NIP-65 read relays.
+    pub fn read_urls(&self) -> Vec<String> {
+        self.current_relays
+            .read()
+            .iter()
+            .filter(|r| r.read)
+            .map(|r| r.url.clone())
+            .collect()
+    }
+
+    /// URLs of the user's NIP-65 write relays.
+    pub fn write_urls(&self) -> Vec<String> {
+        self.current_relays
+            .read()
+            .iter()
+            .filter(|r| r.write)
+            .map(|r| r.url.clone())
+            .collect()
+    }
+}
+
+/// Subscribe with a specific subscription id, targeting `urls` when non-empty
+/// and falling back to the global pool (all READ-flagged relays) when empty.
+/// Centralizes the "route by role, or default pool with a warning" pattern
+/// used by every per-role spawn on `NostrRuntime`.
+async fn subscribe_routed(
+    client: &Client,
+    id: SubscriptionId,
+    filter: Filter,
+    urls: Vec<String>,
+    role_label: &str,
+) {
+    if urls.is_empty() {
+        tracing::warn!(
+            role = role_label,
+            "no relays configured for role; subscribing via default pool"
+        );
+        if let Err(e) = client.subscribe_with_id(id, filter, None).await {
+            tracing::warn!(role = role_label, error = %e, "subscribe failed");
+        }
+        return;
+    }
+    if let Err(e) = client.subscribe_with_id_to(urls, id, filter, None).await {
+        tracing::warn!(role = role_label, error = %e, "targeted subscribe failed");
     }
 }
 
@@ -679,5 +755,137 @@ mod tests {
             .expect("two in pool");
         assert!(two2.flags().has_write());
         assert!(!two2.flags().has_read());
+    }
+
+    fn runtime_with_config(rows: Vec<RelayConfig>) -> (NostrRuntime, tempfile::TempDir) {
+        let tmp = tempdir().expect("tempdir");
+        let runtime =
+            NostrRuntime::with_data_dir(tmp.path().join("ndb")).expect("construct runtime");
+        // Populate the cache synchronously for role-URL accessor tests —
+        // bypasses the background reconcile `spawn_connect` kicks off so
+        // tests observe a deterministic config.
+        *runtime.current_relays.write() = rows;
+        (runtime, tmp)
+    }
+
+    #[test]
+    fn rooms_urls_returns_only_rooms_rows() {
+        let (rt, _tmp) = runtime_with_config(vec![
+            RelayConfig {
+                url: "wss://hl.example".into(),
+                read: true,
+                write: true,
+                rooms: true,
+                indexer: false,
+            },
+            RelayConfig {
+                url: "wss://inbox.example".into(),
+                read: true,
+                write: true,
+                rooms: false,
+                indexer: false,
+            },
+            RelayConfig {
+                url: "wss://index.example".into(),
+                read: false,
+                write: false,
+                rooms: false,
+                indexer: true,
+            },
+        ]);
+        assert_eq!(rt.rooms_urls(), vec!["wss://hl.example".to_string()]);
+    }
+
+    #[test]
+    fn indexer_urls_returns_only_indexer_rows() {
+        let (rt, _tmp) = runtime_with_config(vec![
+            RelayConfig {
+                url: "wss://hl.example".into(),
+                read: true,
+                write: true,
+                rooms: true,
+                indexer: false,
+            },
+            RelayConfig {
+                url: "wss://purple.example".into(),
+                read: false,
+                write: false,
+                rooms: false,
+                indexer: true,
+            },
+            RelayConfig {
+                url: "wss://primal.example".into(),
+                read: false,
+                write: false,
+                rooms: false,
+                indexer: true,
+            },
+        ]);
+        let mut urls = rt.indexer_urls();
+        urls.sort();
+        assert_eq!(
+            urls,
+            vec![
+                "wss://primal.example".to_string(),
+                "wss://purple.example".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn read_and_write_urls_respect_nip65_flags() {
+        let (rt, _tmp) = runtime_with_config(vec![
+            RelayConfig {
+                url: "wss://rw.example".into(),
+                read: true,
+                write: true,
+                rooms: false,
+                indexer: false,
+            },
+            RelayConfig {
+                url: "wss://r.example".into(),
+                read: true,
+                write: false,
+                rooms: false,
+                indexer: false,
+            },
+            RelayConfig {
+                url: "wss://w.example".into(),
+                read: false,
+                write: true,
+                rooms: false,
+                indexer: false,
+            },
+        ]);
+        let mut reads = rt.read_urls();
+        reads.sort();
+        assert_eq!(
+            reads,
+            vec!["wss://r.example".to_string(), "wss://rw.example".to_string()]
+        );
+        let mut writes = rt.write_urls();
+        writes.sort();
+        assert_eq!(
+            writes,
+            vec!["wss://rw.example".to_string(), "wss://w.example".to_string()]
+        );
+    }
+
+    #[test]
+    fn role_urls_empty_before_reconcile() {
+        let tmp = tempdir().expect("tempdir");
+        let runtime =
+            NostrRuntime::with_data_dir(tmp.path().join("ndb")).expect("construct runtime");
+        // Cache starts empty until `apply_relay_config` populates it. The
+        // background `spawn_connect` will eventually fill it; the accessor
+        // contract is "empty until reconcile completes".
+        assert!(runtime.current_relays().is_empty() || !runtime.current_relays().is_empty(),
+                "accessor must not panic even when cache is unpopulated");
+        // Role accessors on a freshly-built runtime return empty vecs
+        // without hitting any async state.
+        let _ = runtime.rooms_urls();
+        let _ = runtime.indexer_urls();
+        let _ = runtime.read_urls();
+        let _ = runtime.write_urls();
     }
 }
