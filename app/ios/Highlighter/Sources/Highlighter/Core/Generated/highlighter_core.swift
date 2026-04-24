@@ -920,6 +920,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func publishPicture(draft: PictureDraft) async throws  -> PictureRecord
     
     /**
+     * Nudge the relay pool to attempt a reconnect on every disconnected
+     * relay. `Client::connect` is idempotent — already-connected relays
+     * are unaffected; disconnected / terminated / banned relays get a
+     * fresh WebSocket attempt.
+     */
+    func reconnectAll() async throws 
+    
+    /**
      * Remove a relay by URL.
      */
     func removeRelay(url: String) async throws 
@@ -1934,6 +1942,29 @@ open func publishPicture(draft: PictureDraft)async throws  -> PictureRecord  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePictureRecord_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Nudge the relay pool to attempt a reconnect on every disconnected
+     * relay. `Client::connect` is idempotent — already-connected relays
+     * are unaffected; disconnected / terminated / banned relays get a
+     * fresh WebSocket attempt.
+     */
+open func reconnectAll()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_reconnect_all(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -6911,6 +6942,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_picture() != 8020) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 18338) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 27189) {

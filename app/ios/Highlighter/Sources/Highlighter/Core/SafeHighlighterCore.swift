@@ -364,4 +364,8 @@ actor SafeHighlighterCore {
     func subscribeRelayStatus() async throws -> UInt64 {
         try await core.subscribeRelayStatus()
     }
+
+    func reconnectAll() async throws {
+        try await core.reconnectAll()
+    }
 }

@@ -6,13 +6,27 @@ struct RelayDetailView: View {
     let url: String
     let store: NetworkSettingsStore
 
+    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
     @State private var showRemoveConfirm = false
     @State private var isSaving = false
 
+    /// Names of joined rooms hosted on this relay. Non-empty → the user
+    /// would lose access to those rooms if they remove the relay. Listed
+    /// in the confirmation dialog so the user can decide.
+    private var orphanedRoomNames: [String] {
+        appStore.joinedCommunities
+            .filter {
+                $0.relayUrl.trimmingCharacters(in: .whitespaces)
+                    == url.trimmingCharacters(in: .whitespaces)
+            }
+            .map { $0.name.isEmpty ? $0.id : $0.name }
+    }
+
     var body: some View {
         List {
             headerSection
+            orphanRoomsSection
             statsSection
             rolesSection
             removeSection
@@ -21,7 +35,9 @@ struct RelayDetailView: View {
         .navigationTitle("Relay")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog(
-            "Remove this relay?",
+            orphanedRoomNames.isEmpty
+                ? "Remove this relay?"
+                : "Remove — you're a member of rooms here",
             isPresented: $showRemoveConfirm,
             titleVisibility: .visible
         ) {
@@ -33,7 +49,11 @@ struct RelayDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Highlighter will stop sending and receiving events through this relay.")
+            if orphanedRoomNames.isEmpty {
+                Text("Highlighter will stop sending and receiving events through this relay.")
+            } else {
+                Text("This relay hosts \(orphanedRoomNames.count) of your rooms (\(orphanedRoomNames.prefix(3).joined(separator: ", "))\(orphanedRoomNames.count > 3 ? ", …" : "")). Removing it will cut you off from them until you re-add it.")
+            }
         }
     }
 
@@ -123,6 +143,25 @@ struct RelayDetailView: View {
                 }
             }
             .disabled(isSaving)
+        }
+    }
+
+    @ViewBuilder
+    private var orphanRoomsSection: some View {
+        if !orphanedRoomNames.isEmpty {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Hosts your rooms", systemImage: "person.3.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.orange)
+                    Text(orphanedRoomNames.prefix(5).joined(separator: ", ") + (orphanedRoomNames.count > 5 ? ", …" : ""))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 2)
+            } footer: {
+                Text("Removing this relay will cut you off from these rooms until you re-add it or leave them.")
+            }
         }
     }
 

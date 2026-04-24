@@ -7,12 +7,21 @@ struct NetworkSettingsView: View {
     @Environment(HighlighterStore.self) private var appStore
     @State private var store: NetworkSettingsStore?
     @State private var showAddSheet = false
+    @State private var pendingRemove: PendingRemove?
+
+    private struct PendingRemove: Identifiable {
+        let id = UUID()
+        let url: String
+        let orphanedRoomNames: [String]
+    }
 
     var body: some View {
         List {
             if let store {
                 headerSection(store)
+                safetySection(store)
                 relaysSection(store)
+                actionsSection(store)
                 footerSection
             } else {
                 ProgressView()
@@ -38,6 +47,28 @@ struct NetworkSettingsView: View {
                 AddRelaySheet { cfg in
                     Task { await store.upsert(cfg) }
                 }
+            }
+        }
+        .confirmationDialog(
+            pendingRemove?.orphanedRoomNames.isEmpty == false
+                ? "Remove — you're a member of rooms here"
+                : "Remove this relay?",
+            isPresented: Binding(
+                get: { pendingRemove != nil },
+                set: { if !$0 { pendingRemove = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingRemove
+        ) { remove in
+            Button("Remove", role: .destructive) {
+                Task { await store?.remove(remove.url) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { remove in
+            if remove.orphanedRoomNames.isEmpty {
+                Text("Highlighter will stop sending and receiving events through \(remove.url).")
+            } else {
+                Text("This relay hosts \(remove.orphanedRoomNames.count) of your rooms (\(remove.orphanedRoomNames.prefix(3).joined(separator: ", "))\(remove.orphanedRoomNames.count > 3 ? ", …" : "")). Removing it will cut you off from them until you re-add it.")
             }
         }
         .task {
@@ -90,11 +121,17 @@ struct NetworkSettingsView: View {
                 }
             }
             .onDelete { indexSet in
-                Task {
-                    for idx in indexSet {
-                        guard idx < store.relays.count else { continue }
-                        await store.remove(store.relays[idx].url)
-                    }
+                // Route every delete through the confirmation dialog so the
+                // orphan-rooms check applies whether the user swiped or
+                // tapped into the detail view.
+                for idx in indexSet where idx < store.relays.count {
+                    let url = store.relays[idx].url
+                    let orphans = orphanedRooms(for: url)
+                    pendingRemove = PendingRemove(
+                        url: url,
+                        orphanedRoomNames: orphans
+                    )
+                    break // confirm one at a time
                 }
             }
         } header: {
@@ -104,12 +141,68 @@ struct NetworkSettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private func safetySection(_ store: NetworkSettingsStore) -> some View {
+        if !store.hasOutbox || !store.hasIndexer {
+            Section {
+                if !store.hasOutbox {
+                    banner(
+                        icon: "exclamationmark.triangle.fill",
+                        tint: .orange,
+                        title: "No outbox relays",
+                        detail: "Turn on Write for at least one relay — otherwise your posts won't reach anyone."
+                    )
+                }
+                if !store.hasIndexer {
+                    banner(
+                        icon: "magnifyingglass",
+                        tint: .yellow,
+                        title: "No indexer relays",
+                        detail: "Profile and follow-list lookups for other users may fail until you turn on Indexer for at least one relay."
+                    )
+                }
+            }
+        }
+    }
+
+    private func actionsSection(_ store: NetworkSettingsStore) -> some View {
+        Section {
+            Button {
+                Task { await store.reconnectAll() }
+            } label: {
+                Label("Reconnect All", systemImage: "arrow.clockwise")
+            }
+        }
+    }
+
     private var footerSection: some View {
         Section {
             EmptyView()
         } footer: {
             Text("Tap a relay to see diagnostics, change its roles, or remove it.")
         }
+    }
+
+    /// Joined-room names that live on the given relay URL, compared by
+    /// trimmed string equality. Used by the remove-confirmation flow.
+    private func orphanedRooms(for url: String) -> [String] {
+        let target = url.trimmingCharacters(in: .whitespaces)
+        return appStore.joinedCommunities
+            .filter { $0.relayUrl.trimmingCharacters(in: .whitespaces) == target }
+            .map { $0.name.isEmpty ? $0.id : $0.name }
+    }
+
+    private func banner(icon: String, tint: Color, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(tint)
+                .frame(width: 24, alignment: .center)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder

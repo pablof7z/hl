@@ -45,6 +45,25 @@ final class NetworkSettingsStore {
         return "\(online) of \(total) online"
     }
 
+    /// True when at least one relay has the `write` flag on. When false,
+    /// the user's published events can't reach anyone — show the
+    /// no-outbox banner.
+    var hasOutbox: Bool { relays.contains { $0.write } }
+
+    /// True when at least one relay has the `indexer` flag on. When false,
+    /// profile / contact / relay-list lookups for arbitrary pubkeys will
+    /// fail — show the no-indexer banner.
+    var hasIndexer: Bool { relays.contains { $0.indexer } }
+
+    /// Kick the pool to attempt a reconnect on every disconnected relay.
+    func reconnectAll() async {
+        do {
+            try await core.reconnectAll()
+        } catch {
+            lastError = "Couldn't reconnect — \(error)"
+        }
+    }
+
     // MARK: - Lifecycle
 
     func load() async {

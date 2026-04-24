@@ -1175,6 +1175,15 @@ impl HighlighterCore {
     pub async fn subscribe_relay_status(&self) -> Result<u64, CoreError> {
         Ok(0)
     }
+
+    /// Nudge the relay pool to attempt a reconnect on every disconnected
+    /// relay. `Client::connect` is idempotent — already-connected relays
+    /// are unaffected; disconnected / terminated / banned relays get a
+    /// fresh WebSocket attempt.
+    pub async fn reconnect_all(&self) -> Result<(), CoreError> {
+        self.runtime.client().connect().await;
+        Ok(())
+    }
 }
 
 impl HighlighterCore {
