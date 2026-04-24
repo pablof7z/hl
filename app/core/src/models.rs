@@ -124,6 +124,23 @@ pub struct HighlightRecord {
     pub created_at: Option<u64>,
 }
 
+/// NIP-22 comment (kind:1111) anchored to an external artifact. The
+/// `root_*` fields name the addressable target (uppercase `A`/`E`/`I`);
+/// `parent_*` name the direct parent in the thread (empty for top-level
+/// comments, which have parent == root).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentRecord {
+    pub event_id: String,
+    pub pubkey: String,
+    pub body: String,
+    pub root_tag_name: String,
+    pub root_tag_value: String,
+    pub parent_tag_name: String,
+    pub parent_tag_value: String,
+    pub root_kind: String,
+    pub created_at: Option<u64>,
+}
+
 /// Highlight + its associated artifact (for feed rendering).
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct HydratedHighlight {

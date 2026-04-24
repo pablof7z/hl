@@ -13,13 +13,15 @@ import Observation
 final class RoomStore {
     private(set) var artifacts: [ArtifactRecord] = []
     private(set) var highlights: [HydratedHighlight] = []
-    /// Highlights fetched per-article via `get_highlights_for_article(address:)`.
-    /// Keyed on the NIP-23 address (e.g. `30023:<pubkey>:<d>`). This is the
-    /// path that actually yields article highlights — the group-scoped
-    /// `get_highlights(groupId:)` filters by `#h:groupId`, which kind:9802
-    /// events don't carry (the community association is on kind:16 reposts,
-    /// not on the highlight itself).
-    private(set) var highlightsByAddress: [String: [HighlightRecord]] = [:]
+    /// Per-artifact highlights, keyed by `"<tagName>:<tagValue>"` (e.g.
+    /// `"a:30023:pk:d"` for articles, `"i:isbn:…"` for books, `"r:<url>"`
+    /// for podcasts). Populated by `get_highlights_for_reference` because
+    /// the group-scoped `get_highlights(groupId:)` filters on `#h` which
+    /// kind:9802 events don't carry.
+    private(set) var highlightsByReference: [String: [HighlightRecord]] = [:]
+    /// NIP-22 comments (kind:1111) per artifact, keyed by the UPPERCASE
+    /// scope (`"A:30023:pk:d"` / `"I:isbn:…"` / `"E:<event-id>"`).
+    private(set) var commentsByReference: [String: [CommentRecord]] = [:]
     private(set) var isLoading: Bool = true
     private(set) var loadError: String?
 
@@ -45,23 +47,18 @@ final class RoomStore {
             artifacts = try await artifactsFetch
             highlights = try await highlightsFetch
         } catch {
-            // Stubs return .NotInitialized until Phase 2 #4 lands; absence
-            // of cached data is the expected pre-impl state.
             loadError = (error as? CoreError).map { "\($0)" }
         }
         isLoading = false
 
-        await refreshArticleHighlights()
+        await refreshReferenceQueries()
 
-        // Install the per-room pump and register this store as the delta
-        // sink for its handle.
         do {
             let handle = try await core.subscribeRoom(groupId: groupId)
             subscriptionHandle = handle
             bridge?.registerRoom(self, handle: handle)
         } catch {
-            // Subscription failure leaves cache-only rendering working;
-            // surface nothing for now (matches the get*Empty state UX).
+            // Subscription failure leaves cache-only rendering working.
         }
     }
 
@@ -82,7 +79,7 @@ final class RoomStore {
             let inserted = artifacts + [artifact]
             artifacts = inserted.sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
         }
-        Task { await self.refreshArticleHighlights(for: artifact) }
+        Task { await self.refreshReferenceQueries(for: artifact) }
     }
 
     func apply(highlight: HydratedHighlight) {
@@ -91,77 +88,120 @@ final class RoomStore {
         } else {
             highlights.append(highlight)
         }
-        let address = highlight.highlight.artifactAddress
-        if !address.isEmpty {
-            var bucket = highlightsByAddress[address] ?? []
+        // Merge into the reference-scoped bucket too so per-artifact lanes
+        // reflect live arrivals without waiting for the next refresh.
+        if let (tagName, tagValue) = lowercaseReference(for: highlight.highlight) {
+            let key = "\(tagName):\(tagValue)"
+            var bucket = highlightsByReference[key] ?? []
             if let i = bucket.firstIndex(where: { $0.eventId == highlight.highlight.eventId }) {
                 bucket[i] = highlight.highlight
             } else {
                 bucket.append(highlight.highlight)
             }
-            highlightsByAddress[address] = bucket
+            bucket.sort { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
+            highlightsByReference[key] = bucket
         }
     }
 
-    // MARK: - Article highlight fetching
+    // MARK: - Reference queries
 
-    /// Parallel `get_highlights_for_article` fetch for every article-style
-    /// artifact in `artifacts`. Call after an initial load and again on new
-    /// artifact arrivals.
-    private func refreshArticleHighlights() async {
-        guard let core else { return }
-        let addresses = articleAddresses(in: artifacts)
-        guard !addresses.isEmpty else { return }
+    /// Runs `get_highlights_for_reference` + `get_comments_for_reference`
+    /// for every artifact in `artifacts`. Each artifact dispatches both
+    /// fetches in parallel; failures keep whatever was previously there.
+    private func refreshReferenceQueries() async {
+        let targets: [ReferenceTarget] = artifacts.compactMap(referenceTarget(for:))
+        guard !targets.isEmpty, let core else { return }
 
-        await withTaskGroup(of: (String, [HighlightRecord])?.self) { group in
-            for addr in addresses {
+        struct FetchResult {
+            let target: ReferenceTarget
+            let highlights: [HighlightRecord]?
+            let comments: [CommentRecord]?
+        }
+
+        await withTaskGroup(of: FetchResult.self) { group in
+            for target in targets {
                 group.addTask {
-                    do {
-                        let records = try await core.getHighlightsForArticle(address: addr)
-                        return (addr, records)
-                    } catch {
-                        return nil
-                    }
+                    let hl: [HighlightRecord]? = try? await core.getHighlightsForReference(
+                        tagName: target.lowercaseTag,
+                        tagValue: target.value
+                    )
+                    let cm: [CommentRecord]? = try? await core.getCommentsForReference(
+                        tagName: target.uppercaseTag,
+                        tagValue: target.value
+                    )
+                    return FetchResult(target: target, highlights: hl, comments: cm)
                 }
             }
             for await result in group {
-                if let (addr, records) = result {
-                    highlightsByAddress[addr] = records
+                let t = result.target
+                if let hl = result.highlights {
+                    highlightsByReference["\(t.lowercaseTag):\(t.value)"] = hl
+                }
+                if let cm = result.comments {
+                    commentsByReference["\(t.uppercaseTag):\(t.value)"] = cm
                 }
             }
         }
     }
 
-    /// Incremental refresh for a single artifact that just arrived via a
-    /// delta. Keeps the existing bucket if the fetch fails (don't wipe).
-    private func refreshArticleHighlights(for artifact: ArtifactRecord) async {
-        guard let core, let addr = articleAddress(for: artifact) else { return }
-        do {
-            let records = try await core.getHighlightsForArticle(address: addr)
-            highlightsByAddress[addr] = records
-        } catch {
-            // Keep whatever was there.
+    private func refreshReferenceQueries(for artifact: ArtifactRecord) async {
+        guard let core, let target = referenceTarget(for: artifact) else { return }
+        let hl: [HighlightRecord]? = try? await core.getHighlightsForReference(
+            tagName: target.lowercaseTag,
+            tagValue: target.value
+        )
+        let cm: [CommentRecord]? = try? await core.getCommentsForReference(
+            tagName: target.uppercaseTag,
+            tagValue: target.value
+        )
+        if let hl {
+            highlightsByReference["\(target.lowercaseTag):\(target.value)"] = hl
+        }
+        if let cm {
+            commentsByReference["\(target.uppercaseTag):\(target.value)"] = cm
         }
     }
 
-    private func articleAddresses(in artifacts: [ArtifactRecord]) -> [String] {
-        var seen = Set<String>()
-        var out: [String] = []
-        for art in artifacts {
-            guard let addr = articleAddress(for: art) else { continue }
-            if seen.insert(addr).inserted { out.append(addr) }
-        }
-        return out
+    // MARK: - Reference targets
+
+    /// The lowercase + uppercase tag pair to query for an artifact, plus
+    /// the shared value. Returns `nil` for artifacts lacking a usable
+    /// reference (no `i` / `a` / `r` information).
+    private struct ReferenceTarget: Sendable {
+        let lowercaseTag: String  // "a" | "i" | "e" | "r"
+        let uppercaseTag: String  // "A" | "I" | "E" | "R"
+        let value: String
     }
 
-    private func articleAddress(for artifact: ArtifactRecord) -> String? {
-        let name = artifact.preview.referenceTagName
-        let value = artifact.preview.referenceTagValue
-        if name == "a", !value.isEmpty { return value }
-        // Some shares carry the NIP-23 address on the highlight tag only.
-        let hName = artifact.preview.highlightTagName
-        let hValue = artifact.preview.highlightTagValue
-        if hName == "a", !hValue.isEmpty { return hValue }
+    private func referenceTarget(for artifact: ArtifactRecord) -> ReferenceTarget? {
+        let pv = artifact.preview
+        if !pv.referenceTagName.isEmpty, !pv.referenceTagValue.isEmpty {
+            return ReferenceTarget(
+                lowercaseTag: pv.referenceTagName.lowercased(),
+                uppercaseTag: pv.referenceTagName.uppercased(),
+                value: pv.referenceTagValue
+            )
+        }
+        if !pv.highlightTagName.isEmpty, !pv.highlightTagValue.isEmpty {
+            return ReferenceTarget(
+                lowercaseTag: pv.highlightTagName.lowercased(),
+                uppercaseTag: pv.highlightTagName.uppercased(),
+                value: pv.highlightTagValue
+            )
+        }
+        return nil
+    }
+
+    private func lowercaseReference(for highlight: HighlightRecord) -> (String, String)? {
+        if !highlight.artifactAddress.isEmpty {
+            return ("a", highlight.artifactAddress)
+        }
+        if !highlight.eventReference.isEmpty {
+            return ("e", highlight.eventReference)
+        }
+        if !highlight.sourceUrl.isEmpty {
+            return ("r", highlight.sourceUrl)
+        }
         return nil
     }
 }

@@ -34,8 +34,10 @@ struct PodcastLaneView: View {
             if lane.highlights.count > 1 {
                 supportingStrip
             }
+
+            LaneCommentsSection(comments: lane.comments, surface: .dark)
         }
-        .padding(.vertical, lane.highlights.isEmpty ? 14 : 28)
+        .padding(.vertical, lane.isDormant ? 14 : 28)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.laneAudioSurface)
         .environment(\.colorScheme, .dark)

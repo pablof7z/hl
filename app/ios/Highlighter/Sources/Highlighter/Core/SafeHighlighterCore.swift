@@ -160,6 +160,22 @@ actor SafeHighlighterCore {
         try await core.getHighlightsForArticle(address: address, limit: limit)
     }
 
+    func getHighlightsForReference(
+        tagName: String,
+        tagValue: String,
+        limit: UInt32 = 128
+    ) async throws -> [HighlightRecord] {
+        try await core.getHighlightsForReference(tagName: tagName, tagValue: tagValue, limit: limit)
+    }
+
+    func getCommentsForReference(
+        tagName: String,
+        tagValue: String,
+        limit: UInt32 = 128
+    ) async throws -> [CommentRecord] {
+        try await core.getCommentsForReference(tagName: tagName, tagValue: tagValue, limit: limit)
+    }
+
     func getUserHighlights(pubkeyHex: String, limit: UInt32 = 64) async throws -> [HighlightRecord] {
         try await core.getUserHighlights(pubkeyHex: pubkeyHex, limit: limit)
     }

@@ -6,6 +6,7 @@ pub mod blossom;
 pub mod bookmarks;
 pub mod cache;
 pub mod client;
+pub mod comments;
 pub mod curation;
 pub mod discovery;
 pub mod discussions;
@@ -35,8 +36,9 @@ pub use client::HighlighterCore;
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
-    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, CommunitySummary, CurrentUser,
-    DiscussionAttachment, DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord,
-    HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions, PictureDraft,
-    PictureRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation, RoomRecommendationReason,
+    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, CommentRecord,
+    CommunitySummary, CurrentUser, DiscussionAttachment, DiscussionRecord, FeedbackEventRecord,
+    FeedbackThreadRecord, HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions,
+    PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
+    RoomRecommendationReason,
 };

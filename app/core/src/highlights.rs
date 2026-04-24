@@ -198,6 +198,47 @@ pub async fn publish(
     Ok(record_from_event(&event, &draft, &artifact))
 }
 
+/// Read kind:9802 highlights whose `tag_name` tag holds `tag_value`,
+/// newest first. `tag_name` is a single-char tag (e.g. `'a'` for NIP-23
+/// addressable refs, `'i'` for NIP-73 external content, `'r'` for URL).
+/// Generalizes `query_for_article`, which is now a thin wrapper over this.
+pub fn query_for_reference(
+    ndb: &Ndb,
+    tag_name: char,
+    tag_value: &str,
+    limit: u32,
+) -> Result<Vec<HighlightRecord>, CoreError> {
+    let tag_value = tag_value.trim();
+    if tag_value.is_empty() {
+        return Ok(Vec::new());
+    }
+    let txn = Transaction::new(ndb)
+        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+
+    let ndb_cap = limit.max(32) as i32;
+    let filter = NdbFilter::new()
+        .kinds([KIND_HIGHLIGHT as u64])
+        .tags([tag_value], tag_name)
+        .build();
+
+    let results = ndb
+        .query(&txn, &[filter], ndb_cap)
+        .map_err(|e| CoreError::Cache(format!("query highlights by reference: {e}")))?;
+
+    let mut records: Vec<HighlightRecord> = Vec::with_capacity(results.len());
+    for r in &results {
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(json) = note.json() else { continue };
+        let Ok(event) = Event::from_json(&json) else { continue };
+        if let Some(rec) = record_from_cached_event(&event) {
+            records.push(rec);
+        }
+    }
+    records.sort_by(|a, b| b.created_at.unwrap_or(0).cmp(&a.created_at.unwrap_or(0)));
+    records.truncate(limit as usize);
+    Ok(records)
+}
+
 /// Read kind:9802 highlights for `group_id` from nostrdb, newest first.
 /// Scans by kind only and checks `#h` manually, consistent with the pattern
 /// used elsewhere to work around nostrdb tag index limitations.

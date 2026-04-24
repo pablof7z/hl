@@ -17,15 +17,16 @@ use crate::discovery;
 use crate::errors::CoreError;
 use crate::events::{DataChangeType, Delta, EventCallback};
 use crate::feedback;
+use crate::comments;
 use crate::follows;
 use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, CommunitySummary, CurrentUser,
-    DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft, HighlightRecord,
-    HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord, ProfileMetadata,
-    ReadingFeedItem, RoomRecommendation,
+    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, CommentRecord, CommunitySummary,
+    CurrentUser, DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft,
+    HighlightRecord, HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord,
+    ProfileMetadata, ReadingFeedItem, RoomRecommendation,
 };
 use crate::reads;
 use crate::recommendations;
@@ -570,6 +571,37 @@ impl HighlighterCore {
         limit: u32,
     ) -> Result<Vec<HighlightRecord>, CoreError> {
         highlights::query_for_article(self.runtime.ndb(), address.trim(), limit)
+    }
+
+    /// Read highlights whose `tag_name` tag holds `tag_value`, newest
+    /// first. Generalizes `get_highlights_for_article`: pass `("a", "30023:pk:d")`
+    /// for articles, `("i", "isbn:…")` for ISBN books, `("r", "<url>")` for
+    /// podcasts. `tag_name` must be a single character.
+    pub async fn get_highlights_for_reference(
+        &self,
+        tag_name: String,
+        tag_value: String,
+        limit: u32,
+    ) -> Result<Vec<HighlightRecord>, CoreError> {
+        let Some(ch) = tag_name.trim().chars().next() else {
+            return Ok(Vec::new());
+        };
+        highlights::query_for_reference(self.runtime.ndb(), ch, tag_value.trim(), limit)
+    }
+
+    /// Read NIP-22 comments (kind:1111) rooted at the given uppercase
+    /// scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
+    /// books, etc. Newest first.
+    pub async fn get_comments_for_reference(
+        &self,
+        tag_name: String,
+        tag_value: String,
+        limit: u32,
+    ) -> Result<Vec<CommentRecord>, CoreError> {
+        let Some(ch) = tag_name.trim().chars().next() else {
+            return Ok(Vec::new());
+        };
+        comments::query_for_reference(self.runtime.ndb(), ch, tag_value.trim(), limit)
     }
 
     pub async fn get_user_highlights(

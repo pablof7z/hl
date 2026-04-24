@@ -16,7 +16,8 @@ import SwiftUI
 struct RoomLanesView: View {
     let artifacts: [ArtifactRecord]
     let highlights: [HydratedHighlight]
-    let highlightsByAddress: [String: [HighlightRecord]]
+    let highlightsByReference: [String: [HighlightRecord]]
+    let commentsByReference: [String: [CommentRecord]]
     let isLoading: Bool
     let onShareToCommunity: (ArtifactRecord) -> Void
 
@@ -37,7 +38,8 @@ struct RoomLanesView: View {
                     let lanes = Lane.build(
                         artifacts: artifacts,
                         highlights: highlights,
-                        highlightsByAddress: highlightsByAddress
+                        highlightsByReference: highlightsByReference,
+                        commentsByReference: commentsByReference
                     )
                     ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
                         laneView(for: lane)
@@ -125,62 +127,73 @@ struct LaneTransitionView: View {
 // MARK: - Lane model
 
 /// A single lane on the community home: an artifact together with the
-/// community's recent highlights on it.
+/// community's recent highlights and NIP-22 comments on it.
 struct Lane: Identifiable {
     let id: String
     let artifact: ArtifactRecord
     /// Newest-first.
     let highlights: [HydratedHighlight]
+    /// Newest-first.
+    let comments: [CommentRecord]
 
     var latestActivity: UInt64? {
-        if let newest = highlights.compactMap({ $0.highlight.createdAt }).max() {
-            return newest
-        }
+        var ts: UInt64 = 0
+        if let h = highlights.compactMap({ $0.highlight.createdAt }).max() { ts = max(ts, h) }
+        if let c = comments.compactMap({ $0.createdAt }).max() { ts = max(ts, c) }
+        if ts > 0 { return ts }
         return artifact.createdAt
     }
 
-    var isDormant: Bool { highlights.isEmpty }
+    var isDormant: Bool { highlights.isEmpty && comments.isEmpty }
 
-    /// Build lanes from `artifacts` + whatever highlight sources are available.
-    /// Primary path for articles: `highlightsByAddress[<nip23-addr>]` — fetched
-    /// via `get_highlights_for_article`. Secondary: the `highlights` stream
-    /// from `get_highlights(groupId:)`, matched against each artifact with a
-    /// permissive predicate. Books and podcasts rely on the secondary path
-    /// (which may yield nothing until the core exposes per-artifact queries
-    /// for those formats).
+    /// Build lanes from `artifacts` + reference-scoped highlight / comment
+    /// fetches. `highlightsByReference` is keyed `"<lowercase>:<value>"`,
+    /// `commentsByReference` is keyed `"<UPPERCASE>:<value>"` (NIP-22
+    /// root scope convention). Falls back to a permissive match against
+    /// the group-scoped `highlights` stream for any artifact that didn't
+    /// pull a per-reference result.
     static func build(
         artifacts: [ArtifactRecord],
         highlights: [HydratedHighlight],
-        highlightsByAddress: [String: [HighlightRecord]]
+        highlightsByReference: [String: [HighlightRecord]],
+        commentsByReference: [String: [CommentRecord]]
     ) -> [Lane] {
         var lanes: [Lane] = artifacts.map { art in
-            var bucket: [HydratedHighlight] = []
+            var highlightBucket: [HydratedHighlight] = []
+            var commentBucket: [CommentRecord] = []
 
-            if let addr = nip23Address(for: art),
-               let records = highlightsByAddress[addr] {
-                bucket.append(contentsOf: records.map { rec in
-                    HydratedHighlight(
-                        highlight: rec,
-                        artifact: art,
-                        sharedByEventId: nil,
-                        sharedByPubkey: nil
-                    )
-                })
+            let (lowerTag, upperTag, value) = referenceTriple(for: art)
+            if !value.isEmpty {
+                if !lowerTag.isEmpty, let recs = highlightsByReference["\(lowerTag):\(value)"] {
+                    highlightBucket.append(contentsOf: recs.map { rec in
+                        HydratedHighlight(
+                            highlight: rec,
+                            artifact: art,
+                            sharedByEventId: nil,
+                            sharedByPubkey: nil
+                        )
+                    })
+                }
+                if !upperTag.isEmpty, let recs = commentsByReference["\(upperTag):\(value)"] {
+                    commentBucket = recs
+                }
             }
 
             for h in highlights where matches(h, art) {
-                if bucket.contains(where: { $0.highlight.eventId == h.highlight.eventId }) {
+                if highlightBucket.contains(where: { $0.highlight.eventId == h.highlight.eventId }) {
                     continue
                 }
-                bucket.append(h)
+                highlightBucket.append(h)
             }
 
-            bucket.sort { ($0.highlight.createdAt ?? 0) > ($1.highlight.createdAt ?? 0) }
+            highlightBucket.sort { ($0.highlight.createdAt ?? 0) > ($1.highlight.createdAt ?? 0) }
+            commentBucket.sort { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
 
             return Lane(
                 id: art.shareEventId.isEmpty ? art.preview.id : art.shareEventId,
                 artifact: art,
-                highlights: bucket
+                highlights: highlightBucket,
+                comments: commentBucket
             )
         }
 
@@ -194,11 +207,8 @@ struct Lane: Identifiable {
         return lanes
     }
 
-    /// Permissive predicate: does this highlight belong to this artifact?
-    /// Tries the canonical `<refName>:<refValue>` pair first, then falls
-    /// back to every other field that might match. Cheap to evaluate
-    /// (string comparisons) so running it O(N·M) is fine for reasonable
-    /// artifact counts.
+    /// Permissive predicate for the group-scoped `highlights` fallback —
+    /// used only when the per-reference fetch hasn't provided a match.
     private static func matches(_ h: HydratedHighlight, _ art: ArtifactRecord) -> Bool {
         let hl = h.highlight
         let pv = art.preview
@@ -228,14 +238,17 @@ struct Lane: Identifiable {
         return false
     }
 
-    private static func nip23Address(for art: ArtifactRecord) -> String? {
-        if art.preview.referenceTagName == "a", !art.preview.referenceTagValue.isEmpty {
-            return art.preview.referenceTagValue
+    /// Returns `(lowercaseTag, uppercaseTag, value)` for the artifact's
+    /// primary reference, or empty strings for artifacts without one.
+    private static func referenceTriple(for art: ArtifactRecord) -> (String, String, String) {
+        let pv = art.preview
+        if !pv.referenceTagName.isEmpty, !pv.referenceTagValue.isEmpty {
+            return (pv.referenceTagName.lowercased(), pv.referenceTagName.uppercased(), pv.referenceTagValue)
         }
-        if art.preview.highlightTagName == "a", !art.preview.highlightTagValue.isEmpty {
-            return art.preview.highlightTagValue
+        if !pv.highlightTagName.isEmpty, !pv.highlightTagValue.isEmpty {
+            return (pv.highlightTagName.lowercased(), pv.highlightTagName.uppercased(), pv.highlightTagValue)
         }
-        return nil
+        return ("", "", "")
     }
 }
 
