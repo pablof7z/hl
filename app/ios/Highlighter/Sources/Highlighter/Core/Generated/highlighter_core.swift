@@ -738,13 +738,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func currentUser()  -> CurrentUser?
     
     /**
-     * Diagnostic report for the highlights feed. Returns a short string
-     * with ndb counts so the iOS side can show what it's seeing when the
-     * feed comes back empty. Temporary — remove once the feed is stable.
-     */
-    func debugHighlightsReport() async throws  -> String
-    
-    /**
      * Every cached room, newest first, truncated to `limit`. Powers the
      * explorer's "Browse all" grid.
      */
@@ -1091,28 +1084,6 @@ open func currentUser() -> CurrentUser?  {
     uniffi_highlighter_core_fn_method_highlightercore_current_user(self.uniffiClonePointer(),$0
     )
 })
-}
-    
-    /**
-     * Diagnostic report for the highlights feed. Returns a short string
-     * with ndb counts so the iOS side can show what it's seeing when the
-     * feed comes back empty. Temporary — remove once the feed is stable.
-     */
-open func debugHighlightsReport()async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_debug_highlights_report(
-                    self.uniffiClonePointer()
-                    
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
 }
     
     /**
@@ -5521,9 +5492,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_current_user() != 38772) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_debug_highlights_report() != 13450) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_all_rooms() != 20905) {

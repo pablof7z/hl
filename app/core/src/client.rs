@@ -12,6 +12,8 @@ use parking_lot::RwLock;
 
 use crate::articles;
 use crate::blossom;
+use crate::curation;
+use crate::discovery;
 use crate::errors::CoreError;
 use crate::events::{DataChangeType, Delta, EventCallback};
 use crate::follows;
@@ -21,9 +23,10 @@ use crate::isbn_lookup;
 use crate::models::{
     ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, CommunitySummary, CurrentUser,
     DiscussionRecord, HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions,
-    PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem,
+    PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
 };
 use crate::reads;
+use crate::recommendations;
 use crate::nip46::{self, BunkerSigner};
 use crate::nostr_runtime::NostrRuntime;
 use crate::profile;
@@ -102,6 +105,12 @@ impl HighlighterCore {
                 self.runtime.drop_subscription(sub_id);
             }
             if let Some(sub_id) = guard.session.take_contacts_subscription() {
+                self.runtime.drop_subscription(sub_id);
+            }
+            if let Some(sub_id) = guard.session.take_discovery_subscription() {
+                self.runtime.drop_subscription(sub_id);
+            }
+            if let Some(sub_id) = guard.session.take_curation_subscription() {
                 self.runtime.drop_subscription(sub_id);
             }
         }
@@ -459,113 +468,6 @@ impl HighlighterCore {
         )
     }
 
-    /// Diagnostic report for the highlights feed. Returns a short string
-    /// with ndb counts so the iOS side can show what it's seeing when the
-    /// feed comes back empty. Temporary — remove once the feed is stable.
-    pub async fn debug_highlights_report(&self) -> Result<String, CoreError> {
-        use nostrdb::{Filter as NdbFilter, Transaction};
-        let Some(user) = self.inner.read().session.current_user() else {
-            return Ok("not_authenticated".to_string());
-        };
-
-        let follows_hex =
-            follows::query_follows(self.runtime.ndb(), &user.pubkey)?;
-        let mut follows_pks: Vec<PublicKey> = follows_hex
-            .iter()
-            .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
-            .collect();
-        let self_pk = PublicKey::from_hex(&user.pubkey).ok();
-        if let Some(me) = &self_pk {
-            if !follows_pks.iter().any(|pk| pk == me) {
-                follows_pks.push(*me);
-            }
-        }
-
-        let joined =
-            groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user.pubkey)?;
-        let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
-
-        let txn = Transaction::new(self.runtime.ndb())
-            .map_err(|e| CoreError::Cache(format!("debug txn: {e}")))?;
-
-        let total = self
-            .runtime
-            .ndb()
-            .query(&txn, &[NdbFilter::new().kinds([9802u64]).build()], 4096)
-            .map(|r| r.len())
-            .unwrap_or(0);
-
-        let mut self_9802 = 0usize;
-        if let Some(me) = &self_pk {
-            let pk_bytes = me.to_bytes();
-            let filter = NdbFilter::new()
-                .kinds([9802u64])
-                .authors([&pk_bytes])
-                .build();
-            self_9802 = self
-                .runtime
-                .ndb()
-                .query(&txn, &[filter], 4096)
-                .map(|r| r.len())
-                .unwrap_or(0);
-        }
-
-        let mut follows_9802 = 0usize;
-        if !follows_pks.is_empty() {
-            let author_bytes: Vec<[u8; 32]> =
-                follows_pks.iter().map(|pk| pk.to_bytes()).collect();
-            let author_refs: Vec<&[u8; 32]> = author_bytes.iter().collect();
-            let filter = NdbFilter::new()
-                .kinds([9802u64])
-                .authors(author_refs.iter().copied())
-                .build();
-            follows_9802 = self
-                .runtime
-                .ndb()
-                .query(&txn, &[filter], 4096)
-                .map(|r| r.len())
-                .unwrap_or(0);
-        }
-
-        let mut room_matched = 0usize;
-        if !group_ids.is_empty() {
-            let filter = NdbFilter::new().kinds([9802u64]).build();
-            let results = self
-                .runtime
-                .ndb()
-                .query(&txn, &[filter], 4096)
-                .unwrap_or_default();
-            for r in &results {
-                let Ok(note) = self.runtime.ndb().get_note_by_key(&txn, r.note_key) else {
-                    continue;
-                };
-                let Ok(json) = note.json() else { continue };
-                let Ok(event) = Event::from_json(&json) else { continue };
-                for tag in event.tags.iter() {
-                    let s = tag.as_slice();
-                    if s.first().map(String::as_str) == Some("h") {
-                        if let Some(val) = s.get(1).map(String::as_str) {
-                            if group_ids.iter().any(|g| g == val) {
-                                room_matched += 1;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(format!(
-            "total9802={} self={} followsN={} follows9802={} groupsN={} rooms9802={}",
-            total,
-            self_9802,
-            follows_pks.len(),
-            follows_9802,
-            group_ids.len(),
-            room_matched,
-        ))
-    }
-
     // -- Profile reads (per-pubkey, no auth required) --
 
     pub async fn get_user_profile(
@@ -746,6 +648,127 @@ impl HighlighterCore {
     ) -> Result<HighlightRecord, CoreError> {
         let _ = self.require_user_pubkey()?;
         crate::highlights::publish(&self.runtime, draft, artifact).await
+    }
+
+    // -- Rooms explorer (discovery + curation + recommendations) --
+
+    /// Install (if not already installed) a long-lived relay sub for every
+    /// kind:39000 metadata event. Call once on explorer appear from iOS.
+    /// Idempotent; the sub rides until logout.
+    pub async fn start_room_discovery(&self) {
+        let already = self.inner.read().session.has_discovery_subscription();
+        if already {
+            return;
+        }
+        let sub_id = self.runtime.spawn_all_rooms_subscription();
+        self.inner
+            .write()
+            .session
+            .set_discovery_subscription(sub_id);
+    }
+
+    /// Install (if not already installed) the kind:10012 curated-list sub for
+    /// `curator_pubkey_hex`. Once the list lands in ndb, this method also
+    /// spawns a metadata backfill for every group the list references, so a
+    /// subsequent `get_featured_rooms` returns rich summaries rather than
+    /// bare ids. Idempotent; the sub rides until logout.
+    pub async fn start_featured_rooms(
+        &self,
+        curator_pubkey_hex: String,
+    ) -> Result<(), CoreError> {
+        let curator = PublicKey::from_hex(curator_pubkey_hex.trim())
+            .map_err(|e| CoreError::InvalidInput(format!("invalid curator pubkey: {e}")))?;
+
+        let already = self.inner.read().session.has_curation_subscription();
+        if !already {
+            let sub_id = self.runtime.spawn_curated_list_subscription(curator);
+            self.inner
+                .write()
+                .session
+                .set_curation_subscription(sub_id);
+        }
+
+        // Even if the sub was already installed, ensure any groups the
+        // currently-cached list references have their 39000s backfilled —
+        // the relay may have delivered the list but not the metadata.
+        let group_ids_from_list = {
+            let ndb = self.runtime.ndb();
+            // Reuse fetch_curated_rooms' internals indirectly by asking for
+            // the list's ids. A full fetch is cheap; we only need ids here.
+            match curation::fetch_curated_rooms_from_ndb(ndb, curator_pubkey_hex.trim()) {
+                Ok(summaries) => summaries.into_iter().map(|c| c.id).collect::<Vec<_>>(),
+                Err(_) => Vec::new(),
+            }
+        };
+        if !group_ids_from_list.is_empty() {
+            self.runtime
+                .spawn_group_metadata_subscription(group_ids_from_list);
+        }
+        Ok(())
+    }
+
+    /// Curator's latest kind:10012 list, resolved into `CommunitySummary`
+    /// items in curator-chosen order. Rooms without cached metadata are
+    /// dropped; the next call after `start_featured_rooms` has backfilled
+    /// metadata returns the full list.
+    pub async fn get_featured_rooms(
+        &self,
+        curator_pubkey_hex: String,
+    ) -> Result<Vec<CommunitySummary>, CoreError> {
+        curation::fetch_curated_rooms_from_ndb(self.runtime.ndb(), curator_pubkey_hex.trim())
+    }
+
+    /// Every cached room, newest first, truncated to `limit`. Powers the
+    /// explorer's "Browse all" grid.
+    pub async fn get_all_rooms(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<CommunitySummary>, CoreError> {
+        discovery::query_all_rooms_from_ndb(self.runtime.ndb(), limit)
+    }
+
+    /// The N most-recently-seen rooms. Same underlying query as
+    /// `get_all_rooms` with a tighter limit — kept as a distinct method so
+    /// the Swift explorer store's shelves remain single-purpose.
+    pub async fn get_new_rooms(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<CommunitySummary>, CoreError> {
+        discovery::query_all_rooms_from_ndb(self.runtime.ndb(), limit)
+    }
+
+    /// Rooms where 2+ of the user's follows are members. Empty when the user
+    /// isn't logged in, has no follows cached, or no room satisfies the
+    /// threshold.
+    pub async fn get_rooms_with_friends(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<RoomRecommendation>, CoreError> {
+        let Some(user) = self.inner.read().session.current_user() else {
+            return Ok(Vec::new());
+        };
+        recommendations::query_rooms_with_friends(self.runtime.ndb(), &user.pubkey, limit)
+    }
+
+    /// Rooms where authors of articles the user has highlighted post
+    /// artifacts. Empty when the user hasn't highlighted any articles yet.
+    pub async fn get_rooms_from_read_authors(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<RoomRecommendation>, CoreError> {
+        let Some(user) = self.inner.read().session.current_user() else {
+            return Ok(Vec::new());
+        };
+        recommendations::query_rooms_from_read_authors(self.runtime.ndb(), &user.pubkey, limit)
+    }
+
+    /// Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
+    /// event id on success. The UI treats this as fire-and-forget: a
+    /// subsequent `MembershipChanged` delta for this group with the user's
+    /// pubkey is the signal that the relay admitted the request.
+    pub async fn request_join_room(&self, group_id: String) -> Result<String, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        groups::publish_join_request(&self.runtime, group_id.trim()).await
     }
 
     // -- Blossom (BUD-03, kind:10063) --

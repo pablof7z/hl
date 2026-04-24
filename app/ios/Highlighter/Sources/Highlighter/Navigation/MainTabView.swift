@@ -2,7 +2,7 @@ import SwiftUI
 
 struct MainTabView: View {
     enum Section: Hashable {
-        case highlights, reads, communities, capture
+        case highlights, reads, rooms, capture
     }
 
     @State private var selection: Section = .highlights
@@ -15,8 +15,8 @@ struct MainTabView: View {
             Tab("Reads", systemImage: "text.book.closed", value: Section.reads) {
                 ReadsTabView()
             }
-            Tab("Communities", systemImage: "square.grid.2x2", value: Section.communities) {
-                CommunitiesTabView()
+            Tab("Rooms", systemImage: "square.grid.2x2", value: Section.rooms) {
+                RoomExplorerView()
             }
             Tab("Capture", systemImage: "camera.viewfinder", value: Section.capture) {
                 CaptureTabView()

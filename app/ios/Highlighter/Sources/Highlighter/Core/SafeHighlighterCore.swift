@@ -88,6 +88,40 @@ actor SafeHighlighterCore {
         try await core.getUserCommunities(pubkeyHex: pubkeyHex)
     }
 
+    // MARK: - Rooms explorer
+
+    func startRoomDiscovery() async {
+        await core.startRoomDiscovery()
+    }
+
+    func startFeaturedRooms(curatorPubkeyHex: String) async throws {
+        try await core.startFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
+    }
+
+    func getFeaturedRooms(curatorPubkeyHex: String) async throws -> [CommunitySummary] {
+        try await core.getFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
+    }
+
+    func getAllRooms(limit: UInt32 = 120) async throws -> [CommunitySummary] {
+        try await core.getAllRooms(limit: limit)
+    }
+
+    func getNewRooms(limit: UInt32 = 24) async throws -> [CommunitySummary] {
+        try await core.getNewRooms(limit: limit)
+    }
+
+    func getRoomsWithFriends(limit: UInt32 = 16) async throws -> [RoomRecommendation] {
+        try await core.getRoomsWithFriends(limit: limit)
+    }
+
+    func getRoomsFromReadAuthors(limit: UInt32 = 16) async throws -> [RoomRecommendation] {
+        try await core.getRoomsFromReadAuthors(limit: limit)
+    }
+
+    func requestJoinRoom(groupId: String) async throws -> String {
+        try await core.requestJoinRoom(groupId: groupId)
+    }
+
     func isFollowing(targetPubkeyHex: String) async throws -> Bool {
         try await core.isFollowing(targetPubkeyHex: targetPubkeyHex)
     }
@@ -106,10 +140,6 @@ actor SafeHighlighterCore {
 
     func getFollowingHighlights(limit: UInt32 = 120) async throws -> [HydratedHighlight] {
         try await core.getFollowingHighlights(limit: limit)
-    }
-
-    func debugHighlightsReport() async throws -> String {
-        try await core.debugHighlightsReport()
     }
 
     // MARK: - Subscriptions

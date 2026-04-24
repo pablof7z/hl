@@ -31,6 +31,14 @@ pub struct Session {
     /// installed so `is_following(...)` answers instantly without a relay
     /// roundtrip on first follow/unfollow.
     contacts_subscription: Option<SubscriptionId>,
+    /// Rooms explorer catalog: one long-lived relay sub pulling every
+    /// kind:39000 metadata event. Installed on first explorer appearance,
+    /// kept until logout so subsequent appearances are instant.
+    discovery_subscription: Option<SubscriptionId>,
+    /// Curated-list sub: kind:10012 authored by the configured curator
+    /// (relay.highlighter.com's pubkey). Installed on first explorer
+    /// appearance, same lifecycle as `discovery_subscription`.
+    curation_subscription: Option<SubscriptionId>,
 }
 
 enum ActiveSigner {
@@ -72,6 +80,8 @@ impl Session {
         self.signer = None;
         self.membership_subscription = None;
         self.contacts_subscription = None;
+        self.discovery_subscription = None;
+        self.curation_subscription = None;
     }
 
     pub fn set_membership_subscription(&mut self, id: SubscriptionId) {
@@ -88,6 +98,30 @@ impl Session {
 
     pub fn take_contacts_subscription(&mut self) -> Option<SubscriptionId> {
         self.contacts_subscription.take()
+    }
+
+    pub fn has_discovery_subscription(&self) -> bool {
+        self.discovery_subscription.is_some()
+    }
+
+    pub fn set_discovery_subscription(&mut self, id: SubscriptionId) {
+        self.discovery_subscription = Some(id);
+    }
+
+    pub fn take_discovery_subscription(&mut self) -> Option<SubscriptionId> {
+        self.discovery_subscription.take()
+    }
+
+    pub fn has_curation_subscription(&self) -> bool {
+        self.curation_subscription.is_some()
+    }
+
+    pub fn set_curation_subscription(&mut self, id: SubscriptionId) {
+        self.curation_subscription = Some(id);
+    }
+
+    pub fn take_curation_subscription(&mut self) -> Option<SubscriptionId> {
+        self.curation_subscription.take()
     }
 
     pub fn current_user(&self) -> Option<CurrentUser> {

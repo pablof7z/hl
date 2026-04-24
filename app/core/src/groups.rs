@@ -13,11 +13,17 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
 use crate::models::CommunitySummary;
+use crate::nostr_runtime::NostrRuntime;
 use crate::relays::HIGHLIGHTER_RELAY;
 
 pub const KIND_GROUP_METADATA: u16 = 39000;
 pub const KIND_GROUP_ADMINS: u16 = 39001;
 pub const KIND_GROUP_MEMBERS: u16 = 39002;
+/// NIP-29 join-request event. Published by a user asking to join a room;
+/// the relay either auto-admits (open rooms) by publishing a 39002 that
+/// includes the requester's pubkey, or holds the request for moderator
+/// approval (closed rooms).
+pub const KIND_JOIN_REQUEST: u16 = 9021;
 
 /// Query the local nostrdb cache for the current user's joined communities.
 /// Returns `[]` if the cache has no relevant events yet (cold start).
@@ -161,6 +167,37 @@ pub fn build_joined_communities(
 
     joined.sort_by(|a, b| a.name.cmp(&b.name));
     joined
+}
+
+/// Publish a NIP-29 kind:9021 join-request event for `group_id`. Fire-and-
+/// forget from the UI's perspective: returns the event id once the relay
+/// accepts the event. The user's actual membership state flips when a
+/// matching kind:39002 arrives in the ndb stream — the subscription pump
+/// delivers that as `MembershipChanged` and the UI promotes the
+/// "Join requested" toast to "You're in ✓".
+pub async fn publish_join_request(
+    runtime: &NostrRuntime,
+    group_id: &str,
+) -> Result<String, CoreError> {
+    let group_id = group_id.trim();
+    if group_id.is_empty() {
+        return Err(CoreError::InvalidInput("group_id must not be empty".into()));
+    }
+
+    let builder = EventBuilder::new(Kind::Custom(KIND_JOIN_REQUEST), "")
+        .tags(vec![Tag::parse(vec!["h".to_string(), group_id.to_string()])
+            .map_err(|e| CoreError::Other(format!("build h tag: {e}")))?]);
+
+    let client = runtime.client();
+    let event = client
+        .sign_event_builder(builder)
+        .await
+        .map_err(|e| CoreError::Signer(format!("sign join request: {e}")))?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish join request: {e}")))?;
+    Ok(event.id.to_hex())
 }
 
 /// Port of `buildCommunitySummary`. Returns `CoreError::InvalidInput` if the

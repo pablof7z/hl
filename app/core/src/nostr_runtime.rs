@@ -231,6 +231,43 @@ impl NostrRuntime {
         });
     }
 
+    /// Catalog subscription for the rooms explorer: pull every NIP-29 group
+    /// metadata event the relay has. The incoming 39000s land in nostrdb and
+    /// power the "Browse all" grid + the "New & noteworthy" shelf. Fire-and-
+    /// forget; the handle is kept by `HighlighterCore` so it can be dropped
+    /// on logout.
+    pub fn spawn_all_rooms_subscription(&self) -> SubscriptionId {
+        let id = SubscriptionId::generate();
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        self.rt().spawn(async move {
+            let filter = Filter::new().kinds([Kind::Custom(KIND_GROUP_METADATA)]);
+            if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
+                tracing::warn!(error = %e, "failed to subscribe to all rooms feed");
+            }
+        });
+        id
+    }
+
+    /// Curated-list subscription: pull the latest kind:10012 from the supplied
+    /// curator pubkey. The rooms referenced by the list are then backfilled
+    /// with a separate metadata subscription once the Swift side calls
+    /// `get_featured_rooms` and sees the list event in cache.
+    pub fn spawn_curated_list_subscription(&self, curator: PublicKey) -> SubscriptionId {
+        let id = SubscriptionId::generate();
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        self.rt().spawn(async move {
+            let filter = Filter::new()
+                .kinds([Kind::Custom(crate::curation::KIND_CURATED_COMMUNITIES)])
+                .author(curator);
+            if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
+                tracing::warn!(error = %e, "failed to subscribe to curated list feed");
+            }
+        });
+        id
+    }
+
     /// Drop a subscription by id. Fire-and-forget.
     pub fn drop_subscription(&self, id: SubscriptionId) {
         let client = self.client.clone();
