@@ -44,6 +44,8 @@ struct RoomLanesView: View {
             BookLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
         case "podcast":
             PodcastLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
+        case "article":
+            ArticleLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
         default:
             LaneView(lane: lane, onShareToCommunity: onShareToCommunity)
         }

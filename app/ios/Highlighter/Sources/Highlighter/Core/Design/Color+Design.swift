@@ -76,4 +76,20 @@ extension Color {
 
     /// Hairlines and dim timeline track on a podcast lane.
     static let laneAudioRule = Color(red: 0.180, green: 0.162, blue: 0.132)
+
+    /// Article-lane surface. Cleaner than the warm book paper — reads as
+    /// a magazine page next to the book lane's leaf.
+    static let laneArticlePage = Color(uiColor: UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.062, green: 0.060, blue: 0.055, alpha: 1)
+            : UIColor(red: 0.995, green: 0.992, blue: 0.985, alpha: 1)
+    })
+
+    /// Highlighter-stroke underlay used behind an article lane's hero
+    /// pull-quote. Accent at low opacity, scoped to the quote.
+    static let laneArticleHighlightFill = Color(uiColor: UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.88, green: 0.60, blue: 0.46, alpha: 0.22)
+            : UIColor(red: 0.95, green: 0.78, blue: 0.42, alpha: 0.32)
+    })
 }
