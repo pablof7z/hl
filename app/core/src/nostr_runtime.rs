@@ -279,6 +279,89 @@ impl NostrRuntime {
         id
     }
 
+    /// Bootstrap the *current user's own* relay config from the network at
+    /// login. Without this, a fresh install with no cached kind:10002 (or
+    /// kind:30078) falls back to `seed_defaults()` forever — so the user
+    /// stays on Highlighter+damus+purple+primal even when their NIP-65 says
+    /// they publish to four other relays.
+    ///
+    /// Strategy: install a long-lived subscription on the indexer pool for
+    /// kind:10002 + kind:30078 authored by the user (so cross-device edits
+    /// land in cache automatically), then run a one-shot fetch with a
+    /// short timeout, and finally re-run `apply_relay_config` against the
+    /// freshly-populated cache. The re-apply diffs against the current
+    /// seed-default pool, removes the seeds that aren't the user's, adds
+    /// the user's actual outbox/inbox, and reconnects.
+    ///
+    /// Returns the long-lived subscription id so logout can drop it.
+    pub fn spawn_user_relay_config_bootstrap(&self, user_pubkey: PublicKey) -> SubscriptionId {
+        let id = SubscriptionId::generate();
+        let id_clone = id.clone();
+        let client = self.client.clone();
+        let ndb = self.ndb.clone();
+        let cache = self.current_relays.clone();
+        let user_hex = user_pubkey.to_hex();
+        let urls = self.indexer_urls();
+        self.rt().spawn(async move {
+            // Long-lived sub: future kind:10002 / kind:30078 publications
+            // by the user (e.g. updating their NIP-65 from another client)
+            // land in cache automatically.
+            let live_filter = Filter::new()
+                .kinds([Kind::Custom(10002), Kind::Custom(30078)])
+                .author(user_pubkey);
+            subscribe_routed(
+                &client,
+                id_clone,
+                live_filter.clone(),
+                urls.clone(),
+                "indexer/user-nip65-live",
+            )
+            .await;
+
+            // One-shot fetch — give the indexer pool 5s to reply with the
+            // existing event so we can re-apply the config now, not "next
+            // time the user logs in". Routes to the same indexer URLs the
+            // sub uses; falls back to the default pool when none are set.
+            let fetched = if urls.is_empty() {
+                client
+                    .fetch_events(live_filter.clone(), std::time::Duration::from_secs(5))
+                    .await
+            } else {
+                client
+                    .fetch_events_from(urls.clone(), live_filter, std::time::Duration::from_secs(5))
+                    .await
+            };
+            match fetched {
+                Ok(events) => {
+                    tracing::info!(
+                        user = %user_hex,
+                        events = events.len(),
+                        "user NIP-65/30078 bootstrap fetched"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(user = %user_hex, error = %e, "user NIP-65 bootstrap fetch");
+                }
+            }
+
+            // Now re-apply: query_relays merges the freshly-cached
+            // kind:10002 + kind:30078 (or falls back to seed_defaults).
+            let rows = query_relays(&ndb, &user_hex).unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "user NIP-65 bootstrap re-query");
+                seed_defaults()
+            });
+            apply_relay_config(&client, &rows).await;
+            client.connect().await;
+            *cache.write() = rows.clone();
+            tracing::info!(
+                user = %user_hex,
+                relays = rows.len(),
+                "user NIP-65 bootstrap applied"
+            );
+        });
+        id
+    }
+
     /// Negentropy-sync the social trio (kind:0 metadata, kind:3 contacts,
     /// kind:10002 relay lists) for `authors` against the relays in
     /// `NEGENTROPY_SYNC_RELAYS`. Cheap cold-start backfill — on a

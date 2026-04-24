@@ -53,6 +53,11 @@ pub struct Session {
     /// every follow lands in the "uncovered" fallback shard. Long-lived;
     /// new relay-list publications by a follow keep landing in nostrdb.
     follows_nip65_subscription: Option<SubscriptionId>,
+    /// Current user's *own* kind:10002 + kind:30078. Without this, a
+    /// fresh install with cold cache stays on `seed_defaults()` forever
+    /// even when the user's NIP-65 says they publish elsewhere. Long-
+    /// lived so cross-device edits to the user's relay config land too.
+    user_relay_config_subscription: Option<SubscriptionId>,
 }
 
 enum ActiveSigner {
@@ -99,6 +104,7 @@ impl Session {
         self.friends_memberships_subscription = None;
         self.friends_groups_list_subscription = None;
         self.follows_nip65_subscription = None;
+        self.user_relay_config_subscription = None;
     }
 
     pub fn set_membership_subscription(&mut self, id: SubscriptionId) {
@@ -175,6 +181,14 @@ impl Session {
 
     pub fn take_follows_nip65_subscription(&mut self) -> Option<SubscriptionId> {
         self.follows_nip65_subscription.take()
+    }
+
+    pub fn set_user_relay_config_subscription(&mut self, id: SubscriptionId) {
+        self.user_relay_config_subscription = Some(id);
+    }
+
+    pub fn take_user_relay_config_subscription(&mut self) -> Option<SubscriptionId> {
+        self.user_relay_config_subscription.take()
     }
 
     pub fn current_user(&self) -> Option<CurrentUser> {

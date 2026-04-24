@@ -78,8 +78,16 @@ impl HighlighterCore {
         if let Some(keys) = keys {
             self.runtime.set_signer(keys.clone());
             let pubkey = keys.public_key();
+            // First-pass: apply whatever's in cache so subscriptions have a
+            // pool to talk to immediately. The bootstrap below races to
+            // fetch the user's actual NIP-65 from the network and re-apply
+            // — without it, a fresh install with cold cache stays on
+            // seed_defaults forever.
             self.runtime
                 .spawn_apply_user_relay_config(pubkey.to_hex());
+            let user_relay_config_id = self
+                .runtime
+                .spawn_user_relay_config_bootstrap(pubkey);
             let sub_id = self.runtime.spawn_membership_subscription(pubkey);
             let contacts_id = self.runtime.spawn_contacts_subscription(pubkey);
             // Eagerly fetch 39000 metadata for any groups already in the
@@ -116,6 +124,9 @@ impl HighlighterCore {
             let mut guard = self.inner.write();
             guard.session.set_membership_subscription(sub_id);
             guard.session.set_contacts_subscription(contacts_id);
+            guard
+                .session
+                .set_user_relay_config_subscription(user_relay_config_id);
             if let Some(id) = follows_nip65_id {
                 guard.session.set_follows_nip65_subscription(id);
             }
@@ -143,6 +154,9 @@ impl HighlighterCore {
                 self.runtime.drop_subscription(sub_id);
             }
             if let Some(sub_id) = guard.session.take_follows_nip65_subscription() {
+                self.runtime.drop_subscription(sub_id);
+            }
+            if let Some(sub_id) = guard.session.take_user_relay_config_subscription() {
                 self.runtime.drop_subscription(sub_id);
             }
         }
