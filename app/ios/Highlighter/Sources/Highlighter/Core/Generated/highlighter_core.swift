@@ -913,6 +913,21 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func startFeaturedRooms(curatorPubkeyHex: String) async throws 
     
+    /**
+     * Install (if not already installed) two relay subs that together
+     * power the "Friends are here" explorer shelf:
+     *
+     * 1. kind:10009 authored by any of the user's follows — NIP-51
+     * user-owned "simple groups" list (denser, always-public signal).
+     * 2. kind:39001 / 39002 where any follow appears in a `p` tag —
+     * relay-owned membership fallback for groups whose members haven't
+     * published a 10009 yet.
+     *
+     * No-op if the user isn't logged in or has no follows cached yet.
+     * Idempotent; both subs ride until logout.
+     */
+    func startFriendsRoomsDiscovery() async throws 
+    
     func startNostrConnect(options: NostrConnectOptions) async throws  -> String
     
     /**
@@ -1792,6 +1807,36 @@ open func startFeaturedRooms(curatorPubkeyHex: String)async throws   {
                 uniffi_highlighter_core_fn_method_highlightercore_start_featured_rooms(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(curatorPubkeyHex)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Install (if not already installed) two relay subs that together
+     * power the "Friends are here" explorer shelf:
+     *
+     * 1. kind:10009 authored by any of the user's follows — NIP-51
+     * user-owned "simple groups" list (denser, always-public signal).
+     * 2. kind:39001 / 39002 where any follow appears in a `p` tag —
+     * relay-owned membership fallback for groups whose members haven't
+     * published a 10009 yet.
+     *
+     * No-op if the user isn't logged in or has no follows cached yet.
+     * Idempotent; both subs ride until logout.
+     */
+open func startFriendsRoomsDiscovery()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_start_friends_rooms_discovery(
+                    self.uniffiClonePointer()
+                    
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_void,
@@ -5606,6 +5651,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_featured_rooms() != 4206) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_start_friends_rooms_discovery() != 37507) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_nostr_connect() != 46145) {

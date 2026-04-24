@@ -94,6 +94,10 @@ actor SafeHighlighterCore {
         await core.startRoomDiscovery()
     }
 
+    func startFriendsRoomsDiscovery() async throws {
+        try await core.startFriendsRoomsDiscovery()
+    }
+
     func startFeaturedRooms(curatorPubkeyHex: String) async throws {
         try await core.startFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
     }

@@ -40,6 +40,9 @@ final class RoomExplorerStore {
             await safeCore.startRoomDiscovery()
             hasStartedDiscovery = true
         }
+        // Pull kind:10009 from each follow + kind:39001/39002 where any follow
+        // is #p-tagged. Powers the "Friends are here" shelf.
+        try? await safeCore.startFriendsRoomsDiscovery()
         await ensureCurationSubscription(safeCore: safeCore)
 
         let curatorPubkey = RoomExplorerConfig.cachedCuratorPubkeyHex

@@ -15,10 +15,13 @@ func searchKey(g orderedGroup) string {
 	return strings.ToLower(g.Name + "\n" + g.ID + "\n" + g.About)
 }
 
-// kindFeaturedRooms is the NIP-51 parameterless list the relay publishes to
-// advertise the editorial "Featured" shelf in the iOS rooms explorer. One
-// `group` tag per featured room, in the curator-chosen order.
-const kindFeaturedRooms = nostr.Kind(10012)
+// kindFeaturedRooms is the NIP-51 "simple groups" list (kind:10009). The
+// relay publishes this to advertise the editorial "Featured" shelf in the
+// iOS rooms explorer — one `group` tag per featured room, in the
+// curator-chosen order. Same kind users publish to enumerate their own
+// memberships; the relay's version is disambiguated by author (the relay's
+// pubkey).
+const kindFeaturedRooms = nostr.Kind(10009)
 
 // orderedGroup is a snapshot of a group needed by the picker — lifted out of
 // the xsync map so the templ template can render them in a stable order.

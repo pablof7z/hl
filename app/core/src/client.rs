@@ -113,6 +113,9 @@ impl HighlighterCore {
             if let Some(sub_id) = guard.session.take_curation_subscription() {
                 self.runtime.drop_subscription(sub_id);
             }
+            if let Some(sub_id) = guard.session.take_friends_memberships_subscription() {
+                self.runtime.drop_subscription(sub_id);
+            }
         }
         self.inner.write().session.logout();
         self.runtime.unset_signer();
@@ -665,6 +668,63 @@ impl HighlighterCore {
             .write()
             .session
             .set_discovery_subscription(sub_id);
+    }
+
+    /// Install (if not already installed) two relay subs that together
+    /// power the "Friends are here" explorer shelf:
+    ///
+    /// 1. kind:10009 authored by any of the user's follows — NIP-51
+    ///    user-owned "simple groups" list (denser, always-public signal).
+    /// 2. kind:39001 / 39002 where any follow appears in a `p` tag —
+    ///    relay-owned membership fallback for groups whose members haven't
+    ///    published a 10009 yet.
+    ///
+    /// No-op if the user isn't logged in or has no follows cached yet.
+    /// Idempotent; both subs ride until logout.
+    pub async fn start_friends_rooms_discovery(&self) -> Result<(), CoreError> {
+        let (have_memberships, have_groups_list) = {
+            let guard = self.inner.read();
+            (
+                guard.session.has_friends_memberships_subscription(),
+                guard.session.has_friends_groups_list_subscription(),
+            )
+        };
+        if have_memberships && have_groups_list {
+            return Ok(());
+        }
+        let Some(user) = self.inner.read().session.current_user() else {
+            return Ok(());
+        };
+        let follows_hex = follows::query_follows(self.runtime.ndb(), &user.pubkey)?;
+        let follows: Vec<PublicKey> = follows_hex
+            .iter()
+            .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
+            .collect();
+        if follows.is_empty() {
+            return Ok(());
+        }
+
+        if !have_groups_list {
+            if let Some(sub_id) = self
+                .runtime
+                .spawn_friends_groups_list_subscription(follows.clone())
+            {
+                self.inner
+                    .write()
+                    .session
+                    .set_friends_groups_list_subscription(sub_id);
+            }
+        }
+
+        if !have_memberships {
+            if let Some(sub_id) = self.runtime.spawn_friends_memberships_subscription(follows) {
+                self.inner
+                    .write()
+                    .session
+                    .set_friends_memberships_subscription(sub_id);
+            }
+        }
+        Ok(())
     }
 
     /// Install (if not already installed) the kind:10012 curated-list sub for

@@ -1,11 +1,15 @@
 //! NIP-51 curated communities list. The "featured rooms" shelf is backed by a
-//! single parameterized-replaceable event published by the relay's pubkey; the
-//! event's `group` tags enumerate the rooms that appear in the shelf.
+//! single replaceable event published by the relay's pubkey; the event's
+//! `group` tags enumerate the rooms that appear in the shelf.
 //!
-//! kind: 10012 — per the user's direction. Chosen because it's the NIP-51
-//! "community set" kind (one list per curator, replaceable). One list per
-//! curator lets us ship a single editorial surface without needing `d` tags;
-//! if that changes we can always move to a 30xxx parameterized variant.
+//! kind: 10009 — the NIP-51 "simple groups" list ("NIP-29 groups the author
+//! is in"). A curator publishing kind:10009 is semantically "here are the
+//! groups I host that I recommend"; the iOS explorer reads the newest
+//! 10009 from the configured curator pubkey and renders its `group` tags
+//! as the Featured shelf. Friends also publish 10009s to enumerate their
+//! own memberships; `recommendations.rs` reads those with an author-in-
+//! follow-set filter to power the "Friends are here" shelf. Same kind,
+//! same tag shape, different author → different meaning.
 
 use std::collections::HashSet;
 
@@ -16,10 +20,9 @@ use crate::errors::CoreError;
 use crate::groups::{build_community_summary, KIND_GROUP_METADATA};
 use crate::models::CommunitySummary;
 
-/// NIP-51 curated-communities list. Non-parameterized — one list per curator
-/// pubkey, newest wins. When we need multiple named lists from the same
-/// curator this becomes kind:30012 with `d` tags.
-pub const KIND_CURATED_COMMUNITIES: u16 = 10012;
+/// NIP-51 "simple groups" list kind. Replaceable — one list per pubkey,
+/// newest wins. Shared with `recommendations.rs` (friends' self-lists).
+pub const KIND_CURATED_COMMUNITIES: u16 = 10009;
 
 /// Read the latest kind:10012 event authored by `curator_pubkey_hex` from
 /// nostrdb and resolve each referenced group into a `CommunitySummary`. Rooms

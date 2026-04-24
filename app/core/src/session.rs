@@ -39,6 +39,15 @@ pub struct Session {
     /// (relay.highlighter.com's pubkey). Installed on first explorer
     /// appearance, same lifecycle as `discovery_subscription`.
     curation_subscription: Option<SubscriptionId>,
+    /// Friends' memberships sub: kind:39001/39002 where any of the user's
+    /// follows appears in a `p` tag. Powers the "Friends are here" shelf by
+    /// dragging non-own-room membership events into the local cache.
+    /// Installed on first explorer appearance.
+    friends_memberships_subscription: Option<SubscriptionId>,
+    /// Friends' groups-list sub: kind:10009 authored by any follow — the
+    /// denser half of the Friends-are-here signal. User-owned, broadcast
+    /// publicly, so more reliable than the relay-owned 39002.
+    friends_groups_list_subscription: Option<SubscriptionId>,
 }
 
 enum ActiveSigner {
@@ -82,6 +91,8 @@ impl Session {
         self.contacts_subscription = None;
         self.discovery_subscription = None;
         self.curation_subscription = None;
+        self.friends_memberships_subscription = None;
+        self.friends_groups_list_subscription = None;
     }
 
     pub fn set_membership_subscription(&mut self, id: SubscriptionId) {
@@ -122,6 +133,30 @@ impl Session {
 
     pub fn take_curation_subscription(&mut self) -> Option<SubscriptionId> {
         self.curation_subscription.take()
+    }
+
+    pub fn has_friends_memberships_subscription(&self) -> bool {
+        self.friends_memberships_subscription.is_some()
+    }
+
+    pub fn set_friends_memberships_subscription(&mut self, id: SubscriptionId) {
+        self.friends_memberships_subscription = Some(id);
+    }
+
+    pub fn take_friends_memberships_subscription(&mut self) -> Option<SubscriptionId> {
+        self.friends_memberships_subscription.take()
+    }
+
+    pub fn has_friends_groups_list_subscription(&self) -> bool {
+        self.friends_groups_list_subscription.is_some()
+    }
+
+    pub fn set_friends_groups_list_subscription(&mut self, id: SubscriptionId) {
+        self.friends_groups_list_subscription = Some(id);
+    }
+
+    pub fn take_friends_groups_list_subscription(&mut self) -> Option<SubscriptionId> {
+        self.friends_groups_list_subscription.take()
     }
 
     pub fn current_user(&self) -> Option<CurrentUser> {

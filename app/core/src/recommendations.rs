@@ -21,8 +21,19 @@ use crate::follows;
 use crate::groups::{build_community_summary, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA};
 use crate::models::{RoomRecommendation, RoomRecommendationReason};
 
+/// NIP-51 "simple groups" list (kind:10009). A user publishes this to
+/// enumerate the NIP-29 rooms they're in; we read one from each follow to
+/// build the "Friends are here" shelf.
+const KIND_SIMPLE_GROUPS_LIST: u16 = 10009;
+
 /// Rooms where 2+ of the user's follows are members. Rooms the user is
 /// already in are excluded — the explorer's "Your rooms" shelf is elsewhere.
+///
+/// The signal is the union of two sources:
+/// - **kind:10009 authored by each follow** — the NIP-51 "simple groups"
+///   list, public and user-owned; denser when friends publish it.
+/// - **kind:39002 with `#p=<follow>`** — the relay-owned members event,
+///   falls back when a given friend hasn't published a 10009 yet.
 ///
 /// The `reason_pubkeys` on each recommendation is the set of matching follows
 /// (the avatar cluster on the card). Capped at 5 per room for UI.
@@ -47,7 +58,89 @@ pub fn query_rooms_with_friends(
     let txn = Transaction::new(ndb)
         .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
-    // Pull all cached member-list events.
+    let user_hex_lower = user_pubkey_hex.to_ascii_lowercase();
+
+    // Aggregate map: group_id -> set of follow pubkeys (deduped across both
+    // signals). We also track the set of group ids the user is a member of
+    // so we can drop those at the end.
+    let mut friends_in_group: BTreeMap<String, HashSet<String>> = BTreeMap::new();
+    let mut user_is_in: HashSet<String> = HashSet::new();
+
+    // --- Signal 1: kind:10009 authored by follows (and the user themself) ---
+    //
+    // Each follow publishes one list naming the rooms they're in. We keep
+    // the newest per author. The user's own 10009 is read alongside so
+    // rooms they're already in get excluded without needing the 39002
+    // signal to catch them.
+    let mut list_pk_bytes: Vec<[u8; 32]> = follows
+        .iter()
+        .filter_map(|hex| PublicKey::from_hex(hex).ok())
+        .map(|pk| pk.to_bytes())
+        .collect();
+    if let Ok(user_pk) = PublicKey::from_hex(user_pubkey_hex) {
+        list_pk_bytes.push(user_pk.to_bytes());
+    }
+    if !list_pk_bytes.is_empty() {
+        let refs: Vec<&[u8; 32]> = list_pk_bytes.iter().collect();
+        let groups_list_filter = NdbFilter::new()
+            .kinds([KIND_SIMPLE_GROUPS_LIST as u64])
+            .authors(refs.iter().copied())
+            .build();
+        let groups_list_results = ndb
+            .query(&txn, &[groups_list_filter], 8192)
+            .map_err(|e| CoreError::Cache(format!("query friends groups list: {e}")))?;
+
+        let mut newest_by_author: BTreeMap<String, Event> = BTreeMap::new();
+        for r in &groups_list_results {
+            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+                continue;
+            };
+            let Ok(json) = note.json() else { continue };
+            let Ok(event) = Event::from_json(&json) else {
+                continue;
+            };
+            let author = event.pubkey.to_hex().to_ascii_lowercase();
+            match newest_by_author.get(&author) {
+                Some(prev) if prev.created_at >= event.created_at => {}
+                _ => {
+                    newest_by_author.insert(author, event);
+                }
+            }
+        }
+
+        for (author_lower, event) in newest_by_author {
+            let author_display = event.pubkey.to_hex();
+            for tag in event.tags.iter() {
+                let s = tag.as_slice();
+                if s.first().map(String::as_str) != Some("group") {
+                    continue;
+                }
+                let Some(group_id) = s.get(1).map(|v| v.trim().to_string()) else {
+                    continue;
+                };
+                if group_id.is_empty() {
+                    continue;
+                }
+                if author_lower == user_hex_lower {
+                    user_is_in.insert(group_id);
+                } else {
+                    friends_in_group
+                        .entry(group_id)
+                        .or_default()
+                        .insert(author_display.clone());
+                }
+            }
+        }
+    }
+
+    // --- Signal 2: kind:39002 (relay-owned members lists) ---
+    //
+    // For each members event, scan the `p` tags for the user's pubkey (→
+    // they're in that room) and for any follow (→ that follow is in that
+    // room). Replaceable; newest 39002 per group id wins, but since we only
+    // care about which follows appear, the union across all 39002s for the
+    // group is fine — a follow listed in the newest alone OR in an older
+    // one still counts. We do prefer the newest when there's a conflict.
     let members_filter = NdbFilter::new()
         .kinds([KIND_GROUP_MEMBERS as u64])
         .build();
@@ -55,9 +148,7 @@ pub fn query_rooms_with_friends(
         .query(&txn, &[members_filter], 4096)
         .map_err(|e| CoreError::Cache(format!("query members: {e}")))?;
 
-    // Per group: newest 39002 wins, and we record which follows appeared in it.
-    let mut newest_by_id: BTreeMap<String, (Event, Vec<String>)> = BTreeMap::new();
-    let user_hex_lower = user_pubkey_hex.to_ascii_lowercase();
+    let mut newest_member_event: BTreeMap<String, Event> = BTreeMap::new();
     for r in &member_results {
         let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
             continue;
@@ -72,10 +163,14 @@ pub fn query_rooms_with_friends(
         if group_id.is_empty() {
             continue;
         }
-        // Skip rooms the user is already in.
-        let mut user_is_member = false;
-        let mut matching_follows: Vec<String> = Vec::new();
-        let mut seen: HashSet<String> = HashSet::new();
+        match newest_member_event.get(&group_id) {
+            Some(prev) if prev.created_at >= event.created_at => {}
+            _ => {
+                newest_member_event.insert(group_id, event);
+            }
+        }
+    }
+    for (group_id, event) in &newest_member_event {
         for tag in event.tags.iter() {
             let s = tag.as_slice();
             if s.first().map(String::as_str) != Some("p") {
@@ -86,35 +181,27 @@ pub fn query_rooms_with_friends(
             };
             let pk_lower = pk.to_ascii_lowercase();
             if pk_lower == user_hex_lower {
-                user_is_member = true;
-                break;
-            }
-            if follows.contains(&pk_lower) && seen.insert(pk_lower.clone()) {
-                matching_follows.push(pk.to_string());
-            }
-        }
-        if user_is_member {
-            continue;
-        }
-        if matching_follows.len() < 2 {
-            continue;
-        }
-
-        // Replaceable — keep newest.
-        match newest_by_id.get(&group_id) {
-            Some((prev, _)) if prev.created_at >= event.created_at => {}
-            _ => {
-                newest_by_id.insert(group_id, (event, matching_follows));
+                user_is_in.insert(group_id.clone());
+            } else if follows.contains(&pk_lower) {
+                friends_in_group
+                    .entry(group_id.clone())
+                    .or_default()
+                    .insert(pk.to_string());
             }
         }
     }
 
-    if newest_by_id.is_empty() {
+    // Drop rooms the user is already in and anything below the 2-follow
+    // threshold.
+    friends_in_group.retain(|group_id, pubkeys| {
+        !user_is_in.contains(group_id) && pubkeys.len() >= 2
+    });
+    if friends_in_group.is_empty() {
         return Ok(Vec::new());
     }
 
     // Resolve metadata for the matching groups.
-    let ids: Vec<String> = newest_by_id.keys().cloned().collect();
+    let ids: Vec<String> = friends_in_group.keys().cloned().collect();
     let id_refs: Vec<&str> = ids.iter().map(String::as_str).collect();
     let metadata_filter = NdbFilter::new()
         .kinds([KIND_GROUP_METADATA as u64])
@@ -145,13 +232,15 @@ pub fn query_rooms_with_friends(
 
     // Assemble. Sort by number of matching follows desc (strongest signal first).
     let mut out: Vec<RoomRecommendation> = Vec::new();
-    for (group_id, (_member_event, mut reasons)) in newest_by_id {
+    for (group_id, pubkeys) in friends_in_group {
         let Some(meta_event) = metadata_by_id.get(&group_id) else {
             continue;
         };
         let Ok(summary) = build_community_summary(meta_event) else {
             continue;
         };
+        let mut reasons: Vec<String> = pubkeys.into_iter().collect();
+        reasons.sort();
         reasons.truncate(5);
         out.push(RoomRecommendation {
             summary,
@@ -452,6 +541,69 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].summary.id, "alpha");
         assert_eq!(out[0].reason_pubkeys.len(), 2);
+    }
+
+    fn groups_list(keys: &Keys, group_ids: &[&str], relay_url: &str, ts: u64) -> Event {
+        let mut tags: Vec<Tag> = Vec::new();
+        for id in group_ids {
+            tags.push(
+                Tag::parse(vec![
+                    "group".to_string(),
+                    (*id).to_string(),
+                    relay_url.to_string(),
+                ])
+                .unwrap(),
+            );
+        }
+        EventBuilder::new(Kind::Custom(KIND_SIMPLE_GROUPS_LIST), "")
+            .tags(tags)
+            .custom_created_at(Timestamp::from(ts))
+            .sign_with_keys(keys)
+            .expect("sign")
+    }
+
+    #[test]
+    fn surfaces_rooms_from_friends_kind_10009_lists() {
+        // Two follows publish 10009 lists naming the same room → shelf match.
+        let (ndb, _tmp) = isolated_ndb();
+        let me = Keys::generate();
+        let f1 = Keys::generate();
+        let f2 = Keys::generate();
+        let author = Keys::generate();
+
+        ingest(&ndb, &contacts(&me, &[&f1, &f2]));
+        ingest(&ndb, &meta(&author, "alpha", "Alpha"));
+        // Both follows list "alpha" as a group they're in. No 39002 needed.
+        ingest(&ndb, &groups_list(&f1, &["alpha"], "wss://relay", 100));
+        ingest(&ndb, &groups_list(&f2, &["alpha"], "wss://relay", 100));
+        wait_for_ndb();
+
+        let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].summary.id, "alpha");
+        assert_eq!(out[0].reason_pubkeys.len(), 2);
+    }
+
+    #[test]
+    fn kind_10009_from_user_excludes_their_rooms() {
+        // The user's own kind:10009 tells us which rooms to exclude from
+        // the shelf without needing a 39002 for those rooms.
+        let (ndb, _tmp) = isolated_ndb();
+        let me = Keys::generate();
+        let f1 = Keys::generate();
+        let f2 = Keys::generate();
+        let author = Keys::generate();
+
+        ingest(&ndb, &contacts(&me, &[&f1, &f2]));
+        ingest(&ndb, &meta(&author, "alpha", "Alpha"));
+        ingest(&ndb, &groups_list(&me, &["alpha"], "wss://relay", 100));
+        // Even with two follows matching, user is already in alpha → exclude.
+        ingest(&ndb, &groups_list(&f1, &["alpha"], "wss://relay", 100));
+        ingest(&ndb, &groups_list(&f2, &["alpha"], "wss://relay", 100));
+        wait_for_ndb();
+
+        let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
+        assert!(out.is_empty());
     }
 
     #[test]

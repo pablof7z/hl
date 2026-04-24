@@ -23,6 +23,11 @@ use tokio::runtime::Runtime;
 
 use crate::errors::CoreError;
 use crate::groups::{KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA};
+
+/// NIP-51 "simple groups" list (replaceable). A user publishes this to
+/// enumerate the NIP-29 groups they're a member of; each entry is a
+/// `group` tag with the group id and relay.
+const KIND_SIMPLE_GROUPS_LIST: u16 = 10009;
 use crate::relays::DEFAULT_RELAYS;
 
 /// LMDB map size for the iOS cache. 2 GiB gives plenty of headroom for a
@@ -247,6 +252,63 @@ impl NostrRuntime {
             }
         });
         id
+    }
+
+    /// Friends' NIP-51 group lists: kind:10009 authored by any of the user's
+    /// follows. Each event enumerates the groups its author is a member of,
+    /// so this is the primary signal for the "Friends are here" shelf —
+    /// denser and more reliable than the relay-owned 39002 alone (users
+    /// broadcast 10009 publicly; some relays gate 39002 behind auth). No-op
+    /// if the follow set is empty.
+    pub fn spawn_friends_groups_list_subscription(
+        &self,
+        follows: Vec<PublicKey>,
+    ) -> Option<SubscriptionId> {
+        if follows.is_empty() {
+            return None;
+        }
+        let id = SubscriptionId::generate();
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        self.rt().spawn(async move {
+            let filter = Filter::new()
+                .kinds([Kind::Custom(KIND_SIMPLE_GROUPS_LIST)])
+                .authors(follows);
+            if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
+                tracing::warn!(error = %e, "failed to subscribe to friends groups list feed");
+            }
+        });
+        Some(id)
+    }
+
+    /// Friends' memberships: pull kind:39001 / 39002 events where any of the
+    /// user's follows appears in a `p` tag. This backfills the data the
+    /// "Friends are here" shelf needs to surface rooms the user could join —
+    /// the default login-time membership sub only sees the user's own groups,
+    /// so without this shelf 3 stays mostly empty. No-op if the follow set
+    /// is empty.
+    pub fn spawn_friends_memberships_subscription(
+        &self,
+        follows: Vec<PublicKey>,
+    ) -> Option<SubscriptionId> {
+        if follows.is_empty() {
+            return None;
+        }
+        let id = SubscriptionId::generate();
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        self.rt().spawn(async move {
+            let filter = Filter::new()
+                .kinds([
+                    Kind::Custom(KIND_GROUP_ADMINS),
+                    Kind::Custom(KIND_GROUP_MEMBERS),
+                ])
+                .pubkeys(follows);
+            if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
+                tracing::warn!(error = %e, "failed to subscribe to friends memberships feed");
+            }
+        });
+        Some(id)
     }
 
     /// Curated-list subscription: pull the latest kind:10012 from the supplied
