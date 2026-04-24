@@ -224,6 +224,7 @@ struct HighlightsTabView: View {
             catalogId: "",
             catalogKind: "",
             podcastGuid: "",
+            podcastItemGuid: "",
             podcastShowTitle: "",
             audioUrl: "",
             audioPreviewUrl: "",

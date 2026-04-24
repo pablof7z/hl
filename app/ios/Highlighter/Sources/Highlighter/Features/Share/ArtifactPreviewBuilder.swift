@@ -22,6 +22,7 @@ enum ArtifactPreviewBuilder {
             catalogId: "",
             catalogKind: "",
             podcastGuid: "",
+            podcastItemGuid: "",
             podcastShowTitle: "",
             audioUrl: "",
             audioPreviewUrl: "",

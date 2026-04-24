@@ -189,6 +189,7 @@ final class ArticleReaderStore {
             catalogId: "",
             catalogKind: "",
             podcastGuid: "",
+            podcastItemGuid: "",
             podcastShowTitle: "",
             audioUrl: "",
             audioPreviewUrl: "",
