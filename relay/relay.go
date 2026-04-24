@@ -64,6 +64,10 @@ func configureRelay(relay *khatru.Relay, relayBaseURL string) error {
 	mux.HandleFunc("POST /settings", global.SettingsHandler)
 	mux.HandleFunc("POST /group/{id}/wipeout", wipeGroupHandler)
 
+	// admin — featured rooms picker (powers the iOS explorer's Featured shelf)
+	mux.HandleFunc("GET /admin/featured", featuredAdminHandler)
+	mux.HandleFunc("POST /admin/featured", publishFeaturedHandler)
+
 	// group page
 	mux.HandleFunc("GET /group/{id}", groupHandler)
 
