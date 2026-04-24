@@ -24,6 +24,7 @@ struct ReadsTabView: View {
                     ProfileView(pubkey: pk)
                 }
             }
+            .globalUserToolbar()
         }
         .sheet(item: $shareTarget) { target in
             ShareToCommunitySheet(target: target)

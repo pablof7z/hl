@@ -7,7 +7,6 @@ import SwiftUI
 struct RoomExplorerView: View {
     @Environment(HighlighterStore.self) private var appStore
     @State private var explorer: RoomExplorerStore?
-    @State private var showSettings = false
     @State private var previewRoom: CommunitySummary?
 
     var body: some View {
@@ -45,11 +44,7 @@ struct RoomExplorerView: View {
             .navigationDestination(for: ArticleReaderTarget.self) { target in
                 ArticleReaderView(target: target)
             }
-            .toolbar { toolbarContent }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-                    .environment(appStore)
-            }
+            .globalUserToolbar()
             .sheet(item: $previewRoom) { room in
                 RoomPreviewSheet(
                     room: room,
@@ -219,39 +214,6 @@ struct RoomExplorerView: View {
             )
         }
         .buttonStyle(.plain)
-    }
-
-    // MARK: - Toolbar
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button { showSettings = true } label: {
-                Image(systemName: "gearshape")
-            }
-            .accessibilityLabel("Settings")
-        }
-        ToolbarItem(placement: .topBarTrailing) {
-            if let me = appStore.currentUser {
-                NavigationLink(value: ProfileDestination.pubkey(me.pubkey)) {
-                    AuthorAvatar(
-                        pubkey: me.pubkey,
-                        pictureURL: appStore.currentUserProfile?.picture ?? "",
-                        displayInitial: preferredInitial(for: me),
-                        size: 30
-                    )
-                }
-                .accessibilityLabel("Your profile")
-            }
-        }
-    }
-
-    private func preferredInitial(for user: CurrentUser) -> String {
-        if let profile = appStore.currentUserProfile {
-            if let ch = profile.displayName.first { return String(ch) }
-            if let ch = profile.name.first { return String(ch) }
-        }
-        return String(user.pubkey.prefix(1))
     }
 
     // MARK: - Shelf shell

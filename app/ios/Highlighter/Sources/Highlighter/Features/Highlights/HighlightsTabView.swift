@@ -44,6 +44,7 @@ struct HighlightsTabView: View {
                     ProfileView(pubkey: pk)
                 }
             }
+            .globalUserToolbar()
         }
         .sheet(item: $shareTarget) { target in
             ShareToCommunitySheet(target: target)

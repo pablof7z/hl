@@ -65,6 +65,7 @@ struct SearchView: View {
                     SearchSeeAllView(target: target, store: store)
                 }
             }
+            .globalUserToolbar()
         }
         .task {
             if store == nil {
