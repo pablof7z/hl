@@ -198,30 +198,27 @@ struct Lane: Identifiable {
         }
     }
 
-    /// Semantic identity for grouping. Designed so a highlight and the
-    /// artifact share of the same thing produce the **same** key.
-    /// `highlightReferenceKey` / `sourceReferenceKey` is the core's
-    /// canonical pairing when present; the NIP-23 address fills in for
-    /// anything addressable by `a`-tag; the tagged event id fills in
-    /// for plain event references.
+    /// Semantic identity for grouping.
+    ///
+    /// The core constructs `highlight.sourceReferenceKey` as `"<tagName>:<tagValue>"`.
+    /// On the artifact side, `referenceTagName` + `referenceTagValue` is always
+    /// populated (the `highlight_*` fields on cached artifacts are not — a
+    /// Rust-side gap we route around here).
+    ///
+    /// Formats are mostly straightforward — article `a:30023:pk:d`, book
+    /// `i:isbn:123` — but podcast highlights tag the episode URL as `r:<url>`
+    /// while the artifact share tags the podcast GUID as `i:podcast:guid:…`.
+    /// We override for podcasts to key on the audio URL the highlights use.
     private static func laneKey(for artifact: ArtifactRecord) -> String {
-        if !artifact.preview.highlightReferenceKey.isEmpty {
-            return "srk:" + artifact.preview.highlightReferenceKey
+        if artifact.preview.source == "podcast", !artifact.preview.audioUrl.isEmpty {
+            return "r:" + artifact.preview.audioUrl
         }
-        if artifact.preview.highlightTagName == "a",
-           !artifact.preview.highlightTagValue.isEmpty {
-            return "addr:" + artifact.preview.highlightTagValue
+        let name = artifact.preview.referenceTagName
+        let value = artifact.preview.referenceTagValue
+        if !name.isEmpty, !value.isEmpty {
+            return "\(name):\(value)"
         }
-        if artifact.preview.referenceTagName == "a",
-           !artifact.preview.referenceTagValue.isEmpty {
-            return "addr:" + artifact.preview.referenceTagValue
-        }
-        if !artifact.preview.referenceTagValue.isEmpty {
-            return "evt:" + artifact.preview.referenceTagValue
-        }
-        if !artifact.preview.highlightTagValue.isEmpty {
-            return "evt:" + artifact.preview.highlightTagValue
-        }
+        if !artifact.preview.url.isEmpty { return "r:" + artifact.preview.url }
         if !artifact.preview.id.isEmpty { return "pid:" + artifact.preview.id }
         if !artifact.shareEventId.isEmpty { return "share:" + artifact.shareEventId }
         return "t:" + artifact.preview.title
@@ -229,19 +226,17 @@ struct Lane: Identifiable {
 
     private static func laneKey(for h: HydratedHighlight) -> String {
         if !h.highlight.sourceReferenceKey.isEmpty {
-            return "srk:" + h.highlight.sourceReferenceKey
+            return h.highlight.sourceReferenceKey
         }
         if !h.highlight.artifactAddress.isEmpty {
-            return "addr:" + h.highlight.artifactAddress
+            return "a:" + h.highlight.artifactAddress
         }
-        if !h.highlight.eventReference.isEmpty {
-            return "evt:" + h.highlight.eventReference
+        if !h.highlight.sourceUrl.isEmpty {
+            return "r:" + h.highlight.sourceUrl
         }
         if let art = h.artifact {
             return laneKey(for: art)
         }
-        // Orphan — unique key so it sits alone (gets dropped later since
-        // it has no artifact record).
         return "orphan:" + h.highlight.eventId
     }
 }
