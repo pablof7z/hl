@@ -37,6 +37,11 @@
 		<string>primal</string>
 		<string>nostrconnect</string>
 	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsForMedia</key>
+		<true/>
+	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Highlighter uses the camera to capture passages from physical books for OCR.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

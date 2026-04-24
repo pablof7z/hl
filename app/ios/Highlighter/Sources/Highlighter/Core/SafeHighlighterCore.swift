@@ -96,7 +96,31 @@ actor SafeHighlighterCore {
         try await core.setFollow(targetPubkeyHex: targetPubkeyHex, follow: follow)
     }
 
+    // MARK: - Following Reads
+
+    func getFollowingReads(limit: UInt32 = 40) async throws -> [ReadingFeedItem] {
+        try await core.getFollowingReads(limit: limit)
+    }
+
+    // MARK: - Following Highlights
+
+    func getFollowingHighlights(limit: UInt32 = 120) async throws -> [HydratedHighlight] {
+        try await core.getFollowingHighlights(limit: limit)
+    }
+
+    func debugHighlightsReport() async throws -> String {
+        try await core.debugHighlightsReport()
+    }
+
     // MARK: - Subscriptions
+
+    func subscribeFollowingReads() async throws -> UInt64 {
+        try await core.subscribeFollowingReads()
+    }
+
+    func subscribeFollowingHighlights() async throws -> UInt64 {
+        try await core.subscribeFollowingHighlights()
+    }
 
     func subscribeJoinedCommunities() async throws -> UInt64 {
         try await core.subscribeJoinedCommunities()
@@ -163,5 +187,45 @@ actor SafeHighlighterCore {
         artifact: ArtifactRecord
     ) async throws -> HighlightRecord {
         try await core.publishHighlight(draft: draft, artifact: artifact)
+    }
+
+    // MARK: - Blossom (BUD-03, kind:10063)
+
+    func getBlossomServers() async throws -> [String] {
+        try await core.getBlossomServers()
+    }
+
+    func setBlossomServers(_ servers: [String]) async throws -> String {
+        try await core.setBlossomServers(servers: servers)
+    }
+
+    func initDefaultBlossomServers() async throws {
+        try await core.initDefaultBlossomServers()
+    }
+
+    func signNip98Auth(url: String, method: String, payloadHash: String?) async throws -> String {
+        try await core.signNip98Auth(url: url, method: method, payloadHash: payloadHash)
+    }
+
+    // MARK: - Capture (Blossom upload + kind:20 picture)
+
+    func uploadPhoto(
+        bytes: Data,
+        mime: String,
+        width: UInt32,
+        height: UInt32,
+        alt: String
+    ) async throws -> BlossomUpload {
+        try await core.uploadPhoto(
+            bytes: bytes,
+            mime: mime,
+            width: width,
+            height: height,
+            alt: alt
+        )
+    }
+
+    func publishPicture(_ draft: PictureDraft) async throws -> PictureRecord {
+        try await core.publishPicture(draft: draft)
     }
 }

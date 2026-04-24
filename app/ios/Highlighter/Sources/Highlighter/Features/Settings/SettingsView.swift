@@ -14,6 +14,7 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 accountSection
+                mediaSection
                 aboutSection
                 logOutSection
             }
@@ -82,6 +83,14 @@ struct SettingsView: View {
                         Spacer()
                     }
                 }
+            }
+        }
+    }
+
+    private var mediaSection: some View {
+        Section {
+            NavigationLink("Media") {
+                MediaSettingsView()
             }
         }
     }
