@@ -215,9 +215,17 @@ impl SubscriptionRegistry {
     }
 }
 
-/// Per-pubkey relay-list cap fed into the outbox planner. Bounds the worst
-/// case a single follow can drag in: keep their top-2 write relays only.
-const OUTBOX_TOP_N_PER_PUBKEY: usize = 2;
+/// Per-pubkey input cap fed into the outbox planner. NIP-65 has no
+/// ordering on the relays in a kind:10002 — position 1 has the same
+/// significance as position 5 — so this is a *sanity bound*, not a
+/// "preferred-N" signal. Trimming the input artificially shrinks the
+/// overlap pool the set-cover greedy can mine: real-data measurement
+/// (see `examples/outbox_stats.rs`) showed `cap=2` cost ~12 percentage
+/// points of coverage for a 1000-follow user vs. feeding the planner
+/// every write relay. 50 is comfortably above any realistic kind:10002
+/// (NIP-65 itself recommends 2-4) while protecting against pathological
+/// or malicious lists.
+const OUTBOX_MAX_RELAYS_PER_PUBKEY: usize = 50;
 
 /// Hard cap on relays the planner will pick. Keeps the home feed from
 /// fanning out to dozens of connections when the user follows people
@@ -226,8 +234,10 @@ const OUTBOX_TOP_N_PER_PUBKEY: usize = 2;
 /// past this cap fall through to the read-relay fallback shard.
 const OUTBOX_MAX_RELAYS: usize = 10;
 
-/// Build the per-pubkey "top-2 write relays" map for `follows`. Empty
-/// vectors for follows whose kind:10002 hasn't reached the cache yet —
+/// Build the per-pubkey write-relay map for `follows`. Each follow's
+/// vec contains every write-marked relay from their newest cached
+/// kind:10002, capped only by `OUTBOX_MAX_RELAYS_PER_PUBKEY` for safety.
+/// Follows without a cached kind:10002 land here with an empty vec —
 /// the planner moves them straight to the uncovered list.
 fn outbox_per_pubkey_for(
     runtime: &NostrRuntime,
@@ -236,8 +246,12 @@ fn outbox_per_pubkey_for(
     let ndb = runtime.ndb();
     let mut out = std::collections::HashMap::with_capacity(follows.len());
     for pk in follows {
-        let urls = outbox::write_relays_for_pubkey(ndb, &pk.to_hex(), OUTBOX_TOP_N_PER_PUBKEY)
-            .unwrap_or_default();
+        let urls = outbox::write_relays_for_pubkey(
+            ndb,
+            &pk.to_hex(),
+            OUTBOX_MAX_RELAYS_PER_PUBKEY,
+        )
+        .unwrap_or_default();
         out.insert(*pk, urls);
     }
     out

@@ -3,20 +3,24 @@
 //! Two pieces:
 //!
 //! 1. [`write_relays_for_pubkey`] — given a pubkey, read their newest cached
-//!    `kind:10002` and return up to `top_n` relays they write to (in their
-//!    own listed order). The caller decides `top_n`; we use 2 by default to
-//!    bound the worst-case fan-out.
+//!    `kind:10002` and return up to `top_n` relays they write to. NIP-65 has
+//!    no ordering on the relays in a kind:10002 (position 1 has the same
+//!    significance as position 5), so the iteration order here is a
+//!    deterministic-but-arbitrary tie-break, **not** a priority signal.
+//!    Callers should pass a generous `top_n` (sanity bound only) and let
+//!    [`compute_outbox_plan`] decide which relays to use. Cutting `top_n`
+//!    to 2 measurably costs ~12 percentage points of coverage in practice;
+//!    see `examples/outbox_stats.rs`.
 //!
 //! 2. [`compute_outbox_plan`] — pure greedy set-cover. Input: a per-pubkey
-//!    map of "preferred write relays". Output: a list of (relay, authors)
-//!    shards plus an `uncovered` list for authors whose relays we couldn't
-//!    afford to keep within `max_total_relays`.
+//!    map of write relays (every relay each follow listed). Output: a list
+//!    of (relay, authors) shards plus an `uncovered` list for authors whose
+//!    relays didn't fit under `max_total_relays`.
 //!
 //! The set-cover is the classic O(n log n) greedy: at each step, pick the
 //! relay that covers the largest set of still-uncovered pubkeys; tie-break
-//! by relay URL for determinism. With the per-pubkey cap, the input is
-//! small enough that the naïve loop is fast in practice (a 500-follow user
-//! with cap=2 yields ≤ 1000 (relay,pubkey) edges).
+//! by relay URL for determinism. Real-world inputs (1000-follow users with
+//! ~8 write relays each) yield ~8000 (relay,pubkey) edges — trivially fast.
 //!
 //! The algorithm naturally exploits intersections: if 80% of follows
 //! publish on `relay.damus.io`, that relay is picked first and covers

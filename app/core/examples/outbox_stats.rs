@@ -1,22 +1,27 @@
 //! Real-data validation for the outbox planner.
 //!
-//! For each test pubkey:
-//!   1. Fetch their kind:3 contact list from purplepag.es (+ a couple of
-//!      generic relays as fallback so we don't miss data when purple is
-//!      cold).
-//!   2. Fetch all kind:10002 events for the people they follow.
-//!   3. Build the per-pubkey "top 2 write relays" map the planner expects.
-//!   4. Run `compute_outbox_plan` at several caps and report:
-//!        - relays selected
-//!        - authors covered (% of follows)
-//!        - average authors per shard
-//!        - per-shard breakdown at cap = OUTBOX_MAX_RELAYS (10)
+//! NIP-65 has *no ordering* on relays in a `kind:10002`: position 1 has
+//! the same significance as position 5. So "top N in listed order" is
+//! effectively picking N at random — it limits the planner's input for
+//! no good reason and shrinks the overlap pool the set-cover can mine.
+//!
+//! This harness fetches each test user's `kind:3`, then every follow's
+//! `kind:10002`, then runs the planner under three per-pubkey-cap
+//! regimes side-by-side so we can quantify what cutting the input to
+//! "top 2" was actually costing:
+//!
+//!   - `top_n = 2`   — the original (broken) behaviour
+//!   - `top_n = 5`   — moderate sanity bound
+//!   - `top_n = all` — feed every write relay; let set-cover decide
+//!
+//! For each combination we report shards / coverage / avg authors per
+//! shard at multiple output caps. The detailed shard breakdown is shown
+//! at `top_n = all` because that's the production-correct mode.
 //!
 //! Run with:
 //!   cargo run --release --example outbox_stats
 //!
-//! The output exists to validate the algorithm against real Nostr data;
-//! it is not part of the iOS app's runtime path.
+//! Pure validation tool; not on the iOS app's runtime path.
 
 use std::collections::{BTreeSet, HashMap};
 use std::time::Duration;
@@ -32,8 +37,6 @@ const FALLBACK: &[&str] = &[
     "wss://relay.primal.net",
 ];
 
-/// Hand-picked test users covering different network sizes and centres of
-/// gravity. Each entry is (display name, hex pubkey).
 const TEST_USERS: &[(&str, &str)] = &[
     (
         "_@f7z.io (Pablo)",
@@ -61,14 +64,32 @@ const TEST_USERS: &[(&str, &str)] = &[
     ),
 ];
 
-const CAPS_TO_REPORT: &[usize] = &[4, 6, 8, 10, 15, 25, 50];
-const PLAN_DETAIL_CAP: usize = 10;
-const TOP_N_PER_PUBKEY: usize = 2;
+const OUTPUT_CAPS: &[usize] = &[6, 8, 10, 15, 25];
+
+/// Per-pubkey input caps to compare. NIP-65 has no ordering, so these
+/// are sanity bounds, not priority signals.
+#[derive(Clone, Copy)]
+struct InputCap {
+    label: &'static str,
+    cap: usize,
+}
+const INPUT_CAPS: &[InputCap] = &[
+    InputCap { label: "top_n=2  ", cap: 2 },
+    InputCap { label: "top_n=5  ", cap: 5 },
+    InputCap { label: "top_n=all", cap: usize::MAX },
+];
+
+/// Detail mode: production-correct (all write relays).
+const DETAIL_INPUT_CAP: usize = usize::MAX;
+const DETAIL_OUTPUT_CAP: usize = 10;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     println!("Outbox Planner — Real-Data Stats");
     println!("================================\n");
+    println!("NIP-65 has no relay ordering: position 1 = position 5.");
+    println!("Comparing top_n ∈ {{2, 5, all}} to quantify the cost of");
+    println!("artificially capping the planner's input.\n");
 
     let client = Client::default();
     client.add_relay(PURPLE).await?;
@@ -76,19 +97,15 @@ async fn main() -> anyhow::Result<()> {
         client.add_relay(*r).await?;
     }
     client.connect().await;
-    // Give relays a beat to actually open the sockets.
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    println!("Connected to {PURPLE} (primary) and {} fallback relays.\n", FALLBACK.len());
-    println!("Filter routing rule under test: each shard sends ONLY the");
-    println!("authors that listed that relay in their kind:10002 — not");
-    println!("the full follow set.\n");
+    println!("Connected to {PURPLE} (primary) + {} fallback relays.\n", FALLBACK.len());
 
     for (name, pk_hex) in TEST_USERS {
         let pk = match PublicKey::from_hex(pk_hex) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("skip {name}: bad pubkey: {e}");
+                eprintln!("skip {name}: {e}");
                 continue;
             }
         };
@@ -104,7 +121,7 @@ async fn analyze(client: &Client, name: &str, pk: PublicKey) -> anyhow::Result<(
     println!("===== {name} =====");
     println!("pubkey: {}", pk.to_hex());
 
-    // 1. kind:3 — their contact list.
+    // 1. kind:3
     let contacts_filter = Filter::new().kinds([Kind::ContactList]).author(pk);
     let events = client
         .fetch_events(contacts_filter, Duration::from_secs(15))
@@ -131,17 +148,14 @@ async fn analyze(client: &Client, name: &str, pk: PublicKey) -> anyhow::Result<(
     };
 
     println!("  follows (kind:3 p-tags, deduped): {}", follows.len());
-
     if follows.is_empty() {
         println!();
         return Ok(());
     }
 
-    // 2. kind:10002 for all follows. Chunk to avoid blowing past relay
-    //    filter-size limits (purplepages caps around 1000 authors).
+    // 2. kind:10002 for all follows
     let mut nip65_by_author: HashMap<PublicKey, Event> = HashMap::new();
-    let chunk_size = 500usize;
-    for chunk in follows.chunks(chunk_size) {
+    for chunk in follows.chunks(500) {
         let filter = Filter::new()
             .kinds([Kind::RelayList])
             .authors(chunk.to_vec());
@@ -155,59 +169,83 @@ async fn analyze(client: &Client, name: &str, pk: PublicKey) -> anyhow::Result<(
             }
         }
     }
-    let with_nip65 = follows
-        .iter()
-        .filter(|pk| nip65_by_author.contains_key(pk))
-        .count();
-    let coverage_pct = 100.0 * with_nip65 as f64 / follows.len() as f64;
+    let with_nip65 = follows.iter().filter(|pk| nip65_by_author.contains_key(pk)).count();
     println!(
         "  follows with kind:10002 cached: {} ({:.1}%)",
-        with_nip65, coverage_pct
+        with_nip65,
+        100.0 * with_nip65 as f64 / follows.len() as f64
     );
 
-    // 3. Build per-pubkey "top 2 write relays" map.
-    let mut per_pubkey: HashMap<PublicKey, Vec<String>> = HashMap::new();
-    for f in &follows {
-        if let Some(ev) = nip65_by_author.get(f) {
-            per_pubkey.insert(*f, outbox::write_relays_from_event(ev, TOP_N_PER_PUBKEY));
-        } else {
-            per_pubkey.insert(*f, Vec::new());
-        }
-    }
-
-    let unique_relays: BTreeSet<&String> = per_pubkey.values().flat_map(|v| v.iter()).collect();
-    println!(
-        "  unique write relays across follows: {}",
-        unique_relays.len()
-    );
-
-    // 4. Cap-vs-coverage table.
-    println!();
-    println!("  cap | relays | covered (% of follows) | avg authors/shard");
-    println!("  ----+--------+------------------------+------------------");
-    for &cap in CAPS_TO_REPORT {
-        let plan = outbox::compute_outbox_plan(per_pubkey.clone(), cap);
-        let covered = follows.len() - plan.uncovered.len();
-        let avg = if plan.shards.is_empty() {
-            0.0
-        } else {
-            plan.shards.iter().map(|s| s.authors.len()).sum::<usize>() as f64
-                / plan.shards.len() as f64
-        };
+    // Distribution of how many write relays per author (to size the cap)
+    let relay_counts: Vec<usize> = follows
+        .iter()
+        .filter_map(|pk| nip65_by_author.get(pk))
+        .map(|ev| outbox::write_relays_from_event(ev, usize::MAX).len())
+        .collect();
+    if !relay_counts.is_empty() {
+        let mut sorted = relay_counts.clone();
+        sorted.sort_unstable();
+        let median = sorted[sorted.len() / 2];
+        let p90 = sorted[(sorted.len() * 9) / 10];
+        let max = *sorted.last().unwrap();
+        let avg = sorted.iter().sum::<usize>() as f64 / sorted.len() as f64;
         println!(
-            "  {:>3} | {:>6} | {:>5} ({:>5.1}%)        | {:>6.1}",
-            cap,
-            plan.shards.len(),
-            covered,
-            100.0 * covered as f64 / follows.len() as f64,
-            avg
+            "  write relays per author — avg={:.1}  median={}  p90={}  max={}",
+            avg, median, p90, max
         );
     }
 
-    // 5. Detailed plan at the production cap.
+    // 3. Build per-pubkey maps for each input cap
+    let mut per_pubkey_by_cap: HashMap<usize, HashMap<PublicKey, Vec<String>>> = HashMap::new();
+    for ic in INPUT_CAPS {
+        let mut map: HashMap<PublicKey, Vec<String>> = HashMap::new();
+        for f in &follows {
+            if let Some(ev) = nip65_by_author.get(f) {
+                map.insert(*f, outbox::write_relays_from_event(ev, ic.cap));
+            } else {
+                map.insert(*f, Vec::new());
+            }
+        }
+        per_pubkey_by_cap.insert(ic.cap, map);
+    }
+
+    // 4. Side-by-side comparison table
     println!();
-    println!("  Plan at cap = {PLAN_DETAIL_CAP} (relay → distinct authors queried):");
-    let plan = outbox::compute_outbox_plan(per_pubkey.clone(), PLAN_DETAIL_CAP);
+    println!(
+        "  output_cap | {} | {} | {}",
+        INPUT_CAPS[0].label, INPUT_CAPS[1].label, INPUT_CAPS[2].label
+    );
+    println!(
+        "             | relays  covered     | relays  covered     | relays  covered"
+    );
+    println!(
+        "  -----------+----------------------+----------------------+--------------------"
+    );
+    for &out_cap in OUTPUT_CAPS {
+        print!("  {:>10} |", out_cap);
+        for ic in INPUT_CAPS {
+            let plan =
+                outbox::compute_outbox_plan(per_pubkey_by_cap[&ic.cap].clone(), out_cap);
+            let covered = follows.len() - plan.uncovered.len();
+            print!(
+                " {:>2}     {:>4} ({:>5.1}%) |",
+                plan.shards.len(),
+                covered,
+                100.0 * covered as f64 / follows.len() as f64
+            );
+        }
+        println!();
+    }
+
+    // 5. Detailed plan at production-correct settings
+    println!();
+    println!(
+        "  Plan @ output_cap={DETAIL_OUTPUT_CAP}, input_cap=ALL (production-correct):"
+    );
+    let plan = outbox::compute_outbox_plan(
+        per_pubkey_by_cap[&DETAIL_INPUT_CAP].clone(),
+        DETAIL_OUTPUT_CAP,
+    );
     for (i, shard) in plan.shards.iter().enumerate() {
         println!(
             "    {:>2}. {:<46} → {:>4} authors",
@@ -217,31 +255,36 @@ async fn analyze(client: &Client, name: &str, pk: PublicKey) -> anyhow::Result<(
         );
     }
     if !plan.uncovered.is_empty() {
+        let no_nip65 = plan
+            .uncovered
+            .iter()
+            .filter(|p| {
+                per_pubkey_by_cap[&DETAIL_INPUT_CAP]
+                    .get(p)
+                    .map(|v| v.is_empty())
+                    .unwrap_or(true)
+            })
+            .count();
         println!(
-            "    fallback (user's read relays): {} authors uncovered ({} have no kind:10002 cached, the rest got trimmed by the cap)",
+            "    fallback (user's read relays): {} uncovered  ({} have no kind:10002, {} trimmed by cap)",
             plan.uncovered.len(),
-            plan.uncovered
-                .iter()
-                .filter(|p| per_pubkey.get(p).map(|v| v.is_empty()).unwrap_or(true))
-                .count()
+            no_nip65,
+            plan.uncovered.len() - no_nip65
         );
     }
 
-    // 6. Sanity check — every shard's `authors` is a subset of the
-    //    population that listed that shard's relay. Per the user's spec:
-    //    "we shouldnt sent all authors to that relay; we only send the
-    //    users who have that relay in their 10002".
+    // 6. Sanity check
     let mut all_ok = true;
     for shard in &plan.shards {
         for a in &shard.authors {
-            let listed_it = per_pubkey
+            let listed_it = per_pubkey_by_cap[&DETAIL_INPUT_CAP]
                 .get(a)
                 .map(|v| v.contains(&shard.url))
                 .unwrap_or(false);
             if !listed_it {
                 all_ok = false;
                 eprintln!(
-                    "  !! BUG: author {} appears in shard {} but did not list that relay",
+                    "  !! BUG: author {} in shard {} did not list that relay",
                     a.to_hex(),
                     shard.url
                 );
@@ -250,7 +293,7 @@ async fn analyze(client: &Client, name: &str, pk: PublicKey) -> anyhow::Result<(
     }
     if all_ok {
         println!(
-            "  per-relay author filtering verified: every shard contains only authors that listed its relay."
+            "  per-relay filtering OK: each shard contains only authors that listed its relay."
         );
     }
 
