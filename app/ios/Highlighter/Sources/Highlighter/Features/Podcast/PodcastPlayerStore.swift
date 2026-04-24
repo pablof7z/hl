@@ -1,10 +1,8 @@
 import AVFoundation
 import Foundation
 import Observation
+import os
 
-/// View-scoped audio-player state for a single podcast artifact. Wraps
-/// `AVPlayer`, drives scrub / play-pause / clip-range selection, and
-/// publishes via the shared `SafeHighlighterCore` when the user saves.
 @MainActor
 @Observable
 final class PodcastPlayerStore {
@@ -14,6 +12,9 @@ final class PodcastPlayerStore {
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
     private(set) var isPlaying: Bool = false
+    private(set) var isBuffering: Bool = false
+    private(set) var loadedTimeRanges: [ClosedRange<TimeInterval>] = []
+    private(set) var lastError: String?
     private(set) var clipStart: TimeInterval?
     private(set) var clipEnd: TimeInterval?
     var speaker: String = ""
@@ -24,23 +25,25 @@ final class PodcastPlayerStore {
     // MARK: - Private plumbing
 
     @ObservationIgnored private var player: AVPlayer?
-    // `nonisolated(unsafe)` is required for the three observer tokens so that
-    // `deinit` (which Swift 6 treats as nonisolated) can tear them down. The
-    // stored values only move between MainActor-isolated setters and the
-    // one-shot nonisolated `deinit` read — no concurrent access.
+    @ObservationIgnored private let logger = Logger(subsystem: "com.highlighter.app", category: "PodcastPlayer")
+    // `nonisolated(unsafe)` lets deinit tear down observer tokens without a MainActor hop.
     @ObservationIgnored private nonisolated(unsafe) var timeObserver: Any?
     @ObservationIgnored private nonisolated(unsafe) var statusObserver: NSKeyValueObservation?
+    @ObservationIgnored private nonisolated(unsafe) var bufferingObserver: NSKeyValueObservation?
+    @ObservationIgnored private nonisolated(unsafe) var rangesObserver: NSKeyValueObservation?
+    @ObservationIgnored private nonisolated(unsafe) var errorObserver: NSKeyValueObservation?
     @ObservationIgnored private nonisolated(unsafe) var playbackEndObserver: NSObjectProtocol?
 
     // MARK: - Lifecycle
 
     deinit {
-        // We can't hop to MainActor from deinit — just detach the observer
-        // tokens and pause the player. All of these APIs are safe off-main.
         if let player, let timeObserver {
             player.removeTimeObserver(timeObserver)
         }
         statusObserver?.invalidate()
+        bufferingObserver?.invalidate()
+        rangesObserver?.invalidate()
+        errorObserver?.invalidate()
         if let playbackEndObserver {
             NotificationCenter.default.removeObserver(playbackEndObserver)
         }
@@ -52,25 +55,33 @@ final class PodcastPlayerStore {
     func load(url: URL) {
         guard audioUrl != url else { return }
         audioUrl = url
+        lastError = nil
+        isBuffering = false
+        loadedTimeRanges = []
+        logger.info("load url=\(url.absoluteString, privacy: .public)")
 
-        // Activate the playback session so we play even with the ring switch off.
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         try? AVAudioSession.sharedInstance().setActive(true)
 
         let item = AVPlayerItem(url: url)
+        // Prefer smaller forward buffer to start playback sooner on slow connections.
+        item.preferredForwardBufferDuration = 10
+
         let newPlayer = AVPlayer(playerItem: item)
+        newPlayer.automaticallyWaitsToMinimizeStalling = true
         self.player = newPlayer
 
         installTimeObserver(on: newPlayer)
         observeItem(item)
+        observeBuffering(item)
+        observeLoadedRanges(item)
+        observeError(item)
         observePlaybackEnd(item: item)
     }
 
     private func installTimeObserver(on player: AVPlayer) {
         let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            // `addPeriodicTimeObserver` fires on the main queue when we pass
-            // `.main` above; hop to the main actor to mutate state safely.
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.currentTime = time.seconds.isFinite ? time.seconds : 0
@@ -82,15 +93,69 @@ final class PodcastPlayerStore {
         statusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self, weak item] _, _ in
             guard let self, let item else { return }
             Task { @MainActor in
-                guard item.status == .readyToPlay else { return }
+                let status = item.status
+                self.logger.info("item status=\(status.rawValue)")
+                guard status == .readyToPlay else { return }
                 do {
                     let loaded = try await item.asset.load(.duration)
                     let seconds = loaded.seconds
                     if seconds.isFinite, seconds > 0 {
                         self.duration = seconds
+                        self.logger.info("duration=\(seconds, format: .fixed(precision: 1))s")
                     }
                 } catch {
-                    // Duration unavailable — leave at 0; UI renders without a scrub range.
+                    self.logger.error("duration load failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+        }
+    }
+
+    private func observeBuffering(_ item: AVPlayerItem) {
+        bufferingObserver = item.observe(
+            \.isPlaybackLikelyToKeepUp,
+            options: [.initial, .new]
+        ) { [weak self, weak item] _, _ in
+            guard let self, let item else { return }
+            Task { @MainActor in
+                let likelyToKeepUp = item.isPlaybackLikelyToKeepUp
+                let bufferEmpty = item.isPlaybackBufferEmpty
+                let newBuffering = !likelyToKeepUp && !bufferEmpty
+                if self.isBuffering != newBuffering {
+                    self.logger.info("buffering=\(newBuffering) likelyToKeepUp=\(likelyToKeepUp) bufferEmpty=\(bufferEmpty)")
+                    self.isBuffering = newBuffering
+                }
+            }
+        }
+    }
+
+    private func observeLoadedRanges(_ item: AVPlayerItem) {
+        rangesObserver = item.observe(
+            \.loadedTimeRanges,
+            options: [.initial, .new]
+        ) { [weak self, weak item] _, _ in
+            guard let self, let item else { return }
+            let ranges = item.loadedTimeRanges.compactMap { value -> ClosedRange<TimeInterval>? in
+                let range = value.timeRangeValue
+                let start = range.start.seconds
+                let end = CMTimeRangeGetEnd(range).seconds
+                guard start.isFinite, end.isFinite, end > start else { return nil }
+                return start...end
+            }
+            Task { @MainActor in
+                self.loadedTimeRanges = ranges
+            }
+        }
+    }
+
+    private func observeError(_ item: AVPlayerItem) {
+        errorObserver = item.observe(\.error, options: [.new]) { [weak self, weak item] _, _ in
+            guard let self, let item else { return }
+            Task { @MainActor in
+                if let error = item.error {
+                    let msg = error.localizedDescription
+                    self.logger.error("playback error: \(msg, privacy: .public)")
+                    self.lastError = msg
+                    self.isPlaying = false
                 }
             }
         }
@@ -111,11 +176,13 @@ final class PodcastPlayerStore {
     // MARK: - Transport
 
     func play() {
+        logger.info("play")
         player?.play()
         isPlaying = true
     }
 
     func pause() {
+        logger.info("pause")
         player?.pause()
         isPlaying = false
     }
@@ -165,8 +232,6 @@ final class PodcastPlayerStore {
         }
     }
 
-    /// Direct updates from drag gestures on the timeline; also called by
-    /// `ClipTimelineView` when the user drags a clip thumb.
     func setClipStart(_ value: TimeInterval) {
         var next = max(0, value)
         if let end = clipEnd { next = min(next, max(0, end - 0.05)) }
@@ -192,9 +257,6 @@ final class PodcastPlayerStore {
         publishError = nil
         defer { isPublishing = false }
 
-        // Concatenate the selected segments in chronological order for the
-        // highlight body. If no transcript segments are selected, the body
-        // is empty — clip bounds alone convey the highlight.
         let selected = segments
             .filter { selectedSegmentIds.contains($0.id) }
             .sorted { $0.start < $1.start }
@@ -207,7 +269,8 @@ final class PodcastPlayerStore {
             clipStartSeconds: clipStart,
             clipEndSeconds: clipEnd,
             clipSpeaker: speaker,
-            clipTranscriptSegmentIds: Array(selectedSegmentIds)
+            clipTranscriptSegmentIds: Array(selectedSegmentIds),
+            image: nil
         )
 
         do {

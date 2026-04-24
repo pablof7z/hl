@@ -7,6 +7,7 @@ struct ClipTimelineView: View {
     @Binding var clipEnd: TimeInterval?
     @Binding var currentTime: TimeInterval
     let duration: TimeInterval
+    let loadedTimeRanges: [ClosedRange<TimeInterval>]
     let onSeek: (TimeInterval) -> Void
 
     private let trackHeight: CGFloat = 6
@@ -25,6 +26,7 @@ struct ClipTimelineView: View {
                 let width = proxy.size.width
                 ZStack(alignment: .leading) {
                     baseTrack
+                    bufferedFills(width: width)
                     clipRangeFill(width: width)
                     scrubThumb(width: width)
                     if let start = clipStart {
@@ -52,6 +54,21 @@ struct ClipTimelineView: View {
     }
 
     // MARK: - Subviews
+
+    @ViewBuilder
+    private func bufferedFills(width: CGFloat) -> some View {
+        if duration > 0 {
+            ForEach(Array(loadedTimeRanges.enumerated()), id: \.offset) { _, range in
+                let x1 = position(for: range.lowerBound, width: width)
+                let x2 = position(for: range.upperBound, width: width)
+                Capsule()
+                    .fill(Color.secondary.opacity(0.35))
+                    .frame(width: max(2, x2 - x1), height: trackHeight)
+                    .offset(x: x1)
+                    .frame(maxHeight: .infinity)
+            }
+        }
+    }
 
     private var baseTrack: some View {
         Capsule()

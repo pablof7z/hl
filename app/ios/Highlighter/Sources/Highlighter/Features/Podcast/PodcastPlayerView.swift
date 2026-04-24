@@ -93,9 +93,18 @@ struct PodcastPlayerView: View {
                 Image(systemName: "gobackward.15").font(.title2)
             }
             Button { player.toggle() } label: {
-                Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 52))
-                    .foregroundStyle(Color.highlighterAccent)
+                ZStack {
+                    if player.isBuffering {
+                        ProgressView()
+                            .controlSize(.large)
+                            .tint(Color.highlighterAccent)
+                            .frame(width: 52, height: 52)
+                    } else {
+                        Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 52))
+                            .foregroundStyle(Color.highlighterAccent)
+                    }
+                }
             }
             Button { player.skip(by: 30) } label: {
                 Image(systemName: "goforward.30").font(.title2)
@@ -109,17 +118,33 @@ struct PodcastPlayerView: View {
     }
 
     private var timeline: some View {
-        ClipTimelineView(
-            clipStart: Binding(get: { player.clipStart }, set: { newValue in
-                if let v = newValue { player.setClipStart(v) }
-            }),
-            clipEnd: Binding(get: { player.clipEnd }, set: { newValue in
-                if let v = newValue { player.setClipEnd(v) }
-            }),
-            currentTime: Binding(get: { player.currentTime }, set: { _ in /* owned by player */ }),
-            duration: effectiveDuration,
-            onSeek: { player.seek(to: $0) }
-        )
+        VStack(spacing: 6) {
+            if let error = player.lastError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.red)
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                    Spacer()
+                }
+                .padding(10)
+                .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            }
+            ClipTimelineView(
+                clipStart: Binding(get: { player.clipStart }, set: { newValue in
+                    if let v = newValue { player.setClipStart(v) }
+                }),
+                clipEnd: Binding(get: { player.clipEnd }, set: { newValue in
+                    if let v = newValue { player.setClipEnd(v) }
+                }),
+                currentTime: Binding(get: { player.currentTime }, set: { _ in }),
+                duration: effectiveDuration,
+                loadedTimeRanges: player.loadedTimeRanges,
+                onSeek: { player.seek(to: $0) }
+            )
+        }
     }
 
     private var effectiveDuration: TimeInterval {
