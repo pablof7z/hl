@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 
 /// Circular avatar with a deterministic gradient fallback when no image is
@@ -34,16 +35,11 @@ struct AuthorAvatar: View {
             }
 
             if let url = avatarURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        Color.clear
-                    }
-                }
+                KFImage(url)
+                    .placeholder { Color.clear }
+                    .fade(duration: 0.15)
+                    .resizable()
+                    .scaledToFill()
             }
         }
         .frame(width: size, height: size)

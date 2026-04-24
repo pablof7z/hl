@@ -1,11 +1,10 @@
+import Kingfisher
 import SwiftUI
 
 struct RoomLibraryPodcastCardView: View {
     @Environment(HighlighterStore.self) private var app
 
     let artifact: ArtifactRecord
-
-    @State private var sharerProfile: ProfileMetadata?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -47,7 +46,7 @@ struct RoomLibraryPodcastCardView: View {
         .padding(.vertical, 18)
         .contentShape(Rectangle())
         .task(id: artifact.pubkey) {
-            sharerProfile = try? await app.safeCore.getUserProfile(pubkeyHex: artifact.pubkey)
+            await app.requestProfile(pubkeyHex: artifact.pubkey)
         }
     }
 
@@ -55,7 +54,7 @@ struct RoomLibraryPodcastCardView: View {
         HStack(spacing: 8) {
             AuthorAvatar(
                 pubkey: artifact.pubkey,
-                pictureURL: sharerProfile?.picture ?? "",
+                pictureURL: app.profileCache[artifact.pubkey]?.picture ?? "",
                 displayInitial: sharerInitial,
                 size: 22
             )
@@ -83,12 +82,11 @@ struct RoomLibraryPodcastCardView: View {
         let image = artifact.preview.image
         Group {
             if !image.isEmpty, let url = URL(string: image) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let img): img.resizable().scaledToFill()
-                    default: artworkPlaceholder
-                    }
-                }
+                KFImage(url)
+                    .placeholder { artworkPlaceholder }
+                    .fade(duration: 0.15)
+                    .resizable()
+                    .scaledToFill()
             } else {
                 artworkPlaceholder
             }
@@ -111,8 +109,9 @@ struct RoomLibraryPodcastCardView: View {
     }
 
     private var sharerName: String {
-        if let dn = sharerProfile?.displayName, !dn.isEmpty { return dn }
-        if let n = sharerProfile?.name, !n.isEmpty { return n }
+        let profile = app.profileCache[artifact.pubkey]
+        if let dn = profile?.displayName, !dn.isEmpty { return dn }
+        if let n = profile?.name, !n.isEmpty { return n }
         return String(artifact.pubkey.prefix(10))
     }
 

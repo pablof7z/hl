@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 
 /// Gorgeous profile screen. Reusable for any pubkey — the logged-in user's
@@ -91,17 +92,12 @@ private struct HeroBanner: View {
         GeometryReader { geo in
             Group {
                 if let url = URL(string: bannerURL), !bannerURL.isEmpty {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .onTapGesture { showFullScreen = true }
-                        default:
-                            fallback
-                        }
-                    }
+                    KFImage(url)
+                        .placeholder { fallback }
+                        .fade(duration: 0.2)
+                        .resizable()
+                        .scaledToFill()
+                        .onTapGesture { showFullScreen = true }
                 } else {
                     fallback
                 }
@@ -436,24 +432,18 @@ private struct BannerZoomView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             if let url {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img
-                            .resizable()
-                            .scaledToFit()
-                            .scaleEffect(scale)
-                            .gesture(
-                                MagnificationGesture()
-                                    .onChanged { value in
-                                        scale = max(1, min(5, lastScale * value))
-                                    }
-                                    .onEnded { _ in lastScale = scale }
-                            )
-                    default:
-                        ProgressView().tint(.white)
-                    }
-                }
+                KFImage(url)
+                    .placeholder { ProgressView().tint(.white) }
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(scale)
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { value in
+                                scale = max(1, min(5, lastScale * value))
+                            }
+                            .onEnded { _ in lastScale = scale }
+                    )
             }
             VStack {
                 HStack {

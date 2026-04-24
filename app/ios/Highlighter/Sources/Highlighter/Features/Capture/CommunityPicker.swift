@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 
 /// Pick which community to publish the capture into. Pulls from
@@ -17,13 +18,13 @@ struct CommunityPicker: View {
                 } label: {
                     HStack(spacing: 12) {
                         if let url = URL(string: community.picture), !community.picture.isEmpty {
-                            AsyncImage(url: url) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: {
-                                Color.highlighterPaper.opacity(0.5)
-                            }
-                            .frame(width: 32, height: 32)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            KFImage(url)
+                                .placeholder { Color.highlighterPaper.opacity(0.5) }
+                                .fade(duration: 0.15)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 32, height: 32)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
                         } else {
                             Image(systemName: "square.grid.2x2")
                                 .frame(width: 32, height: 32)

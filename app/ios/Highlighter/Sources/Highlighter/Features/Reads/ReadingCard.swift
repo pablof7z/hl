@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 
 /// Shared presentational card for reading-style items. Used by the reads
@@ -114,16 +115,13 @@ struct ReadingCard<Avatar: View, Trailing: View>: View {
     @ViewBuilder
     private var thumbnail: some View {
         if let imageURL {
-            AsyncImage(url: imageURL) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    thumbnailPlaceholder
-                }
-            }
-            .frame(width: 96, height: 96)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            KFImage(imageURL)
+                .placeholder { thumbnailPlaceholder }
+                .fade(duration: 0.15)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 96, height: 96)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         } else {
             thumbnailPlaceholder
                 .frame(width: 96, height: 96)

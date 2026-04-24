@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 
 /// Article row on a profile's Writing tab. Mirrors the web `ArticleCard`:
@@ -32,18 +33,13 @@ struct ArticleCardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if let url = thumbnailURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        Color.highlighterRule.opacity(0.4)
-                    }
-                }
-                .frame(width: 96, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                KFImage(url)
+                    .placeholder { Color.highlighterRule.opacity(0.4) }
+                    .fade(duration: 0.15)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 96, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
         .padding(.vertical, 14)

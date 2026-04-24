@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 
 /// Identifiable payload for `.sheet(item:)` — callers construct one of these
@@ -109,16 +110,13 @@ struct ShareToCommunitySheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if let url = target.imageURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    default:
-                        Color.highlighterRule.opacity(0.4)
-                    }
-                }
-                .frame(width: 64, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                KFImage(url)
+                    .placeholder { Color.highlighterRule.opacity(0.4) }
+                    .fade(duration: 0.15)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 64, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
     }
@@ -128,13 +126,13 @@ struct ShareToCommunitySheet: View {
     private func communityRow(_ community: CommunitySummary) -> some View {
         HStack(spacing: 12) {
             if let url = URL(string: community.picture), !community.picture.isEmpty {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Color.highlighterRule.opacity(0.4)
-                }
-                .frame(width: 32, height: 32)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                KFImage(url)
+                    .placeholder { Color.highlighterRule.opacity(0.4) }
+                    .fade(duration: 0.15)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 32, height: 32)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
                 Image(systemName: "square.grid.2x2")
                     .frame(width: 32, height: 32)

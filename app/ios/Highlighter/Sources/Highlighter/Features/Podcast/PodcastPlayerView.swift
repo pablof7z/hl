@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 
 /// Full podcast player UI: artwork header, transport, scrub timeline,
@@ -41,20 +42,13 @@ struct PodcastPlayerView: View {
         let image = artifact.preview.image
         HStack(alignment: .top, spacing: 14) {
             if !image.isEmpty, let url = URL(string: image) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable().scaledToFill()
-                    case .failure:
-                        placeholderArt
-                    case .empty:
-                        placeholderArt
-                    @unknown default:
-                        placeholderArt
-                    }
-                }
-                .frame(width: 96, height: 96)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                KFImage(url)
+                    .placeholder { placeholderArt }
+                    .fade(duration: 0.15)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 96, height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
             } else {
                 placeholderArt.frame(width: 96, height: 96).clipShape(RoundedRectangle(cornerRadius: 14))
             }

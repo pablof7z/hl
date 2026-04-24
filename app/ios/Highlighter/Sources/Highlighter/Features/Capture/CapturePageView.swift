@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 import UIKit
 
@@ -306,16 +307,13 @@ struct CapturePageView: View {
         if let selection = store.selectedBook {
             let cover = selection.coverURL
             if !cover.isEmpty, let url = URL(string: cover) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable().scaledToFill()
-                    default:
-                        bookPillFallback
-                    }
-                }
-                .frame(width: 34, height: 48)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                KFImage(url)
+                    .placeholder { bookPillFallback }
+                    .fade(duration: 0.15)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 34, height: 48)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
             } else {
                 bookPillFallback
             }

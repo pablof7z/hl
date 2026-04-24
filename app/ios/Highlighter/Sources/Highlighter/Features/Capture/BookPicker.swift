@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 
 /// One surface. No tabs. The user either taps a familiar cover (80%) or
@@ -223,14 +224,11 @@ struct BookPicker: View {
         VStack(alignment: .leading, spacing: 6) {
             Group {
                 if !image.isEmpty, let url = URL(string: image) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let img):
-                            img.resizable().scaledToFill()
-                        default:
-                            coverPlaceholder(title: book.preview.title)
-                        }
-                    }
+                    KFImage(url)
+                        .placeholder { coverPlaceholder(title: book.preview.title) }
+                        .fade(duration: 0.15)
+                        .resizable()
+                        .scaledToFill()
                 } else {
                     coverPlaceholder(title: book.preview.title)
                 }
@@ -332,14 +330,13 @@ struct BookPicker: View {
     private func searchRow(_ book: ArtifactRecord) -> some View {
         HStack(spacing: 12) {
             if !book.preview.image.isEmpty, let url = URL(string: book.preview.image) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let img): img.resizable().scaledToFill()
-                    default: coverPlaceholder(title: book.preview.title)
-                    }
-                }
-                .frame(width: 42, height: 62)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                KFImage(url)
+                    .placeholder { coverPlaceholder(title: book.preview.title) }
+                    .fade(duration: 0.15)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 42, height: 62)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
             } else {
                 coverPlaceholder(title: book.preview.title)
                     .frame(width: 42, height: 62)
@@ -521,18 +518,12 @@ private struct ISBNPreviewSheet: View {
     private var coverArea: some View {
         ZStack {
             if let image = preview?.image, !image.isEmpty, let url = URL(string: image) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable().scaledToFit()
-                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                    case .empty:
-                        coverPlaceholder
-                    default:
-                        coverPlaceholder
-                    }
-                }
-                .frame(height: 200)
+                KFImage(url)
+                    .placeholder { coverPlaceholder }
+                    .fade(duration: 0.25)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 200)
             } else {
                 coverPlaceholder
                     .frame(height: 200)

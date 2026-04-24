@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 
 /// Community row on a profile's Communities tab. Taps route through the
@@ -43,14 +44,11 @@ struct CommunityRowView: View {
     @ViewBuilder
     private var thumbnail: some View {
         if let url = URL(string: community.picture), !community.picture.isEmpty {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    Color.highlighterRule.opacity(0.5)
-                }
-            }
+            KFImage(url)
+                .placeholder { Color.highlighterRule.opacity(0.5) }
+                .fade(duration: 0.15)
+                .resizable()
+                .scaledToFill()
         } else {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.highlighterRule.opacity(0.5))
