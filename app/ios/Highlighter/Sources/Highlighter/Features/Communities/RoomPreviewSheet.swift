@@ -1,10 +1,11 @@
 import Kingfisher
 import SwiftUI
 
-/// Modal presented when a card on the explorer is tapped. Large cover
-/// backdrop, room name, description, a primary Join button, and a
-/// secondary "Peek inside" link for open rooms. Dismisses itself after
-/// firing the join; the toast on the root scene confirms.
+/// Modal presented when a card on the explorer is tapped. Starts at
+/// `.medium` with the hero, description, and Join button; "Peek inside"
+/// expands the sheet to `.large` and streams the room's recent artifacts
+/// inline — no dismissal, no navigation. "Open full room" is available
+/// from the expanded state for when the user wants the real deal.
 struct RoomPreviewSheet: View {
     let room: CommunitySummary
     let onJoin: () -> Void
@@ -12,9 +13,14 @@ struct RoomPreviewSheet: View {
     @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
 
+    @State private var detent: PresentationDetent = .medium
+    @State private var roomStore: RoomStore?
+
     private var alreadyJoined: Bool {
         appStore.joinedCommunities.contains(where: { $0.id == room.id })
     }
+
+    private var isExpanded: Bool { detent == .large }
 
     var body: some View {
         ScrollView {
@@ -37,14 +43,29 @@ struct RoomPreviewSheet: View {
                 }
                 .padding(.horizontal, 20)
 
+                if isExpanded {
+                    insideSection
+                        .padding(.horizontal, 20)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
                 Spacer(minLength: 12)
 
                 actionStack
                     .padding(.horizontal, 20)
                     .padding(.bottom, 20)
             }
+            .animation(.easeInOut(duration: 0.25), value: isExpanded)
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
+        .presentationDetents([.medium, .large], selection: $detent)
+        .presentationDragIndicator(.visible)
+        .onChange(of: isExpanded) { _, expanded in
+            if expanded { startRoomStoreIfNeeded() }
+        }
+        .onDisappear {
+            roomStore?.stop()
+        }
     }
 
     // MARK: - Sections
@@ -110,6 +131,46 @@ struct RoomPreviewSheet: View {
     }
 
     @ViewBuilder
+    private var insideSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("RECENT")
+                .font(.caption.weight(.semibold))
+                .tracking(1.2)
+                .foregroundStyle(Color.highlighterInkMuted)
+
+            if let store = roomStore, !store.artifacts.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(store.artifacts.prefix(8)), id: \.shareEventId) { artifact in
+                        InsideArtifactRow(artifact: artifact)
+                        if artifact.shareEventId != store.artifacts.prefix(8).last?.shareEventId {
+                            Divider().overlay(Color.highlighterRule)
+                        }
+                    }
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color.highlighterRule, lineWidth: 1)
+                )
+            } else if roomStore?.isLoading == true || roomStore == nil {
+                HStack(spacing: 10) {
+                    ProgressView().controlSize(.small)
+                    Text("Pulling recent content…")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.highlighterInkMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 18)
+            } else {
+                Text("Nothing shared here yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 12)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var actionStack: some View {
         if alreadyJoined {
             NavigationLink {
@@ -142,20 +203,39 @@ struct RoomPreviewSheet: View {
                 .buttonStyle(.plain)
 
                 if room.access == "open" {
-                    NavigationLink {
-                        RoomHomeView(groupId: room.id)
-                    } label: {
-                        Text("Peek inside")
-                            .font(.subheadline.weight(.medium))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .foregroundStyle(Color.highlighterInkStrong)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color.highlighterRule, lineWidth: 1)
-                            )
+                    if isExpanded {
+                        NavigationLink {
+                            RoomHomeView(groupId: room.id)
+                        } label: {
+                            Text("Open full room")
+                                .font(.subheadline.weight(.medium))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .foregroundStyle(Color.highlighterInkStrong)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke(Color.highlighterRule, lineWidth: 1)
+                                )
+                        }
+                        .simultaneousGesture(TapGesture().onEnded { dismiss() })
+                    } else {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                detent = .large
+                            }
+                        } label: {
+                            Text("Peek inside")
+                                .font(.subheadline.weight(.medium))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .foregroundStyle(Color.highlighterInkStrong)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke(Color.highlighterRule, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .simultaneousGesture(TapGesture().onEnded { dismiss() })
                 }
             }
         }
@@ -166,6 +246,87 @@ struct RoomPreviewSheet: View {
             colors: [
                 Color.highlighterAccent.opacity(0.72),
                 Color.highlighterAccent.opacity(0.36),
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    // MARK: - Private
+
+    private func startRoomStoreIfNeeded() {
+        guard roomStore == nil else { return }
+        let store = RoomStore()
+        roomStore = store
+        Task {
+            await store.start(
+                groupId: room.id,
+                core: appStore.safeCore,
+                bridge: appStore.eventBridge
+            )
+        }
+    }
+}
+
+/// Compact artifact row used inside the peek sheet. Just the essentials —
+/// title, source, author. Full detail is a tap-through on the room page.
+private struct InsideArtifactRow: View {
+    let artifact: ArtifactRecord
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            cover
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayTitle)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.highlighterInkStrong)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                if !artifact.preview.author.isEmpty {
+                    Text(artifact.preview.author)
+                        .font(.caption)
+                        .foregroundStyle(Color.highlighterInkMuted)
+                        .lineLimit(1)
+                } else if !artifact.preview.domain.isEmpty {
+                    Text(artifact.preview.domain)
+                        .font(.caption)
+                        .foregroundStyle(Color.highlighterInkMuted)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private var displayTitle: String {
+        let t = artifact.preview.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? "Untitled" : t
+    }
+
+    @ViewBuilder
+    private var cover: some View {
+        if let url = URL(string: artifact.preview.image), !artifact.preview.image.isEmpty {
+            KFImage(url)
+                .placeholder { coverFallback }
+                .fade(duration: 0.15)
+                .resizable()
+                .scaledToFill()
+        } else {
+            coverFallback
+        }
+    }
+
+    private var coverFallback: some View {
+        LinearGradient(
+            colors: [
+                Color.highlighterAccent.opacity(0.32),
+                Color.highlighterAccent.opacity(0.12),
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing

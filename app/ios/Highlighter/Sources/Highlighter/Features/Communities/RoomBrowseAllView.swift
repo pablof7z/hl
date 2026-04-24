@@ -62,8 +62,6 @@ struct RoomBrowseAllView: View {
                 )
             }
             .environment(appStore)
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
         }
     }
 }

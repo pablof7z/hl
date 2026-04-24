@@ -59,8 +59,6 @@ struct RoomExplorerView: View {
                     }
                 )
                 .environment(appStore)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
             }
         }
         .task {
