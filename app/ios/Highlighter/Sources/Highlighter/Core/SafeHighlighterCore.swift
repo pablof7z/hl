@@ -354,4 +354,14 @@ actor SafeHighlighterCore {
             indexer: indexer
         )
     }
+
+    // MARK: - Relay telemetry (PR 4)
+
+    func getRelayDiagnostics() async throws -> [RelayDiagnostic] {
+        try await core.getRelayDiagnostics()
+    }
+
+    func subscribeRelayStatus() async throws -> UInt64 {
+        try await core.subscribeRelayStatus()
+    }
 }

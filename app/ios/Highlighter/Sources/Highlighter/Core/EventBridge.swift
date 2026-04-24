@@ -33,6 +33,9 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         var feedbackThreads: [UInt64: WeakBox<FeedbackStore>] = [:]
         var feedbackThreadDetails: [UInt64: WeakBox<FeedbackThreadStore>] = [:]
         var searches: [UInt64: WeakBox<SearchStore>] = [:]
+        /// App-scoped Network Settings store (subscription_id == 0). Weak
+        /// so it goes away when the screen is dismissed.
+        var networkStore: WeakBox<NetworkSettingsStore>? = nil
         /// Maps subscription handles → pubkey for app-scoped profile cache subscriptions.
         var profileCacheHandles: [UInt64: String] = [:]
 
@@ -123,6 +126,12 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         registry.withLock { reg in
             reg.profileCacheHandles[handle] = pubkeyHex
             reg.prune()
+        }
+    }
+
+    func registerNetworkStore(_ store: NetworkSettingsStore) {
+        registry.withLock { reg in
+            reg.networkStore = WeakBox(store)
         }
     }
 
@@ -231,6 +240,9 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         switch change {
         case .signerConnected(let user):
             appStore?.currentUser = user
+        case .relayStatusChanged(let url, let state):
+            let store = registry.withLock { reg in reg.networkStore?.value }
+            store?.applyStatus(url: url, state: state)
         case .communityUpserted, .membershipChanged:
             // Any group-related event arrived — re-query nostrdb for the
             // authoritative joined set. A single refresh path eliminates the

@@ -89,6 +89,9 @@ struct SettingsView: View {
 
     private var mediaSection: some View {
         Section {
+            NavigationLink("Network") {
+                NetworkSettingsView()
+            }
             NavigationLink("Media") {
                 MediaSettingsView()
             }
