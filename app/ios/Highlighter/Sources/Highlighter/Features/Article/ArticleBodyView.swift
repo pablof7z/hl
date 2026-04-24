@@ -43,7 +43,11 @@ struct ArticleBodyView: UIViewRepresentable {
         tv.coordinator = context.coordinator
         tv.isEditable = false
         tv.isSelectable = true
-        tv.isScrollEnabled = true
+        // Outer SwiftUI ScrollView owns the gesture — the text view itself
+        // stays non-scrolling and sizes to its intrinsic content.
+        tv.isScrollEnabled = false
+        tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        tv.setContentHuggingPriority(.defaultHigh, for: .vertical)
         tv.backgroundColor = paperColor
         tv.textContainer.lineFragmentPadding = 0
         tv.textContainerInset = UIEdgeInsets(top: 12, left: 20, bottom: 40, right: 20)
@@ -55,7 +59,7 @@ struct ArticleBodyView: UIViewRepresentable {
         // otherwise paint all links in its default blue.
         tv.linkTextAttributes = [:]
         tv.delegate = context.coordinator
-        tv.tintColor = UIColor(named: "highlighterAccent") ?? .systemBlue
+        tv.tintColor = UIColor(Color.highlighterAccent)
 
         // Tap recognizer for custom hit-testing (highlights + footnotes).
         let tap = UITapGestureRecognizer(
@@ -66,11 +70,7 @@ struct ArticleBodyView: UIViewRepresentable {
         tap.delegate = context.coordinator
         tv.addGestureRecognizer(tap)
 
-        // Edit menu interaction (iOS 16+): inject the Highlight action.
-        let menu = UIEditMenuInteraction(delegate: context.coordinator)
-        tv.addInteraction(menu)
         context.coordinator.textView = tv
-        context.coordinator.editMenu = menu
 
         return tv
     }
@@ -90,10 +90,9 @@ struct ArticleBodyView: UIViewRepresentable {
     // MARK: - Coordinator
 
     @MainActor
-    final class Coordinator: NSObject, UITextViewDelegate, UIEditMenuInteractionDelegate, UIGestureRecognizerDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var parent: ArticleBodyView
         weak var textView: UITextView?
-        weak var editMenu: UIEditMenuInteraction?
 
         init(parent: ArticleBodyView) {
             self.parent = parent
@@ -115,44 +114,42 @@ struct ArticleBodyView: UIViewRepresentable {
 
         // MARK: Edit Menu (selection action sheet)
 
-        // `UIEditMenuInteractionDelegate` isn't MainActor-annotated in UIKit,
-        // but the callback is delivered on the main thread. `assumeIsolated`
-        // lets us hop into MainActor-isolated state without Swift 6 warnings.
-        nonisolated func editMenuInteraction(
-            _ interaction: UIEditMenuInteraction,
-            menuFor configuration: UIEditMenuConfiguration,
+        // `UITextView` owns its own `UIEditMenuInteraction` internally; the
+        // delegate hook below is the supported way to add actions to the
+        // selection menu in iOS 16+.
+        func textView(
+            _ textView: UITextView,
+            editMenuForTextIn range: NSRange,
             suggestedActions: [UIMenuElement]
         ) -> UIMenu? {
-            MainActor.assumeIsolated {
-                guard let tv = textView, tv.selectedRange.length > 0 else {
-                    return UIMenu(children: suggestedActions)
-                }
-
-                let highlightAction = UIAction(
-                    title: "Highlight",
-                    image: UIImage(systemName: "highlighter")
-                ) { [weak self] _ in
-                    guard let self, let tv = self.textView else { return }
-                    let (quote, context) = self.selectionText(tv)
-                    guard !quote.isEmpty else { return }
-                    self.parent.onPublishHighlight(quote, context)
-                    tv.selectedRange = NSRange(location: 0, length: 0)
-                }
-
-                let noteAction = UIAction(
-                    title: "Highlight with note",
-                    image: UIImage(systemName: "square.and.pencil")
-                ) { [weak self] _ in
-                    guard let self, let tv = self.textView else { return }
-                    let (quote, context) = self.selectionText(tv)
-                    guard !quote.isEmpty else { return }
-                    self.parent.onRequestNote(quote, context)
-                    tv.selectedRange = NSRange(location: 0, length: 0)
-                }
-
-                let customMenu = UIMenu(options: .displayInline, children: [highlightAction, noteAction])
-                return UIMenu(children: [customMenu] + suggestedActions)
+            guard range.length > 0 else {
+                return UIMenu(children: suggestedActions)
             }
+
+            let highlightAction = UIAction(
+                title: "Highlight",
+                image: UIImage(systemName: "highlighter")
+            ) { [weak self] _ in
+                guard let self, let tv = self.textView else { return }
+                let (quote, context) = self.selectionText(tv)
+                guard !quote.isEmpty else { return }
+                self.parent.onPublishHighlight(quote, context)
+                tv.selectedRange = NSRange(location: 0, length: 0)
+            }
+
+            let noteAction = UIAction(
+                title: "Highlight with note",
+                image: UIImage(systemName: "square.and.pencil")
+            ) { [weak self] _ in
+                guard let self, let tv = self.textView else { return }
+                let (quote, context) = self.selectionText(tv)
+                guard !quote.isEmpty else { return }
+                self.parent.onRequestNote(quote, context)
+                tv.selectedRange = NSRange(location: 0, length: 0)
+            }
+
+            let customMenu = UIMenu(options: .displayInline, children: [highlightAction, noteAction])
+            return UIMenu(children: [customMenu] + suggestedActions)
         }
 
         private func selectionText(_ tv: UITextView) -> (quote: String, context: String) {

@@ -142,7 +142,8 @@ final class ArticleReaderStore {
             clipStartSeconds: nil,
             clipEndSeconds: nil,
             clipSpeaker: "",
-            clipTranscriptSegmentIds: []
+            clipTranscriptSegmentIds: [],
+            image: nil
         )
         let record = try await safeCore.publishHighlight(draft: draft, artifact: artifact)
         // Optimistically inject into the local list so the overlay appears

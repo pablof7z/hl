@@ -13,6 +13,7 @@ struct ArticleReaderView: View {
     @State private var highlightDetail: HighlightRecord?
     @State private var toast: String?
     @State private var scrollAnchor: ScrollAnchor = .idle
+    @State private var shareTarget: ShareToCommunityTarget?
 
     enum ScrollAnchor: Equatable {
         case idle
@@ -38,6 +39,24 @@ struct ArticleReaderView: View {
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            if let article = store?.article {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        shareTarget = .article(article)
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel("Share to community")
+                }
+            }
+        }
+        .sheet(item: $shareTarget) { target in
+            ShareToCommunitySheet(target: target)
+                .presentationDetents([.medium, .large])
+        }
         .task(id: target) {
             if store == nil {
                 let s = ArticleReaderStore(
@@ -161,12 +180,21 @@ private struct ReaderScroll: View {
 
     @State private var rendered: MarkdownRenderer.Output?
 
+    private var coverURL: URL? {
+        guard !article.image.isEmpty else { return nil }
+        return URL(string: article.image)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                if let coverURL {
+                    HeroImage(url: coverURL)
+                }
+
                 Header(article: article, authorProfile: authorProfile)
                     .padding(.horizontal, 20)
-                    .padding(.top, 10)
+                    .padding(.top, coverURL == nil ? 10 : 20)
                     .padding(.bottom, 12)
 
                 if let rendered {
@@ -182,11 +210,11 @@ private struct ReaderScroll: View {
                         onFootnoteTap: onFootnoteTap,
                         onFootnoteBackTap: onFootnoteBackTap
                     )
-                    .frame(minHeight: 600)
                     .frame(maxWidth: .infinity)
                 }
             }
         }
+        .ignoresSafeArea(edges: coverURL == nil ? [] : .top)
         .task(id: "\(article.eventId)-\(highlights.count)") {
             rendered = await Task.detached(priority: .userInitiated) {
                 MarkdownRenderer.render(
@@ -227,6 +255,31 @@ private struct ReaderScroll: View {
     }
 }
 
+// MARK: - Hero image
+
+/// Full-bleed cover that extends behind the status bar / notch. Sized by
+/// GeometryReader so it scales to the device width even when the parent
+/// ScrollView is `.ignoresSafeArea(.top)`.
+private struct HeroImage: View {
+    let url: URL
+
+    var body: some View {
+        GeometryReader { proxy in
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let img):
+                    img.resizable().scaledToFill()
+                default:
+                    Color.highlighterRule.opacity(0.5)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .clipped()
+        }
+        .frame(height: 320)
+    }
+}
+
 // MARK: - Header
 
 private struct Header: View {
@@ -235,21 +288,6 @@ private struct Header: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if !article.image.isEmpty, let url = URL(string: article.image) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable().scaledToFill()
-                    default:
-                        Color.highlighterRule.opacity(0.5)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 200)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-
             Text(article.title.isEmpty ? "Untitled" : article.title)
                 .font(.system(.largeTitle, design: .serif).weight(.bold))
                 .foregroundStyle(Color.highlighterInkStrong)
@@ -290,33 +328,36 @@ private struct Header: View {
 
     @ViewBuilder
     private var authorRow: some View {
-        HStack(spacing: 12) {
-            AuthorAvatar(
-                pubkey: article.pubkey,
-                pictureURL: authorProfile?.picture ?? "",
-                displayInitial: initial,
-                size: 40,
-                ringWidth: 2
-            )
+        NavigationLink(value: ProfileDestination.pubkey(article.pubkey)) {
+            HStack(spacing: 12) {
+                AuthorAvatar(
+                    pubkey: article.pubkey,
+                    pictureURL: authorProfile?.picture ?? "",
+                    displayInitial: initial,
+                    size: 40,
+                    ringWidth: 2
+                )
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(authorDisplayName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.highlighterInkStrong)
-                HStack(spacing: 6) {
-                    if let date = displayDate {
-                        Text(date)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(authorDisplayName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.highlighterInkStrong)
+                    HStack(spacing: 6) {
+                        if let date = displayDate {
+                            Text(date)
+                        }
+                        if let mins = readTimeMinutes {
+                            Text("·")
+                            Text("\(mins) min read")
+                        }
                     }
-                    if let mins = readTimeMinutes {
-                        Text("·")
-                        Text("\(mins) min read")
-                    }
+                    .font(.caption)
+                    .foregroundStyle(Color.highlighterInkMuted)
                 }
-                .font(.caption)
-                .foregroundStyle(Color.highlighterInkMuted)
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
         }
+        .buttonStyle(.plain)
     }
 
     private var initial: String {
