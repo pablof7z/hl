@@ -18,6 +18,7 @@ pub mod isbn_lookup;
 pub mod models;
 pub mod nip46;
 pub mod nostr_runtime;
+pub mod outbox;
 pub mod pictures;
 pub mod profile;
 pub mod reads;

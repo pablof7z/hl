@@ -32,7 +32,8 @@ use crate::feedback::{
 use crate::models::{
     ArtifactPreview, ArtifactRecord, HighlightRecord, HydratedHighlight,
 };
-use crate::nostr_runtime::NostrRuntime;
+use crate::nostr_runtime::{pin_relay_for_read, NostrRuntime};
+use crate::outbox;
 use crate::reads::INTERACTION_KINDS;
 
 const KIND_METADATA: u16 = 0;
@@ -209,6 +210,126 @@ impl SubscriptionRegistry {
     }
 }
 
+/// Per-pubkey relay-list cap fed into the outbox planner. Bounds the worst
+/// case a single follow can drag in: keep their top-2 write relays only.
+const OUTBOX_TOP_N_PER_PUBKEY: usize = 2;
+
+/// Hard cap on relays the planner will pick. Keeps the home feed from
+/// fanning out to dozens of connections when the user follows people
+/// scattered across many small relays. The set-cover greedy concentrates
+/// coverage in the highest-overlap relays first; the long-tail authors
+/// past this cap fall through to the read-relay fallback shard.
+const OUTBOX_MAX_RELAYS: usize = 10;
+
+/// Build the per-pubkey "top-2 write relays" map for `follows`. Empty
+/// vectors for follows whose kind:10002 hasn't reached the cache yet —
+/// the planner moves them straight to the uncovered list.
+fn outbox_per_pubkey_for(
+    runtime: &NostrRuntime,
+    follows: &[PublicKey],
+) -> std::collections::HashMap<PublicKey, Vec<String>> {
+    let ndb = runtime.ndb();
+    let mut out = std::collections::HashMap::with_capacity(follows.len());
+    for pk in follows {
+        let urls = outbox::write_relays_for_pubkey(ndb, &pk.to_hex(), OUTBOX_TOP_N_PER_PUBKEY)
+            .unwrap_or_default();
+        out.insert(*pk, urls);
+    }
+    out
+}
+
+/// Spawn one async-routed subscription per outbox shard, plus a fallback
+/// shard on the user's read relays for authors the planner couldn't cover
+/// (no cached kind:10002 yet, or trimmed by `OUTBOX_MAX_RELAYS`). Returns
+/// the list of generated `SubscriptionId`s so the registry can drop them
+/// on unsubscribe.
+fn spawn_outbox_subs(
+    runtime: &NostrRuntime,
+    follows: &[PublicKey],
+    kinds: Vec<u16>,
+    extra_tag: Option<(Alphabet, String)>,
+    role_label: &'static str,
+) -> Vec<SubscriptionId> {
+    if follows.is_empty() {
+        return Vec::new();
+    }
+    let plan = outbox::compute_outbox_plan(
+        outbox_per_pubkey_for(runtime, follows),
+        OUTBOX_MAX_RELAYS,
+    );
+    tracing::info!(
+        role = role_label,
+        follows = follows.len(),
+        shards = plan.shards.len(),
+        uncovered = plan.uncovered.len(),
+        "outbox plan computed"
+    );
+
+    let client = runtime.client().clone();
+    let kinds_arc = Arc::new(kinds);
+    let tag_arc = Arc::new(extra_tag);
+    let mut ids: Vec<SubscriptionId> = Vec::new();
+
+    for shard in plan.shards.iter() {
+        let id = SubscriptionId::generate();
+        let id_clone = id.clone();
+        let url = shard.url.clone();
+        let authors = shard.authors.clone();
+        let kinds_c = kinds_arc.clone();
+        let tag_c = tag_arc.clone();
+        let c = client.clone();
+        runtime.runtime_handle().spawn(async move {
+            pin_relay_for_read(&c, &url).await;
+            let mut filter = Filter::new()
+                .kinds(kinds_c.iter().map(|k| Kind::Custom(*k)))
+                .authors(authors);
+            if let Some((alpha, value)) = tag_c.as_ref() {
+                filter = filter.custom_tag(SingleLetterTag::lowercase(*alpha), value.clone());
+            }
+            if let Err(e) = c
+                .subscribe_with_id_to([url.clone()], id_clone, filter, None)
+                .await
+            {
+                tracing::warn!(role = role_label, relay = %url, error = %e, "outbox shard subscribe failed");
+            }
+        });
+        ids.push(id);
+    }
+
+    if !plan.uncovered.is_empty() {
+        let fallback_urls = runtime.read_urls();
+        if !fallback_urls.is_empty() {
+            let id = SubscriptionId::generate();
+            let id_clone = id.clone();
+            let authors = plan.uncovered.clone();
+            let kinds_c = kinds_arc.clone();
+            let tag_c = tag_arc.clone();
+            let urls = fallback_urls;
+            let c = client.clone();
+            runtime.runtime_handle().spawn(async move {
+                let mut filter = Filter::new()
+                    .kinds(kinds_c.iter().map(|k| Kind::Custom(*k)))
+                    .authors(authors);
+                if let Some((alpha, value)) = tag_c.as_ref() {
+                    filter = filter.custom_tag(SingleLetterTag::lowercase(*alpha), value.clone());
+                }
+                if let Err(e) = c.subscribe_with_id_to(urls, id_clone, filter, None).await {
+                    tracing::warn!(role = role_label, error = %e, "outbox fallback subscribe failed");
+                }
+            });
+            ids.push(id);
+        } else {
+            tracing::warn!(
+                role = role_label,
+                uncovered = plan.uncovered.len(),
+                "outbox: no read relays for fallback — these authors won't appear in the feed"
+            );
+        }
+    }
+
+    ids
+}
+
 fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<SubscriptionId> {
     match kind {
         SubscriptionKind::Room { group_id } => {
@@ -353,82 +474,65 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             vec![body_id, highlights_id]
         }
         SubscriptionKind::FollowingReads { follows, .. } => {
-            // Two relay filters: one for articles authored by follows, one
-            // for follow-authored interactions against kind:30023 content.
-            // If the user has no follows yet we skip entirely — the pump
-            // will still start (and do nothing) until a kind:3 change
-            // triggers a re-subscribe.
+            // Two outbox-routed filter sets — articles by follows, then their
+            // interactions on any kind:30023 — so each relay only sees the
+            // subset of authors it actually hosts. Authors with no cached
+            // kind:10002 fall back to the user's own read relays for now;
+            // the follows-NIP-65 backfill subscription installed at login
+            // is what fills in their relay lists over time.
             if follows.is_empty() {
                 return vec![];
             }
-            let client = runtime.client().clone();
-
-            let articles_id = SubscriptionId::generate();
-            let articles_id_clone = articles_id.clone();
-            let articles_authors = follows.clone();
-            let client_a = client.clone();
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(30023)])
-                    .authors(articles_authors);
-                if let Err(e) = client_a
-                    .subscribe_with_id(articles_id_clone, filter, None)
-                    .await
-                {
-                    tracing::warn!(error = %e, "failed to subscribe to following-reads articles feed");
-                }
-            });
-
-            let interactions_id = SubscriptionId::generate();
-            let interactions_id_clone = interactions_id.clone();
-            let interaction_authors = follows.clone();
-            let client_b = client.clone();
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds(INTERACTION_KINDS.iter().map(|k| Kind::Custom(*k)))
-                    .authors(interaction_authors)
-                    .custom_tag(SingleLetterTag::lowercase(Alphabet::K), "30023");
-                if let Err(e) = client_b
-                    .subscribe_with_id(interactions_id_clone, filter, None)
-                    .await
-                {
-                    tracing::warn!(error = %e, "failed to subscribe to following-reads interactions feed");
-                }
-            });
-
-            vec![articles_id, interactions_id]
+            let mut ids = spawn_outbox_subs(
+                runtime,
+                follows,
+                vec![30023],
+                None,
+                "outbox/following-reads/articles",
+            );
+            ids.extend(spawn_outbox_subs(
+                runtime,
+                follows,
+                INTERACTION_KINDS.to_vec(),
+                Some((Alphabet::K, "30023".to_string())),
+                "outbox/following-reads/interactions",
+            ));
+            ids
         }
         SubscriptionKind::FollowingHighlights { follows, group_ids } => {
-            let client = runtime.client().clone();
             let mut ids: Vec<SubscriptionId> = Vec::new();
 
+            // Follow-authored highlights via outbox shards.
             if !follows.is_empty() {
-                let id = SubscriptionId::generate();
-                let id_clone = id.clone();
-                let authors = follows.clone();
-                let c = client.clone();
-                runtime.runtime_handle().spawn(async move {
-                    let filter = Filter::new()
-                        .kinds([Kind::Custom(KIND_HIGHLIGHT)])
-                        .authors(authors);
-                    if let Err(e) = c.subscribe_with_id(id_clone, filter, None).await {
-                        tracing::warn!(error = %e, "failed to subscribe to follow-authored highlights feed");
-                    }
-                });
-                ids.push(id);
+                ids.extend(spawn_outbox_subs(
+                    runtime,
+                    follows,
+                    vec![KIND_HIGHLIGHT],
+                    None,
+                    "outbox/following-highlights",
+                ));
             }
 
+            // Room-tagged highlights stay on the rooms-flagged relays where
+            // the groups actually live — outbox routing doesn't apply here
+            // because the authoritative source is the room host, not the
+            // highlighters' personal outboxes.
             if !group_ids.is_empty() {
                 let id = SubscriptionId::generate();
                 let id_clone = id.clone();
                 let groups = group_ids.clone();
-                let c = client.clone();
+                let urls = runtime.rooms_urls();
+                let c = runtime.client().clone();
                 runtime.runtime_handle().spawn(async move {
                     let filter = Filter::new()
                         .kinds([Kind::Custom(KIND_HIGHLIGHT)])
                         .custom_tags(SingleLetterTag::lowercase(Alphabet::H), groups);
-                    if let Err(e) = c.subscribe_with_id(id_clone, filter, None).await {
-                        tracing::warn!(error = %e, "failed to subscribe to room highlights feed");
+                    if urls.is_empty() {
+                        if let Err(e) = c.subscribe_with_id(id_clone, filter, None).await {
+                            tracing::warn!(error = %e, "room highlights subscribe (default pool)");
+                        }
+                    } else if let Err(e) = c.subscribe_with_id_to(urls, id_clone, filter, None).await {
+                        tracing::warn!(error = %e, "room highlights subscribe (rooms relays)");
                     }
                 });
                 ids.push(id);

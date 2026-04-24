@@ -48,6 +48,11 @@ pub struct Session {
     /// denser half of the Friends-are-here signal. User-owned, broadcast
     /// publicly, so more reliable than the relay-owned 39002.
     friends_groups_list_subscription: Option<SubscriptionId>,
+    /// Follows' kind:10002 (NIP-65 relay lists). Backfills the data the
+    /// outbox planner needs to route the user's home feeds — without this
+    /// every follow lands in the "uncovered" fallback shard. Long-lived;
+    /// new relay-list publications by a follow keep landing in nostrdb.
+    follows_nip65_subscription: Option<SubscriptionId>,
 }
 
 enum ActiveSigner {
@@ -93,6 +98,7 @@ impl Session {
         self.curation_subscription = None;
         self.friends_memberships_subscription = None;
         self.friends_groups_list_subscription = None;
+        self.follows_nip65_subscription = None;
     }
 
     pub fn set_membership_subscription(&mut self, id: SubscriptionId) {
@@ -157,6 +163,18 @@ impl Session {
 
     pub fn take_friends_groups_list_subscription(&mut self) -> Option<SubscriptionId> {
         self.friends_groups_list_subscription.take()
+    }
+
+    pub fn has_follows_nip65_subscription(&self) -> bool {
+        self.follows_nip65_subscription.is_some()
+    }
+
+    pub fn set_follows_nip65_subscription(&mut self, id: SubscriptionId) {
+        self.follows_nip65_subscription = Some(id);
+    }
+
+    pub fn take_follows_nip65_subscription(&mut self) -> Option<SubscriptionId> {
+        self.follows_nip65_subscription.take()
     }
 
     pub fn current_user(&self) -> Option<CurrentUser> {

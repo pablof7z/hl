@@ -94,9 +94,21 @@ impl HighlighterCore {
                 self.runtime
                     .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
             }
+            // Best-effort outbox bootstrap: fetch follows' kind:10002 so the
+            // home-feed planner has data to work with. Empty on first login
+            // (no kind:3 cached yet) — `subscribe_following_*` will re-arm
+            // this whenever it's called, picking up follows discovered since.
+            let cached_follows = current_followed_pubkeys(self.runtime.ndb(), &pubkey);
+            let follows_nip65_id = self
+                .runtime
+                .spawn_follows_relay_lists_subscription(cached_follows);
+
             let mut guard = self.inner.write();
             guard.session.set_membership_subscription(sub_id);
             guard.session.set_contacts_subscription(contacts_id);
+            if let Some(id) = follows_nip65_id {
+                guard.session.set_follows_nip65_subscription(id);
+            }
         }
         Ok(user)
     }
@@ -118,6 +130,9 @@ impl HighlighterCore {
                 self.runtime.drop_subscription(sub_id);
             }
             if let Some(sub_id) = guard.session.take_friends_memberships_subscription() {
+                self.runtime.drop_subscription(sub_id);
+            }
+            if let Some(sub_id) = guard.session.take_follows_nip65_subscription() {
                 self.runtime.drop_subscription(sub_id);
             }
         }
@@ -339,6 +354,7 @@ impl HighlighterCore {
             .iter()
             .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
             .collect();
+        self.refresh_follows_nip65_subscription(&follows_pks);
         self.subscriptions.register(
             &self.runtime,
             SubscriptionKind::FollowingReads {
@@ -363,6 +379,7 @@ impl HighlighterCore {
         if !follows_pks.iter().any(|pk| *pk == user_pubkey) {
             follows_pks.push(user_pubkey);
         }
+        self.refresh_follows_nip65_subscription(&follows_pks);
         let joined = groups::query_joined_communities_from_ndb(
             self.runtime.ndb(),
             &user_pubkey.to_hex(),
@@ -1332,6 +1349,32 @@ impl HighlighterCore {
         })
     }
 
+    /// Drop the previous follows-NIP-65 sub (if any) and install a new one
+    /// covering `follows`. No-op when `follows` is empty. Called whenever
+    /// the home-feed subs are (re)installed so freshly-discovered follows
+    /// get their relay lists fetched without waiting for the next login.
+    fn refresh_follows_nip65_subscription(&self, follows: &[PublicKey]) {
+        if follows.is_empty() {
+            return;
+        }
+        let new_id = match self
+            .runtime
+            .spawn_follows_relay_lists_subscription(follows.to_vec())
+        {
+            Some(id) => id,
+            None => return,
+        };
+        let prev = {
+            let mut guard = self.inner.write();
+            let prev = guard.session.take_follows_nip65_subscription();
+            guard.session.set_follows_nip65_subscription(new_id);
+            prev
+        };
+        if let Some(prev) = prev {
+            self.runtime.drop_subscription(prev);
+        }
+    }
+
     fn require_user_pubkey(&self) -> Result<PublicKey, CoreError> {
         let guard = self.inner.read();
         let user = guard
@@ -1341,6 +1384,27 @@ impl HighlighterCore {
         PublicKey::from_hex(&user.pubkey)
             .map_err(|e| CoreError::Other(format!("invalid current user pubkey: {e}")))
     }
+}
+
+/// Read the cached kind:3 contact list for `user_pubkey` and return the
+/// `p`-tag pubkeys that successfully parse. Used at login to seed the
+/// follows-NIP-65 subscription before the user touches a home feed.
+fn current_followed_pubkeys(
+    ndb: &nostrdb::Ndb,
+    user_pubkey: &PublicKey,
+) -> Vec<PublicKey> {
+    let user_hex = user_pubkey.to_hex();
+    let hexes = match crate::follows::query_follows(ndb, &user_hex) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "load cached follows for outbox bootstrap");
+            return Vec::new();
+        }
+    };
+    hexes
+        .iter()
+        .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
+        .collect()
 }
 
 /// Strip a leading `nostr:` prefix, trim whitespace. Olas does this before

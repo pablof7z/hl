@@ -279,6 +279,32 @@ impl NostrRuntime {
         id
     }
 
+    /// Backfill follows' kind:10002 (NIP-65 relay lists) from the indexer
+    /// pool so the outbox planner has data to work with. Without this, the
+    /// per-pubkey relay map at outbox-compute time is empty and every
+    /// follow falls into the "uncovered" fallback shard, defeating the
+    /// whole point of routing. Fire-and-forget; long-lived so updates
+    /// (new relay-list publications by a follow) keep landing in nostrdb.
+    pub fn spawn_follows_relay_lists_subscription(
+        &self,
+        follows: Vec<PublicKey>,
+    ) -> Option<SubscriptionId> {
+        if follows.is_empty() {
+            return None;
+        }
+        let id = SubscriptionId::generate();
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        let urls = self.indexer_urls();
+        self.rt().spawn(async move {
+            let filter = Filter::new()
+                .kinds([Kind::Custom(10002)])
+                .authors(follows);
+            subscribe_routed(&client, id_clone, filter, urls, "indexer/follows-nip65").await;
+        });
+        Some(id)
+    }
+
     /// Friends' NIP-51 group lists: kind:10009 authored by any of the user's
     /// follows. Each event enumerates the groups its author is a member of,
     /// so this is the primary signal for the "Friends are here" shelf —
@@ -554,6 +580,34 @@ fn map_relay_status(inner: nostr_sdk::RelayStatus) -> AppRelayStatus {
 /// and falling back to the global pool (all READ-flagged relays) when empty.
 /// Centralizes the "route by role, or default pool with a warning" pattern
 /// used by every per-role spawn on `NostrRuntime`.
+/// Ensure `url` is in the client's relay pool with at least READ+PING
+/// flags, so an outbox-routed subscription can receive events from it.
+/// Idempotent: relays already in the pool are left alone — their existing
+/// flags survive. Only freshly-added relays get the bare READ+PING set,
+/// so a third-party outbox relay never accidentally becomes a publish
+/// target for the user's own events.
+pub async fn pin_relay_for_read(client: &Client, url: &str) {
+    let known = client.relays().await;
+    if known.iter().any(|(u, _)| u.to_string() == url) {
+        return;
+    }
+    if let Err(e) = client.add_relay(url).await {
+        tracing::warn!(relay = %url, error = %e, "outbox: add_relay");
+        return;
+    }
+    let refreshed = client.relays().await;
+    if let Some((_, relay)) = refreshed.iter().find(|(u, _)| u.to_string() == url) {
+        let flags = relay.flags();
+        flags.remove(
+            RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING,
+        );
+        flags.add(RelayServiceFlags::READ | RelayServiceFlags::PING);
+    }
+    if let Err(e) = client.connect_relay(url).await {
+        tracing::warn!(relay = %url, error = %e, "outbox: connect_relay");
+    }
+}
+
 async fn subscribe_routed(
     client: &Client,
     id: SubscriptionId,
