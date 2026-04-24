@@ -8,6 +8,7 @@ struct RoomExplorerView: View {
     @Environment(HighlighterStore.self) private var appStore
     @State private var explorer: RoomExplorerStore?
     @State private var previewRoom: CommunitySummary?
+    @State private var createSheetPresented = false
 
     var body: some View {
         NavigationStack {
@@ -32,6 +33,17 @@ struct RoomExplorerView: View {
             .background(Color.highlighterPaper.ignoresSafeArea())
             .navigationTitle("Rooms")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        createSheetPresented = true
+                    } label: {
+                        Image(systemName: "plus.circle")
+                            .font(.title3)
+                    }
+                    .accessibilityLabel("New room")
+                }
+            }
             .navigationDestination(for: String.self) { groupId in
                 RoomHomeView(groupId: groupId)
             }
@@ -54,6 +66,11 @@ struct RoomExplorerView: View {
                     }
                 )
                 .environment(appStore)
+            }
+            .sheet(isPresented: $createSheetPresented) {
+                CreateRoomSheet()
+                    .environment(appStore)
+                    .presentationDetents([.large])
             }
         }
         .task {

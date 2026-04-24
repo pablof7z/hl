@@ -188,6 +188,34 @@ actor SafeHighlighterCore {
         try await core.requestJoinRoom(groupId: groupId)
     }
 
+    func createRoom(
+        name: String,
+        about: String,
+        picture: String,
+        visibility: RoomVisibility,
+        access: RoomAccess
+    ) async throws -> String {
+        try await core.createRoom(
+            name: name,
+            about: about,
+            picture: picture,
+            visibility: visibility,
+            access: access
+        )
+    }
+
+    func addRoomMember(groupId: String, pubkeyHex: String) async throws -> String {
+        try await core.addRoomMember(groupId: groupId, pubkeyHex: pubkeyHex)
+    }
+
+    func getFollows() async throws -> [String] {
+        try await core.getFollows()
+    }
+
+    func decodeNpub(_ input: String) throws -> String {
+        try core.decodeNpub(input: input)
+    }
+
     func isFollowing(targetPubkeyHex: String) async throws -> Bool {
         try await core.isFollowing(targetPubkeyHex: targetPubkeyHex)
     }

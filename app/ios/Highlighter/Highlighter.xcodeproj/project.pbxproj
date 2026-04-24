@@ -16,9 +16,11 @@
 		0CF2E6F824F1E1086AFA6D4B /* CommunityPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3381A7B5CBE6575396BAE187 /* CommunityPicker.swift */; };
 		0D0BC52CF421E2A071F8B1C7 /* RoomLibraryBookCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 156863C2F94E50DDFB1AD489 /* RoomLibraryBookCardView.swift */; };
 		0DC8F3B03A4272309D164C8D /* FeedbackProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31652C306FCE498A71D871BD /* FeedbackProject.swift */; };
+		0E34BCA7DE478A5DAB354328 /* CreateRoomSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54989CA45E35C374AD2B3F1A /* CreateRoomSheet.swift */; };
 		1129973B6BA0DBA73E6438F1 /* RoomExplorerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D96675CE64B49C56744890 /* RoomExplorerView.swift */; };
 		11FA031B415C25D1FBC1EBAF /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EA8949AA1BD77BC10C7372 /* ProfileView.swift */; };
 		12506BA5362A4A28F685B75E /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4101EEE477628A6233803A1D /* App.swift */; };
+		1311A5DD8F8E360F0A50EA58 /* RoomShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69005CD41F8F10FAE66C0899 /* RoomShareCard.swift */; };
 		167EB7DA7E3BE3A3E5A63509 /* ShareQueueProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84B71B7545C83F89B94734AF /* ShareQueueProcessor.swift */; };
 		188889A2C474A4C69C53E05C /* CapturePageBodyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47E9A55861FD109E5AFA1450 /* CapturePageBodyView.swift */; };
 		240F325B25313B203A083CC2 /* MediaSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC7A2A1DDAF9E55A099CBBC3 /* MediaSettingsView.swift */; };
@@ -71,6 +73,7 @@
 		8F6908A202D345A1466979AB /* RelayDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57BF148BE9C1A047A0CD85F8 /* RelayDetailView.swift */; };
 		8FC33599A4E6E16E66A9180B /* ShakeDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B11E53320CF44FAE9BD3F4E /* ShakeDetector.swift */; };
 		900670F354A8AC8355BC2783 /* SearchSeeAllView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1317F935DAA15D7884CE312A /* SearchSeeAllView.swift */; };
+		91401F36964AF8376CFA53E7 /* RoomInviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6E92D86D5CC5CA422E4429 /* RoomInviteView.swift */; };
 		94EC6AF6B6C058BF13F8DBB3 /* ImageZoomView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9A6101DB50ED95BCB7FB11 /* ImageZoomView.swift */; };
 		9B056187BF33103792720DA0 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50D9FDAB29866D8CD3194444 /* MainTabView.swift */; };
 		9FB49584EE11ABBB0474EBF3 /* ArtifactPreviewBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA096F6A7F199E5F26C263A /* ArtifactPreviewBuilder.swift */; };
@@ -184,9 +187,11 @@
 		4AB46991120947DDC8F320F9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		4BA6E95D61D20A054C5D13DB /* RoomStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomStore.swift; sourceTree = "<group>"; };
 		4CEBB2C5C329D05474233063 /* CommunityRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityRowView.swift; sourceTree = "<group>"; };
+		4F6E92D86D5CC5CA422E4429 /* RoomInviteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomInviteView.swift; sourceTree = "<group>"; };
 		4FF471C84785CD4EDF454683 /* ShareToCommunitySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareToCommunitySheet.swift; sourceTree = "<group>"; };
 		50D9FDAB29866D8CD3194444 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		51C1725D80C61F5BF4B8EF18 /* FeedbackThreadDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackThreadDetailView.swift; sourceTree = "<group>"; };
+		54989CA45E35C374AD2B3F1A /* CreateRoomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateRoomSheet.swift; sourceTree = "<group>"; };
 		55790648D01DD1D35943CDF8 /* FeedbackStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackStore.swift; sourceTree = "<group>"; };
 		57BF148BE9C1A047A0CD85F8 /* RelayDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayDetailView.swift; sourceTree = "<group>"; };
 		58D2AB528CBD86A235ACE868 /* CaptureFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureFlow.swift; sourceTree = "<group>"; };
@@ -194,6 +199,7 @@
 		60613BA10085AC1A23DAC52E /* Highlighter.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Highlighter.entitlements; sourceTree = "<group>"; };
 		670BD0B8B9E2A9DDE9BBD472 /* FeedbackThreadStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackThreadStore.swift; sourceTree = "<group>"; };
 		6791C90F5AD1EFD9ADFCD596 /* FeedbackThreadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackThreadsView.swift; sourceTree = "<group>"; };
+		69005CD41F8F10FAE66C0899 /* RoomShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomShareCard.swift; sourceTree = "<group>"; };
 		6966BFFF79C29AFA31612F8E /* ReadsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadsStore.swift; sourceTree = "<group>"; };
 		6D28662EE9922264507B7668 /* RoomLibraryArticleCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomLibraryArticleCardView.swift; sourceTree = "<group>"; };
 		6D29C0BA966A767C20164FBE /* ManualISBNEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualISBNEntryView.swift; sourceTree = "<group>"; };
@@ -346,6 +352,7 @@
 		4770E5ACA8E5D1CBCC439775 /* Communities */ = {
 			isa = PBXGroup;
 			children = (
+				6C53227343662A95D2DE157B /* CreateRoom */,
 				C9EEFB93FE013C94256939FA /* ArticleLaneView.swift */,
 				1D0A6C274C36DB719AD4EC33 /* ArtifactDetailView.swift */,
 				9846D3CA5AF08844398AA76B /* BookLaneView.swift */,
@@ -403,6 +410,16 @@
 				7A8D2559ECD61EA313924BD9 /* Info.plist */,
 			);
 			path = Highlighter;
+			sourceTree = "<group>";
+		};
+		6C53227343662A95D2DE157B /* CreateRoom */ = {
+			isa = PBXGroup;
+			children = (
+				54989CA45E35C374AD2B3F1A /* CreateRoomSheet.swift */,
+				4F6E92D86D5CC5CA422E4429 /* RoomInviteView.swift */,
+				69005CD41F8F10FAE66C0899 /* RoomShareCard.swift */,
+			);
+			path = CreateRoom;
 			sourceTree = "<group>";
 		};
 		79A0DC3757DA01E8A8D7E1C0 /* Features */ = {
@@ -752,6 +769,7 @@
 				2A7C8122C0DFE2FED18FFACC /* Color+Design.swift in Sources */,
 				0CF2E6F824F1E1086AFA6D4B /* CommunityPicker.swift in Sources */,
 				086213C407B5D10E52021C29 /* CommunityRowView.swift in Sources */,
+				0E34BCA7DE478A5DAB354328 /* CreateRoomSheet.swift in Sources */,
 				4046D6F0A67207C7FB6EE7A2 /* DiscussionComposerView.swift in Sources */,
 				FECBBED528157C88F2A6BA54 /* DiscussionListView.swift in Sources */,
 				B19C2494E09CB73EF3A00AAA /* DiscussionStore.swift in Sources */,
@@ -805,11 +823,13 @@
 				4B4F482B40A2591BF3251AF0 /* RoomExplorerStore.swift in Sources */,
 				1129973B6BA0DBA73E6438F1 /* RoomExplorerView.swift in Sources */,
 				C7120F362B42A71E448D08D4 /* RoomHomeView.swift in Sources */,
+				91401F36964AF8376CFA53E7 /* RoomInviteView.swift in Sources */,
 				3A55F2017CE7B802B233B91A /* RoomLanesView.swift in Sources */,
 				3E179D53B89B007A4CC256D6 /* RoomLibraryArticleCardView.swift in Sources */,
 				0D0BC52CF421E2A071F8B1C7 /* RoomLibraryBookCardView.swift in Sources */,
 				D0C60ED9AD6199EF245F3E16 /* RoomLibraryPodcastCardView.swift in Sources */,
 				09ED75A05603D0227DF3B3B7 /* RoomPreviewSheet.swift in Sources */,
+				1311A5DD8F8E360F0A50EA58 /* RoomShareCard.swift in Sources */,
 				48A3F3F2F6355D7AB694640E /* RoomSquareTile.swift in Sources */,
 				093ECEDCFA304949B53B97F7 /* RoomStore.swift in Sources */,
 				58073ACB7A26114179CC9BA7 /* RootSceneView.swift in Sources */,

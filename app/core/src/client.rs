@@ -1005,6 +1005,78 @@ impl HighlighterCore {
         groups::publish_join_request(&self.runtime, group_id.trim()).await
     }
 
+    /// Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
+    /// kind:9002 (edit-metadata) signed by the current user. Returns the
+    /// freshly-generated group id on success — the relay's 39000/39001/39002
+    /// follow-up events drive the iOS membership stream automatically.
+    pub async fn create_room(
+        &self,
+        name: String,
+        about: String,
+        picture: String,
+        visibility: groups::RoomVisibility,
+        access: groups::RoomAccess,
+    ) -> Result<String, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        groups::create_room(
+            &self.runtime,
+            name.trim(),
+            about.trim(),
+            picture.trim(),
+            visibility,
+            access,
+        )
+        .await
+    }
+
+    /// Add a Nostr user (by hex pubkey) to a room as a member. Must be
+    /// signed by a room admin — the relay enforces this. Returns the
+    /// kind:9000 event id on success.
+    pub async fn add_room_member(
+        &self,
+        group_id: String,
+        pubkey_hex: String,
+    ) -> Result<String, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        groups::add_member(&self.runtime, group_id.trim(), pubkey_hex.trim()).await
+    }
+
+    /// Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
+    /// `nostr:` URI prefix) to a 64-char hex pubkey. Returns
+    /// `CoreError::InvalidInput` if the input isn't a recognised pubkey
+    /// reference. Used by the room-invite picker to resolve a pasted handle.
+    pub fn decode_npub(&self, input: String) -> Result<String, CoreError> {
+        let trimmed = input
+            .trim()
+            .strip_prefix("nostr:")
+            .unwrap_or(input.trim())
+            .trim();
+        if trimmed.is_empty() {
+            return Err(CoreError::InvalidInput("empty pubkey reference".into()));
+        }
+        if let Ok(pk) = PublicKey::from_bech32(trimmed) {
+            return Ok(pk.to_hex());
+        }
+        if let Ok(profile) = nostr_sdk::nips::nip19::Nip19Profile::from_bech32(trimmed) {
+            return Ok(profile.public_key.to_hex());
+        }
+        if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Ok(trimmed.to_ascii_lowercase());
+        }
+        Err(CoreError::InvalidInput(format!(
+            "unrecognised pubkey reference: {trimmed}"
+        )))
+    }
+
+    /// Pubkeys (hex) the current user follows per their cached kind:3 contact
+    /// list. Empty if the user isn't logged in or the cache hasn't seen a
+    /// kind:3 yet. Used by the room-invite picker to surface "people you know"
+    /// before any typing happens.
+    pub async fn get_follows(&self) -> Result<Vec<String>, CoreError> {
+        let user_pubkey = self.require_user_pubkey()?;
+        crate::follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())
+    }
+
     // -- Blossom (BUD-03, kind:10063) --
 
     /// Return the user's ordered Blossom server list from nostrdb. Empty if no

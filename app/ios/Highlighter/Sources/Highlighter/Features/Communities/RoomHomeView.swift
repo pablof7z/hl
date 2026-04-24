@@ -14,6 +14,7 @@ struct RoomHomeView: View {
     @State private var composerPresented: Bool = false
     @State private var capturePresented: Bool = false
     @State private var shareTarget: ShareToCommunityTarget?
+    @State private var inviteSheetPresented: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -43,22 +44,28 @@ struct RoomHomeView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    capturePresented = true
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .accessibilityLabel("Capture highlight")
-            }
-            if selectedTab == .discussions {
-                ToolbarItem(placement: .topBarTrailing) {
+                Menu {
                     Button {
-                        composerPresented = true
+                        capturePresented = true
                     } label: {
-                        Image(systemName: "square.and.pencil")
+                        Label("Capture highlight", systemImage: "camera")
                     }
-                    .accessibilityLabel("New discussion")
+                    Button {
+                        inviteSheetPresented = true
+                    } label: {
+                        Label("Add people", systemImage: "person.badge.plus")
+                    }
+                    if selectedTab == .discussions {
+                        Button {
+                            composerPresented = true
+                        } label: {
+                            Label("New discussion", systemImage: "square.and.pencil")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityLabel("Room actions")
             }
         }
         .task {
@@ -70,6 +77,13 @@ struct RoomHomeView: View {
         .sheet(item: $shareTarget) { target in
             ShareToCommunitySheet(target: target)
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $inviteSheetPresented) {
+            NavigationStack {
+                RoomInviteView(groupId: groupId, mode: .manage, onClose: nil)
+            }
+            .environment(app)
+            .presentationDetents([.large])
         }
         .captureFlow(isPresented: $capturePresented, preselectedGroupId: groupId)
     }

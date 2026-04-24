@@ -729,13 +729,36 @@ public func FfiConverterTypeEventCallback_lower(_ value: EventCallback) -> Unsaf
 public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     
     /**
+     * Add a Nostr user (by hex pubkey) to a room as a member. Must be
+     * signed by a room admin — the relay enforces this. Returns the
+     * kind:9000 event id on success.
+     */
+    func addRoomMember(groupId: String, pubkeyHex: String) async throws  -> String
+    
+    /**
      * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
      * Extension flow — the main app drains the share queue, normalizes each
      * URL through this, then calls `publish_artifact` to post the kind:11.
      */
     func buildPreviewFromUrl(url: String) async throws  -> ArtifactPreview
     
+    /**
+     * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
+     * kind:9002 (edit-metadata) signed by the current user. Returns the
+     * freshly-generated group id on success — the relay's 39000/39001/39002
+     * follow-up events drive the iOS membership stream automatically.
+     */
+    func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async throws  -> String
+    
     func currentUser()  -> CurrentUser?
+    
+    /**
+     * Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
+     * `nostr:` URI prefix) to a 64-char hex pubkey. Returns
+     * `CoreError::InvalidInput` if the input isn't a recognised pubkey
+     * reference. Used by the room-invite picker to resolve a pasted handle.
+     */
+    func decodeNpub(input: String) throws  -> String
     
     /**
      * Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
@@ -805,6 +828,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * empty list if the user isn't logged in or has no follows cached yet.
      */
     func getFollowingReads(limit: UInt32) async throws  -> [ReadingFeedItem]
+    
+    /**
+     * Pubkeys (hex) the current user follows per their cached kind:3 contact
+     * list. Empty if the user isn't logged in or the cache hasn't seen a
+     * kind:3 yet. Used by the room-invite picker to surface "people you know"
+     * before any typing happens.
+     */
+    func getFollows() async throws  -> [String]
     
     func getHighlights(groupId: String, limit: UInt32) async throws  -> [HydratedHighlight]
     
@@ -1214,6 +1245,28 @@ public convenience init() {
 
     
     /**
+     * Add a Nostr user (by hex pubkey) to a room as a member. Must be
+     * signed by a room admin — the relay enforces this. Returns the
+     * kind:9000 event id on success.
+     */
+open func addRoomMember(groupId: String, pubkeyHex: String)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_add_room_member(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(groupId),FfiConverterString.lower(pubkeyHex)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
      * Extension flow — the main app drains the share queue, normalizes each
      * URL through this, then calls `publish_artifact` to post the kind:11.
@@ -1235,9 +1288,46 @@ open func buildPreviewFromUrl(url: String)async throws  -> ArtifactPreview  {
         )
 }
     
+    /**
+     * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
+     * kind:9002 (edit-metadata) signed by the current user. Returns the
+     * freshly-generated group id on success — the relay's 39000/39001/39002
+     * follow-up events drive the iOS membership stream automatically.
+     */
+open func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_create_room(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(name),FfiConverterString.lower(about),FfiConverterString.lower(picture),FfiConverterTypeRoomVisibility_lower(visibility),FfiConverterTypeRoomAccess_lower(access)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
 open func currentUser() -> CurrentUser?  {
     return try!  FfiConverterOptionTypeCurrentUser.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_current_user(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
+     * `nostr:` URI prefix) to a 64-char hex pubkey. Returns
+     * `CoreError::InvalidInput` if the input isn't a recognised pubkey
+     * reference. Used by the room-invite picker to resolve a pasted handle.
+     */
+open func decodeNpub(input: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_highlighter_core_fn_method_highlightercore_decode_npub(self.uniffiClonePointer(),
+        FfiConverterString.lower(input),$0
     )
 })
 }
@@ -1487,6 +1577,29 @@ open func getFollowingReads(limit: UInt32)async throws  -> [ReadingFeedItem]  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeReadingFeedItem.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Pubkeys (hex) the current user follows per their cached kind:3 contact
+     * list. Empty if the user isn't logged in or the cache hasn't seen a
+     * kind:3 yet. Used by the room-invite picker to surface "people you know"
+     * before any typing happens.
+     */
+open func getFollows()async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_follows(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -6335,6 +6448,81 @@ extension RelayStatus: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Access control for join requests. Open rooms auto-admit; closed rooms
+ * hold join requests for admin approval. Reflected in the metadata event
+ * as the `["open"]` or `["closed"]` marker tag.
+ */
+
+public enum RoomAccess {
+    
+    case `open`
+    case closed
+}
+
+
+#if compiler(>=6)
+extension RoomAccess: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomAccess: FfiConverterRustBuffer {
+    typealias SwiftType = RoomAccess
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomAccess {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .`open`
+        
+        case 2: return .closed
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RoomAccess, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .`open`:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .closed:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomAccess_lift(_ buf: RustBuffer) throws -> RoomAccess {
+    return try FfiConverterTypeRoomAccess.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomAccess_lower(_ value: RoomAccess) -> RustBuffer {
+    return FfiConverterTypeRoomAccess.lower(value)
+}
+
+
+extension RoomAccess: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Why a room is being recommended on the explorer. Drives the subtitle under
  * a card ("Alice + 3 you follow are here" vs. "Posts by writers you read").
  */
@@ -6406,6 +6594,81 @@ public func FfiConverterTypeRoomRecommendationReason_lower(_ value: RoomRecommen
 
 
 extension RoomRecommendationReason: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Visibility of a room. Public rooms list themselves to anyone; private
+ * rooms hide their existence and member list. Reflected in the metadata
+ * event as the `["public"]` or `["private"]` marker tag.
+ */
+
+public enum RoomVisibility {
+    
+    case `public`
+    case `private`
+}
+
+
+#if compiler(>=6)
+extension RoomVisibility: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomVisibility: FfiConverterRustBuffer {
+    typealias SwiftType = RoomVisibility
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomVisibility {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .`public`
+        
+        case 2: return .`private`
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RoomVisibility, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .`public`:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .`private`:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomVisibility_lift(_ buf: RustBuffer) throws -> RoomVisibility {
+    return try FfiConverterTypeRoomVisibility.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomVisibility_lower(_ value: RoomVisibility) -> RustBuffer {
+    return FfiConverterTypeRoomVisibility.lower(value)
+}
+
+
+extension RoomVisibility: Equatable, Hashable {}
 
 
 
@@ -7164,10 +7427,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_eventcallback_on_data_changed() != 54279) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_add_room_member() != 5956) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 53328) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 43966) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_current_user() != 38772) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_decode_npub() != 51714) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 46894) {
@@ -7204,6 +7476,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_reads() != 29016) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_follows() != 29379) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights() != 25748) {

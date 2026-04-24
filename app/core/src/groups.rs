@@ -19,6 +19,15 @@ use crate::relays::HIGHLIGHTER_RELAY;
 pub const KIND_GROUP_METADATA: u16 = 39000;
 pub const KIND_GROUP_ADMINS: u16 = 39001;
 pub const KIND_GROUP_MEMBERS: u16 = 39002;
+/// NIP-29 put-user. Admin-signed; relay add the targeted pubkey to 39002 (and
+/// 39001 if a role tag like "admin" is included).
+pub const KIND_PUT_USER: u16 = 9000;
+/// NIP-29 edit-metadata. Admin-signed; sets name/about/picture and the
+/// visibility/access marker tags. Relay republishes 39000 in response.
+pub const KIND_EDIT_METADATA: u16 = 9002;
+/// NIP-29 create-group. Signed by the room founder; relay initialises the
+/// group state and admits the founder as the first admin.
+pub const KIND_CREATE_GROUP: u16 = 9007;
 /// NIP-29 join-request event. Published by a user asking to join a room;
 /// the relay either auto-admits (open rooms) by publishing a 39002 that
 /// includes the requester's pubkey, or holds the request for moderator
@@ -198,6 +207,165 @@ pub async fn publish_join_request(
         .await
         .map_err(|e| CoreError::Relay(format!("publish join request: {e}")))?;
     Ok(event.id.to_hex())
+}
+
+/// Visibility of a room. Public rooms list themselves to anyone; private
+/// rooms hide their existence and member list. Reflected in the metadata
+/// event as the `["public"]` or `["private"]` marker tag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum RoomVisibility {
+    Public,
+    Private,
+}
+
+/// Access control for join requests. Open rooms auto-admit; closed rooms
+/// hold join requests for admin approval. Reflected in the metadata event
+/// as the `["open"]` or `["closed"]` marker tag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum RoomAccess {
+    Open,
+    Closed,
+}
+
+impl RoomVisibility {
+    fn marker(self) -> &'static str {
+        match self {
+            Self::Public => "public",
+            Self::Private => "private",
+        }
+    }
+}
+
+impl RoomAccess {
+    fn marker(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::Closed => "closed",
+        }
+    }
+}
+
+/// Generate a fresh NIP-29 group identifier. Must match `[a-z0-9-_]+`. Uses
+/// the low 12 hex chars of a v4 UUID — short enough to embed in URLs, wide
+/// enough (48 bits) to make collisions on the rooms relay vanishingly
+/// unlikely. Lowercase to satisfy the NIP-29 character class.
+fn generate_group_id() -> String {
+    let id = uuid::Uuid::new_v4().simple().to_string();
+    id[..12].to_ascii_lowercase()
+}
+
+/// Create a new NIP-29 room. Publishes the kind:9007 create-group event and
+/// the kind:9002 edit-metadata event back-to-back. The relay observes both
+/// and emits the public 39000/39001/39002 events; our nostrdb subscription
+/// pump turns those into `MembershipChanged` and `CommunityUpserted` deltas
+/// the iOS UI already knows how to react to. Returns the freshly-generated
+/// group id (a 12-char lowercase hex slug).
+pub async fn create_room(
+    runtime: &NostrRuntime,
+    name: &str,
+    about: &str,
+    picture: &str,
+    visibility: RoomVisibility,
+    access: RoomAccess,
+) -> Result<String, CoreError> {
+    let trimmed_name = name.trim();
+    if trimmed_name.is_empty() {
+        return Err(CoreError::InvalidInput("room name must not be empty".into()));
+    }
+
+    let group_id = generate_group_id();
+    let client = runtime.client();
+
+    // 1. create-group: empty content, single `h` tag identifying the new room.
+    let create_builder = EventBuilder::new(Kind::Custom(KIND_CREATE_GROUP), "")
+        .tags(vec![h_tag(&group_id)?]);
+    let create_event = client
+        .sign_event_builder(create_builder)
+        .await
+        .map_err(|e| CoreError::Signer(format!("sign create-group: {e}")))?;
+    client
+        .send_event(&create_event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish create-group: {e}")))?;
+
+    // 2. edit-metadata: name + about + picture + visibility/access markers.
+    //    Marker tags use the convention the local reader (`build_summary`)
+    //    expects — `public`/`private` and `open`/`closed`. NIP-29's spec
+    //    canonically only mentions `private`/`closed` (absence ⇒ public/open),
+    //    but emitting both keeps round-tripping symmetric with the existing
+    //    paranoid-default reader without breaking spec-compliant relays.
+    let mut metadata_tags: Vec<Tag> = Vec::with_capacity(8);
+    metadata_tags.push(h_tag(&group_id)?);
+    metadata_tags.push(named_tag("name", trimmed_name)?);
+    if !about.trim().is_empty() {
+        metadata_tags.push(named_tag("about", about.trim())?);
+    }
+    if !picture.trim().is_empty() {
+        metadata_tags.push(named_tag("picture", picture.trim())?);
+    }
+    metadata_tags.push(marker_tag(visibility.marker())?);
+    metadata_tags.push(marker_tag(access.marker())?);
+
+    let metadata_builder =
+        EventBuilder::new(Kind::Custom(KIND_EDIT_METADATA), "").tags(metadata_tags);
+    let metadata_event = client
+        .sign_event_builder(metadata_builder)
+        .await
+        .map_err(|e| CoreError::Signer(format!("sign edit-metadata: {e}")))?;
+    client
+        .send_event(&metadata_event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish edit-metadata: {e}")))?;
+
+    Ok(group_id)
+}
+
+/// Publish a NIP-29 kind:9000 put-user event adding `pubkey_hex` to
+/// `group_id`. Must be signed by an admin of the room — non-admin attempts
+/// are rejected by the relay. The relay republishes 39002 with the new
+/// member, which arrives as a `MembershipChanged` delta and updates UI.
+pub async fn add_member(
+    runtime: &NostrRuntime,
+    group_id: &str,
+    pubkey_hex: &str,
+) -> Result<String, CoreError> {
+    let group_id = group_id.trim();
+    if group_id.is_empty() {
+        return Err(CoreError::InvalidInput("group_id must not be empty".into()));
+    }
+    let pubkey = PublicKey::from_hex(pubkey_hex)
+        .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
+
+    let builder = EventBuilder::new(Kind::Custom(KIND_PUT_USER), "").tags(vec![
+        h_tag(group_id)?,
+        Tag::public_key(pubkey),
+    ]);
+
+    let client = runtime.client();
+    let event = client
+        .sign_event_builder(builder)
+        .await
+        .map_err(|e| CoreError::Signer(format!("sign put-user: {e}")))?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish put-user: {e}")))?;
+    Ok(event.id.to_hex())
+}
+
+fn h_tag(group_id: &str) -> Result<Tag, CoreError> {
+    Tag::parse(vec!["h".to_string(), group_id.to_string()])
+        .map_err(|e| CoreError::Other(format!("build h tag: {e}")))
+}
+
+fn named_tag(name: &str, value: &str) -> Result<Tag, CoreError> {
+    Tag::parse(vec![name.to_string(), value.to_string()])
+        .map_err(|e| CoreError::Other(format!("build {name} tag: {e}")))
+}
+
+fn marker_tag(name: &str) -> Result<Tag, CoreError> {
+    Tag::parse(vec![name.to_string()])
+        .map_err(|e| CoreError::Other(format!("build marker tag {name}: {e}")))
 }
 
 /// Port of `buildCommunitySummary`. Returns `CoreError::InvalidInput` if the
@@ -546,6 +714,16 @@ mod tests {
         assert_eq!(out[0].id, "solo");
         assert_eq!(out[0].name, "solo");
         assert_eq!(out[0].admin_pubkeys, vec![me.public_key().to_hex()]);
+    }
+
+    #[test]
+    fn generated_group_ids_are_well_formed_and_distinct() {
+        let a = generate_group_id();
+        let b = generate_group_id();
+        assert_ne!(a, b);
+        assert_eq!(a.len(), 12);
+        assert!(a.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+            "group id must satisfy [a-z0-9]+: {a}");
     }
 
     #[test]
