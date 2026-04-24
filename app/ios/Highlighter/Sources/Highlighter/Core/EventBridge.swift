@@ -28,12 +28,16 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         var discussions: [UInt64: WeakBox<DiscussionStore>] = [:]
         var profiles: [UInt64: WeakBox<ProfileStore>] = [:]
         var articles: [UInt64: WeakBox<ArticleReaderStore>] = [:]
+        var reads: [UInt64: WeakBox<ReadsStore>] = [:]
+        var highlights: [UInt64: WeakBox<HighlightsStore>] = [:]
 
         mutating func prune() {
             rooms = rooms.filter { $0.value.value != nil }
             discussions = discussions.filter { $0.value.value != nil }
             profiles = profiles.filter { $0.value.value != nil }
             articles = articles.filter { $0.value.value != nil }
+            reads = reads.filter { $0.value.value != nil }
+            highlights = highlights.filter { $0.value.value != nil }
         }
     }
     private let registry = OSAllocatedUnfairLock(initialState: Registry())
@@ -72,12 +76,28 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         }
     }
 
+    func registerReads(_ store: ReadsStore, handle: UInt64) {
+        registry.withLock { reg in
+            reg.reads[handle] = WeakBox(store)
+            reg.prune()
+        }
+    }
+
+    func registerHighlights(_ store: HighlightsStore, handle: UInt64) {
+        registry.withLock { reg in
+            reg.highlights[handle] = WeakBox(store)
+            reg.prune()
+        }
+    }
+
     func unregister(handle: UInt64) {
         registry.withLock { reg in
             _ = reg.rooms.removeValue(forKey: handle)
             _ = reg.discussions.removeValue(forKey: handle)
             _ = reg.profiles.removeValue(forKey: handle)
             _ = reg.articles.removeValue(forKey: handle)
+            _ = reg.reads.removeValue(forKey: handle)
+            _ = reg.highlights.removeValue(forKey: handle)
         }
     }
 
@@ -93,12 +113,14 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 return
             }
 
-            let (roomStore, discussionStore, profileStore, articleStore) = self.registry.withLock { reg in
+            let (roomStore, discussionStore, profileStore, articleStore, readsStore, highlightsStore) = self.registry.withLock { reg in
                 (
                     reg.rooms[id]?.value,
                     reg.discussions[id]?.value,
                     reg.profiles[id]?.value,
-                    reg.articles[id]?.value
+                    reg.articles[id]?.value,
+                    reg.reads[id]?.value,
+                    reg.highlights[id]?.value
                 )
             }
 
@@ -110,6 +132,10 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 self.dispatchProfile(change, store: profileStore)
             } else if let articleStore {
                 self.dispatchArticle(change, store: articleStore)
+            } else if let readsStore {
+                self.dispatchReads(change, store: readsStore)
+            } else if let highlightsStore {
+                self.dispatchHighlights(change, store: highlightsStore)
             }
         }
     }
@@ -133,16 +159,15 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         switch change {
         case .signerConnected(let user):
             appStore?.currentUser = user
-        case .communityUpserted(let community):
-            upsertCommunity(community)
-        case .membershipChanged:
-            // A 39001/39002 event we care about arrived — re-query nostrdb
-            // for the canonical joined set. Cheaper than doing incremental
-            // upserts and sidesteps ordering races (metadata 39000 landing
-            // before its membership 39001/39002).
+        case .communityUpserted, .membershipChanged:
+            // Any group-related event arrived — re-query nostrdb for the
+            // authoritative joined set. A single refresh path eliminates the
+            // race where incremental upserts (CommunityUpserted) and
+            // full-replace refreshes (MembershipChanged) contradicted each
+            // other. The query is now membership-driven so missing metadata
+            // never wipes the list.
             if let appStore { Task { await appStore.refreshJoinedCommunities() } }
         case .bunkerSignRequest:
-            // MVP doesn't act as a signer.
             break
         default:
             break
@@ -177,14 +202,19 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     }
 
     @MainActor
-    private func upsertCommunity(_ community: CommunitySummary) {
-        guard let appStore else { return }
-        if let i = appStore.joinedCommunities.firstIndex(where: { $0.id == community.id }) {
-            appStore.joinedCommunities[i] = community
-        } else {
-            appStore.joinedCommunities.append(community)
+    private func dispatchReads(_ change: DataChangeType, store: ReadsStore) {
+        if case .followingReadsUpdated = change {
+            Task { await store.refresh() }
         }
     }
+
+    @MainActor
+    private func dispatchHighlights(_ change: DataChangeType, store: HighlightsStore) {
+        if case .followingHighlightsUpdated = change {
+            Task { await store.refresh() }
+        }
+    }
+
 }
 
 fileprivate final class WeakBox<T: AnyObject> {
