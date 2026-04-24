@@ -330,3 +330,39 @@ impl Default for NostrConnectOptions {
         }
     }
 }
+
+/// Connection state of a single relay the app is talking to. Mirrors the
+/// nostr-sdk internal `RelayStatus` but trimmed to the values the UI cares
+/// about. `Initialized` / `Pending` / `Sleeping` are collapsed into
+/// `Connecting` — from the user's perspective all three mean "not yet on
+/// the wire but trying".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum RelayStatus {
+    Connecting,
+    Connected,
+    Disconnected,
+    Terminated,
+    Banned,
+}
+
+/// Live diagnostic snapshot for a single relay, polled from the nostr-sdk
+/// connection pool. Updated by `NostrRuntime`'s diagnostics poller every
+/// second; Swift reads via `get_relay_diagnostics` and listens for
+/// `RelayStatusChanged` deltas to know when to re-render.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RelayDiagnostic {
+    pub url: String,
+    pub state: RelayStatus,
+    /// Round-trip time in milliseconds when the relay is connected. `None`
+    /// until the first ping completes.
+    pub rtt_ms: Option<u32>,
+    /// Cumulative bytes sent on this connection since it was first opened
+    /// this session.
+    pub bytes_sent: u64,
+    /// Cumulative bytes received on this connection since it was first
+    /// opened this session.
+    pub bytes_received: u64,
+    /// Unix seconds of the most recent successful connect, `None` if never
+    /// connected in this session.
+    pub connected_since_ts: Option<u64>,
+}

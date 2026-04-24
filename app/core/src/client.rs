@@ -1158,6 +1158,23 @@ impl HighlighterCore {
         self.runtime.spawn_apply_user_relay_config(user.pubkey);
         Ok(())
     }
+
+    // -- Relay telemetry --
+
+    /// Snapshot of the live per-relay diagnostics map. One row per URL
+    /// currently in the client's pool. Refreshed by the background
+    /// diagnostics poller at least once per second.
+    pub async fn get_relay_diagnostics(&self) -> Result<Vec<crate::models::RelayDiagnostic>, CoreError> {
+        Ok(self.runtime.relay_diagnostics_snapshot())
+    }
+
+    /// Handle the Swift side uses to match `RelayStatusChanged` deltas on the
+    /// event bus. Relay status changes are app-scoped and ride
+    /// `subscription_id == 0`, so this returns `0` unconditionally — the
+    /// value is a stable contract, not a unique sub id.
+    pub async fn subscribe_relay_status(&self) -> Result<u64, CoreError> {
+        Ok(0)
+    }
 }
 
 impl HighlighterCore {
@@ -1184,6 +1201,11 @@ impl HighlighterCore {
         let callback_slot: Arc<RwLock<Option<Arc<dyn EventCallback>>>> =
             Arc::new(RwLock::new(None));
         let subscriptions = Arc::new(SubscriptionRegistry::new(callback_slot.clone()));
+        // Start the diagnostics poller before handing out the Arc<Self>.
+        // The callback slot starts empty; the poller updates its in-memory
+        // map regardless, and fires deltas once Swift installs a callback
+        // via `set_event_callback`.
+        runtime.spawn_diagnostics_poller(callback_slot.clone());
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {
                 session: Session::new(),

@@ -8,6 +8,7 @@ use crate::models::{
     ArtifactRecord, CommunitySummary, CurrentUser, DiscussionRecord, FeedbackEventRecord,
     HighlightRecord, HydratedHighlight,
 };
+use crate::models::RelayStatus;
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum DataChangeType {
@@ -68,6 +69,10 @@ pub enum DataChangeType {
     /// rare case our own core is acting as a signer — MVP does not act as
     /// one, but keeping the variant here matches TENEX's shape).
     BunkerSignRequest { request_id: String },
+    /// A relay in the user's pool changed connection state. Swift re-reads
+    /// `get_relay_diagnostics` on receipt to refresh per-row status dots,
+    /// latency, and traffic counters.
+    RelayStatusChanged { url: String, state: RelayStatus },
 }
 
 /// Every delta delivered to Swift. The `subscription_id` routes the change

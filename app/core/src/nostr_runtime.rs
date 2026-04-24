@@ -13,9 +13,10 @@
 //! relays and installing signers. The Client itself is thread-safe and
 //! cloneable internally.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use nostr_ndb::NdbDatabase;
 use nostr_sdk::prelude::*;
@@ -23,13 +24,27 @@ use nostrdb::{Config as NdbConfig, Ndb};
 use tokio::runtime::Runtime;
 
 use crate::errors::CoreError;
+use crate::events::{DataChangeType, Delta, EventCallback};
 use crate::groups::{KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA};
+use crate::models::{RelayDiagnostic, RelayStatus as AppRelayStatus};
 
 /// NIP-51 "simple groups" list (replaceable). A user publishes this to
 /// enumerate the NIP-29 groups they're a member of; each entry is a
 /// `group` tag with the group id and relay.
 const KIND_SIMPLE_GROUPS_LIST: u16 = 10009;
 use crate::relays::{query_relays, seed_defaults, RelayConfig};
+
+/// Shared pointer to the app's event-callback slot. `HighlighterCore` owns
+/// the slot; `NostrRuntime`'s diagnostics poller borrows it (via this type
+/// alias) to dispatch `RelayStatusChanged` deltas without holding a direct
+/// reference back to the core.
+pub type EventCallbackSlot = Arc<parking_lot::RwLock<Option<Arc<dyn EventCallback>>>>;
+
+/// Cadence for the relay diagnostics poller. Cheap — just walks the pool
+/// and compares atomic values. 1s is fast enough that a flicker from
+/// "Connecting" to "Connected" is visible on the UI without overloading
+/// the runtime.
+const DIAGNOSTICS_POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 /// LMDB map size for the iOS cache. 2 GiB gives plenty of headroom for a
 /// highlights/artifacts cache while staying well below iOS's per-app storage
@@ -51,6 +66,10 @@ pub struct NostrRuntime {
     /// so per-role subscription routing can pick the right subset without
     /// re-querying nostrdb.
     current_relays: Arc<parking_lot::RwLock<Vec<RelayConfig>>>,
+    /// Live per-relay diagnostics, keyed by URL. Updated every
+    /// `DIAGNOSTICS_POLL_INTERVAL` by the poller spawned at construction.
+    /// Swift reads via `get_relay_diagnostics`.
+    relay_diagnostics: Arc<parking_lot::RwLock<HashMap<String, RelayDiagnostic>>>,
     #[cfg(test)]
     data_dir: PathBuf,
 }
@@ -103,6 +122,7 @@ impl NostrRuntime {
             ndb,
             rt: Some(rt),
             current_relays: Arc::new(parking_lot::RwLock::new(Vec::new())),
+            relay_diagnostics: Arc::new(parking_lot::RwLock::new(HashMap::new())),
             #[cfg(test)]
             data_dir,
         };
@@ -431,6 +451,101 @@ impl NostrRuntime {
             .filter(|r| r.write)
             .map(|r| r.url.clone())
             .collect()
+    }
+
+    /// Current per-relay diagnostics snapshot, one row per URL in the
+    /// client's pool. Freshly polled at least once per second.
+    pub fn relay_diagnostics_snapshot(&self) -> Vec<RelayDiagnostic> {
+        let map = self.relay_diagnostics.read();
+        map.values().cloned().collect()
+    }
+
+    /// Start the diagnostics poller. Fires every `DIAGNOSTICS_POLL_INTERVAL`
+    /// on the runtime's own tokio executor; on every tick it walks
+    /// `client.relays()`, rebuilds the diagnostics map, and emits
+    /// `RelayStatusChanged` deltas through the provided callback slot for
+    /// any URL whose `RelayStatus` changed since the last tick. Safe to
+    /// call more than once — each call spawns an independent loop, but
+    /// `HighlighterCore::assemble` calls it exactly once.
+    pub fn spawn_diagnostics_poller(&self, callback_slot: EventCallbackSlot) {
+        let client = self.client.clone();
+        let map = self.relay_diagnostics.clone();
+        self.rt().spawn(async move {
+            let mut ticker = tokio::time::interval(DIAGNOSTICS_POLL_INTERVAL);
+            ticker.tick().await; // first tick fires immediately; skip so we settle a beat before polling
+            loop {
+                ticker.tick().await;
+                let relays = client.relays().await;
+                let mut next: HashMap<String, RelayDiagnostic> = HashMap::with_capacity(relays.len());
+                let mut changed_urls: Vec<(String, AppRelayStatus)> = Vec::new();
+
+                {
+                    let previous = map.read();
+                    for (url, relay) in relays.iter() {
+                        let url_str = url.to_string();
+                        let stats = relay.stats();
+                        let state = map_relay_status(relay.status());
+                        let connected_since_ts = if matches!(state, AppRelayStatus::Connected) {
+                            Some(stats.connected_at().as_secs())
+                        } else {
+                            None
+                        };
+                        let diag = RelayDiagnostic {
+                            url: url_str.clone(),
+                            state,
+                            rtt_ms: stats.latency().map(|d| d.as_millis() as u32),
+                            bytes_sent: stats.bytes_sent() as u64,
+                            bytes_received: stats.bytes_received() as u64,
+                            connected_since_ts,
+                        };
+
+                        match previous.get(&url_str) {
+                            Some(prev) if prev.state == state => {}
+                            _ => changed_urls.push((url_str.clone(), state)),
+                        }
+
+                        next.insert(url_str, diag);
+                    }
+
+                    for url in previous.keys() {
+                        if !next.contains_key(url) {
+                            changed_urls.push((url.clone(), AppRelayStatus::Terminated));
+                        }
+                    }
+                }
+
+                *map.write() = next;
+
+                if !changed_urls.is_empty() {
+                    let cb = callback_slot.read().clone();
+                    if let Some(cb) = cb {
+                        for (url, state) in changed_urls {
+                            cb.on_data_changed(Delta {
+                                subscription_id: 0,
+                                change: DataChangeType::RelayStatusChanged { url, state },
+                            });
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+/// Map the nostr-sdk internal relay status to the UI-facing shape. The
+/// intermediate states (`Initialized` / `Pending` / `Sleeping`) collapse
+/// into `Connecting` since they all mean "not yet on the wire but the
+/// pool intends to bring it up".
+fn map_relay_status(inner: nostr_sdk::RelayStatus) -> AppRelayStatus {
+    match inner {
+        nostr_sdk::RelayStatus::Initialized
+        | nostr_sdk::RelayStatus::Pending
+        | nostr_sdk::RelayStatus::Connecting
+        | nostr_sdk::RelayStatus::Sleeping => AppRelayStatus::Connecting,
+        nostr_sdk::RelayStatus::Connected => AppRelayStatus::Connected,
+        nostr_sdk::RelayStatus::Disconnected => AppRelayStatus::Disconnected,
+        nostr_sdk::RelayStatus::Terminated => AppRelayStatus::Terminated,
+        nostr_sdk::RelayStatus::Banned => AppRelayStatus::Banned,
     }
 }
 

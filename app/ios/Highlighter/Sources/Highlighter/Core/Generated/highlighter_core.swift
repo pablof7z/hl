@@ -828,6 +828,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getRecentBooks(limit: UInt32) async throws  -> [ArtifactRecord]
     
     /**
+     * Snapshot of the live per-relay diagnostics map. One row per URL
+     * currently in the client's pool. Refreshed by the background
+     * diagnostics poller at least once per second.
+     */
+    func getRelayDiagnostics() async throws  -> [RelayDiagnostic]
+    
+    /**
      * Return the user's effective relay list, merging NIP-65 (read/write)
      * with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
      * when neither has been cached yet (first login).
@@ -1053,6 +1060,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * call is about setting up the nostrdb notification pump.
      */
     func subscribeJoinedCommunities() async throws  -> UInt64
+    
+    /**
+     * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
+     * event bus. Relay status changes are app-scoped and ride
+     * `subscription_id == 0`, so this returns `0` unconditionally — the
+     * value is a stable contract, not a unique sub id.
+     */
+    func subscribeRelayStatus() async throws  -> UInt64
     
     /**
      * Per-room view-scope subscription. Returns a handle; fires
@@ -1532,6 +1547,28 @@ open func getRecentBooks(limit: UInt32)async throws  -> [ArtifactRecord]  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeArtifactRecord.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Snapshot of the live per-relay diagnostics map. One row per URL
+     * currently in the client's pool. Refreshed by the background
+     * diagnostics poller at least once per second.
+     */
+open func getRelayDiagnostics()async throws  -> [RelayDiagnostic]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_relay_diagnostics(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeRelayDiagnostic.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -2367,6 +2404,29 @@ open func subscribeJoinedCommunities()async throws  -> UInt64  {
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_joined_communities(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
+            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
+            freeFunc: ffi_highlighter_core_rust_future_free_u64,
+            liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
+     * event bus. Relay status changes are app-scoped and ride
+     * `subscription_id == 0`, so this returns `0` unconditionally — the
+     * value is a stable contract, not a unique sub id.
+     */
+open func subscribeRelayStatus()async throws  -> UInt64  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_subscribe_relay_status(
                     self.uniffiClonePointer()
                     
                 )
@@ -5178,6 +5238,146 @@ public func FfiConverterTypeRelayConfig_lower(_ value: RelayConfig) -> RustBuffe
 
 
 /**
+ * Live diagnostic snapshot for a single relay, polled from the nostr-sdk
+ * connection pool. Updated by `NostrRuntime`'s diagnostics poller every
+ * second; Swift reads via `get_relay_diagnostics` and listens for
+ * `RelayStatusChanged` deltas to know when to re-render.
+ */
+public struct RelayDiagnostic {
+    public var url: String
+    public var state: RelayStatus
+    /**
+     * Round-trip time in milliseconds when the relay is connected. `None`
+     * until the first ping completes.
+     */
+    public var rttMs: UInt32?
+    /**
+     * Cumulative bytes sent on this connection since it was first opened
+     * this session.
+     */
+    public var bytesSent: UInt64
+    /**
+     * Cumulative bytes received on this connection since it was first
+     * opened this session.
+     */
+    public var bytesReceived: UInt64
+    /**
+     * Unix seconds of the most recent successful connect, `None` if never
+     * connected in this session.
+     */
+    public var connectedSinceTs: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, state: RelayStatus, 
+        /**
+         * Round-trip time in milliseconds when the relay is connected. `None`
+         * until the first ping completes.
+         */rttMs: UInt32?, 
+        /**
+         * Cumulative bytes sent on this connection since it was first opened
+         * this session.
+         */bytesSent: UInt64, 
+        /**
+         * Cumulative bytes received on this connection since it was first
+         * opened this session.
+         */bytesReceived: UInt64, 
+        /**
+         * Unix seconds of the most recent successful connect, `None` if never
+         * connected in this session.
+         */connectedSinceTs: UInt64?) {
+        self.url = url
+        self.state = state
+        self.rttMs = rttMs
+        self.bytesSent = bytesSent
+        self.bytesReceived = bytesReceived
+        self.connectedSinceTs = connectedSinceTs
+    }
+}
+
+#if compiler(>=6)
+extension RelayDiagnostic: Sendable {}
+#endif
+
+
+extension RelayDiagnostic: Equatable, Hashable {
+    public static func ==(lhs: RelayDiagnostic, rhs: RelayDiagnostic) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.state != rhs.state {
+            return false
+        }
+        if lhs.rttMs != rhs.rttMs {
+            return false
+        }
+        if lhs.bytesSent != rhs.bytesSent {
+            return false
+        }
+        if lhs.bytesReceived != rhs.bytesReceived {
+            return false
+        }
+        if lhs.connectedSinceTs != rhs.connectedSinceTs {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(state)
+        hasher.combine(rttMs)
+        hasher.combine(bytesSent)
+        hasher.combine(bytesReceived)
+        hasher.combine(connectedSinceTs)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayDiagnostic: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayDiagnostic {
+        return
+            try RelayDiagnostic(
+                url: FfiConverterString.read(from: &buf), 
+                state: FfiConverterTypeRelayStatus.read(from: &buf), 
+                rttMs: FfiConverterOptionUInt32.read(from: &buf), 
+                bytesSent: FfiConverterUInt64.read(from: &buf), 
+                bytesReceived: FfiConverterUInt64.read(from: &buf), 
+                connectedSinceTs: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayDiagnostic, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterTypeRelayStatus.write(value.state, into: &buf)
+        FfiConverterOptionUInt32.write(value.rttMs, into: &buf)
+        FfiConverterUInt64.write(value.bytesSent, into: &buf)
+        FfiConverterUInt64.write(value.bytesReceived, into: &buf)
+        FfiConverterOptionUInt64.write(value.connectedSinceTs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayDiagnostic_lift(_ buf: RustBuffer) throws -> RelayDiagnostic {
+    return try FfiConverterTypeRelayDiagnostic.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayDiagnostic_lower(_ value: RelayDiagnostic) -> RustBuffer {
+    return FfiConverterTypeRelayDiagnostic.lower(value)
+}
+
+
+/**
  * A single explorer row: a room plus the signal that surfaced it. The
  * iOS side uses `reason_pubkeys` to render an avatar cluster and
  * `reason_kind` to render the subtitle.
@@ -5492,6 +5692,13 @@ public enum DataChangeType {
      */
     case bunkerSignRequest(requestId: String
     )
+    /**
+     * A relay in the user's pool changed connection state. Swift re-reads
+     * `get_relay_diagnostics` on receipt to refresh per-row status dots,
+     * latency, and traffic counters.
+     */
+    case relayStatusChanged(url: String, state: RelayStatus
+    )
 }
 
 
@@ -5552,6 +5759,9 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         )
         
         case 16: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 17: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -5645,6 +5855,12 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             writeInt(&buf, Int32(16))
             FfiConverterString.write(requestId, into: &buf)
             
+        
+        case let .relayStatusChanged(url,state):
+            writeInt(&buf, Int32(17))
+            FfiConverterString.write(url, into: &buf)
+            FfiConverterTypeRelayStatus.write(state, into: &buf)
+            
         }
     }
 }
@@ -5666,6 +5882,104 @@ public func FfiConverterTypeDataChangeType_lower(_ value: DataChangeType) -> Rus
 
 
 extension DataChangeType: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Connection state of a single relay the app is talking to. Mirrors the
+ * nostr-sdk internal `RelayStatus` but trimmed to the values the UI cares
+ * about. `Initialized` / `Pending` / `Sleeping` are collapsed into
+ * `Connecting` — from the user's perspective all three mean "not yet on
+ * the wire but trying".
+ */
+
+public enum RelayStatus {
+    
+    case connecting
+    case connected
+    case disconnected
+    case terminated
+    case banned
+}
+
+
+#if compiler(>=6)
+extension RelayStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayStatus: FfiConverterRustBuffer {
+    typealias SwiftType = RelayStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .connecting
+        
+        case 2: return .connected
+        
+        case 3: return .disconnected
+        
+        case 4: return .terminated
+        
+        case 5: return .banned
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RelayStatus, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .connecting:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .connected:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .disconnected:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .terminated:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .banned:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayStatus_lift(_ buf: RustBuffer) throws -> RelayStatus {
+    return try FfiConverterTypeRelayStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayStatus_lower(_ value: RelayStatus) -> RustBuffer {
+    return FfiConverterTypeRelayStatus.lower(value)
+}
+
+
+extension RelayStatus: Equatable, Hashable {}
 
 
 
@@ -5751,6 +6065,30 @@ extension RoomRecommendationReason: Equatable, Hashable {}
 
 
 
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = UInt32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -6344,6 +6682,31 @@ fileprivate struct FfiConverterSequenceTypeRelayConfig: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRelayDiagnostic: FfiConverterRustBuffer {
+    typealias SwiftType = [RelayDiagnostic]
+
+    public static func write(_ value: [RelayDiagnostic], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRelayDiagnostic.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RelayDiagnostic] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RelayDiagnostic]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRelayDiagnostic.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRoomRecommendation: FfiConverterRustBuffer {
     typealias SwiftType = [RoomRecommendation]
 
@@ -6487,6 +6850,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 33628) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_relay_diagnostics() != 57074) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relays() != 12364) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6614,6 +6980,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_joined_communities() != 33427) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_relay_status() != 5993) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room() != 19851) {
