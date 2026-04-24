@@ -44,6 +44,17 @@ struct ArticleReaderView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             if let article = store?.article {
+                let address = "30023:\(article.pubkey):\(article.identifier)"
+                let isBookmarked = app.isBookmarked(articleAddress: address)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await app.toggleBookmark(articleAddress: address) }
+                    } label: {
+                        Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
+                            .foregroundStyle(isBookmarked ? Color.highlighterAccent : Color.highlighterInkStrong)
+                    }
+                    .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Bookmark article")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         shareTarget = .article(article)

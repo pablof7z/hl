@@ -251,6 +251,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             // other. The query is now membership-driven so missing metadata
             // never wipes the list.
             if let appStore { Task { await appStore.refreshJoinedCommunities() } }
+        case .bookmarksUpdated:
+            if let appStore { Task { await appStore.refreshBookmarks() } }
         case .bunkerSignRequest:
             break
         default:

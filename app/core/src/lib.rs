@@ -3,6 +3,7 @@ uniffi::setup_scaffolding!();
 pub mod articles;
 pub mod artifacts;
 pub mod blossom;
+pub mod bookmarks;
 pub mod cache;
 pub mod client;
 pub mod curation;

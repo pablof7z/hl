@@ -125,6 +125,11 @@ pub(crate) enum SubscriptionKind {
         query: String,
         relays: Vec<String>,
     },
+    /// Current user's NIP-51 kind:10003 bookmark list. Fires
+    /// `BookmarksUpdated` (app-scope) when a newer list lands in nostrdb —
+    /// the Swift bookmarks store re-queries the authoritative list and every
+    /// observing row reacts.
+    Bookmarks { user_pubkey: PublicKey },
 }
 
 impl SubscriptionRegistry {
@@ -643,6 +648,21 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
         // JoinedCommunities rides the membership relay-sub already installed
         // at login — no additional relay subscription needed.
         SubscriptionKind::JoinedCommunities { .. } => vec![],
+        SubscriptionKind::Bookmarks { user_pubkey } => {
+            let id = SubscriptionId::generate();
+            let id_clone = id.clone();
+            let client = runtime.client().clone();
+            let pk = *user_pubkey;
+            runtime.runtime_handle().spawn(async move {
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(crate::bookmarks::KIND_BOOKMARKS)])
+                    .author(pk);
+                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
+                    tracing::warn!(error = %e, "failed to subscribe to bookmarks feed");
+                }
+            });
+            vec![id]
+        }
     }
 }
 
@@ -758,6 +778,13 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
             // authoritative filtering against its own query-at-time).
             vec![NdbFilter::new().kinds([KIND_LONG_FORM as u64]).build()]
         }
+        SubscriptionKind::Bookmarks { user_pubkey } => {
+            let pk_bytes: [u8; 32] = user_pubkey.to_bytes();
+            vec![NdbFilter::new()
+                .kinds([crate::bookmarks::KIND_BOOKMARKS as u64])
+                .authors([&pk_bytes])
+                .build()]
+        }
     }
 }
 
@@ -779,6 +806,7 @@ async fn run_pump(
     // are view-scoped and route by handle.
     let delivery_id = match kind {
         SubscriptionKind::JoinedCommunities { .. } => 0,
+        SubscriptionKind::Bookmarks { .. } => 0,
         _ => handle,
     };
 
@@ -1202,6 +1230,15 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             Some(DataChangeType::SearchArticlesUpdated {
                 query: query.clone(),
             })
+        }
+        SubscriptionKind::Bookmarks { user_pubkey } => {
+            if event.kind.as_u16() != crate::bookmarks::KIND_BOOKMARKS {
+                return None;
+            }
+            if event.pubkey != *user_pubkey {
+                return None;
+            }
+            Some(DataChangeType::BookmarksUpdated)
         }
         SubscriptionKind::FeedbackThread { root_event_id } => {
             if event.kind.as_u16() != KIND_FEEDBACK_NOTE {

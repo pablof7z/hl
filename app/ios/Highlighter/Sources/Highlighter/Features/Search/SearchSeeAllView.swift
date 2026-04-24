@@ -62,23 +62,23 @@ struct SearchSeeAllView: View {
     // MARK: - Articles
 
     private var articlesList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(store.articles.enumerated()), id: \.element.eventId) { idx, a in
-                    NavigationLink(value: ArticleReaderTarget(pubkey: a.pubkey, dTag: a.identifier, seed: nil)) {
-                        SeeAllArticleRow(article: a, query: store.query)
-                    }
-                    .buttonStyle(.plain)
-                    if idx < store.articles.count - 1 {
-                        Rectangle()
-                            .fill(Color.highlighterRule)
-                            .frame(height: 0.5)
-                    }
+        // Switched from LazyVStack to List so `.swipeActions` on
+        // `articleRowActions` activates. Styled heavily to preserve the
+        // editorial look of the rest of the app.
+        List {
+            ForEach(store.articles, id: \.eventId) { a in
+                NavigationLink(value: ArticleReaderTarget(pubkey: a.pubkey, dTag: a.identifier, seed: nil)) {
+                    ArticleCardView(article: a)
                 }
+                .listRowBackground(Color.highlighterPaper)
+                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+                .listRowSeparatorTint(Color.highlighterRule)
+                .articleRowActions(article: a)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color.highlighterPaper)
     }
 
     // MARK: - Communities
@@ -167,71 +167,6 @@ private struct SeeAllHighlightRow: View {
     }
 }
 
-private struct SeeAllArticleRow: View {
-    @Environment(HighlighterStore.self) private var app
-    let article: ArticleRecord
-    let query: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            articleThumb
-            VStack(alignment: .leading, spacing: 6) {
-                Text(matched(article.title.isEmpty ? "Untitled" : article.title, query))
-                    .font(.system(size: 17, design: .serif).weight(.semibold))
-                    .foregroundStyle(Color.highlighterInkStrong)
-                    .lineLimit(2)
-                if !article.summary.isEmpty {
-                    Text(matched(article.summary, query))
-                        .font(.footnote)
-                        .foregroundStyle(Color.highlighterInkMuted)
-                        .lineLimit(3)
-                }
-                HStack(spacing: 6) {
-                    let name = app.profileCache[article.pubkey]?.bestName ?? String(article.pubkey.prefix(8))
-                    Text(name)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.highlighterInkMuted)
-                    if let date = article.publishedAt ?? article.createdAt {
-                        Text("·")
-                            .foregroundStyle(Color.highlighterInkMuted)
-                        Text(Date(timeIntervalSince1970: TimeInterval(date)), style: .date)
-                            .font(.caption)
-                            .foregroundStyle(Color.highlighterInkMuted)
-                    }
-                }
-            }
-            Spacer()
-        }
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
-        .task(id: article.pubkey) {
-            await app.requestProfile(pubkeyHex: article.pubkey)
-        }
-    }
-
-    @ViewBuilder
-    private var articleThumb: some View {
-        if let url = URL(string: article.image), !article.image.isEmpty {
-            AsyncImage(url: url) { phase in
-                if case .success(let img) = phase {
-                    img.resizable().aspectRatio(contentMode: .fill)
-                } else {
-                    Color.laneArticlePage
-                }
-            }
-            .frame(width: 64, height: 80)
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-        } else {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Color.laneArticlePage)
-                .frame(width: 64, height: 80)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .stroke(Color.highlighterRule, lineWidth: 0.5)
-                }
-        }
-    }
-}
 
 private struct SeeAllCommunityRow: View {
     let community: CommunitySummary

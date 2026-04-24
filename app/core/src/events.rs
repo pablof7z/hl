@@ -62,6 +62,11 @@ pub enum DataChangeType {
     /// query the subscription was opened with (so a stale pump can't update a
     /// newer query's bucket).
     SearchArticlesUpdated { query: String },
+    /// The current user's NIP-51 kind:10003 bookmark list was updated
+    /// (either by us via `toggle_bookmark` or by another client relaying a
+    /// newer event). App-scope delta — Swift re-queries the authoritative
+    /// list from nostrdb.
+    BookmarksUpdated,
     /// NIP-46 signer connected — fires after a remote signer completes the
     /// `nostrconnect://` or `bunker://` handshake.
     SignerConnected { user: CurrentUser },

@@ -76,6 +76,24 @@ actor SafeHighlighterCore {
         try await core.subscribeArticleSearch(query: query)
     }
 
+    // MARK: - Bookmarks (NIP-51 kind:10003)
+
+    func getBookmarkedArticleAddresses() async throws -> [String] {
+        try await core.getBookmarkedArticleAddresses()
+    }
+
+    func isArticleBookmarked(address: String) async throws -> Bool {
+        try await core.isArticleBookmarked(address: address)
+    }
+
+    func toggleArticleBookmark(address: String) async throws -> Bool {
+        try await core.toggleArticleBookmark(address: address)
+    }
+
+    func subscribeBookmarks() async throws -> UInt64 {
+        try await core.subscribeBookmarks()
+    }
+
     func lookupIsbn(_ isbn: String) async throws -> ArtifactPreview {
         try await core.lookupIsbn(isbn: isbn)
     }

@@ -340,9 +340,14 @@ struct SearchView: View {
                 target: store.articles.count > 4
                     ? .articles(query: store.query) : nil
             )
-            VStack(spacing: 16) {
-                ForEach(Array(store.articles.prefix(4)), id: \.eventId) { article in
+            VStack(spacing: 0) {
+                ForEach(Array(store.articles.prefix(4).enumerated()), id: \.element.eventId) { idx, article in
                     articleRow(article)
+                    if idx < min(store.articles.count, 4) - 1 {
+                        Rectangle()
+                            .fill(Color.highlighterRule)
+                            .frame(height: 0.5)
+                    }
                 }
             }
         }
@@ -415,9 +420,10 @@ struct SearchView: View {
     @ViewBuilder
     private func articleRow(_ a: ArticleRecord) -> some View {
         NavigationLink(value: ArticleReaderTarget(pubkey: a.pubkey, dTag: a.identifier, seed: nil)) {
-            SearchArticleRow(article: a, query: store?.query ?? "")
+            ArticleCardView(article: a)
         }
         .buttonStyle(.plain)
+        .articleRowActions(article: a)
     }
 
     // MARK: - Helpers
@@ -645,92 +651,6 @@ private struct SearchHighlightRow: View {
         }
         .padding(.vertical, 14)
         .contentShape(Rectangle())
-    }
-}
-
-private struct SearchArticleRow: View {
-    @Environment(HighlighterStore.self) private var app
-    let article: ArticleRecord
-    let query: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            coverArt
-            VStack(alignment: .leading, spacing: 6) {
-                HighlightMatchedText(
-                    text: article.title.isEmpty ? "Untitled" : article.title,
-                    query: query,
-                    font: .system(size: 17, design: .serif).weight(.semibold)
-                )
-                .foregroundStyle(Color.highlighterInkStrong)
-                .lineLimit(2)
-
-                if !article.summary.isEmpty {
-                    HighlightMatchedText(
-                        text: article.summary,
-                        query: query,
-                        font: .footnote
-                    )
-                    .foregroundStyle(Color.highlighterInkMuted)
-                    .lineLimit(2)
-                }
-
-                HStack(spacing: 6) {
-                    let authorName = app.profileCache[article.pubkey]?.displayNameOrName
-                        ?? String(article.pubkey.prefix(8))
-                    Text(authorName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.highlighterInkMuted)
-                    if let date = article.publishedAt ?? article.createdAt {
-                        Text("·")
-                            .foregroundStyle(Color.highlighterInkMuted)
-                        Text(Date(timeIntervalSince1970: TimeInterval(date)), style: .date)
-                            .font(.caption)
-                            .foregroundStyle(Color.highlighterInkMuted)
-                    }
-                }
-            }
-        }
-        .padding(.vertical, 8)
-        .contentShape(Rectangle())
-        .task(id: article.pubkey) {
-            await app.requestProfile(pubkeyHex: article.pubkey)
-        }
-    }
-
-    @ViewBuilder
-    private var coverArt: some View {
-        if let url = URL(string: article.image), !article.image.isEmpty {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().aspectRatio(contentMode: .fill)
-                default:
-                    placeholder
-                }
-            }
-            .frame(width: 68, height: 88)
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-        } else {
-            placeholder
-        }
-    }
-
-    private var placeholder: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Color.laneArticlePage)
-            Rectangle()
-                .fill(Color.highlighterAccent.opacity(0.5))
-                .frame(width: 2, height: 26)
-                .clipShape(RoundedRectangle(cornerRadius: 1))
-                .offset(x: -22)
-        }
-        .frame(width: 68, height: 88)
-        .overlay {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .stroke(Color.highlighterRule, lineWidth: 0.5)
-        }
     }
 }
 

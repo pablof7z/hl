@@ -713,6 +713,71 @@ impl HighlighterCore {
         )
     }
 
+    // -- Bookmarks (NIP-51 kind:10003) -----------------------------------
+
+    /// Return the set of article addresses the user has bookmarked in their
+    /// newest kind:10003 list (empty when not logged in or no list cached).
+    pub async fn get_bookmarked_article_addresses(&self) -> Result<Vec<String>, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .unwrap_or_default();
+        let list = crate::bookmarks::query_bookmarks(self.runtime.ndb(), &user_hex)?;
+        Ok(list.addresses)
+    }
+
+    /// Read-only predicate: is `address` currently bookmarked for the logged-in
+    /// user? Always `false` when no user is logged in.
+    pub async fn is_article_bookmarked(&self, address: String) -> Result<bool, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .unwrap_or_default();
+        if user_hex.is_empty() {
+            return Ok(false);
+        }
+        crate::bookmarks::is_bookmarked(self.runtime.ndb(), &user_hex, &address)
+    }
+
+    /// Toggle `address` in the user's kind:10003 list. Returns the new
+    /// membership state — `true` if the address is now bookmarked, `false`
+    /// if it was removed.
+    pub async fn toggle_article_bookmark(&self, address: String) -> Result<bool, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .ok_or(CoreError::NotInitialized)?;
+        crate::bookmarks::toggle_bookmark(&self.runtime, &user_hex, &address).await
+    }
+
+    /// Open a live subscription on the current user's kind:10003 bookmark
+    /// events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
+    /// Swift bookmarks store re-queries on each.
+    pub async fn subscribe_bookmarks(&self) -> Result<u64, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .ok_or(CoreError::NotInitialized)?;
+        let pk = PublicKey::from_hex(&user_hex)
+            .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
+        self.subscriptions.register(
+            &self.runtime,
+            SubscriptionKind::Bookmarks { user_pubkey: pk },
+        )
+    }
+
     pub async fn lookup_isbn(&self, isbn: String) -> Result<ArtifactPreview, CoreError> {
         isbn_lookup::lookup_isbn(&isbn).await
     }

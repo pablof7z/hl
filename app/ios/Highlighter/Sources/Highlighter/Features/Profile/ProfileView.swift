@@ -352,6 +352,7 @@ private struct TabContent: View {
                         ArticleCardView(article: article)
                     }
                     .buttonStyle(.plain)
+                    .articleRowActions(article: article)
                     if index < store.articles.count - 1 {
                         Divider().foregroundStyle(Color.highlighterRule)
                     }

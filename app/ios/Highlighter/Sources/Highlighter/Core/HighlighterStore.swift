@@ -36,12 +36,17 @@ final class HighlighterStore {
     /// observing a given pubkey re-render automatically when a fresh kind:0
     /// arrives from a relay.
     var profileCache: [String: ProfileMetadata] = [:]
+    /// NIP-51 kind:10003 article bookmarks — set of `30023:<pubkey>:<d>`
+    /// addresses. Reactive so every row showing a bookmark affordance updates
+    /// when the user toggles one anywhere.
+    var bookmarkedArticleAddresses: Set<String> = []
 
     // Internal plumbing
     @ObservationIgnored let core: HighlighterCore
     @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored private(set) var eventBridge: EventBridge?
     @ObservationIgnored private var joinedCommunitiesHandle: UInt64?
+    @ObservationIgnored private var bookmarksHandle: UInt64?
     @ObservationIgnored private var profileCacheHandles: [String: UInt64] = [:]
 
     var isLoggedIn: Bool { currentUser != nil }
@@ -80,12 +85,18 @@ final class HighlighterStore {
             eventBridge?.unregister(handle: handle)
             joinedCommunitiesHandle = nil
         }
+        if let handle = bookmarksHandle {
+            core.unsubscribe(handle: handle)
+            eventBridge?.unregister(handle: handle)
+            bookmarksHandle = nil
+        }
         for (_, handle) in profileCacheHandles {
             core.unsubscribe(handle: handle)
             eventBridge?.unregister(handle: handle)
         }
         profileCacheHandles.removeAll()
         profileCache.removeAll()
+        bookmarkedArticleAddresses.removeAll()
         core.logout()
         AppSessionStore.shared.clear()
         currentUser = nil
@@ -93,6 +104,40 @@ final class HighlighterStore {
         joinedCommunities.removeAll()
         connectionState = .unknown
         SharedCommunitiesCache.clear()
+    }
+
+    // MARK: - Bookmarks
+
+    /// Optimistic toggle: flip local state immediately for snappy UI, then
+    /// publish. The inevitable `BookmarksUpdated` delta (ours or from another
+    /// client) reconciles to authoritative state via `refreshBookmarks`.
+    func toggleBookmark(articleAddress: String) async {
+        let trimmed = articleAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        // Optimistic flip.
+        if bookmarkedArticleAddresses.contains(trimmed) {
+            bookmarkedArticleAddresses.remove(trimmed)
+        } else {
+            bookmarkedArticleAddresses.insert(trimmed)
+        }
+        // Authoritative toggle + publish.
+        do {
+            _ = try await safeCore.toggleArticleBookmark(address: trimmed)
+            // No explicit refresh — the pump will deliver `BookmarksUpdated`.
+        } catch {
+            // Revert on failure.
+            await refreshBookmarks()
+        }
+    }
+
+    func refreshBookmarks() async {
+        if let addrs = try? await safeCore.getBookmarkedArticleAddresses() {
+            bookmarkedArticleAddresses = Set(addrs)
+        }
+    }
+
+    func isBookmarked(articleAddress: String) -> Bool {
+        bookmarkedArticleAddresses.contains(articleAddress)
     }
 
     /// Fetches a profile from the local nostrdb cache (fast path) and sets up
@@ -193,6 +238,16 @@ final class HighlighterStore {
                 // Joined-communities deltas are dispatched via the appStore
                 // path in EventBridge (not per-view). No store registration
                 // needed; we only hold the handle so logout can unsubscribe.
+            }
+        }
+
+        // Hydrate the bookmark set from nostrdb, then install a live sub so
+        // later kind:10003 events (ours or another client's) trigger a
+        // `BookmarksUpdated` delta that refreshes the set.
+        await refreshBookmarks()
+        if bookmarksHandle == nil {
+            if let handle = try? await safeCore.subscribeBookmarks() {
+                bookmarksHandle = handle
             }
         }
     }
