@@ -24,6 +24,7 @@ pub mod reads;
 pub mod recent_books;
 pub mod recommendations;
 pub mod relays;
+pub mod search;
 pub mod session;
 pub mod subscriptions;
 

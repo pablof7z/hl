@@ -625,6 +625,77 @@ impl HighlighterCore {
         Err(CoreError::NotInitialized)
     }
 
+    // -- Search: across local nostrdb (all four surfaces) + NIP-50 relay ---
+
+    pub async fn search_highlights(
+        &self,
+        query: String,
+        limit: u32,
+    ) -> Result<Vec<HighlightRecord>, CoreError> {
+        crate::search::search_highlights(self.runtime.ndb(), &query, limit)
+    }
+
+    pub async fn search_articles(
+        &self,
+        query: String,
+        limit: u32,
+    ) -> Result<Vec<ArticleRecord>, CoreError> {
+        crate::search::search_articles(self.runtime.ndb(), &query, limit)
+    }
+
+    pub async fn search_communities(
+        &self,
+        query: String,
+        limit: u32,
+    ) -> Result<Vec<CommunitySummary>, CoreError> {
+        crate::search::search_communities(self.runtime.ndb(), &query, limit)
+    }
+
+    pub async fn search_profiles(
+        &self,
+        query: String,
+        limit: u32,
+    ) -> Result<Vec<ProfileMetadata>, CoreError> {
+        crate::search::search_profiles(self.runtime.ndb(), &query, limit)
+    }
+
+    /// Resolve the merged set of NIP-50 search relays for the current user —
+    /// always includes `wss://relay.highlighter.com`, plus every `relay` tag
+    /// from the newest cached kind:10007 (NIP-51 search relay list).
+    pub async fn get_search_relays(&self) -> Result<Vec<String>, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .unwrap_or_default();
+        crate::search::query_search_relays(self.runtime.ndb(), &user_hex)
+    }
+
+    /// Open a NIP-50 relay subscription for kind:30023 against the user's
+    /// search relays. Returns a handle; the pump fires
+    /// `SearchArticlesUpdated { query }` deltas as matching events ingest,
+    /// and the Swift store responds by re-running `search_articles` locally
+    /// to merge the new events into its Articles bucket.
+    pub async fn subscribe_article_search(&self, query: String) -> Result<u64, CoreError> {
+        let trimmed = query.trim().to_string();
+        if trimmed.is_empty() {
+            return Err(CoreError::InvalidInput("search query must not be empty".into()));
+        }
+        let relays = self.get_search_relays().await?;
+        if relays.is_empty() {
+            return Err(CoreError::InvalidInput("no search relays resolved".into()));
+        }
+        self.subscriptions.register(
+            &self.runtime,
+            SubscriptionKind::SearchArticles {
+                query: trimmed,
+                relays,
+            },
+        )
+    }
+
     pub async fn lookup_isbn(&self, isbn: String) -> Result<ArtifactPreview, CoreError> {
         isbn_lookup::lookup_isbn(&isbn).await
     }
@@ -706,11 +777,13 @@ impl HighlighterCore {
 
     /// Publish a feedback note (kind:1) for the shake-to-share surface. When
     /// `parent_event_id` is `Some`, the note is a reply marked NIP-10 root;
-    /// otherwise it's a brand-new thread.
+    /// otherwise it's a brand-new thread. `agent_pubkey` is optional — pass
+    /// `None` when the project event isn't cached yet (the note still ships,
+    /// just without a `p` tag).
     pub async fn publish_feedback_note(
         &self,
         coordinate: String,
-        agent_pubkey: String,
+        agent_pubkey: Option<String>,
         parent_event_id: Option<String>,
         body: String,
     ) -> Result<FeedbackEventRecord, CoreError> {
@@ -718,7 +791,7 @@ impl HighlighterCore {
         feedback::publish_note(
             &self.runtime,
             &coordinate,
-            &agent_pubkey,
+            agent_pubkey.as_deref(),
             parent_event_id.as_deref(),
             &body,
         )

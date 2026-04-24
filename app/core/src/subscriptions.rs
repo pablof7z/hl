@@ -26,7 +26,9 @@ use crate::events::{DataChangeType, Delta, EventCallback};
 use crate::groups::{
     build_community_summary, KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA,
 };
-use crate::feedback::{KIND_FEEDBACK_NOTE, KIND_FEEDBACK_THREAD_META};
+use crate::feedback::{
+    ensure_feedback_relay, FEEDBACK_RELAY, KIND_FEEDBACK_NOTE, KIND_FEEDBACK_THREAD_META,
+};
 use crate::models::{
     ArtifactPreview, ArtifactRecord, HighlightRecord, HydratedHighlight,
 };
@@ -111,6 +113,17 @@ pub(crate) enum SubscriptionKind {
     /// (regardless of author) plus the root itself. Author-agnostic so agent
     /// replies appear inline.
     FeedbackThread { root_event_id: EventId },
+    /// NIP-50 relay search for kind:30023 articles. `query` is the raw search
+    /// term the user typed; `relays` is the resolved set to target (default
+    /// `wss://relay.highlighter.com` plus any kind:10007 entries). The pump
+    /// just forwards a `SearchArticlesUpdated { query }` trigger when matching
+    /// events ingest into nostrdb — the Swift store re-runs the local ndb
+    /// substring match on each delta to merge relay-delivered events into the
+    /// Articles bucket.
+    SearchArticles {
+        query: String,
+        relays: Vec<String>,
+    },
 }
 
 impl SubscriptionRegistry {
@@ -424,6 +437,8 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             ids
         }
         SubscriptionKind::FeedbackThreads { coordinate, current_user_pubkey } => {
+            // Both subs target only FEEDBACK_RELAY so the kind:1/513 traffic
+            // for the project never fans out across the user's relay set.
             let client = runtime.client().clone();
             let mut ids: Vec<SubscriptionId> = Vec::new();
 
@@ -433,11 +448,15 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             let pk = *current_user_pubkey;
             let client_a = client.clone();
             runtime.runtime_handle().spawn(async move {
+                ensure_feedback_relay(&client_a).await;
                 let filter = Filter::new()
                     .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
                     .author(pk)
                     .custom_tag(SingleLetterTag::lowercase(Alphabet::A), coord_owned);
-                if let Err(e) = client_a.subscribe_with_id(roots_id_clone, filter, None).await {
+                if let Err(e) = client_a
+                    .subscribe_with_id_to([FEEDBACK_RELAY], roots_id_clone, filter, None)
+                    .await
+                {
                     tracing::warn!(error = %e, "failed to subscribe to feedback roots feed");
                 }
             });
@@ -448,10 +467,14 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             let coord_owned = coordinate.clone();
             let client_b = client.clone();
             runtime.runtime_handle().spawn(async move {
+                ensure_feedback_relay(&client_b).await;
                 let filter = Filter::new()
                     .kinds([Kind::Custom(KIND_FEEDBACK_THREAD_META)])
                     .custom_tag(SingleLetterTag::lowercase(Alphabet::A), coord_owned);
-                if let Err(e) = client_b.subscribe_with_id(meta_id_clone, filter, None).await {
+                if let Err(e) = client_b
+                    .subscribe_with_id_to([FEEDBACK_RELAY], meta_id_clone, filter, None)
+                    .await
+                {
                     tracing::warn!(error = %e, "failed to subscribe to feedback meta feed");
                 }
             });
@@ -465,11 +488,50 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             let root_hex = root_event_id.to_hex();
             let client = runtime.client().clone();
             runtime.runtime_handle().spawn(async move {
+                ensure_feedback_relay(&client).await;
                 let filter = Filter::new()
                     .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
                     .custom_tag(SingleLetterTag::lowercase(Alphabet::E), root_hex);
-                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
+                if let Err(e) = client
+                    .subscribe_with_id_to([FEEDBACK_RELAY], id_clone, filter, None)
+                    .await
+                {
                     tracing::warn!(error = %e, "failed to subscribe to feedback thread feed");
+                }
+            });
+            vec![id]
+        }
+        SubscriptionKind::SearchArticles { query, relays } => {
+            if relays.is_empty() || query.trim().is_empty() {
+                return vec![];
+            }
+            let id = SubscriptionId::generate();
+            let id_clone = id.clone();
+            let client = runtime.client().clone();
+            let relays_owned = relays.clone();
+            let query_owned = query.clone();
+            runtime.runtime_handle().spawn(async move {
+                // Make sure every target relay is in the pool before we open
+                // the REQ — NIP-51 search relays may not be in the user's
+                // NIP-65 set, and `relay.highlighter.com` always should be but
+                // belt-and-braces.
+                for url in &relays_owned {
+                    if let Err(e) = client.add_relay(url).await {
+                        tracing::debug!(url = %url, error = %e, "search: add_relay");
+                    }
+                    if let Err(e) = client.connect_relay(url).await {
+                        tracing::debug!(url = %url, error = %e, "search: connect_relay");
+                    }
+                }
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(KIND_LONG_FORM)])
+                    .search(query_owned)
+                    .limit(60);
+                if let Err(e) = client
+                    .subscribe_with_id_to(relays_owned, id_clone, filter, None)
+                    .await
+                {
+                    tracing::warn!(error = %e, "failed to open NIP-50 article search");
                 }
             });
             vec![id]
@@ -585,6 +647,13 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
             // root before forwarding.
             vec![NdbFilter::new().kinds([KIND_FEEDBACK_NOTE as u64]).build()]
         }
+        SubscriptionKind::SearchArticles { .. } => {
+            // Every kind:30023 — the pump's `build_change` narrows by substring
+            // match so a generic long-form event that happens to share a word
+            // with the query still triggers a re-query (the Swift side does the
+            // authoritative filtering against its own query-at-time).
+            vec![NdbFilter::new().kinds([KIND_LONG_FORM as u64]).build()]
+        }
     }
 }
 
@@ -643,6 +712,7 @@ async fn run_pump(
         let mut saw_following_reads_update = false;
         let mut saw_following_highlights_update = false;
         let mut saw_feedback_threads_update = false;
+        let mut saw_search_articles_update = false;
         for key in note_keys {
             let Ok(note) = runtime.ndb().get_note_by_key(&txn, key) else {
                 continue;
@@ -690,6 +760,10 @@ async fn run_pump(
                     saw_feedback_threads_update = true;
                     continue;
                 }
+                if matches!(change, DataChangeType::SearchArticlesUpdated { .. }) {
+                    saw_search_articles_update = true;
+                    continue;
+                }
                 deltas.push(Delta {
                     subscription_id: delivery_id,
                     change,
@@ -715,6 +789,16 @@ async fn run_pump(
                 subscription_id: delivery_id,
                 change: DataChangeType::FeedbackThreadsUpdated,
             });
+        }
+        if saw_search_articles_update {
+            if let SubscriptionKind::SearchArticles { query, .. } = &kind {
+                deltas.push(Delta {
+                    subscription_id: delivery_id,
+                    change: DataChangeType::SearchArticlesUpdated {
+                        query: query.clone(),
+                    },
+                });
+            }
         }
 
         if deltas.is_empty() {
@@ -985,6 +1069,35 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
                 KIND_FEEDBACK_THREAD_META => Some(DataChangeType::FeedbackThreadsUpdated),
                 _ => None,
             }
+        }
+        SubscriptionKind::SearchArticles { query, .. } => {
+            if event.kind.as_u16() != KIND_LONG_FORM {
+                return None;
+            }
+            let q_lower = query.to_lowercase();
+            if q_lower.is_empty() {
+                return None;
+            }
+            let title = first_tag_value(event, "title").unwrap_or("").to_lowercase();
+            let summary = first_tag_value(event, "summary").unwrap_or("").to_lowercase();
+            let body_lower = event.content.to_lowercase();
+            let tag_hit = event.tags.iter().any(|t| {
+                let s = t.as_slice();
+                s.first().map(String::as_str) == Some("t")
+                    && s.get(1)
+                        .map(|v| v.to_lowercase().contains(&q_lower))
+                        .unwrap_or(false)
+            });
+            if !(title.contains(&q_lower)
+                || summary.contains(&q_lower)
+                || body_lower.contains(&q_lower)
+                || tag_hit)
+            {
+                return None;
+            }
+            Some(DataChangeType::SearchArticlesUpdated {
+                query: query.clone(),
+            })
         }
         SubscriptionKind::FeedbackThread { root_event_id } => {
             if event.kind.as_u16() != KIND_FEEDBACK_NOTE {

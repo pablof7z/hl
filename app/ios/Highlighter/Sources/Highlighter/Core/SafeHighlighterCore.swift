@@ -50,6 +50,32 @@ actor SafeHighlighterCore {
         try await core.searchArtifacts(query: query, limit: limit)
     }
 
+    // MARK: - Search (local ndb + NIP-50 relay)
+
+    func searchHighlights(query: String, limit: UInt32 = 20) async throws -> [HighlightRecord] {
+        try await core.searchHighlights(query: query, limit: limit)
+    }
+
+    func searchArticles(query: String, limit: UInt32 = 20) async throws -> [ArticleRecord] {
+        try await core.searchArticles(query: query, limit: limit)
+    }
+
+    func searchCommunities(query: String, limit: UInt32 = 20) async throws -> [CommunitySummary] {
+        try await core.searchCommunities(query: query, limit: limit)
+    }
+
+    func searchProfiles(query: String, limit: UInt32 = 20) async throws -> [ProfileMetadata] {
+        try await core.searchProfiles(query: query, limit: limit)
+    }
+
+    func getSearchRelays() async throws -> [String] {
+        try await core.getSearchRelays()
+    }
+
+    func subscribeArticleSearch(query: String) async throws -> UInt64 {
+        try await core.subscribeArticleSearch(query: query)
+    }
+
     func lookupIsbn(_ isbn: String) async throws -> ArtifactPreview {
         try await core.lookupIsbn(isbn: isbn)
     }
@@ -78,7 +104,7 @@ actor SafeHighlighterCore {
 
     func publishFeedbackNote(
         coordinate: String,
-        agentPubkey: String,
+        agentPubkey: String?,
         parentEventId: String?,
         body: String
     ) async throws -> FeedbackEventRecord {

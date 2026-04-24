@@ -81,18 +81,18 @@ final class FeedbackStore {
         threads = ([record] + threads).sorted { $0.lastActivityAt > $1.lastActivityAt }
     }
 
-    /// Resolve and cache the project's first agent pubkey. Throws if the
-    /// project event isn't in nostrdb yet.
-    func resolveAgentPubkey() async throws -> String {
+    /// Resolve and cache the project's first agent pubkey. Returns `nil` if
+    /// the project event isn't in nostrdb yet — callers should still publish,
+    /// just without a `p` tag, and let the agent discover the note via its
+    /// own `a`-tag subscription.
+    func resolveAgentPubkey() async -> String? {
         if let cachedAgentPubkey { return cachedAgentPubkey }
-        guard let core, let coordinate else {
-            throw FeedbackError.notReady
+        guard let core, let coordinate else { return nil }
+        if let agent = try? await core.getProjectFirstAgentPubkey(coordinate: coordinate) {
+            cachedAgentPubkey = agent
+            return agent
         }
-        guard let agent = try await core.getProjectFirstAgentPubkey(coordinate: coordinate) else {
-            throw FeedbackError.agentUnavailable
-        }
-        cachedAgentPubkey = agent
-        return agent
+        return nil
     }
 
     private func previewFromBody(_ body: String) -> String {
@@ -104,13 +104,10 @@ final class FeedbackStore {
 
 enum FeedbackError: LocalizedError {
     case notReady
-    case agentUnavailable
 
     var errorDescription: String? {
         switch self {
         case .notReady: return "Feedback isn't ready yet."
-        case .agentUnavailable:
-            return "Couldn't find the Highlighter project event. Try again in a moment."
         }
     }
 }

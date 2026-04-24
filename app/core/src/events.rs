@@ -56,6 +56,11 @@ pub enum DataChangeType {
     /// A kind:1 message inside an open feedback thread arrived. The Swift
     /// store inserts/upserts it into the chat view ordered by `created_at`.
     FeedbackThreadEventUpserted { event: FeedbackEventRecord },
+    /// A NIP-50 relay search returned new kind:30023 events. The Swift store
+    /// re-queries its local article substring match on receipt; payload is the
+    /// query the subscription was opened with (so a stale pump can't update a
+    /// newer query's bucket).
+    SearchArticlesUpdated { query: String },
     /// NIP-46 signer connected — fires after a remote signer completes the
     /// `nostrconnect://` or `bunker://` handshake.
     SignerConnected { user: CurrentUser },

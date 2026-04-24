@@ -7,22 +7,48 @@ struct ImageZoomView: View {
 
     @State private var scale: CGFloat = 1
     @State private var lastScale: CGFloat = 1
+    @State private var dragOffset: CGSize = .zero
+
+    private var dismissThreshold: CGFloat { 120 }
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.black
+                .opacity(1 - min(1, abs(dragOffset.height) / 300))
+                .ignoresSafeArea()
             if let url {
                 KFImage(url)
                     .placeholder { ProgressView().tint(.white) }
                     .resizable()
                     .scaledToFit()
                     .scaleEffect(scale)
+                    .offset(dragOffset)
                     .gesture(
-                        MagnificationGesture()
-                            .onChanged { value in
-                                scale = max(1, min(5, lastScale * value))
-                            }
-                            .onEnded { _ in lastScale = scale }
+                        SimultaneousGesture(
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    scale = max(1, min(5, lastScale * value))
+                                }
+                                .onEnded { _ in lastScale = scale },
+                            DragGesture()
+                                .onChanged { value in
+                                    guard scale == 1 else { return }
+                                    dragOffset = value.translation
+                                }
+                                .onEnded { value in
+                                    guard scale == 1 else {
+                                        dragOffset = .zero
+                                        return
+                                    }
+                                    if abs(value.translation.height) > dismissThreshold {
+                                        onDismiss()
+                                    } else {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                            dragOffset = .zero
+                                        }
+                                    }
+                                }
+                        )
                     )
             }
             VStack {

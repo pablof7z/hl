@@ -32,6 +32,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         var highlights: [UInt64: WeakBox<HighlightsStore>] = [:]
         var feedbackThreads: [UInt64: WeakBox<FeedbackStore>] = [:]
         var feedbackThreadDetails: [UInt64: WeakBox<FeedbackThreadStore>] = [:]
+        var searches: [UInt64: WeakBox<SearchStore>] = [:]
         /// Maps subscription handles → pubkey for app-scoped profile cache subscriptions.
         var profileCacheHandles: [UInt64: String] = [:]
 
@@ -44,6 +45,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             highlights = highlights.filter { $0.value.value != nil }
             feedbackThreads = feedbackThreads.filter { $0.value.value != nil }
             feedbackThreadDetails = feedbackThreadDetails.filter { $0.value.value != nil }
+            searches = searches.filter { $0.value.value != nil }
         }
     }
     private let registry = OSAllocatedUnfairLock(initialState: Registry())
@@ -110,6 +112,13 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         }
     }
 
+    func registerSearch(_ store: SearchStore, handle: UInt64) {
+        registry.withLock { reg in
+            reg.searches[handle] = WeakBox(store)
+            reg.prune()
+        }
+    }
+
     func registerProfileCache(pubkeyHex: String, handle: UInt64) {
         registry.withLock { reg in
             reg.profileCacheHandles[handle] = pubkeyHex
@@ -127,6 +136,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             _ = reg.highlights.removeValue(forKey: handle)
             _ = reg.feedbackThreads.removeValue(forKey: handle)
             _ = reg.feedbackThreadDetails.removeValue(forKey: handle)
+            _ = reg.searches.removeValue(forKey: handle)
             _ = reg.profileCacheHandles.removeValue(forKey: handle)
         }
     }
@@ -143,7 +153,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 return
             }
 
-            let (roomStore, discussionStore, profileStore, articleStore, readsStore, highlightsStore, feedbackStore, feedbackThreadStore, profileCachePubkey) = self.registry.withLock { reg in
+            let (roomStore, discussionStore, profileStore, articleStore, readsStore, highlightsStore, feedbackStore, feedbackThreadStore, searchStore, profileCachePubkey) = self.registry.withLock { reg in
                 (
                     reg.rooms[id]?.value,
                     reg.discussions[id]?.value,
@@ -153,6 +163,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                     reg.highlights[id]?.value,
                     reg.feedbackThreads[id]?.value,
                     reg.feedbackThreadDetails[id]?.value,
+                    reg.searches[id]?.value,
                     reg.profileCacheHandles[id]
                 )
             }
@@ -173,6 +184,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 self.dispatchFeedbackThreads(change, store: feedbackStore)
             } else if let feedbackThreadStore {
                 self.dispatchFeedbackThread(change, store: feedbackThreadStore)
+            } else if let searchStore {
+                self.dispatchSearch(change, store: searchStore)
             } else if let pubkey = profileCachePubkey {
                 self.dispatchProfileCache(change, pubkey: pubkey)
             }
@@ -271,6 +284,13 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     private func dispatchHighlights(_ change: DataChangeType, store: HighlightsStore) {
         if case .followingHighlightsUpdated = change {
             Task { await store.refresh() }
+        }
+    }
+
+    @MainActor
+    private func dispatchSearch(_ change: DataChangeType, store: SearchStore) {
+        if case .searchArticlesUpdated(let query) = change {
+            store.applyRelaySearchUpdate(query: query)
         }
     }
 

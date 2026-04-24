@@ -66,8 +66,9 @@ final class FeedbackThreadStore {
         }
     }
 
-    /// Send a reply into the open thread. Resolves the agent pubkey lazily if
-    /// the caller didn't already cache it.
+    /// Send a reply into the open thread. Resolves the agent pubkey lazily
+    /// if not already cached; publishes without a `p` tag when the project
+    /// event isn't available.
     @discardableResult
     func sendReply(body: String) async throws -> FeedbackEventRecord {
         guard let core, let coordinate, let rootEventId else {
@@ -77,15 +78,10 @@ final class FeedbackThreadStore {
         guard !trimmed.isEmpty else {
             throw FeedbackError.notReady
         }
-        let agent: String
-        if let cached = agentPubkey {
-            agent = cached
-        } else {
-            guard let resolved = try await core.getProjectFirstAgentPubkey(coordinate: coordinate) else {
-                throw FeedbackError.agentUnavailable
-            }
-            agentPubkey = resolved
-            agent = resolved
+        var agent = agentPubkey
+        if agent == nil {
+            agent = try? await core.getProjectFirstAgentPubkey(coordinate: coordinate)
+            agentPubkey = agent
         }
 
         isPublishing = true

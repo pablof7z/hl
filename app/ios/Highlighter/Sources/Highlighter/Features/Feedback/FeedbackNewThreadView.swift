@@ -69,7 +69,7 @@ struct FeedbackNewThreadView: View {
         defer { isPublishing = false }
 
         do {
-            let agent = try await store.resolveAgentPubkey()
+            let agent = await store.resolveAgentPubkey()
             let record = try await app.safeCore.publishFeedbackNote(
                 coordinate: FeedbackProject.coordinate,
                 agentPubkey: agent,

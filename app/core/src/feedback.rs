@@ -18,6 +18,12 @@ use crate::nostr_runtime::NostrRuntime;
 pub const HIGHLIGHTER_PROJECT_COORDINATE: &str =
     "31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter";
 
+/// Single relay used for the shake-to-share feedback surface. Feedback events
+/// are scoped to this relay only — they do NOT fan out to the user's general
+/// relay set. Both publishes and subscriptions for kind:1/513 with the
+/// project `a` tag are pinned here.
+pub const FEEDBACK_RELAY: &str = "wss://relay.tenex.chat";
+
 pub const KIND_FEEDBACK_NOTE: u16 = 1;
 pub const KIND_FEEDBACK_THREAD_META: u16 = 513;
 pub const KIND_PROJECT_DEFINITION: u16 = 31933;
@@ -228,32 +234,36 @@ pub fn query_first_agent_pubkey(
 }
 
 /// Build, sign and send a kind:1 feedback note. The event always carries an
-/// `a` tag for the project coordinate and a `p` tag for the agent. When
-/// `parent_event_id` is `Some`, an `["e", root, "", "root"]` marker is added
-/// so the reply attaches to an existing thread.
+/// `a` tag for the project coordinate; a `p` tag is added when an
+/// `agent_pubkey` is supplied (`None` is allowed when the project event isn't
+/// cached yet — the note still ships, the agent will just discover it via
+/// the `a`-tag subscription). When `parent_event_id` is `Some`, an
+/// `["e", root, "", "root"]` marker is added so the reply attaches to an
+/// existing thread. Published only to [`FEEDBACK_RELAY`].
 pub async fn publish_note(
     runtime: &NostrRuntime,
     coordinate: &str,
-    agent_pubkey: &str,
+    agent_pubkey: Option<&str>,
     parent_event_id: Option<&str>,
     body: &str,
 ) -> Result<FeedbackEventRecord, CoreError> {
     let coordinate = coordinate.trim();
-    let agent_pubkey = agent_pubkey.trim();
     let body = body.trim();
     if coordinate.is_empty() {
         return Err(CoreError::InvalidInput("coordinate must not be empty".into()));
     }
-    if agent_pubkey.is_empty() {
-        return Err(CoreError::InvalidInput("agent_pubkey must not be empty".into()));
-    }
     if body.is_empty() {
         return Err(CoreError::InvalidInput("feedback body must not be empty".into()));
     }
-    // Sanity-check pubkey/coordinate before we try to sign.
-    PublicKey::from_hex(agent_pubkey)
-        .map_err(|e| CoreError::InvalidInput(format!("invalid agent pubkey: {e}")))?;
     parse_coordinate(coordinate)?;
+    let agent_pubkey = match agent_pubkey.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(pk) => {
+            PublicKey::from_hex(pk)
+                .map_err(|e| CoreError::InvalidInput(format!("invalid agent pubkey: {e}")))?;
+            Some(pk.to_string())
+        }
+        None => None,
+    };
     let parent_root = match parent_event_id.map(str::trim).filter(|s| !s.is_empty()) {
         Some(s) => Some(
             EventId::from_hex(s)
@@ -264,7 +274,9 @@ pub async fn publish_note(
 
     let mut tags: Vec<Tag> = Vec::with_capacity(3);
     tags.push(parse_tag(&["a", coordinate])?);
-    tags.push(parse_tag(&["p", agent_pubkey])?);
+    if let Some(agent) = &agent_pubkey {
+        tags.push(parse_tag(&["p", agent])?);
+    }
     if let Some(parent) = parent_root {
         tags.push(parse_tag(&["e", &parent.to_hex(), "", "root"])?);
     }
@@ -275,8 +287,10 @@ pub async fn publish_note(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign feedback note: {e}")))?;
+
+    ensure_feedback_relay(client).await;
     client
-        .send_event(&event)
+        .send_event_to([FEEDBACK_RELAY], &event)
         .await
         .map_err(|e| CoreError::Relay(format!("publish feedback note: {e}")))?;
 
@@ -284,6 +298,19 @@ pub async fn publish_note(
         .map(|id| id.to_hex())
         .unwrap_or_else(|| event.id.to_hex());
     Ok(event_record(&event, &root_id))
+}
+
+/// Idempotently add + connect [`FEEDBACK_RELAY`] to the runtime's relay pool
+/// before any feedback publish/subscribe runs. Errors are logged but never
+/// propagated — `add_relay` returns `Ok(false)` if the relay is already
+/// known, and `connect_relay` is fine to call again on a connected relay.
+pub async fn ensure_feedback_relay(client: &Client) {
+    if let Err(e) = client.add_relay(FEEDBACK_RELAY).await {
+        tracing::warn!(relay = %FEEDBACK_RELAY, error = %e, "feedback relay add_relay");
+    }
+    if let Err(e) = client.connect_relay(FEEDBACK_RELAY).await {
+        tracing::warn!(relay = %FEEDBACK_RELAY, error = %e, "feedback relay connect");
+    }
 }
 
 // --- helpers ---------------------------------------------------------------
