@@ -14,7 +14,7 @@ export const HIGHLIGHTER_ARTIFACT_SHARE_KIND = NDKKind.Thread as NDKKind;
 
 export type ArtifactSource = 'article' | 'book' | 'podcast' | 'video' | 'paper' | 'web';
 export type ArtifactReferenceTagName = 'a' | 'e' | 'i';
-export type ArtifactHighlightTagName = 'a' | 'e' | 'r';
+export type ArtifactHighlightTagName = 'a' | 'e' | 'i' | 'r';
 
 export type ArtifactPreview = {
   id: string;
@@ -27,7 +27,12 @@ export type ArtifactPreview = {
   domain: string;
   catalogId: string;
   catalogKind: string;
+  /** NIP-73 feed GUID (from `<podcast:guid>` in the RSS feed). */
   podcastGuid: string;
+  /** NIP-73 episode GUID (from `<item><guid>` in the RSS feed). When set,
+   * reference + highlight tags canonicalize to
+   * `i podcast:item:guid:<episode-guid>`. */
+  podcastItemGuid: string;
   podcastShowTitle: string;
   audioUrl: string;
   audioPreviewUrl: string;
@@ -178,6 +183,7 @@ export function buildArtifactPreview(input: {
   catalogId?: string;
   catalogKind?: string;
   podcastGuid?: string;
+  podcastItemGuid?: string;
   podcastShowTitle?: string;
   audioUrl?: string;
   audioPreviewUrl?: string;
@@ -196,12 +202,35 @@ export function buildArtifactPreview(input: {
     throw new Error('Enter a valid URL.');
   }
 
-  const referenceTagName = input.referenceTagName ?? 'i';
-  const referenceTagValue = cleanText(input.referenceTagValue) || cleanText(input.catalogId) || normalizedUrl;
-  const referenceKind = cleanText(input.referenceKind) || cleanText(input.catalogKind) || 'web';
+  // Resolve episode-level GUID first — it canonicalizes both the
+  // reference and highlight tags for podcasts per NIP-73.
+  const podcastItemGuid =
+    cleanText(input.podcastItemGuid) ||
+    podcastItemGuidFromCatalogValue(input.catalogId) ||
+    podcastItemGuidFromCatalogValue(input.referenceTagValue);
+
+  let referenceTagName: ArtifactReferenceTagName;
+  let referenceTagValue: string;
+  let highlightTagName: ArtifactHighlightTagName;
+  let highlightTagValue: string;
+  let referenceKind: string;
+
+  if (podcastItemGuid) {
+    const canonical = `podcast:item:guid:${podcastItemGuid}`;
+    referenceTagName = 'i';
+    referenceTagValue = canonical;
+    highlightTagName = 'i';
+    highlightTagValue = canonical;
+    referenceKind = cleanText(input.referenceKind) || cleanText(input.catalogKind) || 'podcast:item:guid';
+  } else {
+    referenceTagName = input.referenceTagName ?? 'i';
+    referenceTagValue = cleanText(input.referenceTagValue) || cleanText(input.catalogId) || normalizedUrl;
+    highlightTagName = input.highlightTagName ?? 'r';
+    highlightTagValue = cleanText(input.highlightTagValue) || normalizedUrl;
+    referenceKind = cleanText(input.referenceKind) || cleanText(input.catalogKind) || 'web';
+  }
+
   const referenceKey = referenceKeyForTag(referenceTagName, referenceTagValue);
-  const highlightTagName = input.highlightTagName ?? 'r';
-  const highlightTagValue = cleanText(input.highlightTagValue) || normalizedUrl;
   const highlightReferenceKey = referenceKeyForTag(highlightTagName, highlightTagValue);
   const domain = cleanText(input.domain) || domainLabel(normalizedUrl);
   const title = cleanText(input.title) || fallbackTitle(normalizedUrl);
@@ -217,7 +246,11 @@ export function buildArtifactPreview(input: {
     domain,
     catalogId: cleanText(input.catalogId) || referenceTagValue,
     catalogKind: cleanText(input.catalogKind) || referenceKind,
-    podcastGuid: cleanText(input.podcastGuid) || podcastGuidFromCatalogValue(referenceTagValue),
+    podcastGuid:
+      cleanText(input.podcastGuid) ||
+      podcastGuidFromCatalogValue(input.catalogId) ||
+      podcastGuidFromCatalogValue(input.referenceTagValue),
+    podcastItemGuid,
     podcastShowTitle: cleanText(input.podcastShowTitle),
     audioUrl: cleanText(input.audioUrl),
     audioPreviewUrl: cleanText(input.audioPreviewUrl),
@@ -233,6 +266,15 @@ export function buildArtifactPreview(input: {
     highlightTagValue,
     highlightReferenceKey
   };
+}
+
+function podcastItemGuidFromCatalogValue(value: string | undefined | null): string {
+  const normalized = cleanText(value);
+  if (!normalized) return '';
+  if (normalized.startsWith('podcast:item:guid:')) {
+    return normalized.slice('podcast:item:guid:'.length);
+  }
+  return '';
 }
 
 export function buildNostrArticleArtifactPreview(input: {
@@ -265,6 +307,7 @@ export function buildNostrArticleArtifactPreview(input: {
     catalogId: address,
     catalogKind: `nostr:${kindLabel}`,
     podcastGuid: '',
+    podcastItemGuid: '',
     podcastShowTitle: '',
     audioUrl: '',
     audioPreviewUrl: '',
@@ -306,6 +349,7 @@ export function artifactFromEvent(event: NDKEventType): ArtifactRecord {
           source: parseSource(event.tagValue('source')) ?? 'article',
           domain: 'nostr',
           podcastGuid: event.tagValue('podcast_guid'),
+          podcastItemGuid: event.tagValue('podcast_item_guid'),
           podcastShowTitle: event.tagValue('podcast_show_title'),
           audioUrl: event.tagValue('audio'),
           audioPreviewUrl: event.tagValue('audio_preview'),
@@ -329,6 +373,7 @@ export function artifactFromEvent(event: NDKEventType): ArtifactRecord {
           description: event.tagValue('summary'),
           source: parseSource(event.tagValue('source')),
           podcastGuid: event.tagValue('podcast_guid'),
+          podcastItemGuid: event.tagValue('podcast_item_guid'),
           podcastShowTitle: event.tagValue('podcast_show_title'),
           audioUrl: event.tagValue('audio'),
           audioPreviewUrl: event.tagValue('audio_preview'),
@@ -534,6 +579,17 @@ function buildArtifactShareEvent(
     if (input.preview.referenceKind) {
       event.tags.push(['k', input.preview.referenceKind]);
     }
+
+    // For podcast episodes, also emit the feed-level NIP-73 identifier so
+    // clients indexing by show (not episode) still discover the share.
+    // Skip when the primary reference already IS the feed-level tag.
+    const refIsItem = input.preview.referenceTagValue.startsWith('podcast:item:guid:');
+    const feedCatalog = input.preview.podcastGuid
+      ? `podcast:guid:${input.preview.podcastGuid}`
+      : '';
+    if (refIsItem && feedCatalog && input.preview.referenceTagValue !== feedCatalog) {
+      event.tags.push(['i', feedCatalog]);
+    }
   } else {
     event.tags.push([input.preview.referenceTagName, input.preview.referenceTagValue]);
   }
@@ -556,6 +612,10 @@ function buildArtifactShareEvent(
 
   if (input.preview.podcastGuid) {
     event.tags.push(['podcast_guid', input.preview.podcastGuid]);
+  }
+
+  if (input.preview.podcastItemGuid) {
+    event.tags.push(['podcast_item_guid', input.preview.podcastItemGuid]);
   }
 
   if (input.preview.podcastShowTitle) {
@@ -596,6 +656,7 @@ function artifactPreviewShouldRefresh(existing: ArtifactRecord, preview: Artifac
     cleanText(existing.image) !== cleanText(preview.image) ||
     cleanText(existing.description) !== cleanText(preview.description) ||
     cleanText(existing.podcastGuid) !== cleanText(preview.podcastGuid) ||
+    cleanText(existing.podcastItemGuid) !== cleanText(preview.podcastItemGuid) ||
     cleanText(existing.podcastShowTitle) !== cleanText(preview.podcastShowTitle) ||
     cleanText(existing.audioUrl) !== cleanText(preview.audioUrl) ||
     cleanText(existing.audioPreviewUrl) !== cleanText(preview.audioPreviewUrl) ||
@@ -614,6 +675,7 @@ function mergeArtifactPreview(existing: ArtifactRecord, preview: ArtifactPreview
     image: choosePreferredArtifactImage(existing.image, preview.image, existing.domain),
     description: choosePreferredArtifactText(existing.description, preview.description, existing.domain),
     podcastGuid: choosePreferredArtifactValue(existing.podcastGuid, preview.podcastGuid),
+    podcastItemGuid: choosePreferredArtifactValue(existing.podcastItemGuid, preview.podcastItemGuid),
     podcastShowTitle: choosePreferredArtifactText(existing.podcastShowTitle, preview.podcastShowTitle, ''),
     audioUrl: choosePreferredArtifactValue(existing.audioUrl, preview.audioUrl),
     audioPreviewUrl: choosePreferredArtifactValue(existing.audioPreviewUrl, preview.audioPreviewUrl),
@@ -984,12 +1046,12 @@ function fallbackTitle(url: string): string {
   }
 }
 
-function podcastGuidFromCatalogValue(value: string): string {
+function podcastGuidFromCatalogValue(value: string | undefined | null): string {
   const normalized = cleanText(value);
+  if (!normalized) return '';
   if (normalized.startsWith('podcast:guid:')) {
     return normalized.slice('podcast:guid:'.length);
   }
-
   return '';
 }
 
@@ -1028,7 +1090,7 @@ function titleCase(value: string): string {
     .join(' ');
 }
 
-function cleanText(value: string | undefined): string {
+function cleanText(value: string | undefined | null): string {
   return value?.trim() ?? '';
 }
 

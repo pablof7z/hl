@@ -48,6 +48,10 @@ pub struct PreviewInput {
     pub catalog_id: String,
     pub catalog_kind: String,
     pub podcast_guid: String,
+    /// Episode-level `<item><guid>` from the RSS feed. When set, the
+    /// preview canonicalizes both reference and highlight tags to
+    /// `i podcast:item:guid:<episode-guid>` (NIP-73).
+    pub podcast_item_guid: String,
     pub podcast_show_title: String,
     pub audio_url: String,
     pub audio_preview_url: String,
@@ -66,33 +70,59 @@ pub fn build_preview_with(input: PreviewInput) -> Result<ArtifactPreview, CoreEr
     let normalized_url = normalize_artifact_url(&input.url)
         .ok_or_else(|| CoreError::InvalidInput("invalid URL".into()))?;
 
-    let reference_tag_name = clean(&input.reference_tag_name.unwrap_or_default());
-    let reference_tag_name = if reference_tag_name.is_empty() {
-        "i".to_string()
-    } else {
-        reference_tag_name
-    };
-
-    let reference_tag_value = first_non_empty(&[
-        &input.reference_tag_value,
-        &input.catalog_id,
-        &normalized_url,
+    // Resolve the episode-level GUID first — it canonicalizes both the
+    // reference and highlight tags for podcasts. Source-of-truth order:
+    // explicit input → episode-guid embedded in catalog_id (`podcast:item:guid:…`)
+    // → extract from a hint in the reference value.
+    let podcast_item_guid = first_non_empty(&[
+        &input.podcast_item_guid,
+        &podcast_item_guid_from_catalog_value(&input.catalog_id),
+        &podcast_item_guid_from_catalog_value(&input.reference_tag_value),
     ]);
+
+    let explicit_ref_name = clean(&input.reference_tag_name.unwrap_or_default());
+    let explicit_highlight_name = clean(&input.highlight_tag_name.unwrap_or_default());
+
+    // NIP-73 canonical: a known episode GUID always wins, overriding any
+    // `r:<audio_url>` or `i:podcast:guid:<feed>` the caller might have set.
+    let (reference_tag_name, reference_tag_value, highlight_tag_name, highlight_tag_value) =
+        if !podcast_item_guid.is_empty() {
+            let canonical = format!("podcast:item:guid:{podcast_item_guid}");
+            (
+                "i".to_string(),
+                canonical.clone(),
+                "i".to_string(),
+                canonical,
+            )
+        } else {
+            let ref_name = if explicit_ref_name.is_empty() {
+                "i".to_string()
+            } else {
+                explicit_ref_name
+            };
+            let ref_value = first_non_empty(&[
+                &input.reference_tag_value,
+                &input.catalog_id,
+                &normalized_url,
+            ]);
+            let hl_name = if explicit_highlight_name.is_empty() {
+                "r".to_string()
+            } else {
+                explicit_highlight_name
+            };
+            let hl_value = first_non_empty(&[&input.highlight_tag_value, &normalized_url]);
+            (ref_name, ref_value, hl_name, hl_value)
+        };
 
     let reference_kind = first_non_empty(&[
         &input.reference_kind,
         &input.catalog_kind,
-        "web",
+        if !podcast_item_guid.is_empty() {
+            "podcast:item:guid"
+        } else {
+            "web"
+        },
     ]);
-
-    let highlight_tag_name = clean(&input.highlight_tag_name.unwrap_or_default());
-    let highlight_tag_name = if highlight_tag_name.is_empty() {
-        "r".to_string()
-    } else {
-        highlight_tag_name
-    };
-
-    let highlight_tag_value = first_non_empty(&[&input.highlight_tag_value, &normalized_url]);
 
     let reference_key = reference_key_for_tag(&reference_tag_name, &reference_tag_value);
     let highlight_reference_key =
@@ -111,6 +141,16 @@ pub fn build_preview_with(input: PreviewInput) -> Result<ArtifactPreview, CoreEr
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| detect_artifact_source(&normalized_url).to_string());
 
+    // Feed GUID is an orthogonal identifier — derive from explicit input
+    // or by stripping the `podcast:guid:` prefix off whatever catalog
+    // value was supplied. Kept so shares can emit a secondary `i
+    // podcast:guid:<feed>` alongside the canonical episode tag.
+    let podcast_guid = first_non_empty(&[
+        &input.podcast_guid,
+        &podcast_guid_from_catalog_value(&input.catalog_id),
+        &podcast_guid_from_catalog_value(&input.reference_tag_value),
+    ]);
+
     Ok(ArtifactPreview {
         id: artifact_id_from_reference_key(&reference_key)?,
         url: normalized_url,
@@ -122,10 +162,8 @@ pub fn build_preview_with(input: PreviewInput) -> Result<ArtifactPreview, CoreEr
         domain,
         catalog_id: first_non_empty(&[&input.catalog_id, &reference_tag_value]),
         catalog_kind: first_non_empty(&[&input.catalog_kind, &reference_kind]),
-        podcast_guid: first_non_empty(&[
-            &input.podcast_guid,
-            &podcast_guid_from_catalog_value(&reference_tag_value),
-        ]),
+        podcast_guid,
+        podcast_item_guid,
         podcast_show_title: clean(&input.podcast_show_title),
         audio_url: clean(&input.audio_url),
         audio_preview_url: clean(&input.audio_preview_url),
@@ -140,6 +178,14 @@ pub fn build_preview_with(input: PreviewInput) -> Result<ArtifactPreview, CoreEr
         highlight_tag_value,
         highlight_reference_key,
     })
+}
+
+fn podcast_item_guid_from_catalog_value(value: &str) -> String {
+    let normalized = clean(value);
+    normalized
+        .strip_prefix("podcast:item:guid:")
+        .map(str::to_string)
+        .unwrap_or_default()
 }
 
 /// Publish a kind:11 artifact share into a NIP-29 group. Port of
@@ -286,6 +332,7 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
         catalog_id: if ref_name == "i" { ref_value.clone() } else { String::new() },
         catalog_kind: first_tag_value(event, "k").unwrap_or("").to_string(),
         podcast_guid: String::new(),
+        podcast_item_guid: String::new(),
         podcast_show_title: String::new(),
         audio_url: String::new(),
         audio_preview_url: String::new(),
@@ -548,6 +595,20 @@ fn build_share_event(
             }
             if !preview.reference_kind.is_empty() {
                 tags.push(parse_tag(&["k", &preview.reference_kind])?);
+            }
+
+            // For podcast episodes: emit the feed-level NIP-73 identifier
+            // as a secondary `i` tag so clients indexing by show (not
+            // episode) still discover the share. Skip when the primary
+            // reference already IS the feed-level tag.
+            let ref_is_item = preview
+                .reference_tag_value
+                .starts_with("podcast:item:guid:");
+            let has_feed_guid = !preview.podcast_guid.is_empty();
+            let feed_catalog = format!("podcast:guid:{}", preview.podcast_guid);
+            let ref_is_feed = preview.reference_tag_value == feed_catalog;
+            if ref_is_item && has_feed_guid && !ref_is_feed {
+                tags.push(parse_tag(&["i", &feed_catalog])?);
             }
         }
         other if !other.is_empty() => {

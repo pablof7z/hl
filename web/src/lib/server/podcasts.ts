@@ -22,7 +22,10 @@ type PodcastPageMetadata = {
   audioPreviewUrl: string;
   transcriptUrl: string;
   feedUrl: string;
+  /** NIP-73 feed GUID (`<podcast:guid>` element / `podcast:guid` meta). */
   podcastGuid: string;
+  /** NIP-73 episode GUID (`<item><guid>` / apple episode id / etc). */
+  podcastItemGuid: string;
   catalogId: string;
   catalogKind: string;
   audioRestrictedReason: string;
@@ -145,6 +148,13 @@ export function extractPodcastMetadataFromHtml(html: string, responseUrl: string
     metaContent(html, 'property', 'podcast:guid'),
     extractPodcastGuidFromText(html)
   ]);
+  const podcastItemGuid = firstText([
+    apple.episodeGuid,
+    genericSchema.episodeGuid,
+    metaContent(html, 'name', 'podcast:item:guid'),
+    metaContent(html, 'property', 'podcast:item:guid'),
+    extractPodcastItemGuidFromText(html)
+  ]);
   const audioUrl = firstText([
     apple.audioUrl,
     genericSchema.audioUrl,
@@ -156,7 +166,7 @@ export function extractPodcastMetadataFromHtml(html: string, responseUrl: string
       ? resolveUrl(metaContent(html, 'property', 'og:audio'), canonicalUrl)
       : ''
   ]);
-  const identity = resolvePodcastCatalogIdentity(canonicalUrl, podcastGuid);
+  const identity = resolvePodcastCatalogIdentity(canonicalUrl, podcastGuid, podcastItemGuid);
 
   return {
     canonicalUrl,
@@ -171,6 +181,7 @@ export function extractPodcastMetadataFromHtml(html: string, responseUrl: string
     transcriptUrl,
     feedUrl,
     podcastGuid,
+    podcastItemGuid,
     catalogId: identity.catalogId,
     catalogKind: identity.catalogKind,
     audioRestrictedReason:
@@ -668,9 +679,21 @@ function extractSchemaEpisodeData(nodes: SchemaNode[], responseUrl: string) {
       audioUrl: '',
       transcriptUrl: '',
       feedUrl: '',
-      podcastGuid: ''
+      podcastGuid: '',
+      episodeGuid: ''
     };
   }
+
+  // JSON-LD `identifier` often carries the episode id on PodcastEpisode
+  // nodes; `partOfSeries.identifier` carries the show-level feed GUID.
+  const episodeIdentifier = firstText([
+    textValue(episodeNode.identifier),
+    textValue(nodeValue(episodeNode.identifier, 'value'))
+  ]);
+  const seriesIdentifier = firstText([
+    textValue(nodeValue(episodeNode.partOfSeries, 'identifier')),
+    textValue(nodeValue(nodeValue(episodeNode.partOfSeries, 'identifier'), 'value'))
+  ]);
 
   return {
     episodeTitle: firstText([textValue(episodeNode.name), textValue(episodeNode.headline)]),
@@ -696,10 +719,10 @@ function extractSchemaEpisodeData(nodes: SchemaNode[], responseUrl: string) {
       resolveUrl(urlValue(nodeValue(episodeNode.transcript, 'url')), responseUrl)
     ]),
     feedUrl: '',
-    podcastGuid: firstText([
-      textValue(episodeNode.identifier),
-      textValue(nodeValue(episodeNode.identifier, 'value'))
-    ])
+    // Series-level identifier wins as the feed GUID (it's on PartOfSeries),
+    // episode-level identifier as the item GUID.
+    podcastGuid: firstText([seriesIdentifier, episodeIdentifier]),
+    episodeGuid: episodeIdentifier
   };
 }
 
@@ -732,10 +755,11 @@ function extractAppleEpisodeData(html: string, responseUrl: string) {
     audioUrl: firstText([resolveUrl(regexCapture(html, /"streamUrl":"([^"]+)"/i), responseUrl)]),
     transcriptUrl: '',
     feedUrl: firstText([resolveUrl(regexCapture(html, /"feedUrl":"([^"]+)"/i), responseUrl)]),
-    podcastGuid: firstText([
-      regexCapture(html, /"guid":"([^"]+)"/i),
-      metaContent(html, 'name', 'podcast:guid')
-    ])
+    // Apple's embedded JSON has `guid` on the episode payload — treat it as
+    // the episode identifier rather than the feed GUID. The feed GUID, when
+    // Apple exposes one, typically appears under `podcast:guid` meta.
+    podcastGuid: firstText([metaContent(html, 'name', 'podcast:guid')]),
+    episodeGuid: firstText([regexCapture(html, /"guid":"([^"]+)"/i)])
   };
 }
 
@@ -842,7 +866,21 @@ function spotifyCoverUrl(value: unknown): string {
   return largest?.url ?? '';
 }
 
-function resolvePodcastCatalogIdentity(url: string, podcastGuid: string): { catalogId: string; catalogKind: string } {
+function resolvePodcastCatalogIdentity(
+  url: string,
+  podcastGuid: string,
+  podcastItemGuid: string
+): { catalogId: string; catalogKind: string } {
+  // NIP-73 episode identifier wins — it targets the specific episode, which
+  // is what highlights and comments attach to.
+  const normalizedItemGuid = cleanText(podcastItemGuid);
+  if (normalizedItemGuid) {
+    return {
+      catalogId: `podcast:item:guid:${normalizedItemGuid}`,
+      catalogKind: 'podcast:item:guid'
+    };
+  }
+
   const normalizedGuid = cleanText(podcastGuid);
   if (normalizedGuid) {
     return {
@@ -880,6 +918,11 @@ function resolvePodcastCatalogIdentity(url: string, podcastGuid: string): { cata
     catalogId: url,
     catalogKind: 'web'
   };
+}
+
+function extractPodcastItemGuidFromText(value: string): string {
+  const match = /podcast:item:guid:([A-Za-z0-9_.:\-]{6,})/i.exec(value);
+  return cleanText(match?.[1]);
 }
 
 function guidFromCatalogId(value: string): string {

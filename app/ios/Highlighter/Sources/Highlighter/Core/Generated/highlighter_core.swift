@@ -800,6 +800,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getCacheStats() async throws  -> CacheStats
     
+    /**
+     * Read NIP-22 comments (kind:1111) rooted at the given uppercase
+     * scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
+     * books, etc. Newest first.
+     */
+    func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32) async throws  -> [CommentRecord]
+    
     func getDiscussions(groupId: String, limit: UInt32) async throws  -> [DiscussionRecord]
     
     /**
@@ -850,6 +857,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * (`30023:<pubkey>:<d>`) from nostrdb, newest first.
      */
     func getHighlightsForArticle(address: String, limit: UInt32) async throws  -> [HighlightRecord]
+    
+    /**
+     * Read highlights whose `tag_name` tag holds `tag_value`, newest
+     * first. Generalizes `get_highlights_for_article`: pass `("a", "30023:pk:d")`
+     * for articles, `("i", "isbn:…")` for ISBN books, `("r", "<url>")` for
+     * podcasts. `tag_name` must be a single character.
+     */
+    func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32) async throws  -> [HighlightRecord]
     
     func getJoinedCommunities() async throws  -> [CommunitySummary]
     
@@ -1503,6 +1518,28 @@ open func getCacheStats()async throws  -> CacheStats  {
         )
 }
     
+    /**
+     * Read NIP-22 comments (kind:1111) rooted at the given uppercase
+     * scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
+     * books, etc. Newest first.
+     */
+open func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32)async throws  -> [CommentRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_comments_for_reference(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(tagName),FfiConverterString.lower(tagValue),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeCommentRecord.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
 open func getDiscussions(groupId: String, limit: UInt32)async throws  -> [DiscussionRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -1679,6 +1716,29 @@ open func getHighlightsForArticle(address: String, limit: UInt32)async throws  -
                 uniffi_highlighter_core_fn_method_highlightercore_get_highlights_for_article(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(address),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Read highlights whose `tag_name` tag holds `tag_value`, newest
+     * first. Generalizes `get_highlights_for_article`: pass `("a", "30023:pk:d")`
+     * for articles, `("i", "isbn:…")` for ISBN books, `("r", "<url>")` for
+     * podcasts. `tag_name` must be a single character.
+     */
+open func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32)async throws  -> [HighlightRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_highlights_for_reference(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(tagName),FfiConverterString.lower(tagValue),FfiConverterUInt32.lower(limit)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -3183,7 +3243,18 @@ public struct ArtifactPreview {
     public var domain: String
     public var catalogId: String
     public var catalogKind: String
+    /**
+     * NIP-73 feed GUID (from `<podcast:guid>` in the RSS feed). Identifies
+     * the show. Emitted on shares as a secondary `i podcast:guid:<feed-guid>`
+     * so discovery-by-feed still works alongside the episode identifier.
+     */
     public var podcastGuid: String
+    /**
+     * NIP-73 episode GUID (from `<item><guid>` in the RSS feed). Identifies
+     * a specific episode — the canonical NIP-73 target for podcast
+     * highlights and NIP-22 comments: `i podcast:item:guid:<episode-guid>`.
+     */
+    public var podcastItemGuid: String
     public var podcastShowTitle: String
     public var audioUrl: String
     public var audioPreviewUrl: String
@@ -3209,7 +3280,17 @@ public struct ArtifactPreview {
     public init(id: String, url: String, title: String, author: String, image: String, description: String, 
         /**
          * "article" | "book" | "podcast" | "video" | "paper" | "web"
-         */source: String, domain: String, catalogId: String, catalogKind: String, podcastGuid: String, podcastShowTitle: String, audioUrl: String, audioPreviewUrl: String, transcriptUrl: String, feedUrl: String, publishedAt: String, durationSeconds: Int64?, 
+         */source: String, domain: String, catalogId: String, catalogKind: String, 
+        /**
+         * NIP-73 feed GUID (from `<podcast:guid>` in the RSS feed). Identifies
+         * the show. Emitted on shares as a secondary `i podcast:guid:<feed-guid>`
+         * so discovery-by-feed still works alongside the episode identifier.
+         */podcastGuid: String, 
+        /**
+         * NIP-73 episode GUID (from `<item><guid>` in the RSS feed). Identifies
+         * a specific episode — the canonical NIP-73 target for podcast
+         * highlights and NIP-22 comments: `i podcast:item:guid:<episode-guid>`.
+         */podcastItemGuid: String, podcastShowTitle: String, audioUrl: String, audioPreviewUrl: String, transcriptUrl: String, feedUrl: String, publishedAt: String, durationSeconds: Int64?, 
         /**
          * Primary reference tag: "a" | "e" | "i"
          */referenceTagName: String, referenceTagValue: String, referenceKind: String, 
@@ -3227,6 +3308,7 @@ public struct ArtifactPreview {
         self.catalogId = catalogId
         self.catalogKind = catalogKind
         self.podcastGuid = podcastGuid
+        self.podcastItemGuid = podcastItemGuid
         self.podcastShowTitle = podcastShowTitle
         self.audioUrl = audioUrl
         self.audioPreviewUrl = audioPreviewUrl
@@ -3283,6 +3365,9 @@ extension ArtifactPreview: Equatable, Hashable {
         if lhs.podcastGuid != rhs.podcastGuid {
             return false
         }
+        if lhs.podcastItemGuid != rhs.podcastItemGuid {
+            return false
+        }
         if lhs.podcastShowTitle != rhs.podcastShowTitle {
             return false
         }
@@ -3337,6 +3422,7 @@ extension ArtifactPreview: Equatable, Hashable {
         hasher.combine(catalogId)
         hasher.combine(catalogKind)
         hasher.combine(podcastGuid)
+        hasher.combine(podcastItemGuid)
         hasher.combine(podcastShowTitle)
         hasher.combine(audioUrl)
         hasher.combine(audioPreviewUrl)
@@ -3373,6 +3459,7 @@ public struct FfiConverterTypeArtifactPreview: FfiConverterRustBuffer {
                 catalogId: FfiConverterString.read(from: &buf), 
                 catalogKind: FfiConverterString.read(from: &buf), 
                 podcastGuid: FfiConverterString.read(from: &buf), 
+                podcastItemGuid: FfiConverterString.read(from: &buf), 
                 podcastShowTitle: FfiConverterString.read(from: &buf), 
                 audioUrl: FfiConverterString.read(from: &buf), 
                 audioPreviewUrl: FfiConverterString.read(from: &buf), 
@@ -3401,6 +3488,7 @@ public struct FfiConverterTypeArtifactPreview: FfiConverterRustBuffer {
         FfiConverterString.write(value.catalogId, into: &buf)
         FfiConverterString.write(value.catalogKind, into: &buf)
         FfiConverterString.write(value.podcastGuid, into: &buf)
+        FfiConverterString.write(value.podcastItemGuid, into: &buf)
         FfiConverterString.write(value.podcastShowTitle, into: &buf)
         FfiConverterString.write(value.audioUrl, into: &buf)
         FfiConverterString.write(value.audioPreviewUrl, into: &buf)
@@ -3747,6 +3835,138 @@ public func FfiConverterTypeCacheStats_lift(_ buf: RustBuffer) throws -> CacheSt
 #endif
 public func FfiConverterTypeCacheStats_lower(_ value: CacheStats) -> RustBuffer {
     return FfiConverterTypeCacheStats.lower(value)
+}
+
+
+/**
+ * NIP-22 comment (kind:1111) anchored to an external artifact. The
+ * `root_*` fields name the addressable target (uppercase `A`/`E`/`I`);
+ * `parent_*` name the direct parent in the thread (empty for top-level
+ * comments, which have parent == root).
+ */
+public struct CommentRecord {
+    public var eventId: String
+    public var pubkey: String
+    public var body: String
+    public var rootTagName: String
+    public var rootTagValue: String
+    public var parentTagName: String
+    public var parentTagValue: String
+    public var rootKind: String
+    public var createdAt: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, pubkey: String, body: String, rootTagName: String, rootTagValue: String, parentTagName: String, parentTagValue: String, rootKind: String, createdAt: UInt64?) {
+        self.eventId = eventId
+        self.pubkey = pubkey
+        self.body = body
+        self.rootTagName = rootTagName
+        self.rootTagValue = rootTagValue
+        self.parentTagName = parentTagName
+        self.parentTagValue = parentTagValue
+        self.rootKind = rootKind
+        self.createdAt = createdAt
+    }
+}
+
+#if compiler(>=6)
+extension CommentRecord: Sendable {}
+#endif
+
+
+extension CommentRecord: Equatable, Hashable {
+    public static func ==(lhs: CommentRecord, rhs: CommentRecord) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.body != rhs.body {
+            return false
+        }
+        if lhs.rootTagName != rhs.rootTagName {
+            return false
+        }
+        if lhs.rootTagValue != rhs.rootTagValue {
+            return false
+        }
+        if lhs.parentTagName != rhs.parentTagName {
+            return false
+        }
+        if lhs.parentTagValue != rhs.parentTagValue {
+            return false
+        }
+        if lhs.rootKind != rhs.rootKind {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(pubkey)
+        hasher.combine(body)
+        hasher.combine(rootTagName)
+        hasher.combine(rootTagValue)
+        hasher.combine(parentTagName)
+        hasher.combine(parentTagValue)
+        hasher.combine(rootKind)
+        hasher.combine(createdAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentRecord {
+        return
+            try CommentRecord(
+                eventId: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf), 
+                body: FfiConverterString.read(from: &buf), 
+                rootTagName: FfiConverterString.read(from: &buf), 
+                rootTagValue: FfiConverterString.read(from: &buf), 
+                parentTagName: FfiConverterString.read(from: &buf), 
+                parentTagValue: FfiConverterString.read(from: &buf), 
+                rootKind: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterString.write(value.body, into: &buf)
+        FfiConverterString.write(value.rootTagName, into: &buf)
+        FfiConverterString.write(value.rootTagValue, into: &buf)
+        FfiConverterString.write(value.parentTagName, into: &buf)
+        FfiConverterString.write(value.parentTagValue, into: &buf)
+        FfiConverterString.write(value.rootKind, into: &buf)
+        FfiConverterOptionUInt64.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentRecord_lift(_ buf: RustBuffer) throws -> CommentRecord {
+    return try FfiConverterTypeCommentRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentRecord_lower(_ value: CommentRecord) -> RustBuffer {
+    return FfiConverterTypeCommentRecord.lower(value)
 }
 
 
@@ -4724,6 +4944,12 @@ public struct HighlightRecord {
     public var note: String
     public var artifactAddress: String
     public var eventReference: String
+    /**
+     * NIP-73 external content identifier from the `i` tag (e.g.
+     * `podcast:item:guid:<episode-guid>`, `isbn:…`). Empty when the
+     * highlight uses a different reference scheme.
+     */
+    public var externalReference: String
     public var sourceUrl: String
     public var sourceReferenceKey: String
     public var clipStartSeconds: Double?
@@ -4734,7 +4960,12 @@ public struct HighlightRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventId: String, pubkey: String, quote: String, context: String, note: String, artifactAddress: String, eventReference: String, sourceUrl: String, sourceReferenceKey: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String, clipTranscriptSegmentIds: [String], createdAt: UInt64?) {
+    public init(eventId: String, pubkey: String, quote: String, context: String, note: String, artifactAddress: String, eventReference: String, 
+        /**
+         * NIP-73 external content identifier from the `i` tag (e.g.
+         * `podcast:item:guid:<episode-guid>`, `isbn:…`). Empty when the
+         * highlight uses a different reference scheme.
+         */externalReference: String, sourceUrl: String, sourceReferenceKey: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String, clipTranscriptSegmentIds: [String], createdAt: UInt64?) {
         self.eventId = eventId
         self.pubkey = pubkey
         self.quote = quote
@@ -4742,6 +4973,7 @@ public struct HighlightRecord {
         self.note = note
         self.artifactAddress = artifactAddress
         self.eventReference = eventReference
+        self.externalReference = externalReference
         self.sourceUrl = sourceUrl
         self.sourceReferenceKey = sourceReferenceKey
         self.clipStartSeconds = clipStartSeconds
@@ -4780,6 +5012,9 @@ extension HighlightRecord: Equatable, Hashable {
         if lhs.eventReference != rhs.eventReference {
             return false
         }
+        if lhs.externalReference != rhs.externalReference {
+            return false
+        }
         if lhs.sourceUrl != rhs.sourceUrl {
             return false
         }
@@ -4812,6 +5047,7 @@ extension HighlightRecord: Equatable, Hashable {
         hasher.combine(note)
         hasher.combine(artifactAddress)
         hasher.combine(eventReference)
+        hasher.combine(externalReference)
         hasher.combine(sourceUrl)
         hasher.combine(sourceReferenceKey)
         hasher.combine(clipStartSeconds)
@@ -4838,6 +5074,7 @@ public struct FfiConverterTypeHighlightRecord: FfiConverterRustBuffer {
                 note: FfiConverterString.read(from: &buf), 
                 artifactAddress: FfiConverterString.read(from: &buf), 
                 eventReference: FfiConverterString.read(from: &buf), 
+                externalReference: FfiConverterString.read(from: &buf), 
                 sourceUrl: FfiConverterString.read(from: &buf), 
                 sourceReferenceKey: FfiConverterString.read(from: &buf), 
                 clipStartSeconds: FfiConverterOptionDouble.read(from: &buf), 
@@ -4856,6 +5093,7 @@ public struct FfiConverterTypeHighlightRecord: FfiConverterRustBuffer {
         FfiConverterString.write(value.note, into: &buf)
         FfiConverterString.write(value.artifactAddress, into: &buf)
         FfiConverterString.write(value.eventReference, into: &buf)
+        FfiConverterString.write(value.externalReference, into: &buf)
         FfiConverterString.write(value.sourceUrl, into: &buf)
         FfiConverterString.write(value.sourceReferenceKey, into: &buf)
         FfiConverterOptionDouble.write(value.clipStartSeconds, into: &buf)
@@ -7207,6 +7445,31 @@ fileprivate struct FfiConverterSequenceTypeArtifactRecord: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCommentRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [CommentRecord]
+
+    public static func write(_ value: [CommentRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCommentRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommentRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CommentRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCommentRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCommunitySummary: FfiConverterRustBuffer {
     typealias SwiftType = [CommunitySummary]
 
@@ -7604,6 +7867,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 48741) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_reference() != 23769) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 41672) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7629,6 +7895,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_article() != 24140) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_reference() != 19698) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 31741) {

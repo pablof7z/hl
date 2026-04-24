@@ -130,6 +130,7 @@ mod tests {
                 catalog_id: "isbn:9781234567890".into(),
                 catalog_kind: "isbn".into(),
                 podcast_guid: String::new(),
+                podcast_item_guid: String::new(),
                 podcast_show_title: String::new(),
                 audio_url: String::new(),
                 audio_preview_url: String::new(),

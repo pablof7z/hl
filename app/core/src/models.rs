@@ -40,7 +40,14 @@ pub struct ArtifactPreview {
     pub domain: String,
     pub catalog_id: String,
     pub catalog_kind: String,
+    /// NIP-73 feed GUID (from `<podcast:guid>` in the RSS feed). Identifies
+    /// the show. Emitted on shares as a secondary `i podcast:guid:<feed-guid>`
+    /// so discovery-by-feed still works alongside the episode identifier.
     pub podcast_guid: String,
+    /// NIP-73 episode GUID (from `<item><guid>` in the RSS feed). Identifies
+    /// a specific episode — the canonical NIP-73 target for podcast
+    /// highlights and NIP-22 comments: `i podcast:item:guid:<episode-guid>`.
+    pub podcast_item_guid: String,
     pub podcast_show_title: String,
     pub audio_url: String,
     pub audio_preview_url: String,
@@ -115,6 +122,10 @@ pub struct HighlightRecord {
     pub note: String,
     pub artifact_address: String,
     pub event_reference: String,
+    /// NIP-73 external content identifier from the `i` tag (e.g.
+    /// `podcast:item:guid:<episode-guid>`, `isbn:…`). Empty when the
+    /// highlight uses a different reference scheme.
+    pub external_reference: String,
     pub source_url: String,
     pub source_reference_key: String,
     pub clip_start_seconds: Option<f64>,

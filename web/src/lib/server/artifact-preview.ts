@@ -108,6 +108,11 @@ export async function previewArtifactReference(input: {
       entity.kind === 'apple:podcast-episode' ||
       entity.kind === 'overcast:episode';
 
+    // When an episode GUID is known, let buildArtifactPreview canonicalize
+    // both the reference and highlight tags to `i podcast:item:guid:<guid>`
+    // per NIP-73 instead of pinning highlight to `r:<canonicalUrl>`.
+    const episodeGuidKnown = usePodcastMetadata && !!podcastMetadata.podcastItemGuid;
+
     return buildArtifactPreview({
       url: usePodcastMetadata ? podcastMetadata.canonicalUrl : metadata.canonicalUrl,
       title: usePodcastMetadata ? podcastMetadata.episodeTitle || metadata.title : metadata.title,
@@ -118,6 +123,7 @@ export async function previewArtifactReference(input: {
       catalogId: entity.id,
       catalogKind: entity.kind,
       podcastGuid: usePodcastMetadata ? podcastMetadata.podcastGuid : '',
+      podcastItemGuid: usePodcastMetadata ? podcastMetadata.podcastItemGuid : '',
       podcastShowTitle: usePodcastMetadata ? podcastMetadata.showTitle : '',
       audioUrl: usePodcastMetadata ? podcastMetadata.audioUrl : '',
       audioPreviewUrl: usePodcastMetadata ? podcastMetadata.audioPreviewUrl : '',
@@ -125,11 +131,17 @@ export async function previewArtifactReference(input: {
       feedUrl: usePodcastMetadata ? podcastMetadata.feedUrl : '',
       publishedAt: usePodcastMetadata ? podcastMetadata.publishedAt : '',
       durationSeconds: usePodcastMetadata ? podcastMetadata.durationSeconds : null,
-      referenceTagName: 'i',
-      referenceTagValue: entity.id,
-      referenceKind: entity.kind,
-      highlightTagName: 'r',
-      highlightTagValue: usePodcastMetadata ? podcastMetadata.canonicalUrl : metadata.canonicalUrl
+      // Only set explicit reference / highlight tags when we don't have a
+      // canonical episode GUID — otherwise buildArtifactPreview picks them.
+      referenceTagName: episodeGuidKnown ? undefined : 'i',
+      referenceTagValue: episodeGuidKnown ? undefined : entity.id,
+      referenceKind: episodeGuidKnown ? undefined : entity.kind,
+      highlightTagName: episodeGuidKnown ? undefined : 'r',
+      highlightTagValue: episodeGuidKnown
+        ? undefined
+        : usePodcastMetadata
+          ? podcastMetadata.canonicalUrl
+          : metadata.canonicalUrl
     });
   } catch (error) {
     console.warn('Artifact preview fetch failed:', error);

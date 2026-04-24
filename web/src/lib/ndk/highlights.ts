@@ -24,6 +24,10 @@ export type HighlightRecord = {
   note: string;
   artifactAddress: string;
   eventReference: string;
+  /** NIP-73 external content identifier (`i` tag value — e.g.
+   * `podcast:item:guid:<episode-guid>`, `isbn:…`). Canonical target for
+   * highlights on books and podcasts. */
+  externalReference: string;
   sourceUrl: string;
   sourceReferenceKey: string;
   clipStartSeconds: number | null;
@@ -57,6 +61,7 @@ export function highlightFromEvent(event: NDKEventType): HighlightRecord {
   const highlight = NDKHighlight.from(event);
   const artifactAddress = cleanText(highlight.tagValue('a'));
   const eventReference = cleanText(highlight.tagValue('e'));
+  const externalReference = cleanText(highlight.tagValue('i'));
   const sourceUrl = cleanText(highlight.url);
 
   return {
@@ -67,10 +72,12 @@ export function highlightFromEvent(event: NDKEventType): HighlightRecord {
     note: cleanText(highlight.tagValue('comment')),
     artifactAddress,
     eventReference,
+    externalReference,
     sourceUrl,
     sourceReferenceKey: highlightReferenceKey({
       artifactAddress,
       eventReference,
+      externalReference,
       sourceUrl
     }),
     clipStartSeconds: numericTagValue(highlight, 'start'),
@@ -84,6 +91,7 @@ export function highlightFromEvent(event: NDKEventType): HighlightRecord {
 export function highlightReferenceKey(input: {
   artifactAddress?: string;
   eventReference?: string;
+  externalReference?: string;
   sourceUrl?: string;
 }): string {
   const artifactAddress = cleanText(input.artifactAddress);
@@ -91,6 +99,9 @@ export function highlightReferenceKey(input: {
 
   const eventReference = cleanText(input.eventReference);
   if (eventReference) return `e:${eventReference}`;
+
+  const externalReference = cleanText(input.externalReference);
+  if (externalReference) return `i:${externalReference}`;
 
   const sourceUrl = cleanText(input.sourceUrl);
   if (sourceUrl) return `r:${sourceUrl}`;
@@ -118,6 +129,11 @@ export function buildArtifactHighlightFilters(
       .filter((artifact) => artifact.highlightTagName === 'e')
       .map((artifact) => artifact.highlightTagValue)
   );
+  const iValues = uniqueValues(
+    artifacts
+      .filter((artifact) => artifact.highlightTagName === 'i')
+      .map((artifact) => artifact.highlightTagValue)
+  );
   const rValues = uniqueValues(
     artifacts
       .filter((artifact) => artifact.highlightTagName === 'r')
@@ -139,6 +155,15 @@ export function buildArtifactHighlightFilters(
       kinds: [HIGHLIGHTER_HIGHLIGHT_KIND],
       authors: normalizedAuthors,
       '#e': eValues,
+      limit
+    } as NDKFilter);
+  }
+
+  if (iValues.length > 0) {
+    filters.push({
+      kinds: [HIGHLIGHTER_HIGHLIGHT_KIND],
+      authors: normalizedAuthors,
+      '#i': iValues,
       limit
     } as NDKFilter);
   }

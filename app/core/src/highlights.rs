@@ -451,6 +451,7 @@ fn record_from_cached_event(event: &Event) -> Option<HighlightRecord> {
     }
     let artifact_address = first_tag_value(event, "a").unwrap_or("").to_string();
     let event_reference = first_tag_value(event, "e").unwrap_or("").to_string();
+    let external_reference = first_tag_value(event, "i").unwrap_or("").to_string();
     let source_url = first_tag_value(event, "r").unwrap_or("").to_string();
     let context = first_tag_value(event, "context").unwrap_or("").to_string();
     let comment = first_tag_value(event, "comment").unwrap_or("").to_string();
@@ -459,6 +460,8 @@ fn record_from_cached_event(event: &Event) -> Option<HighlightRecord> {
         format!("a:{artifact_address}")
     } else if !event_reference.is_empty() {
         format!("e:{event_reference}")
+    } else if !external_reference.is_empty() {
+        format!("i:{external_reference}")
     } else if !source_url.is_empty() {
         format!("r:{source_url}")
     } else {
@@ -489,6 +492,7 @@ fn record_from_cached_event(event: &Event) -> Option<HighlightRecord> {
         note: comment,
         artifact_address,
         event_reference,
+        external_reference,
         source_url,
         source_reference_key,
         clip_start_seconds,
@@ -682,17 +686,20 @@ fn record_from_event(
     let ref_name = artifact.preview.highlight_tag_name.as_str();
     let ref_value = artifact.preview.highlight_tag_value.as_str();
 
-    let (artifact_address, event_reference, source_url) = match ref_name {
-        "a" => (ref_value.to_string(), String::new(), String::new()),
-        "e" => (String::new(), ref_value.to_string(), String::new()),
-        "r" => (String::new(), String::new(), ref_value.to_string()),
-        _ => (String::new(), String::new(), String::new()),
+    let (artifact_address, event_reference, external_reference, source_url) = match ref_name {
+        "a" => (ref_value.to_string(), String::new(), String::new(), String::new()),
+        "e" => (String::new(), ref_value.to_string(), String::new(), String::new()),
+        "i" => (String::new(), String::new(), ref_value.to_string(), String::new()),
+        "r" => (String::new(), String::new(), String::new(), ref_value.to_string()),
+        _ => (String::new(), String::new(), String::new(), String::new()),
     };
 
     let source_reference_key = if !artifact_address.is_empty() {
         format!("a:{artifact_address}")
     } else if !event_reference.is_empty() {
         format!("e:{event_reference}")
+    } else if !external_reference.is_empty() {
+        format!("i:{external_reference}")
     } else if !source_url.is_empty() {
         format!("r:{source_url}")
     } else {
@@ -707,6 +714,7 @@ fn record_from_event(
         note: draft.note.trim().to_string(),
         artifact_address,
         event_reference,
+        external_reference,
         source_url,
         source_reference_key,
         clip_start_seconds: draft.clip_start_seconds,
@@ -748,6 +756,7 @@ mod tests {
     use crate::models::{ArtifactPreview, ArtifactRecord, HighlightDraft};
 
     fn preview_for_podcast(url: &str) -> ArtifactPreview {
+        let item_catalog = format!("podcast:item:guid:{}", "ep-1");
         ArtifactPreview {
             id: "id1".into(),
             url: url.into(),
@@ -757,9 +766,10 @@ mod tests {
             description: String::new(),
             source: "podcast".into(),
             domain: "example.com".into(),
-            catalog_id: String::new(),
-            catalog_kind: String::new(),
+            catalog_id: item_catalog.clone(),
+            catalog_kind: "podcast:item:guid".into(),
             podcast_guid: "guid-1".into(),
+            podcast_item_guid: "ep-1".into(),
             podcast_show_title: "Show".into(),
             audio_url: url.into(),
             audio_preview_url: String::new(),
@@ -768,11 +778,11 @@ mod tests {
             published_at: String::new(),
             duration_seconds: Some(3600),
             reference_tag_name: "i".into(),
-            reference_tag_value: format!("podcast:guid:{}", "guid-1"),
-            reference_kind: "30054".into(),
-            highlight_tag_name: "r".into(),
-            highlight_tag_value: url.into(),
-            highlight_reference_key: format!("r:{url}"),
+            reference_tag_value: item_catalog.clone(),
+            reference_kind: "podcast:item:guid".into(),
+            highlight_tag_name: "i".into(),
+            highlight_tag_value: item_catalog.clone(),
+            highlight_reference_key: format!("i:{item_catalog}"),
         }
     }
 
@@ -831,6 +841,7 @@ mod tests {
                 catalog_id: catalog_id.clone(),
                 catalog_kind: "isbn".into(),
                 podcast_guid: String::new(),
+                podcast_item_guid: String::new(),
                 podcast_show_title: String::new(),
                 audio_url: String::new(),
                 audio_preview_url: String::new(),
@@ -977,7 +988,7 @@ mod tests {
     }
 
     #[test]
-    fn highlight_for_podcast_uses_r_tag() {
+    fn highlight_for_podcast_uses_nip73_episode_tag() {
         let url = "https://example.com/ep";
         let artifact = artifact_for_podcast(url);
         let draft = HighlightDraft {
@@ -994,19 +1005,23 @@ mod tests {
             build_highlight_event(&draft, &artifact).expect("build highlight event");
         let tags = tags_as_vec(&builder);
 
-        // Source reference tags are only `a`, `e`, or `r` — there must be
-        // exactly one reference tag and it must be ["r", url].
-        let refs: Vec<_> = tags
+        // NIP-73: podcast highlights use `i podcast:item:guid:<episode-guid>`.
+        // The audio URL must not appear as an `r` tag — that's the non-
+        // canonical shape we're moving away from.
+        let i_tags: Vec<_> = tags
             .iter()
-            .filter(|t| {
-                matches!(
-                    t.first().map(String::as_str),
-                    Some("a") | Some("e") | Some("r")
-                )
-            })
+            .filter(|t| t.first().map(String::as_str) == Some("i"))
             .collect();
-        assert_eq!(refs.len(), 1, "exactly one reference tag, got: {tags:?}");
-        assert_eq!(refs[0], &vec!["r".to_string(), url.to_string()]);
+        assert_eq!(
+            i_tags.first().copied(),
+            Some(&vec!["i".to_string(), "podcast:item:guid:ep-1".to_string()]),
+            "first i-tag must be the canonical episode identifier, got: {tags:?}"
+        );
+        let has_r_url = tags.iter().any(|t| {
+            t.first().map(String::as_str) == Some("r")
+                && t.get(1).map(String::as_str) == Some(url)
+        });
+        assert!(!has_r_url, "r:<url> must not appear on a canonical podcast highlight, got: {tags:?}");
     }
 
     #[test]

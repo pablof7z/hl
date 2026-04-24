@@ -386,6 +386,7 @@ fn highlight_record_from_event(event: &Event) -> Option<HighlightRecord> {
         note: comment,
         artifact_address,
         event_reference,
+        external_reference: String::new(),
         source_url,
         source_reference_key,
         clip_start_seconds: first_tag_value(event, "start").and_then(|s| s.parse().ok()),

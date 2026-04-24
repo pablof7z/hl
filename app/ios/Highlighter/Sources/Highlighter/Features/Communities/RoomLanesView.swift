@@ -225,6 +225,15 @@ struct Lane: Identifiable {
             if hl.artifactAddress == pv.highlightTagValue { return true }
         }
 
+        if !hl.externalReference.isEmpty {
+            if hl.externalReference == pv.referenceTagValue { return true }
+            if hl.externalReference == pv.highlightTagValue { return true }
+            if !pv.podcastItemGuid.isEmpty,
+               hl.externalReference == "podcast:item:guid:\(pv.podcastItemGuid)" {
+                return true
+            }
+        }
+
         if !hl.eventReference.isEmpty {
             if hl.eventReference == pv.referenceTagValue { return true }
             if hl.eventReference == art.shareEventId { return true }
