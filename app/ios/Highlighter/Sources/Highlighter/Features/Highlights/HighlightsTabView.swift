@@ -10,6 +10,7 @@ struct HighlightsTabView: View {
     @Environment(HighlighterStore.self) private var app
     @State private var store: HighlightsStore?
     @State private var shareTarget: ShareToCommunityTarget?
+    @State private var capturePresented: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -22,6 +23,16 @@ struct HighlightsTabView: View {
                 }
             }
             .navigationTitle("Highlights")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        capturePresented = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Capture highlight")
+                }
+            }
             .navigationDestination(for: ArticleReaderTarget.self) { target in
                 ArticleReaderView(target: target)
             }
@@ -38,6 +49,7 @@ struct HighlightsTabView: View {
             ShareToCommunitySheet(target: target)
                 .presentationDetents([.medium, .large])
         }
+        .captureFlow(isPresented: $capturePresented)
         .task {
             guard store == nil else { return }
             let s = HighlightsStore(safeCore: app.safeCore, eventBridge: app.eventBridge)

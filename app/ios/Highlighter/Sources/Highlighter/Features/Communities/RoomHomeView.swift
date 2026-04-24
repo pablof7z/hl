@@ -12,6 +12,7 @@ struct RoomHomeView: View {
     @State private var room = RoomStore()
     @State private var selectedTab: Tab = .home
     @State private var composerPresented: Bool = false
+    @State private var capturePresented: Bool = false
     @State private var shareTarget: ShareToCommunityTarget?
 
     var body: some View {
@@ -41,6 +42,14 @@ struct RoomHomeView: View {
             ArtifactDetailView(artifact: artifact)
         }
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    capturePresented = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("Capture highlight")
+            }
             if selectedTab == .discussions {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -62,6 +71,7 @@ struct RoomHomeView: View {
             ShareToCommunitySheet(target: target)
                 .presentationDetents([.medium, .large])
         }
+        .captureFlow(isPresented: $capturePresented, preselectedGroupId: groupId)
     }
 
     // MARK: - Home tab (format-aware lanes — the new surface)
