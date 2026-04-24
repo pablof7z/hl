@@ -31,6 +31,7 @@ struct RoomLanesView: View {
                     let lanes = Lane.build(artifacts: artifacts, highlights: highlights)
                     ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
                         laneView(for: lane)
+                            .opacity(lane.isDormant ? 0.55 : 1)
                         if index < lanes.count - 1 {
                             LaneTransitionView(
                                 from: LaneSurface(for: lane),

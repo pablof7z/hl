@@ -33,7 +33,7 @@ struct ArticleLaneView: View {
                 supportingStrip
             }
         }
-        .padding(.vertical, 28)
+        .padding(.vertical, lane.highlights.isEmpty ? 14 : 28)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.laneArticlePage)
     }
