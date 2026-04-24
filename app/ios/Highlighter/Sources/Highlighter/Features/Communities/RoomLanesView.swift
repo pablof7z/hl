@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 
 /// The community home's library surface rendered as stacked lanes. Each
@@ -31,12 +32,12 @@ struct RoomLanesView: View {
                     let lanes = Lane.build(artifacts: artifacts, highlights: highlights)
                     ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
                         laneView(for: lane)
-                            .opacity(lane.isDormant ? 0.55 : 1)
                         if index < lanes.count - 1 {
-                            LaneTransitionView(
-                                from: LaneSurface(for: lane),
-                                to: LaneSurface(for: lanes[index + 1])
-                            )
+                            let from = LaneSurface(for: lane)
+                            let to = LaneSurface(for: lanes[index + 1])
+                            if from != to {
+                                LaneTransitionView(from: from, to: to)
+                            }
                         }
                     }
                 }
@@ -47,28 +48,34 @@ struct RoomLanesView: View {
 
     @ViewBuilder
     private func laneView(for lane: Lane) -> some View {
-        switch lane.artifact.preview.source {
-        case "book":
-            BookLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
-        case "podcast":
-            PodcastLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
-        case "article":
-            ArticleLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
-        default:
-            LaneView(lane: lane, onShareToCommunity: onShareToCommunity)
+        if lane.isDormant {
+            DormantLaneRow(lane: lane, onShareToCommunity: onShareToCommunity)
+        } else {
+            switch lane.artifact.preview.source {
+            case "book":
+                BookLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
+            case "podcast":
+                PodcastLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
+            case "article":
+                ArticleLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
+            default:
+                LaneView(lane: lane, onShareToCommunity: onShareToCommunity)
+            }
         }
     }
 }
 
 /// Format-surface category for a lane. Used by transitions to pick the
-/// right gradient and height between adjacent lanes.
-enum LaneSurface {
+/// right gradient and height between adjacent lanes. Dormant lanes always
+/// read as `.neutral` because they render directly on the page paper.
+enum LaneSurface: Equatable {
     case paper      // book
     case dark       // podcast
     case white      // article
-    case neutral    // generic / unknown format
+    case neutral    // generic / dormant / unknown format
 
     init(for lane: Lane) {
+        if lane.isDormant { self = .neutral; return }
         switch lane.artifact.preview.source {
         case "book":    self = .paper
         case "podcast": self = .dark
@@ -137,35 +144,49 @@ struct Lane: Identifiable {
     var isDormant: Bool { highlights.isEmpty }
 
     /// Build lanes from the room's flat artifact + highlight lists.
-    /// Highlights without a hydrated artifact are dropped (they can't be
-    /// placed). Shared artifacts with no highlights appear as dormant
+    ///
+    /// Grouping uses **semantic identity** — the canonical reference that
+    /// both sides of the bridge agree on (NIP-23 `a`-tag value, or the
+    /// core's `highlightReferenceKey` / `sourceReferenceKey` pairing).
+    /// Share event id is share-specific and cannot be used to match a
+    /// highlight's hydrated artifact against the room's share of the
+    /// same thing — they're different kind:11 events.
+    ///
+    /// Shared artifacts with no matching highlights become dormant
     /// lanes. Active lanes sort by most-recent activity desc; dormant
     /// lanes follow, sorted by share time desc.
     static func build(
         artifacts: [ArtifactRecord],
         highlights: [HydratedHighlight]
     ) -> [Lane] {
-        var buckets: [String: (artifact: ArtifactRecord, items: [HydratedHighlight])] = [:]
+        var buckets: [String: (artifact: ArtifactRecord?, items: [HydratedHighlight])] = [:]
+
         for h in highlights {
-            guard let art = h.artifact else { continue }
-            let key = laneKey(for: art)
-            var bucket = buckets[key] ?? (artifact: art, items: [])
+            let key = laneKey(for: h)
+            var bucket = buckets[key] ?? (artifact: h.artifact, items: [])
+            if bucket.artifact == nil { bucket.artifact = h.artifact }
             bucket.items.append(h)
             buckets[key] = bucket
         }
-        for key in buckets.keys {
-            buckets[key]?.items.sort {
-                ($0.highlight.createdAt ?? 0) > ($1.highlight.createdAt ?? 0)
+
+        for art in artifacts {
+            let key = laneKey(for: art)
+            if var bucket = buckets[key] {
+                // Prefer the room's share record — it's the anchor the
+                // user actually put into this community.
+                bucket.artifact = art
+                buckets[key] = bucket
+            } else {
+                buckets[key] = (artifact: art, items: [])
             }
         }
 
-        var lanes = buckets.map { key, bucket in
-            Lane(id: key, artifact: bucket.artifact, highlights: bucket.items)
-        }
-
-        let activeKeys = Set(lanes.map(\.id))
-        for art in artifacts where !activeKeys.contains(laneKey(for: art)) {
-            lanes.append(Lane(id: laneKey(for: art), artifact: art, highlights: []))
+        let lanes: [Lane] = buckets.compactMap { key, bucket in
+            guard let artifact = bucket.artifact else { return nil }
+            let sorted = bucket.items.sorted {
+                ($0.highlight.createdAt ?? 0) > ($1.highlight.createdAt ?? 0)
+            }
+            return Lane(id: key, artifact: artifact, highlights: sorted)
         }
 
         return lanes.sorted { a, b in
@@ -177,20 +198,171 @@ struct Lane: Identifiable {
         }
     }
 
-    /// Stable identity for bucketing. Share event id is the preferred key
-    /// (one kind:11 per shared artifact); preview id / reference tags are
-    /// fallbacks for artifacts only reached via a highlight's hydrated
-    /// reference. Prefixes prevent collisions across fallback tiers.
+    /// Semantic identity for grouping. Designed so a highlight and the
+    /// artifact share of the same thing produce the **same** key.
+    /// `highlightReferenceKey` / `sourceReferenceKey` is the core's
+    /// canonical pairing when present; the NIP-23 address fills in for
+    /// anything addressable by `a`-tag; the tagged event id fills in
+    /// for plain event references.
     private static func laneKey(for artifact: ArtifactRecord) -> String {
-        if !artifact.shareEventId.isEmpty { return artifact.shareEventId }
-        if !artifact.preview.id.isEmpty { return "p:" + artifact.preview.id }
-        if !artifact.preview.highlightTagValue.isEmpty {
-            return "h:" + artifact.preview.highlightTagValue
+        if !artifact.preview.highlightReferenceKey.isEmpty {
+            return "srk:" + artifact.preview.highlightReferenceKey
+        }
+        if artifact.preview.highlightTagName == "a",
+           !artifact.preview.highlightTagValue.isEmpty {
+            return "addr:" + artifact.preview.highlightTagValue
+        }
+        if artifact.preview.referenceTagName == "a",
+           !artifact.preview.referenceTagValue.isEmpty {
+            return "addr:" + artifact.preview.referenceTagValue
         }
         if !artifact.preview.referenceTagValue.isEmpty {
-            return "r:" + artifact.preview.referenceTagValue
+            return "evt:" + artifact.preview.referenceTagValue
         }
+        if !artifact.preview.highlightTagValue.isEmpty {
+            return "evt:" + artifact.preview.highlightTagValue
+        }
+        if !artifact.preview.id.isEmpty { return "pid:" + artifact.preview.id }
+        if !artifact.shareEventId.isEmpty { return "share:" + artifact.shareEventId }
         return "t:" + artifact.preview.title
+    }
+
+    private static func laneKey(for h: HydratedHighlight) -> String {
+        if !h.highlight.sourceReferenceKey.isEmpty {
+            return "srk:" + h.highlight.sourceReferenceKey
+        }
+        if !h.highlight.artifactAddress.isEmpty {
+            return "addr:" + h.highlight.artifactAddress
+        }
+        if !h.highlight.eventReference.isEmpty {
+            return "evt:" + h.highlight.eventReference
+        }
+        if let art = h.artifact {
+            return laneKey(for: art)
+        }
+        // Orphan — unique key so it sits alone (gets dropped later since
+        // it has no artifact record).
+        return "orphan:" + h.highlight.eventId
+    }
+}
+
+// MARK: - Dormant lane row
+
+/// Compact row for an artifact the community has shared but not yet
+/// highlighted. Renders on the page paper — no format-specific surface —
+/// with just enough identity to be recognizable. Quietly signals
+/// "nothing to read here yet" through density alone.
+struct DormantLaneRow: View {
+    let lane: Lane
+    let onShareToCommunity: (ArtifactRecord) -> Void
+
+    var body: some View {
+        NavigationLink(value: lane.artifact) {
+            HStack(alignment: .center, spacing: 12) {
+                cover
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(titleFont)
+                        .foregroundStyle(Color.highlighterInkMuted)
+                        .lineLimit(1)
+                    if !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(Color.highlighterInkMuted.opacity(0.75))
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(Color.highlighterInkMuted.opacity(0.6))
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                onShareToCommunity(lane.artifact)
+            } label: {
+                Label("Share to community", systemImage: "square.and.arrow.up")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var cover: some View {
+        let image = lane.artifact.preview.image
+        Group {
+            if !image.isEmpty, let url = URL(string: image) {
+                KFImage(url)
+                    .placeholder { placeholder }
+                    .fade(duration: 0.15)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: coverWidth, height: 36)
+        .clipShape(RoundedRectangle(cornerRadius: coverRadius, style: .continuous))
+    }
+
+    private var placeholder: some View {
+        RoundedRectangle(cornerRadius: coverRadius, style: .continuous)
+            .fill(Color.highlighterRule.opacity(0.6))
+            .overlay(
+                Image(systemName: placeholderIcon)
+                    .font(.caption2)
+                    .foregroundStyle(Color.highlighterInkMuted.opacity(0.6))
+            )
+    }
+
+    private var coverWidth: CGFloat {
+        switch lane.artifact.preview.source {
+        case "book":    return 24
+        case "podcast": return 36
+        default:        return 36
+        }
+    }
+
+    private var coverRadius: CGFloat {
+        switch lane.artifact.preview.source {
+        case "book":    return 2
+        case "podcast": return 4
+        default:        return 3
+        }
+    }
+
+    private var placeholderIcon: String {
+        switch lane.artifact.preview.source {
+        case "book":    return "book.closed"
+        case "podcast": return "waveform"
+        case "article": return "doc.text"
+        default:        return "circle"
+        }
+    }
+
+    private var title: String {
+        lane.artifact.preview.title.isEmpty ? "Untitled" : lane.artifact.preview.title
+    }
+
+    private var titleFont: Font {
+        switch lane.artifact.preview.source {
+        case "book", "article":
+            return .system(.subheadline, design: .serif)
+        default:
+            return .subheadline
+        }
+    }
+
+    private var subtitle: String {
+        if !lane.artifact.preview.author.isEmpty { return lane.artifact.preview.author }
+        if !lane.artifact.preview.domain.isEmpty { return lane.artifact.preview.domain }
+        return ""
     }
 }
 
