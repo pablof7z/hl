@@ -5,6 +5,8 @@ pub mod artifacts;
 pub mod blossom;
 pub mod cache;
 pub mod client;
+pub mod curation;
+pub mod discovery;
 pub mod discussions;
 pub mod errors;
 pub mod events;
@@ -19,6 +21,7 @@ pub mod pictures;
 pub mod profile;
 pub mod reads;
 pub mod recent_books;
+pub mod recommendations;
 pub mod relays;
 pub mod session;
 pub mod subscriptions;
@@ -30,4 +33,5 @@ pub use models::{
     ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, CommunitySummary, CurrentUser,
     DiscussionAttachment, DiscussionRecord, HighlightDraft, HighlightRecord, HydratedHighlight,
     NostrConnectOptions, PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem,
+    RoomRecommendation, RoomRecommendationReason,
 };

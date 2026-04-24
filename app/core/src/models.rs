@@ -202,6 +202,28 @@ pub struct PictureRecord {
     pub created_at: Option<u64>,
 }
 
+/// Why a room is being recommended on the explorer. Drives the subtitle under
+/// a card ("Alice + 3 you follow are here" vs. "Posts by writers you read").
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum RoomRecommendationReason {
+    /// People the user follows (kind:3) are members of this room.
+    Friends,
+    /// Authors whose articles the user has highlighted post to this room.
+    Authors,
+}
+
+/// A single explorer row: a room plus the signal that surfaced it. The
+/// iOS side uses `reason_pubkeys` to render an avatar cluster and
+/// `reason_kind` to render the subtitle.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomRecommendation {
+    pub summary: CommunitySummary,
+    /// Hex pubkeys that triggered the recommendation — follows who are in
+    /// the room, or authors who post to it. Capped at 5 by the recommender.
+    pub reason_pubkeys: Vec<String>,
+    pub reason_kind: RoomRecommendationReason,
+}
+
 /// NIP-01 kind:0 profile metadata. Mirrors the fields the web profile page
 /// reads from `NDKUser.profile`. Empty strings for missing fields so Swift
 /// call sites don't deal with `Option` everywhere.

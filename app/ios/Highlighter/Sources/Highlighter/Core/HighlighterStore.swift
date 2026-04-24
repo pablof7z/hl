@@ -25,12 +25,17 @@ final class HighlighterStore {
     /// Transient toast shown when the Share Extension handoff publishes.
     /// Cleared by the banner after a few seconds.
     var shareToast: String?
+    /// Shared profile cache — keyed by pubkey hex. Reactive so all card views
+    /// observing a given pubkey re-render automatically when a fresh kind:0
+    /// arrives from a relay.
+    var profileCache: [String: ProfileMetadata] = [:]
 
     // Internal plumbing
     @ObservationIgnored let core: HighlighterCore
     @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored private(set) var eventBridge: EventBridge?
     @ObservationIgnored private var joinedCommunitiesHandle: UInt64?
+    @ObservationIgnored private var profileCacheHandles: [String: UInt64] = [:]
 
     var isLoggedIn: Bool { currentUser != nil }
 
@@ -68,6 +73,12 @@ final class HighlighterStore {
             eventBridge?.unregister(handle: handle)
             joinedCommunitiesHandle = nil
         }
+        for (_, handle) in profileCacheHandles {
+            core.unsubscribe(handle: handle)
+            eventBridge?.unregister(handle: handle)
+        }
+        profileCacheHandles.removeAll()
+        profileCache.removeAll()
         core.logout()
         AppSessionStore.shared.clear()
         currentUser = nil
@@ -75,6 +86,28 @@ final class HighlighterStore {
         joinedCommunities.removeAll()
         connectionState = .unknown
         SharedCommunitiesCache.clear()
+    }
+
+    /// Fetches a profile from the local nostrdb cache (fast path) and sets up
+    /// a relay subscription so the cache is updated when a fresh kind:0 arrives.
+    /// Safe to call from multiple views for the same pubkey — deduplicates.
+    func requestProfile(pubkeyHex: String) async {
+        if profileCache[pubkeyHex] == nil,
+           let profile = try? await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
+            profileCache[pubkeyHex] = profile
+        }
+        guard profileCacheHandles[pubkeyHex] == nil else { return }
+        if let handle = try? await safeCore.subscribeUserProfile(pubkeyHex: pubkeyHex) {
+            profileCacheHandles[pubkeyHex] = handle
+            eventBridge?.registerProfileCache(pubkeyHex: pubkeyHex, handle: handle)
+        }
+    }
+
+    /// Called by `EventBridge` when a subscribed profile's kind:0 arrives from a relay.
+    func applyProfileCacheUpdate(pubkeyHex: String) async {
+        if let profile = try? await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
+            profileCache[pubkeyHex] = profile
+        }
     }
 
     /// Snapshot `joinedCommunities` into the App Group cache so the Share

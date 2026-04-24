@@ -745,6 +745,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func debugHighlightsReport() async throws  -> String
     
     /**
+     * Every cached room, newest first, truncated to `limit`. Powers the
+     * explorer's "Browse all" grid.
+     */
+    func getAllRooms(limit: UInt32) async throws  -> [CommunitySummary]
+    
+    /**
      * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
      * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
      * backfills via relays, and a later call returns `Some`.
@@ -760,6 +766,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getBlossomServers() async throws  -> [String]
     
     func getDiscussions(groupId: String, limit: UInt32) async throws  -> [DiscussionRecord]
+    
+    /**
+     * Curator's latest kind:10012 list, resolved into `CommunitySummary`
+     * items in curator-chosen order. Rooms without cached metadata are
+     * dropped; the next call after `start_featured_rooms` has backfilled
+     * metadata returns the full list.
+     */
+    func getFeaturedRooms(curatorPubkeyHex: String) async throws  -> [CommunitySummary]
     
     /**
      * Highlights home feed — kind:9802 events authored by follows plus
@@ -788,11 +802,31 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getMyHighlights(limit: UInt32) async throws  -> [HighlightRecord]
     
     /**
+     * The N most-recently-seen rooms. Same underlying query as
+     * `get_all_rooms` with a tighter limit — kept as a distinct method so
+     * the Swift explorer store's shelves remain single-purpose.
+     */
+    func getNewRooms(limit: UInt32) async throws  -> [CommunitySummary]
+    
+    /**
      * Recent books across the user's joined communities — drives the
      * capture-flow book picker. Returns `[]` if no books are cached or the
      * user isn't logged in.
      */
     func getRecentBooks(limit: UInt32) async throws  -> [ArtifactRecord]
+    
+    /**
+     * Rooms where authors of articles the user has highlighted post
+     * artifacts. Empty when the user hasn't highlighted any articles yet.
+     */
+    func getRoomsFromReadAuthors(limit: UInt32) async throws  -> [RoomRecommendation]
+    
+    /**
+     * Rooms where 2+ of the user's follows are members. Empty when the user
+     * isn't logged in, has no follows cached, or no room satisfies the
+     * threshold.
+     */
+    func getRoomsWithFriends(limit: UInt32) async throws  -> [RoomRecommendation]
     
     func getUserArticles(pubkeyHex: String, limit: UInt32) async throws  -> [ArticleRecord]
     
@@ -843,6 +877,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func publishPicture(draft: PictureDraft) async throws  -> PictureRecord
     
+    /**
+     * Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
+     * event id on success. The UI treats this as fire-and-forget: a
+     * subsequent `MembershipChanged` delta for this group with the user's
+     * pubkey is the signal that the relay admitted the request.
+     */
+    func requestJoinRoom(groupId: String) async throws  -> String
+    
     func searchArtifacts(query: String, limit: UInt32) async throws  -> [ArtifactRecord]
     
     /**
@@ -869,7 +911,23 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func signNip98Auth(url: String, method: String, payloadHash: String?) async throws  -> String
     
+    /**
+     * Install (if not already installed) the kind:10012 curated-list sub for
+     * `curator_pubkey_hex`. Once the list lands in ndb, this method also
+     * spawns a metadata backfill for every group the list references, so a
+     * subsequent `get_featured_rooms` returns rich summaries rather than
+     * bare ids. Idempotent; the sub rides until logout.
+     */
+    func startFeaturedRooms(curatorPubkeyHex: String) async throws 
+    
     func startNostrConnect(options: NostrConnectOptions) async throws  -> String
+    
+    /**
+     * Install (if not already installed) a long-lived relay sub for every
+     * kind:39000 metadata event. Call once on explorer appear from iOS.
+     * Idempotent; the sub rides until logout.
+     */
+    func startRoomDiscovery() async 
     
     /**
      * Article-reader view-scope subscription. Fires `ArticleUpdated` deltas
@@ -1058,6 +1116,27 @@ open func debugHighlightsReport()async throws  -> String  {
 }
     
     /**
+     * Every cached room, newest first, truncated to `limit`. Powers the
+     * explorer's "Browse all" grid.
+     */
+open func getAllRooms(limit: UInt32)async throws  -> [CommunitySummary]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_all_rooms(
+                    self.uniffiClonePointer(),
+                    FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
      * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
      * backfills via relays, and a later call returns `Some`.
@@ -1130,6 +1209,29 @@ open func getDiscussions(groupId: String, limit: UInt32)async throws  -> [Discus
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeDiscussionRecord.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Curator's latest kind:10012 list, resolved into `CommunitySummary`
+     * items in curator-chosen order. Rooms without cached metadata are
+     * dropped; the next call after `start_featured_rooms` has backfilled
+     * metadata returns the full list.
+     */
+open func getFeaturedRooms(curatorPubkeyHex: String)async throws  -> [CommunitySummary]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_featured_rooms(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(curatorPubkeyHex)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -1251,6 +1353,28 @@ open func getMyHighlights(limit: UInt32)async throws  -> [HighlightRecord]  {
 }
     
     /**
+     * The N most-recently-seen rooms. Same underlying query as
+     * `get_all_rooms` with a tighter limit — kept as a distinct method so
+     * the Swift explorer store's shelves remain single-purpose.
+     */
+open func getNewRooms(limit: UInt32)async throws  -> [CommunitySummary]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_new_rooms(
+                    self.uniffiClonePointer(),
+                    FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Recent books across the user's joined communities — drives the
      * capture-flow book picker. Returns `[]` if no books are cached or the
      * user isn't logged in.
@@ -1268,6 +1392,49 @@ open func getRecentBooks(limit: UInt32)async throws  -> [ArtifactRecord]  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeArtifactRecord.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Rooms where authors of articles the user has highlighted post
+     * artifacts. Empty when the user hasn't highlighted any articles yet.
+     */
+open func getRoomsFromReadAuthors(limit: UInt32)async throws  -> [RoomRecommendation]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_rooms_from_read_authors(
+                    self.uniffiClonePointer(),
+                    FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeRoomRecommendation.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Rooms where 2+ of the user's follows are members. Empty when the user
+     * isn't logged in, has no follows cached, or no room satisfies the
+     * threshold.
+     */
+open func getRoomsWithFriends(limit: UInt32)async throws  -> [RoomRecommendation]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_rooms_with_friends(
+                    self.uniffiClonePointer(),
+                    FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeRoomRecommendation.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -1526,6 +1693,29 @@ open func publishPicture(draft: PictureDraft)async throws  -> PictureRecord  {
         )
 }
     
+    /**
+     * Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
+     * event id on success. The UI treats this as fire-and-forget: a
+     * subsequent `MembershipChanged` delta for this group with the user's
+     * pubkey is the signal that the relay admitted the request.
+     */
+open func requestJoinRoom(groupId: String)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_request_join_room(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(groupId)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
 open func searchArtifacts(query: String, limit: UInt32)async throws  -> [ArtifactRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -1617,6 +1807,30 @@ open func signNip98Auth(url: String, method: String, payloadHash: String?)async 
         )
 }
     
+    /**
+     * Install (if not already installed) the kind:10012 curated-list sub for
+     * `curator_pubkey_hex`. Once the list lands in ndb, this method also
+     * spawns a metadata backfill for every group the list references, so a
+     * subsequent `get_featured_rooms` returns rich summaries rather than
+     * bare ids. Idempotent; the sub rides until logout.
+     */
+open func startFeaturedRooms(curatorPubkeyHex: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_start_featured_rooms(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(curatorPubkeyHex)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
 open func startNostrConnect(options: NostrConnectOptions)async throws  -> String  {
     return
         try  await uniffiRustCallAsync(
@@ -1631,6 +1845,29 @@ open func startNostrConnect(options: NostrConnectOptions)async throws  -> String
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Install (if not already installed) a long-lived relay sub for every
+     * kind:39000 metadata event. Call once on explorer appear from iOS.
+     * Idempotent; the sub rides until logout.
+     */
+open func startRoomDiscovery()async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_start_room_discovery(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
         )
 }
     
@@ -4171,6 +4408,97 @@ public func FfiConverterTypeReadingFeedItem_lower(_ value: ReadingFeedItem) -> R
 }
 
 
+/**
+ * A single explorer row: a room plus the signal that surfaced it. The
+ * iOS side uses `reason_pubkeys` to render an avatar cluster and
+ * `reason_kind` to render the subtitle.
+ */
+public struct RoomRecommendation {
+    public var summary: CommunitySummary
+    /**
+     * Hex pubkeys that triggered the recommendation — follows who are in
+     * the room, or authors who post to it. Capped at 5 by the recommender.
+     */
+    public var reasonPubkeys: [String]
+    public var reasonKind: RoomRecommendationReason
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(summary: CommunitySummary, 
+        /**
+         * Hex pubkeys that triggered the recommendation — follows who are in
+         * the room, or authors who post to it. Capped at 5 by the recommender.
+         */reasonPubkeys: [String], reasonKind: RoomRecommendationReason) {
+        self.summary = summary
+        self.reasonPubkeys = reasonPubkeys
+        self.reasonKind = reasonKind
+    }
+}
+
+#if compiler(>=6)
+extension RoomRecommendation: Sendable {}
+#endif
+
+
+extension RoomRecommendation: Equatable, Hashable {
+    public static func ==(lhs: RoomRecommendation, rhs: RoomRecommendation) -> Bool {
+        if lhs.summary != rhs.summary {
+            return false
+        }
+        if lhs.reasonPubkeys != rhs.reasonPubkeys {
+            return false
+        }
+        if lhs.reasonKind != rhs.reasonKind {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(summary)
+        hasher.combine(reasonPubkeys)
+        hasher.combine(reasonKind)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomRecommendation: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendation {
+        return
+            try RoomRecommendation(
+                summary: FfiConverterTypeCommunitySummary.read(from: &buf), 
+                reasonPubkeys: FfiConverterSequenceString.read(from: &buf), 
+                reasonKind: FfiConverterTypeRoomRecommendationReason.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomRecommendation, into buf: inout [UInt8]) {
+        FfiConverterTypeCommunitySummary.write(value.summary, into: &buf)
+        FfiConverterSequenceString.write(value.reasonPubkeys, into: &buf)
+        FfiConverterTypeRoomRecommendationReason.write(value.reasonKind, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendation_lift(_ buf: RustBuffer) throws -> RoomRecommendation {
+    return try FfiConverterTypeRoomRecommendation.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendation_lower(_ value: RoomRecommendation) -> RustBuffer {
+    return FfiConverterTypeRoomRecommendation.lower(value)
+}
+
+
 public enum CoreError: Swift.Error {
 
     
@@ -4525,6 +4853,86 @@ public func FfiConverterTypeDataChangeType_lower(_ value: DataChangeType) -> Rus
 
 
 extension DataChangeType: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Why a room is being recommended on the explorer. Drives the subtitle under
+ * a card ("Alice + 3 you follow are here" vs. "Posts by writers you read").
+ */
+
+public enum RoomRecommendationReason {
+    
+    /**
+     * People the user follows (kind:3) are members of this room.
+     */
+    case friends
+    /**
+     * Authors whose articles the user has highlighted post to this room.
+     */
+    case authors
+}
+
+
+#if compiler(>=6)
+extension RoomRecommendationReason: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomRecommendationReason: FfiConverterRustBuffer {
+    typealias SwiftType = RoomRecommendationReason
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationReason {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .friends
+        
+        case 2: return .authors
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RoomRecommendationReason, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .friends:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .authors:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendationReason_lift(_ buf: RustBuffer) throws -> RoomRecommendationReason {
+    return try FfiConverterTypeRoomRecommendationReason.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendationReason_lower(_ value: RoomRecommendationReason) -> RustBuffer {
+    return FfiConverterTypeRoomRecommendationReason.lower(value)
+}
+
+
+extension RoomRecommendationReason: Equatable, Hashable {}
 
 
 
@@ -5019,6 +5427,31 @@ fileprivate struct FfiConverterSequenceTypeReadingFeedItem: FfiConverterRustBuff
         return seq
     }
 }
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRoomRecommendation: FfiConverterRustBuffer {
+    typealias SwiftType = [RoomRecommendation]
+
+    public static func write(_ value: [RoomRecommendation], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRoomRecommendation.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomRecommendation] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RoomRecommendation]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRoomRecommendation.read(from: &buf))
+        }
+        return seq
+    }
+}
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_MAYBE_READY: Int8 = 1
 
@@ -5093,6 +5526,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_debug_highlights_report() != 13450) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_all_rooms() != 20905) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article() != 17849) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5103,6 +5539,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 41672) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_featured_rooms() != 46959) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_highlights() != 12124) {
@@ -5123,7 +5562,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_highlights() != 10939) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_new_rooms() != 38074) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 33628) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_rooms_from_read_authors() != 47912) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_rooms_with_friends() != 10603) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_articles() != 2405) {
@@ -5171,6 +5619,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_picture() != 8020) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_request_join_room() != 22012) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_artifacts() != 48576) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5186,7 +5637,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_sign_nip98_auth() != 43473) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_start_featured_rooms() != 4206) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_nostr_connect() != 46145) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_discovery() != 41569) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 35661) {
