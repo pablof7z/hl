@@ -19,6 +19,10 @@ use crate::relays::HIGHLIGHTER_RELAY;
 pub const KIND_GROUP_METADATA: u16 = 39000;
 pub const KIND_GROUP_ADMINS: u16 = 39001;
 pub const KIND_GROUP_MEMBERS: u16 = 39002;
+/// NIP-29 chat message. Flat conversational event scoped to the group via
+/// the `["h", <group_id>]` tag. Defined here next to the other NIP-29
+/// kind constants; the actual chat reader/writer lives in `chat.rs`.
+pub const KIND_CHAT_MESSAGE: u16 = 9;
 /// NIP-29 put-user. Admin-signed; relay add the targeted pubkey to 39002 (and
 /// 39001 if a role tag like "admin" is included).
 pub const KIND_PUT_USER: u16 = 9000;

@@ -71,6 +71,9 @@ pub(crate) enum SubscriptionKind {
     JoinedCommunities { user_pubkey: PublicKey },
     Room { group_id: String },
     RoomDiscussions { group_id: String },
+    /// Powers the chat tab: kind:9 messages tagged `#h=group_id`. Lives on
+    /// the same rooms-relays set as `Room` / `RoomDiscussions`.
+    RoomChat { group_id: String },
     Vault { user_pubkey: PublicKey },
     /// Powers the profile page: listens for every event that could affect
     /// what renders on a profile (kind:0 metadata, kind:3 contacts, kind:30023
@@ -393,6 +396,34 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             });
             vec![id]
         }
+        SubscriptionKind::RoomChat { group_id } => {
+            // NIP-29 chat lives at kind:9 with `#h=<group_id>`. Targets the
+            // rooms-flagged relays so the room host sees the REQ — chat is
+            // not part of any user's outbox set, the room-relay is the
+            // canonical home.
+            let id = SubscriptionId::generate();
+            let client = runtime.client().clone();
+            let id_clone = id.clone();
+            let group_id_owned = group_id.clone();
+            let urls = runtime.rooms_urls();
+            runtime.runtime_handle().spawn(async move {
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(crate::chat::KIND_CHAT_MESSAGE)])
+                    .custom_tag(
+                        SingleLetterTag::lowercase(Alphabet::H),
+                        group_id_owned,
+                    );
+                let result = if urls.is_empty() {
+                    client.subscribe_with_id(id_clone, filter, None).await
+                } else {
+                    client.subscribe_with_id_to(urls, id_clone, filter, None).await
+                };
+                if let Err(e) = result {
+                    tracing::warn!(error = %e, "failed to subscribe to room chat feed");
+                }
+            });
+            vec![id]
+        }
         SubscriptionKind::Vault { user_pubkey } => {
             let id = SubscriptionId::generate();
             let client = runtime.client().clone();
@@ -703,6 +734,11 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
             .build()],
         SubscriptionKind::RoomDiscussions { .. } => vec![NdbFilter::new()
             .kinds([11u64])
+            .build()],
+        // RoomChat: kind:9 only — `build_change` re-checks `#h` against
+        // the group_id so misrouted events can't poison another room.
+        SubscriptionKind::RoomChat { .. } => vec![NdbFilter::new()
+            .kinds([crate::chat::KIND_CHAT_MESSAGE as u64])
             .build()],
         SubscriptionKind::Vault { user_pubkey } => {
             let pk_bytes: [u8; 32] = user_pubkey.to_bytes();
@@ -1092,6 +1128,20 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             Some(DataChangeType::DiscussionUpserted {
                 group_id: group_id.clone(),
                 discussion,
+            })
+        }
+        SubscriptionKind::RoomChat { group_id } => {
+            if event.kind.as_u16() != crate::chat::KIND_CHAT_MESSAGE {
+                return None;
+            }
+            let event_group = first_tag_value(event, "h")?;
+            if event_group != group_id {
+                return None;
+            }
+            let message = crate::chat::record_from_event(event)?;
+            Some(DataChangeType::ChatMessageUpserted {
+                group_id: group_id.clone(),
+                message,
             })
         }
         SubscriptionKind::Vault { user_pubkey } => {
@@ -1903,5 +1953,64 @@ mod tests {
             }
         }
         assert!(saw_mine, "must still deliver deltas for groups the user is in");
+    }
+
+    #[test]
+    fn subscribe_room_chat_emits_chat_message_upserted_for_matching_h_tag() {
+        let (core, _tmp) = isolated_core();
+        let me = Keys::generate();
+        let other = Keys::generate();
+
+        core.login_nsec(me.secret_key().to_bech32().unwrap())
+            .expect("login");
+        let (cb, rx) = channel_callback();
+        core.set_event_callback(cb);
+
+        let handle = {
+            let core = core.clone();
+            std::thread::spawn(move || {
+                futures::executor::block_on(core.subscribe_room_chat("alpha".to_string()))
+            })
+            .join()
+            .expect("join")
+            .expect("subscribe")
+        };
+
+        // kind:9 event for alpha — must deliver as ChatMessageUpserted.
+        let chat_alpha = sign(
+            &other,
+            crate::chat::KIND_CHAT_MESSAGE,
+            vec![Tag::parse(vec!["h".to_string(), "alpha".to_string()]).unwrap()],
+            "hello alpha",
+        );
+        // kind:9 event for bravo — must be ignored by the alpha pump.
+        let chat_bravo = sign(
+            &other,
+            crate::chat::KIND_CHAT_MESSAGE,
+            vec![Tag::parse(vec!["h".to_string(), "bravo".to_string()]).unwrap()],
+            "hello bravo",
+        );
+
+        process(core.runtime().ndb(), &chat_alpha);
+        process(core.runtime().ndb(), &chat_bravo);
+
+        let mut alpha_seen = false;
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while std::time::Instant::now() < deadline {
+            let Some(delta) = recv_view_delta(&rx, Duration::from_millis(200)) else {
+                continue;
+            };
+            assert_eq!(delta.subscription_id, handle);
+            match delta.change {
+                DataChangeType::ChatMessageUpserted { group_id, message } => {
+                    assert_eq!(group_id, "alpha");
+                    assert_eq!(message.content, "hello alpha");
+                    assert_eq!(message.group_id, "alpha");
+                    alpha_seen = true;
+                }
+                other => panic!("unexpected delta on chat sub: {other:?}"),
+            }
+        }
+        assert!(alpha_seen, "expected alpha chat delta");
     }
 }

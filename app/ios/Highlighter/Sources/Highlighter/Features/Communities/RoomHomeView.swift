@@ -4,7 +4,7 @@ import SwiftUI
 /// Observation granularity stays tight — this view only re-renders when
 /// its own room's data changes, not when other rooms update.
 struct RoomHomeView: View {
-    enum Tab: Hashable { case home, library, discussions }
+    enum Tab: Hashable { case home, library, discussions, chat }
 
     let groupId: String
 
@@ -15,6 +15,16 @@ struct RoomHomeView: View {
     @State private var capturePresented: Bool = false
     @State private var shareTarget: ShareToCommunityTarget?
     @State private var inviteSheetPresented: Bool = false
+    /// Cached "this room has chat activity" signal. Computed once on
+    /// appearance via a single `getChatMessages(limit: 1)` peek, then
+    /// promoted to true the first time a `ChatMessageUpserted` delta
+    /// arrives via the room's chat-presence subscription. The chat tab
+    /// only renders when this is true.
+    @State private var hasChatActivity: Bool = false
+    /// Subscription handle for the chat-presence probe. Owned here (not
+    /// inside `ChatView`) so the tab can appear without the user opening
+    /// it first — once the probe sees a kind:9 land, the tab unhides.
+    @State private var chatPresenceProbe = ChatPresenceProbe()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +32,9 @@ struct RoomHomeView: View {
                 Text("Home").tag(Tab.home)
                 Text("Library").tag(Tab.library)
                 Text("Discussions").tag(Tab.discussions)
+                if hasChatActivity {
+                    Text("Chat").tag(Tab.chat)
+                }
             }
             .pickerStyle(.segmented)
             .padding(.horizontal)
@@ -35,6 +48,8 @@ struct RoomHomeView: View {
                 libraryContent
             case .discussions:
                 DiscussionListView(groupId: groupId, composerPresented: $composerPresented)
+            case .chat:
+                ChatView(groupId: groupId)
             }
         }
         .navigationTitle(communityName)
@@ -70,9 +85,22 @@ struct RoomHomeView: View {
         }
         .task {
             await room.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
+            await chatPresenceProbe.start(
+                groupId: groupId,
+                core: app.safeCore,
+                bridge: app.eventBridge,
+                onActivity: { hasChatActivity = true }
+            )
         }
         .onDisappear {
             room.stop()
+            chatPresenceProbe.stop()
+            // If the user navigates away while sitting on the chat tab,
+            // reset selection so a return visit doesn't crash trying to
+            // render a tab that's been hidden because activity is gone.
+            if selectedTab == .chat && !hasChatActivity {
+                selectedTab = .home
+            }
         }
         .sheet(item: $shareTarget) { target in
             ShareToCommunitySheet(target: target)

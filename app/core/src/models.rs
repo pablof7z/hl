@@ -96,6 +96,21 @@ pub struct DiscussionRecord {
     pub attachment: Option<DiscussionAttachment>,
 }
 
+/// A NIP-29 kind:9 chat message inside a group. Flat conversation event —
+/// distinct from kind:11 threaded discussions.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ChatMessageRecord {
+    pub event_id: String,
+    pub group_id: String,
+    pub author_pubkey: String,
+    pub content: String,
+    /// Seconds since epoch — required (we drop messages without one upstream).
+    pub created_at: u64,
+    /// When set, this message replies to the named event id (NIP-10 `["e",
+    /// <id>, "", "reply"]`). UI can render an inline reply chip.
+    pub reply_to_event_id: Option<String>,
+}
+
 /// A kind:11 discussion can reference an artifact the way a share does —
 /// the tag shape matches `ArtifactPreview`'s reference fields exactly, so we
 /// reuse the same vocabulary here.

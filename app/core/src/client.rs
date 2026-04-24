@@ -23,10 +23,10 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, CommentRecord, CommunitySummary,
-    CurrentUser, DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft,
-    HighlightRecord, HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord,
-    ProfileMetadata, ReadingFeedItem, RoomRecommendation,
+    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, ChatMessageRecord,
+    CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord, FeedbackEventRecord,
+    FeedbackThreadRecord, HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions,
+    PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
 };
 use crate::reads;
 use crate::recommendations;
@@ -346,6 +346,17 @@ impl HighlighterCore {
         }
         self.subscriptions
             .register(&self.runtime, SubscriptionKind::RoomDiscussions { group_id })
+    }
+
+    /// Per-room Chat view-scope subscription. Returns a handle; fires
+    /// `ChatMessageUpserted` deltas for kind:9 messages tagged
+    /// `#h=<group_id>`.
+    pub async fn subscribe_room_chat(&self, group_id: String) -> Result<u64, CoreError> {
+        if group_id.trim().is_empty() {
+            return Err(CoreError::InvalidInput("group_id must not be empty".into()));
+        }
+        self.subscriptions
+            .register(&self.runtime, SubscriptionKind::RoomChat { group_id })
     }
 
     /// Vault view-scope subscription for the current user's own highlights.
@@ -887,6 +898,17 @@ impl HighlighterCore {
         crate::discussions::query_for_group(self.runtime.ndb(), &group_id, limit)
     }
 
+    /// NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending
+    /// by `created_at`. UI can also peek with `limit=1` to detect chat
+    /// activity and decide whether to expose the chat tab at all.
+    pub async fn get_chat_messages(
+        &self,
+        group_id: String,
+        limit: u32,
+    ) -> Result<Vec<ChatMessageRecord>, CoreError> {
+        crate::chat::query_chat_messages(self.runtime.ndb(), &group_id, limit)
+    }
+
     // -- Feedback (shake-to-share) --
 
     /// Threads scoped to `coordinate` authored by the current user. Returns
@@ -942,6 +964,25 @@ impl HighlighterCore {
     ) -> Result<DiscussionRecord, CoreError> {
         let _ = self.require_user_pubkey()?;
         crate::discussions::publish(&self.runtime, &group_id, &title, &body, attachment).await
+    }
+
+    /// Publish a NIP-29 kind:9 chat message into `group_id`. When
+    /// `reply_to_event_id` is set, the published event carries a marked
+    /// NIP-10 `["e", <id>, "", "reply"]` tag.
+    pub async fn publish_chat_message(
+        &self,
+        group_id: String,
+        content: String,
+        reply_to_event_id: Option<String>,
+    ) -> Result<ChatMessageRecord, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        crate::chat::publish_chat_message(
+            &self.runtime,
+            &group_id,
+            &content,
+            reply_to_event_id.as_deref(),
+        )
+        .await
     }
 
     /// Publish a feedback note (kind:1) for the shake-to-share surface. When

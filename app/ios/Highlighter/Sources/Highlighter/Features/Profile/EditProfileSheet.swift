@@ -214,7 +214,8 @@ struct EditProfileSheet: View {
                 label: "Username",
                 placeholder: "lowercase, no spaces",
                 text: $name,
-                autocap: .never
+                autocap: .never,
+                autocorrect: false
             )
             VStack(alignment: .leading, spacing: 6) {
                 fieldLabel("About")
@@ -239,21 +240,24 @@ struct EditProfileSheet: View {
                 placeholder: "you@example.com",
                 text: $nip05,
                 autocap: .never,
-                keyboard: .emailAddress
+                keyboard: .emailAddress,
+                autocorrect: false
             )
             field(
                 label: "Website",
                 placeholder: "https://…",
                 text: $website,
                 autocap: .never,
-                keyboard: .URL
+                keyboard: .URL,
+                autocorrect: false
             )
             field(
                 label: "Lightning address",
                 placeholder: "you@walletofsatoshi.com",
                 text: $lud16,
                 autocap: .never,
-                keyboard: .emailAddress
+                keyboard: .emailAddress,
+                autocorrect: false
             )
         }
     }
@@ -263,7 +267,8 @@ struct EditProfileSheet: View {
         placeholder: String,
         text: Binding<String>,
         autocap: TextInputAutocapitalization = .sentences,
-        keyboard: UIKeyboardType = .default
+        keyboard: UIKeyboardType = .default,
+        autocorrect: Bool = true
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             fieldLabel(label)
@@ -276,7 +281,7 @@ struct EditProfileSheet: View {
             .font(.body)
             .foregroundStyle(Color.highlighterInkStrong)
             .textInputAutocapitalization(autocap)
-            .autocorrectionDisabled(autocap == .never)
+            .autocorrectionDisabled(!autocorrect)
             .keyboardType(keyboard)
         }
     }

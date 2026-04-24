@@ -801,6 +801,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getCacheStats() async throws  -> CacheStats
     
     /**
+     * NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending
+     * by `created_at`. UI can also peek with `limit=1` to detect chat
+     * activity and decide whether to expose the chat tab at all.
+     */
+    func getChatMessages(groupId: String, limit: UInt32) async throws  -> [ChatMessageRecord]
+    
+    /**
      * Read NIP-22 comments (kind:1111) rooted at the given uppercase
      * scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
      * books, etc. Newest first.
@@ -976,6 +983,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func probeRelayNip11(url: String) async throws  -> Nip11Document
     
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async throws  -> ArtifactRecord
+    
+    /**
+     * Publish a NIP-29 kind:9 chat message into `group_id`. When
+     * `reply_to_event_id` is set, the published event carries a marked
+     * NIP-10 `["e", <id>, "", "reply"]` tag.
+     */
+    func publishChatMessage(groupId: String, content: String, replyToEventId: String?) async throws  -> ChatMessageRecord
     
     func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async throws  -> DiscussionRecord
     
@@ -1178,6 +1192,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func subscribeRoom(groupId: String) async throws  -> UInt64
     
     /**
+     * Per-room Chat view-scope subscription. Returns a handle; fires
+     * `ChatMessageUpserted` deltas for kind:9 messages tagged
+     * `#h=<group_id>`.
+     */
+    func subscribeRoomChat(groupId: String) async throws  -> UInt64
+    
+    /**
      * Per-room Discussions view-scope subscription. Returns a handle; fires
      * `DiscussionUpserted` deltas for kind:11 threads in this group that
      * carry the `t=discussion` marker.
@@ -1207,6 +1228,16 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Drop a subscription by handle. Idempotent.
      */
     func unsubscribe(handle: UInt64) 
+    
+    /**
+     * Publish a new kind:0 metadata event for the current user. Preserves
+     * any unknown JSON fields the user had set via other clients —
+     * only the canonical fields the edit form drives get overwritten.
+     * Empty strings clear the corresponding field. Returns the parsed
+     * metadata so the caller's UI can swap to the new state without
+     * waiting for the relay echo.
+     */
+    func updateProfile(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String) async throws  -> ProfileMetadata
     
     /**
      * Upload a photo to the default Blossom server (`blossom.primal.net`)
@@ -1514,6 +1545,28 @@ open func getCacheStats()async throws  -> CacheStats  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCacheStats_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending
+     * by `created_at`. UI can also peek with `limit=1` to detect chat
+     * activity and decide whether to expose the chat tab at all.
+     */
+open func getChatMessages(groupId: String, limit: UInt32)async throws  -> [ChatMessageRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_chat_messages(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeChatMessageRecord.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -2200,6 +2253,28 @@ open func publishArtifact(preview: ArtifactPreview, groupId: String, note: Strin
         )
 }
     
+    /**
+     * Publish a NIP-29 kind:9 chat message into `group_id`. When
+     * `reply_to_event_id` is set, the published event carries a marked
+     * NIP-10 `["e", <id>, "", "reply"]` tag.
+     */
+open func publishChatMessage(groupId: String, content: String, replyToEventId: String?)async throws  -> ChatMessageRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_chat_message(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(groupId),FfiConverterString.lower(content),FfiConverterOptionString.lower(replyToEventId)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeChatMessageRecord_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
 open func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?)async throws  -> DiscussionRecord  {
     return
         try  await uniffiRustCallAsync(
@@ -2872,6 +2947,28 @@ open func subscribeRoom(groupId: String)async throws  -> UInt64  {
 }
     
     /**
+     * Per-room Chat view-scope subscription. Returns a handle; fires
+     * `ChatMessageUpserted` deltas for kind:9 messages tagged
+     * `#h=<group_id>`.
+     */
+open func subscribeRoomChat(groupId: String)async throws  -> UInt64  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_subscribe_room_chat(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(groupId)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
+            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
+            freeFunc: ffi_highlighter_core_rust_future_free_u64,
+            liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Per-room Discussions view-scope subscription. Returns a handle; fires
      * `DiscussionUpserted` deltas for kind:11 threads in this group that
      * carry the `t=discussion` marker.
@@ -2965,6 +3062,31 @@ open func unsubscribe(handle: UInt64)  {try! rustCall() {
         FfiConverterUInt64.lower(handle),$0
     )
 }
+}
+    
+    /**
+     * Publish a new kind:0 metadata event for the current user. Preserves
+     * any unknown JSON fields the user had set via other clients —
+     * only the canonical fields the edit form drives get overwritten.
+     * Empty strings clear the corresponding field. Returns the parsed
+     * metadata so the caller's UI can swap to the new state without
+     * waiting for the relay echo.
+     */
+open func updateProfile(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String)async throws  -> ProfileMetadata  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_update_profile(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(name),FfiConverterString.lower(displayName),FfiConverterString.lower(about),FfiConverterString.lower(picture),FfiConverterString.lower(banner),FfiConverterString.lower(nip05),FfiConverterString.lower(website),FfiConverterString.lower(lud16)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeProfileMetadata_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
 }
     
     /**
@@ -3835,6 +3957,126 @@ public func FfiConverterTypeCacheStats_lift(_ buf: RustBuffer) throws -> CacheSt
 #endif
 public func FfiConverterTypeCacheStats_lower(_ value: CacheStats) -> RustBuffer {
     return FfiConverterTypeCacheStats.lower(value)
+}
+
+
+/**
+ * A NIP-29 kind:9 chat message inside a group. Flat conversation event —
+ * distinct from kind:11 threaded discussions.
+ */
+public struct ChatMessageRecord {
+    public var eventId: String
+    public var groupId: String
+    public var authorPubkey: String
+    public var content: String
+    /**
+     * Seconds since epoch — required (we drop messages without one upstream).
+     */
+    public var createdAt: UInt64
+    /**
+     * When set, this message replies to the named event id (NIP-10 `["e",
+     * <id>, "", "reply"]`). UI can render an inline reply chip.
+     */
+    public var replyToEventId: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, groupId: String, authorPubkey: String, content: String, 
+        /**
+         * Seconds since epoch — required (we drop messages without one upstream).
+         */createdAt: UInt64, 
+        /**
+         * When set, this message replies to the named event id (NIP-10 `["e",
+         * <id>, "", "reply"]`). UI can render an inline reply chip.
+         */replyToEventId: String?) {
+        self.eventId = eventId
+        self.groupId = groupId
+        self.authorPubkey = authorPubkey
+        self.content = content
+        self.createdAt = createdAt
+        self.replyToEventId = replyToEventId
+    }
+}
+
+#if compiler(>=6)
+extension ChatMessageRecord: Sendable {}
+#endif
+
+
+extension ChatMessageRecord: Equatable, Hashable {
+    public static func ==(lhs: ChatMessageRecord, rhs: ChatMessageRecord) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.replyToEventId != rhs.replyToEventId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(groupId)
+        hasher.combine(authorPubkey)
+        hasher.combine(content)
+        hasher.combine(createdAt)
+        hasher.combine(replyToEventId)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatMessageRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatMessageRecord {
+        return
+            try ChatMessageRecord(
+                eventId: FfiConverterString.read(from: &buf), 
+                groupId: FfiConverterString.read(from: &buf), 
+                authorPubkey: FfiConverterString.read(from: &buf), 
+                content: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterUInt64.read(from: &buf), 
+                replyToEventId: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatMessageRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterOptionString.write(value.replyToEventId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageRecord_lift(_ buf: RustBuffer) throws -> ChatMessageRecord {
+    return try FfiConverterTypeChatMessageRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageRecord_lower(_ value: ChatMessageRecord) -> RustBuffer {
+    return FfiConverterTypeChatMessageRecord.lower(value)
 }
 
 
@@ -6445,6 +6687,12 @@ public enum DataChangeType {
     )
     case discussionUpserted(groupId: String, discussion: DiscussionRecord
     )
+    /**
+     * A NIP-29 kind:9 chat message arrived for `group_id`. The Swift
+     * chat store appends it to its message list (ordered by `created_at`).
+     */
+    case chatMessageUpserted(groupId: String, message: ChatMessageRecord
+    )
     case highlightUpserted(groupId: String, highlight: HydratedHighlight
     )
     /**
@@ -6560,42 +6808,45 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         case 4: return .discussionUpserted(groupId: try FfiConverterString.read(from: &buf), discussion: try FfiConverterTypeDiscussionRecord.read(from: &buf)
         )
         
-        case 5: return .highlightUpserted(groupId: try FfiConverterString.read(from: &buf), highlight: try FfiConverterTypeHydratedHighlight.read(from: &buf)
+        case 5: return .chatMessageUpserted(groupId: try FfiConverterString.read(from: &buf), message: try FfiConverterTypeChatMessageRecord.read(from: &buf)
         )
         
-        case 6: return .highlightShared(groupId: try FfiConverterString.read(from: &buf), highlightId: try FfiConverterString.read(from: &buf), sharedByPubkey: try FfiConverterString.read(from: &buf)
+        case 6: return .highlightUpserted(groupId: try FfiConverterString.read(from: &buf), highlight: try FfiConverterTypeHydratedHighlight.read(from: &buf)
         )
         
-        case 7: return .myHighlightUpserted(highlight: try FfiConverterTypeHighlightRecord.read(from: &buf)
+        case 7: return .highlightShared(groupId: try FfiConverterString.read(from: &buf), highlightId: try FfiConverterString.read(from: &buf), sharedByPubkey: try FfiConverterString.read(from: &buf)
         )
         
-        case 8: return .userProfileUpdated(pubkey: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
+        case 8: return .myHighlightUpserted(highlight: try FfiConverterTypeHighlightRecord.read(from: &buf)
         )
         
-        case 9: return .articleUpdated(address: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
+        case 9: return .userProfileUpdated(pubkey: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
         )
         
-        case 10: return .followingReadsUpdated
-        
-        case 11: return .followingHighlightsUpdated
-        
-        case 12: return .feedbackThreadsUpdated
-        
-        case 13: return .feedbackThreadEventUpserted(event: try FfiConverterTypeFeedbackEventRecord.read(from: &buf)
+        case 10: return .articleUpdated(address: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
         )
         
-        case 14: return .searchArticlesUpdated(query: try FfiConverterString.read(from: &buf)
+        case 11: return .followingReadsUpdated
+        
+        case 12: return .followingHighlightsUpdated
+        
+        case 13: return .feedbackThreadsUpdated
+        
+        case 14: return .feedbackThreadEventUpserted(event: try FfiConverterTypeFeedbackEventRecord.read(from: &buf)
         )
         
-        case 15: return .bookmarksUpdated
-        
-        case 16: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
+        case 15: return .searchArticlesUpdated(query: try FfiConverterString.read(from: &buf)
         )
         
-        case 17: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
+        case 16: return .bookmarksUpdated
+        
+        case 17: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
         )
         
-        case 18: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
+        case 18: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 19: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -6628,74 +6879,80 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             FfiConverterTypeDiscussionRecord.write(discussion, into: &buf)
             
         
-        case let .highlightUpserted(groupId,highlight):
+        case let .chatMessageUpserted(groupId,message):
             writeInt(&buf, Int32(5))
+            FfiConverterString.write(groupId, into: &buf)
+            FfiConverterTypeChatMessageRecord.write(message, into: &buf)
+            
+        
+        case let .highlightUpserted(groupId,highlight):
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeHydratedHighlight.write(highlight, into: &buf)
             
         
         case let .highlightShared(groupId,highlightId,sharedByPubkey):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterString.write(highlightId, into: &buf)
             FfiConverterString.write(sharedByPubkey, into: &buf)
             
         
         case let .myHighlightUpserted(highlight):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeHighlightRecord.write(highlight, into: &buf)
             
         
         case let .userProfileUpdated(pubkey,kind):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterString.write(pubkey, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
             
         
         case let .articleUpdated(address,kind):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(address, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
             
         
         case .followingReadsUpdated:
-            writeInt(&buf, Int32(10))
-        
-        
-        case .followingHighlightsUpdated:
             writeInt(&buf, Int32(11))
         
         
-        case .feedbackThreadsUpdated:
+        case .followingHighlightsUpdated:
             writeInt(&buf, Int32(12))
         
         
-        case let .feedbackThreadEventUpserted(event):
+        case .feedbackThreadsUpdated:
             writeInt(&buf, Int32(13))
+        
+        
+        case let .feedbackThreadEventUpserted(event):
+            writeInt(&buf, Int32(14))
             FfiConverterTypeFeedbackEventRecord.write(event, into: &buf)
             
         
         case let .searchArticlesUpdated(query):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(15))
             FfiConverterString.write(query, into: &buf)
             
         
         case .bookmarksUpdated:
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(16))
         
         
         case let .signerConnected(user):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(17))
             FfiConverterTypeCurrentUser.write(user, into: &buf)
             
         
         case let .bunkerSignRequest(requestId):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(18))
             FfiConverterString.write(requestId, into: &buf)
             
         
         case let .relayStatusChanged(url,state):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(19))
             FfiConverterString.write(url, into: &buf)
             FfiConverterTypeRelayStatus.write(state, into: &buf)
             
@@ -7445,6 +7702,31 @@ fileprivate struct FfiConverterSequenceTypeArtifactRecord: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeChatMessageRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [ChatMessageRecord]
+
+    public static func write(_ value: [ChatMessageRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeChatMessageRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ChatMessageRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ChatMessageRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeChatMessageRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCommentRecord: FfiConverterRustBuffer {
     typealias SwiftType = [CommentRecord]
 
@@ -7867,6 +8149,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 48741) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_messages() != 44460) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_reference() != 23769) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7972,6 +8257,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 62633) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message() != 34308) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 50982) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8068,6 +8356,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room() != 19851) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_chat() != 62044) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_discussions() != 25508) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8081,6 +8372,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_unsubscribe() != 55013) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_update_profile() != 54507) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 51840) {

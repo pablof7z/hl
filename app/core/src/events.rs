@@ -5,8 +5,8 @@
 //! that installed the subscription.
 
 use crate::models::{
-    ArtifactRecord, CommunitySummary, CurrentUser, DiscussionRecord, FeedbackEventRecord,
-    HighlightRecord, HydratedHighlight,
+    ArtifactRecord, ChatMessageRecord, CommunitySummary, CurrentUser, DiscussionRecord,
+    FeedbackEventRecord, HighlightRecord, HydratedHighlight,
 };
 use crate::models::RelayStatus;
 
@@ -18,6 +18,12 @@ pub enum DataChangeType {
     DiscussionUpserted {
         group_id: String,
         discussion: DiscussionRecord,
+    },
+    /// A NIP-29 kind:9 chat message arrived for `group_id`. The Swift
+    /// chat store appends it to its message list (ordered by `created_at`).
+    ChatMessageUpserted {
+        group_id: String,
+        message: ChatMessageRecord,
     },
     HighlightUpserted {
         group_id: String,

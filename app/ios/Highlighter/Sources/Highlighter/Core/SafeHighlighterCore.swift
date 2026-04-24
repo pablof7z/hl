@@ -106,6 +106,28 @@ actor SafeHighlighterCore {
         try await core.getDiscussions(groupId: groupId, limit: limit)
     }
 
+    // MARK: - Chat (NIP-29 kind:9)
+
+    func getChatMessages(groupId: String, limit: UInt32 = 200) async throws -> [ChatMessageRecord] {
+        try await core.getChatMessages(groupId: groupId, limit: limit)
+    }
+
+    func publishChatMessage(
+        groupId: String,
+        content: String,
+        replyToEventId: String? = nil
+    ) async throws -> ChatMessageRecord {
+        try await core.publishChatMessage(
+            groupId: groupId,
+            content: content,
+            replyToEventId: replyToEventId
+        )
+    }
+
+    func subscribeRoomChat(groupId: String) async throws -> UInt64 {
+        try await core.subscribeRoomChat(groupId: groupId)
+    }
+
     // MARK: - Feedback (shake-to-share)
 
     func getFeedbackThreads(coordinate: String) async throws -> [FeedbackThreadRecord] {

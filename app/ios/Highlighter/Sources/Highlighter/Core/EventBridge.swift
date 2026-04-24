@@ -26,6 +26,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     fileprivate struct Registry: @unchecked Sendable {
         var rooms: [UInt64: WeakBox<RoomStore>] = [:]
         var discussions: [UInt64: WeakBox<DiscussionStore>] = [:]
+        var chats: [UInt64: WeakBox<ChatStore>] = [:]
+        var chatPresence: [UInt64: WeakBox<ChatPresenceProbe>] = [:]
         var profiles: [UInt64: WeakBox<ProfileStore>] = [:]
         var articles: [UInt64: WeakBox<ArticleReaderStore>] = [:]
         var reads: [UInt64: WeakBox<ReadsStore>] = [:]
@@ -42,6 +44,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         mutating func prune() {
             rooms = rooms.filter { $0.value.value != nil }
             discussions = discussions.filter { $0.value.value != nil }
+            chats = chats.filter { $0.value.value != nil }
+            chatPresence = chatPresence.filter { $0.value.value != nil }
             profiles = profiles.filter { $0.value.value != nil }
             articles = articles.filter { $0.value.value != nil }
             reads = reads.filter { $0.value.value != nil }
@@ -69,6 +73,20 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     func registerDiscussions(_ store: DiscussionStore, handle: UInt64) {
         registry.withLock { reg in
             reg.discussions[handle] = WeakBox(store)
+            reg.prune()
+        }
+    }
+
+    func registerChat(_ store: ChatStore, handle: UInt64) {
+        registry.withLock { reg in
+            reg.chats[handle] = WeakBox(store)
+            reg.prune()
+        }
+    }
+
+    func registerChatPresence(_ probe: ChatPresenceProbe, handle: UInt64) {
+        registry.withLock { reg in
+            reg.chatPresence[handle] = WeakBox(probe)
             reg.prune()
         }
     }
@@ -139,6 +157,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         registry.withLock { reg in
             _ = reg.rooms.removeValue(forKey: handle)
             _ = reg.discussions.removeValue(forKey: handle)
+            _ = reg.chats.removeValue(forKey: handle)
+            _ = reg.chatPresence.removeValue(forKey: handle)
             _ = reg.profiles.removeValue(forKey: handle)
             _ = reg.articles.removeValue(forKey: handle)
             _ = reg.reads.removeValue(forKey: handle)
@@ -162,43 +182,67 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 return
             }
 
-            let (roomStore, discussionStore, profileStore, articleStore, readsStore, highlightsStore, feedbackStore, feedbackThreadStore, searchStore, profileCachePubkey) = self.registry.withLock { reg in
-                (
-                    reg.rooms[id]?.value,
-                    reg.discussions[id]?.value,
-                    reg.profiles[id]?.value,
-                    reg.articles[id]?.value,
-                    reg.reads[id]?.value,
-                    reg.highlights[id]?.value,
-                    reg.feedbackThreads[id]?.value,
-                    reg.feedbackThreadDetails[id]?.value,
-                    reg.searches[id]?.value,
-                    reg.profileCacheHandles[id]
+            let routed = self.registry.withLock { reg -> RoutedStores in
+                RoutedStores(
+                    room: reg.rooms[id]?.value,
+                    discussion: reg.discussions[id]?.value,
+                    chat: reg.chats[id]?.value,
+                    chatPresence: reg.chatPresence[id]?.value,
+                    profile: reg.profiles[id]?.value,
+                    article: reg.articles[id]?.value,
+                    reads: reg.reads[id]?.value,
+                    highlights: reg.highlights[id]?.value,
+                    feedback: reg.feedbackThreads[id]?.value,
+                    feedbackThread: reg.feedbackThreadDetails[id]?.value,
+                    search: reg.searches[id]?.value,
+                    profileCachePubkey: reg.profileCacheHandles[id]
                 )
             }
 
-            if let roomStore {
-                self.dispatchRoom(change, store: roomStore)
-            } else if let discussionStore {
-                self.dispatchDiscussions(change, store: discussionStore)
-            } else if let profileStore {
-                self.dispatchProfile(change, store: profileStore)
-            } else if let articleStore {
-                self.dispatchArticle(change, store: articleStore)
-            } else if let readsStore {
-                self.dispatchReads(change, store: readsStore)
-            } else if let highlightsStore {
-                self.dispatchHighlights(change, store: highlightsStore)
-            } else if let feedbackStore {
-                self.dispatchFeedbackThreads(change, store: feedbackStore)
-            } else if let feedbackThreadStore {
-                self.dispatchFeedbackThread(change, store: feedbackThreadStore)
-            } else if let searchStore {
-                self.dispatchSearch(change, store: searchStore)
-            } else if let pubkey = profileCachePubkey {
+            if let store = routed.room {
+                self.dispatchRoom(change, store: store)
+            } else if let store = routed.discussion {
+                self.dispatchDiscussions(change, store: store)
+            } else if let store = routed.chat {
+                self.dispatchChat(change, store: store)
+            } else if let probe = routed.chatPresence {
+                self.dispatchChatPresence(change, probe: probe)
+            } else if let store = routed.profile {
+                self.dispatchProfile(change, store: store)
+            } else if let store = routed.article {
+                self.dispatchArticle(change, store: store)
+            } else if let store = routed.reads {
+                self.dispatchReads(change, store: store)
+            } else if let store = routed.highlights {
+                self.dispatchHighlights(change, store: store)
+            } else if let store = routed.feedback {
+                self.dispatchFeedbackThreads(change, store: store)
+            } else if let store = routed.feedbackThread {
+                self.dispatchFeedbackThread(change, store: store)
+            } else if let store = routed.search {
+                self.dispatchSearch(change, store: store)
+            } else if let pubkey = routed.profileCachePubkey {
                 self.dispatchProfileCache(change, pubkey: pubkey)
             }
         }
+    }
+
+    /// Snapshot of every view-scoped store that *might* own this delta's
+    /// subscription handle. Routing is first-non-nil-wins; a handle is only
+    /// ever registered to one store at a time.
+    private struct RoutedStores {
+        let room: RoomStore?
+        let discussion: DiscussionStore?
+        let chat: ChatStore?
+        let chatPresence: ChatPresenceProbe?
+        let profile: ProfileStore?
+        let article: ArticleReaderStore?
+        let reads: ReadsStore?
+        let highlights: HighlightsStore?
+        let feedback: FeedbackStore?
+        let feedbackThread: FeedbackThreadStore?
+        let search: SearchStore?
+        let profileCachePubkey: String?
     }
 
     @MainActor
@@ -284,6 +328,23 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             store.apply(discussion: discussion)
         default:
             break
+        }
+    }
+
+    @MainActor
+    private func dispatchChat(_ change: DataChangeType, store: ChatStore) {
+        switch change {
+        case .chatMessageUpserted(_, let message):
+            store.apply(message: message)
+        default:
+            break
+        }
+    }
+
+    @MainActor
+    private func dispatchChatPresence(_ change: DataChangeType, probe: ChatPresenceProbe) {
+        if case .chatMessageUpserted = change {
+            probe.notifyActivity()
         }
     }
 
