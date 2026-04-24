@@ -532,6 +532,24 @@ fileprivate struct FfiConverterString: FfiConverter {
     }
 }
 
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterData: FfiConverterRustBuffer {
+    typealias SwiftType = Data
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        let len: Int32 = try readInt(&buf)
+        return Data(try readBytes(&buf, count: Int(len)))
+    }
+
+    public static func write(_ value: Data, into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        writeBytes(&buf, value)
+    }
+}
+
 
 
 
@@ -720,6 +738,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func currentUser()  -> CurrentUser?
     
     /**
+     * Diagnostic report for the highlights feed. Returns a short string
+     * with ndb counts so the iOS side can show what it's seeing when the
+     * feed comes back empty. Temporary — remove once the feed is stable.
+     */
+    func debugHighlightsReport() async throws  -> String
+    
+    /**
      * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
      * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
      * backfills via relays, and a later call returns `Some`.
@@ -728,7 +753,20 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     
     func getArtifacts(groupId: String, limit: UInt32) async throws  -> [ArtifactRecord]
     
+    /**
+     * Return the user's ordered Blossom server list from nostrdb. Empty if no
+     * kind:10063 has been cached yet (relay hasn't delivered it).
+     */
+    func getBlossomServers() async throws  -> [String]
+    
     func getDiscussions(groupId: String, limit: UInt32) async throws  -> [DiscussionRecord]
+    
+    /**
+     * Highlights home feed — kind:9802 events authored by follows plus
+     * highlights tagged into joined rooms. See
+     * `highlights::query_following_highlights` for semantics.
+     */
+    func getFollowingHighlights(limit: UInt32) async throws  -> [HydratedHighlight]
     
     /**
      * Following Reads feed — articles surfaced through the user's follow
@@ -749,6 +787,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     
     func getMyHighlights(limit: UInt32) async throws  -> [HighlightRecord]
     
+    /**
+     * Recent books across the user's joined communities — drives the
+     * capture-flow book picker. Returns `[]` if no books are cached or the
+     * user isn't logged in.
+     */
     func getRecentBooks(limit: UInt32) async throws  -> [ArtifactRecord]
     
     func getUserArticles(pubkeyHex: String, limit: UInt32) async throws  -> [ArticleRecord]
@@ -758,6 +801,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getUserHighlights(pubkeyHex: String, limit: UInt32) async throws  -> [HighlightRecord]
     
     func getUserProfile(pubkeyHex: String) async throws  -> ProfileMetadata?
+    
+    /**
+     * Publish the default Blossom server list only if the user has no cached
+     * kind:10063. Called once after login; no-op when the list already exists.
+     */
+    func initDefaultBlossomServers() async throws 
     
     /**
      * Returns true if the logged-in user's cached contact list currently
@@ -786,7 +835,21 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     
     func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [HighlightDraft], targetGroupId: String) async throws  -> [HighlightRecord]
     
+    /**
+     * Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
+     * Used by the capture flow when the user opts not to (or can't) extract
+     * a highlight quote — the photo still ships to the community with all
+     * the imeta metadata.
+     */
+    func publishPicture(draft: PictureDraft) async throws  -> PictureRecord
+    
     func searchArtifacts(query: String, limit: UInt32) async throws  -> [ArtifactRecord]
+    
+    /**
+     * Replace the user's Blossom server list with `servers` (must be
+     * non-empty). Order is preserved — first server is the upload default.
+     */
+    func setBlossomServers(servers: [String]) async throws  -> String
     
     func setEventCallback(callback: EventCallback) 
     
@@ -798,6 +861,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func setFollow(targetPubkeyHex: String, follow: Bool) async throws  -> String?
     
+    /**
+     * Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
+     * request. Returns the raw JSON of the signed event; the Swift caller
+     * base64-encodes it and uses it as `Authorization: Nostr <base64>`.
+     * `payload_hash` is the hex SHA-256 of the file bytes (required for PUT).
+     */
+    func signNip98Auth(url: String, method: String, payloadHash: String?) async throws  -> String
+    
     func startNostrConnect(options: NostrConnectOptions) async throws  -> String
     
     /**
@@ -807,6 +878,15 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * appearance; `unsubscribe(handle)` on disappearance.
      */
     func subscribeArticle(pubkeyHex: String, dTag: String) async throws  -> UInt64
+    
+    /**
+     * Highlights home-feed view-scope subscription. Snapshots the user's
+     * current follow list (plus self — nobody lists themselves in kind:3
+     * but we want our own highlights in the home feed) and joined-group
+     * ids, then listens for kind:9802 events authored by anyone in that
+     * set or tagged into any joined room.
+     */
+    func subscribeFollowingHighlights() async throws  -> UInt64
     
     /**
      * Following Reads view-scope subscription. Snapshots the user's current
@@ -855,6 +935,16 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Drop a subscription by handle. Idempotent.
      */
     func unsubscribe(handle: UInt64) 
+    
+    /**
+     * Upload a photo to the default Blossom server (`blossom.primal.net`)
+     * using BUD-01 auth. The caller (iOS) is responsible for stripping EXIF
+     * metadata and recompressing the image before sending bytes — Rust does
+     * not decode the image. `width`/`height` are stamped onto the returned
+     * descriptor for use in the publishing event's `imeta` tag.
+     * `alt` is the recognized OCR text, or empty if none.
+     */
+    func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async throws  -> BlossomUpload
     
 }
 open class HighlighterCore: HighlighterCoreProtocol, @unchecked Sendable {
@@ -946,6 +1036,28 @@ open func currentUser() -> CurrentUser?  {
 }
     
     /**
+     * Diagnostic report for the highlights feed. Returns a short string
+     * with ndb counts so the iOS side can show what it's seeing when the
+     * feed comes back empty. Temporary — remove once the feed is stable.
+     */
+open func debugHighlightsReport()async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_debug_highlights_report(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
      * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
      * backfills via relays, and a later call returns `Some`.
@@ -984,6 +1096,27 @@ open func getArtifacts(groupId: String, limit: UInt32)async throws  -> [Artifact
         )
 }
     
+    /**
+     * Return the user's ordered Blossom server list from nostrdb. Empty if no
+     * kind:10063 has been cached yet (relay hasn't delivered it).
+     */
+open func getBlossomServers()async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_blossom_servers(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
 open func getDiscussions(groupId: String, limit: UInt32)async throws  -> [DiscussionRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -997,6 +1130,28 @@ open func getDiscussions(groupId: String, limit: UInt32)async throws  -> [Discus
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeDiscussionRecord.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Highlights home feed — kind:9802 events authored by follows plus
+     * highlights tagged into joined rooms. See
+     * `highlights::query_following_highlights` for semantics.
+     */
+open func getFollowingHighlights(limit: UInt32)async throws  -> [HydratedHighlight]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_following_highlights(
+                    self.uniffiClonePointer(),
+                    FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeHydratedHighlight.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -1095,6 +1250,11 @@ open func getMyHighlights(limit: UInt32)async throws  -> [HighlightRecord]  {
         )
 }
     
+    /**
+     * Recent books across the user's joined communities — drives the
+     * capture-flow book picker. Returns `[]` if no books are cached or the
+     * user isn't logged in.
+     */
 open func getRecentBooks(limit: UInt32)async throws  -> [ArtifactRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -1176,6 +1336,27 @@ open func getUserProfile(pubkeyHex: String)async throws  -> ProfileMetadata?  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionTypeProfileMetadata.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Publish the default Blossom server list only if the user has no cached
+     * kind:10063. Called once after login; no-op when the list already exists.
+     */
+open func initDefaultBlossomServers()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_init_default_blossom_servers(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -1322,6 +1503,29 @@ open func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [Highlight
         )
 }
     
+    /**
+     * Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
+     * Used by the capture flow when the user opts not to (or can't) extract
+     * a highlight quote — the photo still ships to the community with all
+     * the imeta metadata.
+     */
+open func publishPicture(draft: PictureDraft)async throws  -> PictureRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_picture(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePictureDraft_lower(draft)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePictureRecord_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
 open func searchArtifacts(query: String, limit: UInt32)async throws  -> [ArtifactRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -1335,6 +1539,27 @@ open func searchArtifacts(query: String, limit: UInt32)async throws  -> [Artifac
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeArtifactRecord.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Replace the user's Blossom server list with `servers` (must be
+     * non-empty). Order is preserved — first server is the upload default.
+     */
+open func setBlossomServers(servers: [String])async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_set_blossom_servers(
+                    self.uniffiClonePointer(),
+                    FfiConverterSequenceString.lower(servers)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -1369,6 +1594,29 @@ open func setFollow(targetPubkeyHex: String, follow: Bool)async throws  -> Strin
         )
 }
     
+    /**
+     * Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
+     * request. Returns the raw JSON of the signed event; the Swift caller
+     * base64-encodes it and uses it as `Authorization: Nostr <base64>`.
+     * `payload_hash` is the hex SHA-256 of the file bytes (required for PUT).
+     */
+open func signNip98Auth(url: String, method: String, payloadHash: String?)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_sign_nip98_auth(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(url),FfiConverterString.lower(method),FfiConverterOptionString.lower(payloadHash)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
 open func startNostrConnect(options: NostrConnectOptions)async throws  -> String  {
     return
         try  await uniffiRustCallAsync(
@@ -1399,6 +1647,30 @@ open func subscribeArticle(pubkeyHex: String, dTag: String)async throws  -> UInt
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_article(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(pubkeyHex),FfiConverterString.lower(dTag)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
+            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
+            freeFunc: ffi_highlighter_core_rust_future_free_u64,
+            liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Highlights home-feed view-scope subscription. Snapshots the user's
+     * current follow list (plus self — nobody lists themselves in kind:3
+     * but we want our own highlights in the home feed) and joined-group
+     * ids, then listens for kind:9802 events authored by anyone in that
+     * set or tagged into any joined room.
+     */
+open func subscribeFollowingHighlights()async throws  -> UInt64  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_highlights(
+                    self.uniffiClonePointer()
+                    
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_u64,
@@ -1550,6 +1822,31 @@ open func unsubscribe(handle: UInt64)  {try! rustCall() {
         FfiConverterUInt64.lower(handle),$0
     )
 }
+}
+    
+    /**
+     * Upload a photo to the default Blossom server (`blossom.primal.net`)
+     * using BUD-01 auth. The caller (iOS) is responsible for stripping EXIF
+     * metadata and recompressing the image before sending bytes — Rust does
+     * not decode the image. `width`/`height` are stamped onto the returned
+     * descriptor for use in the publishing event's `imeta` tag.
+     * `alt` is the recognized OCR text, or empty if none.
+     */
+open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String)async throws  -> BlossomUpload  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_upload_photo(
+                    self.uniffiClonePointer(),
+                    FfiConverterData.lower(bytes),FfiConverterString.lower(mime),FfiConverterUInt32.lower(width),FfiConverterUInt32.lower(height),FfiConverterString.lower(alt)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBlossomUpload_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
 }
     
 
@@ -2133,6 +2430,143 @@ public func FfiConverterTypeArtifactRecord_lift(_ buf: RustBuffer) throws -> Art
 #endif
 public func FfiConverterTypeArtifactRecord_lower(_ value: ArtifactRecord) -> RustBuffer {
     return FfiConverterTypeArtifactRecord.lower(value)
+}
+
+
+/**
+ * Result of a successful Blossom upload — what to put in an `imeta` tag.
+ */
+public struct BlossomUpload {
+    /**
+     * Public URL the server returned (e.g. `https://blossom.primal.net/<sha>.jpg`).
+     */
+    public var url: String
+    /**
+     * Lowercase hex SHA-256 of the uploaded bytes.
+     */
+    public var sha256Hex: String
+    /**
+     * MIME type the client uploaded as.
+     */
+    public var mime: String
+    public var sizeBytes: UInt64
+    public var width: UInt32
+    public var height: UInt32
+    /**
+     * Optional alt text — for OCR captures, the recognized text. Empty if none.
+     */
+    public var alt: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Public URL the server returned (e.g. `https://blossom.primal.net/<sha>.jpg`).
+         */url: String, 
+        /**
+         * Lowercase hex SHA-256 of the uploaded bytes.
+         */sha256Hex: String, 
+        /**
+         * MIME type the client uploaded as.
+         */mime: String, sizeBytes: UInt64, width: UInt32, height: UInt32, 
+        /**
+         * Optional alt text — for OCR captures, the recognized text. Empty if none.
+         */alt: String) {
+        self.url = url
+        self.sha256Hex = sha256Hex
+        self.mime = mime
+        self.sizeBytes = sizeBytes
+        self.width = width
+        self.height = height
+        self.alt = alt
+    }
+}
+
+#if compiler(>=6)
+extension BlossomUpload: Sendable {}
+#endif
+
+
+extension BlossomUpload: Equatable, Hashable {
+    public static func ==(lhs: BlossomUpload, rhs: BlossomUpload) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.sha256Hex != rhs.sha256Hex {
+            return false
+        }
+        if lhs.mime != rhs.mime {
+            return false
+        }
+        if lhs.sizeBytes != rhs.sizeBytes {
+            return false
+        }
+        if lhs.width != rhs.width {
+            return false
+        }
+        if lhs.height != rhs.height {
+            return false
+        }
+        if lhs.alt != rhs.alt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(sha256Hex)
+        hasher.combine(mime)
+        hasher.combine(sizeBytes)
+        hasher.combine(width)
+        hasher.combine(height)
+        hasher.combine(alt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlossomUpload: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomUpload {
+        return
+            try BlossomUpload(
+                url: FfiConverterString.read(from: &buf), 
+                sha256Hex: FfiConverterString.read(from: &buf), 
+                mime: FfiConverterString.read(from: &buf), 
+                sizeBytes: FfiConverterUInt64.read(from: &buf), 
+                width: FfiConverterUInt32.read(from: &buf), 
+                height: FfiConverterUInt32.read(from: &buf), 
+                alt: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlossomUpload, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterString.write(value.sha256Hex, into: &buf)
+        FfiConverterString.write(value.mime, into: &buf)
+        FfiConverterUInt64.write(value.sizeBytes, into: &buf)
+        FfiConverterUInt32.write(value.width, into: &buf)
+        FfiConverterUInt32.write(value.height, into: &buf)
+        FfiConverterString.write(value.alt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomUpload_lift(_ buf: RustBuffer) throws -> BlossomUpload {
+    return try FfiConverterTypeBlossomUpload.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomUpload_lower(_ value: BlossomUpload) -> RustBuffer {
+    return FfiConverterTypeBlossomUpload.lower(value)
 }
 
 
@@ -2734,6 +3168,12 @@ public struct HighlightDraft {
      * Transcript segment IDs that the clip spans. Empty for non-clip highlights.
      */
     public var clipTranscriptSegmentIds: [String]
+    /**
+     * Optional photo accompanying the highlight (e.g. the page captured for an
+     * OCR'd book quote). When set, the published kind:9802 carries an
+     * `imeta` tag (NIP-92) referencing the Blossom-hosted blob.
+     */
+    public var image: BlossomUpload?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -2746,7 +3186,12 @@ public struct HighlightDraft {
          */clipSpeaker: String, 
         /**
          * Transcript segment IDs that the clip spans. Empty for non-clip highlights.
-         */clipTranscriptSegmentIds: [String]) {
+         */clipTranscriptSegmentIds: [String], 
+        /**
+         * Optional photo accompanying the highlight (e.g. the page captured for an
+         * OCR'd book quote). When set, the published kind:9802 carries an
+         * `imeta` tag (NIP-92) referencing the Blossom-hosted blob.
+         */image: BlossomUpload?) {
         self.quote = quote
         self.context = context
         self.note = note
@@ -2754,6 +3199,7 @@ public struct HighlightDraft {
         self.clipEndSeconds = clipEndSeconds
         self.clipSpeaker = clipSpeaker
         self.clipTranscriptSegmentIds = clipTranscriptSegmentIds
+        self.image = image
     }
 }
 
@@ -2785,6 +3231,9 @@ extension HighlightDraft: Equatable, Hashable {
         if lhs.clipTranscriptSegmentIds != rhs.clipTranscriptSegmentIds {
             return false
         }
+        if lhs.image != rhs.image {
+            return false
+        }
         return true
     }
 
@@ -2796,6 +3245,7 @@ extension HighlightDraft: Equatable, Hashable {
         hasher.combine(clipEndSeconds)
         hasher.combine(clipSpeaker)
         hasher.combine(clipTranscriptSegmentIds)
+        hasher.combine(image)
     }
 }
 
@@ -2814,7 +3264,8 @@ public struct FfiConverterTypeHighlightDraft: FfiConverterRustBuffer {
                 clipStartSeconds: FfiConverterOptionDouble.read(from: &buf), 
                 clipEndSeconds: FfiConverterOptionDouble.read(from: &buf), 
                 clipSpeaker: FfiConverterString.read(from: &buf), 
-                clipTranscriptSegmentIds: FfiConverterSequenceString.read(from: &buf)
+                clipTranscriptSegmentIds: FfiConverterSequenceString.read(from: &buf), 
+                image: FfiConverterOptionTypeBlossomUpload.read(from: &buf)
         )
     }
 
@@ -2826,6 +3277,7 @@ public struct FfiConverterTypeHighlightDraft: FfiConverterRustBuffer {
         FfiConverterOptionDouble.write(value.clipEndSeconds, into: &buf)
         FfiConverterString.write(value.clipSpeaker, into: &buf)
         FfiConverterSequenceString.write(value.clipTranscriptSegmentIds, into: &buf)
+        FfiConverterOptionTypeBlossomUpload.write(value.image, into: &buf)
     }
 }
 
@@ -3208,6 +3660,252 @@ public func FfiConverterTypeNostrConnectOptions_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeNostrConnectOptions_lower(_ value: NostrConnectOptions) -> RustBuffer {
     return FfiConverterTypeNostrConnectOptions.lower(value)
+}
+
+
+/**
+ * A pending NIP-68 picture (kind:20) to publish into a community.
+ * Used as the OCR-fallback path: when the user couldn't or didn't want to
+ * extract a highlight quote from the captured photo.
+ */
+public struct PictureDraft {
+    /**
+     * The Blossom upload to attach (must already have been uploaded).
+     */
+    public var image: BlossomUpload
+    /**
+     * Free-form note from the user — populates event content.
+     */
+    public var note: String
+    /**
+     * Optional book/article context. When present, an `a`/`e`/`i` reference
+     * tag is included so the picture is discoverable next to that artifact.
+     */
+    public var artifact: ArtifactRecord?
+    /**
+     * NIP-29 group id this picture is being shared into.
+     */
+    public var targetGroupId: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The Blossom upload to attach (must already have been uploaded).
+         */image: BlossomUpload, 
+        /**
+         * Free-form note from the user — populates event content.
+         */note: String, 
+        /**
+         * Optional book/article context. When present, an `a`/`e`/`i` reference
+         * tag is included so the picture is discoverable next to that artifact.
+         */artifact: ArtifactRecord?, 
+        /**
+         * NIP-29 group id this picture is being shared into.
+         */targetGroupId: String) {
+        self.image = image
+        self.note = note
+        self.artifact = artifact
+        self.targetGroupId = targetGroupId
+    }
+}
+
+#if compiler(>=6)
+extension PictureDraft: Sendable {}
+#endif
+
+
+extension PictureDraft: Equatable, Hashable {
+    public static func ==(lhs: PictureDraft, rhs: PictureDraft) -> Bool {
+        if lhs.image != rhs.image {
+            return false
+        }
+        if lhs.note != rhs.note {
+            return false
+        }
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        if lhs.targetGroupId != rhs.targetGroupId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(image)
+        hasher.combine(note)
+        hasher.combine(artifact)
+        hasher.combine(targetGroupId)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePictureDraft: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PictureDraft {
+        return
+            try PictureDraft(
+                image: FfiConverterTypeBlossomUpload.read(from: &buf), 
+                note: FfiConverterString.read(from: &buf), 
+                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf), 
+                targetGroupId: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PictureDraft, into buf: inout [UInt8]) {
+        FfiConverterTypeBlossomUpload.write(value.image, into: &buf)
+        FfiConverterString.write(value.note, into: &buf)
+        FfiConverterOptionTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterString.write(value.targetGroupId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePictureDraft_lift(_ buf: RustBuffer) throws -> PictureDraft {
+    return try FfiConverterTypePictureDraft.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePictureDraft_lower(_ value: PictureDraft) -> RustBuffer {
+    return FfiConverterTypePictureDraft.lower(value)
+}
+
+
+/**
+ * Published kind:20 picture event record returned to the client.
+ */
+public struct PictureRecord {
+    public var eventId: String
+    public var pubkey: String
+    public var groupId: String
+    public var note: String
+    public var imageUrl: String
+    public var imageSha256: String
+    /**
+     * Address/id/url of the artifact this picture references — empty when
+     * the picture stands alone.
+     */
+    public var artifactReferenceKey: String
+    public var createdAt: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, pubkey: String, groupId: String, note: String, imageUrl: String, imageSha256: String, 
+        /**
+         * Address/id/url of the artifact this picture references — empty when
+         * the picture stands alone.
+         */artifactReferenceKey: String, createdAt: UInt64?) {
+        self.eventId = eventId
+        self.pubkey = pubkey
+        self.groupId = groupId
+        self.note = note
+        self.imageUrl = imageUrl
+        self.imageSha256 = imageSha256
+        self.artifactReferenceKey = artifactReferenceKey
+        self.createdAt = createdAt
+    }
+}
+
+#if compiler(>=6)
+extension PictureRecord: Sendable {}
+#endif
+
+
+extension PictureRecord: Equatable, Hashable {
+    public static func ==(lhs: PictureRecord, rhs: PictureRecord) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.note != rhs.note {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        if lhs.imageSha256 != rhs.imageSha256 {
+            return false
+        }
+        if lhs.artifactReferenceKey != rhs.artifactReferenceKey {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(pubkey)
+        hasher.combine(groupId)
+        hasher.combine(note)
+        hasher.combine(imageUrl)
+        hasher.combine(imageSha256)
+        hasher.combine(artifactReferenceKey)
+        hasher.combine(createdAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePictureRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PictureRecord {
+        return
+            try PictureRecord(
+                eventId: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf), 
+                groupId: FfiConverterString.read(from: &buf), 
+                note: FfiConverterString.read(from: &buf), 
+                imageUrl: FfiConverterString.read(from: &buf), 
+                imageSha256: FfiConverterString.read(from: &buf), 
+                artifactReferenceKey: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PictureRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.note, into: &buf)
+        FfiConverterString.write(value.imageUrl, into: &buf)
+        FfiConverterString.write(value.imageSha256, into: &buf)
+        FfiConverterString.write(value.artifactReferenceKey, into: &buf)
+        FfiConverterOptionUInt64.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePictureRecord_lift(_ buf: RustBuffer) throws -> PictureRecord {
+    return try FfiConverterTypePictureRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePictureRecord_lower(_ value: PictureRecord) -> RustBuffer {
+    return FfiConverterTypePictureRecord.lower(value)
 }
 
 
@@ -3656,6 +4354,11 @@ public enum DataChangeType {
      */
     case followingReadsUpdated
     /**
+     * A new kind:9802 highlight showed up from a follow or in a joined
+     * room — trigger a re-query of the Highlights home feed.
+     */
+    case followingHighlightsUpdated
+    /**
      * NIP-46 signer connected — fires after a remote signer completes the
      * `nostrconnect://` or `bunker://` handshake.
      */
@@ -3714,10 +4417,12 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         
         case 10: return .followingReadsUpdated
         
-        case 11: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
+        case 11: return .followingHighlightsUpdated
+        
+        case 12: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
         )
         
-        case 12: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
+        case 13: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -3784,13 +4489,17 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             writeInt(&buf, Int32(10))
         
         
-        case let .signerConnected(user):
+        case .followingHighlightsUpdated:
             writeInt(&buf, Int32(11))
+        
+        
+        case let .signerConnected(user):
+            writeInt(&buf, Int32(12))
             FfiConverterTypeCurrentUser.write(user, into: &buf)
             
         
         case let .bunkerSignRequest(requestId):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterString.write(requestId, into: &buf)
             
         }
@@ -3983,6 +4692,30 @@ fileprivate struct FfiConverterOptionTypeArtifactRecord: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeArtifactRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeBlossomUpload: FfiConverterRustBuffer {
+    typealias SwiftType = BlossomUpload?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBlossomUpload.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBlossomUpload.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -4355,19 +5088,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_current_user() != 38772) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_debug_highlights_report() != 13450) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article() != 17849) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifacts() != 42231) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifacts() != 30870) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_servers() != 32428) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 41672) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_highlights() != 12124) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_reads() != 29016) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights() != 17223) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights() != 25748) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_article() != 24140) {
@@ -4379,7 +5121,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_highlights() != 10939) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 37708) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 33628) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_articles() != 2405) {
@@ -4392,6 +5134,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 29632) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 35163) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_following() != 22885) {
@@ -4421,7 +5166,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_highlights_and_share() != 8629) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_picture() != 8020) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_artifacts() != 48576) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_blossom_servers() != 8768) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_event_callback() != 16901) {
@@ -4430,10 +5181,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_follow() != 22034) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_sign_nip98_auth() != 43473) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_nostr_connect() != 46145) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 35661) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_highlights() != 25287) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_reads() != 12398) {
@@ -4455,6 +5212,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_unsubscribe() != 55013) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 51840) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_constructor_highlightercore_new() != 37739) {
