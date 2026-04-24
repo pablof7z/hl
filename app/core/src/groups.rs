@@ -32,14 +32,16 @@ pub fn query_joined_communities_from_ndb(
     let txn = Transaction::new(ndb)
         .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
-    // 1. Fetch all admin+member events that #p-tag the current user.
+    // 1. Fetch all admin+member events and manually check the p-tag.
+    //    nostrdb's tag index for the 'p' character does not reliably match
+    //    hex pubkeys in parameterized-replaceable event kinds (39001/39002),
+    //    so we scan by kind only and filter in Rust.
     let membership_filter = NdbFilter::new()
         .kinds([KIND_GROUP_ADMINS as u64, KIND_GROUP_MEMBERS as u64])
-        .tags([current_pubkey_hex], 'p')
         .build();
 
     let membership_results = ndb
-        .query(&txn, &[membership_filter], 1024)
+        .query(&txn, &[membership_filter], 4096)
         .map_err(|e| CoreError::Cache(format!("query membership: {e}")))?;
 
     let mut membership_events: Vec<Event> = Vec::with_capacity(membership_results.len());
@@ -52,6 +54,14 @@ pub fn query_joined_communities_from_ndb(
         let Ok(event) = Event::from_json(&json) else {
             continue;
         };
+        let has_me = event.tags.iter().any(|tag| {
+            let s = tag.as_slice();
+            s.first().map(String::as_str) == Some("p")
+                && s.get(1).map(String::as_str) == Some(current_pubkey_hex)
+        });
+        if !has_me {
+            continue;
+        }
         if let Some(id) = group_id_from_event(&event) {
             group_ids.insert(id);
         }
@@ -125,8 +135,16 @@ pub fn build_joined_communities(
             .filter(|e| e.kind.as_u16() == KIND_GROUP_MEMBERS),
     );
 
+    // Membership events are the source of truth for "am I in this group?".
+    // Metadata enriches the row but must never gate its existence — a group
+    // without a cached kind:39000 should still appear in the list.
+    let mut all_group_ids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for id in admin_by_id.keys().chain(member_by_id.keys()).chain(metadata_by_id.keys()) {
+        all_group_ids.insert(id.clone());
+    }
+
     let mut joined: Vec<CommunitySummary> = Vec::new();
-    for (group_id, metadata_event) in metadata_by_id {
+    for group_id in all_group_ids {
         let admin_event = admin_by_id.get(&group_id).copied();
         let member_event = member_by_id.get(&group_id).copied();
         let is_admin = event_has_p_tag(admin_event, current_pubkey);
@@ -134,8 +152,8 @@ pub fn build_joined_communities(
         if !is_admin && !is_member {
             continue;
         }
-
-        match build_summary(metadata_event, admin_event, member_event) {
+        let metadata_event = metadata_by_id.get(&group_id).copied();
+        match build_summary(&group_id, metadata_event, admin_event, member_event) {
             Ok(summary) => joined.push(summary),
             Err(_) => continue,
         }
@@ -148,24 +166,26 @@ pub fn build_joined_communities(
 /// Port of `buildCommunitySummary`. Returns `CoreError::InvalidInput` if the
 /// metadata event is missing its `d` tag.
 pub fn build_community_summary(event: &Event) -> Result<CommunitySummary, CoreError> {
-    build_summary(event, None, None)
-}
-
-fn build_summary(
-    metadata_event: &Event,
-    admin_event: Option<&Event>,
-    member_event: Option<&Event>,
-) -> Result<CommunitySummary, CoreError> {
-    let id = first_tag_value(metadata_event, "d")
+    let id = first_tag_value(event, "d")
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .ok_or_else(|| CoreError::InvalidInput("Group metadata missing d tag.".into()))?;
+    build_summary(&id, Some(event), None, None)
+}
+
+fn build_summary(
+    group_id: &str,
+    metadata_event: Option<&Event>,
+    admin_event: Option<&Event>,
+    member_event: Option<&Event>,
+) -> Result<CommunitySummary, CoreError> {
+    let id = group_id.to_string();
 
     // Tag presence, per the webapp's getters (`["public"]` / `["closed"]` etc.)
-    let has_public = has_marker_tag(metadata_event, "public");
-    let has_private = has_marker_tag(metadata_event, "private");
-    let has_open = has_marker_tag(metadata_event, "open");
-    let has_closed = has_marker_tag(metadata_event, "closed");
+    let has_public = metadata_event.map(|e| has_marker_tag(e, "public")).unwrap_or(false);
+    let has_private = metadata_event.map(|e| has_marker_tag(e, "private")).unwrap_or(false);
+    let has_open = metadata_event.map(|e| has_marker_tag(e, "open")).unwrap_or(false);
+    let has_closed = metadata_event.map(|e| has_marker_tag(e, "closed")).unwrap_or(false);
 
     // Deviation from the TS defaults: we use paranoid defaults
     // (`closed` / `private` when both visibility/access tags are missing)
@@ -187,10 +207,12 @@ fn build_summary(
         "closed"
     };
 
-    let name = clean_text(first_tag_value(metadata_event, "name"));
-    let name = if name.is_empty() { id.clone() } else { name };
-    let about = clean_text(first_tag_value(metadata_event, "about"));
-    let picture = clean_text(first_tag_value(metadata_event, "picture"));
+    let name = {
+        let raw = metadata_event.map(|e| clean_text(first_tag_value(e, "name"))).unwrap_or_default();
+        if raw.is_empty() { id.clone() } else { raw }
+    };
+    let about = metadata_event.map(|e| clean_text(first_tag_value(e, "about"))).unwrap_or_default();
+    let picture = metadata_event.map(|e| clean_text(first_tag_value(e, "picture"))).unwrap_or_default();
 
     let admin_pubkeys = unique_p_tag_values(admin_event);
     let member_pubkeys = unique_p_tag_values(member_event);
@@ -210,8 +232,8 @@ fn build_summary(
         admin_pubkeys,
         member_count,
         relay_url: HIGHLIGHTER_RELAY.to_string(),
-        metadata_event_id: metadata_event.id.to_hex(),
-        created_at: Some(metadata_event.created_at.as_secs()),
+        metadata_event_id: metadata_event.map(|e| e.id.to_hex()).unwrap_or_default(),
+        created_at: metadata_event.map(|e| e.created_at.as_secs()),
     })
 }
 

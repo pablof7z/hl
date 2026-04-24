@@ -335,6 +335,12 @@ mod tests {
         ndb.process_event(&line).expect("process event");
     }
 
+    fn wait_for_ndb() {
+        // nostrdb processes writes on a background ingester thread; give it a
+        // moment to commit before opening a read transaction.
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
     fn sign(keys: &Keys, kind: u16, tags: Vec<Tag>, ts: u64, content: &str) -> Event {
         EventBuilder::new(Kind::Custom(kind), content)
             .tags(tags)
@@ -412,6 +418,7 @@ mod tests {
         ingest(&ndb, &a1);
         ingest(&ndb, &b1);
         ingest(&ndb, &s1);
+        wait_for_ndb();
 
         let feed =
             query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
@@ -450,6 +457,7 @@ mod tests {
         );
         ingest(&ndb, &reaction);
         ingest(&ndb, &comment);
+        wait_for_ndb();
 
         let feed =
             query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
@@ -484,6 +492,7 @@ mod tests {
         let address = format!("30023:{}:post", alice.public_key().to_hex());
         let reaction = interaction_event(&bob, KIND_REACTION, &address, 5_000, "+");
         ingest(&ndb, &reaction);
+        wait_for_ndb();
 
         let feed =
             query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
@@ -561,6 +570,7 @@ mod tests {
                 ),
             );
         }
+        wait_for_ndb();
         let feed =
             query_following_reads(&ndb, &me.public_key().to_hex(), 2).expect("query");
         assert_eq!(feed.len(), 2);

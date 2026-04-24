@@ -148,6 +148,57 @@ pub struct HighlightDraft {
     pub clip_speaker: String,
     /// Transcript segment IDs that the clip spans. Empty for non-clip highlights.
     pub clip_transcript_segment_ids: Vec<String>,
+    /// Optional photo accompanying the highlight (e.g. the page captured for an
+    /// OCR'd book quote). When set, the published kind:9802 carries an
+    /// `imeta` tag (NIP-92) referencing the Blossom-hosted blob.
+    pub image: Option<BlossomUpload>,
+}
+
+/// Result of a successful Blossom upload — what to put in an `imeta` tag.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BlossomUpload {
+    /// Public URL the server returned (e.g. `https://blossom.primal.net/<sha>.jpg`).
+    pub url: String,
+    /// Lowercase hex SHA-256 of the uploaded bytes.
+    pub sha256_hex: String,
+    /// MIME type the client uploaded as.
+    pub mime: String,
+    pub size_bytes: u64,
+    pub width: u32,
+    pub height: u32,
+    /// Optional alt text — for OCR captures, the recognized text. Empty if none.
+    pub alt: String,
+}
+
+/// A pending NIP-68 picture (kind:20) to publish into a community.
+/// Used as the OCR-fallback path: when the user couldn't or didn't want to
+/// extract a highlight quote from the captured photo.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PictureDraft {
+    /// The Blossom upload to attach (must already have been uploaded).
+    pub image: BlossomUpload,
+    /// Free-form note from the user — populates event content.
+    pub note: String,
+    /// Optional book/article context. When present, an `a`/`e`/`i` reference
+    /// tag is included so the picture is discoverable next to that artifact.
+    pub artifact: Option<ArtifactRecord>,
+    /// NIP-29 group id this picture is being shared into.
+    pub target_group_id: String,
+}
+
+/// Published kind:20 picture event record returned to the client.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PictureRecord {
+    pub event_id: String,
+    pub pubkey: String,
+    pub group_id: String,
+    pub note: String,
+    pub image_url: String,
+    pub image_sha256: String,
+    /// Address/id/url of the artifact this picture references — empty when
+    /// the picture stands alone.
+    pub artifact_reference_key: String,
+    pub created_at: Option<u64>,
 }
 
 /// NIP-01 kind:0 profile metadata. Mirrors the fields the web profile page

@@ -44,6 +44,9 @@ pub enum DataChangeType {
     /// store re-queries the full feed on each delta (dedupe + sort is
     /// cheap). No payload beyond the trigger — keep deltas small.
     FollowingReadsUpdated,
+    /// A new kind:9802 highlight showed up from a follow or in a joined
+    /// room — trigger a re-query of the Highlights home feed.
+    FollowingHighlightsUpdated,
     /// NIP-46 signer connected — fires after a remote signer completes the
     /// `nostrconnect://` or `bunker://` handshake.
     SignerConnected { user: CurrentUser },

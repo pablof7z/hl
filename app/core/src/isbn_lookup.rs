@@ -218,10 +218,14 @@ fn build_preview(
         published_at: String::new(),
         duration_seconds: None,
         reference_tag_name: "i".into(),
-        reference_tag_value: catalog_id,
-        reference_kind: String::new(),
-        highlight_tag_name: "r".into(),
-        highlight_tag_value: String::new(),
+        reference_tag_value: catalog_id.clone(),
+        reference_kind: "isbn".into(),
+        // Highlights on ISBN-sourced books reference the canonical NIP-73
+        // `i` tag — there is no URL for a physical book, so the primary
+        // anchor is the ISBN itself. This lets any Nostr client identify
+        // the source without relying on Highlighter's kind:11 share.
+        highlight_tag_name: "i".into(),
+        highlight_tag_value: catalog_id,
         highlight_reference_key,
     }
 }
@@ -232,8 +236,10 @@ fn build_preview(
 /// shares) and the reference tags.
 fn partial_preview(isbn13: &str) -> ArtifactPreview {
     let catalog_id = format!("isbn:{isbn13}");
+    let highlight_reference_key = format!("i:{catalog_id}");
+    let id = format!("c{:x}", fnv1a(&format!("i:{catalog_id}")));
     ArtifactPreview {
-        id: String::new(),
+        id,
         url: String::new(),
         title: String::new(),
         author: String::new(),
@@ -252,11 +258,13 @@ fn partial_preview(isbn13: &str) -> ArtifactPreview {
         published_at: String::new(),
         duration_seconds: None,
         reference_tag_name: "i".into(),
-        reference_tag_value: catalog_id,
-        reference_kind: String::new(),
-        highlight_tag_name: String::new(),
-        highlight_tag_value: String::new(),
-        highlight_reference_key: String::new(),
+        reference_tag_value: catalog_id.clone(),
+        reference_kind: "isbn".into(),
+        // Same reasoning as the fully-populated preview — the ISBN itself
+        // is the canonical NIP-73 anchor, regardless of catalog resolution.
+        highlight_tag_name: "i".into(),
+        highlight_tag_value: catalog_id,
+        highlight_reference_key,
     }
 }
 
@@ -320,8 +328,12 @@ mod tests {
         assert!(p.author.is_empty());
         assert!(p.image.is_empty());
         assert!(p.description.is_empty());
-        assert!(p.highlight_tag_name.is_empty());
-        assert!(p.highlight_reference_key.is_empty());
+        // The NIP-73 `i` tag is what anchors a highlight to the book, so
+        // partial previews still carry it — that's the whole point of the
+        // fallback path.
+        assert_eq!(p.highlight_tag_name, "i");
+        assert_eq!(p.highlight_tag_value, "isbn:9780735211292");
+        assert!(!p.highlight_reference_key.is_empty());
     }
 
     /// End-to-end hit against the real Open Library API. Ignored by default

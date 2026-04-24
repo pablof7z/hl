@@ -2,6 +2,7 @@ uniffi::setup_scaffolding!();
 
 pub mod articles;
 pub mod artifacts;
+pub mod blossom;
 pub mod cache;
 pub mod client;
 pub mod discussions;
@@ -14,6 +15,7 @@ pub mod isbn_lookup;
 pub mod models;
 pub mod nip46;
 pub mod nostr_runtime;
+pub mod pictures;
 pub mod profile;
 pub mod reads;
 pub mod recent_books;
@@ -25,7 +27,7 @@ pub use client::HighlighterCore;
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
-    ArticleRecord, ArtifactPreview, ArtifactRecord, CommunitySummary, CurrentUser,
+    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, CommunitySummary, CurrentUser,
     DiscussionAttachment, DiscussionRecord, HighlightDraft, HighlightRecord, HydratedHighlight,
-    NostrConnectOptions, ProfileMetadata, ReadingFeedItem,
+    NostrConnectOptions, PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem,
 };

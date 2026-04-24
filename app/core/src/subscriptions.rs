@@ -91,6 +91,13 @@ pub(crate) enum SubscriptionKind {
     /// is a snapshot at subscribe time; if the user's contact list changes,
     /// the Swift store should drop + re-install the subscription.
     FollowingReads { follows: Vec<PublicKey> },
+    /// Powers the "Highlights" home tab: kind:9802 events authored by
+    /// follows plus kind:9802 events tagged with `#h=<group_id>` for any
+    /// joined room. Both sets are snapshots at subscribe time.
+    FollowingHighlights {
+        follows: Vec<PublicKey>,
+        group_ids: Vec<String>,
+    },
 }
 
 impl SubscriptionRegistry {
@@ -365,6 +372,44 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
 
             vec![articles_id, interactions_id]
         }
+        SubscriptionKind::FollowingHighlights { follows, group_ids } => {
+            let client = runtime.client().clone();
+            let mut ids: Vec<SubscriptionId> = Vec::new();
+
+            if !follows.is_empty() {
+                let id = SubscriptionId::generate();
+                let id_clone = id.clone();
+                let authors = follows.clone();
+                let c = client.clone();
+                runtime.runtime_handle().spawn(async move {
+                    let filter = Filter::new()
+                        .kinds([Kind::Custom(KIND_HIGHLIGHT)])
+                        .authors(authors);
+                    if let Err(e) = c.subscribe_with_id(id_clone, filter, None).await {
+                        tracing::warn!(error = %e, "failed to subscribe to follow-authored highlights feed");
+                    }
+                });
+                ids.push(id);
+            }
+
+            if !group_ids.is_empty() {
+                let id = SubscriptionId::generate();
+                let id_clone = id.clone();
+                let groups = group_ids.clone();
+                let c = client.clone();
+                runtime.runtime_handle().spawn(async move {
+                    let filter = Filter::new()
+                        .kinds([Kind::Custom(KIND_HIGHLIGHT)])
+                        .custom_tags(SingleLetterTag::lowercase(Alphabet::H), groups);
+                    if let Err(e) = c.subscribe_with_id(id_clone, filter, None).await {
+                        tracing::warn!(error = %e, "failed to subscribe to room highlights feed");
+                    }
+                });
+                ids.push(id);
+            }
+
+            ids
+        }
         // JoinedCommunities rides the membership relay-sub already installed
         // at login — no additional relay subscription needed.
         SubscriptionKind::JoinedCommunities { .. } => vec![],
@@ -385,13 +430,15 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
                 ])
                 .build()]
         }
-        SubscriptionKind::Room { group_id } => vec![NdbFilter::new()
+        // Room / RoomDiscussions: kind-only filter — nostrdb's `#h` tag index
+        // is unreliable so we skip it here. `build_change` already checks
+        // `first_tag_value(event, "h")` against the group_id in Rust, which
+        // is the authoritative filter.
+        SubscriptionKind::Room { .. } => vec![NdbFilter::new()
             .kinds([11u64, 9802u64, 16u64])
-            .tags([group_id.as_str()], 'h')
             .build()],
-        SubscriptionKind::RoomDiscussions { group_id } => vec![NdbFilter::new()
+        SubscriptionKind::RoomDiscussions { .. } => vec![NdbFilter::new()
             .kinds([11u64])
-            .tags([group_id.as_str()], 'h')
             .build()],
         SubscriptionKind::Vault { user_pubkey } => {
             let pk_bytes: [u8; 32] = user_pubkey.to_bytes();
@@ -450,6 +497,11 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
                 .build();
             vec![articles_filter, interactions_filter]
         }
+        SubscriptionKind::FollowingHighlights { .. } => {
+            // Kind:9802 only — we filter by author / #h in `build_change`.
+            // ndb's tag index for `h` is unreliable, hence the broad filter.
+            vec![NdbFilter::new().kinds([KIND_HIGHLIGHT as u64]).build()]
+        }
     }
 }
 
@@ -501,10 +553,12 @@ async fn run_pump(
             continue;
         };
         let mut deltas: Vec<Delta> = Vec::new();
-        // FollowingReads collapses many per-event deltas into one re-query
-        // trigger per batch — the Swift store re-queries the whole feed on
-        // each, so one delta per batch is plenty.
+        // FollowingReads / FollowingHighlights collapse many per-event
+        // deltas into one re-query trigger per batch — the Swift store
+        // re-queries the whole feed on each, so one delta per batch is
+        // plenty.
         let mut saw_following_reads_update = false;
+        let mut saw_following_highlights_update = false;
         for key in note_keys {
             let Ok(note) = runtime.ndb().get_note_by_key(&txn, key) else {
                 continue;
@@ -523,15 +577,29 @@ async fn run_pump(
                 );
             }
             if let Some(change) = build_change(&kind, &event) {
-                // Stage-2 hydrate: if this membership event is for a group
-                // we haven't yet pulled metadata for, install that sub.
+                // Stage-2 hydrate: if this membership event introduces a new
+                // group, record it and fetch its 39000 metadata from the relay.
                 if let DataChangeType::MembershipChanged { group_id } = &change {
                     if hydrated.insert(group_id.clone()) {
                         runtime.spawn_group_metadata_subscription(vec![group_id.clone()]);
                     }
                 }
+                // Guard: only forward CommunityUpserted for groups the user is
+                // actually a member of. The ndb filter catches all 39000 events
+                // (no pubkey filter exists at that level), so a 39000 for an
+                // unrelated group — e.g., landing from a profile-view relay sub
+                // — must not pollute joinedCommunities.
+                if let DataChangeType::CommunityUpserted { community } = &change {
+                    if !hydrated.contains(&community.id) {
+                        continue;
+                    }
+                }
                 if matches!(change, DataChangeType::FollowingReadsUpdated) {
                     saw_following_reads_update = true;
+                    continue;
+                }
+                if matches!(change, DataChangeType::FollowingHighlightsUpdated) {
+                    saw_following_highlights_update = true;
                     continue;
                 }
                 deltas.push(Delta {
@@ -546,6 +614,12 @@ async fn run_pump(
             deltas.push(Delta {
                 subscription_id: delivery_id,
                 change: DataChangeType::FollowingReadsUpdated,
+            });
+        }
+        if saw_following_highlights_update {
+            deltas.push(Delta {
+                subscription_id: delivery_id,
+                change: DataChangeType::FollowingHighlightsUpdated,
             });
         }
 
@@ -787,6 +861,19 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             }
             None
         }
+        SubscriptionKind::FollowingHighlights { follows, group_ids } => {
+            if event.kind.as_u16() != KIND_HIGHLIGHT {
+                return None;
+            }
+            let is_follow = follows.iter().any(|pk| *pk == event.pubkey);
+            let in_joined_group = first_tag_value(event, "h")
+                .map(|h| group_ids.iter().any(|g| g == h))
+                .unwrap_or(false);
+            if !is_follow && !in_joined_group {
+                return None;
+            }
+            Some(DataChangeType::FollowingHighlightsUpdated)
+        }
     }
 }
 
@@ -898,11 +985,13 @@ fn minimal_highlight_record(event: &Event) -> Option<HighlightRecord> {
     })
 }
 
-/// On pump startup, scan nostrdb for all cached kind:39001 / 39002 events
-/// where `user_pubkey` appears in a `p` tag. Returns the set of group ids
-/// so the stage-2 metadata hydrate doesn't skip groups that were already
-/// cached from a prior session.
-fn collect_cached_group_ids(
+/// Scan nostrdb for all cached kind:39001 / 39002 events where `user_pubkey`
+/// appears in a `p` tag and return the set of group ids. Used both by the
+/// pump on startup (to seed the hydrated set) and by `client.rs` at login
+/// time (to eagerly install stage-2 relay subscriptions before any delta
+/// fires, so a warm cache populates immediately without waiting for new
+/// membership events to arrive from the relay).
+pub(crate) fn collect_cached_group_ids(
     ndb: &nostrdb::Ndb,
     user_pubkey: &PublicKey,
 ) -> std::collections::HashSet<String> {
@@ -1058,8 +1147,11 @@ mod tests {
             "",
         );
 
-        process(core.runtime().ndb(), &meta);
+        // Membership must arrive before metadata so "alpha" is in the hydrated
+        // set when the 39000 fires — the pump only delivers CommunityUpserted
+        // for groups it has confirmed the user belongs to.
         process(core.runtime().ndb(), &members);
+        process(core.runtime().ndb(), &meta);
 
         // JoinedCommunities deltas ride the app-scope bus (subscription_id
         // == 0); the handle is kept only for `unsubscribe()`. Skip the
@@ -1113,6 +1205,17 @@ mod tests {
             .expect("subscribe")
         };
 
+        // Membership first — this adds "alpha" to the hydrated set so the
+        // subsequent 39000 is allowed through.
+        let members = sign(
+            &other,
+            39002,
+            vec![
+                Tag::identifier("alpha"),
+                Tag::public_key(me.public_key()),
+            ],
+            "",
+        );
         let meta = sign(
             &other,
             39000,
@@ -1122,17 +1225,20 @@ mod tests {
             ],
             "",
         );
+        process(core.runtime().ndb(), &members);
         process(core.runtime().ndb(), &meta);
 
-        // Drain the first community delivery (skip the `SignerConnected`
-        // seed).
+        // Drain until we see a community-shaped delta (skip SignerConnected).
         let deadline = std::time::Instant::now() + Duration::from_secs(3);
         let mut drained = false;
         while std::time::Instant::now() < deadline {
             let Ok(delta) = rx.recv_timeout(Duration::from_millis(200)) else {
                 continue;
             };
-            if matches!(delta.change, DataChangeType::CommunityUpserted { .. }) {
+            if matches!(
+                delta.change,
+                DataChangeType::CommunityUpserted { .. } | DataChangeType::MembershipChanged { .. }
+            ) {
                 drained = true;
                 break;
             }
@@ -1289,5 +1395,114 @@ mod tests {
             }
         }
         assert!(mine_seen, "vault sub must deliver self-authored highlight");
+    }
+
+    #[test]
+    fn joined_communities_pump_ignores_metadata_for_unjoined_groups() {
+        // Regression: the pump subscribed to ALL 39000/39001/39002 events in
+        // ndb with no pubkey filter. Any 39000 — even for a group the user is
+        // not a member of — would blindly emit CommunityUpserted and pollute
+        // the list. Only groups where the user has a matching 39001/39002 (with
+        // their pubkey in #p) should produce deltas.
+        let (core, _tmp) = isolated_core();
+        let me = Keys::generate();
+        let other = Keys::generate();
+        let stranger = Keys::generate();
+
+        core.login_nsec(me.secret_key().to_bech32().unwrap())
+            .expect("login");
+        let (cb, rx) = channel_callback();
+        core.set_event_callback(cb);
+
+        let _handle = {
+            let core = core.clone();
+            std::thread::spawn(move || {
+                futures::executor::block_on(core.subscribe_joined_communities())
+            })
+            .join()
+            .expect("join")
+            .expect("subscribe");
+        };
+
+        // A 39000 for a group where ONLY `stranger` is a member — user `me`
+        // has no membership event for this group.
+        let meta_strangers_group = sign(
+            &other,
+            39000,
+            vec![
+                Tag::identifier("strangers-only"),
+                Tag::parse(vec!["name".to_string(), "Strangers Only".to_string()]).unwrap(),
+            ],
+            "",
+        );
+        let members_stranger_only = sign(
+            &other,
+            39002,
+            vec![
+                Tag::identifier("strangers-only"),
+                Tag::public_key(stranger.public_key()),
+            ],
+            "",
+        );
+
+        process(core.runtime().ndb(), &meta_strangers_group);
+        process(core.runtime().ndb(), &members_stranger_only);
+
+        // Now ingest a group that `me` IS actually a member of, to confirm
+        // the pump is still alive and does deliver for real memberships.
+        let meta_mine = sign(
+            &other,
+            39000,
+            vec![
+                Tag::identifier("mine"),
+                Tag::parse(vec!["name".to_string(), "Mine".to_string()]).unwrap(),
+            ],
+            "",
+        );
+        let members_mine = sign(
+            &other,
+            39002,
+            vec![
+                Tag::identifier("mine"),
+                Tag::public_key(me.public_key()),
+            ],
+            "",
+        );
+        process(core.runtime().ndb(), &meta_mine);
+        process(core.runtime().ndb(), &members_mine);
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let mut saw_mine = false;
+        while std::time::Instant::now() < deadline {
+            let Ok(delta) = rx.recv_timeout(Duration::from_millis(200)) else {
+                if saw_mine { break; }
+                continue;
+            };
+            if matches!(delta.change, DataChangeType::SignerConnected { .. }) {
+                continue;
+            }
+            match &delta.change {
+                DataChangeType::CommunityUpserted { community } => {
+                    assert_ne!(
+                        community.id, "strangers-only",
+                        "must not emit CommunityUpserted for a group the user is not a member of"
+                    );
+                    if community.id == "mine" {
+                        saw_mine = true;
+                    }
+                }
+                DataChangeType::MembershipChanged { group_id } => {
+                    assert_ne!(
+                        group_id, "strangers-only",
+                        "must not emit MembershipChanged for a group the user is not a member of"
+                    );
+                    if group_id == "mine" {
+                        saw_mine = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        assert!(saw_mine, "must still deliver deltas for groups the user is in");
     }
 }

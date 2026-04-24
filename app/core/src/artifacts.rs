@@ -2,6 +2,7 @@
 //! `web/src/lib/ndk/artifacts.ts`.
 
 use nostr_sdk::prelude::*;
+use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
 use crate::models::{ArtifactPreview, ArtifactRecord};
@@ -187,12 +188,127 @@ pub async fn fetch_shares(
     Ok(Vec::new())
 }
 
+/// Read kind:11 artifact shares for `group_id` from nostrdb, newest first.
+/// Scans by kind only and checks `#h` manually — the nostrdb tag index is
+/// unreliable for non-standard tag names on some event kinds.
+pub fn query_for_group(
+    ndb: &Ndb,
+    group_id: &str,
+    limit: u32,
+) -> Result<Vec<ArtifactRecord>, CoreError> {
+    let group_id = group_id.trim();
+    if group_id.is_empty() {
+        return Ok(Vec::new());
+    }
+    let txn = Transaction::new(ndb)
+        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+
+    let cap = (limit.saturating_mul(4)).max(128) as i32;
+    let filter = NdbFilter::new()
+        .kinds([KIND_ARTIFACT_SHARE as u64])
+        .build();
+
+    let results = ndb
+        .query(&txn, &[filter], cap)
+        .map_err(|e| CoreError::Cache(format!("query artifacts for group: {e}")))?;
+
+    let mut records: Vec<ArtifactRecord> = Vec::new();
+    for r in &results {
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(json) = note.json() else { continue };
+        let Ok(event) = Event::from_json(&json) else { continue };
+        let Some(h) = first_tag_value(&event, "h") else { continue };
+        if h != group_id {
+            continue;
+        }
+        if crate::discussions::is_discussion(&event) {
+            continue;
+        }
+        if let Some(rec) = artifact_record_from_event(&event, group_id) {
+            records.push(rec);
+        }
+    }
+
+    records.sort_by(|a, b| b.created_at.unwrap_or(0).cmp(&a.created_at.unwrap_or(0)));
+    records.truncate(limit as usize);
+    Ok(records)
+}
+
 /// Simple title/author substring search over cached artifacts.
 pub fn search_cached(
     _query: &str,
     _limit: u32,
 ) -> Result<Vec<ArtifactRecord>, CoreError> {
     Ok(Vec::new())
+}
+
+// -- Event helpers -----------------------------------------------------------
+
+pub(crate) fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
+    for tag in event.tags.iter() {
+        let slice = tag.as_slice();
+        if slice.first().map(String::as_str) == Some(name) {
+            return slice.get(1).map(String::as_str);
+        }
+    }
+    None
+}
+
+/// Build an `ArtifactRecord` from a cached kind:11 event.
+pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Option<ArtifactRecord> {
+    let title = first_tag_value(event, "title").unwrap_or("").to_string();
+    let url = first_tag_value(event, "r").unwrap_or("").to_string();
+    let source = first_tag_value(event, "source").unwrap_or("").to_string();
+    let author = first_tag_value(event, "author").unwrap_or("").to_string();
+    let image = first_tag_value(event, "image").unwrap_or("").to_string();
+    let summary = first_tag_value(event, "summary").unwrap_or("").to_string();
+    let d = first_tag_value(event, "d").unwrap_or("").to_string();
+
+    let (ref_name, ref_value) = if let Some(i) = first_tag_value(event, "i") {
+        ("i".to_string(), i.to_string())
+    } else if let Some(a) = first_tag_value(event, "a") {
+        ("a".to_string(), a.to_string())
+    } else if let Some(e_val) = first_tag_value(event, "e") {
+        ("e".to_string(), e_val.to_string())
+    } else {
+        (String::new(), String::new())
+    };
+
+    let preview = ArtifactPreview {
+        id: d,
+        url,
+        title,
+        author,
+        image,
+        description: summary,
+        source,
+        domain: String::new(),
+        catalog_id: if ref_name == "i" { ref_value.clone() } else { String::new() },
+        catalog_kind: first_tag_value(event, "k").unwrap_or("").to_string(),
+        podcast_guid: String::new(),
+        podcast_show_title: String::new(),
+        audio_url: String::new(),
+        audio_preview_url: String::new(),
+        transcript_url: String::new(),
+        feed_url: String::new(),
+        published_at: String::new(),
+        duration_seconds: None,
+        reference_tag_name: ref_name.clone(),
+        reference_tag_value: ref_value,
+        reference_kind: String::new(),
+        highlight_tag_name: String::new(),
+        highlight_tag_value: String::new(),
+        highlight_reference_key: String::new(),
+    };
+
+    Some(ArtifactRecord {
+        preview,
+        group_id: group_id.to_string(),
+        share_event_id: event.id.to_hex(),
+        pubkey: event.pubkey.to_hex(),
+        created_at: Some(event.created_at.as_secs()),
+        note: event.content.clone(),
+    })
 }
 
 // -- URL helpers -------------------------------------------------------------
@@ -585,5 +701,104 @@ mod tests {
         assert!(has("i", "https://example.com/post"));
         assert!(has("k", "web"));
         assert!(has("r", "https://example.com/post"));
+    }
+
+    // -- query_for_group tests ------------------------------------------------
+
+    fn isolated_ndb() -> (nostrdb::Ndb, tempfile::TempDir) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("ndb");
+        std::fs::create_dir_all(&path).expect("mkdir");
+        let cfg = nostrdb::Config::new().set_mapsize(32 * 1024 * 1024);
+        let ndb = nostrdb::Ndb::new(path.to_str().unwrap(), &cfg).expect("open ndb");
+        (ndb, tmp)
+    }
+
+    fn ingest(ndb: &nostrdb::Ndb, event: &Event) {
+        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
+        ndb.process_event(&line).expect("process event");
+    }
+
+    fn wait_for_ndb() {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    fn make_share(keys: &Keys, group_id: &str, d: &str, title: &str) -> Event {
+        EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), "")
+            .tags(vec![
+                Tag::parse(vec!["h".to_string(), group_id.to_string()]).unwrap(),
+                Tag::identifier(d),
+                Tag::parse(vec!["title".to_string(), title.to_string()]).unwrap(),
+                Tag::parse(vec!["source".to_string(), "article".to_string()]).unwrap(),
+                Tag::parse(vec!["r".to_string(), "https://example.com/post".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(keys)
+            .expect("sign")
+    }
+
+    #[test]
+    fn query_for_group_returns_matching_artifacts() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        let share = make_share(&keys, "alpha", "art-1", "Alpha Article");
+        ingest(&ndb, &share);
+        wait_for_ndb();
+
+        let records = query_for_group(&ndb, "alpha", 32).expect("query");
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].preview.title, "Alpha Article");
+        assert_eq!(records[0].group_id, "alpha");
+    }
+
+    #[test]
+    fn query_for_group_filters_by_group() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        ingest(&ndb, &make_share(&keys, "alpha", "a1", "Alpha"));
+        ingest(&ndb, &make_share(&keys, "bravo", "b1", "Bravo"));
+        wait_for_ndb();
+
+        let alpha = query_for_group(&ndb, "alpha", 32).expect("alpha");
+        assert_eq!(alpha.len(), 1);
+        assert_eq!(alpha[0].preview.title, "Alpha");
+
+        let bravo = query_for_group(&ndb, "bravo", 32).expect("bravo");
+        assert_eq!(bravo.len(), 1);
+        assert_eq!(bravo[0].preview.title, "Bravo");
+    }
+
+    #[test]
+    fn query_for_group_excludes_discussions() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        // A kind:11 with t=discussion must be filtered out
+        let discussion = EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), "body")
+            .tags(vec![
+                Tag::parse(vec!["h".to_string(), "alpha".to_string()]).unwrap(),
+                Tag::identifier("disc-1"),
+                Tag::parse(vec!["t".to_string(), "discussion".to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "A Discussion".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign");
+        ingest(&ndb, &discussion);
+        ingest(&ndb, &make_share(&keys, "alpha", "art-1", "Real Article"));
+        wait_for_ndb();
+
+        let records = query_for_group(&ndb, "alpha", 32).expect("query");
+        assert_eq!(records.len(), 1, "discussion must be excluded");
+        assert_eq!(records[0].preview.title, "Real Article");
+    }
+
+    #[test]
+    fn query_for_group_honors_limit() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        for i in 0..5u64 {
+            ingest(&ndb, &make_share(&keys, "alpha", &format!("a{i}"), &format!("T{i}")));
+        }
+        wait_for_ndb();
+        let records = query_for_group(&ndb, "alpha", 3).expect("query");
+        assert_eq!(records.len(), 3);
     }
 }

@@ -11,6 +11,7 @@ use nostr_sdk::prelude::*;
 use parking_lot::RwLock;
 
 use crate::articles;
+use crate::blossom;
 use crate::errors::CoreError;
 use crate::events::{DataChangeType, Delta, EventCallback};
 use crate::follows;
@@ -18,9 +19,9 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleRecord, ArtifactPreview, ArtifactRecord, CommunitySummary, CurrentUser,
+    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, CommunitySummary, CurrentUser,
     DiscussionRecord, HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions,
-    ProfileMetadata, ReadingFeedItem,
+    PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem,
 };
 use crate::reads;
 use crate::nip46::{self, BunkerSigner};
@@ -73,6 +74,19 @@ impl HighlighterCore {
             let pubkey = keys.public_key();
             let sub_id = self.runtime.spawn_membership_subscription(pubkey);
             let contacts_id = self.runtime.spawn_contacts_subscription(pubkey);
+            // Eagerly fetch 39000 metadata for any groups already in the
+            // nostrdb cache. Without this, the first `getJoinedCommunities`
+            // call on a warm cache would return summaries with name=id because
+            // the stage-2 metadata sub would only be installed after the pump
+            // sees a live membership delta.
+            let cached_ids = crate::subscriptions::collect_cached_group_ids(
+                self.runtime.ndb(),
+                &pubkey,
+            );
+            if !cached_ids.is_empty() {
+                self.runtime
+                    .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
+            }
             let mut guard = self.inner.write();
             guard.session.set_membership_subscription(sub_id);
             guard.session.set_contacts_subscription(contacts_id);
@@ -200,6 +214,14 @@ impl HighlighterCore {
             .runtime
             .spawn_membership_subscription(user_pubkey);
         let contacts_id = self.runtime.spawn_contacts_subscription(user_pubkey);
+        let cached_ids = crate::subscriptions::collect_cached_group_ids(
+            self.runtime.ndb(),
+            &user_pubkey,
+        );
+        if !cached_ids.is_empty() {
+            self.runtime
+                .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
+        }
         {
             let mut guard = self.inner.write();
             guard.session.set_bunker(signer, user.clone());
@@ -307,6 +329,36 @@ impl HighlighterCore {
         )
     }
 
+    /// Highlights home-feed view-scope subscription. Snapshots the user's
+    /// current follow list (plus self — nobody lists themselves in kind:3
+    /// but we want our own highlights in the home feed) and joined-group
+    /// ids, then listens for kind:9802 events authored by anyone in that
+    /// set or tagged into any joined room.
+    pub async fn subscribe_following_highlights(&self) -> Result<u64, CoreError> {
+        let user_pubkey = self.require_user_pubkey()?;
+        let follow_hex_strings =
+            follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())?;
+        let mut follows_pks: Vec<PublicKey> = follow_hex_strings
+            .iter()
+            .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
+            .collect();
+        if !follows_pks.iter().any(|pk| *pk == user_pubkey) {
+            follows_pks.push(user_pubkey);
+        }
+        let joined = groups::query_joined_communities_from_ndb(
+            self.runtime.ndb(),
+            &user_pubkey.to_hex(),
+        )?;
+        let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
+        self.subscriptions.register(
+            &self.runtime,
+            SubscriptionKind::FollowingHighlights {
+                follows: follows_pks,
+                group_ids,
+            },
+        )
+    }
+
     /// Article-reader view-scope subscription. Fires `ArticleUpdated` deltas
     /// whenever the article's replaceable body supersedes OR a new kind:9802
     /// highlighting this article's `a`-tag arrives. Install on reader view
@@ -352,18 +404,18 @@ impl HighlighterCore {
 
     pub async fn get_artifacts(
         &self,
-        _group_id: String,
-        _limit: u32,
+        group_id: String,
+        limit: u32,
     ) -> Result<Vec<ArtifactRecord>, CoreError> {
-        Err(CoreError::NotInitialized)
+        crate::artifacts::query_for_group(self.runtime.ndb(), &group_id, limit)
     }
 
     pub async fn get_highlights(
         &self,
-        _group_id: String,
-        _limit: u32,
+        group_id: String,
+        limit: u32,
     ) -> Result<Vec<HydratedHighlight>, CoreError> {
-        Err(CoreError::NotInitialized)
+        crate::highlights::query_for_group(self.runtime.ndb(), &group_id, limit)
     }
 
     pub async fn get_my_highlights(&self, limit: u32) -> Result<Vec<HighlightRecord>, CoreError> {
@@ -384,6 +436,134 @@ impl HighlighterCore {
             return Err(CoreError::NotAuthenticated);
         };
         reads::query_following_reads(self.runtime.ndb(), &user.pubkey, limit)
+    }
+
+    /// Highlights home feed — kind:9802 events authored by follows plus
+    /// highlights tagged into joined rooms. See
+    /// `highlights::query_following_highlights` for semantics.
+    pub async fn get_following_highlights(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<HydratedHighlight>, CoreError> {
+        let Some(user) = self.inner.read().session.current_user() else {
+            return Err(CoreError::NotAuthenticated);
+        };
+        let joined =
+            groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user.pubkey)?;
+        let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
+        highlights::query_following_highlights(
+            self.runtime.ndb(),
+            &user.pubkey,
+            &group_ids,
+            limit,
+        )
+    }
+
+    /// Diagnostic report for the highlights feed. Returns a short string
+    /// with ndb counts so the iOS side can show what it's seeing when the
+    /// feed comes back empty. Temporary — remove once the feed is stable.
+    pub async fn debug_highlights_report(&self) -> Result<String, CoreError> {
+        use nostrdb::{Filter as NdbFilter, Transaction};
+        let Some(user) = self.inner.read().session.current_user() else {
+            return Ok("not_authenticated".to_string());
+        };
+
+        let follows_hex =
+            follows::query_follows(self.runtime.ndb(), &user.pubkey)?;
+        let mut follows_pks: Vec<PublicKey> = follows_hex
+            .iter()
+            .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
+            .collect();
+        let self_pk = PublicKey::from_hex(&user.pubkey).ok();
+        if let Some(me) = &self_pk {
+            if !follows_pks.iter().any(|pk| pk == me) {
+                follows_pks.push(*me);
+            }
+        }
+
+        let joined =
+            groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user.pubkey)?;
+        let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
+
+        let txn = Transaction::new(self.runtime.ndb())
+            .map_err(|e| CoreError::Cache(format!("debug txn: {e}")))?;
+
+        let total = self
+            .runtime
+            .ndb()
+            .query(&txn, &[NdbFilter::new().kinds([9802u64]).build()], 4096)
+            .map(|r| r.len())
+            .unwrap_or(0);
+
+        let mut self_9802 = 0usize;
+        if let Some(me) = &self_pk {
+            let pk_bytes = me.to_bytes();
+            let filter = NdbFilter::new()
+                .kinds([9802u64])
+                .authors([&pk_bytes])
+                .build();
+            self_9802 = self
+                .runtime
+                .ndb()
+                .query(&txn, &[filter], 4096)
+                .map(|r| r.len())
+                .unwrap_or(0);
+        }
+
+        let mut follows_9802 = 0usize;
+        if !follows_pks.is_empty() {
+            let author_bytes: Vec<[u8; 32]> =
+                follows_pks.iter().map(|pk| pk.to_bytes()).collect();
+            let author_refs: Vec<&[u8; 32]> = author_bytes.iter().collect();
+            let filter = NdbFilter::new()
+                .kinds([9802u64])
+                .authors(author_refs.iter().copied())
+                .build();
+            follows_9802 = self
+                .runtime
+                .ndb()
+                .query(&txn, &[filter], 4096)
+                .map(|r| r.len())
+                .unwrap_or(0);
+        }
+
+        let mut room_matched = 0usize;
+        if !group_ids.is_empty() {
+            let filter = NdbFilter::new().kinds([9802u64]).build();
+            let results = self
+                .runtime
+                .ndb()
+                .query(&txn, &[filter], 4096)
+                .unwrap_or_default();
+            for r in &results {
+                let Ok(note) = self.runtime.ndb().get_note_by_key(&txn, r.note_key) else {
+                    continue;
+                };
+                let Ok(json) = note.json() else { continue };
+                let Ok(event) = Event::from_json(&json) else { continue };
+                for tag in event.tags.iter() {
+                    let s = tag.as_slice();
+                    if s.first().map(String::as_str) == Some("h") {
+                        if let Some(val) = s.get(1).map(String::as_str) {
+                            if group_ids.iter().any(|g| g == val) {
+                                room_matched += 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(format!(
+            "total9802={} self={} followsN={} follows9802={} groupsN={} rooms9802={}",
+            total,
+            self_9802,
+            follows_pks.len(),
+            follows_9802,
+            group_ids.len(),
+            room_matched,
+        ))
     }
 
     // -- Profile reads (per-pubkey, no auth required) --
@@ -476,8 +656,14 @@ impl HighlighterCore {
         .await
     }
 
-    pub async fn get_recent_books(&self, _limit: u32) -> Result<Vec<ArtifactRecord>, CoreError> {
-        Err(CoreError::NotInitialized)
+    /// Recent books across the user's joined communities — drives the
+    /// capture-flow book picker. Returns `[]` if no books are cached or the
+    /// user isn't logged in.
+    pub async fn get_recent_books(&self, limit: u32) -> Result<Vec<ArtifactRecord>, CoreError> {
+        let Some(user) = self.inner.read().session.current_user() else {
+            return Ok(Vec::new());
+        };
+        crate::recent_books::query_recent_books(self.runtime.ndb(), &user.pubkey, limit)
     }
 
     pub async fn search_artifacts(
@@ -560,6 +746,85 @@ impl HighlighterCore {
     ) -> Result<HighlightRecord, CoreError> {
         let _ = self.require_user_pubkey()?;
         crate::highlights::publish(&self.runtime, draft, artifact).await
+    }
+
+    // -- Blossom (BUD-03, kind:10063) --
+
+    /// Return the user's ordered Blossom server list from nostrdb. Empty if no
+    /// kind:10063 has been cached yet (relay hasn't delivered it).
+    pub async fn get_blossom_servers(&self) -> Result<Vec<String>, CoreError> {
+        let user = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .ok_or(CoreError::NotAuthenticated)?;
+        blossom::query_blossom_servers(self.runtime.ndb(), &user.pubkey)
+    }
+
+    /// Replace the user's Blossom server list with `servers` (must be
+    /// non-empty). Order is preserved — first server is the upload default.
+    pub async fn set_blossom_servers(&self, servers: Vec<String>) -> Result<String, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        blossom::publish_blossom_servers(&self.runtime, servers).await
+    }
+
+    /// Publish the default Blossom server list only if the user has no cached
+    /// kind:10063. Called once after login; no-op when the list already exists.
+    pub async fn init_default_blossom_servers(&self) -> Result<(), CoreError> {
+        let user = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .ok_or(CoreError::NotAuthenticated)?;
+        blossom::init_default_blossom_servers(&self.runtime, &user.pubkey).await
+    }
+
+    /// Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
+    /// request. Returns the raw JSON of the signed event; the Swift caller
+    /// base64-encodes it and uses it as `Authorization: Nostr <base64>`.
+    /// `payload_hash` is the hex SHA-256 of the file bytes (required for PUT).
+    pub async fn sign_nip98_auth(
+        &self,
+        url: String,
+        method: String,
+        payload_hash: Option<String>,
+    ) -> Result<String, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        blossom::sign_nip98_auth(&self.runtime, &url, &method, payload_hash.as_deref()).await
+    }
+
+    // -- Capture flow (BUD-01 upload + kind:20 picture publish) --
+
+    /// Upload a photo to the default Blossom server (`blossom.primal.net`)
+    /// using BUD-01 auth. The caller (iOS) is responsible for stripping EXIF
+    /// metadata and recompressing the image before sending bytes — Rust does
+    /// not decode the image. `width`/`height` are stamped onto the returned
+    /// descriptor for use in the publishing event's `imeta` tag.
+    /// `alt` is the recognized OCR text, or empty if none.
+    pub async fn upload_photo(
+        &self,
+        bytes: Vec<u8>,
+        mime: String,
+        width: u32,
+        height: u32,
+        alt: String,
+    ) -> Result<BlossomUpload, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        blossom::upload_blob(&self.runtime, bytes, mime, width, height, alt).await
+    }
+
+    /// Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
+    /// Used by the capture flow when the user opts not to (or can't) extract
+    /// a highlight quote — the photo still ships to the community with all
+    /// the imeta metadata.
+    pub async fn publish_picture(
+        &self,
+        draft: PictureDraft,
+    ) -> Result<PictureRecord, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        crate::pictures::publish_picture(&self.runtime, draft).await
     }
 }
 

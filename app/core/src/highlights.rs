@@ -5,7 +5,7 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::{ArtifactRecord, HighlightDraft, HighlightRecord, HydratedHighlight};
+use crate::models::{ArtifactRecord, BlossomUpload, HighlightDraft, HighlightRecord, HydratedHighlight};
 use crate::nostr_runtime::NostrRuntime;
 use crate::relays::HIGHLIGHTER_RELAY;
 
@@ -198,6 +198,56 @@ pub async fn publish(
     Ok(record_from_event(&event, &draft, &artifact))
 }
 
+/// Read kind:9802 highlights for `group_id` from nostrdb, newest first.
+/// Scans by kind only and checks `#h` manually, consistent with the pattern
+/// used elsewhere to work around nostrdb tag index limitations.
+pub fn query_for_group(
+    ndb: &Ndb,
+    group_id: &str,
+    limit: u32,
+) -> Result<Vec<HydratedHighlight>, CoreError> {
+    let group_id = group_id.trim();
+    if group_id.is_empty() {
+        return Ok(Vec::new());
+    }
+    let txn = Transaction::new(ndb)
+        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+
+    let cap = (limit.saturating_mul(4)).max(128) as i32;
+    let filter = NdbFilter::new()
+        .kinds([KIND_HIGHLIGHT as u64])
+        .build();
+
+    let results = ndb
+        .query(&txn, &[filter], cap)
+        .map_err(|e| CoreError::Cache(format!("query highlights for group: {e}")))?;
+
+    let mut hydrated: Vec<HydratedHighlight> = Vec::new();
+    for r in &results {
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(json) = note.json() else { continue };
+        let Ok(event) = Event::from_json(&json) else { continue };
+        let Some(h) = first_tag_value(&event, "h") else { continue };
+        if h != group_id {
+            continue;
+        }
+        if let Some(rec) = record_from_cached_event(&event) {
+            hydrated.push(HydratedHighlight {
+                highlight: rec,
+                artifact: None,
+                shared_by_event_id: None,
+                shared_by_pubkey: None,
+            });
+        }
+    }
+
+    hydrated.sort_by(|a, b| {
+        b.highlight.created_at.unwrap_or(0).cmp(&a.highlight.created_at.unwrap_or(0))
+    });
+    hydrated.truncate(limit as usize);
+    Ok(hydrated)
+}
+
 /// Read highlights authored by `pubkey_hex` from nostrdb, newest first.
 /// Used both for the profile page's Highlights tab and for the vault view.
 pub fn query_highlights_by_author(
@@ -242,6 +292,113 @@ pub fn query_highlights_by_author(
     records.sort_by(|a, b| b.created_at.unwrap_or(0).cmp(&a.created_at.unwrap_or(0)));
     records.truncate(limit as usize);
     Ok(records)
+}
+
+/// Unified "Highlights" feed — kind:9802 events from people the user follows
+/// plus highlights in rooms they've joined. Dedupes by event id, sorts by
+/// `created_at` descending. Returns `HydratedHighlight`s with `artifact=None`;
+/// the Swift side resolves the artifact on render via the `artifact_address`
+/// (or falls back to `source_url` / `event_reference`).
+pub fn query_following_highlights(
+    ndb: &Ndb,
+    user_pubkey_hex: &str,
+    joined_group_ids: &[String],
+    limit: u32,
+) -> Result<Vec<HydratedHighlight>, CoreError> {
+    let user_pubkey_hex = user_pubkey_hex.trim();
+    if user_pubkey_hex.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let per_stream_cap = (limit.saturating_mul(4)).max(128) as i32;
+
+    // Resolve follows BEFORE opening our txn — nostrdb allows only one
+    // transaction per thread, and `query_follows` opens its own internally.
+    // Stream A: highlights authored by follows plus the user themselves
+    // (since nobody lists themselves in their own kind:3 and we want "my
+    // highlights" in the home feed).
+    let follows_hex = crate::follows::query_follows(ndb, user_pubkey_hex)?;
+    let mut follows_pks: Vec<PublicKey> = follows_hex
+        .iter()
+        .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
+        .collect();
+    if let Ok(me) = PublicKey::from_hex(user_pubkey_hex) {
+        if !follows_pks.iter().any(|pk| *pk == me) {
+            follows_pks.push(me);
+        }
+    }
+
+    let txn = Transaction::new(ndb)
+        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+
+    let mut by_event_id: std::collections::BTreeMap<String, HydratedHighlight> =
+        std::collections::BTreeMap::new();
+
+    if !follows_pks.is_empty() {
+        let follow_bytes: Vec<[u8; 32]> = follows_pks.iter().map(|pk| pk.to_bytes()).collect();
+        let follow_refs: Vec<&[u8; 32]> = follow_bytes.iter().collect();
+        let filter = NdbFilter::new()
+            .kinds([KIND_HIGHLIGHT as u64])
+            .authors(follow_refs.iter().copied())
+            .build();
+        let results = ndb
+            .query(&txn, &[filter], per_stream_cap)
+            .map_err(|e| CoreError::Cache(format!("query follow highlights: {e}")))?;
+        for r in &results {
+            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+            let Ok(json) = note.json() else { continue };
+            let Ok(event) = Event::from_json(&json) else { continue };
+            let Some(rec) = record_from_cached_event(&event) else { continue };
+            by_event_id.insert(
+                rec.event_id.clone(),
+                HydratedHighlight {
+                    highlight: rec,
+                    artifact: None,
+                    shared_by_event_id: None,
+                    shared_by_pubkey: None,
+                },
+            );
+        }
+    }
+
+    // Stream B: highlights from joined rooms (kind:9802 with matching `#h`).
+    // ndb's `#h` index is unreliable, so we scan kind:9802 and filter in Rust.
+    if !joined_group_ids.is_empty() {
+        let group_set: std::collections::HashSet<&str> =
+            joined_group_ids.iter().map(|s| s.as_str()).collect();
+        let filter = NdbFilter::new().kinds([KIND_HIGHLIGHT as u64]).build();
+        let results = ndb
+            .query(&txn, &[filter], per_stream_cap)
+            .map_err(|e| CoreError::Cache(format!("query room highlights: {e}")))?;
+        for r in &results {
+            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+            let Ok(json) = note.json() else { continue };
+            let Ok(event) = Event::from_json(&json) else { continue };
+            let Some(h) = first_tag_value(&event, "h") else { continue };
+            if !group_set.contains(h) {
+                continue;
+            }
+            let Some(rec) = record_from_cached_event(&event) else { continue };
+            by_event_id
+                .entry(rec.event_id.clone())
+                .or_insert(HydratedHighlight {
+                    highlight: rec,
+                    artifact: None,
+                    shared_by_event_id: None,
+                    shared_by_pubkey: None,
+                });
+        }
+    }
+
+    let mut out: Vec<HydratedHighlight> = by_event_id.into_values().collect();
+    out.sort_by(|a, b| {
+        b.highlight
+            .created_at
+            .unwrap_or(0)
+            .cmp(&a.highlight.created_at.unwrap_or(0))
+    });
+    out.truncate(limit as usize);
+    Ok(out)
 }
 
 /// Pure: build a `HighlightRecord` from an already-cached kind:9802 event.
@@ -351,6 +508,19 @@ fn build_highlight_event(
             .map_err(|e| CoreError::Other(format!("build reference tag: {e}")))?,
     );
 
+    // NIP-73 external-entity tag. When the artifact has a canonical catalog
+    // id (e.g. an ISBN-sourced book), mirror it onto the highlight so every
+    // Nostr client — not just Highlighter — can identify the source. Skipped
+    // if the primary reference is already an `i` tag with the same value
+    // (would be a duplicate).
+    let catalog_id = artifact.preview.catalog_id.trim();
+    if !catalog_id.is_empty() && !(ref_name == "i" && ref_value == catalog_id) {
+        tags.push(
+            Tag::parse(vec!["i".to_string(), catalog_id.to_string()])
+                .map_err(|e| CoreError::Other(format!("build catalog tag: {e}")))?,
+        );
+    }
+
     // Context tag: only if differs from content.
     let context = draft.context.trim();
     if !context.is_empty() && context != content {
@@ -401,7 +571,33 @@ fn build_highlight_event(
         }
     }
 
+    // NIP-92 imeta tag — only present when the user attached a photo to the
+    // highlight (e.g. the page they OCR'd). The image is uploaded separately
+    // via `blossom::upload_blob`; here we only describe it.
+    if let Some(image) = &draft.image {
+        tags.push(build_imeta_tag(image)?);
+    }
+
     Ok(EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), content).tags(tags))
+}
+
+/// Build a NIP-92 `imeta` tag from a Blossom upload descriptor.
+/// Tag shape: `["imeta", "url <url>", "m <mime>", "x <sha>", "size <bytes>", "dim WxH", "alt <text>"]`.
+/// `dim` and `alt` are omitted when not meaningful (zero dim, empty alt).
+pub(crate) fn build_imeta_tag(image: &BlossomUpload) -> Result<Tag, CoreError> {
+    let mut parts: Vec<String> = vec!["imeta".to_string()];
+    parts.push(format!("url {}", image.url));
+    parts.push(format!("m {}", image.mime));
+    parts.push(format!("x {}", image.sha256_hex));
+    parts.push(format!("size {}", image.size_bytes));
+    if image.width > 0 && image.height > 0 {
+        parts.push(format!("dim {}x{}", image.width, image.height));
+    }
+    let alt = image.alt.trim();
+    if !alt.is_empty() {
+        parts.push(format!("alt {alt}"));
+    }
+    Tag::parse(parts).map_err(|e| CoreError::Other(format!("build imeta tag: {e}")))
 }
 
 /// Build the kind:16 repost `EventBuilder` that shares a highlight into a
@@ -559,6 +755,7 @@ mod tests {
             clip_end_seconds: Some(34.5678),
             clip_speaker: String::new(),
             clip_transcript_segment_ids: vec![],
+            image: None,
         }
     }
 
@@ -576,6 +773,106 @@ mod tests {
             .iter()
             .map(|t| t.as_slice().to_vec())
             .collect()
+    }
+
+    fn artifact_for_isbn(isbn: &str) -> ArtifactRecord {
+        let catalog_id = format!("isbn:{isbn}");
+        ArtifactRecord {
+            preview: ArtifactPreview {
+                id: "cbook".into(),
+                url: String::new(),
+                title: "Some Book".into(),
+                author: "An Author".into(),
+                image: String::new(),
+                description: String::new(),
+                source: "book".into(),
+                domain: String::new(),
+                catalog_id: catalog_id.clone(),
+                catalog_kind: "isbn".into(),
+                podcast_guid: String::new(),
+                podcast_show_title: String::new(),
+                audio_url: String::new(),
+                audio_preview_url: String::new(),
+                transcript_url: String::new(),
+                feed_url: String::new(),
+                published_at: String::new(),
+                duration_seconds: None,
+                reference_tag_name: "i".into(),
+                reference_tag_value: catalog_id.clone(),
+                reference_kind: "isbn".into(),
+                highlight_tag_name: "i".into(),
+                highlight_tag_value: catalog_id.clone(),
+                highlight_reference_key: format!("i:{catalog_id}"),
+            },
+            group_id: "group-a".into(),
+            share_event_id: "share-isbn-1".into(),
+            pubkey: "a".repeat(64),
+            created_at: Some(1_700_000_000),
+            note: String::new(),
+        }
+    }
+
+    #[test]
+    fn isbn_highlight_emits_single_i_tag_with_catalog_id() {
+        let artifact = artifact_for_isbn("9780735211292");
+        let draft = HighlightDraft {
+            quote: "one tiny spark".into(),
+            context: String::new(),
+            note: String::new(),
+            clip_start_seconds: None,
+            clip_end_seconds: None,
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: vec![],
+            image: None,
+        };
+        let builder = build_highlight_event(&draft, &artifact).expect("build");
+        let tags = tags_as_vec(&builder);
+
+        let i_tags: Vec<_> = tags
+            .iter()
+            .filter(|t| t.first().map(String::as_str) == Some("i"))
+            .collect();
+        assert_eq!(
+            i_tags.len(),
+            1,
+            "exactly one i tag (primary reference already covers NIP-73)"
+        );
+        assert_eq!(
+            i_tags[0],
+            &vec!["i".to_string(), "isbn:9780735211292".to_string()]
+        );
+    }
+
+    #[test]
+    fn non_isbn_artifact_with_catalog_id_gets_extra_i_tag() {
+        // Simulates a future case where the primary reference is `a` (kind:11
+        // address) but the artifact still carries a catalog id like an ISBN —
+        // belt-and-suspenders NIP-73 tagging per Nostr convention.
+        let mut artifact = artifact_for_isbn("9780735211292");
+        artifact.preview.highlight_tag_name = "a".into();
+        artifact.preview.highlight_tag_value = "11:abc:def".into();
+
+        let draft = HighlightDraft {
+            quote: "q".into(),
+            context: String::new(),
+            note: String::new(),
+            clip_start_seconds: None,
+            clip_end_seconds: None,
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: vec![],
+            image: None,
+        };
+        let builder = build_highlight_event(&draft, &artifact).expect("build");
+        let tags = tags_as_vec(&builder);
+
+        assert!(
+            tags.iter().any(|t| t.as_slice() == ["a", "11:abc:def"]),
+            "primary `a` reference present"
+        );
+        assert!(
+            tags.iter().any(|t| t.as_slice() == ["i", "isbn:9780735211292"]),
+            "NIP-73 `i` catalog tag present alongside"
+        );
     }
 
     #[test]
@@ -650,6 +947,7 @@ mod tests {
             clip_end_seconds: None,
             clip_speaker: String::new(),
             clip_transcript_segment_ids: vec![],
+            image: None,
         };
         let builder =
             build_highlight_event(&draft, &artifact).expect("build highlight event");
@@ -671,6 +969,72 @@ mod tests {
     }
 
     #[test]
+    fn imeta_tag_omitted_when_no_image() {
+        let artifact = artifact_for_podcast("https://example.com/ep1");
+        let draft = draft_with_clip();
+        let builder = build_highlight_event(&draft, &artifact).expect("build");
+        let tags = tags_as_vec(&builder);
+        assert!(
+            !tags.iter().any(|t| t.first().map(String::as_str) == Some("imeta")),
+            "no imeta tag when draft.image is None: {tags:?}"
+        );
+    }
+
+    #[test]
+    fn imeta_tag_present_with_all_fields() {
+        let artifact = artifact_for_podcast("https://example.com/ep1");
+        let mut draft = draft_with_clip();
+        draft.image = Some(BlossomUpload {
+            url: "https://blossom.primal.net/abc.jpg".into(),
+            sha256_hex: "abc123".into(),
+            mime: "image/jpeg".into(),
+            size_bytes: 12345,
+            width: 1536,
+            height: 2048,
+            alt: "page text".into(),
+        });
+        let builder = build_highlight_event(&draft, &artifact).expect("build");
+        let tags = tags_as_vec(&builder);
+
+        let imeta = tags
+            .iter()
+            .find(|t| t.first().map(String::as_str) == Some("imeta"))
+            .expect("imeta tag present");
+        // Each field is a single space-separated element after "imeta".
+        let parts: Vec<&str> = imeta.iter().skip(1).map(String::as_str).collect();
+        assert!(parts.contains(&"url https://blossom.primal.net/abc.jpg"));
+        assert!(parts.contains(&"m image/jpeg"));
+        assert!(parts.contains(&"x abc123"));
+        assert!(parts.contains(&"size 12345"));
+        assert!(parts.contains(&"dim 1536x2048"));
+        assert!(parts.contains(&"alt page text"));
+    }
+
+    #[test]
+    fn imeta_tag_omits_dim_and_alt_when_unset() {
+        let artifact = artifact_for_podcast("https://example.com/ep1");
+        let mut draft = draft_with_clip();
+        draft.image = Some(BlossomUpload {
+            url: "https://blossom.primal.net/abc.jpg".into(),
+            sha256_hex: "abc123".into(),
+            mime: "image/jpeg".into(),
+            size_bytes: 1,
+            width: 0,
+            height: 0,
+            alt: String::new(),
+        });
+        let builder = build_highlight_event(&draft, &artifact).expect("build");
+        let tags = tags_as_vec(&builder);
+        let imeta = tags
+            .iter()
+            .find(|t| t.first().map(String::as_str) == Some("imeta"))
+            .expect("imeta tag present");
+        let parts: Vec<&str> = imeta.iter().skip(1).map(String::as_str).collect();
+        assert!(!parts.iter().any(|p| p.starts_with("dim ")));
+        assert!(!parts.iter().any(|p| p.starts_with("alt ")));
+    }
+
+    #[test]
     fn comment_tag_emitted_for_note() {
         let artifact = artifact_for_podcast("https://example.com/ep1");
         let draft = HighlightDraft {
@@ -681,6 +1045,7 @@ mod tests {
             clip_end_seconds: None,
             clip_speaker: String::new(),
             clip_transcript_segment_ids: vec![],
+            image: None,
         };
         let builder =
             build_highlight_event(&draft, &artifact).expect("build highlight event");
@@ -703,6 +1068,7 @@ mod tests {
             clip_end_seconds: None,
             clip_speaker: String::new(),
             clip_transcript_segment_ids: vec![],
+            image: None,
         };
         let builder =
             build_highlight_event(&draft, &artifact).expect("build highlight event");
@@ -812,5 +1178,85 @@ mod tests {
             build_clip_fallback_quote(3_600.0, 3_665.0),
             "Clip 1:00:00-1:01:05"
         );
+    }
+
+    // -- query_for_group tests ------------------------------------------------
+
+    fn isolated_ndb() -> (Ndb, tempfile::TempDir) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let path = tmp.path().join("ndb");
+        std::fs::create_dir_all(&path).expect("mkdir");
+        let cfg = nostrdb::Config::new().set_mapsize(32 * 1024 * 1024);
+        let ndb = Ndb::new(path.to_str().unwrap(), &cfg).expect("open ndb");
+        (ndb, tmp)
+    }
+
+    fn ingest(ndb: &Ndb, event: &Event) {
+        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
+        ndb.process_event(&line).expect("process event");
+    }
+
+    fn wait_for_ndb() {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    fn make_group_highlight(keys: &Keys, group_id: &str, quote: &str) -> Event {
+        EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), quote)
+            .tags(vec![
+                Tag::parse(vec!["h".to_string(), group_id.to_string()]).unwrap(),
+                Tag::parse(vec!["r".to_string(), "https://example.com".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(keys)
+            .expect("sign")
+    }
+
+    #[test]
+    fn query_for_group_returns_matching_highlights() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        let hl = make_group_highlight(&keys, "alpha", "my insight");
+        ingest(&ndb, &hl);
+        wait_for_ndb();
+
+        let records = query_for_group(&ndb, "alpha", 32).expect("query");
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].highlight.quote, "my insight");
+    }
+
+    #[test]
+    fn query_for_group_filters_by_group() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        ingest(&ndb, &make_group_highlight(&keys, "alpha", "alpha hl"));
+        ingest(&ndb, &make_group_highlight(&keys, "bravo", "bravo hl"));
+        wait_for_ndb();
+
+        let alpha = query_for_group(&ndb, "alpha", 32).expect("alpha");
+        assert_eq!(alpha.len(), 1);
+        assert_eq!(alpha[0].highlight.quote, "alpha hl");
+
+        let bravo = query_for_group(&ndb, "bravo", 32).expect("bravo");
+        assert_eq!(bravo.len(), 1);
+        assert_eq!(bravo[0].highlight.quote, "bravo hl");
+    }
+
+    #[test]
+    fn query_for_group_excludes_highlights_without_h_tag() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        // Highlight without any h tag — must be excluded from group queries.
+        let no_h = EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "no group")
+            .tags(vec![
+                Tag::parse(vec!["r".to_string(), "https://example.com".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign");
+        ingest(&ndb, &no_h);
+        ingest(&ndb, &make_group_highlight(&keys, "alpha", "alpha hl"));
+        wait_for_ndb();
+
+        let records = query_for_group(&ndb, "alpha", 32).expect("query");
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].highlight.quote, "alpha hl");
     }
 }
