@@ -28,8 +28,15 @@ struct RoomLanesView: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(Lane.build(artifacts: artifacts, highlights: highlights)) { lane in
+                    let lanes = Lane.build(artifacts: artifacts, highlights: highlights)
+                    ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
                         laneView(for: lane)
+                        if index < lanes.count - 1 {
+                            LaneTransitionView(
+                                from: LaneSurface(for: lane),
+                                to: LaneSurface(for: lanes[index + 1])
+                            )
+                        }
                     }
                 }
             }
@@ -48,6 +55,60 @@ struct RoomLanesView: View {
             ArticleLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
         default:
             LaneView(lane: lane, onShareToCommunity: onShareToCommunity)
+        }
+    }
+}
+
+/// Format-surface category for a lane. Used by transitions to pick the
+/// right gradient and height between adjacent lanes.
+enum LaneSurface {
+    case paper      // book
+    case dark       // podcast
+    case white      // article
+    case neutral    // generic / unknown format
+
+    init(for lane: Lane) {
+        switch lane.artifact.preview.source {
+        case "book":    self = .paper
+        case "podcast": self = .dark
+        case "article": self = .white
+        default:        self = .neutral
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .paper:   return .laneBookPaper
+        case .dark:    return .laneAudioSurface
+        case .white:   return .laneArticlePage
+        case .neutral: return .highlighterPaper
+        }
+    }
+}
+
+/// Designed transition between two adjacent lanes. A dark surface on
+/// either side makes the transition dramatic (40pt dusk / dawn). All
+/// other pairs breathe in a shorter neutral fold. Same-to-same gets a
+/// minimal hairline — shouldn't happen for consecutive artifacts of the
+/// same format, but it's defensive.
+struct LaneTransitionView: View {
+    let from: LaneSurface
+    let to: LaneSurface
+
+    var body: some View {
+        LinearGradient(
+            colors: [from.color, to.color],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: height)
+    }
+
+    private var height: CGFloat {
+        switch (from, to) {
+        case (.dark, _), (_, .dark): return 40    // dusk / dawn
+        case (.paper, .white), (.white, .paper): return 22  // fold
+        default: return 14
         }
     }
 }
