@@ -23,6 +23,15 @@ use crate::nostr_runtime::NostrRuntime;
 
 pub const HIGHLIGHTER_RELAY: &str = "wss://relay.highlighter.com";
 
+/// Canonical indexer relay. Hardcoded into the pool — `indexer_urls()`
+/// always includes it whether or not the user's NIP-78 lists it. Used as
+/// the fallback target for outbox-model lookups (kind:0/3/10002 for
+/// arbitrary pubkeys, kind:10009/10012 for follows). The user can add
+/// other indexer relays in their NIP-78, but they can't remove this one
+/// — losing it would silently break profile/follow-list resolution for
+/// the rest of the app.
+pub const PURPLE_PAGES_RELAY: &str = "wss://purplepag.es";
+
 /// Relays we run NIP-77 negentropy sync against for the cold-start
 /// backfill of follows' kind:0/3/10002 (the "social trio"). The premise
 /// for using purplepag.es here was wrong — it specialises in those kinds
@@ -271,6 +280,14 @@ fn latest_app_data(ndb: &Ndb, user_hex: &str) -> Result<Option<Event>, CoreError
 /// Merge kind:10002 and kind:30078 into the user's effective relay list,
 /// deduped by URL. Falls back to `seed_defaults()` when neither event is
 /// cached.
+///
+/// **Defaulting rule for Rooms:** if the merged result has no row flagged
+/// `rooms`, append `HIGHLIGHTER_RELAY` with `rooms = true` (and read/write
+/// off so it doesn't pollute the user's NIP-65 outbox). Highlighter is
+/// the canonical rooms host for the app — without it the rooms surfaces
+/// can't load anything. The user can remove it via the UI by toggling
+/// Rooms off and adding another relay with Rooms on; once any Rooms-
+/// flagged row exists in NIP-78 this fallback stops firing.
 pub fn query_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<RelayConfig>, CoreError> {
     let nip65 = latest_nip65(ndb, user_hex)?
         .as_ref()
@@ -306,6 +323,24 @@ pub fn query_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<RelayConfig>, CoreE
                 write: false,
                 rooms: entry.rooms,
                 indexer: entry.indexer,
+            });
+        }
+    }
+
+    // Rooms default: if the user hasn't picked a rooms relay (no NIP-78
+    // entry with rooms=true), surface Highlighter as the default. Don't
+    // touch read/write — those live in NIP-65 and shouldn't change just
+    // because rooms needs a host.
+    if !rows.iter().any(|r| r.rooms) {
+        if let Some(row) = rows.iter_mut().find(|r| r.url == HIGHLIGHTER_RELAY) {
+            row.rooms = true;
+        } else {
+            rows.push(RelayConfig {
+                url: HIGHLIGHTER_RELAY.to_string(),
+                read: false,
+                write: false,
+                rooms: true,
+                indexer: false,
             });
         }
     }

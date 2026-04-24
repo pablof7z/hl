@@ -32,7 +32,9 @@ use crate::models::{RelayDiagnostic, RelayStatus as AppRelayStatus};
 /// enumerate the NIP-29 groups they're a member of; each entry is a
 /// `group` tag with the group id and relay.
 const KIND_SIMPLE_GROUPS_LIST: u16 = 10009;
-use crate::relays::{query_relays, seed_defaults, RelayConfig, NEGENTROPY_SYNC_RELAYS};
+use crate::relays::{
+    query_relays, seed_defaults, RelayConfig, NEGENTROPY_SYNC_RELAYS, PURPLE_PAGES_RELAY,
+};
 
 /// Shared pointer to the app's event-callback slot. `HighlighterCore` owns
 /// the slot; `NostrRuntime`'s diagnostics poller borrows it (via this type
@@ -540,6 +542,7 @@ impl NostrRuntime {
         let cache = self.current_relays.clone();
         self.rt().spawn(async move {
             apply_relay_config(&client, &rows).await;
+            pin_relay_for_read(&client, PURPLE_PAGES_RELAY).await;
             client.connect().await;
             *cache.write() = rows;
         });
@@ -548,6 +551,8 @@ impl NostrRuntime {
     /// Convenience: load the user's persisted `RelayConfig` from nostrdb and
     /// reconcile the pool. Called after login succeeds. Falls back to
     /// `seed_defaults()` if no kind:10002 / kind:30078 is cached yet.
+    /// `PURPLE_PAGES_RELAY` is pinned afterwards regardless — it's the
+    /// canonical indexer and not a user-managed entry.
     pub fn spawn_apply_user_relay_config(&self, user_hex: String) {
         let client = self.client.clone();
         let ndb = self.ndb.clone();
@@ -561,6 +566,7 @@ impl NostrRuntime {
                 }
             };
             apply_relay_config(&client, &rows).await;
+            pin_relay_for_read(&client, PURPLE_PAGES_RELAY).await;
             client.connect().await;
             *cache.write() = rows;
         });
@@ -585,13 +591,17 @@ impl NostrRuntime {
 
     /// URLs of relays serving as the outbox-model bootstrap pool for
     /// resolving `kind:0` / `kind:3` / `kind:1xxxx` for arbitrary pubkeys.
+    /// `PURPLE_PAGES_RELAY` is always included regardless of user config —
+    /// it's app-internal infrastructure, not a user setting. Anything the
+    /// user has flagged `indexer` in NIP-78 is added on top, deduped.
     pub fn indexer_urls(&self) -> Vec<String> {
-        self.current_relays
-            .read()
-            .iter()
-            .filter(|r| r.indexer)
-            .map(|r| r.url.clone())
-            .collect()
+        let mut urls: Vec<String> = vec![PURPLE_PAGES_RELAY.to_string()];
+        for row in self.current_relays.read().iter() {
+            if row.indexer && row.url != PURPLE_PAGES_RELAY {
+                urls.push(row.url.clone());
+            }
+        }
+        urls
     }
 
     /// URLs of the user's NIP-65 read relays.
@@ -1101,7 +1111,7 @@ mod tests {
     }
 
     #[test]
-    fn indexer_urls_returns_only_indexer_rows() {
+    fn indexer_urls_returns_indexer_rows_plus_hardcoded_purple() {
         let (rt, _tmp) = runtime_with_config(vec![
             RelayConfig {
                 url: "wss://hl.example".into(),
@@ -1127,13 +1137,30 @@ mod tests {
         ]);
         let mut urls = rt.indexer_urls();
         urls.sort();
+        // Hardcoded `wss://purplepag.es` is always present, then the
+        // user's own indexer-flagged rows (deduped if the user happens
+        // to list purple too).
         assert_eq!(
             urls,
             vec![
                 "wss://primal.example".to_string(),
                 "wss://purple.example".to_string(),
+                "wss://purplepag.es".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn indexer_urls_dedupes_purple_when_user_lists_it() {
+        let (rt, _tmp) = runtime_with_config(vec![RelayConfig {
+            url: "wss://purplepag.es".into(),
+            read: false,
+            write: false,
+            rooms: false,
+            indexer: true,
+        }]);
+        let urls = rt.indexer_urls();
+        assert_eq!(urls, vec!["wss://purplepag.es".to_string()]);
     }
 
     #[test]

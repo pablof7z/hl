@@ -22,6 +22,7 @@ struct NetworkSettingsView: View {
                 headerSection(store)
                 safetySection(store)
                 relaysSection(store)
+                autoConnectedSection(store)
                 actionsSection(store)
                 cacheSection(store)
                 connectivitySection(store)
@@ -151,27 +152,53 @@ struct NetworkSettingsView: View {
     }
 
     @ViewBuilder
-    private func safetySection(_ store: NetworkSettingsStore) -> some View {
-        if !store.hasOutbox || !store.hasIndexer {
+    private func autoConnectedSection(_ store: NetworkSettingsStore) -> some View {
+        if !store.autoConnectedUrls.isEmpty {
             Section {
-                if !store.hasOutbox {
-                    banner(
-                        icon: "exclamationmark.triangle.fill",
-                        tint: .orange,
-                        title: "No outbox relays",
-                        detail: "Turn on Write for at least one relay — otherwise your posts won't reach anyone."
+                ForEach(store.autoConnectedUrls, id: \.self) { url in
+                    RelayRowView(
+                        config: autoConfig(for: url),
+                        diagnostic: store.diagnostic(for: url),
+                        nip11: store.nip11(for: url)
                     )
                 }
-                if !store.hasIndexer {
-                    banner(
-                        icon: "magnifyingglass",
-                        tint: .yellow,
-                        title: "No indexer relays",
-                        detail: "Profile and follow-list lookups for other users may fail until you turn on Indexer for at least one relay."
-                    )
-                }
+            } header: {
+                Text("Auto-connected")
+            } footer: {
+                Text("Connected to support outbox routing for the people you follow and the hardcoded `purplepag.es` indexer. Not part of your published NIP-65.")
             }
         }
+    }
+
+    /// Synthesise a display-only `RelayConfig` for an auto-connected
+    /// relay. Outbox-pinned relays carry only Read at the FFI layer, but
+    /// the role chips are display-only here anyway — the user can't
+    /// toggle them from this section.
+    private func autoConfig(for url: String) -> RelayConfig {
+        RelayConfig(
+            url: url,
+            read: true,
+            write: false,
+            rooms: false,
+            indexer: url == "wss://purplepag.es"
+        )
+    }
+
+    @ViewBuilder
+    private func safetySection(_ store: NetworkSettingsStore) -> some View {
+        if !store.hasOutbox {
+            Section {
+                banner(
+                    icon: "exclamationmark.triangle.fill",
+                    tint: .orange,
+                    title: "No outbox relays",
+                    detail: "Turn on Write for at least one relay — otherwise your posts won't reach anyone."
+                )
+            }
+        }
+        // No indexer banner — `purplepag.es` is hardcoded into the
+        // indexer pool by the core (see `relays.rs::PURPLE_PAGES_RELAY`),
+        // so profile / follow-list lookups always have somewhere to go.
     }
 
     private func actionsSection(_ store: NetworkSettingsStore) -> some View {

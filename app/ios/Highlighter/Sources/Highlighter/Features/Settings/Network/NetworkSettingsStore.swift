@@ -46,15 +46,40 @@ final class NetworkSettingsStore {
         nip11ByUrl[url]
     }
 
+    /// URLs of relays in the live pool that the user *didn't* configure —
+    /// added by the outbox planner, NIP-77 sync, or the hardcoded purple
+    /// indexer pin. We surface them in their own section so the
+    /// connected-count math reflects every relay we're actually talking
+    /// to (configured + auto-pinned).
+    var autoConnectedUrls: [String] {
+        let configured = Set(relays.map { $0.url })
+        return diagnostics.keys
+            .filter { !configured.contains($0) }
+            .sorted()
+    }
+
+    /// Diagnostics rows for the auto-connected URLs, in the same order.
+    var autoConnectedDiagnostics: [RelayDiagnostic] {
+        autoConnectedUrls.compactMap { diagnostics[$0] }
+    }
+
+    /// Total relays the user can see in the screen — configured + auto.
+    var totalVisibleRelays: Int {
+        relays.count + autoConnectedUrls.count
+    }
+
     /// Number of relays currently reporting `Connected`. Used for the header
-    /// "Online — N of M" pill.
+    /// "Online — N of M" pill. Counts every pool relay (configured + auto)
+    /// since both groups are visible in the UI.
     var connectedCount: Int {
         diagnostics.values.filter { $0.state == .connected }.count
     }
 
-    /// Human-readable aggregate state for the header pill.
+    /// Human-readable aggregate state for the header pill. The denominator
+    /// matches what's actually rendered (configured + auto-connected) so
+    /// the user never sees nonsense like "10 of 5".
     var aggregateStateLabel: String {
-        let total = relays.count
+        let total = totalVisibleRelays
         let online = connectedCount
         if total == 0 { return "No relays" }
         if online == 0 { return "Offline" }
@@ -66,11 +91,6 @@ final class NetworkSettingsStore {
     /// the user's published events can't reach anyone — show the
     /// no-outbox banner.
     var hasOutbox: Bool { relays.contains { $0.write } }
-
-    /// True when at least one relay has the `indexer` flag on. When false,
-    /// profile / contact / relay-list lookups for arbitrary pubkeys will
-    /// fail — show the no-indexer banner.
-    var hasIndexer: Bool { relays.contains { $0.indexer } }
 
     /// Kick the pool to attempt a reconnect on every disconnected relay.
     func reconnectAll() async {
