@@ -366,3 +366,28 @@ pub struct RelayDiagnostic {
     /// connected in this session.
     pub connected_since_ts: Option<u64>,
 }
+
+/// Minimal projection of a relay's NIP-11 information document. Populated
+/// by `probe_relay_nip11` via a one-shot HTTPS GET to the relay's base URL
+/// with `Accept: application/nostr+json`. All fields are optional because
+/// relay operators configure NIP-11 loosely — many skip most fields.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct Nip11Document {
+    pub url: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub pubkey: Option<String>,
+    pub contact: Option<String>,
+    pub software: Option<String>,
+    pub version: Option<String>,
+    pub supported_nips: Vec<u32>,
+}
+
+/// Local nostrdb cache statistics. Rough — `disk_bytes` is the sum of file
+/// sizes in the ndb directory; `event_count_estimate` is an upper bound
+/// returned by a single kinds-wildcard query.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CacheStats {
+    pub disk_bytes: u64,
+    pub event_count_estimate: u64,
+}

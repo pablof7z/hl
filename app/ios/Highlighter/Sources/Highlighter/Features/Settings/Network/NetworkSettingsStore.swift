@@ -1,5 +1,11 @@
 import Foundation
+import Network
 import Observation
+
+/// UserDefaults key for the Wi-Fi-only toggle. Persisted outside the
+/// @Observable store so it survives process restarts and the `WifiMonitor`
+/// can read the initial value before the Store is constructed.
+private let wifiOnlyDefaultsKey = "hl.network.wifiOnly"
 
 /// App-scope store for the Network Settings screen. Owns the user's relay
 /// rows (config) + the live diagnostics snapshot.
@@ -14,11 +20,14 @@ import Observation
 final class NetworkSettingsStore {
     var relays: [RelayConfig] = []
     var diagnostics: [String: RelayDiagnostic] = [:]
+    var cacheStats: CacheStats?
     var isLoading: Bool = true
     var lastError: String?
+    private(set) var wifiOnlyEnabled: Bool = UserDefaults.standard.bool(forKey: wifiOnlyDefaultsKey)
 
     @ObservationIgnored private let core: SafeHighlighterCore
     @ObservationIgnored private var pollTask: Task<Void, Never>?
+    @ObservationIgnored private var pathMonitor: NWPathMonitor?
 
     init(core: SafeHighlighterCore) {
         self.core = core
@@ -64,6 +73,23 @@ final class NetworkSettingsStore {
         }
     }
 
+    /// Toggle Wi-Fi-only mode. When on, an `NWPathMonitor` suspends the
+    /// relay pool on cellular and resumes it when Wi-Fi comes back. The
+    /// setting persists in UserDefaults.
+    func setWifiOnly(_ on: Bool) {
+        wifiOnlyEnabled = on
+        UserDefaults.standard.set(on, forKey: wifiOnlyDefaultsKey)
+        if on {
+            startPathMonitor()
+        } else {
+            pathMonitor?.cancel()
+            pathMonitor = nil
+            // Leaving Wi-Fi-only mode → ensure the pool is reconnected
+            // regardless of current path state.
+            Task { await reconnectAll() }
+        }
+    }
+
     // MARK: - Lifecycle
 
     func load() async {
@@ -88,11 +114,45 @@ final class NetworkSettingsStore {
                 await self.refreshDiagnostics()
             }
         }
+        if wifiOnlyEnabled && pathMonitor == nil {
+            startPathMonitor()
+        }
+        Task { await self.refreshCacheStats() }
     }
 
     func stopLiveUpdates() {
         pollTask?.cancel()
         pollTask = nil
+        // Leave the path monitor running — Wi-Fi-only enforcement should
+        // keep working after the user leaves the Network screen.
+    }
+
+    // MARK: - Cache
+
+    func refreshCacheStats() async {
+        if let stats = try? await core.getCacheStats() {
+            cacheStats = stats
+        }
+    }
+
+    // MARK: - NWPathMonitor
+
+    private func startPathMonitor() {
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            let isWifi = path.usesInterfaceType(.wifi)
+            Task { @MainActor in
+                guard self.wifiOnlyEnabled else { return }
+                if isWifi {
+                    try? await self.core.reconnectAll()
+                } else {
+                    try? await self.core.disconnectAll()
+                }
+            }
+        }
+        monitor.start(queue: .global(qos: .utility))
+        pathMonitor = monitor
     }
 
     // MARK: - Writes

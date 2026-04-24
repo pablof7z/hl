@@ -1184,6 +1184,41 @@ impl HighlighterCore {
         self.runtime.client().connect().await;
         Ok(())
     }
+
+    /// Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
+    /// when the device drops off Wi-Fi — the Swift side re-enables by
+    /// calling `reconnect_all` once the path monitor reports Wi-Fi back.
+    pub async fn disconnect_all(&self) -> Result<(), CoreError> {
+        self.runtime.client().disconnect().await;
+        Ok(())
+    }
+
+    /// Fetch the target relay's NIP-11 information document via an HTTPS
+    /// GET to the `ws[s]://` URL's HTTP equivalent with
+    /// `Accept: application/nostr+json`. Fails fast on timeout.
+    pub async fn probe_relay_nip11(
+        &self,
+        url: String,
+    ) -> Result<crate::models::Nip11Document, CoreError> {
+        crate::relay_polish::probe_nip11(&url).await
+    }
+
+    /// Fetch another user's kind:10002 via the indexer pool and return the
+    /// parsed `RelayConfig` rows. Useful for "adopt someone else's relay
+    /// setup" flows — the Swift caller shows the list with checkboxes
+    /// and upserts the selected subset through `upsert_relay`.
+    pub async fn import_relays_from_npub(
+        &self,
+        npub: String,
+    ) -> Result<Vec<crate::relays::RelayConfig>, CoreError> {
+        crate::relay_polish::import_from_npub(&self.runtime, &npub).await
+    }
+
+    /// Size + event-count snapshot of the local nostrdb cache. Order-of-
+    /// magnitude figures used by the Network Settings "Local cache" card.
+    pub async fn get_cache_stats(&self) -> Result<crate::models::CacheStats, CoreError> {
+        crate::relay_polish::cache_stats(self.runtime.ndb(), self.runtime.data_dir())
+    }
 }
 
 impl HighlighterCore {

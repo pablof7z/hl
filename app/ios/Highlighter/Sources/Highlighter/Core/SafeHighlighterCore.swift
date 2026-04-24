@@ -368,4 +368,20 @@ actor SafeHighlighterCore {
     func reconnectAll() async throws {
         try await core.reconnectAll()
     }
+
+    func disconnectAll() async throws {
+        try await core.disconnectAll()
+    }
+
+    func probeRelayNip11(_ url: String) async throws -> Nip11Document {
+        try await core.probeRelayNip11(url: url)
+    }
+
+    func importRelaysFromNpub(_ npub: String) async throws -> [RelayConfig] {
+        try await core.importRelaysFromNpub(npub: npub)
+    }
+
+    func getCacheStats() async throws -> CacheStats {
+        try await core.getCacheStats()
+    }
 }

@@ -23,6 +23,7 @@ pub mod profile;
 pub mod reads;
 pub mod recent_books;
 pub mod recommendations;
+pub mod relay_polish;
 pub mod relays;
 pub mod search;
 pub mod session;

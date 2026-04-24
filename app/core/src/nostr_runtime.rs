@@ -70,7 +70,8 @@ pub struct NostrRuntime {
     /// `DIAGNOSTICS_POLL_INTERVAL` by the poller spawned at construction.
     /// Swift reads via `get_relay_diagnostics`.
     relay_diagnostics: Arc<parking_lot::RwLock<HashMap<String, RelayDiagnostic>>>,
-    #[cfg(test)]
+    /// Path the LMDB-backed nostrdb was opened at. Used by features that
+    /// need to size the on-disk cache.
     data_dir: PathBuf,
 }
 
@@ -123,7 +124,6 @@ impl NostrRuntime {
             rt: Some(rt),
             current_relays: Arc::new(parking_lot::RwLock::new(Vec::new())),
             relay_diagnostics: Arc::new(parking_lot::RwLock::new(HashMap::new())),
-            #[cfg(test)]
             data_dir,
         };
 
@@ -156,7 +156,8 @@ impl NostrRuntime {
             .expect("NostrRuntime::rt accessed after Drop")
     }
 
-    #[cfg(test)]
+    /// Resolved nostrdb directory. Used by cache-stats features that want
+    /// to size the on-disk store.
     pub fn data_dir(&self) -> &std::path::Path {
         &self.data_dir
     }

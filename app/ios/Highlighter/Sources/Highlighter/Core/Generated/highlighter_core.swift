@@ -738,6 +738,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func currentUser()  -> CurrentUser?
     
     /**
+     * Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
+     * when the device drops off Wi-Fi — the Swift side re-enables by
+     * calling `reconnect_all` once the path monitor reports Wi-Fi back.
+     */
+    func disconnectAll() async throws 
+    
+    /**
      * Every cached room, newest first, truncated to `limit`. Powers the
      * explorer's "Browse all" grid.
      */
@@ -757,6 +764,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * kind:10063 has been cached yet (relay hasn't delivered it).
      */
     func getBlossomServers() async throws  -> [String]
+    
+    /**
+     * Size + event-count snapshot of the local nostrdb cache. Order-of-
+     * magnitude figures used by the Network Settings "Local cache" card.
+     */
+    func getCacheStats() async throws  -> CacheStats
     
     func getDiscussions(groupId: String, limit: UInt32) async throws  -> [DiscussionRecord]
     
@@ -870,6 +883,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getUserProfile(pubkeyHex: String) async throws  -> ProfileMetadata?
     
     /**
+     * Fetch another user's kind:10002 via the indexer pool and return the
+     * parsed `RelayConfig` rows. Useful for "adopt someone else's relay
+     * setup" flows — the Swift caller shows the list with checkboxes
+     * and upserts the selected subset through `upsert_relay`.
+     */
+    func importRelaysFromNpub(npub: String) async throws  -> [RelayConfig]
+    
+    /**
      * Publish the default Blossom server list only if the user has no cached
      * kind:10063. Called once after login; no-op when the list already exists.
      */
@@ -888,6 +909,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func lookupIsbn(isbn: String) async throws  -> ArtifactPreview
     
     func pairBunker(uri: String) async throws  -> CurrentUser
+    
+    /**
+     * Fetch the target relay's NIP-11 information document via an HTTPS
+     * GET to the `ws[s]://` URL's HTTP equivalent with
+     * `Accept: application/nostr+json`. Fails fast on timeout.
+     */
+    func probeRelayNip11(url: String) async throws  -> Nip11Document
     
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async throws  -> ArtifactRecord
     
@@ -1215,6 +1243,28 @@ open func currentUser() -> CurrentUser?  {
 }
     
     /**
+     * Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
+     * when the device drops off Wi-Fi — the Swift side re-enables by
+     * calling `reconnect_all` once the path monitor reports Wi-Fi back.
+     */
+open func disconnectAll()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_disconnect_all(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Every cached room, newest first, truncated to `limit`. Powers the
      * explorer's "Browse all" grid.
      */
@@ -1291,6 +1341,27 @@ open func getBlossomServers()async throws  -> [String]  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Size + event-count snapshot of the local nostrdb cache. Order-of-
+     * magnitude figures used by the Network Settings "Local cache" card.
+     */
+open func getCacheStats()async throws  -> CacheStats  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_cache_stats(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCacheStats_lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -1737,6 +1808,29 @@ open func getUserProfile(pubkeyHex: String)async throws  -> ProfileMetadata?  {
 }
     
     /**
+     * Fetch another user's kind:10002 via the indexer pool and return the
+     * parsed `RelayConfig` rows. Useful for "adopt someone else's relay
+     * setup" flows — the Swift caller shows the list with checkboxes
+     * and upserts the selected subset through `upsert_relay`.
+     */
+open func importRelaysFromNpub(npub: String)async throws  -> [RelayConfig]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_import_relays_from_npub(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(npub)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeRelayConfig.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Publish the default Blossom server list only if the user has no cached
      * kind:10063. Called once after login; no-op when the list already exists.
      */
@@ -1822,6 +1916,28 @@ open func pairBunker(uri: String)async throws  -> CurrentUser  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCurrentUser_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Fetch the target relay's NIP-11 information document via an HTTPS
+     * GET to the `ws[s]://` URL's HTTP equivalent with
+     * `Accept: application/nostr+json`. Fails fast on timeout.
+     */
+open func probeRelayNip11(url: String)async throws  -> Nip11Document  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_probe_relay_nip11(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(url)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNip11Document_lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -3335,6 +3451,81 @@ public func FfiConverterTypeBlossomUpload_lower(_ value: BlossomUpload) -> RustB
 
 
 /**
+ * Local nostrdb cache statistics. Rough — `disk_bytes` is the sum of file
+ * sizes in the ndb directory; `event_count_estimate` is an upper bound
+ * returned by a single kinds-wildcard query.
+ */
+public struct CacheStats {
+    public var diskBytes: UInt64
+    public var eventCountEstimate: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(diskBytes: UInt64, eventCountEstimate: UInt64) {
+        self.diskBytes = diskBytes
+        self.eventCountEstimate = eventCountEstimate
+    }
+}
+
+#if compiler(>=6)
+extension CacheStats: Sendable {}
+#endif
+
+
+extension CacheStats: Equatable, Hashable {
+    public static func ==(lhs: CacheStats, rhs: CacheStats) -> Bool {
+        if lhs.diskBytes != rhs.diskBytes {
+            return false
+        }
+        if lhs.eventCountEstimate != rhs.eventCountEstimate {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(diskBytes)
+        hasher.combine(eventCountEstimate)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCacheStats: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CacheStats {
+        return
+            try CacheStats(
+                diskBytes: FfiConverterUInt64.read(from: &buf), 
+                eventCountEstimate: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CacheStats, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.diskBytes, into: &buf)
+        FfiConverterUInt64.write(value.eventCountEstimate, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCacheStats_lift(_ buf: RustBuffer) throws -> CacheStats {
+    return try FfiConverterTypeCacheStats.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCacheStats_lower(_ value: CacheStats) -> RustBuffer {
+    return FfiConverterTypeCacheStats.lower(value)
+}
+
+
+/**
  * Mirrors `CommunitySummary` in `web/src/lib/ndk/groups.ts:23-35`.
  */
 public struct CommunitySummary {
@@ -4564,6 +4755,130 @@ public func FfiConverterTypeHydratedHighlight_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeHydratedHighlight_lower(_ value: HydratedHighlight) -> RustBuffer {
     return FfiConverterTypeHydratedHighlight.lower(value)
+}
+
+
+/**
+ * Minimal projection of a relay's NIP-11 information document. Populated
+ * by `probe_relay_nip11` via a one-shot HTTPS GET to the relay's base URL
+ * with `Accept: application/nostr+json`. All fields are optional because
+ * relay operators configure NIP-11 loosely — many skip most fields.
+ */
+public struct Nip11Document {
+    public var url: String
+    public var name: String?
+    public var description: String?
+    public var pubkey: String?
+    public var contact: String?
+    public var software: String?
+    public var version: String?
+    public var supportedNips: [UInt32]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, name: String?, description: String?, pubkey: String?, contact: String?, software: String?, version: String?, supportedNips: [UInt32]) {
+        self.url = url
+        self.name = name
+        self.description = description
+        self.pubkey = pubkey
+        self.contact = contact
+        self.software = software
+        self.version = version
+        self.supportedNips = supportedNips
+    }
+}
+
+#if compiler(>=6)
+extension Nip11Document: Sendable {}
+#endif
+
+
+extension Nip11Document: Equatable, Hashable {
+    public static func ==(lhs: Nip11Document, rhs: Nip11Document) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.contact != rhs.contact {
+            return false
+        }
+        if lhs.software != rhs.software {
+            return false
+        }
+        if lhs.version != rhs.version {
+            return false
+        }
+        if lhs.supportedNips != rhs.supportedNips {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(name)
+        hasher.combine(description)
+        hasher.combine(pubkey)
+        hasher.combine(contact)
+        hasher.combine(software)
+        hasher.combine(version)
+        hasher.combine(supportedNips)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNip11Document: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip11Document {
+        return
+            try Nip11Document(
+                url: FfiConverterString.read(from: &buf), 
+                name: FfiConverterOptionString.read(from: &buf), 
+                description: FfiConverterOptionString.read(from: &buf), 
+                pubkey: FfiConverterOptionString.read(from: &buf), 
+                contact: FfiConverterOptionString.read(from: &buf), 
+                software: FfiConverterOptionString.read(from: &buf), 
+                version: FfiConverterOptionString.read(from: &buf), 
+                supportedNips: FfiConverterSequenceUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Nip11Document, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterOptionString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterOptionString.write(value.pubkey, into: &buf)
+        FfiConverterOptionString.write(value.contact, into: &buf)
+        FfiConverterOptionString.write(value.software, into: &buf)
+        FfiConverterOptionString.write(value.version, into: &buf)
+        FfiConverterSequenceUInt32.write(value.supportedNips, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNip11Document_lift(_ buf: RustBuffer) throws -> Nip11Document {
+    return try FfiConverterTypeNip11Document.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNip11Document_lower(_ value: Nip11Document) -> RustBuffer {
+    return FfiConverterTypeNip11Document.lower(value)
 }
 
 
@@ -6388,6 +6703,31 @@ fileprivate struct FfiConverterOptionTypeProfileMetadata: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt32]
+
+    public static func write(_ value: [UInt32], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterUInt32.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UInt32] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UInt32]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterUInt32.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -6830,6 +7170,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_current_user() != 38772) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 46894) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_all_rooms() != 20905) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6840,6 +7183,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_servers() != 32428) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 48741) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 41672) {
@@ -6908,6 +7254,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 29632) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_import_relays_from_npub() != 20364) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 35163) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6924,6 +7273,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 63581) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_probe_relay_nip11() != 47708) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 62633) {

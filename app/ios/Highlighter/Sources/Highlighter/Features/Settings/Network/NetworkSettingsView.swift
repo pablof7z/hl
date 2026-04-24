@@ -7,6 +7,7 @@ struct NetworkSettingsView: View {
     @Environment(HighlighterStore.self) private var appStore
     @State private var store: NetworkSettingsStore?
     @State private var showAddSheet = false
+    @State private var showImportSheet = false
     @State private var pendingRemove: PendingRemove?
 
     private struct PendingRemove: Identifiable {
@@ -22,6 +23,8 @@ struct NetworkSettingsView: View {
                 safetySection(store)
                 relaysSection(store)
                 actionsSection(store)
+                cacheSection(store)
+                connectivitySection(store)
                 footerSection
             } else {
                 ProgressView()
@@ -47,6 +50,11 @@ struct NetworkSettingsView: View {
                 AddRelaySheet { cfg in
                     Task { await store.upsert(cfg) }
                 }
+            }
+        }
+        .sheet(isPresented: $showImportSheet) {
+            if let store {
+                ImportRelaysSheet(store: store)
             }
         }
         .confirmationDialog(
@@ -172,6 +180,46 @@ struct NetworkSettingsView: View {
             } label: {
                 Label("Reconnect All", systemImage: "arrow.clockwise")
             }
+            Button {
+                showImportSheet = true
+            } label: {
+                Label("Import from another user…", systemImage: "person.crop.circle.badge.plus")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cacheSection(_ store: NetworkSettingsStore) -> some View {
+        Section {
+            if let stats = store.cacheStats {
+                LabeledContent("Events", value: "\(stats.eventCountEstimate)")
+                LabeledContent("On disk", value: formatBytes(stats.diskBytes))
+            } else {
+                HStack {
+                    ProgressView().scaleEffect(0.7)
+                    Text("Measuring…").foregroundStyle(.secondary).font(.caption)
+                }
+            }
+        } header: {
+            Text("Local cache")
+        } footer: {
+            Text("Everything Highlighter has seen on relays lives here. Uninstall the app to clear it.")
+        }
+    }
+
+    @ViewBuilder
+    private func connectivitySection(_ store: NetworkSettingsStore) -> some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { store.wifiOnlyEnabled },
+                set: { store.setWifiOnly($0) }
+            )) {
+                Label("Wi-Fi only", systemImage: "wifi")
+            }
+        } header: {
+            Text("Connectivity")
+        } footer: {
+            Text("When on, Highlighter pauses relay connections on cellular to save mobile data. Resumes automatically on Wi-Fi.")
         }
     }
 
@@ -181,6 +229,10 @@ struct NetworkSettingsView: View {
         } footer: {
             Text("Tap a relay to see diagnostics, change its roles, or remove it.")
         }
+    }
+
+    private func formatBytes(_ bytes: UInt64) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .binary)
     }
 
     /// Joined-room names that live on the given relay URL, compared by
