@@ -1,10 +1,12 @@
+import Kingfisher
 import SwiftUI
 
 /// Editorial pull-quote card for the Highlights home feed. Three visual
 /// priorities, top → bottom:
 ///  1. The quote (serif, hero treatment, with a terracotta accent rail).
 ///  2. The highlighter's note, when present (serif italic, muted).
-///  3. Source attribution — "From [title] by [author]" — at the bottom.
+///  3. Source — a read-strip (cover + title + read time) when the highlight
+///     points at a resolved NIP-23 article; otherwise a compact "FROM …" line.
 ///
 /// The highlighter's byline floats above the quote as a small social line.
 /// Tap targets are split: byline → highlighter profile, source line →
@@ -24,7 +26,7 @@ struct HighlightFeedCardView: View {
             if !item.highlight.note.isEmpty {
                 noteBlock
             }
-            sourceLine
+            sourceBlock
         }
         .padding(.vertical, 28)
         .contentShape(Rectangle())
@@ -95,11 +97,15 @@ struct HighlightFeedCardView: View {
             .padding(.leading, 19) // align with quote body (3pt bar + 16pt gap)
     }
 
-    // MARK: - Source line
+    // MARK: - Source block (read-strip for articles, compact line otherwise)
 
     @ViewBuilder
-    private var sourceLine: some View {
-        if let attributed = sourceAttributed {
+    private var sourceBlock: some View {
+        if let article = sourceArticle {
+            readStrip(for: article)
+                .padding(.leading, 19)
+                .padding(.top, 6)
+        } else if let attributed = sourceAttributed {
             Text(attributed)
                 .font(.caption)
                 .lineLimit(2)
@@ -107,6 +113,94 @@ struct HighlightFeedCardView: View {
                 .padding(.leading, 19)
                 .padding(.top, 4)
         }
+    }
+
+    /// Compact read-affordance rendered under a highlight whose source is a
+    /// resolved NIP-23 article. Cover thumb + title + author · read-time +
+    /// a terracotta "Read →" tail. Purely visual — the parent
+    /// `NavigationLink` owns the tap.
+    @ViewBuilder
+    private func readStrip(for article: ArticleRecord) -> some View {
+        HStack(spacing: 10) {
+            readStripThumb(imageURLString: article.image)
+                .frame(width: 38, height: 38)
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(article.title.isEmpty ? "Untitled" : article.title)
+                    .font(.system(.footnote, design: .serif).weight(.semibold))
+                    .foregroundStyle(Color.highlighterInkStrong)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Text(readStripMeta(for: article))
+                    .font(.caption2)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("Read →")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.highlighterAccent)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.highlighterPaper)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.highlighterRule, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func readStripThumb(imageURLString: String) -> some View {
+        let url = URL(string: imageURLString.trimmingCharacters(in: .whitespacesAndNewlines))
+        if let url, !imageURLString.isEmpty {
+            KFImage(url)
+                .placeholder { readStripThumbPlaceholder }
+                .fade(duration: 0.15)
+                .resizable()
+                .scaledToFill()
+        } else {
+            readStripThumbPlaceholder
+        }
+    }
+
+    private var readStripThumbPlaceholder: some View {
+        LinearGradient(
+            colors: [Color.highlighterRule.opacity(0.7), Color.highlighterRule.opacity(0.35)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(
+            Image(systemName: "doc.text")
+                .font(.caption2)
+                .foregroundStyle(Color.highlighterInkMuted.opacity(0.7))
+        )
+    }
+
+    /// "Lyn Alden · 12 min" — author (if resolved) joined with a rough read
+    /// estimate (240 wpm, matches `ReadingFeedCardView`). Falls back to just
+    /// the author or just the read time when either is missing.
+    private func readStripMeta(for article: ArticleRecord) -> String {
+        var bits: [String] = []
+        if let authorName = sourceAuthorDisplayName, !authorName.isEmpty {
+            bits.append(authorName)
+        }
+        if let mins = readTimeMinutes(for: article) {
+            bits.append("\(mins) min read")
+        }
+        return bits.joined(separator: " · ")
+    }
+
+    private func readTimeMinutes(for article: ArticleRecord) -> Int? {
+        let words = article.content.split(whereSeparator: { $0.isWhitespace }).count
+        guard words > 60 else { return nil }
+        return max(1, words / 240)
     }
 
     // MARK: - Derived

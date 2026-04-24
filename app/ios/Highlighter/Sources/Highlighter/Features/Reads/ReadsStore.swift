@@ -1,8 +1,9 @@
 import Foundation
 import Observation
 
-/// View-scoped store for the Following Reads feed. Lifetime matches
-/// `ReadsTabView` — created in `.task`, torn down in `.onDisappear`.
+/// View-scoped store for the Following Reads feed. Owned by `HomeFeedStore`
+/// — lifetime matches the Highlights home tab (start in `.task`, tear down
+/// in `.onDisappear`).
 ///
 /// Two sources of truth:
 /// - **nostrdb** (via Rust core): the feed is rebuilt from the local cache
