@@ -70,6 +70,7 @@ struct RoomHomeView: View {
         RoomLanesView(
             artifacts: room.artifacts,
             highlights: room.highlights,
+            highlightsByAddress: room.highlightsByAddress,
             isLoading: room.isLoading,
             onShareToCommunity: { artifact in
                 shareTarget = .artifact(artifact)
