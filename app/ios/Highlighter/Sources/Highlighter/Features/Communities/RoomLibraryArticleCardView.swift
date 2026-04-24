@@ -9,8 +9,6 @@ struct RoomLibraryArticleCardView: View {
 
     let artifact: ArtifactRecord
 
-    @State private var authorProfile: ProfileMetadata?
-
     var body: some View {
         ReadingCard(
             title: artifact.preview.title,
@@ -22,9 +20,10 @@ struct RoomLibraryArticleCardView: View {
             metaBits: metaBits,
             showTrailing: false,
             avatar: {
+                let pubkey = articleAuthorPubkey ?? artifact.pubkey
                 AuthorAvatar(
-                    pubkey: articleAuthorPubkey ?? artifact.pubkey,
-                    pictureURL: authorProfile?.picture ?? "",
+                    pubkey: pubkey,
+                    pictureURL: app.profileCache[pubkey]?.picture ?? "",
                     displayInitial: authorInitial,
                     size: 22
                 )
@@ -33,7 +32,7 @@ struct RoomLibraryArticleCardView: View {
         )
         .task(id: articleAuthorPubkey ?? "") {
             guard let pk = articleAuthorPubkey else { return }
-            authorProfile = try? await app.safeCore.getUserProfile(pubkeyHex: pk)
+            await app.requestProfile(pubkeyHex: pk)
         }
     }
 
@@ -62,8 +61,9 @@ struct RoomLibraryArticleCardView: View {
     }
 
     private var authorDisplayName: String {
-        if let dn = authorProfile?.displayName, !dn.isEmpty { return dn }
-        if let n = authorProfile?.name, !n.isEmpty { return n }
+        let profile = articleAuthorPubkey.flatMap { app.profileCache[$0] }
+        if let dn = profile?.displayName, !dn.isEmpty { return dn }
+        if let n = profile?.name, !n.isEmpty { return n }
         if !artifact.preview.author.isEmpty { return artifact.preview.author }
         if let pk = articleAuthorPubkey { return String(pk.prefix(10)) }
         return "Unknown"

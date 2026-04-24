@@ -107,19 +107,6 @@ struct HighlightsTabView: View {
                 .foregroundStyle(Color.highlighterInkMuted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
-
-            Text(store.debugReport)
-                .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(Color.highlighterInkMuted.opacity(0.8))
-                .padding(.top, 12)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let err = store.loadError {
-                Text(err)
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(Color.red.opacity(0.8))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .frame(maxWidth: 360, alignment: .leading)
         .padding(.horizontal, 32)

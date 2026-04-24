@@ -12,10 +12,6 @@ final class HighlightsStore {
     var items: [HydratedHighlight] = []
     var isLoadingInitial: Bool = true
     var loadError: String?
-    /// Temporary diagnostic surface — populated from
-    /// `debugHighlightsReport()` so we can see what ndb contains when the
-    /// feed comes back empty.
-    var debugReport: String = ""
 
     @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored weak var eventBridge: EventBridge?
@@ -47,7 +43,6 @@ final class HighlightsStore {
         } catch {
             loadError = String(describing: error)
         }
-        debugReport = (try? await safeCore.debugHighlightsReport()) ?? "debug_err"
     }
 
     private func installSubscription() async {

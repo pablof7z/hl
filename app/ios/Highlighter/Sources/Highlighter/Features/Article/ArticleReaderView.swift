@@ -1,3 +1,4 @@
+import Kingfisher
 import SwiftUI
 import UIKit
 
@@ -68,6 +69,9 @@ struct ArticleReaderView: View {
                 await s.start()
             }
         }
+        .task(id: target.pubkey) {
+            await app.requestProfile(pubkeyHex: target.pubkey)
+        }
         .onDisappear {
             store?.stop()
         }
@@ -114,7 +118,7 @@ struct ArticleReaderView: View {
         } else if let article = store.article {
             ReaderScroll(
                 article: article,
-                authorProfile: store.authorProfile,
+                authorProfile: app.profileCache[target.pubkey] ?? store.authorProfile,
                 highlights: store.highlights,
                 scrollAnchor: scrollAnchor,
                 onPublishHighlight: { quote, context in
@@ -265,16 +269,13 @@ private struct HeroImage: View {
 
     var body: some View {
         GeometryReader { proxy in
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let img):
-                    img.resizable().scaledToFill()
-                default:
-                    Color.highlighterRule.opacity(0.5)
-                }
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
-            .clipped()
+            KFImage(url)
+                .placeholder { Color.highlighterRule.opacity(0.5) }
+                .fade(duration: 0.2)
+                .resizable()
+                .scaledToFill()
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .clipped()
         }
         .frame(height: 320)
     }
@@ -446,8 +447,6 @@ private struct HighlightDetailSheet: View {
     let highlight: HighlightRecord
 
     @Environment(HighlighterStore.self) private var app
-    @State private var authorProfile: ProfileMetadata?
-
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -470,8 +469,8 @@ private struct HighlightDetailSheet: View {
             .background(Color.highlighterPaper)
             .navigationBarTitleDisplayMode(.inline)
         }
-        .task {
-            authorProfile = try? await app.safeCore.getUserProfile(pubkeyHex: highlight.pubkey)
+        .task(id: highlight.pubkey) {
+            await app.requestProfile(pubkeyHex: highlight.pubkey)
         }
     }
 
@@ -479,7 +478,7 @@ private struct HighlightDetailSheet: View {
         HStack(spacing: 12) {
             AuthorAvatar(
                 pubkey: highlight.pubkey,
-                pictureURL: authorProfile?.picture ?? "",
+                pictureURL: app.profileCache[highlight.pubkey]?.picture ?? "",
                 displayInitial: initial,
                 size: 40,
                 ringWidth: 2
@@ -520,9 +519,10 @@ private struct HighlightDetailSheet: View {
     }
 
     private var displayName: String {
-        let dn = authorProfile?.displayName ?? ""
+        let profile = app.profileCache[highlight.pubkey]
+        let dn = profile?.displayName ?? ""
         if !dn.isEmpty { return dn }
-        let n = authorProfile?.name ?? ""
+        let n = profile?.name ?? ""
         if !n.isEmpty { return n }
         return String(highlight.pubkey.prefix(10))
     }

@@ -15,8 +15,6 @@ struct HighlightFeedCardView: View {
 
     let item: HydratedHighlight
 
-    @State private var highlighterProfile: ProfileMetadata?
-    @State private var sourceAuthorProfile: ProfileMetadata?
     @State private var sourceArticle: ArticleRecord?
 
     var body: some View {
@@ -31,7 +29,7 @@ struct HighlightFeedCardView: View {
         .padding(.vertical, 28)
         .contentShape(Rectangle())
         .task(id: item.highlight.pubkey) {
-            highlighterProfile = try? await app.safeCore.getUserProfile(pubkeyHex: item.highlight.pubkey)
+            await app.requestProfile(pubkeyHex: item.highlight.pubkey)
         }
         .task(id: item.highlight.artifactAddress) {
             await resolveSource()
@@ -45,7 +43,7 @@ struct HighlightFeedCardView: View {
             HStack(spacing: 8) {
                 AuthorAvatar(
                     pubkey: item.highlight.pubkey,
-                    pictureURL: highlighterProfile?.picture ?? "",
+                    pictureURL: app.profileCache[item.highlight.pubkey]?.picture ?? "",
                     displayInitial: highlighterInitial,
                     size: 22
                 )
@@ -118,8 +116,9 @@ struct HighlightFeedCardView: View {
     }
 
     private var highlighterDisplayName: String {
-        if let dn = highlighterProfile?.displayName, !dn.isEmpty { return dn }
-        if let n = highlighterProfile?.name, !n.isEmpty { return n }
+        let profile = app.profileCache[item.highlight.pubkey]
+        if let dn = profile?.displayName, !dn.isEmpty { return dn }
+        if let n = profile?.name, !n.isEmpty { return n }
         return String(item.highlight.pubkey.prefix(10))
     }
 
@@ -181,9 +180,20 @@ struct HighlightFeedCardView: View {
         return out
     }
 
+    private var sourceArtifactPubkey: String? {
+        let addr = item.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !addr.isEmpty else { return nil }
+        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3, parts[0] == "30023" else { return nil }
+        let pubkey = String(parts[1])
+        return pubkey.isEmpty ? nil : pubkey
+    }
+
     private var sourceAuthorDisplayName: String? {
-        if let dn = sourceAuthorProfile?.displayName, !dn.isEmpty { return dn }
-        if let n = sourceAuthorProfile?.name, !n.isEmpty { return n }
+        guard let pubkey = sourceArtifactPubkey else { return nil }
+        let profile = app.profileCache[pubkey]
+        if let dn = profile?.displayName, !dn.isEmpty { return dn }
+        if let n = profile?.name, !n.isEmpty { return n }
         return nil
     }
 
@@ -193,7 +203,6 @@ struct HighlightFeedCardView: View {
     /// non-article highlights — those fall back to the `sourceUrl` path.
     private func resolveSource() async {
         sourceArticle = nil
-        sourceAuthorProfile = nil
 
         let addr = item.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !addr.isEmpty else { return }
@@ -204,6 +213,6 @@ struct HighlightFeedCardView: View {
         guard !pubkey.isEmpty, !dTag.isEmpty else { return }
 
         sourceArticle = try? await app.safeCore.getArticle(pubkeyHex: pubkey, dTag: dTag)
-        sourceAuthorProfile = try? await app.safeCore.getUserProfile(pubkeyHex: pubkey)
+        await app.requestProfile(pubkeyHex: pubkey)
     }
 }

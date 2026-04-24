@@ -8,9 +8,6 @@ struct ReadingFeedCardView: View {
 
     let item: ReadingFeedItem
 
-    @State private var authorProfile: ProfileMetadata?
-    @State private var firstInteractorProfile: ProfileMetadata?
-
     var body: some View {
         ReadingCard(
             title: item.article.title,
@@ -24,7 +21,7 @@ struct ReadingFeedCardView: View {
             avatar: {
                 AuthorAvatar(
                     pubkey: item.article.pubkey,
-                    pictureURL: authorProfile?.picture ?? "",
+                    pictureURL: app.profileCache[item.article.pubkey]?.picture ?? "",
                     displayInitial: authorInitial,
                     size: 22
                 )
@@ -32,14 +29,11 @@ struct ReadingFeedCardView: View {
             trailing: { socialBadge }
         )
         .task(id: item.article.pubkey) {
-            authorProfile = try? await app.safeCore.getUserProfile(pubkeyHex: item.article.pubkey)
+            await app.requestProfile(pubkeyHex: item.article.pubkey)
         }
         .task(id: primaryInteractor ?? "") {
-            guard let pk = primaryInteractor else {
-                firstInteractorProfile = nil
-                return
-            }
-            firstInteractorProfile = try? await app.safeCore.getUserProfile(pubkeyHex: pk)
+            guard let pk = primaryInteractor else { return }
+            await app.requestProfile(pubkeyHex: pk)
         }
     }
 
@@ -103,8 +97,9 @@ struct ReadingFeedCardView: View {
     // MARK: - Author name / initial resolution
 
     private var authorDisplayName: String {
-        if let dn = authorProfile?.displayName, !dn.isEmpty { return dn }
-        if let n = authorProfile?.name, !n.isEmpty { return n }
+        let profile = app.profileCache[item.article.pubkey]
+        if let dn = profile?.displayName, !dn.isEmpty { return dn }
+        if let n = profile?.name, !n.isEmpty { return n }
         return shortPubkey(item.article.pubkey)
     }
 
@@ -113,10 +108,11 @@ struct ReadingFeedCardView: View {
     }
 
     private var firstInteractorName: String {
-        if let dn = firstInteractorProfile?.displayName, !dn.isEmpty { return dn }
-        if let n = firstInteractorProfile?.name, !n.isEmpty { return n }
-        if let pk = primaryInteractor { return shortPubkey(pk) }
-        return "Someone"
+        guard let pk = primaryInteractor else { return "Someone" }
+        let profile = app.profileCache[pk]
+        if let dn = profile?.displayName, !dn.isEmpty { return dn }
+        if let n = profile?.name, !n.isEmpty { return n }
+        return shortPubkey(pk)
     }
 
     private var primaryInteractor: String? {

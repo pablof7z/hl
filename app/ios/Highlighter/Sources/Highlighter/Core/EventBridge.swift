@@ -30,6 +30,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         var articles: [UInt64: WeakBox<ArticleReaderStore>] = [:]
         var reads: [UInt64: WeakBox<ReadsStore>] = [:]
         var highlights: [UInt64: WeakBox<HighlightsStore>] = [:]
+        /// Maps subscription handles → pubkey for app-scoped profile cache subscriptions.
+        var profileCacheHandles: [UInt64: String] = [:]
 
         mutating func prune() {
             rooms = rooms.filter { $0.value.value != nil }
@@ -90,6 +92,13 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         }
     }
 
+    func registerProfileCache(pubkeyHex: String, handle: UInt64) {
+        registry.withLock { reg in
+            reg.profileCacheHandles[handle] = pubkeyHex
+            reg.prune()
+        }
+    }
+
     func unregister(handle: UInt64) {
         registry.withLock { reg in
             _ = reg.rooms.removeValue(forKey: handle)
@@ -98,6 +107,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             _ = reg.articles.removeValue(forKey: handle)
             _ = reg.reads.removeValue(forKey: handle)
             _ = reg.highlights.removeValue(forKey: handle)
+            _ = reg.profileCacheHandles.removeValue(forKey: handle)
         }
     }
 
@@ -113,14 +123,15 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 return
             }
 
-            let (roomStore, discussionStore, profileStore, articleStore, readsStore, highlightsStore) = self.registry.withLock { reg in
+            let (roomStore, discussionStore, profileStore, articleStore, readsStore, highlightsStore, profileCachePubkey) = self.registry.withLock { reg in
                 (
                     reg.rooms[id]?.value,
                     reg.discussions[id]?.value,
                     reg.profiles[id]?.value,
                     reg.articles[id]?.value,
                     reg.reads[id]?.value,
-                    reg.highlights[id]?.value
+                    reg.highlights[id]?.value,
+                    reg.profileCacheHandles[id]
                 )
             }
 
@@ -136,6 +147,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 self.dispatchReads(change, store: readsStore)
             } else if let highlightsStore {
                 self.dispatchHighlights(change, store: highlightsStore)
+            } else if let pubkey = profileCachePubkey {
+                self.dispatchProfileCache(change, pubkey: pubkey)
             }
         }
     }
@@ -152,6 +165,12 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         if case .userProfileUpdated(_, let kind) = change {
             Task { await store.applyUpdate(kind: kind) }
         }
+    }
+
+    @MainActor
+    private func dispatchProfileCache(_ change: DataChangeType, pubkey: String) {
+        guard case .userProfileUpdated(_, 0) = change else { return }
+        if let appStore { Task { await appStore.applyProfileCacheUpdate(pubkeyHex: pubkey) } }
     }
 
     @MainActor
