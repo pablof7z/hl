@@ -246,6 +246,73 @@ impl NostrRuntime {
         });
     }
 
+    /// Backfill the event behind a [`NostrEntityRef`] from the network.
+    /// Routes to whatever relay hints the entity carried (set by the
+    /// publisher of an `nevent1…` / `naddr1…`) plus the indexer pool,
+    /// so a hot relay hint hits first and the indexer is the safety net.
+    /// Fire-and-forget; the event lands in nostrdb via the NdbDatabase
+    /// bridge and the next `resolve_nostr_entity` returns it. No-op
+    /// when no relays are available (e.g. the indexer pool isn't
+    /// configured yet — `purplepag.es` is hardcoded so this is rare).
+    pub fn spawn_nostr_entity_backfill(
+        &self,
+        entity: crate::nostr_entities::NostrEntityRef,
+    ) -> Result<(), crate::errors::CoreError> {
+        use crate::nostr_entities::NostrEntityRef;
+
+        let mut hint_relays: Vec<String> = match &entity {
+            NostrEntityRef::Profile { relays, .. }
+            | NostrEntityRef::Event { relays, .. }
+            | NostrEntityRef::Address { relays, .. } => relays.clone(),
+        };
+        for u in self.indexer_urls() {
+            if !hint_relays.iter().any(|r| r == &u) {
+                hint_relays.push(u);
+            }
+        }
+        if hint_relays.is_empty() {
+            tracing::warn!("nostr-entity backfill: no relays available");
+            return Ok(());
+        }
+
+        let filter = match entity {
+            NostrEntityRef::Profile { pubkey_hex, .. } => {
+                let pk = PublicKey::from_hex(&pubkey_hex)
+                    .map_err(|e| crate::errors::CoreError::InvalidInput(e.to_string()))?;
+                Filter::new().kinds([Kind::Custom(0)]).author(pk).limit(1)
+            }
+            NostrEntityRef::Event { event_id_hex, .. } => {
+                let id = EventId::from_hex(&event_id_hex)
+                    .map_err(|e| crate::errors::CoreError::InvalidInput(e.to_string()))?;
+                Filter::new().id(id).limit(1)
+            }
+            NostrEntityRef::Address {
+                kind,
+                pubkey_hex,
+                d_tag,
+                ..
+            } => {
+                let pk = PublicKey::from_hex(&pubkey_hex)
+                    .map_err(|e| crate::errors::CoreError::InvalidInput(e.to_string()))?;
+                Filter::new()
+                    .kinds([Kind::Custom(kind as u16)])
+                    .author(pk)
+                    .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag)
+                    .limit(1)
+            }
+        };
+
+        let id = SubscriptionId::generate();
+        let client = self.client.clone();
+        self.rt().spawn(async move {
+            for url in &hint_relays {
+                pin_relay_for_read(&client, url).await;
+            }
+            subscribe_routed(&client, id, filter, hint_relays, "nostr-entity-backfill").await;
+        });
+        Ok(())
+    }
+
     /// Stage 2 of the join-set query: fetch metadata for the supplied
     /// groups via `{ kinds: [39000], '#d': <group_ids> }`. Called from the
     /// subscription pump as membership events arrive. Fire-and-forget.

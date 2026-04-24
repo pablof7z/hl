@@ -171,12 +171,9 @@ private struct IdentityBlock: View {
             }
 
             if !bio.isEmpty {
-                Text(bio)
-                    .font(.body)
-                    .foregroundStyle(Color.highlighterInkMuted)
-                    .multilineTextAlignment(.center)
+                NostrRichText(content: bio, font: .body, ink: .highlighterInkMuted)
                     .frame(maxWidth: 480)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.center)
             }
         }
     }

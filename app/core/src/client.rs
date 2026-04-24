@@ -1278,6 +1278,43 @@ impl HighlighterCore {
         )))
     }
 
+    /// Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,
+    /// `nevent1…`, `naddr1…`) into a renderable variant. Strips an
+    /// optional `nostr:` URI prefix. Used by the iOS rich-text renderer
+    /// to walk event content for inline mentions and event-ref cards.
+    pub fn decode_nostr_entity(
+        &self,
+        input: String,
+    ) -> Result<crate::nostr_entities::NostrEntityRef, CoreError> {
+        crate::nostr_entities::decode_nostr_entity(&input)
+    }
+
+    /// Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
+    /// resolved event when nostrdb already has it, `None` otherwise.
+    /// The caller should pair this with `subscribe_nostr_entity` so a
+    /// cold-cache reference warms up over the wire.
+    pub async fn resolve_nostr_entity(
+        &self,
+        entity: crate::nostr_entities::NostrEntityRef,
+    ) -> Result<Option<crate::nostr_entities::NostrEntityEvent>, CoreError> {
+        crate::nostr_entities::resolve_from_cache(self.runtime.ndb(), &entity)
+    }
+
+    /// Install a one-shot REQ for the missing event behind an entity.
+    /// Routes to relay hints first (when the bech32 carried any) plus
+    /// the indexer pool. Events received are persisted to nostrdb via
+    /// the `NdbDatabase` bridge; the caller polls
+    /// `resolve_nostr_entity` again to pick them up. Fire-and-forget —
+    /// no handle returned, no need to unsubscribe (the relay closes
+    /// the REQ on EOSE).
+    pub async fn subscribe_nostr_entity(
+        &self,
+        entity: crate::nostr_entities::NostrEntityRef,
+    ) -> Result<(), CoreError> {
+        let _ = self.require_user_pubkey()?;
+        self.runtime.spawn_nostr_entity_backfill(entity)
+    }
+
     /// Pubkeys (hex) the current user follows per their cached kind:3 contact
     /// list. Empty if the user isn't logged in or the cache hasn't seen a
     /// kind:3 yet. Used by the room-invite picker to surface "people you know"

@@ -170,6 +170,18 @@ actor SafeHighlighterCore {
         try await core.getUserProfile(pubkeyHex: pubkeyHex)
     }
 
+    func decodeNostrEntity(_ input: String) throws -> NostrEntityRef {
+        try core.decodeNostrEntity(input: input)
+    }
+
+    func resolveNostrEntity(_ entity: NostrEntityRef) async throws -> NostrEntityEvent? {
+        try await core.resolveNostrEntity(entity: entity)
+    }
+
+    func subscribeNostrEntity(_ entity: NostrEntityRef) async throws {
+        try await core.subscribeNostrEntity(entity: entity)
+    }
+
     func updateProfile(
         name: String,
         displayName: String,

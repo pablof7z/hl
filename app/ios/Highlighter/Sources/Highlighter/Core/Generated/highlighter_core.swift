@@ -753,6 +753,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func currentUser()  -> CurrentUser?
     
     /**
+     * Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,
+     * `nevent1…`, `naddr1…`) into a renderable variant. Strips an
+     * optional `nostr:` URI prefix. Used by the iOS rich-text renderer
+     * to walk event content for inline mentions and event-ref cards.
+     */
+    func decodeNostrEntity(input: String) throws  -> NostrEntityRef
+    
+    /**
      * Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
      * `nostr:` URI prefix) to a 64-char hex pubkey. Returns
      * `CoreError::InvalidInput` if the input isn't a recognised pubkey
@@ -1040,6 +1048,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func requestJoinRoom(groupId: String) async throws  -> String
     
+    /**
+     * Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
+     * resolved event when nostrdb already has it, `None` otherwise.
+     * The caller should pair this with `subscribe_nostr_entity` so a
+     * cold-cache reference warms up over the wire.
+     */
+    func resolveNostrEntity(entity: NostrEntityRef) async throws  -> NostrEntityEvent?
+    
     func searchArticles(query: String, limit: UInt32) async throws  -> [ArticleRecord]
     
     func searchArtifacts(query: String, limit: UInt32) async throws  -> [ArtifactRecord]
@@ -1175,6 +1191,17 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * call is about setting up the nostrdb notification pump.
      */
     func subscribeJoinedCommunities() async throws  -> UInt64
+    
+    /**
+     * Install a one-shot REQ for the missing event behind an entity.
+     * Routes to relay hints first (when the bech32 carried any) plus
+     * the indexer pool. Events received are persisted to nostrdb via
+     * the `NdbDatabase` bridge; the caller polls
+     * `resolve_nostr_entity` again to pick them up. Fire-and-forget —
+     * no handle returned, no need to unsubscribe (the relay closes
+     * the REQ on EOSE).
+     */
+    func subscribeNostrEntity(entity: NostrEntityRef) async throws 
     
     /**
      * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
@@ -1386,6 +1413,20 @@ open func createRoom(name: String, about: String, picture: String, visibility: R
 open func currentUser() -> CurrentUser?  {
     return try!  FfiConverterOptionTypeCurrentUser.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_current_user(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,
+     * `nevent1…`, `naddr1…`) into a renderable variant. Strips an
+     * optional `nostr:` URI prefix. Used by the iOS rich-text renderer
+     * to walk event content for inline mentions and event-ref cards.
+     */
+open func decodeNostrEntity(input: String)throws  -> NostrEntityRef  {
+    return try  FfiConverterTypeNostrEntityRef_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_highlighter_core_fn_method_highlightercore_decode_nostr_entity(self.uniffiClonePointer(),
+        FfiConverterString.lower(input),$0
     )
 })
 }
@@ -2444,6 +2485,29 @@ open func requestJoinRoom(groupId: String)async throws  -> String  {
         )
 }
     
+    /**
+     * Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
+     * resolved event when nostrdb already has it, `None` otherwise.
+     * The caller should pair this with `subscribe_nostr_entity` so a
+     * cold-cache reference warms up over the wire.
+     */
+open func resolveNostrEntity(entity: NostrEntityRef)async throws  -> NostrEntityEvent?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_resolve_nostr_entity(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeNostrEntityRef_lower(entity)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeNostrEntityEvent.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
 open func searchArticles(query: String, limit: UInt32)async throws  -> [ArticleRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -2897,6 +2961,32 @@ open func subscribeJoinedCommunities()async throws  -> UInt64  {
             completeFunc: ffi_highlighter_core_rust_future_complete_u64,
             freeFunc: ffi_highlighter_core_rust_future_free_u64,
             liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Install a one-shot REQ for the missing event behind an entity.
+     * Routes to relay hints first (when the bech32 carried any) plus
+     * the indexer pool. Events received are persisted to nostrdb via
+     * the `NdbDatabase` bridge; the caller polls
+     * `resolve_nostr_entity` again to pick them up. Fire-and-forget —
+     * no handle returned, no need to unsubscribe (the relay closes
+     * the REQ on EOSE).
+     */
+open func subscribeNostrEntity(entity: NostrEntityRef)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_subscribe_nostr_entity(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeNostrEntityRef_lower(entity)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -5700,6 +5790,125 @@ public func FfiConverterTypeNostrConnectOptions_lower(_ value: NostrConnectOptio
 
 
 /**
+ * Resolved event data for a [`NostrEntityRef`]. Returned by
+ * [`resolve_from_cache`] when the underlying event is already in
+ * nostrdb; the Swift layer switches on `kind` to pick the right
+ * inline card (30023 → article, 1 → note, 9802 → highlight quote,
+ * etc.) and falls back to a generic "Event <id>" rendering otherwise.
+ */
+public struct NostrEntityEvent {
+    public var eventIdHex: String
+    public var kind: UInt32
+    public var pubkeyHex: String
+    public var content: String
+    public var createdAt: UInt64
+    /**
+     * Serialised `[["k", "v"], …]` so Swift can extract `title` /
+     * `image` etc. for an article card without needing a second FFI
+     * record schema per kind.
+     */
+    public var tagsJson: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventIdHex: String, kind: UInt32, pubkeyHex: String, content: String, createdAt: UInt64, 
+        /**
+         * Serialised `[["k", "v"], …]` so Swift can extract `title` /
+         * `image` etc. for an article card without needing a second FFI
+         * record schema per kind.
+         */tagsJson: String) {
+        self.eventIdHex = eventIdHex
+        self.kind = kind
+        self.pubkeyHex = pubkeyHex
+        self.content = content
+        self.createdAt = createdAt
+        self.tagsJson = tagsJson
+    }
+}
+
+#if compiler(>=6)
+extension NostrEntityEvent: Sendable {}
+#endif
+
+
+extension NostrEntityEvent: Equatable, Hashable {
+    public static func ==(lhs: NostrEntityEvent, rhs: NostrEntityEvent) -> Bool {
+        if lhs.eventIdHex != rhs.eventIdHex {
+            return false
+        }
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.pubkeyHex != rhs.pubkeyHex {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.tagsJson != rhs.tagsJson {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventIdHex)
+        hasher.combine(kind)
+        hasher.combine(pubkeyHex)
+        hasher.combine(content)
+        hasher.combine(createdAt)
+        hasher.combine(tagsJson)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNostrEntityEvent: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityEvent {
+        return
+            try NostrEntityEvent(
+                eventIdHex: FfiConverterString.read(from: &buf), 
+                kind: FfiConverterUInt32.read(from: &buf), 
+                pubkeyHex: FfiConverterString.read(from: &buf), 
+                content: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterUInt64.read(from: &buf), 
+                tagsJson: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NostrEntityEvent, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventIdHex, into: &buf)
+        FfiConverterUInt32.write(value.kind, into: &buf)
+        FfiConverterString.write(value.pubkeyHex, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterString.write(value.tagsJson, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityEvent_lift(_ buf: RustBuffer) throws -> NostrEntityEvent {
+    return try FfiConverterTypeNostrEntityEvent.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityEvent_lower(_ value: NostrEntityEvent) -> RustBuffer {
+    return FfiConverterTypeNostrEntityEvent.lower(value)
+}
+
+
+/**
  * A pending NIP-68 picture (kind:20) to publish into a community.
  * Used as the OCR-fallback path: when the user couldn't or didn't want to
  * extract a highlight quote from the captured photo.
@@ -6986,6 +7195,120 @@ extension DataChangeType: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Parsed reference to a Nostr entity encoded as a NIP-19 bech32.
+ */
+
+public enum NostrEntityRef {
+    
+    /**
+     * `npub1…` / `nprofile1…` — reference to a user's profile.
+     */
+    case profile(pubkeyHex: String, relays: [String]
+    )
+    /**
+     * `note1…` / `nevent1…` — reference to a specific event by id.
+     */
+    case event(eventIdHex: String, relays: [String], 
+        /**
+         * `nevent` can carry a hinted author pubkey. `None` for `note1…`.
+         */authorHintHex: String?, 
+        /**
+         * `nevent` can carry a hinted kind so the UI can pick a
+         * renderer skeleton (article card vs. note card vs. highlight
+         * quote) before the actual event lands. `None` when absent.
+         */kindHint: UInt32?
+    )
+    /**
+     * `naddr1…` — reference to a parameterised replaceable event
+     * (kind:30xxx with a `d` tag).
+     */
+    case address(kind: UInt32, pubkeyHex: String, dTag: String, relays: [String]
+    )
+}
+
+
+#if compiler(>=6)
+extension NostrEntityRef: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNostrEntityRef: FfiConverterRustBuffer {
+    typealias SwiftType = NostrEntityRef
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityRef {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .profile(pubkeyHex: try FfiConverterString.read(from: &buf), relays: try FfiConverterSequenceString.read(from: &buf)
+        )
+        
+        case 2: return .event(eventIdHex: try FfiConverterString.read(from: &buf), relays: try FfiConverterSequenceString.read(from: &buf), authorHintHex: try FfiConverterOptionString.read(from: &buf), kindHint: try FfiConverterOptionUInt32.read(from: &buf)
+        )
+        
+        case 3: return .address(kind: try FfiConverterUInt32.read(from: &buf), pubkeyHex: try FfiConverterString.read(from: &buf), dTag: try FfiConverterString.read(from: &buf), relays: try FfiConverterSequenceString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NostrEntityRef, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .profile(pubkeyHex,relays):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(pubkeyHex, into: &buf)
+            FfiConverterSequenceString.write(relays, into: &buf)
+            
+        
+        case let .event(eventIdHex,relays,authorHintHex,kindHint):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(eventIdHex, into: &buf)
+            FfiConverterSequenceString.write(relays, into: &buf)
+            FfiConverterOptionString.write(authorHintHex, into: &buf)
+            FfiConverterOptionUInt32.write(kindHint, into: &buf)
+            
+        
+        case let .address(kind,pubkeyHex,dTag,relays):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt32.write(kind, into: &buf)
+            FfiConverterString.write(pubkeyHex, into: &buf)
+            FfiConverterString.write(dTag, into: &buf)
+            FfiConverterSequenceString.write(relays, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityRef_lift(_ buf: RustBuffer) throws -> NostrEntityRef {
+    return try FfiConverterTypeNostrEntityRef.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityRef_lower(_ value: NostrEntityRef) -> RustBuffer {
+    return FfiConverterTypeNostrEntityRef.lower(value)
+}
+
+
+extension NostrEntityRef: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Connection state of a single relay the app is talking to. Mirrors the
  * nostr-sdk internal `RelayStatus` but trimmed to the values the UI cares
  * about. `Initialized` / `Pending` / `Sleeping` are collapsed into
@@ -7578,6 +7901,30 @@ fileprivate struct FfiConverterOptionTypeDiscussionAttachment: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeNostrEntityEvent: FfiConverterRustBuffer {
+    typealias SwiftType = NostrEntityEvent?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeNostrEntityEvent.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeNostrEntityEvent.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeProfileMetadata: FfiConverterRustBuffer {
     typealias SwiftType = ProfileMetadata?
 
@@ -8125,6 +8472,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_current_user() != 38772) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_decode_nostr_entity() != 32142) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_decode_npub() != 51714) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8284,6 +8634,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_request_join_room() != 22012) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 56937) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_articles() != 31180) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8348,6 +8701,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_joined_communities() != 33427) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_nostr_entity() != 50420) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_relay_status() != 5993) {
