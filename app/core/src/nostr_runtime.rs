@@ -724,6 +724,26 @@ fn map_relay_status(inner: nostr_sdk::RelayStatus) -> AppRelayStatus {
 /// and falling back to the global pool (all READ-flagged relays) when empty.
 /// Centralizes the "route by role, or default pool with a warning" pattern
 /// used by every per-role spawn on `NostrRuntime`.
+/// Mirror a "social trio" event (kind:0 metadata, kind:3 contacts,
+/// kind:10002 NIP-65 relay list) to `PURPLE_PAGES_RELAY` after the
+/// caller's normal `send_event` broadcast. Purple is the canonical
+/// mirror for these kinds — every other Nostr client expects to find
+/// them there — but we keep it READ-only in the pool so kind:9802 /
+/// kind:11 / kind:1111 / etc. don't pollute it via `send_event`'s
+/// WRITE-flag broadcast.
+///
+/// Failures are logged, not surfaced. The caller has already published
+/// to the user's actual write relays; the mirror is best-effort.
+pub async fn mirror_social_trio_to_purple(client: &Client, event: &Event) {
+    if let Err(e) = client.send_event_to([PURPLE_PAGES_RELAY], event).await {
+        tracing::warn!(
+            kind = event.kind.as_u16(),
+            error = %e,
+            "purple mirror failed"
+        );
+    }
+}
+
 /// Ensure `url` is in the client's relay pool with at least READ+PING
 /// flags, so an outbox-routed subscription can receive events from it.
 /// Idempotent: relays already in the pool are left alone — their existing

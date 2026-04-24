@@ -108,6 +108,7 @@ pub async fn publish_follow_toggle(
         .send_event(&event)
         .await
         .map_err(|e| CoreError::Relay(format!("publish contact list: {e}")))?;
+    crate::nostr_runtime::mirror_social_trio_to_purple(client, &event).await;
     Ok(Some(event.id.to_hex()))
 }
 

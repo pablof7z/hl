@@ -363,6 +363,7 @@ pub async fn publish_nip65(
         .send_event(&event)
         .await
         .map_err(|e| CoreError::Relay(format!("publish relay list: {e}")))?;
+    crate::nostr_runtime::mirror_social_trio_to_purple(client, &event).await;
     Ok(event.id.to_hex())
 }
 
