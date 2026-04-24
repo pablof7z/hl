@@ -63,6 +63,7 @@ struct ProfileView: View {
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
         }
+        .ignoresSafeArea(edges: .top)
         .safeAreaInset(edge: .bottom) {
             if let message = store.followError {
                 Text(message)
