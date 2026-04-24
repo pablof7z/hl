@@ -60,4 +60,20 @@ extension Color {
             ? UIColor(red: 0.35, green: 0.30, blue: 0.24, alpha: 1)
             : UIColor(red: 0.78, green: 0.74, blue: 0.65, alpha: 1)
     })
+
+    /// Podcast-lane surface. Always dark regardless of system mode — the
+    /// audio interior doesn't adapt. Warm near-black so the page doesn't
+    /// feel clinical.
+    static let laneAudioSurface = Color(red: 0.078, green: 0.070, blue: 0.058)
+
+    /// Primary text on a podcast lane. Warm off-white (lamp-lit), never
+    /// pure white.
+    static let laneAudioInk = Color(red: 0.925, green: 0.898, blue: 0.835)
+
+    /// Muted text on a podcast lane (timestamps, speaker kickers,
+    /// attribution).
+    static let laneAudioInkMuted = Color(red: 0.565, green: 0.530, blue: 0.470)
+
+    /// Hairlines and dim timeline track on a podcast lane.
+    static let laneAudioRule = Color(red: 0.180, green: 0.162, blue: 0.132)
 }

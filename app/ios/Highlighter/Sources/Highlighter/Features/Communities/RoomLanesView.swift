@@ -42,6 +42,8 @@ struct RoomLanesView: View {
         switch lane.artifact.preview.source {
         case "book":
             BookLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
+        case "podcast":
+            PodcastLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
         default:
             LaneView(lane: lane, onShareToCommunity: onShareToCommunity)
         }
