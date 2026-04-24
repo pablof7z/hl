@@ -26,6 +26,7 @@ use crate::events::{DataChangeType, Delta, EventCallback};
 use crate::groups::{
     build_community_summary, KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA,
 };
+use crate::feedback::{KIND_FEEDBACK_NOTE, KIND_FEEDBACK_THREAD_META};
 use crate::models::{
     ArtifactPreview, ArtifactRecord, HighlightRecord, HydratedHighlight,
 };
@@ -98,6 +99,18 @@ pub(crate) enum SubscriptionKind {
         follows: Vec<PublicKey>,
         group_ids: Vec<String>,
     },
+    /// Powers the shake-to-share feedback list: roots are kind:1 notes the
+    /// current user authored that `a`-tag the project coordinate; titles come
+    /// from kind:513 metadata events sharing the same `a` tag (any author —
+    /// the project's agent emits these).
+    FeedbackThreads {
+        coordinate: String,
+        current_user_pubkey: PublicKey,
+    },
+    /// Powers the open-thread chat: every kind:1 `e`-tagged to the root
+    /// (regardless of author) plus the root itself. Author-agnostic so agent
+    /// replies appear inline.
+    FeedbackThread { root_event_id: EventId },
 }
 
 impl SubscriptionRegistry {
@@ -410,6 +423,57 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
 
             ids
         }
+        SubscriptionKind::FeedbackThreads { coordinate, current_user_pubkey } => {
+            let client = runtime.client().clone();
+            let mut ids: Vec<SubscriptionId> = Vec::new();
+
+            let roots_id = SubscriptionId::generate();
+            let roots_id_clone = roots_id.clone();
+            let coord_owned = coordinate.clone();
+            let pk = *current_user_pubkey;
+            let client_a = client.clone();
+            runtime.runtime_handle().spawn(async move {
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
+                    .author(pk)
+                    .custom_tag(SingleLetterTag::lowercase(Alphabet::A), coord_owned);
+                if let Err(e) = client_a.subscribe_with_id(roots_id_clone, filter, None).await {
+                    tracing::warn!(error = %e, "failed to subscribe to feedback roots feed");
+                }
+            });
+            ids.push(roots_id);
+
+            let meta_id = SubscriptionId::generate();
+            let meta_id_clone = meta_id.clone();
+            let coord_owned = coordinate.clone();
+            let client_b = client.clone();
+            runtime.runtime_handle().spawn(async move {
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(KIND_FEEDBACK_THREAD_META)])
+                    .custom_tag(SingleLetterTag::lowercase(Alphabet::A), coord_owned);
+                if let Err(e) = client_b.subscribe_with_id(meta_id_clone, filter, None).await {
+                    tracing::warn!(error = %e, "failed to subscribe to feedback meta feed");
+                }
+            });
+            ids.push(meta_id);
+
+            ids
+        }
+        SubscriptionKind::FeedbackThread { root_event_id } => {
+            let id = SubscriptionId::generate();
+            let id_clone = id.clone();
+            let root_hex = root_event_id.to_hex();
+            let client = runtime.client().clone();
+            runtime.runtime_handle().spawn(async move {
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
+                    .custom_tag(SingleLetterTag::lowercase(Alphabet::E), root_hex);
+                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
+                    tracing::warn!(error = %e, "failed to subscribe to feedback thread feed");
+                }
+            });
+            vec![id]
+        }
         // JoinedCommunities rides the membership relay-sub already installed
         // at login — no additional relay subscription needed.
         SubscriptionKind::JoinedCommunities { .. } => vec![],
@@ -502,6 +566,25 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
             // ndb's tag index for `h` is unreliable, hence the broad filter.
             vec![NdbFilter::new().kinds([KIND_HIGHLIGHT as u64]).build()]
         }
+        SubscriptionKind::FeedbackThreads { current_user_pubkey, .. } => {
+            // Kind:1 by current user (root or reply) and kind:513 from anyone.
+            // The pump's `build_change` re-runs query_threads on each delta so
+            // the title/summary/last_activity_at recompute after a 513 lands.
+            let pk_bytes: [u8; 32] = current_user_pubkey.to_bytes();
+            let roots = NdbFilter::new()
+                .kinds([KIND_FEEDBACK_NOTE as u64])
+                .authors([&pk_bytes])
+                .build();
+            let meta = NdbFilter::new()
+                .kinds([KIND_FEEDBACK_THREAD_META as u64])
+                .build();
+            vec![roots, meta]
+        }
+        SubscriptionKind::FeedbackThread { .. } => {
+            // Kind:1 only — `build_change` checks the `e` tag points at the
+            // root before forwarding.
+            vec![NdbFilter::new().kinds([KIND_FEEDBACK_NOTE as u64]).build()]
+        }
     }
 }
 
@@ -553,12 +636,13 @@ async fn run_pump(
             continue;
         };
         let mut deltas: Vec<Delta> = Vec::new();
-        // FollowingReads / FollowingHighlights collapse many per-event
-        // deltas into one re-query trigger per batch — the Swift store
-        // re-queries the whole feed on each, so one delta per batch is
+        // FollowingReads / FollowingHighlights / FeedbackThreads collapse many
+        // per-event deltas into one re-query trigger per batch — the Swift
+        // store re-queries the whole feed on each, so one delta per batch is
         // plenty.
         let mut saw_following_reads_update = false;
         let mut saw_following_highlights_update = false;
+        let mut saw_feedback_threads_update = false;
         for key in note_keys {
             let Ok(note) = runtime.ndb().get_note_by_key(&txn, key) else {
                 continue;
@@ -602,6 +686,10 @@ async fn run_pump(
                     saw_following_highlights_update = true;
                     continue;
                 }
+                if matches!(change, DataChangeType::FeedbackThreadsUpdated) {
+                    saw_feedback_threads_update = true;
+                    continue;
+                }
                 deltas.push(Delta {
                     subscription_id: delivery_id,
                     change,
@@ -620,6 +708,12 @@ async fn run_pump(
             deltas.push(Delta {
                 subscription_id: delivery_id,
                 change: DataChangeType::FollowingHighlightsUpdated,
+            });
+        }
+        if saw_feedback_threads_update {
+            deltas.push(Delta {
+                subscription_id: delivery_id,
+                change: DataChangeType::FeedbackThreadsUpdated,
             });
         }
 
@@ -873,6 +967,41 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
                 return None;
             }
             Some(DataChangeType::FollowingHighlightsUpdated)
+        }
+        SubscriptionKind::FeedbackThreads { coordinate, current_user_pubkey } => {
+            let has_coord = first_tag_value(event, "a")
+                .map(|v| v == coordinate)
+                .unwrap_or(false);
+            if !has_coord {
+                return None;
+            }
+            match event.kind.as_u16() {
+                KIND_FEEDBACK_NOTE => {
+                    if event.pubkey != *current_user_pubkey {
+                        return None;
+                    }
+                    Some(DataChangeType::FeedbackThreadsUpdated)
+                }
+                KIND_FEEDBACK_THREAD_META => Some(DataChangeType::FeedbackThreadsUpdated),
+                _ => None,
+            }
+        }
+        SubscriptionKind::FeedbackThread { root_event_id } => {
+            if event.kind.as_u16() != KIND_FEEDBACK_NOTE {
+                return None;
+            }
+            let root_hex = root_event_id.to_hex();
+            let matches_root = event.id == *root_event_id
+                || event.tags.iter().any(|tag| {
+                    let s = tag.as_slice();
+                    s.first().map(String::as_str) == Some("e")
+                        && s.get(1).map(String::as_str) == Some(root_hex.as_str())
+                });
+            if !matches_root {
+                return None;
+            }
+            let record = crate::feedback::event_record_for_delta(event, &root_hex);
+            Some(DataChangeType::FeedbackThreadEventUpserted { event: record })
         }
     }
 }

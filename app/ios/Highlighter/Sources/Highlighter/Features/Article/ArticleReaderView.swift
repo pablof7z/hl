@@ -267,6 +267,8 @@ private struct ReaderScroll: View {
 private struct HeroImage: View {
     let url: URL
 
+    @State private var showFullScreen = false
+
     var body: some View {
         GeometryReader { proxy in
             KFImage(url)
@@ -276,8 +278,12 @@ private struct HeroImage: View {
                 .scaledToFill()
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .clipped()
+                .onTapGesture { showFullScreen = true }
         }
         .frame(height: 320)
+        .fullScreenCover(isPresented: $showFullScreen) {
+            ImageZoomView(url: url, onDismiss: { showFullScreen = false })
+        }
     }
 }
 

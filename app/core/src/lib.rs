@@ -10,6 +10,7 @@ pub mod discovery;
 pub mod discussions;
 pub mod errors;
 pub mod events;
+pub mod feedback;
 pub mod follows;
 pub mod groups;
 pub mod highlights;
@@ -31,7 +32,7 @@ pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
     ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, CommunitySummary, CurrentUser,
-    DiscussionAttachment, DiscussionRecord, HighlightDraft, HighlightRecord, HydratedHighlight,
-    NostrConnectOptions, PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem,
-    RoomRecommendation, RoomRecommendationReason,
+    DiscussionAttachment, DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord,
+    HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions, PictureDraft,
+    PictureRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation, RoomRecommendationReason,
 };

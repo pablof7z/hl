@@ -3,6 +3,10 @@ import SwiftUI
 struct RootSceneView: View {
     @Environment(HighlighterStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
+    @State private var feedbackPresented: Bool = false
+    /// Debounce repeated `motionEnded` callbacks for the same physical shake;
+    /// iOS often delivers two within ~250ms.
+    @State private var lastShakeAt: Date = .distantPast
 
     var body: some View {
         Group {
@@ -30,6 +34,20 @@ struct RootSceneView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: store.shareToast)
+        .onShake { handleShake() }
+        .sheet(isPresented: $feedbackPresented) {
+            FeedbackThreadsView()
+        }
+    }
+
+    private func handleShake() {
+        guard store.isLoggedIn else { return }
+        let now = Date()
+        if now.timeIntervalSince(lastShakeAt) < 1.0 { return }
+        lastShakeAt = now
+        if !feedbackPresented {
+            feedbackPresented = true
+        }
     }
 }
 

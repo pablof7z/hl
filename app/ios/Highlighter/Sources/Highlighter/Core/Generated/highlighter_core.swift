@@ -769,6 +769,17 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getFeaturedRooms(curatorPubkeyHex: String) async throws  -> [CommunitySummary]
     
     /**
+     * Every message in a feedback thread, ordered ascending by `created_at`.
+     */
+    func getFeedbackThreadEvents(rootEventId: String) async throws  -> [FeedbackEventRecord]
+    
+    /**
+     * Threads scoped to `coordinate` authored by the current user. Returns
+     * an empty list if not logged in.
+     */
+    func getFeedbackThreads(coordinate: String) async throws  -> [FeedbackThreadRecord]
+    
+    /**
      * Highlights home feed — kind:9802 events authored by follows plus
      * highlights tagged into joined rooms. See
      * `highlights::query_following_highlights` for semantics.
@@ -800,6 +811,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * the Swift explorer store's shelves remain single-purpose.
      */
     func getNewRooms(limit: UInt32) async throws  -> [CommunitySummary]
+    
+    /**
+     * First `p` tag of the project's kind:31933 event by addressable
+     * coordinate. The shake-to-share composer uses this to pick the agent
+     * pubkey for the root note's `p` tag. `None` if the project event isn't
+     * cached or has no agents.
+     */
+    func getProjectFirstAgentPubkey(coordinate: String) async throws  -> String?
     
     /**
      * Recent books across the user's joined communities — drives the
@@ -859,6 +878,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async throws  -> ArtifactRecord
     
     func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async throws  -> DiscussionRecord
+    
+    /**
+     * Publish a feedback note (kind:1) for the shake-to-share surface. When
+     * `parent_event_id` is `Some`, the note is a reply marked NIP-10 root;
+     * otherwise it's a brand-new thread.
+     */
+    func publishFeedbackNote(coordinate: String, agentPubkey: String, parentEventId: String?, body: String) async throws  -> FeedbackEventRecord
     
     /**
      * Publish a solo NIP-84 highlight without a NIP-29 repost. Used by the
@@ -961,6 +987,20 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * appearance; `unsubscribe(handle)` on disappearance.
      */
     func subscribeArticle(pubkeyHex: String, dTag: String) async throws  -> UInt64
+    
+    /**
+     * Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
+     * deltas for every kind:1 `e`-tagged to the root (regardless of author).
+     */
+    func subscribeFeedbackThread(rootEventId: String) async throws  -> UInt64
+    
+    /**
+     * Feedback-threads subscription for the shake-to-share surface. Fires
+     * `FeedbackThreadsUpdated` deltas whenever a kind:1 root authored by
+     * the current user (with the project `a` tag) or any kind:513 metadata
+     * for the same project arrives. Swift re-queries on each.
+     */
+    func subscribeFeedbackThreads(coordinate: String) async throws  -> UInt64
     
     /**
      * Highlights home-feed view-scope subscription. Snapshots the user's
@@ -1246,6 +1286,47 @@ open func getFeaturedRooms(curatorPubkeyHex: String)async throws  -> [CommunityS
 }
     
     /**
+     * Every message in a feedback thread, ordered ascending by `created_at`.
+     */
+open func getFeedbackThreadEvents(rootEventId: String)async throws  -> [FeedbackEventRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_feedback_thread_events(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(rootEventId)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeFeedbackEventRecord.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Threads scoped to `coordinate` authored by the current user. Returns
+     * an empty list if not logged in.
+     */
+open func getFeedbackThreads(coordinate: String)async throws  -> [FeedbackThreadRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_feedback_threads(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(coordinate)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeFeedbackThreadRecord.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Highlights home feed — kind:9802 events authored by follows plus
      * highlights tagged into joined rooms. See
      * `highlights::query_following_highlights` for semantics.
@@ -1379,6 +1460,29 @@ open func getNewRooms(limit: UInt32)async throws  -> [CommunitySummary]  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * First `p` tag of the project's kind:31933 event by addressable
+     * coordinate. The shake-to-share composer uses this to pick the agent
+     * pubkey for the root note's `p` tag. `None` if the project event isn't
+     * cached or has no agents.
+     */
+open func getProjectFirstAgentPubkey(coordinate: String)async throws  -> String?  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_project_first_agent_pubkey(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(coordinate)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionString.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -1658,6 +1762,28 @@ open func publishDiscussion(groupId: String, title: String, body: String, attach
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeDiscussionRecord_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Publish a feedback note (kind:1) for the shake-to-share surface. When
+     * `parent_event_id` is `Some`, the note is a reply marked NIP-10 root;
+     * otherwise it's a brand-new thread.
+     */
+open func publishFeedbackNote(coordinate: String, agentPubkey: String, parentEventId: String?, body: String)async throws  -> FeedbackEventRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_feedback_note(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(coordinate),FfiConverterString.lower(agentPubkey),FfiConverterOptionString.lower(parentEventId),FfiConverterString.lower(body)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFeedbackEventRecord_lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -1985,6 +2111,50 @@ open func subscribeArticle(pubkeyHex: String, dTag: String)async throws  -> UInt
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_article(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(pubkeyHex),FfiConverterString.lower(dTag)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
+            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
+            freeFunc: ffi_highlighter_core_rust_future_free_u64,
+            liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
+     * deltas for every kind:1 `e`-tagged to the root (regardless of author).
+     */
+open func subscribeFeedbackThread(rootEventId: String)async throws  -> UInt64  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_subscribe_feedback_thread(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(rootEventId)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
+            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
+            freeFunc: ffi_highlighter_core_rust_future_free_u64,
+            liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Feedback-threads subscription for the shake-to-share surface. Fires
+     * `FeedbackThreadsUpdated` deltas whenever a kind:1 root authored by
+     * the current user (with the project `a` tag) or any kind:513 metadata
+     * for the same project arrives. Swift re-queries on each.
+     */
+open func subscribeFeedbackThreads(coordinate: String)async throws  -> UInt64  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_subscribe_feedback_threads(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(coordinate)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_u64,
@@ -3508,6 +3678,242 @@ public func FfiConverterTypeDiscussionRecord_lower(_ value: DiscussionRecord) ->
 
 
 /**
+ * One message inside a feedback thread — the root note itself or any kind:1
+ * `e`-tagged to it (regardless of author, so agent replies appear inline).
+ */
+public struct FeedbackEventRecord {
+    public var eventId: String
+    /**
+     * Hex id of the thread's root note. Equals `event_id` for the root.
+     */
+    public var rootEventId: String
+    public var authorPubkey: String
+    public var createdAt: UInt64
+    public var content: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, 
+        /**
+         * Hex id of the thread's root note. Equals `event_id` for the root.
+         */rootEventId: String, authorPubkey: String, createdAt: UInt64, content: String) {
+        self.eventId = eventId
+        self.rootEventId = rootEventId
+        self.authorPubkey = authorPubkey
+        self.createdAt = createdAt
+        self.content = content
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackEventRecord: Sendable {}
+#endif
+
+
+extension FeedbackEventRecord: Equatable, Hashable {
+    public static func ==(lhs: FeedbackEventRecord, rhs: FeedbackEventRecord) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.rootEventId != rhs.rootEventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(rootEventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(createdAt)
+        hasher.combine(content)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackEventRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackEventRecord {
+        return
+            try FeedbackEventRecord(
+                eventId: FfiConverterString.read(from: &buf), 
+                rootEventId: FfiConverterString.read(from: &buf), 
+                authorPubkey: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterUInt64.read(from: &buf), 
+                content: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackEventRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.rootEventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackEventRecord_lift(_ buf: RustBuffer) throws -> FeedbackEventRecord {
+    return try FfiConverterTypeFeedbackEventRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackEventRecord_lower(_ value: FeedbackEventRecord) -> RustBuffer {
+    return FfiConverterTypeFeedbackEventRecord.lower(value)
+}
+
+
+/**
+ * One thread in the in-app feedback surface — a kind:1 root note that
+ * `a`-tags the project coordinate, optionally enriched with the latest
+ * kind:513 metadata (title/summary/status-label) emitted by the project's
+ * agent. `last_activity_at` drives the slack-style list ordering.
+ */
+public struct FeedbackThreadRecord {
+    public var rootEventId: String
+    public var authorPubkey: String
+    public var createdAt: UInt64
+    public var lastActivityAt: UInt64
+    public var title: String?
+    public var summary: String?
+    public var statusLabel: String?
+    /**
+     * First ~140 chars of the root note's content, whitespace-collapsed.
+     * Rendered when no `title` is available.
+     */
+    public var preview: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(rootEventId: String, authorPubkey: String, createdAt: UInt64, lastActivityAt: UInt64, title: String?, summary: String?, statusLabel: String?, 
+        /**
+         * First ~140 chars of the root note's content, whitespace-collapsed.
+         * Rendered when no `title` is available.
+         */preview: String) {
+        self.rootEventId = rootEventId
+        self.authorPubkey = authorPubkey
+        self.createdAt = createdAt
+        self.lastActivityAt = lastActivityAt
+        self.title = title
+        self.summary = summary
+        self.statusLabel = statusLabel
+        self.preview = preview
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackThreadRecord: Sendable {}
+#endif
+
+
+extension FeedbackThreadRecord: Equatable, Hashable {
+    public static func ==(lhs: FeedbackThreadRecord, rhs: FeedbackThreadRecord) -> Bool {
+        if lhs.rootEventId != rhs.rootEventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.lastActivityAt != rhs.lastActivityAt {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.summary != rhs.summary {
+            return false
+        }
+        if lhs.statusLabel != rhs.statusLabel {
+            return false
+        }
+        if lhs.preview != rhs.preview {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rootEventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(createdAt)
+        hasher.combine(lastActivityAt)
+        hasher.combine(title)
+        hasher.combine(summary)
+        hasher.combine(statusLabel)
+        hasher.combine(preview)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackThreadRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackThreadRecord {
+        return
+            try FeedbackThreadRecord(
+                rootEventId: FfiConverterString.read(from: &buf), 
+                authorPubkey: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterUInt64.read(from: &buf), 
+                lastActivityAt: FfiConverterUInt64.read(from: &buf), 
+                title: FfiConverterOptionString.read(from: &buf), 
+                summary: FfiConverterOptionString.read(from: &buf), 
+                statusLabel: FfiConverterOptionString.read(from: &buf), 
+                preview: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackThreadRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.rootEventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterUInt64.write(value.lastActivityAt, into: &buf)
+        FfiConverterOptionString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.summary, into: &buf)
+        FfiConverterOptionString.write(value.statusLabel, into: &buf)
+        FfiConverterString.write(value.preview, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackThreadRecord_lift(_ buf: RustBuffer) throws -> FeedbackThreadRecord {
+    return try FfiConverterTypeFeedbackThreadRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackThreadRecord_lower(_ value: FeedbackThreadRecord) -> RustBuffer {
+    return FfiConverterTypeFeedbackThreadRecord.lower(value)
+}
+
+
+/**
  * A pending highlight to publish — text + optional context/note.
  */
 public struct HighlightDraft {
@@ -4908,6 +5314,20 @@ public enum DataChangeType {
      */
     case followingHighlightsUpdated
     /**
+     * A kind:1 root note authored by the user, or a kind:513 metadata event
+     * for any of their threads, arrived. The Swift store re-queries the
+     * thread list on each (the 513 may have updated a title/summary on an
+     * existing row, which is easier to handle with a re-query than an in-place
+     * patch).
+     */
+    case feedbackThreadsUpdated
+    /**
+     * A kind:1 message inside an open feedback thread arrived. The Swift
+     * store inserts/upserts it into the chat view ordered by `created_at`.
+     */
+    case feedbackThreadEventUpserted(event: FeedbackEventRecord
+    )
+    /**
      * NIP-46 signer connected — fires after a remote signer completes the
      * `nostrconnect://` or `bunker://` handshake.
      */
@@ -4968,10 +5388,15 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         
         case 11: return .followingHighlightsUpdated
         
-        case 12: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
+        case 12: return .feedbackThreadsUpdated
+        
+        case 13: return .feedbackThreadEventUpserted(event: try FfiConverterTypeFeedbackEventRecord.read(from: &buf)
         )
         
-        case 13: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
+        case 14: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
+        )
+        
+        case 15: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -5042,13 +5467,22 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             writeInt(&buf, Int32(11))
         
         
-        case let .signerConnected(user):
+        case .feedbackThreadsUpdated:
             writeInt(&buf, Int32(12))
+        
+        
+        case let .feedbackThreadEventUpserted(event):
+            writeInt(&buf, Int32(13))
+            FfiConverterTypeFeedbackEventRecord.write(event, into: &buf)
+            
+        
+        case let .signerConnected(user):
+            writeInt(&buf, Int32(14))
             FfiConverterTypeCurrentUser.write(user, into: &buf)
             
         
         case let .bunkerSignRequest(requestId):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(15))
             FfiConverterString.write(requestId, into: &buf)
             
         }
@@ -5550,6 +5984,56 @@ fileprivate struct FfiConverterSequenceTypeDiscussionRecord: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFeedbackEventRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [FeedbackEventRecord]
+
+    public static func write(_ value: [FeedbackEventRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFeedbackEventRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FeedbackEventRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FeedbackEventRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFeedbackEventRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFeedbackThreadRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [FeedbackThreadRecord]
+
+    public static func write(_ value: [FeedbackThreadRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFeedbackThreadRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FeedbackThreadRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FeedbackThreadRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFeedbackThreadRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeHighlightDraft: FfiConverterRustBuffer {
     typealias SwiftType = [HighlightDraft]
 
@@ -5785,6 +6269,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_featured_rooms() != 46959) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_feedback_thread_events() != 32828) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_feedback_threads() != 39148) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_highlights() != 12124) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5804,6 +6294,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_new_rooms() != 38074) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_project_first_agent_pubkey() != 8227) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 33628) {
@@ -5854,6 +6347,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 50982) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_note() != 5644) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_highlight() != 16312) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5900,6 +6396,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 35661) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_thread() != 19940) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_threads() != 5574) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_highlights() != 25287) {

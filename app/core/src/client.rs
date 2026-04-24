@@ -16,14 +16,16 @@ use crate::curation;
 use crate::discovery;
 use crate::errors::CoreError;
 use crate::events::{DataChangeType, Delta, EventCallback};
+use crate::feedback;
 use crate::follows;
 use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
     ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, CommunitySummary, CurrentUser,
-    DiscussionRecord, HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions,
-    PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
+    DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft, HighlightRecord,
+    HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord, ProfileMetadata,
+    ReadingFeedItem, RoomRecommendation,
 };
 use crate::reads;
 use crate::recommendations;
@@ -400,6 +402,46 @@ impl HighlighterCore {
         )
     }
 
+    /// Feedback-threads subscription for the shake-to-share surface. Fires
+    /// `FeedbackThreadsUpdated` deltas whenever a kind:1 root authored by
+    /// the current user (with the project `a` tag) or any kind:513 metadata
+    /// for the same project arrives. Swift re-queries on each.
+    pub async fn subscribe_feedback_threads(
+        &self,
+        coordinate: String,
+    ) -> Result<u64, CoreError> {
+        let coordinate = coordinate.trim();
+        if coordinate.is_empty() {
+            return Err(CoreError::InvalidInput("coordinate must not be empty".into()));
+        }
+        let user_pubkey = self.require_user_pubkey()?;
+        self.subscriptions.register(
+            &self.runtime,
+            SubscriptionKind::FeedbackThreads {
+                coordinate: coordinate.to_string(),
+                current_user_pubkey: user_pubkey,
+            },
+        )
+    }
+
+    /// Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
+    /// deltas for every kind:1 `e`-tagged to the root (regardless of author).
+    pub async fn subscribe_feedback_thread(
+        &self,
+        root_event_id: String,
+    ) -> Result<u64, CoreError> {
+        let root_event_id = root_event_id.trim();
+        if root_event_id.is_empty() {
+            return Err(CoreError::InvalidInput(
+                "root_event_id must not be empty".into(),
+            ));
+        }
+        let root = EventId::from_hex(root_event_id)
+            .map_err(|e| CoreError::InvalidInput(format!("invalid event id: {e}")))?;
+        self.subscriptions
+            .register(&self.runtime, SubscriptionKind::FeedbackThread { root_event_id: root })
+    }
+
     /// Drop a subscription by handle. Idempotent.
     pub fn unsubscribe(&self, handle: u64) {
         self.subscriptions.remove(&self.runtime, handle);
@@ -601,6 +643,40 @@ impl HighlighterCore {
         crate::discussions::query_for_group(self.runtime.ndb(), &group_id, limit)
     }
 
+    // -- Feedback (shake-to-share) --
+
+    /// Threads scoped to `coordinate` authored by the current user. Returns
+    /// an empty list if not logged in.
+    pub async fn get_feedback_threads(
+        &self,
+        coordinate: String,
+    ) -> Result<Vec<FeedbackThreadRecord>, CoreError> {
+        let user = match self.inner.read().session.current_user() {
+            Some(u) => u,
+            None => return Ok(Vec::new()),
+        };
+        feedback::query_threads(self.runtime.ndb(), &coordinate, &user.pubkey)
+    }
+
+    /// Every message in a feedback thread, ordered ascending by `created_at`.
+    pub async fn get_feedback_thread_events(
+        &self,
+        root_event_id: String,
+    ) -> Result<Vec<FeedbackEventRecord>, CoreError> {
+        feedback::query_thread_events(self.runtime.ndb(), &root_event_id)
+    }
+
+    /// First `p` tag of the project's kind:31933 event by addressable
+    /// coordinate. The shake-to-share composer uses this to pick the agent
+    /// pubkey for the root note's `p` tag. `None` if the project event isn't
+    /// cached or has no agents.
+    pub async fn get_project_first_agent_pubkey(
+        &self,
+        coordinate: String,
+    ) -> Result<Option<String>, CoreError> {
+        feedback::query_first_agent_pubkey(self.runtime.ndb(), &coordinate)
+    }
+
     // -- Writes --
 
     pub async fn publish_artifact(
@@ -622,6 +698,27 @@ impl HighlighterCore {
     ) -> Result<DiscussionRecord, CoreError> {
         let _ = self.require_user_pubkey()?;
         crate::discussions::publish(&self.runtime, &group_id, &title, &body, attachment).await
+    }
+
+    /// Publish a feedback note (kind:1) for the shake-to-share surface. When
+    /// `parent_event_id` is `Some`, the note is a reply marked NIP-10 root;
+    /// otherwise it's a brand-new thread.
+    pub async fn publish_feedback_note(
+        &self,
+        coordinate: String,
+        agent_pubkey: String,
+        parent_event_id: Option<String>,
+        body: String,
+    ) -> Result<FeedbackEventRecord, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        feedback::publish_note(
+            &self.runtime,
+            &coordinate,
+            &agent_pubkey,
+            parent_event_id.as_deref(),
+            &body,
+        )
+        .await
     }
 
     pub async fn publish_highlights_and_share(

@@ -2,26 +2,31 @@ import SwiftUI
 @preconcurrency import WebKit
 
 /// Full-page reader for web-URL highlights. Loads the target URL in a
-/// `WKWebView`; once the DOM is ready we inject a small script that finds
-/// the highlighted quote in the page and wraps it in a `<mark>` with our
-/// accent color, then scrolls it into view.
+/// `WKWebView`, runs Mozilla Readability against the loaded DOM, and — if
+/// extraction yields meaningful content — replaces the page body with a
+/// styled "reader mode" layout. Falls back to the raw page when readability
+/// fails or the user toggles off.
 ///
-/// Extraction / reader-mode rendering (Mozilla-Readability-style) is a
-/// deliberate follow-up. For now the raw page is the source of truth so
-/// users can see what they're looking at and the highlight is anchored.
+/// After the page settles, a self-contained JS pass finds the highlighted
+/// quote in the (possibly transformed) DOM and wraps it in a `<mark>` with
+/// our accent color, then smooth-scrolls it into view.
 struct WebReaderView: View {
     let target: WebReaderTarget
 
-    @State private var loadProgress: Double = 0
     @State private var isLoading: Bool = true
+    @State private var loadProgress: Double = 0
+    @State private var showAsReader: Bool = true
+    @State private var readerAvailable: Bool = false
 
     var body: some View {
         ZStack(alignment: .top) {
             WebView(
                 url: target.url,
                 highlightQuote: target.highlightQuote,
+                showAsReader: $showAsReader,
                 isLoading: $isLoading,
-                loadProgress: $loadProgress
+                loadProgress: $loadProgress,
+                readerAvailable: $readerAvailable
             )
 
             if isLoading {
@@ -35,6 +40,18 @@ struct WebReaderView: View {
         .navigationTitle(target.url.host ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            if readerAvailable {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showAsReader.toggle()
+                    } label: {
+                        Image(systemName: showAsReader ? "doc.plaintext" : "textformat")
+                    }
+                    .accessibilityLabel(showAsReader ? "Show original page" : "Show reader view")
+                }
+            }
+        }
     }
 }
 
@@ -43,18 +60,36 @@ struct WebReaderView: View {
 private struct WebView: UIViewRepresentable {
     let url: URL
     let highlightQuote: String
+    @Binding var showAsReader: Bool
     @Binding var isLoading: Bool
     @Binding var loadProgress: Double
+    @Binding var readerAvailable: Bool
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+
+        // Install Readability.js as a user script so `window.Readability`
+        // exists by the time `didFinish` fires. Scoped to main frame —
+        // subframes (ads, embeds) don't need it.
+        let controller = WKUserContentController()
+        if let js = Self.loadReadabilitySource() {
+            let userScript = WKUserScript(
+                source: js,
+                injectionTime: .atDocumentEnd,
+                forMainFrameOnly: true
+            )
+            controller.addUserScript(userScript)
+        }
+        config.userContentController = controller
+
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
         context.coordinator.webView = webView
+        context.coordinator.showAsReaderBinding = $showAsReader
+        context.coordinator.readerAvailableBinding = $readerAvailable
 
-        // Track load progress so the linear bar has something to draw.
-        let progressObservation = webView.observe(\.estimatedProgress, options: [.new]) { web, change in
+        let progressObservation = webView.observe(\.estimatedProgress, options: [.new]) { _, change in
             Task { @MainActor in
                 loadProgress = change.newValue ?? 0
             }
@@ -67,6 +102,14 @@ private struct WebView: UIViewRepresentable {
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
         context.coordinator.highlightQuote = highlightQuote
+        if context.coordinator.lastAppliedMode != showAsReader {
+            context.coordinator.lastAppliedMode = showAsReader
+            // Only reload if we've already finished once; the initial load
+            // will pick up the current mode on its first didFinish.
+            if context.coordinator.hasFinishedInitialLoad {
+                uiView.reload()
+            }
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -76,13 +119,23 @@ private struct WebView: UIViewRepresentable {
         )
     }
 
+    private static func loadReadabilitySource() -> String? {
+        guard let url = Bundle.main.url(forResource: "Readability", withExtension: "js") else {
+            return nil
+        }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
+
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate {
         var highlightQuote: String
         let isLoadingBinding: Binding<Bool>
+        var showAsReaderBinding: Binding<Bool>?
+        var readerAvailableBinding: Binding<Bool>?
         weak var webView: WKWebView?
         var progressObservation: NSKeyValueObservation?
-        private var hasInjected: Bool = false
+        var lastAppliedMode: Bool = true
+        var hasFinishedInitialLoad: Bool = false
 
         init(highlightQuote: String, isLoadingBinding: Binding<Bool>) {
             self.highlightQuote = highlightQuote
@@ -91,17 +144,18 @@ private struct WebView: UIViewRepresentable {
 
         nonisolated func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             Task { @MainActor in
-                self.hasInjected = false
                 self.isLoadingBinding.wrappedValue = true
             }
         }
 
         nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             Task { @MainActor in
-                // Let JS-heavy pages settle a beat before we walk the DOM.
-                try? await Task.sleep(nanoseconds: 400_000_000)
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                await self.applyMode()
+                try? await Task.sleep(nanoseconds: 120_000_000)
                 self.injectHighlight()
                 self.isLoadingBinding.wrappedValue = false
+                self.hasFinishedInitialLoad = true
             }
         }
 
@@ -117,11 +171,135 @@ private struct WebView: UIViewRepresentable {
             }
         }
 
+        /// Reader-or-raw dispatch. Always probes Readability so the toolbar
+        /// can surface the toggle when extraction is viable.
+        private func applyMode() async {
+            guard let webView else { return }
+            let reader = showAsReaderBinding?.wrappedValue ?? true
+
+            if reader {
+                let js = Self.readerTransformScript()
+                let result = try? await webView.evaluateJavaScript(js)
+                let status = (result as? String) ?? ""
+                readerAvailableBinding?.wrappedValue = (status == "ready" || status == "unavailable")
+                    // `unavailable` still means the page was analyzable — we just
+                    // didn't have enough content. But we only show the toggle
+                    // when the reader *worked*, not when it didn't.
+                    ? (status == "ready")
+                    : false
+            } else {
+                // Raw mode — probe only, so the toggle stays visible.
+                let probe = Self.readerProbeScript()
+                let result = try? await webView.evaluateJavaScript(probe)
+                let status = (result as? String) ?? ""
+                readerAvailableBinding?.wrappedValue = (status == "ok")
+            }
+        }
+
         private func injectHighlight() {
-            guard !hasInjected, !highlightQuote.isEmpty, let webView else { return }
-            hasInjected = true
+            guard !highlightQuote.isEmpty, let webView else { return }
             let js = Self.buildHighlightScript(quote: highlightQuote)
             webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+
+        // MARK: - Scripts
+
+        /// Runs Readability against a document clone; if it yields usable
+        /// content, mutates the live document to show a styled reader view.
+        /// Returns `"ready"` / `"unavailable"` / `"error:<msg>"`.
+        private static func readerTransformScript() -> String {
+            return """
+            (function() {
+              try {
+                if (typeof Readability !== 'function') return 'error:no-readability';
+                var clone = document.cloneNode(true);
+                var article = new Readability(clone).parse();
+                if (!article || !article.content) return 'unavailable';
+                var body = article.content;
+                if (body.replace(/<[^>]+>/g, '').trim().length < 400) return 'unavailable';
+
+                var escapeHtml = function(s) {
+                  return String(s)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+                };
+
+                var title = article.title || '';
+                var byline = article.byline || article.siteName || '';
+
+                var css = `
+                  :root { color-scheme: light dark; }
+                  html, body { margin: 0; padding: 0; background: #fafaf7; color: #15130f; }
+                  @media (prefers-color-scheme: dark) {
+                    html, body { background: #151310; color: #f3f0e9; }
+                    .reader-byline { color: #ada69a !important; }
+                    .reader-article a { color: #e09a78 !important; }
+                    .reader-rule { border-color: #38332a !important; }
+                  }
+                  body { font: 18px/1.65 'Iowan Old Style', 'Palatino', Georgia, serif; }
+                  .reader-article { max-width: 680px; margin: 0 auto; padding: 34px 22px 60px; }
+                  .reader-title { font: 700 30px/1.2 'Iowan Old Style', 'Palatino', Georgia, serif; margin: 0 0 10px; }
+                  .reader-byline { font: 14px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; color: #7a7468; margin: 0 0 6px; }
+                  .reader-rule { border: 0; border-top: 1px solid #e5ddc9; margin: 22px 0 26px; }
+                  .reader-body p { margin: 0 0 1em; }
+                  .reader-body h1, .reader-body h2, .reader-body h3 { font-family: 'Iowan Old Style', 'Palatino', Georgia, serif; }
+                  .reader-body img, .reader-body figure { max-width: 100%; height: auto; display: block; margin: 1.2em auto; }
+                  .reader-body figure figcaption { font: 13px/1.4 -apple-system, sans-serif; color: #7a7468; text-align: center; margin-top: 4px; }
+                  .reader-body a { color: #c57d5f; text-decoration: underline; text-decoration-color: rgba(197,125,95,0.35); text-underline-offset: 2px; }
+                  .reader-body pre, .reader-body code { font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; }
+                  .reader-body pre { background: rgba(127,127,127,0.08); padding: 12px 14px; border-radius: 6px; overflow-x: auto; }
+                  .reader-body blockquote { margin: 1em 0 1em 0; padding: 0 0 0 16px; border-left: 3px solid #c57d5f; color: #5a5448; font-style: italic; }
+                  mark[data-highlighter] { background: rgba(197,125,95,0.32); color: inherit; padding: 0.05em 0.15em; border-radius: 2px; box-shadow: inset 0 -1px 0 rgba(197,125,95,0.6); }
+                `;
+
+                // Replace <head> with our own minimal head (strips page CSS/JS).
+                document.head.innerHTML = '<meta name="viewport" content="width=device-width, initial-scale=1"><style>' + css + '</style>';
+
+                var header = '<h1 class="reader-title">' + escapeHtml(title) + '</h1>';
+                if (byline) {
+                  header += '<p class="reader-byline">' + escapeHtml(byline) + '</p>';
+                }
+                header += '<hr class="reader-rule">';
+
+                document.body.className = '';
+                document.body.setAttribute('style', '');
+                document.body.innerHTML =
+                  '<article class="reader-article">' +
+                    header +
+                    '<div class="reader-body">' + body + '</div>' +
+                  '</article>';
+
+                // Kill any leftover inline styles on the <html> root from the
+                // original page (some sites pin the background via style attr).
+                document.documentElement.setAttribute('style', '');
+
+                return 'ready';
+              } catch (e) {
+                return 'error:' + String(e && e.message || e);
+              }
+            })();
+            """
+        }
+
+        /// Returns `'ok'` if Readability would yield readable content; never
+        /// mutates the DOM. Used when the user chose "raw" mode so we can
+        /// keep the toggle visible.
+        private static func readerProbeScript() -> String {
+            return """
+            (function() {
+              try {
+                if (typeof Readability !== 'function') return 'no-readability';
+                var a = new Readability(document.cloneNode(true)).parse();
+                if (!a || !a.content) return 'no-content';
+                return (a.content.replace(/<[^>]+>/g, '').trim().length >= 400) ? 'ok' : 'short';
+              } catch (e) {
+                return 'error:' + String(e && e.message || e);
+              }
+            })();
+            """
         }
 
         /// Builds a self-contained IIFE that:
@@ -133,9 +311,9 @@ private struct WebView: UIViewRepresentable {
         ///     back to (node, offset) pairs, creates a DOM Range, wraps it
         ///     with a styled `<mark>`, and scrolls the mark into view.
         ///
-        /// Handles quotes that span multiple text nodes and elements.
+        /// Handles quotes that span multiple text nodes and elements. Works
+        /// in both the original page and the reader-mode DOM.
         private static func buildHighlightScript(quote: String) -> String {
-            // Safely serialize the quote as a JSON string literal.
             let encoded = try? JSONEncoder().encode(quote)
             let needleLiteral = encoded.flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
             return """
@@ -168,23 +346,17 @@ private struct WebView: UIViewRepresentable {
                 while ((node = walker.nextNode())) {
                   var raw = node.nodeValue;
                   if (!raw) continue;
-                  // Replace each whitespace run with a single space, recording
-                  // original offsets so we can map back later.
                   var nodeSpan = [];
-                  var i = 0, j = 0;
+                  var i = 0;
                   while (i < raw.length) {
                     var c = raw.charCodeAt(i);
                     if (c === 32 || c === 9 || c === 10 || c === 13 || c === 12 || c === 160) {
-                      // whitespace run
                       var runStart = i;
                       while (i < raw.length) {
                         var cc = raw.charCodeAt(i);
                         if (cc === 32 || cc === 9 || cc === 10 || cc === 13 || cc === 12 || cc === 160) { i++; }
                         else { break; }
                       }
-                      // emit a single space if we're not at the start of the
-                      // normalized buffer and the previous char isn't already
-                      // a space.
                       if (norm.length > 0 && norm.charAt(norm.length - 1) !== ' ') {
                         nodeSpan.push({normStart: norm.length, origStart: runStart, origEnd: i});
                         norm += ' ';
@@ -200,8 +372,6 @@ private struct WebView: UIViewRepresentable {
 
                 var idx = norm.indexOf(needle);
                 if (idx < 0) {
-                  // Fallback: try a shorter prefix (first 80 chars) in case
-                  // the tail diverges (e.g. truncation, stray markup).
                   var probe = needle.slice(0, Math.min(80, needle.length));
                   if (probe.length < 12) return;
                   idx = norm.indexOf(probe);
@@ -210,7 +380,6 @@ private struct WebView: UIViewRepresentable {
                 }
                 var endIdx = idx + needle.length;
 
-                // Map normalized start/end back to (node, offset).
                 function locate(target) {
                   for (var p = 0; p < parts.length; p++) {
                     var spans = parts[p].spans;
@@ -220,9 +389,7 @@ private struct WebView: UIViewRepresentable {
                         return {node: parts[p].node, offset: span.origStart};
                       }
                     }
-                    // walked entire node without hitting target → continue.
                   }
-                  // Target past end — return last position.
                   if (parts.length === 0) return null;
                   var last = parts[parts.length - 1];
                   var lastSpan = last.spans[last.spans.length - 1];
@@ -248,8 +415,6 @@ private struct WebView: UIViewRepresentable {
                 try {
                   range.surroundContents(mark);
                 } catch(e) {
-                  // surroundContents rejects ranges that span partial element
-                  // boundaries. Fallback: use extractContents + insertNode.
                   try {
                     var frag = range.extractContents();
                     mark.appendChild(frag);
@@ -262,9 +427,7 @@ private struct WebView: UIViewRepresentable {
                 setTimeout(function() {
                   try { mark.scrollIntoView({behavior: 'smooth', block: 'center'}); } catch(_) {}
                 }, 80);
-              } catch (err) {
-                // Silently no-op — never break the page.
-              }
+              } catch (err) {}
             })();
             """
         }

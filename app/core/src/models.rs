@@ -279,6 +279,36 @@ pub struct ReadingFeedItem {
     pub latest_activity_at: u64,
 }
 
+/// One thread in the in-app feedback surface — a kind:1 root note that
+/// `a`-tags the project coordinate, optionally enriched with the latest
+/// kind:513 metadata (title/summary/status-label) emitted by the project's
+/// agent. `last_activity_at` drives the slack-style list ordering.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackThreadRecord {
+    pub root_event_id: String,
+    pub author_pubkey: String,
+    pub created_at: u64,
+    pub last_activity_at: u64,
+    pub title: Option<String>,
+    pub summary: Option<String>,
+    pub status_label: Option<String>,
+    /// First ~140 chars of the root note's content, whitespace-collapsed.
+    /// Rendered when no `title` is available.
+    pub preview: String,
+}
+
+/// One message inside a feedback thread — the root note itself or any kind:1
+/// `e`-tagged to it (regardless of author, so agent replies appear inline).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackEventRecord {
+    pub event_id: String,
+    /// Hex id of the thread's root note. Equals `event_id` for the root.
+    pub root_event_id: String,
+    pub author_pubkey: String,
+    pub created_at: u64,
+    pub content: String,
+}
+
 /// Options for initiating a `nostrconnect://` outgoing pairing.
 /// Matches Olas's `NDKBunkerSigner.NostrConnectOptions`.
 #[derive(Debug, Clone, uniffi::Record)]

@@ -30,6 +30,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         var articles: [UInt64: WeakBox<ArticleReaderStore>] = [:]
         var reads: [UInt64: WeakBox<ReadsStore>] = [:]
         var highlights: [UInt64: WeakBox<HighlightsStore>] = [:]
+        var feedbackThreads: [UInt64: WeakBox<FeedbackStore>] = [:]
+        var feedbackThreadDetails: [UInt64: WeakBox<FeedbackThreadStore>] = [:]
         /// Maps subscription handles → pubkey for app-scoped profile cache subscriptions.
         var profileCacheHandles: [UInt64: String] = [:]
 
@@ -40,6 +42,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             articles = articles.filter { $0.value.value != nil }
             reads = reads.filter { $0.value.value != nil }
             highlights = highlights.filter { $0.value.value != nil }
+            feedbackThreads = feedbackThreads.filter { $0.value.value != nil }
+            feedbackThreadDetails = feedbackThreadDetails.filter { $0.value.value != nil }
         }
     }
     private let registry = OSAllocatedUnfairLock(initialState: Registry())
@@ -92,6 +96,20 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         }
     }
 
+    func registerFeedbackThreads(_ store: FeedbackStore, handle: UInt64) {
+        registry.withLock { reg in
+            reg.feedbackThreads[handle] = WeakBox(store)
+            reg.prune()
+        }
+    }
+
+    func registerFeedbackThread(_ store: FeedbackThreadStore, handle: UInt64) {
+        registry.withLock { reg in
+            reg.feedbackThreadDetails[handle] = WeakBox(store)
+            reg.prune()
+        }
+    }
+
     func registerProfileCache(pubkeyHex: String, handle: UInt64) {
         registry.withLock { reg in
             reg.profileCacheHandles[handle] = pubkeyHex
@@ -107,6 +125,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             _ = reg.articles.removeValue(forKey: handle)
             _ = reg.reads.removeValue(forKey: handle)
             _ = reg.highlights.removeValue(forKey: handle)
+            _ = reg.feedbackThreads.removeValue(forKey: handle)
+            _ = reg.feedbackThreadDetails.removeValue(forKey: handle)
             _ = reg.profileCacheHandles.removeValue(forKey: handle)
         }
     }
@@ -123,7 +143,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 return
             }
 
-            let (roomStore, discussionStore, profileStore, articleStore, readsStore, highlightsStore, profileCachePubkey) = self.registry.withLock { reg in
+            let (roomStore, discussionStore, profileStore, articleStore, readsStore, highlightsStore, feedbackStore, feedbackThreadStore, profileCachePubkey) = self.registry.withLock { reg in
                 (
                     reg.rooms[id]?.value,
                     reg.discussions[id]?.value,
@@ -131,6 +151,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                     reg.articles[id]?.value,
                     reg.reads[id]?.value,
                     reg.highlights[id]?.value,
+                    reg.feedbackThreads[id]?.value,
+                    reg.feedbackThreadDetails[id]?.value,
                     reg.profileCacheHandles[id]
                 )
             }
@@ -147,9 +169,27 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 self.dispatchReads(change, store: readsStore)
             } else if let highlightsStore {
                 self.dispatchHighlights(change, store: highlightsStore)
+            } else if let feedbackStore {
+                self.dispatchFeedbackThreads(change, store: feedbackStore)
+            } else if let feedbackThreadStore {
+                self.dispatchFeedbackThread(change, store: feedbackThreadStore)
             } else if let pubkey = profileCachePubkey {
                 self.dispatchProfileCache(change, pubkey: pubkey)
             }
+        }
+    }
+
+    @MainActor
+    private func dispatchFeedbackThreads(_ change: DataChangeType, store: FeedbackStore) {
+        if case .feedbackThreadsUpdated = change {
+            Task { await store.refreshThreads() }
+        }
+    }
+
+    @MainActor
+    private func dispatchFeedbackThread(_ change: DataChangeType, store: FeedbackThreadStore) {
+        if case .feedbackThreadEventUpserted(let event) = change {
+            store.apply(event: event)
         }
     }
 

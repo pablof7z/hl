@@ -62,6 +62,42 @@ actor SafeHighlighterCore {
         try await core.getDiscussions(groupId: groupId, limit: limit)
     }
 
+    // MARK: - Feedback (shake-to-share)
+
+    func getFeedbackThreads(coordinate: String) async throws -> [FeedbackThreadRecord] {
+        try await core.getFeedbackThreads(coordinate: coordinate)
+    }
+
+    func getFeedbackThreadEvents(rootEventId: String) async throws -> [FeedbackEventRecord] {
+        try await core.getFeedbackThreadEvents(rootEventId: rootEventId)
+    }
+
+    func getProjectFirstAgentPubkey(coordinate: String) async throws -> String? {
+        try await core.getProjectFirstAgentPubkey(coordinate: coordinate)
+    }
+
+    func publishFeedbackNote(
+        coordinate: String,
+        agentPubkey: String,
+        parentEventId: String?,
+        body: String
+    ) async throws -> FeedbackEventRecord {
+        try await core.publishFeedbackNote(
+            coordinate: coordinate,
+            agentPubkey: agentPubkey,
+            parentEventId: parentEventId,
+            body: body
+        )
+    }
+
+    func subscribeFeedbackThreads(coordinate: String) async throws -> UInt64 {
+        try await core.subscribeFeedbackThreads(coordinate: coordinate)
+    }
+
+    func subscribeFeedbackThread(rootEventId: String) async throws -> UInt64 {
+        try await core.subscribeFeedbackThread(rootEventId: rootEventId)
+    }
+
     // MARK: - Profile reads
 
     func getUserProfile(pubkeyHex: String) async throws -> ProfileMetadata? {

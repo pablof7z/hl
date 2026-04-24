@@ -5,8 +5,8 @@
 //! that installed the subscription.
 
 use crate::models::{
-    ArtifactRecord, CommunitySummary, CurrentUser, DiscussionRecord, HighlightRecord,
-    HydratedHighlight,
+    ArtifactRecord, CommunitySummary, CurrentUser, DiscussionRecord, FeedbackEventRecord,
+    HighlightRecord, HydratedHighlight,
 };
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -47,6 +47,15 @@ pub enum DataChangeType {
     /// A new kind:9802 highlight showed up from a follow or in a joined
     /// room — trigger a re-query of the Highlights home feed.
     FollowingHighlightsUpdated,
+    /// A kind:1 root note authored by the user, or a kind:513 metadata event
+    /// for any of their threads, arrived. The Swift store re-queries the
+    /// thread list on each (the 513 may have updated a title/summary on an
+    /// existing row, which is easier to handle with a re-query than an in-place
+    /// patch).
+    FeedbackThreadsUpdated,
+    /// A kind:1 message inside an open feedback thread arrived. The Swift
+    /// store inserts/upserts it into the chat view ordered by `created_at`.
+    FeedbackThreadEventUpserted { event: FeedbackEventRecord },
     /// NIP-46 signer connected — fires after a remote signer completes the
     /// `nostrconnect://` or `bunker://` handshake.
     SignerConnected { user: CurrentUser },
