@@ -8,6 +8,7 @@ import SwiftUI
 struct ProfileView: View {
     @Environment(HighlighterStore.self) private var appStore
     @State private var store: ProfileStore?
+    @State private var editPresented = false
 
     let pubkey: String
 
@@ -45,7 +46,7 @@ struct ProfileView: View {
                 VStack(spacing: 20) {
                     IdentityBlock(store: store, pubkey: pubkey)
                         .padding(.horizontal, 24)
-                    ActionRow(store: store)
+                    ActionRow(store: store, onEdit: { editPresented = true })
                         .padding(.horizontal, 24)
                     StatsStrip(store: store)
                         .padding(.horizontal, 24)
@@ -65,6 +66,17 @@ struct ProfileView: View {
             .frame(maxWidth: .infinity)
         }
         .ignoresSafeArea(edges: .top)
+        .sheet(isPresented: $editPresented) {
+            EditProfileSheet(initial: store.profile) { updated in
+                store.profile = updated
+                appStore.profileCache[pubkey] = updated
+                if pubkey == appStore.currentUser?.pubkey {
+                    appStore.currentUserProfile = updated
+                }
+            }
+            .environment(appStore)
+            .presentationDetents([.large])
+        }
         .safeAreaInset(edge: .bottom) {
             if let message = store.followError {
                 Text(message)
@@ -193,10 +205,13 @@ private struct IdentityBlock: View {
 
 private struct ActionRow: View {
     let store: ProfileStore
+    let onEdit: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
-            if !store.isOwnProfile && store.viewerPubkey != nil {
+            if store.isOwnProfile {
+                editButton
+            } else if store.viewerPubkey != nil {
                 followButton
             }
             if let website = store.profile?.website, !website.isEmpty,
@@ -209,6 +224,16 @@ private struct ActionRow: View {
                 .tint(Color.highlighterAccent)
             }
         }
+    }
+
+    private var editButton: some View {
+        Button(action: onEdit) {
+            Text("Edit profile")
+                .font(.subheadline.weight(.semibold))
+                .frame(minWidth: 96)
+        }
+        .buttonStyle(.glass)
+        .tint(Color.highlighterAccent)
     }
 
     @ViewBuilder

@@ -6,9 +6,11 @@
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use serde::Deserialize;
+use serde_json::{json, Value};
 
 use crate::errors::CoreError;
 use crate::models::ProfileMetadata;
+use crate::nostr_runtime::{mirror_social_trio_to_purple, NostrRuntime};
 
 const KIND_METADATA: u16 = 0;
 
@@ -105,6 +107,125 @@ struct RawMetadata {
     nip05: Option<String>,
     website: Option<String>,
     lud16: Option<String>,
+}
+
+/// Publish a fresh kind:0 metadata event for the current user. Preserves
+/// any unknown fields the user may have set from another client (e.g.
+/// `pronouns`, `bot`, `picture_animated`) — we deserialise the existing
+/// content as a JSON object and overwrite only the canonical fields the
+/// edit form drives. Falls back to a brand-new object if no kind:0 is
+/// cached.
+///
+/// After the standard `send_event` broadcast, mirrors to
+/// `PURPLE_PAGES_RELAY` so the canonical social-trio store always has
+/// the latest revision (other Nostr clients look there for kind:0).
+/// Returns the parsed `ProfileMetadata` so the caller's UI can swap to
+/// the new state without waiting for the relay echo.
+pub async fn publish_profile(
+    runtime: &NostrRuntime,
+    name: &str,
+    display_name: &str,
+    about: &str,
+    picture: &str,
+    banner: &str,
+    nip05: &str,
+    website: &str,
+    lud16: &str,
+) -> Result<ProfileMetadata, CoreError> {
+    // Recover the current user's pubkey from the active signer so we can
+    // load their existing kind:0 from cache.
+    let client = runtime.client();
+    let signer = client
+        .signer()
+        .await
+        .map_err(|e| CoreError::Signer(format!("get signer: {e}")))?;
+    let user_pubkey = signer
+        .get_public_key()
+        .await
+        .map_err(|e| CoreError::Signer(format!("get pubkey: {e}")))?;
+
+    // Start from any existing JSON so unknown keys round-trip.
+    let mut content: Value = match query_raw_metadata_json(runtime.ndb(), &user_pubkey.to_hex())? {
+        Some(v) if v.is_object() => v,
+        _ => json!({}),
+    };
+    let obj = content
+        .as_object_mut()
+        .expect("guaranteed to be a JSON object");
+
+    set_or_clear(obj, "name", name);
+    set_or_clear(obj, "display_name", display_name);
+    set_or_clear(obj, "about", about);
+    set_or_clear(obj, "picture", picture);
+    set_or_clear(obj, "banner", banner);
+    set_or_clear(obj, "nip05", nip05);
+    set_or_clear(obj, "website", website);
+    set_or_clear(obj, "lud16", lud16);
+
+    let body = serde_json::to_string(&content)
+        .map_err(|e| CoreError::Other(format!("serialise metadata: {e}")))?;
+
+    let builder = EventBuilder::new(Kind::Custom(KIND_METADATA), body);
+    let event = client
+        .sign_event_builder(builder)
+        .await
+        .map_err(|e| CoreError::Signer(format!("sign metadata: {e}")))?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish metadata: {e}")))?;
+    mirror_social_trio_to_purple(client, &event).await;
+
+    Ok(parse_metadata(&event))
+}
+
+/// Set `key` to `value` if non-empty (after trim), otherwise remove the
+/// key entirely. Removing rather than writing `""` keeps a cleared field
+/// from re-appearing as a stale empty string on clients that just check
+/// for key presence.
+fn set_or_clear(obj: &mut serde_json::Map<String, Value>, key: &str, value: &str) {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        obj.remove(key);
+    } else {
+        obj.insert(key.to_string(), Value::String(trimmed.to_string()));
+    }
+}
+
+/// Newest cached kind:0 for `pubkey_hex`, parsed as a JSON value (so the
+/// caller can preserve unknown fields). `None` when no kind:0 is cached.
+fn query_raw_metadata_json(ndb: &Ndb, pubkey_hex: &str) -> Result<Option<Value>, CoreError> {
+    if pubkey_hex.is_empty() {
+        return Ok(None);
+    }
+    let author = PublicKey::from_hex(pubkey_hex)
+        .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
+    let txn = Transaction::new(ndb)
+        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let pk_bytes: [u8; 32] = author.to_bytes();
+    let filter = NdbFilter::new()
+        .kinds([KIND_METADATA as u64])
+        .authors([&pk_bytes])
+        .build();
+    let results = ndb
+        .query(&txn, &[filter], 16)
+        .map_err(|e| CoreError::Cache(format!("query profile: {e}")))?;
+    let mut newest: Option<Event> = None;
+    for r in &results {
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
+        let Ok(json) = note.json() else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
+        newest = Some(match newest {
+            Some(prev) if prev.created_at >= event.created_at => prev,
+            _ => event,
+        });
+    }
+    let Some(event) = newest else { return Ok(None) };
+    Ok(serde_json::from_str::<Value>(&event.content).ok())
 }
 
 #[cfg(test)]

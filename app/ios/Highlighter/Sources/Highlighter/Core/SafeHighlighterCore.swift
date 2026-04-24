@@ -148,6 +148,28 @@ actor SafeHighlighterCore {
         try await core.getUserProfile(pubkeyHex: pubkeyHex)
     }
 
+    func updateProfile(
+        name: String,
+        displayName: String,
+        about: String,
+        picture: String,
+        banner: String,
+        nip05: String,
+        website: String,
+        lud16: String
+    ) async throws -> ProfileMetadata {
+        try await core.updateProfile(
+            name: name,
+            displayName: displayName,
+            about: about,
+            picture: picture,
+            banner: banner,
+            nip05: nip05,
+            website: website,
+            lud16: lud16
+        )
+    }
+
     func getUserArticles(pubkeyHex: String, limit: UInt32 = 32) async throws -> [ArticleRecord] {
         try await core.getUserArticles(pubkeyHex: pubkeyHex, limit: limit)
     }

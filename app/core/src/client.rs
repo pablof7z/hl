@@ -567,6 +567,38 @@ impl HighlighterCore {
         profile::query_profile_from_ndb(self.runtime.ndb(), pubkey_hex.trim())
     }
 
+    /// Publish a new kind:0 metadata event for the current user. Preserves
+    /// any unknown JSON fields the user had set via other clients —
+    /// only the canonical fields the edit form drives get overwritten.
+    /// Empty strings clear the corresponding field. Returns the parsed
+    /// metadata so the caller's UI can swap to the new state without
+    /// waiting for the relay echo.
+    pub async fn update_profile(
+        &self,
+        name: String,
+        display_name: String,
+        about: String,
+        picture: String,
+        banner: String,
+        nip05: String,
+        website: String,
+        lud16: String,
+    ) -> Result<ProfileMetadata, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        profile::publish_profile(
+            &self.runtime,
+            &name,
+            &display_name,
+            &about,
+            &picture,
+            &banner,
+            &nip05,
+            &website,
+            &lud16,
+        )
+        .await
+    }
+
     pub async fn get_user_articles(
         &self,
         pubkey_hex: String,
