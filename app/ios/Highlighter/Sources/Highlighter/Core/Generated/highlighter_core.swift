@@ -3683,9 +3683,10 @@ public struct PictureDraft {
      */
     public var artifact: ArtifactRecord?
     /**
-     * NIP-29 group id this picture is being shared into.
+     * NIP-29 group id this picture is being shared into. `None` publishes the
+     * picture as a standalone event (no `h` tag, not scoped to any community).
      */
-    public var targetGroupId: String
+    public var targetGroupId: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -3701,8 +3702,9 @@ public struct PictureDraft {
          * tag is included so the picture is discoverable next to that artifact.
          */artifact: ArtifactRecord?, 
         /**
-         * NIP-29 group id this picture is being shared into.
-         */targetGroupId: String) {
+         * NIP-29 group id this picture is being shared into. `None` publishes the
+         * picture as a standalone event (no `h` tag, not scoped to any community).
+         */targetGroupId: String?) {
         self.image = image
         self.note = note
         self.artifact = artifact
@@ -3752,7 +3754,7 @@ public struct FfiConverterTypePictureDraft: FfiConverterRustBuffer {
                 image: FfiConverterTypeBlossomUpload.read(from: &buf), 
                 note: FfiConverterString.read(from: &buf), 
                 artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf), 
-                targetGroupId: FfiConverterString.read(from: &buf)
+                targetGroupId: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -3760,7 +3762,7 @@ public struct FfiConverterTypePictureDraft: FfiConverterRustBuffer {
         FfiConverterTypeBlossomUpload.write(value.image, into: &buf)
         FfiConverterString.write(value.note, into: &buf)
         FfiConverterOptionTypeArtifactRecord.write(value.artifact, into: &buf)
-        FfiConverterString.write(value.targetGroupId, into: &buf)
+        FfiConverterOptionString.write(value.targetGroupId, into: &buf)
     }
 }
 

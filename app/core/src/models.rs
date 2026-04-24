@@ -182,8 +182,9 @@ pub struct PictureDraft {
     /// Optional book/article context. When present, an `a`/`e`/`i` reference
     /// tag is included so the picture is discoverable next to that artifact.
     pub artifact: Option<ArtifactRecord>,
-    /// NIP-29 group id this picture is being shared into.
-    pub target_group_id: String,
+    /// NIP-29 group id this picture is being shared into. `None` publishes the
+    /// picture as a standalone event (no `h` tag, not scoped to any community).
+    pub target_group_id: Option<String>,
 }
 
 /// Published kind:20 picture event record returned to the client.

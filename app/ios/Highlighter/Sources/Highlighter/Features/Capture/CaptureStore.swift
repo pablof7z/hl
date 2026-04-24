@@ -70,9 +70,7 @@ final class CaptureStore {
         default:
             return false
         }
-        guard upload != nil else { return false }
-        guard let groupId = selectedGroupId, !groupId.isEmpty else { return false }
-        return true
+        return upload != nil
     }
 
     /// Entry point: user just snapped a photo. Strip metadata, kick OCR +
@@ -159,18 +157,18 @@ final class CaptureStore {
     }
 
     /// Publish the capture. If `stashedQuote` is set AND a book is picked,
-    /// goes via the highlight (kind:9802 + kind:16 repost) path; otherwise
-    /// publishes a kind:20 picture event directly.
+    /// goes via the highlight (kind:9802) path; otherwise publishes a kind:20
+    /// picture event. When `selectedGroupId` is set, the highlight is also
+    /// shared into the room via a kind:16 repost.
     ///
-    /// For a `.pending` book selection (scanned ISBN, not yet shared in the
-    /// room) the kind:11 artifact share is auto-published first so the
-    /// highlight has a valid artifact to reference. The kind:9802 also
-    /// carries a NIP-73 `i` tag pointing to the ISBN — any Nostr client can
-    /// identify the source without depending on Highlighter's kind:11.
+    /// For a `.pending` book with a room, the kind:11 artifact share is
+    /// auto-published first. Without a room, an `ArtifactRecord` is synthesised
+    /// from the preview so the highlight still carries the reference tags.
     func publish() {
-        guard let upload, let groupId = selectedGroupId else { return }
+        guard let upload else { return }
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let selection = selectedBook
+        let groupId = selectedGroupId
         let quote = stashedQuote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         // Refresh the imeta alt to reflect the current (possibly edited) OCR.
@@ -199,23 +197,39 @@ final class CaptureStore {
                         clipTranscriptSegmentIds: [],
                         image: imageWithAlt
                     )
-                    let records = try await safeCore.publishHighlightsAndShare(
-                        artifact: artifact,
-                        drafts: [draft],
-                        targetGroupId: groupId
-                    )
-                    self.phase = .done(records.first?.eventId)
+                    if let groupId {
+                        let records = try await safeCore.publishHighlightsAndShare(
+                            artifact: artifact,
+                            drafts: [draft],
+                            targetGroupId: groupId
+                        )
+                        self.phase = .done(records.first?.eventId)
+                    } else {
+                        let record = try await safeCore.publishHighlight(draft: draft, artifact: artifact)
+                        self.phase = .done(record.eventId)
+                    }
                 } else {
                     let artifactForPicture: ArtifactRecord?
                     switch selection {
                     case .existing(let record):
                         artifactForPicture = record
                     case .pending(let preview):
-                        artifactForPicture = try await safeCore.publishArtifact(
-                            preview: preview,
-                            groupId: groupId,
-                            note: nil
-                        )
+                        if let groupId {
+                            artifactForPicture = try await safeCore.publishArtifact(
+                                preview: preview,
+                                groupId: groupId,
+                                note: nil
+                            )
+                        } else {
+                            artifactForPicture = ArtifactRecord(
+                                preview: preview,
+                                groupId: "",
+                                shareEventId: "",
+                                pubkey: "",
+                                createdAt: nil,
+                                note: ""
+                            )
+                        }
                     case nil:
                         artifactForPicture = nil
                     }
@@ -234,19 +248,31 @@ final class CaptureStore {
         }
     }
 
-    /// Produce a published `ArtifactRecord` for the given selection. An
-    /// `.existing` selection returns as-is; a `.pending` selection triggers
-    /// a kind:11 artifact share and returns the resulting record.
-    private func resolveArtifact(_ selection: BookSelection, groupId: String) async throws -> ArtifactRecord {
+    /// Produce an `ArtifactRecord` for the given selection.
+    /// For `.existing`, returns as-is. For `.pending` with a group, publishes
+    /// the kind:11 artifact share first; without a group, synthesises a record
+    /// from the preview so the highlight event can carry the reference tags.
+    private func resolveArtifact(_ selection: BookSelection, groupId: String?) async throws -> ArtifactRecord {
         switch selection {
         case .existing(let record):
             return record
         case .pending(let preview):
-            return try await safeCore.publishArtifact(
-                preview: preview,
-                groupId: groupId,
-                note: nil
-            )
+            if let groupId {
+                return try await safeCore.publishArtifact(
+                    preview: preview,
+                    groupId: groupId,
+                    note: nil
+                )
+            } else {
+                return ArtifactRecord(
+                    preview: preview,
+                    groupId: "",
+                    shareEventId: "",
+                    pubkey: "",
+                    createdAt: nil,
+                    note: ""
+                )
+            }
         }
     }
 

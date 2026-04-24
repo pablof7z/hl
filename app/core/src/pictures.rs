@@ -19,17 +19,17 @@ pub async fn publish_picture(
     runtime: &NostrRuntime,
     draft: PictureDraft,
 ) -> Result<PictureRecord, CoreError> {
-    if draft.target_group_id.trim().is_empty() {
-        return Err(CoreError::InvalidInput(
-            "target_group_id must not be empty".into(),
-        ));
-    }
     if draft.image.url.trim().is_empty() {
         return Err(CoreError::InvalidInput("image must have a url".into()));
     }
+    let group_id = draft
+        .target_group_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
 
     let builder = build_picture_event(
-        &draft.target_group_id,
+        group_id,
         &draft.image,
         draft.artifact.as_ref(),
         &draft.note,
@@ -47,7 +47,7 @@ pub async fn publish_picture(
     Ok(PictureRecord {
         event_id: event.id.to_hex(),
         pubkey: event.pubkey.to_hex(),
-        group_id: draft.target_group_id.clone(),
+        group_id: group_id.unwrap_or_default().to_string(),
         note: draft.note.trim().to_string(),
         image_url: draft.image.url.clone(),
         image_sha256: draft.image.sha256_hex.clone(),
@@ -62,13 +62,15 @@ pub async fn publish_picture(
 
 /// Pure builder for the `kind:20` event. Unit-testable.
 fn build_picture_event(
-    group_id: &str,
+    group_id: Option<&str>,
     image: &BlossomUpload,
     artifact: Option<&ArtifactRecord>,
     note: &str,
 ) -> Result<EventBuilder, CoreError> {
     let mut tags: Vec<Tag> = Vec::new();
-    tags.push(parse_tag(&["h", group_id])?);
+    if let Some(gid) = group_id {
+        tags.push(parse_tag(&["h", gid])?);
+    }
     tags.push(build_imeta_tag(image)?);
 
     if let Some(artifact) = artifact {
@@ -161,7 +163,7 @@ mod tests {
 
     #[test]
     fn picture_event_kind_is_20() {
-        let builder = build_picture_event("group-a", &sample_image(), None, "")
+        let builder = build_picture_event(Some("group-a"), &sample_image(), None, "")
             .expect("build picture event");
         let event = builder.sign_with_keys(&Keys::generate()).expect("sign");
         assert_eq!(event.kind, Kind::Custom(20));
@@ -169,7 +171,7 @@ mod tests {
 
     #[test]
     fn picture_event_has_h_and_imeta() {
-        let builder = build_picture_event("group-a", &sample_image(), None, "hello")
+        let builder = build_picture_event(Some("group-a"), &sample_image(), None, "hello")
             .expect("build");
         let tags = tag_pairs(&builder);
 
@@ -193,7 +195,7 @@ mod tests {
     #[test]
     fn picture_event_includes_artifact_reference_when_provided() {
         let artifact = sample_artifact();
-        let builder = build_picture_event("group-a", &sample_image(), Some(&artifact), "")
+        let builder = build_picture_event(Some("group-a"), &sample_image(), Some(&artifact), "")
             .expect("build");
         let tags = tag_pairs(&builder);
         assert!(
@@ -205,7 +207,7 @@ mod tests {
 
     #[test]
     fn picture_event_omits_artifact_reference_when_none() {
-        let builder = build_picture_event("group-a", &sample_image(), None, "")
+        let builder = build_picture_event(Some("group-a"), &sample_image(), None, "")
             .expect("build");
         let tags = tag_pairs(&builder);
         assert!(
@@ -221,7 +223,7 @@ mod tests {
 
     #[test]
     fn picture_event_content_is_trimmed_note() {
-        let builder = build_picture_event("group-a", &sample_image(), None, "  hi  ")
+        let builder = build_picture_event(Some("group-a"), &sample_image(), None, "  hi  ")
             .expect("build");
         let event = builder.sign_with_keys(&Keys::generate()).expect("sign");
         assert_eq!(event.content, "hi");

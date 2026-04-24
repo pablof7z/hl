@@ -173,7 +173,7 @@ struct CapturePageView: View {
             pickerRow(
                 label: "Room",
                 value: communityName,
-                placeholder: "Required",
+                placeholder: "Optional",
                 icon: "number",
                 action: { showCommunityPicker = true }
             )
