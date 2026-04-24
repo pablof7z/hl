@@ -32,7 +32,7 @@ struct RoomHomeView: View {
                 DiscussionListView(groupId: groupId, composerPresented: $composerPresented)
             }
         }
-        .navigationTitle("Community")
+        .navigationTitle(communityName)
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: ArtifactRecord.self) { artifact in
             ArtifactDetailView(artifact: artifact)
@@ -70,5 +70,11 @@ struct RoomHomeView: View {
                 shareTarget = .artifact(artifact)
             }
         )
+    }
+
+    private var communityName: String {
+        let match = app.joinedCommunities.first { $0.id == groupId }
+        if let name = match?.name, !name.isEmpty { return name }
+        return "Community"
     }
 }
