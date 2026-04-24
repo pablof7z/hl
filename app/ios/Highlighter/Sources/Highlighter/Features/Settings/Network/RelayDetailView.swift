@@ -67,18 +67,35 @@ struct RelayDetailView: View {
         store.diagnostic(for: url)
     }
 
+    private var nip11: Nip11Document? { store.nip11(for: url) }
+
     @ViewBuilder
     private var headerSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(url)
-                    .font(.subheadline.monospaced())
-                    .lineLimit(2)
-                    .truncationMode(.middle)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    RelayAvatar(url: url, nip11: nip11, size: 52)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let name = nip11?.name?.trimmingCharacters(in: .whitespaces), !name.isEmpty {
+                            Text(name).font(.title3.weight(.semibold))
+                        }
+                        Text(url)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                        if let desc = nip11?.description?.trimmingCharacters(in: .whitespaces), !desc.isEmpty {
+                            Text(desc)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
+                                .padding(.top, 2)
+                        }
+                    }
+                }
                 HStack(spacing: 8) {
                     stateDot
-                    Text(stateLabel)
-                        .font(.headline)
+                    Text(stateLabel).font(.subheadline.weight(.medium))
                     Spacer()
                     if let rtt = diagnostic?.rttMs {
                         Text("\(rtt) ms")

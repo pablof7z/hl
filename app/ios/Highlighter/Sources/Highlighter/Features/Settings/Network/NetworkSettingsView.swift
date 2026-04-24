@@ -124,7 +124,8 @@ struct NetworkSettingsView: View {
                 } label: {
                     RelayRowView(
                         config: row,
-                        diagnostic: store.diagnostic(for: row.url)
+                        diagnostic: store.diagnostic(for: row.url),
+                        nip11: store.nip11(for: row.url)
                     )
                 }
             }

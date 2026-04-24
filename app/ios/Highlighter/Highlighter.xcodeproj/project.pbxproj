@@ -85,6 +85,7 @@
 		AD3629A5F34E17645EF8379D /* HighlightsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3B8A708737A4654FD0077C2 /* HighlightsStore.swift */; };
 		AEA757BDF87E8C48FF89B914 /* KnownSigner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 034E108E2850823E1CD1BAB4 /* KnownSigner.swift */; };
 		B19C2494E09CB73EF3A00AAA /* DiscussionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A232DA7DFDD08CEBA3B00FA /* DiscussionStore.swift */; };
+		B1CEB4099BE870E77685AB39 /* ArticleRowActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DE5E60FD0F0D0277E9EF990 /* ArticleRowActions.swift */; };
 		B45D5980FB6425CD084236EF /* highlighter_core.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77023F72997D85E61B44EEF8 /* highlighter_core.swift */; };
 		B69634EC95098A04B2088F4B /* FeedbackStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55790648D01DD1D35943CDF8 /* FeedbackStore.swift */; };
 		B8C0FB14BB5219154785FB45 /* OCRStructureReconstructor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1082315DE0FF2734F453EDDF /* OCRStructureReconstructor.swift */; };
@@ -210,6 +211,7 @@
 		7AE7500C044361E86AE1DA14 /* RoomLanesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomLanesView.swift; sourceTree = "<group>"; };
 		7AE754199FB68850F53FC6F3 /* PodcastLaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastLaneView.swift; sourceTree = "<group>"; };
 		7C2D225FA375DBAA3BDD6E14 /* CaptureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureStore.swift; sourceTree = "<group>"; };
+		7DE5E60FD0F0D0277E9EF990 /* ArticleRowActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleRowActions.swift; sourceTree = "<group>"; };
 		8186C68BFC13E0B1D3294117 /* ClipTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipTimelineView.swift; sourceTree = "<group>"; };
 		84B71B7545C83F89B94734AF /* ShareQueueProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareQueueProcessor.swift; sourceTree = "<group>"; };
 		881E7AA3D647FCE1B03FB463 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -310,6 +312,7 @@
 				F206D49B13185CCF92155DF4 /* ArticleBodyView.swift */,
 				C9E2771D8440F9E7827D2DF7 /* ArticleReaderStore.swift */,
 				B5B02F4E550EB515EF977948 /* ArticleReaderView.swift */,
+				7DE5E60FD0F0D0277E9EF990 /* ArticleRowActions.swift */,
 				A623EEA6EB4F2D39A64701F7 /* FootnotePreprocessor.swift */,
 				30929C05472617D818D66641 /* MarkdownRenderer.swift */,
 			);
@@ -751,6 +754,7 @@
 				705C9F009B95F4AC2A0A5E07 /* ArticleLaneView.swift in Sources */,
 				73DE8B4F1ACA88BE11DE1CFA /* ArticleReaderStore.swift in Sources */,
 				8C5DFBA1B45CA93EEC5B75F8 /* ArticleReaderView.swift in Sources */,
+				B1CEB4099BE870E77685AB39 /* ArticleRowActions.swift in Sources */,
 				6939524B0E9202DFDA984416 /* ArtifactDetailView.swift in Sources */,
 				9FB49584EE11ABBB0474EBF3 /* ArtifactPreviewBuilder.swift in Sources */,
 				F4BB417D04CB238F9D18B078 /* AuthorAvatar.swift in Sources */,

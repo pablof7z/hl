@@ -789,6 +789,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getBlossomServers() async throws  -> [String]
     
     /**
+     * Return the set of article addresses the user has bookmarked in their
+     * newest kind:10003 list (empty when not logged in or no list cached).
+     */
+    func getBookmarkedArticleAddresses() async throws  -> [String]
+    
+    /**
      * Size + event-count snapshot of the local nostrdb cache. Order-of-
      * magnitude figures used by the Network Settings "Local cache" card.
      */
@@ -926,6 +932,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * kind:10063. Called once after login; no-op when the list already exists.
      */
     func initDefaultBlossomServers() async throws 
+    
+    /**
+     * Read-only predicate: is `address` currently bookmarked for the logged-in
+     * user? Always `false` when no user is logged in.
+     */
+    func isArticleBookmarked(address: String) async throws  -> Bool
     
     /**
      * Returns true if the logged-in user's cached contact list currently
@@ -1089,6 +1101,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func subscribeArticleSearch(query: String) async throws  -> UInt64
     
     /**
+     * Open a live subscription on the current user's kind:10003 bookmark
+     * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
+     * Swift bookmarks store re-queries on each.
+     */
+    func subscribeBookmarks() async throws  -> UInt64
+    
+    /**
      * Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
      * deltas for every kind:1 `e`-tagged to the root (regardless of author).
      */
@@ -1161,6 +1180,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Vault view-scope subscription for the current user's own highlights.
      */
     func subscribeVault() async throws  -> UInt64
+    
+    /**
+     * Toggle `address` in the user's kind:10003 list. Returns the new
+     * membership state — `true` if the address is now bookmarked, `false`
+     * if it was removed.
+     */
+    func toggleArticleBookmark(address: String) async throws  -> Bool
     
     /**
      * Drop a subscription by handle. Idempotent.
@@ -1423,6 +1449,27 @@ open func getBlossomServers()async throws  -> [String]  {
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_blossom_servers(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Return the set of article addresses the user has bookmarked in their
+     * newest kind:10003 list (empty when not logged in or no list cached).
+     */
+open func getBookmarkedArticleAddresses()async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_bookmarked_article_addresses(
                     self.uniffiClonePointer()
                     
                 )
@@ -1960,6 +2007,27 @@ open func initDefaultBlossomServers()async throws   {
             completeFunc: ffi_highlighter_core_rust_future_complete_void,
             freeFunc: ffi_highlighter_core_rust_future_free_void,
             liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Read-only predicate: is `address` currently bookmarked for the logged-in
+     * user? Always `false` when no user is logged in.
+     */
+open func isArticleBookmarked(address: String)async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_is_article_bookmarked(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(address)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
+            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
+            freeFunc: ffi_highlighter_core_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -2562,6 +2630,28 @@ open func subscribeArticleSearch(query: String)async throws  -> UInt64  {
 }
     
     /**
+     * Open a live subscription on the current user's kind:10003 bookmark
+     * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
+     * Swift bookmarks store re-queries on each.
+     */
+open func subscribeBookmarks()async throws  -> UInt64  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_subscribe_bookmarks(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
+            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
+            freeFunc: ffi_highlighter_core_rust_future_free_u64,
+            liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
      * deltas for every kind:1 `e`-tagged to the root (regardless of author).
      */
@@ -2781,6 +2871,28 @@ open func subscribeVault()async throws  -> UInt64  {
             completeFunc: ffi_highlighter_core_rust_future_complete_u64,
             freeFunc: ffi_highlighter_core_rust_future_free_u64,
             liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Toggle `address` in the user's kind:10003 list. Returns the new
+     * membership state — `true` if the address is now bookmarked, `false`
+     * if it was removed.
+     */
+open func toggleArticleBookmark(address: String)async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_toggle_article_bookmark(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(address)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
+            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
+            freeFunc: ffi_highlighter_core_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -4886,10 +4998,19 @@ public struct Nip11Document {
     public var software: String?
     public var version: String?
     public var supportedNips: [UInt32]
+    /**
+     * URL of the relay's icon / avatar (NIP-11 `icon`). Typically an
+     * https:// URL the Swift side can hand to Kingfisher.
+     */
+    public var icon: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(url: String, name: String?, description: String?, pubkey: String?, contact: String?, software: String?, version: String?, supportedNips: [UInt32]) {
+    public init(url: String, name: String?, description: String?, pubkey: String?, contact: String?, software: String?, version: String?, supportedNips: [UInt32], 
+        /**
+         * URL of the relay's icon / avatar (NIP-11 `icon`). Typically an
+         * https:// URL the Swift side can hand to Kingfisher.
+         */icon: String?) {
         self.url = url
         self.name = name
         self.description = description
@@ -4898,6 +5019,7 @@ public struct Nip11Document {
         self.software = software
         self.version = version
         self.supportedNips = supportedNips
+        self.icon = icon
     }
 }
 
@@ -4932,6 +5054,9 @@ extension Nip11Document: Equatable, Hashable {
         if lhs.supportedNips != rhs.supportedNips {
             return false
         }
+        if lhs.icon != rhs.icon {
+            return false
+        }
         return true
     }
 
@@ -4944,6 +5069,7 @@ extension Nip11Document: Equatable, Hashable {
         hasher.combine(software)
         hasher.combine(version)
         hasher.combine(supportedNips)
+        hasher.combine(icon)
     }
 }
 
@@ -4963,7 +5089,8 @@ public struct FfiConverterTypeNip11Document: FfiConverterRustBuffer {
                 contact: FfiConverterOptionString.read(from: &buf), 
                 software: FfiConverterOptionString.read(from: &buf), 
                 version: FfiConverterOptionString.read(from: &buf), 
-                supportedNips: FfiConverterSequenceUInt32.read(from: &buf)
+                supportedNips: FfiConverterSequenceUInt32.read(from: &buf), 
+                icon: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -4976,6 +5103,7 @@ public struct FfiConverterTypeNip11Document: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.software, into: &buf)
         FfiConverterOptionString.write(value.version, into: &buf)
         FfiConverterSequenceUInt32.write(value.supportedNips, into: &buf)
+        FfiConverterOptionString.write(value.icon, into: &buf)
     }
 }
 
@@ -6139,6 +6267,13 @@ public enum DataChangeType {
     case searchArticlesUpdated(query: String
     )
     /**
+     * The current user's NIP-51 kind:10003 bookmark list was updated
+     * (either by us via `toggle_bookmark` or by another client relaying a
+     * newer event). App-scope delta — Swift re-queries the authoritative
+     * list from nostrdb.
+     */
+    case bookmarksUpdated
+    /**
      * NIP-46 signer connected — fires after a remote signer completes the
      * `nostrconnect://` or `bunker://` handshake.
      */
@@ -6214,13 +6349,15 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         case 14: return .searchArticlesUpdated(query: try FfiConverterString.read(from: &buf)
         )
         
-        case 15: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
+        case 15: return .bookmarksUpdated
+        
+        case 16: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
         )
         
-        case 16: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
+        case 17: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
         )
         
-        case 17: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
+        case 18: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -6305,18 +6442,22 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             FfiConverterString.write(query, into: &buf)
             
         
-        case let .signerConnected(user):
+        case .bookmarksUpdated:
             writeInt(&buf, Int32(15))
+        
+        
+        case let .signerConnected(user):
+            writeInt(&buf, Int32(16))
             FfiConverterTypeCurrentUser.write(user, into: &buf)
             
         
         case let .bunkerSignRequest(requestId):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(17))
             FfiConverterString.write(requestId, into: &buf)
             
         
         case let .relayStatusChanged(url,state):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(18))
             FfiConverterString.write(url, into: &buf)
             FfiConverterTypeRelayStatus.write(state, into: &buf)
             
@@ -7457,6 +7598,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_servers() != 32428) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmarked_article_addresses() != 53917) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 48741) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7533,6 +7677,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 35163) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_is_article_bookmarked() != 11256) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_following() != 22885) {
@@ -7628,6 +7775,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article_search() != 39992) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmarks() != 41073) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_thread() != 19940) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7656,6 +7806,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_vault() != 26608) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark() != 6523) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_unsubscribe() != 55013) {

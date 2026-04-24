@@ -381,6 +381,9 @@ pub struct Nip11Document {
     pub software: Option<String>,
     pub version: Option<String>,
     pub supported_nips: Vec<u32>,
+    /// URL of the relay's icon / avatar (NIP-11 `icon`). Typically an
+    /// https:// URL the Swift side can hand to Kingfisher.
+    pub icon: Option<String>,
 }
 
 /// Local nostrdb cache statistics. Rough — `disk_bytes` is the sum of file

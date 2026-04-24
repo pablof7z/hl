@@ -84,6 +84,7 @@ pub async fn probe_nip11(relay_url: &str) -> Result<Nip11Document, CoreError> {
                 .collect()
         })
         .unwrap_or_default();
+    let icon = json.get("icon").and_then(|v| v.as_str()).map(str::to_string);
 
     Ok(Nip11Document {
         url: relay_url.trim().to_string(),
@@ -94,6 +95,7 @@ pub async fn probe_nip11(relay_url: &str) -> Result<Nip11Document, CoreError> {
         software,
         version,
         supported_nips,
+        icon,
     })
 }
 

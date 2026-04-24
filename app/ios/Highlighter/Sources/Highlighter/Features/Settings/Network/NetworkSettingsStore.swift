@@ -20,6 +20,7 @@ private let wifiOnlyDefaultsKey = "hl.network.wifiOnly"
 final class NetworkSettingsStore {
     var relays: [RelayConfig] = []
     var diagnostics: [String: RelayDiagnostic] = [:]
+    var nip11ByUrl: [String: Nip11Document] = [:]
     var cacheStats: CacheStats?
     var isLoading: Bool = true
     var lastError: String?
@@ -28,6 +29,7 @@ final class NetworkSettingsStore {
     @ObservationIgnored private let core: SafeHighlighterCore
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     @ObservationIgnored private var pathMonitor: NWPathMonitor?
+    @ObservationIgnored private var inFlightNip11: Set<String> = []
 
     init(core: SafeHighlighterCore) {
         self.core = core
@@ -36,6 +38,12 @@ final class NetworkSettingsStore {
     /// Index diagnostics by URL for O(1) lookup from row views.
     func diagnostic(for url: String) -> RelayDiagnostic? {
         diagnostics[url]
+    }
+
+    /// Cached NIP-11 document for a relay, or `nil` if not yet fetched / the
+    /// relay doesn't serve one.
+    func nip11(for url: String) -> Nip11Document? {
+        nip11ByUrl[url]
     }
 
     /// Number of relays currently reporting `Connected`. Used for the header
@@ -102,6 +110,20 @@ final class NetworkSettingsStore {
             lastError = String(describing: error)
         }
         isLoading = false
+        // Fire-and-forget NIP-11 probes for every relay we don't already
+        // have cached. Each probe updates `nip11ByUrl` as it resolves, so
+        // the rows progressively fill in their icons and names. Fails are
+        // silent — a row without a NIP-11 doc just keeps its URL fallback.
+        for row in relays where nip11ByUrl[row.url] == nil && !inFlightNip11.contains(row.url) {
+            inFlightNip11.insert(row.url)
+            let core = self.core
+            let url = row.url
+            Task { [weak self] in
+                defer { Task { @MainActor [weak self] in self?.inFlightNip11.remove(url) } }
+                guard let doc = try? await core.probeRelayNip11(url) else { return }
+                await MainActor.run { self?.nip11ByUrl[url] = doc }
+            }
+        }
     }
 
     func startLiveUpdates() {
