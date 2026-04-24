@@ -32,7 +32,7 @@ use crate::models::{RelayDiagnostic, RelayStatus as AppRelayStatus};
 /// enumerate the NIP-29 groups they're a member of; each entry is a
 /// `group` tag with the group id and relay.
 const KIND_SIMPLE_GROUPS_LIST: u16 = 10009;
-use crate::relays::{query_relays, seed_defaults, RelayConfig};
+use crate::relays::{query_relays, seed_defaults, RelayConfig, NEGENTROPY_SYNC_RELAYS};
 
 /// Shared pointer to the app's event-callback slot. `HighlighterCore` owns
 /// the slot; `NostrRuntime`'s diagnostics poller borrows it (via this type
@@ -277,6 +277,57 @@ impl NostrRuntime {
             subscribe_routed(&client, id_clone, filter, urls, "rooms/all-rooms").await;
         });
         id
+    }
+
+    /// Negentropy-sync the social trio (kind:0 metadata, kind:3 contacts,
+    /// kind:10002 relay lists) for `authors` against the relays in
+    /// `NEGENTROPY_SYNC_RELAYS`. Cheap cold-start backfill — on a
+    /// re-login the relay sends only the events we're missing, vs. REQ
+    /// which has to resend the full set (and is bound by the relay's
+    /// `max_limit`, capping us at 500 events per query against most
+    /// strfry deployments).
+    ///
+    /// Fire-and-forget. Events received during reconciliation land in
+    /// nostrdb via the `NdbDatabase` bridge wired into the Client, so
+    /// the outbox planner picks them up on its next compute. Sync runs
+    /// in parallel against each relay; the per-relay timeout is short
+    /// so a non-NIP-77 relay in the list can't block the others.
+    /// No-op when `authors` is empty.
+    pub fn spawn_negentropy_sync_for_follows(&self, authors: Vec<PublicKey>) {
+        if authors.is_empty() {
+            return;
+        }
+        for relay in NEGENTROPY_SYNC_RELAYS {
+            let client = self.client.clone();
+            let count = authors.len();
+            let authors = authors.clone();
+            let relay = (*relay).to_string();
+            self.rt().spawn(async move {
+                pin_relay_for_read(&client, &relay).await;
+
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(0), Kind::Custom(3), Kind::Custom(10002)])
+                    .authors(authors);
+                let opts = SyncOptions::default().direction(SyncDirection::Down);
+
+                match client.sync_with([&relay], filter, &opts).await {
+                    Ok(output) => {
+                        let recon = &output.val;
+                        tracing::info!(
+                            relay = %relay,
+                            authors = count,
+                            local = recon.local.len(),
+                            remote = recon.remote.len(),
+                            received = recon.received.len(),
+                            "negentropy sync complete"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(relay = %relay, authors = count, error = %e, "negentropy sync failed");
+                    }
+                }
+            });
+        }
     }
 
     /// Backfill follows' kind:10002 (NIP-65 relay lists) from the indexer

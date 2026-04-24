@@ -23,6 +23,17 @@ use crate::nostr_runtime::NostrRuntime;
 
 pub const HIGHLIGHTER_RELAY: &str = "wss://relay.highlighter.com";
 
+/// Relays we run NIP-77 negentropy sync against for the cold-start
+/// backfill of follows' kind:0/3/10002 (the "social trio"). The premise
+/// for using purplepag.es here was wrong — it specialises in those kinds
+/// but doesn't currently advertise or implement NIP-77 (its NIP-11
+/// supported_nips list omits 77, and `examples/purple_sync_bench.rs`
+/// confirms negentropy times out against it). relay.damus.io (strfry)
+/// works and, crucially, isn't bound by purple's `max_limit=500` cap on
+/// REQ — negentropy returned 1794 events vs REQ's 500 for a 1052-follow
+/// query. Keep this list short; sync runs in parallel against each.
+pub const NEGENTROPY_SYNC_RELAYS: &[&str] = &["wss://relay.damus.io"];
+
 /// Relay used for outgoing `nostrconnect://` pairing. Matches Olas's choice —
 /// Primal's bunker relay is the lowest-friction option because it's what
 /// Primal's built-in signer expects.

@@ -99,7 +99,16 @@ impl HighlighterCore {
             // home-feed planner has data to work with. Empty on first login
             // (no kind:3 cached yet) — `subscribe_following_*` will re-arm
             // this whenever it's called, picking up follows discovered since.
+            //
+            // Also kick off a NIP-77 negentropy sync against purplepag.es
+            // for the social trio (kind:0/3/10002) of the same set. Live
+            // subscriptions catch incremental updates; negentropy sync is
+            // the cheap cold-start path that closes the "no kind:10002
+            // cached" gap so the planner stops dumping authors into the
+            // fallback shard.
             let cached_follows = current_followed_pubkeys(self.runtime.ndb(), &pubkey);
+            self.runtime
+                .spawn_negentropy_sync_for_follows(cached_follows.clone());
             let follows_nip65_id = self
                 .runtime
                 .spawn_follows_relay_lists_subscription(cached_follows);
@@ -1447,13 +1456,17 @@ impl HighlighterCore {
     }
 
     /// Drop the previous follows-NIP-65 sub (if any) and install a new one
-    /// covering `follows`. No-op when `follows` is empty. Called whenever
-    /// the home-feed subs are (re)installed so freshly-discovered follows
-    /// get their relay lists fetched without waiting for the next login.
+    /// covering `follows`. Also fires a fresh purplepag.es negentropy sync
+    /// for kind:0/3/10002 — cheap when most events are already cached
+    /// (negentropy only ships the deltas) and the right thing to do when
+    /// the follow set may have grown since last call. No-op when `follows`
+    /// is empty.
     fn refresh_follows_nip65_subscription(&self, follows: &[PublicKey]) {
         if follows.is_empty() {
             return;
         }
+        self.runtime
+            .spawn_negentropy_sync_for_follows(follows.to_vec());
         let new_id = match self
             .runtime
             .spawn_follows_relay_lists_subscription(follows.to_vec())
