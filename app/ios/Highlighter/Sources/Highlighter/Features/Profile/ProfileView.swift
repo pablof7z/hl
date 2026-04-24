@@ -85,6 +85,8 @@ struct ProfileView: View {
 private struct HeroBanner: View {
     let bannerURL: String
 
+    @State private var showFullScreen = false
+
     var body: some View {
         GeometryReader { geo in
             Group {
@@ -95,6 +97,7 @@ private struct HeroBanner: View {
                             image
                                 .resizable()
                                 .scaledToFill()
+                                .onTapGesture { showFullScreen = true }
                         default:
                             fallback
                         }
@@ -107,6 +110,9 @@ private struct HeroBanner: View {
             .clipped()
         }
         .frame(height: bannerHeight)
+        .fullScreenCover(isPresented: $showFullScreen) {
+            BannerZoomView(url: URL(string: bannerURL), onDismiss: { showFullScreen = false })
+        }
     }
 
     private var bannerHeight: CGFloat { 160 }
@@ -414,5 +420,55 @@ private struct TabContent: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 48)
+    }
+}
+
+// MARK: - Banner full-screen viewer
+
+private struct BannerZoomView: View {
+    let url: URL?
+    let onDismiss: () -> Void
+
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if let url {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img
+                            .resizable()
+                            .scaledToFit()
+                            .scaleEffect(scale)
+                            .gesture(
+                                MagnificationGesture()
+                                    .onChanged { value in
+                                        scale = max(1, min(5, lastScale * value))
+                                    }
+                                    .onEnded { _ in lastScale = scale }
+                            )
+                    default:
+                        ProgressView().tint(.white)
+                    }
+                }
+            }
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(12)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .padding()
+                }
+                Spacer()
+            }
+        }
     }
 }
