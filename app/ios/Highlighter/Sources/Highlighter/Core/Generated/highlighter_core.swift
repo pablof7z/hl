@@ -1071,7 +1071,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     
     /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
-     * appends a new one, then re-publishes kind:10002 + kind:30078.
+     * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
+     * the live relay pool so the change takes effect immediately.
      */
     func upsertRelay(cfg: RelayConfig) async throws 
     
@@ -2359,7 +2360,8 @@ open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, 
     
     /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
-     * appends a new one, then re-publishes kind:10002 + kind:30078.
+     * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
+     * the live relay pool so the change takes effect immediately.
      */
 open func upsertRelay(cfg: RelayConfig)async throws   {
     return
@@ -6431,7 +6433,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 51840) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 52902) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 60842) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_constructor_highlightercore_new() != 37739) {

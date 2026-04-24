@@ -13,6 +13,7 @@
 //! relays and installing signers. The Client itself is thread-safe and
 //! cloneable internally.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -28,7 +29,7 @@ use crate::groups::{KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA};
 /// enumerate the NIP-29 groups they're a member of; each entry is a
 /// `group` tag with the group id and relay.
 const KIND_SIMPLE_GROUPS_LIST: u16 = 10009;
-use crate::relays::DEFAULT_RELAYS;
+use crate::relays::{query_relays, seed_defaults, RelayConfig};
 
 /// LMDB map size for the iOS cache. 2 GiB gives plenty of headroom for a
 /// highlights/artifacts cache while staying well below iOS's per-app storage
@@ -339,15 +340,129 @@ impl NostrRuntime {
     }
 
     fn spawn_connect(&self) {
+        // No user logged in yet at runtime construction, so reconcile to the
+        // starting seed set. `spawn_apply_relay_config` with the user's
+        // stored `RelayConfig` is called separately from the login path.
+        self.spawn_apply_relay_config(seed_defaults());
+    }
+
+    /// Reconcile the client's relay pool with `rows`. Adds any URLs not yet
+    /// in the pool, removes URLs no longer desired, and updates per-relay
+    /// `RelayServiceFlags` in place for the ones that remain. Fire-and-
+    /// forget; logs on failure.
+    ///
+    /// PR 2 scope: sets READ/WRITE based on the NIP-65 meaning of each row,
+    /// with the relaxation that relays carrying only `rooms` or `indexer`
+    /// still get the READ flag so current subscriptions continue to work.
+    /// PR 3 swaps that global-pool behavior for per-role subscription
+    /// targeting and removes the relaxation.
+    pub fn spawn_apply_relay_config(&self, rows: Vec<RelayConfig>) {
         let client = self.client.clone();
         self.rt().spawn(async move {
-            for url in DEFAULT_RELAYS {
-                if let Err(e) = client.add_relay(*url).await {
-                    tracing::warn!(relay = %url, error = %e, "failed to add relay");
-                }
-            }
+            apply_relay_config(&client, &rows).await;
             client.connect().await;
         });
+    }
+
+    /// Convenience: load the user's persisted `RelayConfig` from nostrdb and
+    /// reconcile the pool. Called after login succeeds. Falls back to
+    /// `seed_defaults()` if no kind:10002 / kind:30078 is cached yet.
+    pub fn spawn_apply_user_relay_config(&self, user_hex: String) {
+        let client = self.client.clone();
+        let ndb = self.ndb.clone();
+        self.rt().spawn(async move {
+            let rows = match query_relays(&ndb, &user_hex) {
+                Ok(rows) => rows,
+                Err(e) => {
+                    tracing::warn!(error = %e, "load relay config on login; using seed");
+                    seed_defaults()
+                }
+            };
+            apply_relay_config(&client, &rows).await;
+            client.connect().await;
+        });
+    }
+}
+
+/// Target `RelayServiceFlags` for a config row. `PING` is always on for
+/// keep-alive; `READ` is set whenever the row is declared to receive events
+/// for *any* reason (NIP-65 read, NIP-29 rooms, or indexer lookups) so
+/// sub-routing that ignores the Highlighter-specific flags keeps working
+/// until PR 3 introduces per-role subscription targeting. `WRITE` is only
+/// set for rows the user has declared as outbox.
+fn target_flags(row: &RelayConfig) -> RelayServiceFlags {
+    let mut flags = RelayServiceFlags::PING;
+    if row.read || row.rooms || row.indexer {
+        flags |= RelayServiceFlags::READ;
+    }
+    if row.write {
+        flags |= RelayServiceFlags::WRITE;
+    }
+    flags
+}
+
+/// Diff-and-apply the client's relay pool to match `rows`. Public for
+/// tests; feature callers use `NostrRuntime::spawn_apply_relay_config` /
+/// `spawn_apply_user_relay_config` which also kick off a connect.
+pub async fn apply_relay_config(client: &Client, rows: &[RelayConfig]) {
+    let desired: HashSet<String> = rows.iter().map(|r| r.url.trim().to_string()).collect();
+    let current = client.relays().await;
+
+    // Drop relays that are no longer desired. `force_remove_relay` ignores
+    // the GOSSIP flag — we don't enable gossip, so there's nothing to
+    // protect here, and this gives clean removal semantics.
+    let stale: Vec<RelayUrl> = current
+        .keys()
+        .filter(|u| !desired.contains(&u.to_string()))
+        .cloned()
+        .collect();
+    for url in stale {
+        if let Err(e) = client.force_remove_relay(url.clone()).await {
+            tracing::warn!(relay = %url, error = %e, "force_remove_relay");
+        }
+    }
+
+    // Add-or-update the desired set.
+    for row in rows {
+        let url = row.url.trim();
+        if url.is_empty() {
+            continue;
+        }
+        let target = target_flags(row);
+
+        // Existing → update flags in place.
+        if let Some(relay) = current
+            .iter()
+            .find(|(u, _)| u.to_string() == url)
+            .map(|(_, r)| r)
+        {
+            let flags = relay.flags();
+            flags.remove(
+                RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING,
+            );
+            flags.add(target);
+            continue;
+        }
+
+        // New → add then reset flags to the precise target. `add_relay` ORs
+        // the default `READ|WRITE|PING` into whatever's there, so we do a
+        // post-add flag reset to match config exactly.
+        if let Err(e) = client.add_relay(url).await {
+            tracing::warn!(relay = %url, error = %e, "add_relay");
+            continue;
+        }
+        let refreshed = client.relays().await;
+        if let Some(relay) = refreshed
+            .iter()
+            .find(|(u, _)| u.to_string() == url)
+            .map(|(_, r)| r)
+        {
+            let flags = relay.flags();
+            flags.remove(
+                RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING,
+            );
+            flags.add(target);
+        }
     }
 }
 
@@ -402,5 +517,167 @@ mod tests {
         let keys = Keys::generate();
         runtime.set_signer(keys);
         runtime.unset_signer();
+    }
+
+    fn flag_has(flags: RelayServiceFlags, required: RelayServiceFlags) -> bool {
+        AtomicRelayServiceFlags::new(flags).has_all(required)
+    }
+
+    #[test]
+    fn target_flags_read_only_row() {
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: true,
+            write: false,
+            rooms: false,
+            indexer: false,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(flags, RelayServiceFlags::READ));
+        assert!(flag_has(flags, RelayServiceFlags::PING));
+        assert!(!flag_has(flags, RelayServiceFlags::WRITE));
+    }
+
+    #[test]
+    fn target_flags_write_only_row() {
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: false,
+            write: true,
+            rooms: false,
+            indexer: false,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(flags, RelayServiceFlags::WRITE));
+        assert!(flag_has(flags, RelayServiceFlags::PING));
+        assert!(!flag_has(flags, RelayServiceFlags::READ));
+    }
+
+    #[test]
+    fn target_flags_rooms_only_row_gets_read() {
+        // Rooms-only — PR 2 grants READ for now so current subscriptions
+        // keep working until PR 3 adds per-role subscription targeting.
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: false,
+            write: false,
+            rooms: true,
+            indexer: false,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(flags, RelayServiceFlags::READ));
+        assert!(flag_has(flags, RelayServiceFlags::PING));
+        assert!(!flag_has(flags, RelayServiceFlags::WRITE));
+    }
+
+    #[test]
+    fn target_flags_indexer_only_row_gets_read() {
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: false,
+            write: false,
+            rooms: false,
+            indexer: true,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(flags, RelayServiceFlags::READ));
+        assert!(flag_has(flags, RelayServiceFlags::PING));
+        assert!(!flag_has(flags, RelayServiceFlags::WRITE));
+    }
+
+    #[test]
+    fn target_flags_row_with_no_roles_is_ping_only() {
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: false,
+            write: false,
+            rooms: false,
+            indexer: false,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(flags, RelayServiceFlags::PING));
+        assert!(!flag_has(flags, RelayServiceFlags::READ));
+        assert!(!flag_has(flags, RelayServiceFlags::WRITE));
+    }
+
+    #[test]
+    fn target_flags_full_row() {
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: true,
+            write: true,
+            rooms: true,
+            indexer: true,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(
+            flags,
+            RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING
+        ));
+    }
+
+    /// Uses a bare `Client` to isolate `apply_relay_config` from the boot
+    /// reconcile that `NostrRuntime::with_data_dir` spawns. Otherwise the
+    /// seed-defaults reconcile races with the test's direct reconcile call.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn apply_relay_config_adds_removes_and_updates_flags() {
+        let client = Client::builder().build();
+
+        let initial = vec![
+            RelayConfig {
+                url: "wss://one.example".into(),
+                read: true,
+                write: true,
+                rooms: false,
+                indexer: false,
+            },
+            RelayConfig {
+                url: "wss://two.example".into(),
+                read: true,
+                write: false,
+                rooms: false,
+                indexer: false,
+            },
+        ];
+        apply_relay_config(&client, &initial).await;
+
+        let after = client.relays().await;
+        assert_eq!(after.len(), 2, "pool should have exactly the two configured relays");
+
+        let one = after
+            .iter()
+            .find(|(u, _)| u.to_string().contains("one.example"))
+            .map(|(_, r)| r)
+            .expect("one in pool");
+        assert!(one
+            .flags()
+            .has_all(RelayServiceFlags::READ | RelayServiceFlags::WRITE));
+
+        let two = after
+            .iter()
+            .find(|(u, _)| u.to_string().contains("two.example"))
+            .map(|(_, r)| r)
+            .expect("two in pool");
+        assert!(two.flags().has_read());
+        assert!(!two.flags().has_write());
+
+        let next = vec![RelayConfig {
+            url: "wss://two.example".into(),
+            read: false,
+            write: true,
+            rooms: false,
+            indexer: false,
+        }];
+        apply_relay_config(&client, &next).await;
+
+        let after2 = client.relays().await;
+        assert_eq!(after2.len(), 1, "one should have been removed");
+        let two2 = after2
+            .iter()
+            .find(|(u, _)| u.to_string().contains("two.example"))
+            .map(|(_, r)| r)
+            .expect("two in pool");
+        assert!(two2.flags().has_write());
+        assert!(!two2.flags().has_read());
     }
 }

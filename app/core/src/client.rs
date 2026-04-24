@@ -77,6 +77,8 @@ impl HighlighterCore {
         if let Some(keys) = keys {
             self.runtime.set_signer(keys.clone());
             let pubkey = keys.public_key();
+            self.runtime
+                .spawn_apply_user_relay_config(pubkey.to_hex());
             let sub_id = self.runtime.spawn_membership_subscription(pubkey);
             let contacts_id = self.runtime.spawn_contacts_subscription(pubkey);
             // Eagerly fetch 39000 metadata for any groups already in the
@@ -153,9 +155,8 @@ impl HighlighterCore {
 
         // Ensure the NIP-46 relay is part of the pool before we start
         // listening for the inbound `connect` request. `add_relay` is a
-        // no-op if the relay is already known (which it is — Primal is in
-        // DEFAULT_RELAYS — but we can't rely on the initial relay connect
-        // having completed yet).
+        // no-op if the relay is already known — but we can't rely on the
+        // initial pool reconcile having completed yet.
         let client = self.runtime.client().clone();
         if let Err(e) = client.add_relay(NOSTR_CONNECT_RELAY).await {
             tracing::warn!(relay = %NOSTR_CONNECT_RELAY, error = %e, "add_relay");
@@ -186,6 +187,7 @@ impl HighlighterCore {
                         };
                         let signer = Arc::new(signer);
                         runtime.set_signer((*signer).clone());
+                        runtime.spawn_apply_user_relay_config(user_pubkey.to_hex());
                         let sub_id = runtime.spawn_membership_subscription(user_pubkey);
                         let contacts_id = runtime.spawn_contacts_subscription(user_pubkey);
                         {
@@ -223,6 +225,8 @@ impl HighlighterCore {
 
         let signer = Arc::new(signer);
         self.runtime.set_signer((*signer).clone());
+        self.runtime
+            .spawn_apply_user_relay_config(user_pubkey.to_hex());
 
         let sub_id = self
             .runtime
@@ -1023,7 +1027,8 @@ impl HighlighterCore {
     }
 
     /// Insert-or-update a single relay. Replaces the row with matching URL or
-    /// appends a new one, then re-publishes kind:10002 + kind:30078.
+    /// appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
+    /// the live relay pool so the change takes effect immediately.
     pub async fn upsert_relay(
         &self,
         cfg: crate::relays::RelayConfig,
@@ -1034,7 +1039,9 @@ impl HighlighterCore {
             .session
             .current_user()
             .ok_or(CoreError::NotAuthenticated)?;
-        crate::relays::upsert_relay(&self.runtime, &user.pubkey, cfg).await
+        crate::relays::upsert_relay(&self.runtime, &user.pubkey, cfg).await?;
+        self.runtime.spawn_apply_user_relay_config(user.pubkey);
+        Ok(())
     }
 
     /// Remove a relay by URL.
@@ -1045,7 +1052,9 @@ impl HighlighterCore {
             .session
             .current_user()
             .ok_or(CoreError::NotAuthenticated)?;
-        crate::relays::remove_relay(&self.runtime, &user.pubkey, url).await
+        crate::relays::remove_relay(&self.runtime, &user.pubkey, url).await?;
+        self.runtime.spawn_apply_user_relay_config(user.pubkey);
+        Ok(())
     }
 
     /// Atomically update a single relay's role flags.
@@ -1072,7 +1081,9 @@ impl HighlighterCore {
             rooms,
             indexer,
         )
-        .await
+        .await?;
+        self.runtime.spawn_apply_user_relay_config(user.pubkey);
+        Ok(())
     }
 }
 

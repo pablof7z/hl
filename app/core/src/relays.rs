@@ -33,16 +33,6 @@ pub const NOSTR_CONNECT_RELAY: &str = "wss://relay.primal.net";
 pub const DEFAULT_NOSTR_CONNECT_PERMS: &str =
     "sign_event:11,sign_event:1111,sign_event:9802,sign_event:16,nip04_encrypt,nip04_decrypt,nip44_encrypt,nip44_decrypt";
 
-/// Starting-pool URLs used by `nostr_runtime::spawn_connect` on boot, before
-/// the user's persisted `RelayConfig` has been resolved. Replaced by a
-/// config-driven connect once PR 2 lands.
-pub const DEFAULT_RELAYS: &[&str] = &[
-    HIGHLIGHTER_RELAY,
-    "wss://relay.damus.io",
-    "wss://purplepag.es",
-    "wss://relay.primal.net",
-];
-
 // -- Types -------------------------------------------------------------------
 
 /// A single row in the user's relay list, carrying all four roles.
