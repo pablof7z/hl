@@ -13,14 +13,14 @@ enum TimelineRow: Identifiable {
     case chapter(t: Double, title: String)
     case clip(HighlightRecord)
     case transcript(TranscriptSegment)
-    case waveformTick(t: Double, isSpeech: Bool)
+    case waveformTick(t: Double)
 
     var id: String {
         switch self {
         case .chapter(let t, _): return "chapter-\(t)"
         case .clip(let h): return "clip-\(h.eventId)"
         case .transcript(let s): return "transcript-\(s.id)"
-        case .waveformTick(let t, _): return "waveform-\(t)"
+        case .waveformTick(let t): return "waveform-\(t)"
         }
     }
 
@@ -29,10 +29,12 @@ enum TimelineRow: Identifiable {
         case .chapter(let t, _): return t
         case .clip(let h): return h.clipStartSeconds ?? 0
         case .transcript(let s): return s.start
-        case .waveformTick(let t, _): return t
+        case .waveformTick(let t): return t
         }
     }
 }
+
+private let waveformTickWindow: Double = 30
 
 // MARK: - Main view
 
@@ -250,7 +252,7 @@ struct PodcastListeningView: View {
             layerPill("Transcript", active: showTranscript, disabled: player.transcriptAvailability == .unavailable) {
                 showTranscript.toggle()
             }
-            layerPill("Chapters", active: showChapters, disabled: true) {
+            layerPill("Chapters", active: showChapters, disabled: availableChapters.isEmpty) {
                 showChapters.toggle()
             }
             layerPill("Clips", active: showClips, disabled: false) {
@@ -337,8 +339,14 @@ struct PodcastListeningView: View {
                 player.seek(to: $0)
                 if !player.isPlaying { player.play() }
             })
-        case .waveformTick(let t, let isSpeech):
-            WaveformTickRow(t: t, isSpeech: isSpeech, state: state, onSeek: { player.seek(to: $0) })
+        case .waveformTick(let t):
+            WaveformTickRow(
+                t: t,
+                state: state,
+                windowSeconds: waveformTickWindow,
+                peaks: player.waveformPeaks(from: t, to: t + waveformTickWindow),
+                onSeek: { player.seek(to: $0) }
+            )
         }
     }
 
@@ -359,33 +367,39 @@ struct PodcastListeningView: View {
 
     // MARK: - Row builder
 
+    private var availableChapters: [Chapter] {
+        player.currentArtifact?.preview.chapters ?? []
+    }
+
     private var timelineRows: [TimelineRow] {
         var rows: [TimelineRow] = []
 
-        // Clips layer
         if showClips {
             for h in memberClips {
                 rows.append(.clip(h))
             }
         }
 
-        // Transcript layer
+        if showChapters {
+            for chapter in availableChapters {
+                rows.append(.chapter(t: chapter.startSeconds, title: chapter.title))
+            }
+        }
+
         if showTranscript && player.transcriptAvailability == .available {
             for seg in player.transcriptSegments {
                 rows.append(.transcript(seg))
             }
         } else {
-            // Synthetic waveform tick rows every 30s where no clip or chapter is within 8s
             let occupiedTimes = rows.map { $0.t }
             let totalDuration = player.duration > 0 ? player.duration : 3600
             var t: Double = 0
             while t < totalDuration {
                 let hasNeighbor = occupiedTimes.contains { abs($0 - t) < 8 }
                 if !hasNeighbor {
-                    let isSpeech = sin(t / 90) > 0
-                    rows.append(.waveformTick(t: t, isSpeech: isSpeech))
+                    rows.append(.waveformTick(t: t))
                 }
-                t += 30
+                t += waveformTickWindow
             }
         }
 

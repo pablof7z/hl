@@ -202,7 +202,8 @@ final class ArticleReaderStore {
             referenceKind: "30023",
             highlightTagName: "a",
             highlightTagValue: target.address,
-            highlightReferenceKey: "a:\(target.address)"
+            highlightReferenceKey: "a:\(target.address)",
+            chapters: []
         )
         return ArtifactRecord(
             preview: preview,

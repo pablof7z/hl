@@ -621,7 +621,8 @@ private struct ISBNPreviewSheet: View {
             referenceKind: "isbn",
             highlightTagName: "i",
             highlightTagValue: "isbn:\(isbn)",
-            highlightReferenceKey: "i:isbn:\(isbn)"
+            highlightReferenceKey: "i:isbn:\(isbn)",
+            chapters: []
         )
         let updated = ArtifactPreview(
             id: base.id,
@@ -648,7 +649,8 @@ private struct ISBNPreviewSheet: View {
             referenceKind: base.referenceKind,
             highlightTagName: base.highlightTagName,
             highlightTagValue: base.highlightTagValue,
-            highlightReferenceKey: base.highlightReferenceKey
+            highlightReferenceKey: base.highlightReferenceKey,
+            chapters: base.chapters
         )
         onEditTitle(updated)
         onUse(updated)

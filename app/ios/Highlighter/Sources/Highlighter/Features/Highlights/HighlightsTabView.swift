@@ -246,7 +246,8 @@ struct HighlightsTabView: View {
             referenceKind: "30023",
             highlightTagName: "a",
             highlightTagValue: addr,
-            highlightReferenceKey: "a:\(addr)"
+            highlightReferenceKey: "a:\(addr)",
+            chapters: []
         )
         return ShareToCommunityTarget(
             kind: .artifactShare(preview: preview),

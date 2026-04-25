@@ -95,6 +95,7 @@
 		ACA17C8EEC9768B46B11D0CB /* NetworkSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15174542621B26AC7D26719C /* NetworkSettingsView.swift */; };
 		AD20ED2D07E2D94AD8D659F9 /* ProfileDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E57460F70897229B9EC00D2 /* ProfileDestination.swift */; };
 		AD3629A5F34E17645EF8379D /* HighlightsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3B8A708737A4654FD0077C2 /* HighlightsStore.swift */; };
+		ADBF2D2A29F2DF2386B16481 /* WaveformExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12D88E9E3FB08CDC17F065B7 /* WaveformExtractor.swift */; };
 		AEA757BDF87E8C48FF89B914 /* KnownSigner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 034E108E2850823E1CD1BAB4 /* KnownSigner.swift */; };
 		B19C2494E09CB73EF3A00AAA /* DiscussionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A232DA7DFDD08CEBA3B00FA /* DiscussionStore.swift */; };
 		B1CEB4099BE870E77685AB39 /* ArticleRowActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DE5E60FD0F0D0277E9EF990 /* ArticleRowActions.swift */; };
@@ -171,6 +172,7 @@
 		0EC0CD636BB36729BEBEE23B /* HighlighterShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HighlighterShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1082315DE0FF2734F453EDDF /* OCRStructureReconstructor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRStructureReconstructor.swift; sourceTree = "<group>"; };
 		11EA8949AA1BD77BC10C7372 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		12D88E9E3FB08CDC17F065B7 /* WaveformExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformExtractor.swift; sourceTree = "<group>"; };
 		1317F935DAA15D7884CE312A /* SearchSeeAllView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchSeeAllView.swift; sourceTree = "<group>"; };
 		15174542621B26AC7D26719C /* NetworkSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkSettingsView.swift; sourceTree = "<group>"; };
 		156863C2F94E50DDFB1AD489 /* RoomLibraryBookCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomLibraryBookCardView.swift; sourceTree = "<group>"; };
@@ -607,6 +609,7 @@
 				086CEFC46ADE095C2C280637 /* PodcastPlayerStore.swift */,
 				34131A44B5DC53EFF1B1443D /* TranscriptParser.swift */,
 				E58E01CBB5EEEB2358437B36 /* TranscriptView.swift */,
+				12D88E9E3FB08CDC17F065B7 /* WaveformExtractor.swift */,
 			);
 			path = Podcast;
 			sourceTree = "<group>";
@@ -915,6 +918,7 @@
 				E6E488B481F0C5D02346BC27 /* TranscriptParser.swift in Sources */,
 				8970727A6B674012F302AE3D /* TranscriptRow.swift in Sources */,
 				70FB8E39E995B6FBFF6633FE /* TranscriptView.swift in Sources */,
+				ADBF2D2A29F2DF2386B16481 /* WaveformExtractor.swift in Sources */,
 				50C7C84868FD02366E956D04 /* WaveformTickRow.swift in Sources */,
 				4B2C1870368C15D510E2E09E /* WebReaderTarget.swift in Sources */,
 				7EE476D6EE533B6CBC224C00 /* WebReaderView.swift in Sources */,

@@ -13,6 +13,11 @@ private struct PositionRecord: Codable {
     var snapshot: ArtifactSnapshot?
 }
 
+private struct ChapterSnapshot: Codable {
+    var startSeconds: Double
+    var title: String
+}
+
 private struct ArtifactSnapshot: Codable {
     var title: String
     var image: String
@@ -28,6 +33,7 @@ private struct ArtifactSnapshot: Codable {
     var pubkey: String
     var createdAt: UInt64?
     var note: String
+    var chapters: [ChapterSnapshot]
 
     init(from record: ArtifactRecord) {
         self.title = record.preview.title
@@ -44,6 +50,9 @@ private struct ArtifactSnapshot: Codable {
         self.pubkey = record.pubkey
         self.createdAt = record.createdAt
         self.note = record.note
+        self.chapters = record.preview.chapters.map {
+            ChapterSnapshot(startSeconds: $0.startSeconds, title: $0.title)
+        }
     }
 
     func materialize() -> ArtifactRecord {
@@ -78,7 +87,8 @@ private struct ArtifactSnapshot: Codable {
                 : "podcast:item:guid",
             highlightTagName: "",
             highlightTagValue: "",
-            highlightReferenceKey: ""
+            highlightReferenceKey: "",
+            chapters: chapters.map { Chapter(startSeconds: $0.startSeconds, title: $0.title) }
         )
         return ArtifactRecord(
             preview: preview,
@@ -121,6 +131,13 @@ final class PodcastPlayerStore {
     // Apple Music–style: only one clip expanded at a time
     var expandedClipId: String? = nil
 
+    /// One-peak-per-second amplitude envelope (0...1) for the loaded episode.
+    /// Empty until extraction completes; nil after extraction was attempted
+    /// but skipped (cellular, format unsupported, etc.). Used by the
+    /// listening view's tick rows to show a real waveform instead of a
+    /// placeholder.
+    private(set) var waveformPeaks: [Float] = []
+
     // MARK: - Private plumbing
 
     @ObservationIgnored private var player: AVPlayer?
@@ -133,6 +150,7 @@ final class PodcastPlayerStore {
     @ObservationIgnored private nonisolated(unsafe) var playbackEndObserver: NSObjectProtocol?
     @ObservationIgnored private var positionPersistenceTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptTask: Task<Void, Never>?
+    @ObservationIgnored private var waveformTask: Task<Void, Never>?
 
     private static let positionDefaultsKey = "highlighter.podcast.lastPosition"
 
@@ -227,6 +245,36 @@ final class PodcastPlayerStore {
             transcriptAvailability = .loading
             transcriptTask = Task { await loadTranscript(from: tUrl) }
         }
+
+        // Background: extract or load-from-cache the audio waveform. The
+        // listening view falls back to plain time pegs when peaks aren't
+        // present, so playback isn't blocked by this work.
+        waveformPeaks = []
+        waveformTask?.cancel()
+        let dur = artifact.preview.durationSeconds.map(TimeInterval.init) ?? 0
+        waveformTask = Task(priority: .background) { [weak self, url] in
+            let peaks = await WaveformExtractor.peaks(forAudioURL: url, durationSeconds: dur)
+            guard let self, !Task.isCancelled, let peaks else { return }
+            await MainActor.run { self.waveformPeaks = peaks }
+        }
+    }
+
+    /// Returns the 0...1 amplitude peak nearest the given timestamp, or nil
+    /// when no waveform is loaded.
+    func waveformPeak(at seconds: Double) -> Float? {
+        guard !waveformPeaks.isEmpty else { return nil }
+        let idx = max(0, min(waveformPeaks.count - 1, Int(seconds.rounded())))
+        return waveformPeaks[idx]
+    }
+
+    /// Returns the slice of peaks covering [start, end) seconds. Used by the
+    /// 30-second tick rows to render a mini-histogram of the actual audio.
+    func waveformPeaks(from start: Double, to end: Double) -> [Float] {
+        guard !waveformPeaks.isEmpty, end > start else { return [] }
+        let lo = max(0, Int(start.rounded()))
+        let hi = min(waveformPeaks.count, Int(end.rounded()))
+        guard lo < hi else { return [] }
+        return Array(waveformPeaks[lo..<hi])
     }
 
     func clear() {
@@ -246,6 +294,7 @@ final class PodcastPlayerStore {
         publishError = nil
         transcriptSegments = []
         transcriptAvailability = .unavailable
+        waveformPeaks = []
     }
 
     // MARK: - Transport
@@ -544,6 +593,8 @@ final class PodcastPlayerStore {
         positionPersistenceTask = nil
         transcriptTask?.cancel()
         transcriptTask = nil
+        waveformTask?.cancel()
+        waveformTask = nil
 
         if let player, let timeObserver {
             player.removeTimeObserver(timeObserver)

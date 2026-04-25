@@ -35,7 +35,8 @@ enum ArtifactPreviewBuilder {
             referenceKind: "30023",
             highlightTagName: "a",
             highlightTagValue: address,
-            highlightReferenceKey: "a:\(address)"
+            highlightReferenceKey: "a:\(address)",
+            chapters: []
         )
     }
 

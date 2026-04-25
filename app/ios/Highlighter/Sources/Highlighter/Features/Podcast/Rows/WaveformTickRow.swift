@@ -1,9 +1,19 @@
 import SwiftUI
 
+/// One 30-second slice of the timeline rendered as either:
+/// - a mini-histogram of real audio peaks (when WaveformExtractor has
+///   populated the store's `waveformPeaks`), or
+/// - a thin time peg when peaks aren't loaded yet (cellular, just-loaded
+///   episode, format unsupported).
+///
+/// The row is purely time-anchored — `t` is the timestamp at the left edge
+/// of the slice; the row covers `[t, t + windowSeconds)`. Tapping seeks to
+/// the start of the slice.
 struct WaveformTickRow: View {
     let t: Double
-    let isSpeech: Bool
     let state: TimelineRowState
+    let windowSeconds: Double
+    let peaks: [Float]
     let onSeek: (Double) -> Void
 
     var body: some View {
@@ -16,26 +26,10 @@ struct WaveformTickRow: View {
                     .foregroundStyle(Color.laneAudioInkMuted)
                     .frame(width: 48, alignment: .leading)
 
-                HStack(spacing: 6) {
-                    Canvas { context, size in
-                        let stripeWidth: CGFloat = 6
-                        let gapWidth: CGFloat = 3
-                        let totalPattern = stripeWidth + gapWidth
-                        var x: CGFloat = 0
-                        while x < size.width {
-                            let rect = CGRect(x: x, y: 0, width: stripeWidth, height: size.height)
-                            context.fill(Path(rect), with: .color(Color.laneAudioRule))
-                            x += totalPattern
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 8)
-                    .clipShape(RoundedRectangle(cornerRadius: 2))
-
-                    Text(isSpeech ? "speech" : "silence")
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(Color.laneAudioInkMuted)
-                        .frame(width: 48, alignment: .trailing)
+                if peaks.isEmpty {
+                    timePeg
+                } else {
+                    waveformBars
                 }
             }
             .padding(.horizontal, 16)
@@ -44,6 +38,42 @@ struct WaveformTickRow: View {
             .opacity(state == .future ? 0.55 : 1.0)
         }
         .buttonStyle(.plain)
+    }
+
+    private var timePeg: some View {
+        Rectangle()
+            .fill(Color.laneAudioRule)
+            .frame(maxWidth: .infinity)
+            .frame(height: 1)
+    }
+
+    private var waveformBars: some View {
+        Canvas { context, size in
+            let count = peaks.count
+            guard count > 0 else { return }
+            let gap: CGFloat = 1.5
+            let totalGapWidth = gap * CGFloat(count - 1)
+            let barWidth = max(1, (size.width - totalGapWidth) / CGFloat(count))
+            let centerY = size.height / 2
+
+            for (idx, peak) in peaks.enumerated() {
+                let normalized = CGFloat(min(max(peak, 0.02), 1.0))
+                let h = max(2, normalized * size.height)
+                let x = CGFloat(idx) * (barWidth + gap)
+                let rect = CGRect(
+                    x: x,
+                    y: centerY - h / 2,
+                    width: barWidth,
+                    height: h
+                )
+                context.fill(
+                    Path(roundedRect: rect, cornerRadius: barWidth / 2),
+                    with: .color(Color.laneAudioInkMuted)
+                )
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 18)
     }
 }
 
