@@ -10,6 +10,7 @@ struct RoomSquareTile: View {
         VStack(alignment: .leading, spacing: 8) {
             cover
                 .frame(width: 96, height: 96)
+                .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 14))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14)

@@ -218,9 +218,7 @@ struct RoomPreviewSheet: View {
                         .simultaneousGesture(TapGesture().onEnded { dismiss() })
                     } else {
                         Button {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                detent = .large
-                            }
+                            detent = .large
                         } label: {
                             Text("Peek inside")
                                 .font(.subheadline.weight(.medium))

@@ -58,13 +58,15 @@ struct RoomExplorerView: View {
             }
             .globalUserToolbar()
             .sheet(item: $previewRoom) { room in
-                RoomPreviewSheet(
-                    room: room,
-                    onJoin: {
-                        Task { await explorer?.requestJoin(room: room) }
-                        previewRoom = nil
-                    }
-                )
+                NavigationStack {
+                    RoomPreviewSheet(
+                        room: room,
+                        onJoin: {
+                            Task { await explorer?.requestJoin(room: room) }
+                            previewRoom = nil
+                        }
+                    )
+                }
                 .environment(appStore)
             }
             .sheet(isPresented: $createSheetPresented) {
@@ -109,7 +111,7 @@ struct RoomExplorerView: View {
                     HStack(alignment: .top, spacing: 14) {
                         ForEach(appStore.joinedCommunities, id: \.id) { room in
                             NavigationLink(value: room.id) {
-                                RoomSquareTile(room: room)
+                                RoomCoverCard(room: room, width: 140)
                             }
                             .buttonStyle(.plain)
                         }
@@ -150,13 +152,12 @@ struct RoomExplorerView: View {
             shelf(
                 title: "Featured",
                 rationale: "Curated by Highlighter",
-                cardWidth: 168,
                 content: {
                     ForEach(Array(featured.dropFirst()), id: \.id) { room in
                         Button {
                             previewRoom = room
                         } label: {
-                            RoomCoverCard(room: room, width: 168)
+                            RoomSquareTile(room: room)
                         }
                         .buttonStyle(.plain)
                     }
@@ -176,7 +177,7 @@ struct RoomExplorerView: View {
                         Button {
                             previewRoom = rec.summary
                         } label: {
-                            RoomCoverCard(room: rec.summary, width: 140)
+                            RoomSquareTile(room: rec.summary)
                         }
                         .buttonStyle(.plain)
                     }
@@ -196,7 +197,7 @@ struct RoomExplorerView: View {
                         Button {
                             previewRoom = room
                         } label: {
-                            RoomCoverCard(room: room, width: 140)
+                            RoomSquareTile(room: room)
                         }
                         .buttonStyle(.plain)
                     }
@@ -254,7 +255,6 @@ struct RoomExplorerView: View {
     private func shelf<Content: View>(
         title: String,
         rationale: String,
-        cardWidth: CGFloat = 140,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {

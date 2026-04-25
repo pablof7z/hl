@@ -16,8 +16,9 @@ struct RoomCoverCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            cover
+            Color.clear
                 .aspectRatio(3 / 4, contentMode: .fit)
+                .overlay(cover)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14)

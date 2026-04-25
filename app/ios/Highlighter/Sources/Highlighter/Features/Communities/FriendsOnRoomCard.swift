@@ -9,13 +9,14 @@ struct FriendsOnRoomCard: View {
 
     @Environment(HighlighterStore.self) private var store
 
-    private let width: CGFloat = 156
+    private let width: CGFloat = 96
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .bottomLeading) {
                 cover
-                    .frame(width: width, height: width * 4 / 3)
+                    .frame(width: width, height: width)
+                    .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                     .overlay(
                         RoundedRectangle(cornerRadius: 14)
@@ -23,18 +24,18 @@ struct FriendsOnRoomCard: View {
                     )
 
                 avatarCluster
-                    .padding(10)
+                    .padding(8)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(recommendation.summary.name)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
                 Text(friendsByline)
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(1)
             }
