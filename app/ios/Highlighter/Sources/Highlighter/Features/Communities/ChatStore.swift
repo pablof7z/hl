@@ -72,27 +72,35 @@ final class ChatPresenceProbe {
 @MainActor
 @Observable
 final class ChatStore {
+    static let pageSize: UInt32 = 50
+
     private(set) var messages: [ChatMessageRecord] = []
     private(set) var isLoading: Bool = true
+    private(set) var isLoadingMore: Bool = false
+    /// True when the last page fetch returned a full page, implying older
+    /// messages exist in the DB beyond the current window.
+    private(set) var hasMore: Bool = false
     private(set) var loadError: String?
-    /// Errors raised by the most recent `send(text:)` call. Cleared on the
-    /// next send attempt or when the user dismisses the alert.
     var sendError: String?
 
     @ObservationIgnored private var groupId: String?
     @ObservationIgnored private var core: SafeHighlighterCore?
     @ObservationIgnored private weak var bridge: EventBridge?
     @ObservationIgnored private var subscriptionHandle: UInt64?
+    @ObservationIgnored private var loadedLimit: UInt32 = ChatStore.pageSize
 
     func start(groupId: String, core: SafeHighlighterCore, bridge: EventBridge?) async {
         self.groupId = groupId
         self.core = core
         self.bridge = bridge
+        loadedLimit = ChatStore.pageSize
         isLoading = true
         loadError = nil
 
         do {
-            messages = try await core.getChatMessages(groupId: groupId)
+            let batch = try await core.getChatMessages(groupId: groupId, limit: loadedLimit)
+            messages = batch
+            hasMore = UInt32(batch.count) >= loadedLimit
         } catch {
             loadError = (error as? CoreError).map { "\($0)" }
         }
@@ -105,6 +113,22 @@ final class ChatStore {
         } catch {
             // Subscription failure leaves cache-only rendering working.
         }
+    }
+
+    /// Expand the loaded window by one page. Replaces `messages` with a
+    /// larger slice from the DB; the caller is responsible for restoring
+    /// the scroll position to the previously-topmost visible message.
+    func loadMore() async {
+        guard !isLoadingMore, hasMore, let groupId, let core else { return }
+        isLoadingMore = true
+        let newLimit = loadedLimit + ChatStore.pageSize
+        do {
+            let batch = try await core.getChatMessages(groupId: groupId, limit: newLimit)
+            messages = batch
+            loadedLimit = newLimit
+            hasMore = UInt32(batch.count) >= newLimit
+        } catch {}
+        isLoadingMore = false
     }
 
     func stop() {

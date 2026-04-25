@@ -15,15 +15,9 @@ struct RoomHomeView: View {
     @State private var capturePresented: Bool = false
     @State private var shareTarget: ShareToCommunityTarget?
     @State private var inviteSheetPresented: Bool = false
-    /// Cached "this room has chat activity" signal. Computed once on
-    /// appearance via a single `getChatMessages(limit: 1)` peek, then
-    /// promoted to true the first time a `ChatMessageUpserted` delta
-    /// arrives via the room's chat-presence subscription. The chat tab
-    /// only renders when this is true.
     @State private var hasChatActivity: Bool = false
-    /// Subscription handle for the chat-presence probe. Owned here (not
-    /// inside `ChatView`) so the tab can appear without the user opening
-    /// it first — once the probe sees a kind:9 land, the tab unhides.
+    /// True from the moment chat activity appears until the user opens the Chat tab.
+    @State private var chatUnread: Bool = false
     @State private var chatPresenceProbe = ChatPresenceProbe()
 
     var body: some View {
@@ -33,7 +27,8 @@ struct RoomHomeView: View {
                 Text("Library").tag(Tab.library)
                 Text("Discussions").tag(Tab.discussions)
                 if hasChatActivity {
-                    Text("Chat").tag(Tab.chat)
+                    Text(chatUnread && selectedTab != .chat ? "Chat ·" : "Chat")
+                        .tag(Tab.chat)
                 }
             }
             .pickerStyle(.segmented)
@@ -83,13 +78,19 @@ struct RoomHomeView: View {
                 .accessibilityLabel("Room actions")
             }
         }
+        .onChange(of: selectedTab) { _, tab in
+            if tab == .chat { chatUnread = false }
+        }
         .task {
             await room.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
             await chatPresenceProbe.start(
                 groupId: groupId,
                 core: app.safeCore,
                 bridge: app.eventBridge,
-                onActivity: { hasChatActivity = true }
+                onActivity: {
+                    hasChatActivity = true
+                    if selectedTab != .chat { chatUnread = true }
+                }
             )
         }
         .onDisappear {

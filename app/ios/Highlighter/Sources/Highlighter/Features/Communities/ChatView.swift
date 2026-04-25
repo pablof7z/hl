@@ -1,12 +1,5 @@
 import SwiftUI
 
-/// NIP-29 chat tab content for a room. Owns its own `ChatStore` so each
-/// room's chat lifetime tracks the view.
-///
-/// Visual language: paper background, ink text, sans typography. No iMessage
-/// bubbles — messages are rendered in the magazine-comment style of the
-/// rest of Highlighter, with consecutive messages from the same author
-/// collapsing the avatar/name header (Slack/iMessage groups).
 struct ChatView: View {
     let groupId: String
 
@@ -14,23 +7,43 @@ struct ChatView: View {
     @State private var store = ChatStore()
     @State private var draft: String = ""
     @FocusState private var inputFocused: Bool
+    @State private var replyTo: ChatMessageRecord? = nil
+    @State private var isAtBottom: Bool = true
+    @State private var pendingNewCount: Int = 0
+    /// Incrementing this triggers a scroll-to-bottom inside the ScrollViewReader.
+    @State private var scrollRevision: Int = 0
+    /// eventId of the top-most visible message before a loadMore — used to
+    /// restore scroll position after older messages are prepended.
+    @State private var loadMoreAnchorId: String?
 
     var body: some View {
         VStack(spacing: 0) {
-            messageList
+            ZStack(alignment: .bottom) {
+                messageList
+                if pendingNewCount > 0 {
+                    newMessagesPill
+                }
+            }
             Rectangle()
                 .fill(Color.highlighterRule)
                 .frame(height: 1)
-            composer
+            composerArea
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
         .task {
             await store.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
-            await prefetchProfiles()
         }
         .onDisappear { store.stop() }
-        .onChange(of: store.messages.count) { _, _ in
-            Task { await prefetchProfiles() }
+        .onChange(of: store.messages.count) { oldCount, newCount in
+            let added = max(0, newCount - oldCount)
+            guard added > 0 else { return }
+            if isAtBottom {
+                scrollRevision += 1
+            } else {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    pendingNewCount += added
+                }
+            }
         }
         .alert("Couldn't send", isPresented: Binding(
             get: { store.sendError != nil },
@@ -51,58 +64,162 @@ struct ChatView: View {
                 .controlSize(.large)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if store.messages.isEmpty {
-            ContentUnavailableView(
-                "No messages yet",
-                systemImage: "bubble.left",
-                description: Text("Be the first to say hello.")
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            emptyState
         } else {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
+                        // Load-more trigger — invisible when idle, spinner when fetching.
+                        if store.hasMore || store.isLoadingMore {
+                            Group {
+                                if store.isLoadingMore {
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .id("load-more-spinner")
+                                } else {
+                                    Color.clear
+                                        .frame(height: 1)
+                                        .id("load-more-trigger")
+                                        .onAppear {
+                                            loadMoreAnchorId = store.messages.first?.eventId
+                                            Task { await store.loadMore() }
+                                        }
+                                }
+                            }
+                        }
+
                         ForEach(Array(store.messages.enumerated()), id: \.element.eventId) { index, message in
                             ChatMessageRow(
                                 message: message,
                                 profile: app.profileCache[message.authorPubkey],
-                                showHeader: shouldShowHeader(at: index)
+                                showHeader: shouldShowHeader(at: index),
+                                replyToMessage: parentMessage(for: message),
+                                replyToProfile: parentProfile(for: message),
+                                onReply: { replyTo = message; inputFocused = true }
                             )
                             .id(message.eventId)
+                            .task(id: message.authorPubkey) {
+                                await app.requestProfile(pubkeyHex: message.authorPubkey)
+                            }
+                            .onAppear {
+                                if index == store.messages.count - 1 {
+                                    isAtBottom = true
+                                    pendingNewCount = 0
+                                }
+                            }
+                            .onDisappear {
+                                if index == store.messages.count - 1 {
+                                    isAtBottom = false
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 12)
-                }
-                .onChange(of: store.messages.count) { _, _ in
-                    if let last = store.messages.last {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            proxy.scrollTo(last.eventId, anchor: .bottom)
-                        }
-                    }
                 }
                 .onAppear {
                     if let last = store.messages.last {
                         proxy.scrollTo(last.eventId, anchor: .bottom)
                     }
                 }
+                .onChange(of: scrollRevision) { _, _ in
+                    guard let last = store.messages.last else { return }
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(last.eventId, anchor: .bottom)
+                    }
+                }
+                .onChange(of: store.isLoadingMore) { wasLoading, isLoading in
+                    // After prepending older messages, snap back to where the
+                    // user was so the view doesn't jump to the new top.
+                    guard wasLoading, !isLoading, let anchorId = loadMoreAnchorId else { return }
+                    proxy.scrollTo(anchorId, anchor: .top)
+                    loadMoreAnchorId = nil
+                }
             }
         }
     }
 
-    /// Show the avatar+name header when this row's author differs from the
-    /// previous row's, OR when more than 5 minutes elapsed since the
-    /// previous message (a fresh "burst" of conversation).
-    private func shouldShowHeader(at index: Int) -> Bool {
-        guard index > 0 else { return true }
-        let prev = store.messages[index - 1]
-        let curr = store.messages[index]
-        if prev.authorPubkey != curr.authorPubkey { return true }
-        // 5 minutes between messages → re-show header so timestamps stay
-        // legible even in long monologues.
-        if curr.createdAt > prev.createdAt + 300 { return true }
-        return false
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 38))
+                .foregroundStyle(Color.highlighterInkMuted.opacity(0.45))
+            Text("No messages yet")
+                .font(.headline)
+                .foregroundStyle(Color.highlighterInkStrong)
+            Text("Be the first to say something.")
+                .font(.subheadline)
+                .foregroundStyle(Color.highlighterInkMuted)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Composer
+    private var newMessagesPill: some View {
+        Button {
+            withAnimation(.spring(response: 0.3)) {
+                pendingNewCount = 0
+                isAtBottom = true
+            }
+            scrollRevision += 1
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.down")
+                    .font(.caption.weight(.semibold))
+                Text(pendingNewCount == 1 ? "1 new message" : "\(pendingNewCount) new messages")
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(Color.highlighterPaper)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(Color.highlighterAccent))
+        }
+        .padding(.bottom, 12)
+        .transition(.scale.combined(with: .opacity))
+    }
+
+    // MARK: - Composer area
+
+    private var composerArea: some View {
+        VStack(spacing: 0) {
+            if let reply = replyTo {
+                replyBar(reply)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            composer
+        }
+        .background(Color.highlighterPaper)
+        .animation(.spring(response: 0.28, dampingFraction: 0.8), value: replyTo?.eventId)
+    }
+
+    private func replyBar(_ message: ChatMessageRecord) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Rectangle()
+                .fill(Color.highlighterAccent)
+                .frame(width: 2)
+                .clipShape(Capsule())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayName(for: message.authorPubkey))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.highlighterAccent)
+                Text(message.content)
+                    .font(.caption)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Button {
+                replyTo = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.highlighterInkMuted)
+                    .padding(4)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color.highlighterRule.opacity(0.25))
+    }
 
     @ViewBuilder
     private var composer: some View {
@@ -119,20 +236,24 @@ struct ChatView: View {
                 )
                 .focused($inputFocused)
 
-            Button {
-                Task { await send() }
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(canSend ? Color.highlighterAccent : Color.highlighterInkMuted.opacity(0.5))
+            if canSend {
+                Button {
+                    Task { await send() }
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(Color.highlighterAccent)
+                }
+                .accessibilityLabel("Send message")
+                .transition(.scale.combined(with: .opacity))
             }
-            .disabled(!canSend)
-            .accessibilityLabel("Send message")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color.highlighterPaper)
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: canSend)
     }
+
+    // MARK: - Helpers
 
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -140,45 +261,122 @@ struct ChatView: View {
 
     private func send() async {
         let text = draft
+        let reply = replyTo
         draft = ""
-        await store.send(text: text)
+        replyTo = nil
+        await store.send(text: text, replyTo: reply)
+        scrollRevision += 1
     }
 
-    // MARK: - Profile prefetch
+    private func shouldShowHeader(at index: Int) -> Bool {
+        guard index > 0 else { return true }
+        let prev = store.messages[index - 1]
+        let curr = store.messages[index]
+        if prev.authorPubkey != curr.authorPubkey { return true }
+        if curr.createdAt > prev.createdAt + 300 { return true }
+        return false
+    }
 
-    /// Walk the unique authors in the message list and ask `HighlighterStore`
-    /// to surface a kind:0 + a live subscription for each. The store dedupes
-    /// internally, so this is cheap to call on every delta.
-    private func prefetchProfiles() async {
-        let pubkeys = Set(store.messages.map(\.authorPubkey))
-        for pubkey in pubkeys {
-            await app.requestProfile(pubkeyHex: pubkey)
+    private func parentMessage(for message: ChatMessageRecord) -> ChatMessageRecord? {
+        guard let id = message.replyToEventId else { return nil }
+        return store.messages.first { $0.eventId == id }
+    }
+
+    private func parentProfile(for message: ChatMessageRecord) -> ProfileMetadata? {
+        guard let parent = parentMessage(for: message) else { return nil }
+        return app.profileCache[parent.authorPubkey]
+    }
+
+    private func displayName(for pubkey: String) -> String {
+        if let p = app.profileCache[pubkey] {
+            if !p.displayName.isEmpty { return p.displayName }
+            if !p.name.isEmpty { return p.name }
         }
+        return String(pubkey.prefix(8))
     }
+
+
 }
+
+// MARK: - ChatMessageRow
 
 private struct ChatMessageRow: View {
     let message: ChatMessageRecord
     let profile: ProfileMetadata?
     let showHeader: Bool
+    let replyToMessage: ChatMessageRecord?
+    let replyToProfile: ProfileMetadata?
+    let onReply: () -> Void
+
+    @State private var swipeOffset: CGFloat = 0
+    @State private var swipeTriggered: Bool = false
 
     var body: some View {
+        ZStack(alignment: .leading) {
+            Image(systemName: "arrowshape.turn.up.left.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.highlighterAccent)
+                .opacity(Double(min(swipeOffset, 40)) / 40.0)
+                .offset(x: max(-4, swipeOffset - 28))
+
+            rowContent
+                .offset(x: swipeOffset)
+        }
+        .contentShape(Rectangle())
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: swipeTriggered)
+        .gesture(
+            DragGesture(minimumDistance: 15, coordinateSpace: .local)
+                .onChanged { value in
+                    let dx = value.translation.width
+                    let dy = value.translation.height
+                    guard dx > 0, dx > abs(dy) else { return }
+                    swipeOffset = min(dx * 0.55, 60)
+                    if swipeOffset >= 40 && !swipeTriggered {
+                        swipeTriggered = true
+                        onReply()
+                    }
+                }
+                .onEnded { _ in
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        swipeOffset = 0
+                    }
+                    swipeTriggered = false
+                }
+        )
+        .contextMenu {
+            Button {
+                onReply()
+            } label: {
+                Label("Reply", systemImage: "arrowshape.turn.up.left")
+            }
+            Button {
+                UIPasteboard.general.string = message.content
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+        }
+    }
+
+    private var rowContent: some View {
         HStack(alignment: .top, spacing: 10) {
             if showHeader {
-                ProfileAvatar(profile: profile, pubkey: message.authorPubkey, size: 32)
+                ProfileAvatar(profile: profile, pubkey: message.authorPubkey, size: 28)
             } else {
-                Color.clear.frame(width: 32, height: 1)
+                Color.clear.frame(width: 28, height: 1)
             }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 if showHeader {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(displayName)
+                        Text(authorName)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color.highlighterInkStrong)
                         Text(timeLabel(message.createdAt))
                             .font(.caption2)
                             .foregroundStyle(Color.highlighterInkMuted)
                     }
+                }
+                if let replyMsg = replyToMessage {
+                    replyChip(replyMsg)
                 }
                 NostrRichText(content: message.content, font: .body)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -189,14 +387,45 @@ private struct ChatMessageRow: View {
         .padding(.top, showHeader ? 10 : 2)
     }
 
-    private var displayName: String {
+    private func replyChip(_ quoted: ChatMessageRecord) -> some View {
+        HStack(spacing: 6) {
+            Rectangle()
+                .fill(Color.highlighterAccent.opacity(0.7))
+                .frame(width: 2)
+                .clipShape(Capsule())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(quotedAuthorName(quoted))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.highlighterAccent)
+                Text(quoted.content)
+                    .font(.caption)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.vertical, 5)
+        .padding(.trailing, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.highlighterAccent.opacity(0.06))
+        )
+    }
+
+    private var authorName: String {
         if let p = profile {
             if !p.displayName.isEmpty { return p.displayName }
             if !p.name.isEmpty { return p.name }
         }
-        // Short-pubkey fallback so unknown authors are still distinguishable.
-        let prefix = String(message.authorPubkey.prefix(8))
-        return prefix.isEmpty ? "Anonymous" : prefix
+        return String(message.authorPubkey.prefix(8))
+    }
+
+    private func quotedAuthorName(_ msg: ChatMessageRecord) -> String {
+        if let p = replyToProfile {
+            if !p.displayName.isEmpty { return p.displayName }
+            if !p.name.isEmpty { return p.name }
+        }
+        return String(msg.authorPubkey.prefix(8))
     }
 
     private func timeLabel(_ ts: UInt64) -> String {
@@ -208,7 +437,6 @@ private struct ChatMessageRow: View {
             fmt.dateStyle = .none
             fmt.timeStyle = .short
         } else if cal.isDate(date, equalTo: now, toGranularity: .weekOfYear) {
-            // "Mon 14:32"
             fmt.dateFormat = "EEE HH:mm"
         } else {
             fmt.dateStyle = .short
@@ -218,6 +446,8 @@ private struct ChatMessageRow: View {
     }
 }
 
+// MARK: - ProfileAvatar
+
 private struct ProfileAvatar: View {
     let profile: ProfileMetadata?
     let pubkey: String
@@ -225,14 +455,12 @@ private struct ProfileAvatar: View {
 
     var body: some View {
         Group {
-            if let urlString = profile?.picture, let url = URL(string: urlString) {
+            if let urlString = profile?.picture, !urlString.isEmpty, let url = URL(string: urlString) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
                         image.resizable().scaledToFill()
-                    case .empty, .failure:
-                        placeholder
-                    @unknown default:
+                    default:
                         placeholder
                     }
                 }
@@ -242,9 +470,7 @@ private struct ProfileAvatar: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
-        .overlay(
-            Circle().stroke(Color.highlighterRule, lineWidth: 0.5)
-        )
+        .overlay(Circle().stroke(Color.highlighterRule, lineWidth: 0.5))
     }
 
     private var placeholder: some View {
@@ -257,8 +483,8 @@ private struct ProfileAvatar: View {
     }
 
     private var initial: String {
-        if let name = profile?.displayName.first ?? profile?.name.first {
-            return String(name).uppercased()
+        if let c = profile?.displayName.first ?? profile?.name.first {
+            return String(c).uppercased()
         }
         return String(pubkey.prefix(1)).uppercased()
     }
