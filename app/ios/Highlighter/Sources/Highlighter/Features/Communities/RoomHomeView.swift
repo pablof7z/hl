@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Per-community feed view. Owns its own `RoomStore` (view-scoped) so
-/// Observation granularity stays tight — this view only re-renders when
-/// its own room's data changes, not when other rooms update.
 struct RoomHomeView: View {
     enum Tab: Hashable { case home, library, discussions, chat }
 
@@ -16,108 +13,134 @@ struct RoomHomeView: View {
     @State private var shareTarget: ShareToCommunityTarget?
     @State private var inviteSheetPresented: Bool = false
     @State private var hasChatActivity: Bool = false
-    /// True from the moment chat activity appears until the user opens the Chat tab.
     @State private var chatUnread: Bool = false
     @State private var chatPresenceProbe = ChatPresenceProbe()
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("", selection: $selectedTab) {
-                Text("Home").tag(Tab.home)
-                Text("Library").tag(Tab.library)
-                Text("Discussions").tag(Tab.discussions)
-                if hasChatActivity {
-                    Text(chatUnread && selectedTab != .chat ? "Chat ·" : "Chat")
-                        .tag(Tab.chat)
-                }
+        tabContent
+            .navigationTitle(communityName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .tabBar)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                pillTabBar
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-
-            switch selectedTab {
-            case .home:
-                homeContent
-            case .library:
-                libraryContent
-            case .discussions:
-                DiscussionListView(groupId: groupId, composerPresented: $composerPresented)
-            case .chat:
-                ChatView(groupId: groupId)
+            .navigationDestination(for: ArtifactRecord.self) { artifact in
+                ArtifactDetailView(artifact: artifact)
             }
-        }
-        .navigationTitle(communityName)
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(for: ArtifactRecord.self) { artifact in
-            ArtifactDetailView(artifact: artifact)
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        capturePresented = true
-                    } label: {
-                        Label("Capture highlight", systemImage: "camera")
-                    }
-                    Button {
-                        inviteSheetPresented = true
-                    } label: {
-                        Label("Add people", systemImage: "person.badge.plus")
-                    }
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     if selectedTab == .discussions {
-                        Button {
-                            composerPresented = true
-                        } label: {
-                            Label("New discussion", systemImage: "square.and.pencil")
+                        Button { composerPresented = true } label: {
+                            Image(systemName: "square.and.pencil")
                         }
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Button { capturePresented = true } label: {
+                        Image(systemName: "camera")
+                    }
+                    Button { inviteSheetPresented = true } label: {
+                        Image(systemName: "person.badge.plus")
+                    }
                 }
-                .accessibilityLabel("Room actions")
             }
-        }
-        .onChange(of: selectedTab) { _, tab in
-            if tab == .chat { chatUnread = false }
-        }
-        .task {
-            await room.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
-            await chatPresenceProbe.start(
-                groupId: groupId,
-                core: app.safeCore,
-                bridge: app.eventBridge,
-                onActivity: {
-                    hasChatActivity = true
-                    if selectedTab != .chat { chatUnread = true }
+            .onChange(of: selectedTab) { _, tab in
+                if tab == .chat { chatUnread = false }
+            }
+            .task {
+                await room.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
+                await chatPresenceProbe.start(
+                    groupId: groupId,
+                    core: app.safeCore,
+                    bridge: app.eventBridge,
+                    onActivity: {
+                        hasChatActivity = true
+                        if selectedTab != .chat { chatUnread = true }
+                    }
+                )
+            }
+            .onDisappear {
+                room.stop()
+                chatPresenceProbe.stop()
+                if selectedTab == .chat && !hasChatActivity {
+                    selectedTab = .home
                 }
-            )
-        }
-        .onDisappear {
-            room.stop()
-            chatPresenceProbe.stop()
-            // If the user navigates away while sitting on the chat tab,
-            // reset selection so a return visit doesn't crash trying to
-            // render a tab that's been hidden because activity is gone.
-            if selectedTab == .chat && !hasChatActivity {
-                selectedTab = .home
             }
-        }
-        .sheet(item: $shareTarget) { target in
-            ShareToCommunitySheet(target: target)
-                .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $inviteSheetPresented) {
-            NavigationStack {
-                RoomInviteView(groupId: groupId, mode: .manage, onClose: nil)
+            .sheet(item: $shareTarget) { target in
+                ShareToCommunitySheet(target: target)
+                    .presentationDetents([.medium, .large])
             }
-            .environment(app)
-            .presentationDetents([.large])
-        }
-        .captureFlow(isPresented: $capturePresented, preselectedGroupId: groupId)
+            .sheet(isPresented: $inviteSheetPresented) {
+                NavigationStack {
+                    RoomInviteView(groupId: groupId, mode: .manage, onClose: nil)
+                }
+                .environment(app)
+                .presentationDetents([.large])
+            }
+            .captureFlow(isPresented: $capturePresented, preselectedGroupId: groupId)
     }
 
-    // MARK: - Home tab (format-aware lanes — the new surface)
+    @ViewBuilder
+    private var tabContent: some View {
+        switch selectedTab {
+        case .home:
+            homeContent
+        case .library:
+            libraryContent
+        case .discussions:
+            DiscussionListView(groupId: groupId, composerPresented: $composerPresented)
+        case .chat:
+            ChatView(groupId: groupId)
+        }
+    }
+
+    // MARK: - Pill tab bar
+
+    private var pillTabBar: some View {
+        HStack(spacing: 2) {
+            pillSegment(.home, label: "Home")
+            pillSegment(.library, label: "Library")
+            pillSegment(.discussions, label: "Discussions")
+            if hasChatActivity {
+                pillSegment(.chat, label: "Chat", badge: chatUnread)
+            }
+        }
+        .padding(4)
+        .background(.ultraThinMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 12)
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: hasChatActivity)
+    }
+
+    private func pillSegment(_ tab: Tab, label: String, badge: Bool = false) -> some View {
+        Button {
+            selectedTab = tab
+        } label: {
+            Text(label)
+                .font(.subheadline.weight(selectedTab == tab ? .semibold : .regular))
+                .foregroundStyle(selectedTab == tab ? Color.primary : Color.secondary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background {
+                    if selectedTab == tab {
+                        Capsule()
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.08), radius: 4, y: 1)
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if badge {
+                        Circle()
+                            .fill(Color.accentColor)
+                            .frame(width: 7, height: 7)
+                            .offset(x: 2, y: -1)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: selectedTab)
+    }
+
+    // MARK: - Home tab
 
     private var homeContent: some View {
         RoomLanesView(
@@ -132,7 +155,7 @@ struct RoomHomeView: View {
         )
     }
 
-    // MARK: - Library tab (unchanged — flat list of shares + highlights)
+    // MARK: - Library tab
 
     @ViewBuilder
     private var libraryContent: some View {

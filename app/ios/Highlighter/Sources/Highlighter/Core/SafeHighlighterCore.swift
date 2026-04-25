@@ -94,6 +94,60 @@ actor SafeHighlighterCore {
         try await core.subscribeBookmarks()
     }
 
+    // MARK: - Reactions (kind:7)
+
+    func getReactionsForEvent(targetEventId: String, limit: UInt32) async throws -> [ReactionRecord] {
+        try await core.getReactionsForEvent(targetEventId: targetEventId, limit: limit)
+    }
+
+    func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String) async throws -> ReactionRecord {
+        try await core.publishReaction(eventId: eventId, authorPubkeyHex: authorPubkeyHex, targetKind: targetKind, content: content)
+    }
+
+    func unpublishReaction(reactionEventId: String) async throws -> String {
+        try await core.unpublishReaction(reactionEventId: reactionEventId)
+    }
+
+    // MARK: - Event bookmarks (kind:10003 note bookmarks)
+
+    func isEventBookmarked(eventIdHex: String) async throws -> Bool {
+        try await core.isEventBookmarked(eventIdHex: eventIdHex)
+    }
+
+    func toggleEventBookmark(eventIdHex: String) async throws -> Bool {
+        try await core.toggleEventBookmark(eventIdHex: eventIdHex)
+    }
+
+    // MARK: - Bookmark sets (kind:30003/30004) + NIP-B0 (kind:39701)
+
+    func getMyBookmarkSets() async throws -> [BookmarkSetRecord] {
+        try await core.getMyBookmarkSets()
+    }
+
+    func getMyCurationSets() async throws -> [BookmarkSetRecord] {
+        try await core.getMyCurationSets()
+    }
+
+    func getFollowingCurationSets() async throws -> [BookmarkSetRecord] {
+        try await core.getFollowingCurationSets()
+    }
+
+    func getMyWebBookmarks() async throws -> [WebBookmarkRecord] {
+        try await core.getMyWebBookmarks()
+    }
+
+    func subscribeBookmarkSets() async throws -> UInt64 {
+        try await core.subscribeBookmarkSets()
+    }
+
+    func subscribeFollowingCurationSets() async throws -> UInt64 {
+        try await core.subscribeFollowingCurationSets()
+    }
+
+    func subscribeWebBookmarks() async throws -> UInt64 {
+        try await core.subscribeWebBookmarks()
+    }
+
     func lookupIsbn(_ isbn: String) async throws -> ArtifactPreview {
         try await core.lookupIsbn(isbn: isbn)
     }
