@@ -1025,6 +1025,31 @@ impl HighlighterCore {
         .await
     }
 
+    /// Re-share an existing kind:9802 highlight into a NIP-29 room as a
+    /// kind:16 generic repost. Used to surface a friend's highlight (or
+    /// your own old one) into a community without re-publishing the
+    /// underlying highlight event. The repost carries `["e", id]`,
+    /// `["k", "9802"]`, `["p", author]`, and `["h", target_group_id]`
+    /// per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
+    /// to the Highlighter relay as the e-tag relay hint.
+    pub async fn share_highlight_to_room(
+        &self,
+        highlight_id: String,
+        highlight_author_pubkey_hex: String,
+        highlight_relay_url: String,
+        target_group_id: String,
+    ) -> Result<(), CoreError> {
+        let _ = self.require_user_pubkey()?;
+        crate::highlights::share_to_community(
+            &self.runtime,
+            highlight_id.trim(),
+            highlight_author_pubkey_hex.trim(),
+            highlight_relay_url.trim(),
+            target_group_id.trim(),
+        )
+        .await
+    }
+
     /// Publish a solo NIP-84 highlight without a NIP-29 repost. Used by the
     /// article reader's text-selection flow: user highlights → event lands in
     /// their vault; sharing into a community is a later explicit action.

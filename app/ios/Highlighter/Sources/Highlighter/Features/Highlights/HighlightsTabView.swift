@@ -146,11 +146,20 @@ struct HighlightsTabView: View {
 
     @ViewBuilder
     private func highlightContextMenu(_ item: HydratedHighlight) -> some View {
+        // Reshare the kind:9802 highlight itself as a kind:16 repost.
+        // Surfaces the friend's quote (with attribution) inside the room.
+        Button {
+            shareTarget = .highlight(item.highlight)
+        } label: {
+            Label("Share quote to room", systemImage: "quote.bubble")
+        }
+        // Reshare the source artifact (kind:11 article share) — different
+        // intent: surface the article so other room members can read it.
         if let target = shareTargetForHighlight(item) {
             Button {
                 shareTarget = target
             } label: {
-                Label("Share to community", systemImage: "square.and.arrow.up")
+                Label("Share article to room", systemImage: "doc.text")
             }
         }
         Button {
@@ -240,7 +249,7 @@ struct HighlightsTabView: View {
             highlightReferenceKey: "a:\(addr)"
         )
         return ShareToCommunityTarget(
-            preview: preview,
+            kind: .artifactShare(preview: preview),
             displayTitle: "Article",
             displaySubtitle: item.highlight.quote,
             imageURL: nil

@@ -403,6 +403,23 @@ actor SafeHighlighterCore {
         try await core.publishHighlight(draft: draft, artifact: artifact)
     }
 
+    /// Re-share an existing highlight into a room as a kind:16 repost.
+    /// `relayHint` may be empty — the core falls back to the Highlighter
+    /// relay for the e-tag hint when so.
+    func shareHighlightToRoom(
+        highlightId: String,
+        highlightAuthorPubkeyHex: String,
+        highlightRelayUrl: String,
+        targetGroupId: String
+    ) async throws {
+        try await core.shareHighlightToRoom(
+            highlightId: highlightId,
+            highlightAuthorPubkeyHex: highlightAuthorPubkeyHex,
+            highlightRelayUrl: highlightRelayUrl,
+            targetGroupId: targetGroupId
+        )
+    }
+
     // MARK: - Blossom (BUD-03, kind:10063)
 
     func getBlossomServers() async throws -> [String] {

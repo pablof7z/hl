@@ -13,10 +13,14 @@ import SwiftUI
 struct WebReaderView: View {
     let target: WebReaderTarget
 
+    @Environment(HighlighterStore.self) private var app
     @State private var isLoading: Bool = true
     @State private var loadProgress: Double = 0
     @State private var showAsReader: Bool = true
     @State private var readerAvailable: Bool = false
+    @State private var shareTarget: ShareToCommunityTarget?
+    @State private var sharePreparing = false
+    @State private var shareError: String?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -50,6 +54,56 @@ struct WebReaderView: View {
                     }
                     .accessibilityLabel(showAsReader ? "Show original page" : "Show reader view")
                 }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task { await prepareShare() }
+                } label: {
+                    if sharePreparing {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+                .disabled(sharePreparing)
+                .accessibilityLabel("Share to room")
+            }
+        }
+        .sheet(item: $shareTarget) { target in
+            ShareToCommunitySheet(target: target)
+                .environment(app)
+                .presentationDetents([.medium, .large])
+        }
+        .alert("Couldn't share", isPresented: Binding(
+            get: { shareError != nil },
+            set: { if !$0 { shareError = nil } }
+        )) {
+            Button("OK", role: .cancel) { shareError = nil }
+        } message: {
+            Text(shareError ?? "")
+        }
+    }
+
+    /// Build an `ArtifactPreview` from the URL via the Rust core (which
+    /// fetches the page metadata) and hand it to the share sheet.
+    /// Falls back to a bare URL-only preview if the fetch fails so
+    /// the user can still share the link without a title.
+    private func prepareShare() async {
+        sharePreparing = true
+        defer { sharePreparing = false }
+        do {
+            let preview = try await app.safeCore.buildPreviewFromUrl(target.url.absoluteString)
+            await MainActor.run {
+                shareTarget = ShareToCommunityTarget(
+                    kind: .artifactShare(preview: preview),
+                    displayTitle: preview.title.isEmpty ? (target.url.host ?? target.url.absoluteString) : preview.title,
+                    displaySubtitle: preview.description,
+                    imageURL: preview.image.isEmpty ? nil : URL(string: preview.image)
+                )
+            }
+        } catch {
+            await MainActor.run {
+                shareError = "Couldn't build a preview: \(error.localizedDescription)"
             }
         }
     }

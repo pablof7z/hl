@@ -1,19 +1,33 @@
 import Kingfisher
 import SwiftUI
 
-/// Identifiable payload for `.sheet(item:)` — callers construct one of these
-/// from an `ArticleRecord` or `ArtifactRecord` and hand it to the sheet.
+/// Identifiable payload for `.sheet(item:)`.
+///
+/// Two flavours:
+/// - `.artifact` / `.article` → publish a kind:11 share of the underlying
+///   article/book/podcast into the target room (existing flow). Uses the
+///   `preview` payload to construct the kind:11 event.
+/// - `.highlight` → publish a kind:16 generic repost referencing the
+///   selected highlight directly. The repost carries `["e", id]`,
+///   `["k", "9802"]`, `["p", author]`, `["h", target_group_id]`.
 struct ShareToCommunityTarget: Identifiable {
     let id = UUID()
-    let preview: ArtifactPreview
+    let kind: Kind
     let displayTitle: String
     let displaySubtitle: String
     let imageURL: URL?
 
+    enum Kind {
+        /// Share the source artifact/article via kind:11.
+        case artifactShare(preview: ArtifactPreview)
+        /// Re-share an existing highlight via kind:16.
+        case highlightRepost(eventId: String, authorPubkeyHex: String, relayHint: String)
+    }
+
     static func article(_ article: ArticleRecord) -> ShareToCommunityTarget {
         let preview = ArtifactPreviewBuilder.from(article: article)
         return ShareToCommunityTarget(
-            preview: preview,
+            kind: .artifactShare(preview: preview),
             displayTitle: article.title.isEmpty ? "Untitled" : article.title,
             displaySubtitle: article.summary,
             imageURL: article.image.isEmpty ? nil : URL(string: article.image)
@@ -23,10 +37,32 @@ struct ShareToCommunityTarget: Identifiable {
     static func artifact(_ artifact: ArtifactRecord) -> ShareToCommunityTarget {
         let preview = ArtifactPreviewBuilder.from(artifact: artifact)
         return ShareToCommunityTarget(
-            preview: preview,
+            kind: .artifactShare(preview: preview),
             displayTitle: artifact.preview.title.isEmpty ? "Untitled" : artifact.preview.title,
             displaySubtitle: artifact.preview.description,
             imageURL: artifact.preview.image.isEmpty ? nil : URL(string: artifact.preview.image)
+        )
+    }
+
+    /// Share the highlight quote itself (not the source artifact). The
+    /// repost references the kind:9802 highlight event by id, so anyone
+    /// in the room sees the friend's quote with full attribution.
+    static func highlight(
+        _ highlight: HighlightRecord,
+        relayHint: String = ""
+    ) -> ShareToCommunityTarget {
+        let snippet = highlight.quote.isEmpty
+            ? "Highlight"
+            : "\u{201C}\(highlight.quote)\u{201D}"
+        return ShareToCommunityTarget(
+            kind: .highlightRepost(
+                eventId: highlight.eventId,
+                authorPubkeyHex: highlight.pubkey,
+                relayHint: relayHint
+            ),
+            displayTitle: snippet,
+            displaySubtitle: highlight.note,
+            imageURL: nil
         )
     }
 }
@@ -72,7 +108,7 @@ struct ShareToCommunitySheet: View {
                     }
                 }
             }
-            .navigationTitle("Share to community")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -152,18 +188,38 @@ struct ShareToCommunitySheet: View {
 
     // MARK: - Action
 
+    private var navigationTitle: String {
+        switch target.kind {
+        case .artifactShare: return "Share to community"
+        case .highlightRepost: return "Share highlight"
+        }
+    }
+
     private func publish(to groupId: String) {
         guard publishingId == nil else { return }
         publishingId = groupId
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         Task {
             do {
-                _ = try await app.safeCore.publishArtifact(
-                    preview: target.preview,
-                    groupId: groupId,
-                    note: trimmedNote.isEmpty ? nil : trimmedNote
-                )
-                await MainActor.run { dismiss() }
+                switch target.kind {
+                case .artifactShare(let preview):
+                    _ = try await app.safeCore.publishArtifact(
+                        preview: preview,
+                        groupId: groupId,
+                        note: trimmedNote.isEmpty ? nil : trimmedNote
+                    )
+                case .highlightRepost(let eventId, let authorPubkey, let relayHint):
+                    try await app.safeCore.shareHighlightToRoom(
+                        highlightId: eventId,
+                        highlightAuthorPubkeyHex: authorPubkey,
+                        highlightRelayUrl: relayHint,
+                        targetGroupId: groupId
+                    )
+                }
+                await MainActor.run {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    dismiss()
+                }
             } catch {
                 await MainActor.run {
                     publishingId = nil
