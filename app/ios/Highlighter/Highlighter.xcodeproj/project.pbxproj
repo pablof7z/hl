@@ -67,6 +67,7 @@
 		779564CF8056F01EA872D783 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA579D8C87B26DF0740A9498 /* SharedStore.swift */; };
 		7A46EFABB7D837777CEBA159 /* EventBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C2998FA6F33E28DFCFAE50 /* EventBridge.swift */; };
 		7BDC286A7E8967B6322C2728 /* HighlighterShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0EC0CD636BB36729BEBEE23B /* HighlighterShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7C4F76288A603560227FD281 /* BookmarkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7042FB7E80313E436728C88C /* BookmarkStore.swift */; };
 		7D2F56D8707B4658ADECFBD7 /* BookSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D6E7BFE1048E7388D450B9 /* BookSelection.swift */; };
 		7EE476D6EE533B6CBC224C00 /* WebReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F206574616F6B6C249AC11 /* WebReaderView.swift */; };
 		7F0D438E3B8401522DB95D1B /* RecentSearches.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BC7092BA6B35A1ECD3AE9F5 /* RecentSearches.swift */; };
@@ -111,6 +112,7 @@
 		C4D3C0A1EADAAC3C88FFF3AB /* ReadsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6966BFFF79C29AFA31612F8E /* ReadsStore.swift */; };
 		C7120F362B42A71E448D08D4 /* RoomHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4645E053E892DF7A696D2C91 /* RoomHomeView.swift */; };
 		C77B624D8721AEE900AD9886 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB46991120947DDC8F320F9 /* SettingsView.swift */; };
+		C8C4E83A88F3960F609B9369 /* BookmarksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC57F4037CA6E551E592EF9B /* BookmarksView.swift */; };
 		CDB701F801F34D6355758A0D /* SearchStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB19F812EE258E17953D44EA /* SearchStore.swift */; };
 		D02D3AB3DA39C794129ADBE5 /* HighlightQuoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E68F97439335A03F79F3015D /* HighlightQuoteView.swift */; };
 		D0C60ED9AD6199EF245F3E16 /* RoomLibraryPodcastCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27DCF425EDBAC6B55009CBDE /* RoomLibraryPodcastCardView.swift */; };
@@ -224,6 +226,7 @@
 		6D28662EE9922264507B7668 /* RoomLibraryArticleCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomLibraryArticleCardView.swift; sourceTree = "<group>"; };
 		6D29C0BA966A767C20164FBE /* ManualISBNEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualISBNEntryView.swift; sourceTree = "<group>"; };
 		6E57460F70897229B9EC00D2 /* ProfileDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileDestination.swift; sourceTree = "<group>"; };
+		7042FB7E80313E436728C88C /* BookmarkStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BookmarkStore.swift; sourceTree = "<group>"; };
 		7140C718506A93D2842A89B2 /* RoomCoverCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomCoverCard.swift; sourceTree = "<group>"; };
 		73259EC9D0D8B947B26C7F77 /* WaveformTickRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformTickRow.swift; sourceTree = "<group>"; };
 		77023F72997D85E61B44EEF8 /* highlighter_core.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = highlighter_core.swift; sourceTree = "<group>"; };
@@ -259,6 +262,7 @@
 		C9E2771D8440F9E7827D2DF7 /* ArticleReaderStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleReaderStore.swift; sourceTree = "<group>"; };
 		CB19F812EE258E17953D44EA /* SearchStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchStore.swift; sourceTree = "<group>"; };
 		CC4CA94F828F382244A71336 /* BookScannerModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookScannerModel.swift; sourceTree = "<group>"; };
+		CC57F4037CA6E551E592EF9B /* BookmarksView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BookmarksView.swift; sourceTree = "<group>"; };
 		CD76237A41BEC0E30A8AAF56 /* CameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraView.swift; sourceTree = "<group>"; };
 		CF66DB51C8B47DF82A79F535 /* RoomBrowseAllView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomBrowseAllView.swift; sourceTree = "<group>"; };
 		D03FED5576D90C6E5AA8A54D /* Readability.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Readability.js; sourceTree = "<group>"; };
@@ -339,6 +343,16 @@
 				30929C05472617D818D66641 /* MarkdownRenderer.swift */,
 			);
 			path = Article;
+			sourceTree = "<group>";
+		};
+		120F78162344279CEF91C7C9 /* Bookmarks */ = {
+			isa = PBXGroup;
+			children = (
+				7042FB7E80313E436728C88C /* BookmarkStore.swift */,
+				CC57F4037CA6E551E592EF9B /* BookmarksView.swift */,
+			);
+			name = Bookmarks;
+			path = Bookmarks;
 			sourceTree = "<group>";
 		};
 		263ED200EEC7AB8A211D74AC /* Share */ = {
@@ -472,6 +486,7 @@
 				E48D52B278708F0BC86651AE /* Settings */,
 				263ED200EEC7AB8A211D74AC /* Share */,
 				C155D241A2EE52B6CBDA1280 /* Web */,
+				120F78162344279CEF91C7C9 /* Bookmarks */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -698,8 +713,6 @@
 			dependencies = (
 			);
 			name = HighlighterShareExtension;
-			packageProductDependencies = (
-			);
 			productName = HighlighterShareExtension;
 			productReference = 0EC0CD636BB36729BEBEE23B /* HighlighterShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -737,7 +750,7 @@
 				FB7EF9EA9634F818A24E8CBE /* XCRemoteSwiftPackageReference "Kingfisher" */,
 				606904F7AC6AFD8CD87A1B33 /* XCRemoteSwiftPackageReference "swift-markdown" */,
 			);
-			preferredProjectObjectVersion = 54;
+			productRefGroup = 9288D1FF044AFA08F6DE9CC7 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -911,6 +924,8 @@
 				4B2C1870368C15D510E2E09E /* WebReaderTarget.swift in Sources */,
 				7EE476D6EE533B6CBC224C00 /* WebReaderView.swift in Sources */,
 				B45D5980FB6425CD084236EF /* highlighter_core.swift in Sources */,
+				7C4F76288A603560227FD281 /* BookmarkStore.swift in Sources */,
+				C8C4E83A88F3960F609B9369 /* BookmarksView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -959,10 +974,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.highlighter.app;
 				SDKROOT = iphoneos;
-				SWIFT_INCLUDE_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/Vendor",
-				);
+				SWIFT_INCLUDE_PATHS = "$(inherited) $(SRCROOT)/Vendor";
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
@@ -1001,10 +1013,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.highlighter.app;
 				SDKROOT = iphoneos;
-				SWIFT_INCLUDE_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/Vendor",
-				);
+				SWIFT_INCLUDE_PATHS = "$(inherited) $(SRCROOT)/Vendor";
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
