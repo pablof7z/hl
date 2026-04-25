@@ -4,6 +4,7 @@ pub mod articles;
 pub mod artifacts;
 pub mod blossom;
 pub mod bookmarks;
+pub mod lists;
 pub mod cache;
 pub mod chat;
 pub mod client;
@@ -40,11 +41,11 @@ pub use client::HighlighterCore;
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
-    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, ChatMessageRecord,
-    CommentRecord, CommunitySummary, CurrentUser, DiscussionAttachment, DiscussionRecord,
-    FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft, HighlightRecord, HydratedHighlight,
-    NostrConnectOptions, PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem,
-    RoomRecommendation, RoomRecommendationReason,
+    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, BookmarkSetRecord,
+    ChatMessageRecord, CommentRecord, CommunitySummary, CurrentUser, DiscussionAttachment,
+    DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft, HighlightRecord,
+    HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord, ProfileMetadata,
+    ReadingFeedItem, RoomRecommendation, RoomRecommendationReason, WebBookmarkRecord,
 };
 pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;

@@ -988,6 +988,71 @@ impl HighlighterCore {
         )
     }
 
+    // -- NIP-51 Bookmark sets (kind:30003) / Curation sets (kind:30004) -----
+
+    /// Return all kind:30003 bookmark sets authored by the current user.
+    pub async fn get_my_bookmark_sets(&self) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
+        let user_hex = self.inner.read().session.current_user()
+            .map(|u| u.pubkey).unwrap_or_default();
+        crate::lists::query_user_sets(self.runtime.ndb(), &user_hex, crate::lists::KIND_BOOKMARK_SETS)
+    }
+
+    /// Return all kind:30004 curation sets authored by the current user.
+    pub async fn get_my_curation_sets(&self) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
+        let user_hex = self.inner.read().session.current_user()
+            .map(|u| u.pubkey).unwrap_or_default();
+        crate::lists::query_user_sets(self.runtime.ndb(), &user_hex, crate::lists::KIND_CURATION_SETS)
+    }
+
+    /// Return kind:30004 curation sets from users the current user follows.
+    pub async fn get_following_curation_sets(&self) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
+        let user_hex = self.inner.read().session.current_user()
+            .map(|u| u.pubkey).unwrap_or_default();
+        let follows = crate::follows::query_follows(self.runtime.ndb(), &user_hex)?;
+        crate::lists::query_following_curation_sets(self.runtime.ndb(), &follows)
+    }
+
+    /// Open a live subscription for the current user's kind:30003/30004 sets.
+    /// Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
+    pub async fn subscribe_bookmark_sets(&self) -> Result<u64, CoreError> {
+        let user_hex = self.inner.read().session.current_user()
+            .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
+        let pk = PublicKey::from_hex(&user_hex)
+            .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
+        self.subscriptions.register(&self.runtime, SubscriptionKind::BookmarkSets { user_pubkey: pk })
+    }
+
+    /// Open a live subscription for kind:30004 sets from followed authors.
+    /// Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
+    pub async fn subscribe_following_curation_sets(&self) -> Result<u64, CoreError> {
+        let user_hex = self.inner.read().session.current_user()
+            .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
+        let follow_hexes = crate::follows::query_follows(self.runtime.ndb(), &user_hex)?;
+        let follows: Vec<PublicKey> = follow_hexes.iter()
+            .filter_map(|h| PublicKey::from_hex(h).ok())
+            .collect();
+        self.subscriptions.register(&self.runtime, SubscriptionKind::FollowingCurationSets { follows })
+    }
+
+    // -- NIP-B0 Web bookmarks (kind:39701) -----------------------------------
+
+    /// Return all NIP-B0 kind:39701 web bookmarks authored by the current user.
+    pub async fn get_my_web_bookmarks(&self) -> Result<Vec<crate::models::WebBookmarkRecord>, CoreError> {
+        let user_hex = self.inner.read().session.current_user()
+            .map(|u| u.pubkey).unwrap_or_default();
+        crate::lists::query_user_web_bookmarks(self.runtime.ndb(), &user_hex)
+    }
+
+    /// Open a live subscription for the current user's NIP-B0 kind:39701 events.
+    /// Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
+    pub async fn subscribe_web_bookmarks(&self) -> Result<u64, CoreError> {
+        let user_hex = self.inner.read().session.current_user()
+            .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
+        let pk = PublicKey::from_hex(&user_hex)
+            .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
+        self.subscriptions.register(&self.runtime, SubscriptionKind::WebBookmarks { user_pubkey: pk })
+    }
+
     pub async fn lookup_isbn(&self, isbn: String) -> Result<ArtifactPreview, CoreError> {
         isbn_lookup::lookup_isbn(&isbn).await
     }

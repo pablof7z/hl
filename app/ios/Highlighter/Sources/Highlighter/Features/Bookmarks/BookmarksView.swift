@@ -2,25 +2,23 @@ import Kingfisher
 import SwiftUI
 
 enum BookmarkFilter: CaseIterable, Identifiable {
-    case all, articles, notes, web
+    case articles, collections, web
 
     var id: Self { self }
 
     var label: String {
         switch self {
-        case .all:      return "All"
-        case .articles: return "Articles"
-        case .notes:    return "Notes"
-        case .web:      return "Web"
+        case .articles:    return "Articles"
+        case .collections: return "Collections"
+        case .web:         return "Web"
         }
     }
 
     var icon: String {
         switch self {
-        case .all:      return "square.grid.2x2"
-        case .articles: return "doc.text"
-        case .notes:    return "note.text"
-        case .web:      return "globe"
+        case .articles:    return "doc.text"
+        case .collections: return "rectangle.stack"
+        case .web:         return "globe"
         }
     }
 }
@@ -29,12 +27,12 @@ struct BookmarksView: View {
     @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var store = BookmarkStore()
-    @State private var filter: BookmarkFilter = .all
+    @State private var filter: BookmarkFilter = .articles
 
     var body: some View {
         NavigationStack {
             Group {
-                if store.isLoading {
+                if store.isLoading && store.myArticles.isEmpty && store.myBookmarkSets.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -45,6 +43,9 @@ struct BookmarksView: View {
             .navigationTitle("Bookmarks")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    scopePicker
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
@@ -52,36 +53,42 @@ struct BookmarksView: View {
             .navigationDestination(for: ArticleReaderTarget.self) { target in
                 ArticleReaderView(target: target)
             }
+            .navigationDestination(for: BookmarkSetRecord.self) { rec in
+                SetDetailView(record: rec)
+            }
         }
         .task(id: app.bookmarkedArticleAddresses) {
-            await store.load(addresses: app.bookmarkedArticleAddresses, core: app.safeCore)
+            guard let bridge = app.eventBridge else { return }
+            await store.start(
+                addresses: app.bookmarkedArticleAddresses,
+                core: app.safeCore,
+                bridge: bridge
+            )
         }
+        .onDisappear { store.stop() }
+    }
+
+    private var scopePicker: some View {
+        Picker("Scope", selection: $store.scope) {
+            Text("Mine").tag(BookmarkScope.mine)
+            Text("Explore").tag(BookmarkScope.explore)
+        }
+        .pickerStyle(.segmented)
+        .fixedSize()
     }
 
     private var scrollContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                filterChipRail
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-
-                Divider()
-
-                switch filter {
-                case .all, .articles:
-                    articlesContent
-                case .notes:
-                    unavailableState(
-                        icon: "note.text",
-                        title: "No notes saved",
-                        message: "Bookmarked Nostr notes will appear here."
-                    )
-                case .web:
-                    unavailableState(
-                        icon: "globe",
-                        title: "No web pages saved",
-                        message: "Bookmarked links will appear here."
-                    )
+                if store.scope == .mine {
+                    filterChipRail
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    Divider()
+                    mineContent
+                } else {
+                    exploreContent
+                        .padding(.top, 16)
                 }
             }
         }
@@ -100,9 +107,6 @@ struct BookmarksView: View {
 
     private func chip(for item: BookmarkFilter) -> some View {
         let isActive = filter == item
-        let articleCount = store.articles.count
-        let showCount = (item == .all || item == .articles) && articleCount > 0
-
         return Button {
             withAnimation(.spring(duration: 0.22)) { filter = item }
         } label: {
@@ -111,35 +115,40 @@ struct BookmarksView: View {
                     .font(.caption.weight(.semibold))
                 Text(item.label)
                     .font(.subheadline.weight(.medium))
-                if showCount {
-                    Text("\(articleCount)")
-                        .font(.caption.weight(.bold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(
-                            isActive ? Color.highlighterAccent.opacity(0.2) : Color.highlighterRule,
-                            in: Capsule()
-                        )
-                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .foregroundStyle(isActive ? Color.highlighterAccent : Color.highlighterInkMuted)
             .background(.ultraThinMaterial, in: Capsule())
             .overlay(
-                Capsule()
-                    .strokeBorder(
-                        isActive ? Color.highlighterAccent.opacity(0.4) : Color.highlighterRule,
-                        lineWidth: 1
-                    )
+                Capsule().strokeBorder(
+                    isActive ? Color.highlighterAccent.opacity(0.4) : Color.highlighterRule,
+                    lineWidth: 1
+                )
             )
         }
         .buttonStyle(.plain)
     }
 
     @ViewBuilder
+    private var mineContent: some View {
+        switch filter {
+        case .articles:
+            articlesContent
+        case .collections:
+            collectionsContent(
+                sets: store.myBookmarkSets + store.myCurationSets,
+                emptyTitle: "No collections yet",
+                emptyMessage: "Create bookmark or curation sets to organise your saved content."
+            )
+        case .web:
+            webContent
+        }
+    }
+
+    @ViewBuilder
     private var articlesContent: some View {
-        if store.articles.isEmpty {
+        if store.myArticles.isEmpty {
             unavailableState(
                 icon: "bookmark",
                 title: "No bookmarks yet",
@@ -147,16 +156,70 @@ struct BookmarksView: View {
             )
         } else {
             LazyVStack(spacing: 0) {
-                ForEach(store.articles, id: \.eventId) { article in
+                ForEach(store.myArticles, id: \.eventId) { article in
                     NavigationLink(value: ArticleReaderTarget(pubkey: article.pubkey, dTag: article.identifier, seed: article)) {
                         BookmarkedArticleRow(article: article)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                     }
                     .buttonStyle(.plain)
+                    Divider().padding(.leading, 84)
+                }
+            }
+        }
+    }
 
-                    Divider()
-                        .padding(.leading, 84)
+    @ViewBuilder
+    private var webContent: some View {
+        if store.myWebBookmarks.isEmpty {
+            unavailableState(
+                icon: "globe",
+                title: "No web bookmarks yet",
+                message: "Web pages you bookmark via Nostr will appear here."
+            )
+        } else {
+            LazyVStack(spacing: 0) {
+                ForEach(store.myWebBookmarks, id: \.url) { bookmark in
+                    WebBookmarkRow(bookmark: bookmark)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                    Divider().padding(.leading, 16)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var exploreContent: some View {
+        if store.followingCurationSets.isEmpty {
+            unavailableState(
+                icon: "rectangle.stack",
+                title: "Nothing to explore",
+                message: "People you follow haven't created any curation sets yet."
+            )
+        } else {
+            collectionsContent(
+                sets: store.followingCurationSets,
+                emptyTitle: "Nothing to explore",
+                emptyMessage: "People you follow haven't created any curation sets yet."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func collectionsContent(sets: [BookmarkSetRecord], emptyTitle: String, emptyMessage: String) -> some View {
+        if sets.isEmpty {
+            unavailableState(icon: "rectangle.stack", title: emptyTitle, message: emptyMessage)
+        } else {
+            LazyVStack(spacing: 0) {
+                ForEach(sets, id: \.id) { set in
+                    NavigationLink(value: set) {
+                        CollectionRow(record: set)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.plain)
+                    Divider().padding(.leading, 16)
                 }
             }
         }
@@ -172,7 +235,9 @@ struct BookmarksView: View {
     }
 }
 
-private struct BookmarkedArticleRow: View {
+// MARK: - Row views
+
+struct BookmarkedArticleRow: View {
     @Environment(HighlighterStore.self) private var app
     let article: ArticleRecord
 
@@ -184,7 +249,7 @@ private struct BookmarkedArticleRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(article.title.isEmpty ? "Untitled" : article.title)
-                    .font(.system(.subheadline, design: .serif).weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -239,12 +304,8 @@ private struct BookmarkedArticleRow: View {
     private var coverFallback: some View {
         ZStack {
             LinearGradient(
-                colors: [
-                    Color.highlighterAccent.opacity(0.28),
-                    Color.highlighterAccent.opacity(0.10),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+                colors: [Color.highlighterAccent.opacity(0.28), Color.highlighterAccent.opacity(0.10)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
             )
             Image(systemName: "doc.text")
                 .font(.system(size: 20, weight: .medium))
@@ -265,11 +326,149 @@ private struct BookmarkedArticleRow: View {
         let delta = Date().timeIntervalSince1970 - TimeInterval(s)
         guard delta >= 0 else { return nil }
         switch delta {
-        case ..<3600:              return "\(Int(delta / 60))m"
-        case ..<86400:             return "\(Int(delta / 3600))h"
-        case ..<(86400 * 7):       return "\(Int(delta / 86400))d"
-        case ..<(86400 * 30):      return "\(Int(delta / (86400 * 7)))w"
-        default:                   return "\(Int(delta / (86400 * 30)))mo"
+        case ..<3600:           return "\(Int(delta / 60))m"
+        case ..<86400:          return "\(Int(delta / 3600))h"
+        case ..<(86400 * 7):    return "\(Int(delta / 86400))d"
+        case ..<(86400 * 30):   return "\(Int(delta / (86400 * 7)))w"
+        default:                return "\(Int(delta / (86400 * 30)))mo"
         }
     }
 }
+
+struct CollectionRow: View {
+    let record: BookmarkSetRecord
+
+    private var displayTitle: String {
+        record.title.isEmpty ? (record.id.isEmpty ? "Untitled" : record.id) : record.title
+    }
+
+    private var kindLabel: String {
+        record.kind == 30003 ? "Bookmarks" : "Curation"
+    }
+
+    private var itemCount: Int {
+        record.articleAddresses.count + record.noteIds.count
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.highlighterAccent.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Image(systemName: record.kind == 30003 ? "bookmark.fill" : "rectangle.stack.fill")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Color.highlighterAccent)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.highlighterInkStrong)
+                    .lineLimit(1)
+
+                HStack(spacing: 4) {
+                    Text(kindLabel)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(Color.highlighterAccent.opacity(0.8))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.highlighterAccent.opacity(0.1), in: Capsule())
+
+                    if itemCount > 0 {
+                        Text("\(itemCount) item\(itemCount == 1 ? "" : "s")")
+                            .font(.caption2)
+                            .foregroundStyle(Color.highlighterInkMuted)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.highlighterInkMuted.opacity(0.5))
+        }
+    }
+}
+
+struct WebBookmarkRow: View {
+    let bookmark: WebBookmarkRecord
+
+    private var displayTitle: String {
+        bookmark.title.isEmpty ? bookmark.url : bookmark.title
+    }
+
+    private var host: String? {
+        URL(string: bookmark.url)?.host
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "globe")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.highlighterAccent)
+
+                if let host {
+                    Text(host)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(Color.highlighterInkMuted)
+                }
+
+                Spacer(minLength: 0)
+
+                if let date = relativeDate {
+                    Text(date)
+                        .font(.caption2)
+                        .foregroundStyle(Color.highlighterInkMuted)
+                }
+            }
+
+            Text(displayTitle)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.highlighterInkStrong)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+
+            if !bookmark.description.isEmpty {
+                Text(bookmark.description)
+                    .font(.caption)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+
+            if !bookmark.topics.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(bookmark.topics, id: \.self) { topic in
+                            Text("#\(topic)")
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(Color.highlighterAccent.opacity(0.8))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.highlighterAccent.opacity(0.1), in: Capsule())
+                        }
+                    }
+                }
+                .scrollClipDisabled()
+            }
+        }
+    }
+
+    private var relativeDate: String? {
+        let seconds = bookmark.publishedAt ?? bookmark.createdAt
+        guard let s = seconds, s > 0 else { return nil }
+        let delta = Date().timeIntervalSince1970 - TimeInterval(s)
+        guard delta >= 0 else { return nil }
+        switch delta {
+        case ..<3600:           return "\(Int(delta / 60))m"
+        case ..<86400:          return "\(Int(delta / 3600))h"
+        case ..<(86400 * 7):    return "\(Int(delta / 86400))d"
+        case ..<(86400 * 30):   return "\(Int(delta / (86400 * 7)))w"
+        default:                return "\(Int(delta / (86400 * 30)))mo"
+        }
+    }
+}
+

@@ -447,3 +447,38 @@ pub struct CacheStats {
     pub disk_bytes: u64,
     pub event_count_estimate: u64,
 }
+
+/// One NIP-51 Bookmark set (kind:30003) or Curation set (kind:30004).
+/// Parameterized replaceable — keyed by (author pubkey, d-tag).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkSetRecord {
+    /// `d` tag — stable identifier within the author's sets.
+    pub id: String,
+    pub pubkey: String,
+    /// 30003 for bookmark sets, 30004 for curation sets.
+    pub kind: u32,
+    pub title: String,
+    pub description: String,
+    pub image: String,
+    /// `a`-tag references — NIP-33 addresses like `"30023:<pubkey>:<d>"`.
+    pub article_addresses: Vec<String>,
+    /// `e`-tag references — event ids of kind:1 notes.
+    pub note_ids: Vec<String>,
+    pub created_at: Option<u64>,
+}
+
+/// One NIP-B0 web bookmark (kind:39701). The `d` tag is the URL without
+/// scheme; we always prepend `https://` when surfacing it to Swift.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct WebBookmarkRecord {
+    /// Full URL — `"https://"` prepended to the `d` tag.
+    pub url: String,
+    pub pubkey: String,
+    pub title: String,
+    /// Detailed description from the event's `content` field.
+    pub description: String,
+    /// `t` tags (topics / hashtags).
+    pub topics: Vec<String>,
+    pub published_at: Option<u64>,
+    pub created_at: Option<u64>,
+}

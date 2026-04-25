@@ -133,6 +133,15 @@ pub(crate) enum SubscriptionKind {
     /// the Swift bookmarks store re-queries the authoritative list and every
     /// observing row reacts.
     Bookmarks { user_pubkey: PublicKey },
+    /// Current user's kind:30003 / kind:30004 sets. Fires `BookmarkSetsUpdated`
+    /// (view-scoped) when any of the user's sets change.
+    BookmarkSets { user_pubkey: PublicKey },
+    /// kind:30004 curation sets from followed authors. Fires
+    /// `FollowingCurationSetsUpdated` (view-scoped) on each new set event.
+    FollowingCurationSets { follows: Vec<PublicKey> },
+    /// Current user's NIP-B0 kind:39701 web bookmarks. Fires
+    /// `WebBookmarksUpdated` (view-scoped) when any web bookmark changes.
+    WebBookmarks { user_pubkey: PublicKey },
 }
 
 impl SubscriptionRegistry {
@@ -708,6 +717,57 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             });
             vec![id]
         }
+        SubscriptionKind::BookmarkSets { user_pubkey } => {
+            let id = SubscriptionId::generate();
+            let id_clone = id.clone();
+            let client = runtime.client().clone();
+            let pk = *user_pubkey;
+            runtime.runtime_handle().spawn(async move {
+                let filter = Filter::new()
+                    .kinds([
+                        Kind::Custom(crate::lists::KIND_BOOKMARK_SETS),
+                        Kind::Custom(crate::lists::KIND_CURATION_SETS),
+                    ])
+                    .author(pk);
+                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
+                    tracing::warn!(error = %e, "failed to subscribe to bookmark sets");
+                }
+            });
+            vec![id]
+        }
+        SubscriptionKind::FollowingCurationSets { follows } => {
+            if follows.is_empty() {
+                return vec![];
+            }
+            let id = SubscriptionId::generate();
+            let id_clone = id.clone();
+            let client = runtime.client().clone();
+            let authors: Vec<PublicKey> = follows.clone();
+            runtime.runtime_handle().spawn(async move {
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(crate::lists::KIND_CURATION_SETS)])
+                    .authors(authors);
+                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
+                    tracing::warn!(error = %e, "failed to subscribe to following curation sets");
+                }
+            });
+            vec![id]
+        }
+        SubscriptionKind::WebBookmarks { user_pubkey } => {
+            let id = SubscriptionId::generate();
+            let id_clone = id.clone();
+            let client = runtime.client().clone();
+            let pk = *user_pubkey;
+            runtime.runtime_handle().spawn(async move {
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(crate::lists::KIND_WEB_BOOKMARK)])
+                    .author(pk);
+                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
+                    tracing::warn!(error = %e, "failed to subscribe to web bookmarks");
+                }
+            });
+            vec![id]
+        }
     }
 }
 
@@ -835,6 +895,34 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
                 .authors([&pk_bytes])
                 .build()]
         }
+        SubscriptionKind::BookmarkSets { user_pubkey } => {
+            let pk_bytes: [u8; 32] = user_pubkey.to_bytes();
+            vec![NdbFilter::new()
+                .kinds([
+                    crate::lists::KIND_BOOKMARK_SETS as u64,
+                    crate::lists::KIND_CURATION_SETS as u64,
+                ])
+                .authors([&pk_bytes])
+                .build()]
+        }
+        SubscriptionKind::FollowingCurationSets { follows } => {
+            if follows.is_empty() {
+                return vec![];
+            }
+            let pk_bytes: Vec<[u8; 32]> = follows.iter().map(|pk| pk.to_bytes()).collect();
+            let pk_refs: Vec<&[u8; 32]> = pk_bytes.iter().collect();
+            vec![NdbFilter::new()
+                .kinds([crate::lists::KIND_CURATION_SETS as u64])
+                .authors(pk_refs.iter().copied())
+                .build()]
+        }
+        SubscriptionKind::WebBookmarks { user_pubkey } => {
+            let pk_bytes: [u8; 32] = user_pubkey.to_bytes();
+            vec![NdbFilter::new()
+                .kinds([crate::lists::KIND_WEB_BOOKMARK as u64])
+                .authors([&pk_bytes])
+                .build()]
+        }
     }
 }
 
@@ -859,6 +947,7 @@ async fn run_pump(
         SubscriptionKind::Bookmarks { .. } => 0,
         _ => handle,
     };
+    // BookmarkSets / FollowingCurationSets / WebBookmarks use `handle` (view-scoped)
 
     // Stage 2 of the NIP-29 join-set query: as we see membership events
     // (kind:39001/39002) for this user, install a `{ kinds: [39000], '#d':
@@ -1303,6 +1392,34 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
                 return None;
             }
             Some(DataChangeType::BookmarksUpdated)
+        }
+        SubscriptionKind::BookmarkSets { user_pubkey } => {
+            let k = event.kind.as_u16();
+            if k != crate::lists::KIND_BOOKMARK_SETS && k != crate::lists::KIND_CURATION_SETS {
+                return None;
+            }
+            if event.pubkey != *user_pubkey {
+                return None;
+            }
+            Some(DataChangeType::BookmarkSetsUpdated)
+        }
+        SubscriptionKind::FollowingCurationSets { follows } => {
+            if event.kind.as_u16() != crate::lists::KIND_CURATION_SETS {
+                return None;
+            }
+            if !follows.contains(&event.pubkey) {
+                return None;
+            }
+            Some(DataChangeType::FollowingCurationSetsUpdated)
+        }
+        SubscriptionKind::WebBookmarks { user_pubkey } => {
+            if event.kind.as_u16() != crate::lists::KIND_WEB_BOOKMARK {
+                return None;
+            }
+            if event.pubkey != *user_pubkey {
+                return None;
+            }
+            Some(DataChangeType::WebBookmarksUpdated)
         }
         SubscriptionKind::FeedbackThread { root_event_id } => {
             if event.kind.as_u16() != KIND_FEEDBACK_NOTE {

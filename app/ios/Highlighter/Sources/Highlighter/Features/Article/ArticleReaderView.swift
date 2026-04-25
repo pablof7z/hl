@@ -117,6 +117,7 @@ struct ArticleReaderView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .modifier(ArticleCommentsAttachmentModifier(article: store?.article, target: target))
     }
 
     // MARK: - Content
@@ -177,6 +178,24 @@ struct ArticleReaderView: View {
             try? await Task.sleep(nanoseconds: 2_800_000_000)
             withAnimation(.easeIn(duration: 0.2)) { toast = nil }
         }
+    }
+}
+
+// MARK: - Comments attachment
+
+/// Tiny adapter that mounts the premium NIP-22 comments toolbar + sheet
+/// against an article. The article's address (`30023:<pubkey>:<d>`) is
+/// the NIP-22 root scope, so we always have the artifact ref even
+/// before the body finishes loading.
+private struct ArticleCommentsAttachmentModifier: ViewModifier {
+    let article: ArticleRecord?
+    let target: ArticleReaderTarget
+
+    func body(content: Content) -> some View {
+        content.commentsAttachment(
+            artifact: .article(addr: target.address),
+            artifactAuthorPubkey: target.pubkey
+        )
     }
 }
 

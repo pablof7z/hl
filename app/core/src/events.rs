@@ -73,6 +73,15 @@ pub enum DataChangeType {
     /// newer event). App-scope delta — Swift re-queries the authoritative
     /// list from nostrdb.
     BookmarksUpdated,
+    /// One of the current user's kind:30003 / kind:30004 sets changed.
+    /// View-scoped — the BookmarkStore re-queries on receipt.
+    BookmarkSetsUpdated,
+    /// A kind:30004 curation set from a followed author arrived.
+    /// View-scoped — the BookmarkStore re-queries the explore list.
+    FollowingCurationSetsUpdated,
+    /// A NIP-B0 kind:39701 web bookmark from the current user changed.
+    /// View-scoped — the BookmarkStore re-queries on receipt.
+    WebBookmarksUpdated,
     /// NIP-46 signer connected — fires after a remote signer completes the
     /// `nostrconnect://` or `bunker://` handshake.
     SignerConnected { user: CurrentUser },

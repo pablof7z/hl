@@ -35,6 +35,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         var feedbackThreads: [UInt64: WeakBox<FeedbackStore>] = [:]
         var feedbackThreadDetails: [UInt64: WeakBox<FeedbackThreadStore>] = [:]
         var searches: [UInt64: WeakBox<SearchStore>] = [:]
+        var bookmarks: [UInt64: WeakBox<BookmarkStore>] = [:]
         /// App-scoped Network Settings store (subscription_id == 0). Weak
         /// so it goes away when the screen is dismissed.
         var networkStore: WeakBox<NetworkSettingsStore>? = nil
@@ -53,6 +54,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             feedbackThreads = feedbackThreads.filter { $0.value.value != nil }
             feedbackThreadDetails = feedbackThreadDetails.filter { $0.value.value != nil }
             searches = searches.filter { $0.value.value != nil }
+            bookmarks = bookmarks.filter { $0.value.value != nil }
         }
     }
     private let registry = OSAllocatedUnfairLock(initialState: Registry())
@@ -140,6 +142,13 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         }
     }
 
+    func registerBookmarkStore(_ store: BookmarkStore, handle: UInt64) {
+        registry.withLock { reg in
+            reg.bookmarks[handle] = WeakBox(store)
+            reg.prune()
+        }
+    }
+
     func registerProfileCache(pubkeyHex: String, handle: UInt64) {
         registry.withLock { reg in
             reg.profileCacheHandles[handle] = pubkeyHex
@@ -166,6 +175,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             _ = reg.feedbackThreads.removeValue(forKey: handle)
             _ = reg.feedbackThreadDetails.removeValue(forKey: handle)
             _ = reg.searches.removeValue(forKey: handle)
+            _ = reg.bookmarks.removeValue(forKey: handle)
             _ = reg.profileCacheHandles.removeValue(forKey: handle)
         }
     }
@@ -195,6 +205,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                     feedback: reg.feedbackThreads[id]?.value,
                     feedbackThread: reg.feedbackThreadDetails[id]?.value,
                     search: reg.searches[id]?.value,
+                    bookmark: reg.bookmarks[id]?.value,
                     profileCachePubkey: reg.profileCacheHandles[id]
                 )
             }
@@ -221,6 +232,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 self.dispatchFeedbackThread(change, store: store)
             } else if let store = routed.search {
                 self.dispatchSearch(change, store: store)
+            } else if let store = routed.bookmark {
+                self.dispatchBookmarkStore(change, store: store)
             } else if let pubkey = routed.profileCachePubkey {
                 self.dispatchProfileCache(change, pubkey: pubkey)
             }
@@ -242,6 +255,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         let feedback: FeedbackStore?
         let feedbackThread: FeedbackThreadStore?
         let search: SearchStore?
+        let bookmark: BookmarkStore?
         let profileCachePubkey: String?
     }
 
@@ -366,6 +380,16 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     private func dispatchSearch(_ change: DataChangeType, store: SearchStore) {
         if case .searchArticlesUpdated(let query) = change {
             store.applyRelaySearchUpdate(query: query)
+        }
+    }
+
+    @MainActor
+    private func dispatchBookmarkStore(_ change: DataChangeType, store: BookmarkStore) {
+        switch change {
+        case .bookmarkSetsUpdated, .followingCurationSetsUpdated, .webBookmarksUpdated:
+            Task { await store.reload() }
+        default:
+            break
         }
     }
 
