@@ -1,24 +1,21 @@
 import SwiftUI
 
-/// Destination view for both the sheet root (no `focused` node — list is
-/// the artifact's top-level comments) and any pushed thread (`focused`
-/// node — list is its direct children). Includes a header (artifact
-/// preview at root, the focused comment as subject when pushed) and a
-/// pinned-bottom composer that always replies to the current subject.
+/// Root and pushed destination for NIP-22 thread navigation.
+///
+/// At root (`focused == nil`) renders the artifact's top-level comments.
+/// When pushed (`focused != nil`) renders that comment's direct children
+/// as its heading and lists its replies. Recursive drill-down is handled
+/// by the local `focusedNode` state + `navigationDestination(item:)` so
+/// every level lives in the enclosing NavigationStack — no nested stacks.
 struct ThreadView: View {
-    /// `nil` at root view; the focused comment when pushed.
     let focused: CommentNode?
-    /// At root we display the artifact context header.
     let artifactHeader: AnyView?
     let store: CommentsStore
     let artifact: ArtifactRef
-    /// Pubkey of the artifact's own author (article author, podcaster, …)
-    /// — used to tint the inline-reply thread line gold when they engage.
     let artifactAuthorPubkey: String?
-    /// Bound to the parent sheet's `NavigationPath` so row taps push.
-    @Binding var path: NavigationPath
 
     @Environment(\.dismiss) private var dismiss
+    @State private var focusedNode: CommentNode? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -69,26 +66,28 @@ struct ThreadView: View {
                     .foregroundStyle(Color.highlighterInkStrong)
             }
         }
+        .navigationDestination(item: $focusedNode) { node in
+            ThreadView(
+                focused: Self.locate(eventId: node.record.eventId, in: store.tree) ?? node,
+                artifactHeader: nil,
+                store: store,
+                artifact: artifact,
+                artifactAuthorPubkey: artifactAuthorPubkey
+            )
+        }
     }
 
     // MARK: - Children resolution
 
-    /// Cells to render at depth 0 of *this* view: top-level when at root,
-    /// the focused comment's direct children when pushed.
     private var children: [CommentNode] {
         if let focused {
-            return locate(eventId: focused.record.eventId)?.children ?? focused.children
+            return Self.locate(eventId: focused.record.eventId, in: store.tree)?.children
+                ?? focused.children
         }
         return store.tree
     }
 
-    /// Re-walk the tree to find the current node for a given id (so the
-    /// pushed view always sees the freshest children after a publish).
-    private func locate(eventId: String) -> CommentNode? {
-        Self.locate(eventId: eventId, in: store.tree)
-    }
-
-    private static func locate(eventId: String, in nodes: [CommentNode]) -> CommentNode? {
+    static func locate(eventId: String, in nodes: [CommentNode]) -> CommentNode? {
         for n in nodes {
             if n.record.eventId == eventId { return n }
             if let hit = locate(eventId: eventId, in: n.children) { return hit }
@@ -96,7 +95,7 @@ struct ThreadView: View {
         return nil
     }
 
-    // MARK: - Inline reply preview (depth-1 most-recent reply)
+    // MARK: - Inline reply preview
 
     @ViewBuilder
     private func inlineReplyPreview(for parent: CommentNode) -> some View {
@@ -140,7 +139,7 @@ struct ThreadView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Focused-comment header (when pushed)
+    // MARK: - Focused-comment header
 
     @ViewBuilder
     private func focusedHeader(_ node: CommentNode) -> some View {
@@ -149,7 +148,7 @@ struct ThreadView: View {
                 node: node,
                 depth: 0,
                 isAuthorReply: false,
-                onTap: {}, // already focused; tap is a no-op
+                onTap: {},
                 store: store
             )
             .allowsHitTesting(false)
@@ -173,7 +172,8 @@ struct ThreadView: View {
     }
 
     private func replyCountLabel(for node: CommentNode) -> String {
-        let count = (locate(eventId: node.record.eventId)?.children.count) ?? node.children.count
+        let count = (Self.locate(eventId: node.record.eventId, in: store.tree)?.children.count)
+            ?? node.children.count
         if count == 0 { return "Be the first to reply" }
         if count == 1 { return "1 reply" }
         return "\(count) replies"
@@ -209,11 +209,10 @@ struct ThreadView: View {
     }
 
     private var composerPlaceholder: String {
-        if focused == nil { return "Add to the conversation" }
-        return "Reply…"
+        focused == nil ? "Add to the conversation" : "Reply…"
     }
 
     private func focusOn(_ node: CommentNode) {
-        path.append(node.record.eventId)
+        focusedNode = node
     }
 }
