@@ -300,7 +300,11 @@ pub(crate) fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a st
     None
 }
 
-/// Build an `ArtifactRecord` from a cached kind:11 event.
+/// Build an `ArtifactRecord` from a cached kind:11 event. Mirrors the
+/// tag-reading shape of `artifactFromEvent` in `web/src/lib/ndk/artifacts.ts`
+/// — every tag the publisher emits has to be lifted off the event here, or
+/// downstream views see empty strings (e.g. an empty `audio_url` makes the
+/// podcast player refuse to load anything).
 pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Option<ArtifactRecord> {
     let title = first_tag_value(event, "title").unwrap_or("").to_string();
     let url = first_tag_value(event, "r").unwrap_or("").to_string();
@@ -309,6 +313,7 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
     let image = first_tag_value(event, "image").unwrap_or("").to_string();
     let summary = first_tag_value(event, "summary").unwrap_or("").to_string();
     let d = first_tag_value(event, "d").unwrap_or("").to_string();
+    let k = first_tag_value(event, "k").unwrap_or("").to_string();
 
     let (ref_name, ref_value) = if let Some(i) = first_tag_value(event, "i") {
         ("i".to_string(), i.to_string())
@@ -320,6 +325,25 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
         (String::new(), String::new())
     };
 
+    // NIP-73 episode/feed GUIDs: prefer dedicated tags, then fall back to
+    // parsing the `i` tag prefix.
+    let podcast_item_guid = first_tag_value(event, "podcast_item_guid")
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            ref_value
+                .strip_prefix("podcast:item:guid:")
+                .map(str::to_string)
+                .unwrap_or_default()
+        });
+    let podcast_guid = first_tag_value(event, "podcast_guid")
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            ref_value
+                .strip_prefix("podcast:guid:")
+                .map(str::to_string)
+                .unwrap_or_default()
+        });
+
     let preview = ArtifactPreview {
         id: d,
         url,
@@ -330,19 +354,21 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
         source,
         domain: String::new(),
         catalog_id: if ref_name == "i" { ref_value.clone() } else { String::new() },
-        catalog_kind: first_tag_value(event, "k").unwrap_or("").to_string(),
-        podcast_guid: String::new(),
-        podcast_item_guid: String::new(),
-        podcast_show_title: String::new(),
-        audio_url: String::new(),
-        audio_preview_url: String::new(),
-        transcript_url: String::new(),
-        feed_url: String::new(),
-        published_at: String::new(),
-        duration_seconds: None,
+        catalog_kind: k.clone(),
+        podcast_guid,
+        podcast_item_guid,
+        podcast_show_title: first_tag_value(event, "podcast_show_title")
+            .unwrap_or("")
+            .to_string(),
+        audio_url: first_tag_value(event, "audio").unwrap_or("").to_string(),
+        audio_preview_url: first_tag_value(event, "audio_preview").unwrap_or("").to_string(),
+        transcript_url: first_tag_value(event, "transcript").unwrap_or("").to_string(),
+        feed_url: first_tag_value(event, "feed").unwrap_or("").to_string(),
+        published_at: first_tag_value(event, "published_at").unwrap_or("").to_string(),
+        duration_seconds: first_tag_value(event, "duration").and_then(|v| v.parse::<i64>().ok()),
         reference_tag_name: ref_name.clone(),
         reference_tag_value: ref_value,
-        reference_kind: String::new(),
+        reference_kind: k,
         highlight_tag_name: String::new(),
         highlight_tag_value: String::new(),
         highlight_reference_key: String::new(),
@@ -762,6 +788,92 @@ mod tests {
         assert!(has("i", "https://example.com/post"));
         assert!(has("k", "web"));
         assert!(has("r", "https://example.com/post"));
+    }
+
+    #[test]
+    fn artifact_record_lifts_podcast_tags_off_kind_11() {
+        // Real Tucker Carlson event from relay.highlighter.com. Before the
+        // fix the audio_url field was always empty — iOS player would never
+        // load anything no matter how many times you tapped Play.
+        let keys = Keys::generate();
+        let event = EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), "")
+            .tags(vec![
+                Tag::parse(vec!["h".to_string(), "signal-over-noise".to_string()]).unwrap(),
+                Tag::identifier("ccc5hrs"),
+                Tag::parse(vec!["title".to_string(), "Tucker Debates Biotech CEO".to_string()]).unwrap(),
+                Tag::parse(vec!["source".to_string(), "podcast".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "i".to_string(),
+                    "podcast:guid:D27CDB6E-AE6D-11cf-96B8-444553540000".to_string(),
+                    "http://www.tuckercarlson.com/".to_string(),
+                ])
+                .unwrap(),
+                Tag::parse(vec!["k".to_string(), "podcast:guid".to_string()]).unwrap(),
+                Tag::parse(vec!["r".to_string(), "http://www.tuckercarlson.com/".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "podcast_guid".to_string(),
+                    "D27CDB6E-AE6D-11cf-96B8-444553540000".to_string(),
+                ])
+                .unwrap(),
+                Tag::parse(vec![
+                    "audio".to_string(),
+                    "https://www.podtrac.com/pts/redirect.mp3/example/TCN.mp3".to_string(),
+                ])
+                .unwrap(),
+                Tag::parse(vec!["duration".to_string(), "3742".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign");
+
+        let record = artifact_record_from_event(&event, "signal-over-noise").expect("record");
+        assert_eq!(
+            record.preview.audio_url,
+            "https://www.podtrac.com/pts/redirect.mp3/example/TCN.mp3"
+        );
+        assert_eq!(record.preview.podcast_guid, "D27CDB6E-AE6D-11cf-96B8-444553540000");
+        assert_eq!(record.preview.duration_seconds, Some(3742));
+        assert_eq!(record.preview.catalog_kind, "podcast:guid");
+        assert_eq!(record.preview.reference_kind, "podcast:guid");
+    }
+
+    #[test]
+    fn artifact_record_lifts_audio_preview_for_spotify() {
+        // Spotify shares carry only `audio_preview` (a 60-sec clip URL) —
+        // never a full `audio` URL. Both fields must survive the read so the
+        // player can fall back to the preview.
+        let keys = Keys::generate();
+        let event = EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), "")
+            .tags(vec![
+                Tag::parse(vec!["h".to_string(), "adhd".to_string()]).unwrap(),
+                Tag::identifier("c12vkeiz"),
+                Tag::parse(vec!["title".to_string(), "ADHD Awareness".to_string()]).unwrap(),
+                Tag::parse(vec!["source".to_string(), "podcast".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "i".to_string(),
+                    "spotify:episode:6L0fNLvby2nmASYTpCTZTv".to_string(),
+                ])
+                .unwrap(),
+                Tag::parse(vec!["k".to_string(), "spotify:episode".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "audio_preview".to_string(),
+                    "https://podz-content.spotifycdn.com/clip.mp3".to_string(),
+                ])
+                .unwrap(),
+                Tag::parse(vec!["published_at".to_string(), "2023-09-22".to_string()]).unwrap(),
+                Tag::parse(vec!["duration".to_string(), "2343".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign");
+
+        let record = artifact_record_from_event(&event, "adhd").expect("record");
+        assert_eq!(record.preview.audio_url, "");
+        assert_eq!(
+            record.preview.audio_preview_url,
+            "https://podz-content.spotifycdn.com/clip.mp3"
+        );
+        assert_eq!(record.preview.duration_seconds, Some(2343));
+        assert_eq!(record.preview.published_at, "2023-09-22");
+        assert_eq!(record.preview.catalog_kind, "spotify:episode");
     }
 
     // -- query_for_group tests ------------------------------------------------

@@ -670,6 +670,21 @@ impl HighlighterCore {
         comments::query_for_reference(self.runtime.ndb(), ch, tag_value.trim(), limit)
     }
 
+    /// Publish a NIP-22 kind:1111 comment as a top-level reply to a Nostr
+    /// event (e.g. a kind:9802 highlight). `root_kind` is the kind of the
+    /// event being replied to (9802 for highlights). Returns the new record
+    /// so callers can optimistically update their cache.
+    pub async fn publish_comment(
+        &self,
+        root_event_id: String,
+        root_kind: u16,
+        content: String,
+    ) -> Result<CommentRecord, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        comments::publish_comment(&self.runtime, root_event_id.trim(), root_kind, content.trim())
+            .await
+    }
+
     pub async fn get_user_highlights(
         &self,
         pubkey_hex: String,

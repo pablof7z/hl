@@ -406,6 +406,22 @@ private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
+    typealias FfiType = UInt16
+    typealias SwiftType = UInt16
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt16 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
     typealias FfiType = UInt32
     typealias SwiftType = UInt32
@@ -999,6 +1015,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func publishChatMessage(groupId: String, content: String, replyToEventId: String?) async throws  -> ChatMessageRecord
     
+    /**
+     * Publish a NIP-22 kind:1111 comment as a top-level reply to a Nostr
+     * event (e.g. a kind:9802 highlight). `root_kind` is the kind of the
+     * event being replied to (9802 for highlights). Returns the new record
+     * so callers can optimistically update their cache.
+     */
+    func publishComment(rootEventId: String, rootKind: UInt16, content: String) async throws  -> CommentRecord
+    
     func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async throws  -> DiscussionRecord
     
     /**
@@ -1086,6 +1110,17 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Atomically update a single relay's role flags.
      */
     func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async throws 
+    
+    /**
+     * Re-share an existing kind:9802 highlight into a NIP-29 room as a
+     * kind:16 generic repost. Used to surface a friend's highlight (or
+     * your own old one) into a community without re-publishing the
+     * underlying highlight event. The repost carries `["e", id]`,
+     * `["k", "9802"]`, `["p", author]`, and `["h", target_group_id]`
+     * per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
+     * to the Highlighter relay as the e-tag relay hint.
+     */
+    func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async throws 
     
     /**
      * Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
@@ -2316,6 +2351,29 @@ open func publishChatMessage(groupId: String, content: String, replyToEventId: S
         )
 }
     
+    /**
+     * Publish a NIP-22 kind:1111 comment as a top-level reply to a Nostr
+     * event (e.g. a kind:9802 highlight). `root_kind` is the kind of the
+     * event being replied to (9802 for highlights). Returns the new record
+     * so callers can optimistically update their cache.
+     */
+open func publishComment(rootEventId: String, rootKind: UInt16, content: String)async throws  -> CommentRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_comment(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(rootEventId),FfiConverterUInt16.lower(rootKind),FfiConverterString.lower(content)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCommentRecord_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
 open func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?)async throws  -> DiscussionRecord  {
     return
         try  await uniffiRustCallAsync(
@@ -2654,6 +2712,32 @@ open func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, index
                 uniffi_highlighter_core_fn_method_highlightercore_set_relay_roles(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(url),FfiConverterBool.lower(read),FfiConverterBool.lower(write),FfiConverterBool.lower(rooms),FfiConverterBool.lower(indexer)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Re-share an existing kind:9802 highlight into a NIP-29 room as a
+     * kind:16 generic repost. Used to surface a friend's highlight (or
+     * your own old one) into a community without re-publishing the
+     * underlying highlight event. The repost carries `["e", id]`,
+     * `["k", "9802"]`, `["p", author]`, and `["h", target_group_id]`
+     * per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
+     * to the Highlighter relay as the e-tag relay hint.
+     */
+open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_share_highlight_to_room(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(highlightId),FfiConverterString.lower(highlightAuthorPubkeyHex),FfiConverterString.lower(highlightRelayUrl),FfiConverterString.lower(targetGroupId)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_void,
@@ -8610,6 +8694,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message() != 34308) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment() != 55227) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 50982) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8662,6 +8749,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_relay_roles() != 25561) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 10741) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_sign_nip98_auth() != 43473) {
