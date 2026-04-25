@@ -336,6 +336,7 @@ struct BookmarkedArticleRow: View {
 }
 
 struct CollectionRow: View {
+    @Environment(HighlighterStore.self) private var app
     let record: BookmarkSetRecord
 
     private var displayTitle: String {
@@ -350,6 +351,17 @@ struct CollectionRow: View {
         record.articleAddresses.count + record.noteIds.count
     }
 
+    private var curatorName: String {
+        let profile = app.profileCache[record.pubkey]
+        if let dn = profile?.displayName, !dn.isEmpty { return dn }
+        if let n = profile?.name, !n.isEmpty { return n }
+        return String(record.pubkey.prefix(10))
+    }
+
+    private var curatorInitial: String {
+        curatorName.first.map { String($0).uppercased() } ?? ""
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
@@ -361,11 +373,24 @@ struct CollectionRow: View {
                     .foregroundStyle(Color.highlighterAccent)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(displayTitle)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    AuthorAvatar(
+                        pubkey: record.pubkey,
+                        pictureURL: app.profileCache[record.pubkey]?.picture ?? "",
+                        displayInitial: curatorInitial,
+                        size: 16
+                    )
+                    Text(curatorName)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(Color.highlighterInkMuted)
+                        .lineLimit(1)
+                }
 
                 HStack(spacing: 4) {
                     Text(kindLabel)
@@ -388,6 +413,9 @@ struct CollectionRow: View {
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.highlighterInkMuted.opacity(0.5))
+        }
+        .task(id: record.pubkey) {
+            await app.requestProfile(pubkeyHex: record.pubkey)
         }
     }
 }
