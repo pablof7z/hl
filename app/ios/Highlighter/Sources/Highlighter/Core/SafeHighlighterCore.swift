@@ -232,6 +232,14 @@ actor SafeHighlighterCore {
         try await core.getCommentsForReference(tagName: tagName, tagValue: tagValue, limit: limit)
     }
 
+    func publishComment(
+        rootEventId: String,
+        rootKind: UInt16,
+        content: String
+    ) async throws -> CommentRecord {
+        try await core.publishComment(rootEventId: rootEventId, rootKind: rootKind, content: content)
+    }
+
     func getUserHighlights(pubkeyHex: String, limit: UInt32 = 64) async throws -> [HighlightRecord] {
         try await core.getUserHighlights(pubkeyHex: pubkeyHex, limit: limit)
     }

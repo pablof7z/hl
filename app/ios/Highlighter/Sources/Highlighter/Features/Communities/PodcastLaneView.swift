@@ -14,11 +14,18 @@ struct PodcastLaneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            NavigationLink(value: lane.artifact) {
+            Button {
+                app.podcastPlayer.load(artifact: lane.artifact)
+            } label: {
                 identity
             }
             .buttonStyle(.plain)
             .contextMenu {
+                Button {
+                    app.podcastPlayer.load(artifact: lane.artifact)
+                } label: {
+                    Label("Play episode", systemImage: "play.fill")
+                }
                 Button {
                     onShareToCommunity(lane.artifact)
                 } label: {
