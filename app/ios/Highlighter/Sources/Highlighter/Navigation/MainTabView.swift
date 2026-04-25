@@ -5,6 +5,7 @@ struct MainTabView: View {
         case highlights, rooms, search
     }
 
+    @Environment(HighlighterStore.self) private var store
     @State private var selection: Section = .highlights
 
     var body: some View {
@@ -20,6 +21,10 @@ struct MainTabView: View {
             Tab(value: Section.search, role: .search) {
                 SearchView()
             }
+        }
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewBottomAccessory(isEnabled: store.podcastPlayer.currentArtifact != nil) {
+            MiniPlayerView()
         }
     }
 }

@@ -2,7 +2,7 @@ name: Highlighter
 options:
   bundleIdPrefix: com.highlighter
   deploymentTarget:
-    iOS: "26.0"
+    iOS: "26.1"
   createIntermediateGroups: true
   generateEmptyDirectories: true
   groupSortPosition: top
@@ -12,7 +12,7 @@ settings:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
-    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.1"
     DEVELOPMENT_TEAM: "456SHKPP26"
     CODE_SIGN_STYLE: "Automatic"
 
@@ -28,7 +28,7 @@ targets:
   Highlighter:
     type: application
     platform: iOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "26.1"
     sources:
       - path: Sources/Highlighter
         excludes:
@@ -104,7 +104,7 @@ targets:
   HighlighterShareExtension:
     type: app-extension
     platform: iOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "26.1"
     sources:
       - path: Sources/ShareExtension
       - path: Sources/Shared

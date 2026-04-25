@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MiniPlayerView: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(\.tabViewBottomAccessoryPlacement) private var placement
     @Namespace private var heroNamespace
     @State private var playerSheetPresented = false
 
@@ -10,72 +11,25 @@ struct MiniPlayerView: View {
 
     var body: some View {
         guard let artifact = player.currentArtifact else { return AnyView(EmptyView()) }
-        return AnyView(capsule(artifact: artifact))
+        return AnyView(content(artifact: artifact))
     }
 
     @ViewBuilder
-    private func capsule(artifact: ArtifactRecord) -> some View {
-        ZStack(alignment: .bottom) {
-            HStack(spacing: 12) {
-                artwork(artifact: artifact)
-                    .matchedTransitionSource(id: "podcast-mini-art", in: heroNamespace)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    let showTitle = artifact.preview.podcastShowTitle.isEmpty
-                        ? artifact.preview.author
-                        : artifact.preview.podcastShowTitle
-                    if !showTitle.isEmpty {
-                        Text(showTitle)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Text(artifact.preview.title.isEmpty ? "Untitled episode" : artifact.preview.title)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Button {
-                    player.toggle()
-                } label: {
-                    ZStack {
-                        if player.isBuffering {
-                            ProgressView()
-                                .controlSize(.small)
-                                .frame(width: 36, height: 36)
-                        } else {
-                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(width: 36, height: 36)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    player.clear()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 56)
-            .overlay(alignment: .bottom) {
-                progressBar
-                    .padding(.horizontal, 4)
-                    .padding(.bottom, 3)
+    private func content(artifact: ArtifactRecord) -> some View {
+        Group {
+            if placement == .inline {
+                inlineRow(artifact: artifact)
+            } else {
+                expandedRow(artifact: artifact)
             }
         }
-        .glassEffect(.regular, in: .capsule)
+        .overlay(alignment: .bottom) {
+            progressBar
+                .padding(.horizontal, 4)
+                .padding(.bottom, 3)
+        }
         .contentShape(.capsule)
-        .onTapGesture {
-            playerSheetPresented = true
-        }
+        .onTapGesture { playerSheetPresented = true }
         .contextMenu {
             Button {
                 player.skip(by: 30)
@@ -104,10 +58,74 @@ struct MiniPlayerView: View {
                 .presentationDetents([.large])
                 .navigationTransition(.zoom(sourceID: "podcast-mini-art", in: heroNamespace))
         }
+        .animation(.snappy, value: placement)
     }
 
     @ViewBuilder
-    private func artwork(artifact: ArtifactRecord) -> some View {
+    private func expandedRow(artifact: ArtifactRecord) -> some View {
+        HStack(spacing: 12) {
+            artwork(artifact: artifact, size: 40, cornerRadius: 6)
+                .matchedTransitionSource(id: "podcast-mini-art", in: heroNamespace)
+
+            VStack(alignment: .leading, spacing: 2) {
+                let showTitle = artifact.preview.podcastShowTitle.isEmpty
+                    ? artifact.preview.author
+                    : artifact.preview.podcastShowTitle
+                if !showTitle.isEmpty {
+                    Text(showTitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Text(artifact.preview.title.isEmpty ? "Untitled episode" : artifact.preview.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            playPauseButton(size: 36)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 56)
+    }
+
+    @ViewBuilder
+    private func inlineRow(artifact: ArtifactRecord) -> some View {
+        HStack(spacing: 8) {
+            artwork(artifact: artifact, size: 24, cornerRadius: 4)
+                .matchedTransitionSource(id: "podcast-mini-art", in: heroNamespace)
+
+            Text(artifact.preview.title.isEmpty ? "Untitled episode" : artifact.preview.title)
+                .font(.footnote.weight(.semibold))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            playPauseButton(size: 28)
+        }
+        .padding(.horizontal, 10)
+    }
+
+    private func playPauseButton(size: CGFloat) -> some View {
+        Button {
+            player.toggle()
+        } label: {
+            ZStack {
+                if player.isBuffering {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: size, height: size)
+                } else {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: size * 0.45, weight: .semibold))
+                        .frame(width: size, height: size)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func artwork(artifact: ArtifactRecord, size: CGFloat, cornerRadius: CGFloat) -> some View {
         let imageUrl = artifact.preview.image
         Group {
             if !imageUrl.isEmpty, let url = URL(string: imageUrl) {
@@ -120,8 +138,8 @@ struct MiniPlayerView: View {
                 artworkPlaceholder
             }
         }
-        .frame(width: 40, height: 40)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 
     private var artworkPlaceholder: some View {
@@ -140,9 +158,9 @@ struct MiniPlayerView: View {
                 : 0
             Rectangle()
                 .fill(.primary.opacity(0.6))
-                .frame(width: geo.size.width * fraction, height: 2)
+                .frame(width: geo.size.width * fraction, height: 1)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(height: 2)
+        .frame(height: 1)
     }
 }

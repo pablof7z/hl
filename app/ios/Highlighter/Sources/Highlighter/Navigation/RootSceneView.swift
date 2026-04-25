@@ -12,14 +12,6 @@ struct RootSceneView: View {
         Group {
             if store.isLoggedIn {
                 MainTabView()
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        if store.podcastPlayer.currentArtifact != nil {
-                            MiniPlayerView()
-                                .padding(.horizontal, 12)
-                                .padding(.bottom, 6)
-                                .environment(store)
-                        }
-                    }
             } else {
                 LoginView()
             }
