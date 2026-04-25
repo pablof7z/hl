@@ -111,10 +111,9 @@ struct ClipComposerSheet: View {
 
     private var header: some View {
         VStack(spacing: 12) {
-            Text("NEW CLIP")
-                .font(.system(.caption2, design: .monospaced).weight(.semibold))
-                .tracking(1.5)
-                .foregroundStyle(Color.laneAudioInkMuted)
+            Text("New Clip")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)
 
             rangeRow
@@ -132,8 +131,8 @@ struct ClipComposerSheet: View {
                 Spacer(minLength: 0)
 
                 Text("→")
-                    .font(.system(.title3, design: .monospaced).weight(.light))
-                    .foregroundStyle(Color.laneAudioInkMuted)
+                    .font(.title3.weight(.light))
+                    .foregroundStyle(.secondary)
 
                 Spacer(minLength: 0)
 
@@ -144,8 +143,8 @@ struct ClipComposerSheet: View {
             }
 
             Text(subtitleLabel)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(Color.laneAudioInkMuted)
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)
         }
     }
@@ -163,9 +162,8 @@ struct ClipComposerSheet: View {
             }
 
             Text(formatTimestamp(seconds.wrappedValue))
-                .font(.system(size: 24, weight: .semibold, design: .monospaced))
-                .foregroundStyle(Color.laneAudioInk)
-                .monospacedDigit()
+                .font(.system(size: 24, weight: .semibold).monospacedDigit())
+                .foregroundStyle(.primary)
 
             if direction == .leading {
                 nudgeButton(label: "+5s", delta: +5, onNudge: onNudge)
@@ -178,11 +176,11 @@ struct ClipComposerSheet: View {
             onNudge(delta)
         } label: {
             Text(label)
-                .font(.system(.caption2, design: .monospaced).weight(.semibold))
-                .foregroundStyle(Color.laneAudioInkMuted)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color.laneAudioRule.opacity(0.4), in: Capsule())
+                .background(Color(.tertiarySystemFill), in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -200,27 +198,26 @@ struct ClipComposerSheet: View {
 
                 Text(extractedFragment)
                     .font(.system(.callout, design: .default).italic())
-                    .foregroundStyle(Color.laneAudioInk)
+                    .foregroundStyle(.primary)
                     .lineSpacing(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
             }
-            .background(Color.laneAudioRule.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+            .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 8))
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                Text("NO TRANSCRIPT IN RANGE")
-                    .font(.system(.caption2, design: .monospaced).weight(.semibold))
-                    .tracking(1.0)
-                    .foregroundStyle(Color.laneAudioInkMuted)
+                Text("No transcript in range")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
 
                 Text("Time-only clip · \(durationLabel). Add a note for the room below.")
                     .font(.caption)
-                    .foregroundStyle(Color.laneAudioInkMuted)
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(Color.laneAudioRule.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 
@@ -232,10 +229,10 @@ struct ClipComposerSheet: View {
             .font(.callout)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color.laneAudioRule.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color.laneAudioRule, lineWidth: 1)
+                    .strokeBorder(Color(.separator), lineWidth: 1)
             )
     }
 
@@ -248,24 +245,24 @@ struct ClipComposerSheet: View {
             HStack(spacing: 10) {
                 Image(systemName: "number")
                     .font(.footnote)
-                    .foregroundStyle(Color.laneAudioInkMuted)
+                    .foregroundStyle(.secondary)
                     .frame(width: 20)
                 Text("Room")
                     .font(.callout)
-                    .foregroundStyle(Color.laneAudioInk)
+                    .foregroundStyle(.primary)
                 Spacer()
                 Text(communityName.isEmpty ? "Personal" : communityName)
                     .font(.callout)
-                    .foregroundStyle(communityName.isEmpty ? Color.laneAudioInkMuted : Color.highlighterAccent)
+                    .foregroundStyle(communityName.isEmpty ? Color.secondary : Color.highlighterAccent)
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.laneAudioInkMuted)
+                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color.laneAudioRule.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.laneAudioRule, lineWidth: 1))
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(.separator), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -278,11 +275,11 @@ struct ClipComposerSheet: View {
                 dismiss()
             }
             .font(.body.weight(.medium))
-            .foregroundStyle(Color.laneAudioInk)
+            .foregroundStyle(.primary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(Color.laneAudioRule.opacity(0.2), in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.laneAudioRule, lineWidth: 1))
+            .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color(.separator), lineWidth: 1))
             .buttonStyle(.plain)
 
             Button {

@@ -1,231 +1,501 @@
 import Kingfisher
 import SwiftUI
 
-/// Editorial pull-quote card for the Highlights home feed. Three visual
-/// priorities, top → bottom:
-///  1. The quote (serif, hero treatment, with a terracotta accent rail).
-///  2. The highlighter's note, when present (serif italic, muted).
-///  3. Source — a read-strip (cover + title + read time) when the highlight
-///     points at a resolved NIP-23 article; otherwise a compact "FROM …" line.
+/// Universal grouped-highlight module used by both the Highlights tab and
+/// the Room home. The shape is uniform: a tinted rounded module that
+/// joins the resource header (top) to the highlight content (below) as
+/// one coherent block.
 ///
-/// The highlighter's byline floats above the quote as a small social line.
-/// Tap targets are split: byline → highlighter profile, source line →
-/// article reader. The card as a whole opens the article on tap (wired by
-/// the parent `NavigationLink`).
+/// Three rendering rules, encoded by `items.count` and the number of
+/// distinct highlighter pubkeys:
+///   1 highlight                → resource header → byline + pull-quote
+///   2+ highlights, 1 highlighter → resource header → reel of cards (no strip)
+///   2+ highlights, 2+ highlighters → resource header → "Highlighted by …" → reel
+///
+/// The resource header adapts per artifact kind (article, web, podcast,
+/// book) — the rest of the layout is shared.
 struct HighlightFeedCardView: View {
     @Environment(HighlighterStore.self) private var app
 
-    let item: HydratedHighlight
+    let items: [HydratedHighlight]
+
+    /// The lead item drives the resource header and tasks. All items in
+    /// the array share the same source (grouping invariant), so any of
+    /// them resolves to the same artifact metadata.
+    private var lead: HydratedHighlight { items[0] }
 
     @State private var sourceArticle: ArticleRecord?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            highlighterByline
-            quoteBlock
-            if !item.highlight.note.isEmpty {
-                noteBlock
+        VStack(alignment: .leading, spacing: 14) {
+            resourceHeader
+            if showHighlightersStrip {
+                highlightersStrip
             }
-            sourceBlock
+            highlightsBody
         }
-        .padding(.vertical, 28)
-        .contentShape(Rectangle())
-        .task(id: item.highlight.pubkey) {
-            await app.requestProfile(pubkeyHex: item.highlight.pubkey)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.highlighterPaperTint)
+        )
+        .task(id: lead.highlight.pubkey) {
+            await app.requestProfile(pubkeyHex: lead.highlight.pubkey)
         }
-        .task(id: item.highlight.artifactAddress) {
+        .task(id: lead.highlight.artifactAddress) {
             await resolveSource()
         }
     }
 
-    // MARK: - Highlighter byline (top)
+    // MARK: - Resource header
 
-    private var highlighterByline: some View {
-        NavigationLink(value: ProfileDestination.pubkey(item.highlight.pubkey)) {
-            HStack(spacing: 8) {
-                AuthorAvatar(
-                    pubkey: item.highlight.pubkey,
-                    pictureURL: app.profileCache[item.highlight.pubkey]?.picture ?? "",
-                    displayInitial: highlighterInitial,
-                    size: 22
-                )
-                Text(highlighterDisplayName)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.highlighterInkStrong)
-                    .lineLimit(1)
-                if let rel = relativeDate {
-                    Text("·")
-                        .foregroundStyle(Color.highlighterInkMuted)
-                    Text(rel)
-                        .font(.footnote)
-                        .foregroundStyle(Color.highlighterInkMuted)
+    private var resourceHeader: some View {
+        HStack(alignment: .top, spacing: 12) {
+            resourceCover
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    kindPill
+                    Text(resourceAuthorOrDomain)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.highlighterInkStrong)
                         .lineLimit(1)
                 }
-                Spacer(minLength: 0)
+
+                Text(resourceTitle)
+                    .font(.system(.headline, design: .serif).weight(.semibold))
+                    .foregroundStyle(Color.highlighterInkStrong)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let cta = resourceCTA {
+                    Text(cta)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.highlighterAccent)
+                        .padding(.top, 1)
+                }
             }
         }
-        .buttonStyle(.plain)
     }
 
-    // MARK: - Quote + note
-
-    private var quoteBlock: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Rectangle()
-                .fill(Color.highlighterAccent)
-                .frame(width: 3)
-                .clipShape(RoundedRectangle(cornerRadius: 1.5))
-
-            Text(trimmedQuote)
-                .font(.system(size: 22, design: .serif).italic())
-                .foregroundStyle(Color.highlighterInkStrong)
-                .lineSpacing(5)
-                .lineLimit(12)
-                .truncationMode(.tail)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+    @ViewBuilder
+    private var resourceCover: some View {
+        if let urlString = resourceCoverURL,
+           !urlString.isEmpty,
+           let url = URL(string: urlString) {
+            Color.clear
+                .overlay(
+                    KFImage(url)
+                        .placeholder { coverFallback }
+                        .fade(duration: 0.15)
+                        .resizable()
+                        .scaledToFill()
+                )
+                .clipped()
+        } else {
+            coverFallback
         }
     }
 
-    private var noteBlock: some View {
-        Text(item.highlight.note)
-            .font(.system(.subheadline, design: .serif))
+    private var coverFallback: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.highlighterAccent.opacity(0.30),
+                    Color.highlighterAccent.opacity(0.12),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Image(systemName: kindIconName)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.highlighterInkStrong.opacity(0.55))
+        }
+    }
+
+    private var kindPill: some View {
+        Text(artifactKindLabel)
+            .font(.caption2.weight(.bold))
+            .tracking(0.6)
+            .textCase(.uppercase)
             .foregroundStyle(Color.highlighterInkMuted)
-            .lineSpacing(2)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 19) // align with quote body (3pt bar + 16pt gap)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1.5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.highlighterPaper)
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(Color.highlighterRule, lineWidth: 0.5)
+                    )
+            )
     }
 
-    // MARK: - Source block (read-strip for articles, compact line otherwise)
+    // MARK: - Highlighters strip (only when 2+ unique highlighters)
 
-    @ViewBuilder
-    private var sourceBlock: some View {
-        if let article = sourceArticle {
-            readStrip(for: article)
-                .padding(.leading, 19)
-                .padding(.top, 6)
-        } else if let attributed = sourceAttributed {
-            Text(attributed)
+    private var highlightersStrip: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: -6) {
+                ForEach(uniqueHighlighters.prefix(3), id: \.highlight.pubkey) { h in
+                    AuthorAvatar(
+                        pubkey: h.highlight.pubkey,
+                        pictureURL: app.profileCache[h.highlight.pubkey]?.picture ?? "",
+                        displayInitial: initial(for: h.highlight.pubkey),
+                        size: 20
+                    )
+                    .overlay(
+                        Circle().stroke(Color.highlighterPaperTint, lineWidth: 1.5)
+                    )
+                    .task(id: h.highlight.pubkey) {
+                        await app.requestProfile(pubkeyHex: h.highlight.pubkey)
+                    }
+                }
+                if uniqueHighlighters.count > 3 {
+                    ZStack {
+                        Circle()
+                            .fill(Color.highlighterPaper)
+                            .overlay(Circle().stroke(Color.highlighterRule, lineWidth: 0.5))
+                        Text("+\(uniqueHighlighters.count - 3)")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Color.highlighterInkMuted)
+                    }
+                    .frame(width: 20, height: 20)
+                    .overlay(Circle().stroke(Color.highlighterPaperTint, lineWidth: 1.5))
+                }
+            }
+
+            Text(highlightersLabel)
                 .font(.caption)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.leading, 19)
-                .padding(.top, 4)
+                .foregroundStyle(Color.highlighterInkMuted)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
     }
 
-    /// Compact read-affordance rendered under a highlight whose source is a
-    /// resolved NIP-23 article. Cover thumb + title + author · read-time +
-    /// a terracotta "Read →" tail. Purely visual — the parent
-    /// `NavigationLink` owns the tap.
+    private var highlightersLabel: AttributedString {
+        let names = uniqueHighlighters.map { displayName(for: $0.highlight.pubkey) }
+        var out = AttributedString("Highlighted by ")
+        out.foregroundColor = Color.highlighterInkMuted
+
+        switch names.count {
+        case 0:
+            return out
+        case 1:
+            return out + boldName(names[0])
+        case 2:
+            return out + boldName(names[0]) + plain(" and ") + boldName(names[1])
+        default:
+            // First two by name, then "+N others"
+            let lead = boldName(names[0]) + plain(", ") + boldName(names[1])
+            let othersCount = names.count - 2
+            return out + lead + plain(" and ") + boldName("\(othersCount) others")
+        }
+    }
+
+    private func boldName(_ name: String) -> AttributedString {
+        var s = AttributedString(name)
+        s.font = .caption.weight(.semibold)
+        s.foregroundColor = Color.highlighterInkStrong
+        return s
+    }
+
+    private func plain(_ str: String) -> AttributedString {
+        var s = AttributedString(str)
+        s.foregroundColor = Color.highlighterInkMuted
+        return s
+    }
+
+    // MARK: - Highlight body (single inline OR reel)
+
     @ViewBuilder
-    private func readStrip(for article: ArticleRecord) -> some View {
-        HStack(spacing: 10) {
-            readStripThumb(imageURLString: article.image)
-                .frame(width: 38, height: 38)
-                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+    private var highlightsBody: some View {
+        if items.count == 1 {
+            singleHighlight(lead)
+        } else {
+            reel
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(article.title.isEmpty ? "Untitled" : article.title)
-                    .font(.system(.footnote, design: .serif).weight(.semibold))
-                    .foregroundStyle(Color.highlighterInkStrong)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+    private func singleHighlight(_ h: HydratedHighlight) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            highlighterByline(for: h)
 
-                Text(readStripMeta(for: article))
-                    .font(.caption2)
+            HStack(alignment: .top, spacing: 14) {
+                Rectangle()
+                    .fill(Color.highlighterAccent)
+                    .frame(width: 3)
+                    .clipShape(RoundedRectangle(cornerRadius: 1.5))
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(h.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                        .font(.system(size: 18, design: .serif).italic())
+                        .foregroundStyle(Color.highlighterInkStrong)
+                        .lineSpacing(4)
+                        .lineLimit(8)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if !h.highlight.note.isEmpty {
+                        Text(h.highlight.note)
+                            .font(.system(.subheadline, design: .serif))
+                            .foregroundStyle(Color.highlighterInkMuted)
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+    }
+
+    private var reel: some View {
+        // Bleed the scroll edge-to-edge of the module so the cards reach
+        // the inner padding boundary, with a leading inset that re-aligns
+        // the first card to the resource header.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 10) {
+                ForEach(items, id: \.highlight.eventId) { h in
+                    HighlightQuoteCard(highlight: h)
+                }
+                Color.clear.frame(width: 4)
+            }
+            .padding(.horizontal, 16)
+        }
+        .padding(.horizontal, -16)
+    }
+
+    private func highlighterByline(for h: HydratedHighlight) -> some View {
+        HStack(spacing: 8) {
+            AuthorAvatar(
+                pubkey: h.highlight.pubkey,
+                pictureURL: app.profileCache[h.highlight.pubkey]?.picture ?? "",
+                displayInitial: initial(for: h.highlight.pubkey),
+                size: 22
+            )
+            Text(displayName(for: h.highlight.pubkey))
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.highlighterInkStrong)
+                .lineLimit(1)
+            if let rel = relativeDate(h.highlight.createdAt) {
+                Text("·").foregroundStyle(Color.highlighterInkMuted)
+                Text(rel)
+                    .font(.footnote)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text("Read →")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.highlighterAccent)
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.highlighterPaper)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.highlighterRule, lineWidth: 1)
-        )
-    }
-
-    @ViewBuilder
-    private func readStripThumb(imageURLString: String) -> some View {
-        let url = URL(string: imageURLString.trimmingCharacters(in: .whitespacesAndNewlines))
-        if let url, !imageURLString.isEmpty {
-            KFImage(url)
-                .placeholder { readStripThumbPlaceholder }
-                .fade(duration: 0.15)
-                .resizable()
-                .scaledToFill()
-        } else {
-            readStripThumbPlaceholder
+        .task(id: h.highlight.pubkey) {
+            await app.requestProfile(pubkeyHex: h.highlight.pubkey)
         }
     }
 
-    private var readStripThumbPlaceholder: some View {
-        LinearGradient(
-            colors: [Color.highlighterRule.opacity(0.7), Color.highlighterRule.opacity(0.35)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay(
-            Image(systemName: "doc.text")
-                .font(.caption2)
-                .foregroundStyle(Color.highlighterInkMuted.opacity(0.7))
-        )
+    // MARK: - Derived: artifact kind
+
+    /// Canonical artifact kind for header rendering. Falls back to
+    /// inspecting `artifactAddress` / `sourceUrl` when the highlight has
+    /// no resolved artifact.
+    private enum ArtifactKind {
+        case article, web, podcast, book, video, paper, unknown
     }
 
-    /// "Lyn Alden · 12 min" — author (if resolved) joined with a rough read
-    /// estimate (240 wpm, matches `ReadingFeedCardView`). Falls back to just
-    /// the author or just the read time when either is missing.
-    private func readStripMeta(for article: ArticleRecord) -> String {
-        var bits: [String] = []
-        if let authorName = sourceAuthorDisplayName, !authorName.isEmpty {
-            bits.append(authorName)
+    private var artifactKind: ArtifactKind {
+        if let source = lead.artifact?.preview.source.lowercased(), !source.isEmpty {
+            switch source {
+            case "article": return .article
+            case "web":     return .web
+            case "podcast": return .podcast
+            case "book":    return .book
+            case "video":   return .video
+            case "paper":   return .paper
+            default:        return .unknown
+            }
         }
-        if let mins = readTimeMinutes(for: article) {
-            bits.append("\(mins) min read")
+        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        if addr.hasPrefix("30023:") { return .article }
+        if !lead.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .web
         }
-        return bits.joined(separator: " · ")
+        return .unknown
     }
 
-    private func readTimeMinutes(for article: ArticleRecord) -> Int? {
-        let words = article.content.split(whereSeparator: { $0.isWhitespace }).count
+    private var artifactKindLabel: String {
+        switch artifactKind {
+        case .article: return "Article"
+        case .web:     return "Web"
+        case .podcast: return "Podcast"
+        case .book:    return "Book"
+        case .video:   return "Video"
+        case .paper:   return "Paper"
+        case .unknown: return "Highlight"
+        }
+    }
+
+    private var kindIconName: String {
+        switch artifactKind {
+        case .article: return "doc.text"
+        case .web:     return "globe"
+        case .podcast: return "waveform"
+        case .book:    return "book.closed"
+        case .video:   return "play.rectangle"
+        case .paper:   return "doc.richtext"
+        case .unknown: return "quote.bubble"
+        }
+    }
+
+    // MARK: - Derived: resource fields
+
+    private var resourceCoverURL: String? {
+        if let img = lead.artifact?.preview.image, !img.isEmpty {
+            return img
+        }
+        if artifactKind == .article, let img = sourceArticle?.image, !img.isEmpty {
+            return img
+        }
+        return nil
+    }
+
+    private var resourceAuthorOrDomain: String {
+        switch artifactKind {
+        case .article:
+            if let name = articleAuthorDisplayName, !name.isEmpty { return name }
+            return lead.artifact?.preview.author ?? ""
+        case .podcast:
+            let show = lead.artifact?.preview.podcastShowTitle ?? ""
+            if !show.isEmpty { return show }
+            return lead.artifact?.preview.author ?? ""
+        case .book:
+            return lead.artifact?.preview.author ?? ""
+        case .web:
+            if let domain = lead.artifact?.preview.domain, !domain.isEmpty {
+                return domain
+            }
+            return urlHost ?? ""
+        case .video, .paper:
+            return lead.artifact?.preview.author ?? (lead.artifact?.preview.domain ?? "")
+        case .unknown:
+            return urlHost ?? ""
+        }
+    }
+
+    private var resourceTitle: String {
+        switch artifactKind {
+        case .article:
+            if let t = sourceArticle?.title, !t.isEmpty { return t }
+            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
+            return "Untitled"
+        case .podcast, .book, .video, .paper:
+            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
+            return "Untitled"
+        case .web:
+            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
+            return urlHost ?? "Web page"
+        case .unknown:
+            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
+            return urlHost ?? "Highlight"
+        }
+    }
+
+    private var resourceCTA: String? {
+        switch artifactKind {
+        case .article:
+            if let mins = articleReadMinutes {
+                return "Read article · \(mins) min →"
+            }
+            return "Read article →"
+        case .podcast:
+            if let secs = lead.artifact?.preview.durationSeconds, secs > 0 {
+                return "▸ Play episode · \(formatDuration(seconds: Int(secs)))"
+            }
+            return "▸ Play episode"
+        case .book:    return "Open book →"
+        case .web:     return "Open page →"
+        case .video:   return "Watch video →"
+        case .paper:   return "Read paper →"
+        case .unknown: return nil
+        }
+    }
+
+    private var urlHost: String? {
+        let raw = lead.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, let url = URL(string: raw), let host = url.host else { return nil }
+        return host
+    }
+
+    // MARK: - Derived: profile / article resolution
+
+    /// Profile-resolved display name for a NIP-23 article author.
+    /// Returns nil for non-article kinds or unresolved profiles.
+    private var articleAuthorDisplayName: String? {
+        guard let pubkey = articleAuthorPubkey else { return nil }
+        let profile = app.profileCache[pubkey]
+        if let dn = profile?.displayName, !dn.isEmpty { return dn }
+        if let n = profile?.name, !n.isEmpty { return n }
+        return nil
+    }
+
+    private var articleAuthorPubkey: String? {
+        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !addr.isEmpty else { return nil }
+        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3, parts[0] == "30023" else { return nil }
+        let pubkey = String(parts[1])
+        return pubkey.isEmpty ? nil : pubkey
+    }
+
+    private var articleReadMinutes: Int? {
+        guard let content = sourceArticle?.content, !content.isEmpty else { return nil }
+        let words = content.split(whereSeparator: { $0.isWhitespace }).count
         guard words > 60 else { return nil }
         return max(1, words / 240)
     }
 
-    // MARK: - Derived
-
-    private var trimmedQuote: String {
-        item.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func formatDuration(seconds: Int) -> String {
+        let h = seconds / 3600
+        let m = (seconds % 3600) / 60
+        if h > 0 { return "\(h)h \(m)m" }
+        return "\(m)m"
     }
 
-    private var highlighterDisplayName: String {
-        let profile = app.profileCache[item.highlight.pubkey]
+    // MARK: - Derived: highlighters
+
+    private var uniqueHighlighters: [HydratedHighlight] {
+        var seen = Set<String>()
+        var out: [HydratedHighlight] = []
+        for h in items {
+            if seen.insert(h.highlight.pubkey).inserted {
+                out.append(h)
+            }
+        }
+        return out
+    }
+
+    private var showHighlightersStrip: Bool {
+        items.count >= 2 && uniqueHighlighters.count >= 2
+    }
+
+    // MARK: - Derived: profile helpers
+
+    private func displayName(for pubkey: String) -> String {
+        let profile = app.profileCache[pubkey]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
-        return String(item.highlight.pubkey.prefix(10))
+        return String(pubkey.prefix(10))
     }
 
-    private var highlighterInitial: String {
-        highlighterDisplayName.first.map { String($0).uppercased() } ?? "?"
+    private func initial(for pubkey: String) -> String {
+        displayName(for: pubkey).first.map { String($0).uppercased() } ?? "?"
     }
 
-    /// Short relative time — "2h", "3d", "just now". Avoids the trailing
-    /// "ago" that feels notification-y in an editorial context.
-    private var relativeDate: String? {
-        guard let seconds = item.highlight.createdAt, seconds > 0 else { return nil }
+    private func relativeDate(_ seconds: UInt64?) -> String? {
+        guard let s = seconds, s > 0 else { return nil }
         let now = Date().timeIntervalSince1970
-        let delta = now - TimeInterval(seconds)
+        let delta = now - TimeInterval(s)
         guard delta >= 0 else { return nil }
         switch delta {
         case ..<60: return "just now"
@@ -237,68 +507,13 @@ struct HighlightFeedCardView: View {
         }
     }
 
-    /// "FROM TITLE · Author" with FROM in small-caps muted, the title in
-    /// near-ink, and the author in muted. Uses AttributedString so we get
-    /// per-run styling in a single layout-sensible Text.
-    private var sourceAttributed: AttributedString? {
-        var title: String?
-        if let article = sourceArticle {
-            title = article.title.isEmpty ? "Untitled" : article.title
-        } else if !item.highlight.sourceUrl.isEmpty,
-                  let url = URL(string: item.highlight.sourceUrl),
-                  let host = url.host {
-            title = host
-        }
-        guard let title else { return nil }
-
-        var out = AttributedString("FROM  ")
-        out.font = .caption2.weight(.semibold)
-        out.foregroundColor = Color.highlighterInkMuted
-        out.kern = 1.2
-
-        var titleRun = AttributedString(title)
-        titleRun.font = .caption.weight(.medium)
-        titleRun.foregroundColor = Color.highlighterInkStrong
-        out.append(titleRun)
-
-        if let authorName = sourceAuthorDisplayName, !authorName.isEmpty {
-            var sep = AttributedString("  ·  ")
-            sep.font = .caption
-            sep.foregroundColor = Color.highlighterInkMuted
-            out.append(sep)
-            var by = AttributedString(authorName)
-            by.font = .caption
-            by.foregroundColor = Color.highlighterInkMuted
-            out.append(by)
-        }
-        return out
-    }
-
-    private var sourceArtifactPubkey: String? {
-        let addr = item.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        let pubkey = String(parts[1])
-        return pubkey.isEmpty ? nil : pubkey
-    }
-
-    private var sourceAuthorDisplayName: String? {
-        guard let pubkey = sourceArtifactPubkey else { return nil }
-        let profile = app.profileCache[pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return nil
-    }
-
-    /// For NIP-23 article highlights we carry `30023:<pubkey>:<d>` in
-    /// `artifact_address`. Parse it and fetch the article (for the title) +
-    /// the original author's profile (for the byline). Silently no-ops for
-    /// non-article highlights — those fall back to the `sourceUrl` path.
+    /// Hydrate the NIP-23 article (title + content) and the article
+    /// author's profile when the highlight points at one. No-op for
+    /// other artifact kinds.
     private func resolveSource() async {
         sourceArticle = nil
 
-        let addr = item.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !addr.isEmpty else { return }
         let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
         guard parts.count == 3, parts[0] == "30023" else { return }
@@ -308,5 +523,118 @@ struct HighlightFeedCardView: View {
 
         sourceArticle = try? await app.safeCore.getArticle(pubkeyHex: pubkey, dTag: dTag)
         await app.requestProfile(pubkeyHex: pubkey)
+    }
+}
+
+// MARK: - Single quote card (used inside the reel)
+
+/// One quote inside the horizontal reel of a multi-highlight module.
+/// Shows the highlighter byline at the top, the quote with the accent
+/// rail below, and the optional note. Width is fixed so the reel paces
+/// consistently.
+private struct HighlightQuoteCard: View {
+    @Environment(HighlighterStore.self) private var app
+
+    let highlight: HydratedHighlight
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            byline
+                .padding(12)
+                .padding(.bottom, 10)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.highlighterRule.opacity(0.5))
+                        .frame(height: 1)
+                        .padding(.horizontal, 12)
+                }
+
+            HStack(alignment: .top, spacing: 10) {
+                Rectangle()
+                    .fill(Color.highlighterAccent)
+                    .frame(width: 3)
+                    .clipShape(RoundedRectangle(cornerRadius: 1.5))
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(highlight.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                        .font(.system(size: 14, design: .serif).italic())
+                        .foregroundStyle(Color.highlighterInkStrong)
+                        .lineSpacing(3)
+                        .lineLimit(6)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if !highlight.highlight.note.isEmpty {
+                        Text(highlight.highlight.note)
+                            .font(.caption)
+                            .foregroundStyle(Color.highlighterInkMuted)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding(12)
+        }
+        .frame(width: 240, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.highlighterPaper)
+        )
+        .task(id: highlight.highlight.pubkey) {
+            await app.requestProfile(pubkeyHex: highlight.highlight.pubkey)
+        }
+    }
+
+    private var byline: some View {
+        HStack(spacing: 7) {
+            AuthorAvatar(
+                pubkey: highlight.highlight.pubkey,
+                pictureURL: app.profileCache[highlight.highlight.pubkey]?.picture ?? "",
+                displayInitial: initial,
+                size: 22
+            )
+            Text(name)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.highlighterInkStrong)
+                .lineLimit(1)
+            if let rel = relative {
+                Text("·")
+                    .font(.caption2)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                Text(rel)
+                    .font(.caption2)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var name: String {
+        let profile = app.profileCache[highlight.highlight.pubkey]
+        if let dn = profile?.displayName, !dn.isEmpty { return dn }
+        if let n = profile?.name, !n.isEmpty { return n }
+        return String(highlight.highlight.pubkey.prefix(10))
+    }
+
+    private var initial: String {
+        name.first.map { String($0).uppercased() } ?? "?"
+    }
+
+    private var relative: String? {
+        guard let s = highlight.highlight.createdAt, s > 0 else { return nil }
+        let now = Date().timeIntervalSince1970
+        let delta = now - TimeInterval(s)
+        guard delta >= 0 else { return nil }
+        switch delta {
+        case ..<60: return "just now"
+        case ..<3600: return "\(Int(delta / 60))m"
+        case ..<86400: return "\(Int(delta / 3600))h"
+        case ..<(86400 * 7): return "\(Int(delta / 86400))d"
+        case ..<(86400 * 30): return "\(Int(delta / (86400 * 7)))w"
+        default: return "\(Int(delta / (86400 * 30)))mo"
+        }
     }
 }

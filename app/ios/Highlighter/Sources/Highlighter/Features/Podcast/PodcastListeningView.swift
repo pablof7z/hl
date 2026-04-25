@@ -66,20 +66,25 @@ struct PodcastListeningView: View {
     private var player: PodcastPlayerStore { app.podcastPlayer }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            Color.laneAudioSurface.ignoresSafeArea()
+        NavigationStack {
+            ZStack(alignment: .bottomTrailing) {
+                VStack(spacing: 0) {
+                    episodeHeader
+                    layerToggles
+                    timeline
+                }
 
-            VStack(spacing: 0) {
-                topBar
-                episodeHeader
-                layerToggles
-                timeline
+                clipFab
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 80)
             }
-
-            // Clipping FAB
-            clipFab
-                .padding(.trailing, 20)
-                .padding(.bottom, 80)
+            .navigationTitle("Now Playing")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
         .sheet(isPresented: $showComposer, onDismiss: {
             Task { await loadClips() }
@@ -101,56 +106,9 @@ struct PodcastListeningView: View {
                 .environment(app)
             }
         }
-        .environment(\.colorScheme, .dark)
         .task(id: player.currentArtifact?.shareEventId) {
             await loadClips()
         }
-    }
-
-    // MARK: - Top bar
-
-    private var topBar: some View {
-        HStack {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.laneAudioInk)
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Text(topBarTitle)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(Color.laneAudioInkMuted)
-
-            Spacer()
-
-            Button {
-                // Share — non-functional placeholder
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 16, weight: .regular))
-                    .foregroundStyle(Color.laneAudioInkMuted)
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-        }
-        .frame(height: 40)
-        .padding(.horizontal, 4)
-    }
-
-    private var topBarTitle: String {
-        if let artifact = player.currentArtifact {
-            let show = artifact.preview.podcastShowTitle.isEmpty
-                ? artifact.preview.author
-                : artifact.preview.podcastShowTitle
-            if !show.isEmpty { return "Listening · \(show)" }
-        }
-        return "Listening"
     }
 
     // MARK: - Episode header
@@ -167,10 +125,9 @@ struct PodcastListeningView: View {
                 } ?? ""
 
                 if !showTitle.isEmpty {
-                    Text(showTitle.uppercased())
-                        .font(.system(.caption2, design: .monospaced).weight(.semibold))
-                        .tracking(1.0)
-                        .foregroundStyle(Color.laneAudioInkMuted)
+                    Text(showTitle)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
@@ -178,13 +135,13 @@ struct PodcastListeningView: View {
                     ? (artifact?.preview.title ?? "Untitled episode")
                     : "Untitled episode")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.laneAudioInk)
+                    .foregroundStyle(.primary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(episodeMeta)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(Color.laneAudioInkMuted)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 0)
@@ -238,10 +195,10 @@ struct PodcastListeningView: View {
 
     private var artworkPlaceholder: some View {
         ZStack {
-            Color.laneAudioRule
+            Color(.secondarySystemFill)
             Image(systemName: "waveform")
                 .font(.footnote)
-                .foregroundStyle(Color.laneAudioInkMuted)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -267,17 +224,17 @@ struct PodcastListeningView: View {
     private func layerPill(_ label: String, active: Bool, disabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(.system(.caption, design: .monospaced).weight(.semibold))
-                .foregroundStyle(active && !disabled ? Color.laneAudioSurface : Color.laneAudioInkMuted)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(active && !disabled ? Color(.systemBackground) : Color.secondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
                     Capsule()
-                        .fill(active && !disabled ? Color.laneAudioInk : Color.clear)
+                        .fill(active && !disabled ? Color.primary : Color.clear)
                 )
                 .overlay(
                     Capsule()
-                        .strokeBorder(Color.laneAudioRule, lineWidth: 1)
+                        .strokeBorder(Color(.separator), lineWidth: 1)
                         .opacity(active && !disabled ? 0 : 1)
                 )
         }
@@ -297,7 +254,7 @@ struct PodcastListeningView: View {
                             .id(row.id)
                             .background(
                                 rowState(for: row) == .active
-                                    ? Color.laneAudioRule.opacity(0.25)
+                                    ? Color(.separator).opacity(0.2)
                                     : Color.clear
                             )
                     }
@@ -415,16 +372,16 @@ struct PodcastListeningView: View {
             } label: {
                 ZStack {
                     Circle()
-                        .fill(Color.laneAudioInk)
+                        .fill(Color.primary)
                         .frame(width: 40, height: 40)
                     if player.isBuffering {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(Color.laneAudioSurface)
+                            .tint(Color(.systemBackground))
                     } else {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Color.laneAudioSurface)
+                            .foregroundStyle(Color(.systemBackground))
                     }
                 }
             }
@@ -432,12 +389,12 @@ struct PodcastListeningView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("now playing")
-                    .font(.system(.caption2, design: .monospaced))
-                    .foregroundStyle(Color.laneAudioInkMuted)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
 
                 Text(currentSpeakerOrTimestamp)
-                    .font(.system(.caption, design: .monospaced).weight(.semibold))
-                    .foregroundStyle(Color.laneAudioInk)
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
             }
 
@@ -450,9 +407,9 @@ struct PodcastListeningView: View {
                     : 0
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.laneAudioRule)
+                        .fill(Color(.separator))
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.laneAudioInk)
+                        .fill(Color.primary)
                         .frame(width: max(2, geo.size.width * fraction))
                 }
                 .frame(height: 4)
@@ -490,19 +447,18 @@ struct PodcastListeningView: View {
             } label: {
                 ZStack {
                     Circle()
-                        .fill(clipArmed ? Color.laneAudioInk : Color.highlighterAccent)
+                        .fill(clipArmed ? Color.primary : Color.highlighterAccent)
                         .frame(width: 56, height: 56)
                     Image(systemName: "pencil")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(clipArmed ? Color.laneAudioSurface : .white)
+                        .foregroundStyle(clipArmed ? Color(.systemBackground) : .white)
                 }
             }
             .buttonStyle(.plain)
 
             Text(fabLabel)
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                .tracking(0.8)
-                .foregroundStyle(Color.laneAudioInkMuted)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
         }
     }
 

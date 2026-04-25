@@ -18,6 +18,15 @@ extension Color {
             : UIColor(red: 0.98, green: 0.98, blue: 0.97, alpha: 1)
     })
 
+    /// Module surface — a warmer, slightly darker paper used to wrap a
+    /// grouped feed item (resource header + highlight content) so the
+    /// section reads as one coherent module against the page paper.
+    static let highlighterPaperTint = Color(uiColor: UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.115, green: 0.108, blue: 0.092, alpha: 1)
+            : UIColor(red: 0.945, green: 0.925, blue: 0.878, alpha: 1)
+    })
+
     /// Primary body type.
     static let highlighterInkStrong = Color(uiColor: UIColor { trait in
         trait.userInterfaceStyle == .dark
@@ -46,47 +55,8 @@ extension Color {
             : UIColor(red: 0.91, green: 0.955, blue: 0.992, alpha: 1)
     })
 
-    /// Book-lane surface — a warmer paper leaf that reads distinctly from
-    /// `highlighterPaper` when stacked next to other lane atmospheres.
-    static let laneBookPaper = Color(uiColor: UIColor { trait in
-        trait.userInterfaceStyle == .dark
-            ? UIColor(red: 0.110, green: 0.094, blue: 0.075, alpha: 1)
-            : UIColor(red: 0.965, green: 0.945, blue: 0.902, alpha: 1)
-    })
-
-    /// Gutter rule shown down the margin of a book-lane pull-quote.
-    static let laneBookGutter = Color(uiColor: UIColor { trait in
-        trait.userInterfaceStyle == .dark
-            ? UIColor(red: 0.35, green: 0.30, blue: 0.24, alpha: 1)
-            : UIColor(red: 0.78, green: 0.74, blue: 0.65, alpha: 1)
-    })
-
-    /// Podcast-lane surface. Always dark regardless of system mode — the
-    /// audio interior doesn't adapt. Warm near-black so the page doesn't
-    /// feel clinical.
-    static let laneAudioSurface = Color(red: 0.078, green: 0.070, blue: 0.058)
-
-    /// Primary text on a podcast lane. Warm off-white (lamp-lit), never
-    /// pure white.
-    static let laneAudioInk = Color(red: 0.925, green: 0.898, blue: 0.835)
-
-    /// Muted text on a podcast lane (timestamps, speaker kickers,
-    /// attribution).
-    static let laneAudioInkMuted = Color(red: 0.565, green: 0.530, blue: 0.470)
-
-    /// Hairlines and dim timeline track on a podcast lane.
-    static let laneAudioRule = Color(red: 0.180, green: 0.162, blue: 0.132)
-
-    /// Article-lane surface. Cleaner than the warm book paper — reads as
-    /// a magazine page next to the book lane's leaf.
-    static let laneArticlePage = Color(uiColor: UIColor { trait in
-        trait.userInterfaceStyle == .dark
-            ? UIColor(red: 0.062, green: 0.060, blue: 0.055, alpha: 1)
-            : UIColor(red: 0.995, green: 0.992, blue: 0.985, alpha: 1)
-    })
-
-    /// Highlighter-stroke underlay used behind an article lane's hero
-    /// pull-quote. Accent at low opacity, scoped to the quote.
+    /// Highlighter-stroke underlay used to mark matched text in search
+    /// results. Accent at low opacity, scoped to the matched run.
     static let laneArticleHighlightFill = Color(uiColor: UIColor { trait in
         trait.userInterfaceStyle == .dark
             ? UIColor(red: 0.88, green: 0.60, blue: 0.46, alpha: 0.22)

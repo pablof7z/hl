@@ -12,18 +12,17 @@ struct ChapterRow: View {
         } label: {
             HStack(alignment: .center, spacing: 14) {
                 Text(formatTimestamp(t))
-                    .font(.system(.caption, design: .monospaced).weight(.semibold))
-                    .foregroundStyle(Color.laneAudioInkMuted)
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.secondary)
                     .frame(width: 48, alignment: .leading)
 
                 VStack(alignment: .leading, spacing: 0) {
                     Rectangle()
-                        .fill(Color.laneAudioRule)
+                        .fill(Color(.separator))
                         .frame(maxWidth: .infinity, maxHeight: 2)
-                    Text(title.uppercased())
-                        .font(.system(.caption, design: .monospaced).weight(.semibold))
-                        .tracking(1.5)
-                        .foregroundStyle(state == .future ? Color.laneAudioInkMuted : Color.laneAudioInk)
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(state == .future ? Color.secondary : Color.primary)
                         .padding(.top, 6)
                         .lineLimit(1)
                 }

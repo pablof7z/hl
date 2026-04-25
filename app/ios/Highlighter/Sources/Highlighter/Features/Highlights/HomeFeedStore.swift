@@ -6,27 +6,39 @@ import Observation
 /// (owning both for the lifetime of the view) and recomputes a deduped,
 /// sorted `items` array whenever either side changes.
 ///
-/// Dedup rule: if a friend highlighted an article, that article is dropped
-/// from the reads side — the highlight row already represents the piece
-/// (and more richly, with a friend's voice). An article only ever gets the
-/// bare article-card treatment when no friend has highlighted it.
+/// Highlights are grouped by source (article address or sourceUrl) regardless
+/// of who highlighted them — multiple people highlighting the same article
+/// land in one module. The single-highlight case uses the same shape (just
+/// a one-element array). Dedup rule: if any friend highlighted an article,
+/// that article is dropped from the reads side.
 @MainActor
 @Observable
 final class HomeFeedStore {
     enum Item: Hashable {
-        case highlight(HydratedHighlight)
+        /// One or more highlights on the same source (article / web URL).
+        /// Always non-empty. The view component renders the same module
+        /// shape for count == 1 and count > 1.
+        case highlights([HydratedHighlight])
         case read(ReadingFeedItem)
 
         var sortKey: UInt64 {
             switch self {
-            case .highlight(let h): return h.highlight.createdAt ?? 0
-            case .read(let r): return r.latestActivityAt
+            case .highlights(let hs): return hs.compactMap(\.highlight.createdAt).max() ?? 0
+            case .read(let r):        return r.latestActivityAt
             }
         }
 
         var stableId: String {
             switch self {
-            case .highlight(let h): return "h:\(h.highlight.eventId)"
+            case .highlights(let hs):
+                let h = hs[0]
+                let addr = h.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+                let src  = addr.isEmpty
+                    ? h.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+                    : addr
+                if !src.isEmpty { return "h:src:\(src)" }
+                // Sourceless lone highlight — fall back to event id.
+                return "h:evt:\(h.highlight.eventId)"
             case .read(let r):
                 return "r:30023:\(r.article.pubkey):\(r.article.identifier)"
             }
@@ -87,25 +99,53 @@ final class HomeFeedStore {
         }
     }
 
+    /// Source-only grouping key. Returns nil for highlights with no
+    /// identifiable source (those land as solo entries via event id).
+    private func groupKey(for h: HydratedHighlight) -> String? {
+        let addr = h.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !addr.isEmpty { return addr }
+        let url = h.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !url.isEmpty { return url }
+        return nil
+    }
+
     private func recompute() {
+        // Bucket highlights by source, preserving first-seen order.
+        var groupMap: [String: [HydratedHighlight]] = [:]
+        var groupOrder: [String] = []
+
+        for h in highlights.items {
+            let key = groupKey(for: h) ?? "solo:\(h.highlight.eventId)"
+            if groupMap[key] == nil {
+                groupOrder.append(key)
+                groupMap[key] = []
+            }
+            groupMap[key]!.append(h)
+        }
+
         let highlightedAddresses: Set<String> = Set(
-            highlights.items.compactMap { hydrated in
-                let addr = hydrated.highlight.artifactAddress
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            highlights.items.compactMap { h in
+                let addr = h.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
                 return addr.isEmpty ? nil : addr
             }
         )
 
         var merged: [Item] = []
-        merged.reserveCapacity(highlights.items.count + reads.items.count)
-        for h in highlights.items {
-            merged.append(.highlight(h))
+        merged.reserveCapacity(groupOrder.count + reads.items.count)
+
+        for key in groupOrder {
+            let group = groupMap[key]!
+            // Sort within group chronologically (oldest first = reading order).
+            let sorted = group.sorted { ($0.highlight.createdAt ?? 0) < ($1.highlight.createdAt ?? 0) }
+            merged.append(.highlights(sorted))
         }
+
         for r in reads.items {
             let addr = "30023:\(r.article.pubkey):\(r.article.identifier)"
             if highlightedAddresses.contains(addr) { continue }
             merged.append(.read(r))
         }
+
         merged.sort { $0.sortKey > $1.sortKey }
         items = merged
     }

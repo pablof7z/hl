@@ -11,22 +11,21 @@ struct TranscriptRow: View {
         } label: {
             HStack(alignment: .top, spacing: 14) {
                 Text(formatTimestamp(segment.start))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(Color.laneAudioInkMuted)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
                     .frame(width: 48, alignment: .leading)
                     .padding(.top, 1)
 
                 VStack(alignment: .leading, spacing: 4) {
                     if !segment.speaker.isEmpty {
-                        Text(segment.speaker.uppercased())
-                            .font(.system(.caption2, design: .monospaced).weight(.semibold))
-                            .tracking(1.0)
-                            .foregroundStyle(Color.laneAudioInkMuted)
+                        Text(segment.speaker)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
                     }
                     Text(segment.text)
                         .font(.system(size: 15))
                         .lineSpacing(15 * 0.55)
-                        .foregroundStyle(textColor)
+                        .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -37,20 +36,12 @@ struct TranscriptRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 state == .active
-                    ? Color.laneAudioRule.opacity(0.6)
+                    ? Color(.separator).opacity(0.3)
                     : Color.clear
             )
             .opacity(state == .future ? 0.55 : 1.0)
         }
         .buttonStyle(.plain)
-    }
-
-    private var textColor: Color {
-        switch state {
-        case .played: return Color.laneAudioInk
-        case .active: return Color.laneAudioInk
-        case .future: return Color.laneAudioInk
-        }
     }
 }
 

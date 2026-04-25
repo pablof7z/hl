@@ -343,6 +343,8 @@ private struct TabBar: View {
 
 private struct TabContent: View {
     let store: ProfileStore
+    @Environment(HighlighterStore.self) private var appStore
+    @State private var previewRoom: CommunitySummary?
 
     var body: some View {
         switch store.activeTab {
@@ -412,7 +414,9 @@ private struct TabContent: View {
         } else {
             LazyVStack(spacing: 0) {
                 ForEach(Array(store.communities.enumerated()), id: \.element.id) { index, community in
-                    NavigationLink(value: community.id) {
+                    Button {
+                        previewRoom = community
+                    } label: {
                         CommunityRowView(community: community)
                     }
                     .buttonStyle(.plain)
@@ -420,6 +424,21 @@ private struct TabContent: View {
                         Divider().foregroundStyle(Color.highlighterRule)
                     }
                 }
+            }
+            .sheet(item: $previewRoom) { room in
+                NavigationStack {
+                    RoomPreviewSheet(
+                        room: room,
+                        onJoin: {
+                            Task {
+                                appStore.noteJoinRequested(groupId: room.id, roomName: room.name)
+                                _ = try? await appStore.safeCore.requestJoinRoom(groupId: room.id)
+                            }
+                            previewRoom = nil
+                        }
+                    )
+                }
+                .environment(appStore)
             }
         }
     }

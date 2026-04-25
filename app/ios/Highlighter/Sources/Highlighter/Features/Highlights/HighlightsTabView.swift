@@ -75,18 +75,13 @@ struct HighlightsTabView: View {
 
     private func feedList(store: HomeFeedStore) -> some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(store.items.enumerated()), id: \.element.stableId) { index, item in
+            LazyVStack(spacing: 12) {
+                ForEach(store.items, id: \.stableId) { item in
                     row(for: item)
-
-                    if index < store.items.count - 1 {
-                        Rectangle()
-                            .fill(Color.highlighterRule)
-                            .frame(height: 1)
-                    }
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
     }
@@ -115,8 +110,8 @@ struct HighlightsTabView: View {
     @ViewBuilder
     private func row(for item: HomeFeedStore.Item) -> some View {
         switch item {
-        case .highlight(let h):
-            highlightRow(h)
+        case .highlights(let hs):
+            highlightRow(hs)
         case .read(let r):
             readRow(r)
         }
@@ -125,36 +120,33 @@ struct HighlightsTabView: View {
     // MARK: - Highlight row
 
     @ViewBuilder
-    private func highlightRow(_ item: HydratedHighlight) -> some View {
-        if let articleTarget = articleReaderTarget(for: item) {
+    private func highlightRow(_ items: [HydratedHighlight]) -> some View {
+        let lead = items[0]
+        if let articleTarget = articleReaderTarget(for: lead) {
             NavigationLink(value: articleTarget) {
-                HighlightFeedCardView(item: item)
+                HighlightFeedCardView(items: items)
             }
             .buttonStyle(.plain)
-            .contextMenu { highlightContextMenu(item) }
-        } else if let webTarget = webReaderTarget(for: item) {
+            .contextMenu { highlightContextMenu(lead) }
+        } else if let webTarget = webReaderTarget(for: lead) {
             NavigationLink(value: webTarget) {
-                HighlightFeedCardView(item: item)
+                HighlightFeedCardView(items: items)
             }
             .buttonStyle(.plain)
-            .contextMenu { highlightContextMenu(item) }
+            .contextMenu { highlightContextMenu(lead) }
         } else {
-            HighlightFeedCardView(item: item)
-                .contextMenu { highlightContextMenu(item) }
+            HighlightFeedCardView(items: items)
+                .contextMenu { highlightContextMenu(lead) }
         }
     }
 
     @ViewBuilder
     private func highlightContextMenu(_ item: HydratedHighlight) -> some View {
-        // Reshare the kind:9802 highlight itself as a kind:16 repost.
-        // Surfaces the friend's quote (with attribution) inside the room.
         Button {
             shareTarget = .highlight(item.highlight)
         } label: {
             Label("Share quote to room", systemImage: "quote.bubble")
         }
-        // Reshare the source artifact (kind:11 article share) — different
-        // intent: surface the article so other room members can read it.
         if let target = shareTargetForHighlight(item) {
             Button {
                 shareTarget = target

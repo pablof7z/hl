@@ -1,14 +1,12 @@
 import SwiftUI
 
 /// NIP-22 comment thread anchored to an artifact, rendered inside a lane
-/// below the highlights strip. Appearance adapts to the lane surface
-/// (dark for the podcast lane, paper for others) so comments feel native
-/// to the atmosphere that hosts them.
+/// below the highlight module. Uses the standard ink palette (no per-lane
+/// surface variants).
 struct LaneCommentsSection: View {
     @Environment(HighlighterStore.self) private var app
 
     let comments: [CommentRecord]
-    let surface: LaneSurface
 
     var body: some View {
         if comments.isEmpty {
@@ -17,12 +15,12 @@ struct LaneCommentsSection: View {
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(Array(comments.prefix(4)), id: \.eventId) { comment in
                     row(for: comment)
-                    Divider().background(ruleColor)
+                    Divider().background(Color.highlighterRule)
                 }
                 if comments.count > 4 {
                     Text("+ \(comments.count - 4) more")
                         .font(.caption)
-                        .foregroundStyle(mutedColor)
+                        .foregroundStyle(Color.highlighterInkMuted)
                 }
             }
             .padding(.horizontal, 24)
@@ -43,18 +41,18 @@ struct LaneCommentsSection: View {
                 HStack(spacing: 6) {
                     Text(name(for: comment.pubkey))
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(inkColor)
+                        .foregroundStyle(Color.highlighterInkStrong)
                         .lineLimit(1)
                     if let t = relative(comment.createdAt) {
-                        Text("·").foregroundStyle(mutedColor)
+                        Text("·").foregroundStyle(Color.highlighterInkMuted)
                         Text(t)
                             .font(.footnote)
-                            .foregroundStyle(mutedColor)
+                            .foregroundStyle(Color.highlighterInkMuted)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                 }
-                NostrRichText(content: comment.body, font: .subheadline, ink: inkColor)
+                NostrRichText(content: comment.body, font: .subheadline, ink: Color.highlighterInkStrong)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -62,18 +60,6 @@ struct LaneCommentsSection: View {
         .task(id: comment.pubkey) {
             await app.requestProfile(pubkeyHex: comment.pubkey)
         }
-    }
-
-    private var inkColor: Color {
-        surface == .dark ? .laneAudioInk : .highlighterInkStrong
-    }
-
-    private var mutedColor: Color {
-        surface == .dark ? .laneAudioInkMuted : .highlighterInkMuted
-    }
-
-    private var ruleColor: Color {
-        surface == .dark ? .laneAudioRule : .highlighterRule
     }
 
     private func name(for pubkey: String) -> String {

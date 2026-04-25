@@ -28,8 +28,8 @@ struct MemberClipRow: View {
             } label: {
                 HStack(alignment: .top, spacing: 14) {
                     Text(rangeLabel)
-                        .font(.system(.caption, design: .monospaced).weight(.medium))
-                        .foregroundStyle(Color.laneAudioInkMuted)
+                        .font(.caption.weight(.medium).monospacedDigit())
+                        .foregroundStyle(.secondary)
                         .frame(width: 48, alignment: .leading)
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -44,18 +44,18 @@ struct MemberClipRow: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(authorName)
                                     .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(Color.laneAudioInk)
+                                    .foregroundStyle(.primary)
                                     .lineLimit(1)
                                 Text(rangeLabel)
-                                    .font(.system(.caption2, design: .monospaced))
-                                    .foregroundStyle(Color.laneAudioInkMuted)
+                                    .font(.caption2.monospacedDigit())
+                                    .foregroundStyle(.secondary)
                             }
 
                             Spacer(minLength: 0)
 
                             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                                 .font(.caption2)
-                                .foregroundStyle(Color.laneAudioInkMuted)
+                                .foregroundStyle(.secondary)
                         }
 
                         if !highlight.quote.isEmpty {
@@ -65,7 +65,7 @@ struct MemberClipRow: View {
                                     .frame(width: 2)
                                 Text("\u{201C}\(highlight.quote)\u{201D}")
                                     .font(.system(.subheadline).italic())
-                                    .foregroundStyle(Color.laneAudioInk.opacity(0.9))
+                                    .foregroundStyle(.primary.opacity(0.9))
                                     .lineLimit(isExpanded ? nil : 3)
                                     .multilineTextAlignment(.leading)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -75,7 +75,7 @@ struct MemberClipRow: View {
                         if isExpanded && !highlight.note.isEmpty {
                             Text(highlight.note)
                                 .font(.footnote)
-                                .foregroundStyle(Color.laneAudioInkMuted)
+                                .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -85,7 +85,7 @@ struct MemberClipRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     state == .active
-                        ? Color.laneAudioRule.opacity(0.6)
+                        ? Color(.separator).opacity(0.3)
                         : Color.clear
                 )
                 .opacity(state == .future ? 0.55 : 1.0)

@@ -17,26 +17,22 @@ struct ClipThreadView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Divider()
-                .background(Color.laneAudioRule)
                 .padding(.horizontal, 16)
 
             if comments == nil {
-                // Loading state
                 HStack {
                     Spacer()
                     ProgressView()
-                        .tint(Color.laneAudioInkMuted)
                     Spacer()
                 }
                 .padding(.vertical, 16)
             } else if let list = comments, list.isEmpty {
                 Text("No replies yet")
                     .font(.footnote)
-                    .foregroundStyle(Color.laneAudioInkMuted)
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
             } else if let list = comments {
-                // Chronological thread (newest at bottom, so reverse the newest-first order)
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(list.reversed(), id: \.eventId) { comment in
                         CommentRowView(comment: comment)
@@ -46,20 +42,16 @@ struct ClipThreadView: View {
                 .padding(.vertical, 12)
             }
 
-            // Reply composer
             Divider()
-                .background(Color.laneAudioRule)
                 .padding(.horizontal, 16)
 
             HStack(spacing: 10) {
                 TextField("Reply...", text: $replyText)
                     .font(.subheadline)
-                    .foregroundStyle(Color.laneAudioInk)
                     .tint(Color.highlighterAccent)
 
                 if isSending {
                     ProgressView()
-                        .tint(Color.laneAudioInkMuted)
                         .scaleEffect(0.8)
                 } else {
                     Button("Send") {
@@ -67,7 +59,7 @@ struct ClipThreadView: View {
                     }
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(replyText.trimmingCharacters(in: .whitespaces).isEmpty
-                        ? Color.laneAudioInkMuted
+                        ? Color.secondary
                         : Color.highlighterAccent)
                     .disabled(replyText.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -98,7 +90,6 @@ struct ClipThreadView: View {
                     rootKind: 9802,
                     content: text
                 )
-                // Optimistically append
                 var existing = app.podcastPlayer.comments[id] ?? []
                 existing.append(record)
                 app.podcastPlayer.comments[id] = existing
@@ -128,20 +119,20 @@ private struct CommentRowView: View {
                 HStack(spacing: 6) {
                     Text(name)
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color.laneAudioInk)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                     if let t = relativeTime {
-                        Text("·").foregroundStyle(Color.laneAudioInkMuted)
+                        Text("·").foregroundStyle(.secondary)
                         Text(t)
                             .font(.footnote)
-                            .foregroundStyle(Color.laneAudioInkMuted)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                 }
                 Text(comment.body)
                     .font(.subheadline)
-                    .foregroundStyle(Color.laneAudioInk)
+                    .foregroundStyle(.primary)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }

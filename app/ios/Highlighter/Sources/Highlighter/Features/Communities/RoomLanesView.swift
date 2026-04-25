@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// The community home's Home tab rendered as stacked, format-aware lanes.
-/// Each lane pairs one artifact with the community's recent highlights on
-/// it, sorted so the most-alive artifact sits at the top. Lanes without
-/// highlights still render in their format atmosphere — the absence of
-/// a hero pull-quote is the signal, not a separate "dormant" row.
+/// The community home's Home tab — a stream of artifact-grouped highlight
+/// modules, identical in shape to the Highlights tab. Each lane pairs one
+/// artifact with the room's recent highlights on it; dormant lanes (no
+/// highlights and no comments) are filtered out — the Library tab is the
+/// place to browse every artifact regardless of activity.
 ///
 /// Highlight data flows in two streams because the Rust core's
 /// `get_highlights(groupId:)` filters on `#h` tags that kind:9802 events
@@ -26,100 +26,57 @@ struct RoomLanesView: View {
             ProgressView()
                 .controlSize(.large)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if artifacts.isEmpty {
+        } else if visibleLanes.isEmpty {
             ContentUnavailableView(
                 "Nothing here yet",
                 systemImage: "square.stack.3d.up",
-                description: Text("Shares and highlights will appear as activity flows in.")
+                description: Text("Highlights from the room's library will appear here.")
             )
         } else {
             ScrollView {
-                LazyVStack(spacing: 0) {
-                    let lanes = Lane.build(
-                        artifacts: artifacts,
-                        highlights: highlights,
-                        highlightsByReference: highlightsByReference,
-                        commentsByReference: commentsByReference
-                    )
-                    ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
+                LazyVStack(spacing: 12) {
+                    ForEach(visibleLanes, id: \.id) { lane in
                         laneView(for: lane)
-                        if index < lanes.count - 1 {
-                            let from = LaneSurface(for: lane)
-                            let to = LaneSurface(for: lanes[index + 1])
-                            if from != to {
-                                LaneTransitionView(from: from, to: to)
-                            }
-                        }
                     }
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
             }
             .background(Color.highlighterPaper.ignoresSafeArea())
         }
     }
 
+    private var visibleLanes: [Lane] {
+        Lane.build(
+            artifacts: artifacts,
+            highlights: highlights,
+            highlightsByReference: highlightsByReference,
+            commentsByReference: commentsByReference
+        )
+        .filter { !$0.isDormant }
+    }
+
     @ViewBuilder
     private func laneView(for lane: Lane) -> some View {
-        switch lane.artifact.preview.source {
-        case "book":
-            BookLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
-        case "podcast":
-            PodcastLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
-        case "article":
-            ArticleLaneView(lane: lane, onShareToCommunity: onShareToCommunity)
-        default:
-            LaneView(lane: lane, onShareToCommunity: onShareToCommunity)
-        }
-    }
-}
+        VStack(alignment: .leading, spacing: 0) {
+            if !lane.highlights.isEmpty {
+                NavigationLink(value: lane.artifact) {
+                    HighlightFeedCardView(items: lane.highlights)
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    Button {
+                        onShareToCommunity(lane.artifact)
+                    } label: {
+                        Label("Share to community", systemImage: "square.and.arrow.up")
+                    }
+                }
+            }
 
-/// Format-surface category for a lane. Used by transitions to pick the
-/// right gradient and height between adjacent lanes.
-enum LaneSurface: Equatable {
-    case paper      // book
-    case dark       // podcast
-    case white      // article
-    case neutral    // generic / unknown format
-
-    init(for lane: Lane) {
-        switch lane.artifact.preview.source {
-        case "book":    self = .paper
-        case "podcast": self = .dark
-        case "article": self = .white
-        default:        self = .neutral
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .paper:   return .laneBookPaper
-        case .dark:    return .laneAudioSurface
-        case .white:   return .laneArticlePage
-        case .neutral: return .highlighterPaper
-        }
-    }
-}
-
-/// Designed transition between two adjacent lanes. A dark surface on
-/// either side makes the transition dramatic (40pt dusk / dawn). Paper
-/// to magazine-white folds in 22pt. Everything else breathes in 14pt.
-struct LaneTransitionView: View {
-    let from: LaneSurface
-    let to: LaneSurface
-
-    var body: some View {
-        LinearGradient(
-            colors: [from.color, to.color],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .frame(height: height)
-    }
-
-    private var height: CGFloat {
-        switch (from, to) {
-        case (.dark, _), (_, .dark): return 40
-        case (.paper, .white), (.white, .paper): return 22
-        default: return 14
+            if !lane.comments.isEmpty {
+                LaneCommentsSection(comments: lane.comments)
+                    .padding(.top, 8)
+            }
         }
     }
 }
@@ -258,117 +215,5 @@ struct Lane: Identifiable {
             return (pv.highlightTagName.lowercased(), pv.highlightTagName.uppercased(), pv.highlightTagValue)
         }
         return ("", "", "")
-    }
-}
-
-// MARK: - Generic lane view (for unknown formats)
-
-struct LaneView: View {
-    let lane: Lane
-    let onShareToCommunity: (ArtifactRecord) -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            NavigationLink(value: lane.artifact) {
-                laneHead
-                    .padding(.horizontal, 20)
-            }
-            .buttonStyle(.plain)
-            .contextMenu {
-                Button {
-                    onShareToCommunity(lane.artifact)
-                } label: {
-                    Label("Share to community", systemImage: "square.and.arrow.up")
-                }
-            }
-
-            if !lane.highlights.isEmpty {
-                highlightsStrip
-                    .padding(.top, 2)
-            }
-
-            Rectangle()
-                .fill(Color.highlighterRule)
-                .frame(height: 1)
-                .padding(.top, 14)
-        }
-    }
-
-    private var laneHead: some View {
-        HStack {
-            Text(lane.artifact.preview.title.isEmpty ? "Untitled" : lane.artifact.preview.title)
-                .font(.headline)
-                .foregroundStyle(Color.highlighterInkStrong)
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.footnote)
-                .foregroundStyle(Color.highlighterInkMuted)
-        }
-        .padding(.vertical, 14)
-    }
-
-    private var highlightsStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 12) {
-                ForEach(lane.highlights, id: \.highlight.eventId) { h in
-                    LaneHighlightCardView(highlight: h)
-                }
-            }
-            .padding(.horizontal, 20)
-        }
-    }
-}
-
-struct LaneHighlightCardView: View {
-    @Environment(HighlighterStore.self) private var app
-    let highlight: HydratedHighlight
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(highlight.highlight.quote)
-                .font(.callout)
-                .foregroundStyle(Color.highlighterInkStrong)
-                .lineLimit(5)
-                .multilineTextAlignment(.leading)
-
-            Spacer(minLength: 0)
-
-            HStack(spacing: 6) {
-                AuthorAvatar(
-                    pubkey: highlight.highlight.pubkey,
-                    pictureURL: app.profileCache[highlight.highlight.pubkey]?.picture ?? "",
-                    displayInitial: highlighterInitial,
-                    size: 18
-                )
-                Text(highlighterName)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(Color.highlighterInkMuted)
-                    .lineLimit(1)
-            }
-        }
-        .padding(14)
-        .frame(width: 260, height: 170, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.45))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.highlighterRule, lineWidth: 1)
-                )
-        )
-        .task(id: highlight.highlight.pubkey) {
-            await app.requestProfile(pubkeyHex: highlight.highlight.pubkey)
-        }
-    }
-
-    private var highlighterName: String {
-        let profile = app.profileCache[highlight.highlight.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(highlight.highlight.pubkey.prefix(10))
-    }
-
-    private var highlighterInitial: String {
-        highlighterName.first.map { String($0).uppercased() } ?? ""
     }
 }

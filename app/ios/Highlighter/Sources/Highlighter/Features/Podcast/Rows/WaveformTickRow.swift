@@ -22,8 +22,8 @@ struct WaveformTickRow: View {
         } label: {
             HStack(alignment: .center, spacing: 14) {
                 Text(formatTimestamp(t))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(Color.laneAudioInkMuted)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
                     .frame(width: 48, alignment: .leading)
 
                 if peaks.isEmpty {
@@ -42,7 +42,7 @@ struct WaveformTickRow: View {
 
     private var timePeg: some View {
         Rectangle()
-            .fill(Color.laneAudioRule)
+            .fill(Color(.separator))
             .frame(maxWidth: .infinity)
             .frame(height: 1)
     }
@@ -68,7 +68,7 @@ struct WaveformTickRow: View {
                 )
                 context.fill(
                     Path(roundedRect: rect, cornerRadius: barWidth / 2),
-                    with: .color(Color.laneAudioInkMuted)
+                    with: .color(Color.secondary)
                 )
             }
         }
