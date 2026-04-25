@@ -674,19 +674,82 @@ impl HighlighterCore {
         comments::query_for_reference(self.runtime.ndb(), ch, tag_value.trim(), limit)
     }
 
-    /// Publish a NIP-22 kind:1111 comment as a top-level reply to a Nostr
-    /// event (e.g. a kind:9802 highlight). `root_kind` is the kind of the
-    /// event being replied to (9802 for highlights). Returns the new record
-    /// so callers can optimistically update their cache.
+    /// Publish a NIP-22 kind:1111 comment scoped to any artifact.
+    ///
+    /// `root_tag_name` is `"A"` (addressable, e.g. `30023:<pubkey>:<d>`),
+    /// `"E"` (event id — a highlight, an event share), or `"I"` (external
+    /// content like `url:…`, `podcast:item:guid:…`, `isbn:…`).
+    /// `root_tag_value` is the corresponding scope value. `root_kind` is
+    /// the kind of the root event (or 0 for purely external roots).
+    /// `parent_event_id` is `None` for top-level comments and `Some(id)`
+    /// for replies (the parent kind:1111 comment).
     pub async fn publish_comment(
         &self,
-        root_event_id: String,
+        root_tag_name: String,
+        root_tag_value: String,
         root_kind: u16,
+        parent_event_id: Option<String>,
         content: String,
     ) -> Result<CommentRecord, CoreError> {
         let _ = self.require_user_pubkey()?;
-        comments::publish_comment(&self.runtime, root_event_id.trim(), root_kind, content.trim())
-            .await
+        let Some(scope) = root_tag_name.trim().chars().next() else {
+            return Err(CoreError::InvalidInput("root tag must not be empty".into()));
+        };
+        let parent = parent_event_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        comments::publish_comment(
+            &self.runtime,
+            scope,
+            root_tag_value.trim(),
+            root_kind,
+            parent,
+            content.trim(),
+        )
+        .await
+    }
+
+    // -- Reactions (NIP-25 kind:7) ---------------------------------------
+
+    /// All cached kind:7 reactions on `target_event_id`, newest first.
+    pub async fn get_reactions_for_event(
+        &self,
+        target_event_id: String,
+        limit: u32,
+    ) -> Result<Vec<crate::reactions::ReactionRecord>, CoreError> {
+        crate::reactions::query_reactions_for_event(
+            self.runtime.ndb(),
+            target_event_id.trim(),
+            limit,
+        )
+    }
+
+    /// Publish a kind:7 reaction targeting `event_id` authored by
+    /// `author_pubkey_hex` of `target_kind`. `content` is the reaction
+    /// body — pass `"+"` for a like.
+    pub async fn publish_reaction(
+        &self,
+        event_id: String,
+        author_pubkey_hex: String,
+        target_kind: u16,
+        content: String,
+    ) -> Result<crate::reactions::ReactionRecord, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        crate::reactions::publish_reaction(
+            &self.runtime,
+            event_id.trim(),
+            author_pubkey_hex.trim(),
+            target_kind,
+            content.trim(),
+        )
+        .await
+    }
+
+    /// Delete one of the user's own kind:7 reactions via NIP-09.
+    pub async fn unpublish_reaction(&self, reaction_event_id: String) -> Result<String, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        crate::reactions::unpublish_reaction(&self.runtime, reaction_event_id.trim()).await
     }
 
     pub async fn get_user_highlights(
@@ -874,6 +937,36 @@ impl HighlighterCore {
             .map(|u| u.pubkey)
             .ok_or(CoreError::NotInitialized)?;
         crate::bookmarks::toggle_bookmark(&self.runtime, &user_hex, &address).await
+    }
+
+    /// Read-only predicate: is `event_id_hex` currently bookmarked for
+    /// the logged-in user? Always `false` when no user is logged in.
+    pub async fn is_event_bookmarked(&self, event_id_hex: String) -> Result<bool, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .unwrap_or_default();
+        if user_hex.is_empty() {
+            return Ok(false);
+        }
+        crate::bookmarks::is_event_bookmarked(self.runtime.ndb(), &user_hex, &event_id_hex)
+    }
+
+    /// Toggle `event_id_hex` in the user's kind:10003 list (for comments
+    /// and other event-id-addressed targets). Returns the new membership
+    /// state.
+    pub async fn toggle_event_bookmark(&self, event_id_hex: String) -> Result<bool, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .ok_or(CoreError::NotInitialized)?;
+        crate::bookmarks::toggle_event_bookmark(&self.runtime, &user_hex, &event_id_hex).await
     }
 
     /// Open a live subscription on the current user's kind:10003 bookmark

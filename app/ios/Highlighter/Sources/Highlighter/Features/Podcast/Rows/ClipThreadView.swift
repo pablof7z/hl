@@ -86,7 +86,8 @@ struct ClipThreadView: View {
         Task {
             do {
                 let record = try await app.safeCore.publishComment(
-                    rootEventId: id,
+                    rootTagName: "e",
+                    rootTagValue: id,
                     rootKind: 9802,
                     content: text
                 )

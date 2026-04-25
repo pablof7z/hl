@@ -19,14 +19,18 @@ use crate::nostr_runtime::NostrRuntime;
 
 pub const KIND_BOOKMARKS: u16 = 10003;
 
-/// Parsed shape of a kind:10003 event. We only care about `a`-tags today
-/// (article addresses) but preserve every other tag verbatim so writes
-/// don't destroy bookmarks we don't understand.
+/// Parsed shape of a kind:10003 event. We surface `a`-tag (addressable —
+/// articles) and `e`-tag (event — comments, highlights) bookmarks; every
+/// other tag (`r`, `t`, …) is preserved verbatim so writes don't destroy
+/// bookmarks set by the web app or other clients we don't understand.
 #[derive(Debug, Clone, Default)]
 pub struct BookmarkList {
     /// Addressable bookmarks, e.g. `"30023:<pubkey>:<d>"`.
     pub addresses: Vec<String>,
-    /// Preserved tags we don't interpret — `r`, `e`, `t`, anything else.
+    /// Event-id bookmarks (hex). Used for kind:1111 comments and any other
+    /// non-replaceable event we want to bookmark.
+    pub event_ids: Vec<String>,
+    /// Preserved tags we don't interpret — `r`, `t`, anything else.
     /// Written back verbatim on the next publish.
     pub other_tags: Vec<Vec<String>>,
     /// Original event content (NIP-51 reserves this for encrypted private
@@ -76,6 +80,12 @@ pub fn is_bookmarked(ndb: &Ndb, user_hex: &str, address: &str) -> Result<bool, C
     Ok(list.addresses.iter().any(|a| a == address))
 }
 
+/// Fast predicate: is `event_hex` currently bookmarked for `user_hex`?
+pub fn is_event_bookmarked(ndb: &Ndb, user_hex: &str, event_hex: &str) -> Result<bool, CoreError> {
+    let list = query_bookmarks(ndb, user_hex)?;
+    Ok(list.event_ids.iter().any(|e| e == event_hex))
+}
+
 /// Toggle `address` in the user's kind:10003 bookmark list. Reads the newest
 /// cached list, flips membership, re-publishes. Returns the new membership
 /// state (`true` = now bookmarked, `false` = removed).
@@ -107,6 +117,39 @@ pub async fn toggle_bookmark(
     Ok(now_bookmarked)
 }
 
+/// Toggle `event_hex` in the user's kind:10003 bookmark list (for comments
+/// and other event-id-addressed targets). Reads the newest cached list,
+/// flips membership, re-publishes. Returns the new membership state.
+pub async fn toggle_event_bookmark(
+    runtime: &NostrRuntime,
+    user_hex: &str,
+    event_hex: &str,
+) -> Result<bool, CoreError> {
+    let event_hex = event_hex.trim();
+    if event_hex.is_empty() {
+        return Err(CoreError::InvalidInput(
+            "bookmark event id must not be empty".into(),
+        ));
+    }
+    EventId::from_hex(event_hex)
+        .map_err(|e| CoreError::InvalidInput(format!("invalid bookmark event id: {e}")))?;
+
+    let mut list = query_bookmarks(runtime.ndb(), user_hex)?;
+    let now_bookmarked = match list.event_ids.iter().position(|e| e == event_hex) {
+        Some(idx) => {
+            list.event_ids.remove(idx);
+            false
+        }
+        None => {
+            list.event_ids.push(event_hex.to_string());
+            true
+        }
+    };
+
+    publish_bookmarks(runtime, &list).await?;
+    Ok(now_bookmarked)
+}
+
 /// Publish `list` as a kind:10003 event replacing whatever's currently on
 /// the relays. Preserves `other_tags` and `content` so bookmarks we don't
 /// understand (URLs, notes, encrypted private set) survive.
@@ -119,6 +162,12 @@ async fn publish_bookmarks(
         tags.push(
             Tag::parse(vec!["a".to_string(), addr.clone()])
                 .map_err(|e| CoreError::Other(format!("build a tag: {e}")))?,
+        );
+    }
+    for ev in &list.event_ids {
+        tags.push(
+            Tag::parse(vec!["e".to_string(), ev.clone()])
+                .map_err(|e| CoreError::Other(format!("build e tag: {e}")))?,
         );
     }
     for raw in &list.other_tags {
@@ -145,6 +194,7 @@ async fn publish_bookmarks(
 fn parse_bookmark_event(event: Event) -> BookmarkList {
     let mut list = BookmarkList {
         addresses: Vec::new(),
+        event_ids: Vec::new(),
         other_tags: Vec::new(),
         content: event.content.clone(),
     };
@@ -154,6 +204,11 @@ fn parse_bookmark_event(event: Event) -> BookmarkList {
             Some("a") => {
                 if let Some(v) = s.get(1) {
                     list.addresses.push(v.clone());
+                }
+            }
+            Some("e") => {
+                if let Some(v) = s.get(1) {
+                    list.event_ids.push(v.clone());
                 }
             }
             _ => {

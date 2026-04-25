@@ -917,6 +917,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getProjectFirstAgentPubkey(coordinate: String) async throws  -> String?
     
     /**
+     * All cached kind:7 reactions on `target_event_id`, newest first.
+     */
+    func getReactionsForEvent(targetEventId: String, limit: UInt32) async throws  -> [ReactionRecord]
+    
+    /**
      * Recent books across the user's joined communities — drives the
      * capture-flow book picker. Returns `[]` if no books are cached or the
      * user isn't logged in.
@@ -995,6 +1000,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func isArticleBookmarked(address: String) async throws  -> Bool
     
     /**
+     * Read-only predicate: is `event_id_hex` currently bookmarked for
+     * the logged-in user? Always `false` when no user is logged in.
+     */
+    func isEventBookmarked(eventIdHex: String) async throws  -> Bool
+    
+    /**
      * Returns true if the logged-in user's cached contact list currently
      * includes `target_pubkey_hex`.
      */
@@ -1025,12 +1036,17 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func publishChatMessage(groupId: String, content: String, replyToEventId: String?) async throws  -> ChatMessageRecord
     
     /**
-     * Publish a NIP-22 kind:1111 comment as a top-level reply to a Nostr
-     * event (e.g. a kind:9802 highlight). `root_kind` is the kind of the
-     * event being replied to (9802 for highlights). Returns the new record
-     * so callers can optimistically update their cache.
+     * Publish a NIP-22 kind:1111 comment scoped to any artifact.
+     *
+     * `root_tag_name` is `"A"` (addressable, e.g. `30023:<pubkey>:<d>`),
+     * `"E"` (event id — a highlight, an event share), or `"I"` (external
+     * content like `url:…`, `podcast:item:guid:…`, `isbn:…`).
+     * `root_tag_value` is the corresponding scope value. `root_kind` is
+     * the kind of the root event (or 0 for purely external roots).
+     * `parent_event_id` is `None` for top-level comments and `Some(id)`
+     * for replies (the parent kind:1111 comment).
      */
-    func publishComment(rootEventId: String, rootKind: UInt16, content: String) async throws  -> CommentRecord
+    func publishComment(rootTagName: String, rootTagValue: String, rootKind: UInt16, parentEventId: String?, content: String) async throws  -> CommentRecord
     
     func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async throws  -> DiscussionRecord
     
@@ -1059,6 +1075,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * the imeta metadata.
      */
     func publishPicture(draft: PictureDraft) async throws  -> PictureRecord
+    
+    /**
+     * Publish a kind:7 reaction targeting `event_id` authored by
+     * `author_pubkey_hex` of `target_kind`. `content` is the reaction
+     * body — pass `"+"` for a like.
+     */
+    func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String) async throws  -> ReactionRecord
     
     /**
      * Nudge the relay pool to attempt a reconnect on every disconnected
@@ -1294,6 +1317,18 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * if it was removed.
      */
     func toggleArticleBookmark(address: String) async throws  -> Bool
+    
+    /**
+     * Toggle `event_id_hex` in the user's kind:10003 list (for comments
+     * and other event-id-addressed targets). Returns the new membership
+     * state.
+     */
+    func toggleEventBookmark(eventIdHex: String) async throws  -> Bool
+    
+    /**
+     * Delete one of the user's own kind:7 reactions via NIP-09.
+     */
+    func unpublishReaction(reactionEventId: String) async throws  -> String
     
     /**
      * Drop a subscription by handle. Idempotent.
@@ -1967,6 +2002,26 @@ open func getProjectFirstAgentPubkey(coordinate: String)async throws  -> String?
 }
     
     /**
+     * All cached kind:7 reactions on `target_event_id`, newest first.
+     */
+open func getReactionsForEvent(targetEventId: String, limit: UInt32)async throws  -> [ReactionRecord]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_reactions_for_event(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(targetEventId),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeReactionRecord.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Recent books across the user's joined communities — drives the
      * capture-flow book picker. Returns `[]` if no books are cached or the
      * user isn't logged in.
@@ -2255,6 +2310,27 @@ open func isArticleBookmarked(address: String)async throws  -> Bool  {
 }
     
     /**
+     * Read-only predicate: is `event_id_hex` currently bookmarked for
+     * the logged-in user? Always `false` when no user is logged in.
+     */
+open func isEventBookmarked(eventIdHex: String)async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_is_event_bookmarked(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(eventIdHex)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
+            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
+            freeFunc: ffi_highlighter_core_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
      * Returns true if the logged-in user's cached contact list currently
      * includes `target_pubkey_hex`.
      */
@@ -2385,18 +2461,23 @@ open func publishChatMessage(groupId: String, content: String, replyToEventId: S
 }
     
     /**
-     * Publish a NIP-22 kind:1111 comment as a top-level reply to a Nostr
-     * event (e.g. a kind:9802 highlight). `root_kind` is the kind of the
-     * event being replied to (9802 for highlights). Returns the new record
-     * so callers can optimistically update their cache.
+     * Publish a NIP-22 kind:1111 comment scoped to any artifact.
+     *
+     * `root_tag_name` is `"A"` (addressable, e.g. `30023:<pubkey>:<d>`),
+     * `"E"` (event id — a highlight, an event share), or `"I"` (external
+     * content like `url:…`, `podcast:item:guid:…`, `isbn:…`).
+     * `root_tag_value` is the corresponding scope value. `root_kind` is
+     * the kind of the root event (or 0 for purely external roots).
+     * `parent_event_id` is `None` for top-level comments and `Some(id)`
+     * for replies (the parent kind:1111 comment).
      */
-open func publishComment(rootEventId: String, rootKind: UInt16, content: String)async throws  -> CommentRecord  {
+open func publishComment(rootTagName: String, rootTagValue: String, rootKind: UInt16, parentEventId: String?, content: String)async throws  -> CommentRecord  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_publish_comment(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(rootEventId),FfiConverterUInt16.lower(rootKind),FfiConverterString.lower(content)
+                    FfiConverterString.lower(rootTagName),FfiConverterString.lower(rootTagValue),FfiConverterUInt16.lower(rootKind),FfiConverterOptionString.lower(parentEventId),FfiConverterString.lower(content)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2506,6 +2587,28 @@ open func publishPicture(draft: PictureDraft)async throws  -> PictureRecord  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePictureRecord_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Publish a kind:7 reaction targeting `event_id` authored by
+     * `author_pubkey_hex` of `target_kind`. `content` is the reaction
+     * body — pass `"+"` for a like.
+     */
+open func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String)async throws  -> ReactionRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_reaction(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(eventId),FfiConverterString.lower(authorPubkeyHex),FfiConverterUInt16.lower(targetKind),FfiConverterString.lower(content)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeReactionRecord_lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -3257,6 +3360,48 @@ open func toggleArticleBookmark(address: String)async throws  -> Bool  {
             completeFunc: ffi_highlighter_core_rust_future_complete_i8,
             freeFunc: ffi_highlighter_core_rust_future_free_i8,
             liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Toggle `event_id_hex` in the user's kind:10003 list (for comments
+     * and other event-id-addressed targets). Returns the new membership
+     * state.
+     */
+open func toggleEventBookmark(eventIdHex: String)async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_toggle_event_bookmark(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(eventIdHex)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
+            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
+            freeFunc: ffi_highlighter_core_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Delete one of the user's own kind:7 reactions via NIP-09.
+     */
+open func unpublishReaction(reactionEventId: String)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_unpublish_reaction(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(reactionEventId)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -6507,6 +6652,104 @@ public func FfiConverterTypeProfileMetadata_lower(_ value: ProfileMetadata) -> R
 
 
 /**
+ * One row of cached reaction data — what the UI needs to render
+ * "12 likes · I liked this".
+ */
+public struct ReactionRecord {
+    public var eventId: String
+    public var pubkey: String
+    public var targetEventId: String
+    public var content: String
+    public var createdAt: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, pubkey: String, targetEventId: String, content: String, createdAt: UInt64?) {
+        self.eventId = eventId
+        self.pubkey = pubkey
+        self.targetEventId = targetEventId
+        self.content = content
+        self.createdAt = createdAt
+    }
+}
+
+#if compiler(>=6)
+extension ReactionRecord: Sendable {}
+#endif
+
+
+extension ReactionRecord: Equatable, Hashable {
+    public static func ==(lhs: ReactionRecord, rhs: ReactionRecord) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.targetEventId != rhs.targetEventId {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(pubkey)
+        hasher.combine(targetEventId)
+        hasher.combine(content)
+        hasher.combine(createdAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReactionRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReactionRecord {
+        return
+            try ReactionRecord(
+                eventId: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf), 
+                targetEventId: FfiConverterString.read(from: &buf), 
+                content: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReactionRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterString.write(value.targetEventId, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterOptionUInt64.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionRecord_lift(_ buf: RustBuffer) throws -> ReactionRecord {
+    return try FfiConverterTypeReactionRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionRecord_lower(_ value: ReactionRecord) -> RustBuffer {
+    return FfiConverterTypeReactionRecord.lower(value)
+}
+
+
+/**
  * One entry in the Following Reads feed — a NIP-23 article surfaced via
  * the user's NIP-02 follow graph, either because a follow authored it or
  * because a follow interacted with it (reaction, repost, reply, NIP-22
@@ -8651,6 +8894,31 @@ fileprivate struct FfiConverterSequenceTypeProfileMetadata: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeReactionRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [ReactionRecord]
+
+    public static func write(_ value: [ReactionRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeReactionRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ReactionRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ReactionRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeReactionRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeReadingFeedItem: FfiConverterRustBuffer {
     typealias SwiftType = [ReadingFeedItem]
 
@@ -8899,6 +9167,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_project_first_agent_pubkey() != 8227) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_reactions_for_event() != 45696) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 33628) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8941,6 +9212,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_article_bookmarked() != 11256) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_is_event_bookmarked() != 30643) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_following() != 22885) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8965,7 +9239,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message() != 34308) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment() != 55227) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment() != 22772) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 50982) {
@@ -8981,6 +9255,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_picture() != 8020) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_reaction() != 53660) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 18338) {
@@ -9086,6 +9363,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark() != 6523) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark() != 63170) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_unpublish_reaction() != 4906) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_unsubscribe() != 55013) {

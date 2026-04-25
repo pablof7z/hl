@@ -25,6 +25,7 @@ pub mod nostr_runtime;
 pub mod outbox;
 pub mod pictures;
 pub mod profile;
+pub mod reactions;
 pub mod reads;
 pub mod recent_books;
 pub mod recommendations;
@@ -45,4 +46,5 @@ pub use models::{
     NostrConnectOptions, PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem,
     RoomRecommendation, RoomRecommendationReason,
 };
+pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;

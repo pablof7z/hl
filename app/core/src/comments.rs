@@ -109,50 +109,83 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
     None
 }
 
-/// Publish a NIP-22 kind:1111 comment replying to a kind:9802 highlight (or
-/// any event). `root_event_id` is the event being commented on; `root_kind`
-/// is its Nostr kind (9802 for highlights). The comment is a top-level reply:
-/// uppercase root tags == lowercase parent tags.
+/// Publish a NIP-22 kind:1111 comment scoped to any artifact root and,
+/// optionally, replying to a specific parent comment.
 ///
-/// Returns the new `CommentRecord` so callers can optimistically update their
-/// cache without waiting for a relay round-trip.
+/// - `root_tag_name` selects the uppercase scope tag: `'A'` for an
+///   addressable artifact (`30023:<pubkey>:<d>`), `'E'` for an event id
+///   (e.g. a kind:9802 highlight), `'I'` for external content
+///   (`url:…`, `podcast:item:guid:…`, `isbn:…`). Case is normalised.
+/// - `root_tag_value` is the corresponding scope value.
+/// - `root_kind` is the kind of the root event (used for the uppercase `K`
+///   tag). For purely external roots with no host kind, pass `0`.
+/// - `parent_event_id` is `None` for top-level comments (parent mirrors
+///   root) and `Some(comment_id)` for replies (parent = that kind:1111
+///   comment via lowercase `e` + `k=1111`).
+///
+/// Returns the new `CommentRecord` so callers can optimistically update
+/// their cache without waiting for a relay round-trip.
 pub async fn publish_comment(
     runtime: &NostrRuntime,
-    root_event_id: &str,
+    root_tag_name: char,
+    root_tag_value: &str,
     root_kind: u16,
+    parent_event_id: Option<&str>,
     content: &str,
 ) -> Result<CommentRecord, CoreError> {
     let content = content.trim();
     if content.is_empty() {
         return Err(CoreError::InvalidInput("comment body must not be empty".into()));
     }
-    let root_event_id = root_event_id.trim();
-    let event_id = EventId::from_hex(root_event_id)
-        .map_err(|e| CoreError::InvalidInput(format!("invalid root event id: {e}")))?;
+    let root_value = root_tag_value.trim();
+    if root_value.is_empty() {
+        return Err(CoreError::InvalidInput("root tag value must not be empty".into()));
+    }
+    let upper = root_tag_name.to_ascii_uppercase();
+    let lower = root_tag_name.to_ascii_lowercase();
+    if !matches!(upper, 'A' | 'E' | 'I') {
+        return Err(CoreError::InvalidInput(format!(
+            "root tag must be A/E/I, got {root_tag_name}"
+        )));
+    }
+    if upper == 'E' {
+        EventId::from_hex(root_value)
+            .map_err(|e| CoreError::InvalidInput(format!("invalid root event id: {e}")))?;
+    }
 
-    // NIP-22 root scope (uppercase) — references the root event being commented on.
-    let root_e_tag = Tag::parse(vec![
-        "E".to_string(),
-        event_id.to_hex(),
-    ])
-    .map_err(|e| CoreError::Other(format!("build E tag: {e}")))?;
+    let mut tags: Vec<Tag> = Vec::with_capacity(4);
 
-    // NIP-22 root kind tag.
-    let root_k_tag = Tag::parse(vec!["K".to_string(), root_kind.to_string()])
-        .map_err(|e| CoreError::Other(format!("build K tag: {e}")))?;
+    // Uppercase root scope.
+    tags.push(
+        Tag::parse(vec![upper.to_string(), root_value.to_string()])
+            .map_err(|e| CoreError::Other(format!("build {upper} tag: {e}")))?,
+    );
+    tags.push(
+        Tag::parse(vec!["K".to_string(), root_kind.to_string()])
+            .map_err(|e| CoreError::Other(format!("build K tag: {e}")))?,
+    );
 
-    // NIP-22 parent scope (lowercase) — for top-level replies, parent == root.
-    let parent_e_tag = Tag::parse(vec![
-        "e".to_string(),
-        event_id.to_hex(),
-    ])
-    .map_err(|e| CoreError::Other(format!("build e tag: {e}")))?;
+    // Lowercase parent scope. Top-level mirrors root; replies reference
+    // the parent comment as a kind:1111 event.
+    let (parent_name, parent_value, parent_kind) = match parent_event_id {
+        Some(pid) => {
+            let pid = pid.trim();
+            EventId::from_hex(pid)
+                .map_err(|e| CoreError::InvalidInput(format!("invalid parent event id: {e}")))?;
+            ('e', pid.to_string(), KIND_NIP22_COMMENT)
+        }
+        None => (lower, root_value.to_string(), root_kind),
+    };
+    tags.push(
+        Tag::parse(vec![parent_name.to_string(), parent_value.clone()])
+            .map_err(|e| CoreError::Other(format!("build {parent_name} tag: {e}")))?,
+    );
+    tags.push(
+        Tag::parse(vec!["k".to_string(), parent_kind.to_string()])
+            .map_err(|e| CoreError::Other(format!("build k tag: {e}")))?,
+    );
 
-    let parent_k_tag = Tag::parse(vec!["k".to_string(), root_kind.to_string()])
-        .map_err(|e| CoreError::Other(format!("build k tag: {e}")))?;
-
-    let builder = EventBuilder::new(Kind::Custom(KIND_NIP22_COMMENT), content)
-        .tags(vec![root_e_tag, root_k_tag, parent_e_tag, parent_k_tag]);
+    let builder = EventBuilder::new(Kind::Custom(KIND_NIP22_COMMENT), content).tags(tags);
 
     let client = runtime.client();
     let event = client
@@ -169,10 +202,10 @@ pub async fn publish_comment(
         event_id: event.id.to_hex(),
         pubkey: event.pubkey.to_hex(),
         body: event.content.clone(),
-        root_tag_name: "E".to_string(),
-        root_tag_value: root_event_id.to_string(),
-        parent_tag_name: "e".to_string(),
-        parent_tag_value: root_event_id.to_string(),
+        root_tag_name: upper.to_string(),
+        root_tag_value: root_value.to_string(),
+        parent_tag_name: parent_name.to_string(),
+        parent_tag_value: parent_value,
         root_kind: root_kind.to_string(),
         created_at: Some(event.created_at.as_secs()),
     })

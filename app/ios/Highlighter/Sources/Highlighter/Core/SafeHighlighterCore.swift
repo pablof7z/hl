@@ -237,11 +237,13 @@ actor SafeHighlighterCore {
     }
 
     func publishComment(
-        rootEventId: String,
+        rootTagName: String,
+        rootTagValue: String,
         rootKind: UInt16,
+        parentEventId: String? = nil,
         content: String
     ) async throws -> CommentRecord {
-        try await core.publishComment(rootEventId: rootEventId, rootKind: rootKind, content: content)
+        try await core.publishComment(rootTagName: rootTagName, rootTagValue: rootTagValue, rootKind: rootKind, parentEventId: parentEventId, content: content)
     }
 
     func getUserHighlights(pubkeyHex: String, limit: UInt32 = 64) async throws -> [HighlightRecord] {
