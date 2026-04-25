@@ -17,7 +17,9 @@ export const GET: RequestHandler = async ({ setHeaders, url }) => {
   return json(
     await searchRelayContent(query, {
       roomLimit: limit,
-      articleLimit: limit
+      articleLimit: limit,
+      profileLimit: limit,
+      highlightLimit: limit
     })
   );
 };

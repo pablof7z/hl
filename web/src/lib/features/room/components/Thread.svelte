@@ -1,6 +1,10 @@
 <script lang="ts">
   import { ndk } from '$lib/ndk/client';
   import { User } from '$lib/ndk/ui/user';
+  import { MarkdownEventContent } from '$lib/ndk/ui/markdown-event-content';
+  import '$lib/ndk/components/mention';
+  import '$lib/ndk/components/embedded-note';
+  import '$lib/ndk/components/embedded-article';
   import { memberTint } from '../utils/colors';
 
   interface Message {
@@ -60,7 +64,7 @@
             <span class="msg-handle"><User.Handle /></span>
             <span class="msg-time">{msg.time}</span>
           </div>
-          <div class="msg-text">{msg.body}</div>
+          <MarkdownEventContent {ndk} content={msg.body} class="msg-text" />
         </div>
       </div>
     </User.Root>
@@ -147,7 +151,7 @@
     letter-spacing: 0.04em;
   }
 
-  .msg-text {
+  :global(.msg-text) {
     color: var(--ink-soft);
   }
 

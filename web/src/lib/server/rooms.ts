@@ -1,10 +1,12 @@
 import { NDKKind, NDKSimpleGroupMetadata, type NDKEvent } from '@nostr-dev-kit/ndk';
-import { GROUP_RELAY_URLS } from '$lib/ndk/config';
+import { GROUP_RELAY_URLS, HIGHLIGHTER_RELAY_URL } from '$lib/ndk/config';
 import {
   buildRoomSummary,
   type RoomSummary,
   type RoomVisibility
 } from '$lib/ndk/groups';
+import { groupRefsFromEvent } from '$lib/ndk/lists';
+import { fetchRelayCuratorPubkey } from '$lib/ndk/relay-probe';
 import { fetchEventsForSsr } from '$lib/server/nostr';
 import type { Room, RoomMember } from '$lib/features/room/api/room';
 
@@ -12,6 +14,49 @@ type FetchRoomsOptions = {
   limit?: number;
   visibility?: RoomVisibility | 'all';
 };
+
+/**
+ * Fetch the curator's featured room list (kind:10009 authored by the relay
+ * operator pubkey found via NIP-11). Returns rooms in curator order; unresolvable
+ * group refs are dropped silently.
+ */
+export async function fetchFeaturedRooms(): Promise<RoomSummary[]> {
+  const curatorPubkey = await fetchRelayCuratorPubkey(HIGHLIGHTER_RELAY_URL);
+  if (!curatorPubkey) return [];
+
+  const listEvents = Array.from(
+    (await fetchEventsForSsr(
+      { kinds: [10009], authors: [curatorPubkey], limit: 5 },
+      `fetchFeaturedRooms(${curatorPubkey})`,
+      { relays: GROUP_RELAY_URLS }
+    )) ?? []
+  ).sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+
+  const latestList = listEvents[0];
+  if (!latestList) return [];
+
+  const refs = groupRefsFromEvent(latestList);
+  if (refs.length === 0) return [];
+
+  const groupIds = refs.map((ref) => ref.groupId);
+
+  const metadataEvents = Array.from(
+    (await fetchEventsForSsr(
+      { kinds: [NDKKind.GroupMetadata], '#d': groupIds, limit: groupIds.length * 2 },
+      `fetchFeaturedRooms:metadata(${groupIds.length})`,
+      { relays: GROUP_RELAY_URLS }
+    )) ?? []
+  );
+
+  const summaries = await buildRoomSummariesFromMetadataEvents(metadataEvents);
+  const byId = new Map(summaries.map((s) => [s.id, s]));
+
+  // Preserve curator order, drop unresolvable
+  return groupIds.flatMap((id) => {
+    const s = byId.get(id);
+    return s ? [s] : [];
+  });
+}
 
 export async function fetchRooms(
   options: number | FetchRoomsOptions = 32

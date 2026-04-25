@@ -22,6 +22,7 @@
     latestListEvent
   } from '$lib/ndk/lists';
   import { safeUserPubkey } from '$lib/ndk/user';
+  import ProfileActions from '$lib/features/profile/ProfileActions.svelte';
 
   type Tab = 'writing' | 'highlights' | 'bookmarks';
   let activeTab: Tab = $state('writing');
@@ -274,13 +275,8 @@
       {/if}
 
       <div class="flex gap-3 items-center">
-        {#if pubkey && ndk.$currentUser && ndk.$currentUser.pubkey !== pubkey}
-          <button
-            class={ndk.$follows.has(pubkey) ? 'btn btn-outline btn-primary rounded-full' : 'btn btn-primary rounded-full'}
-            onclick={() => ndk.$follows.has(pubkey) ? ndk.$follows.remove(pubkey) : ndk.$follows.add(pubkey)}
-          >
-            {ndk.$follows.has(pubkey) ? 'Following' : 'Follow'}
-          </button>
+        {#if pubkey}
+          <ProfileActions {pubkey} />
         {/if}
         {#if isOwnProfile}
           <a href="/profile/edit" class="btn text-[0.88rem] no-underline">Edit profile</a>

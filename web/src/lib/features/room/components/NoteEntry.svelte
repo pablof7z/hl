@@ -1,6 +1,10 @@
 <script lang="ts">
   import { ndk } from '$lib/ndk/client';
   import { User } from '$lib/ndk/ui/user';
+  import { MarkdownEventContent } from '$lib/ndk/ui/markdown-event-content';
+  import '$lib/ndk/components/mention';
+  import '$lib/ndk/components/embedded-note';
+  import '$lib/ndk/components/embedded-article';
   import { memberTint } from '../utils/colors';
 
   let {
@@ -22,8 +26,6 @@
     replies?: number;
     replyHref?: string;
   } = $props();
-
-  const paragraphs = $derived(body.split(/\n{2,}|\n/).filter((p) => p.trim().length > 0));
 </script>
 
 <article class="note-entry" data-id={id}>
@@ -56,9 +58,7 @@
   {#if title}<h4 class="note-title">{title}</h4>{/if}
 
   <div class="note-body">
-    {#each paragraphs as p (p)}
-      <p>{p}</p>
-    {/each}
+    <MarkdownEventContent {ndk} content={body} class="note-body-content" />
   </div>
 
   {#if replies && replies > 0}
@@ -132,17 +132,17 @@
   }
 
   .note-body {
-    font-family: var(--font-serif);
-    font-size: 17px;
-    line-height: 1.65;
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
     color: var(--ink);
   }
 
-  .note-body p {
+  .note-body :global(.note-body-content p) {
     margin: 0 0 0.85em;
   }
 
-  .note-body p:last-child {
+  .note-body :global(.note-body-content p:last-child) {
     margin-bottom: 0;
   }
 

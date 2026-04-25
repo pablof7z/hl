@@ -20,7 +20,12 @@
   let requestVersion = 0;
 
   const trimmedQuery = $derived(query.trim());
-  const hasResults = $derived(results.rooms.length > 0 || results.articles.length > 0);
+  const hasResults = $derived(
+    results.rooms.length > 0 ||
+    results.articles.length > 0 ||
+    results.profiles.length > 0 ||
+    results.highlights.length > 0
+  );
   const showEmptyState = $derived(
     trimmedQuery.length >= MIN_SEARCH_QUERY_LENGTH &&
       !loading &&
@@ -159,7 +164,9 @@
     return {
       query: searchQuery,
       rooms: [],
-      articles: []
+      articles: [],
+      profiles: [],
+      highlights: []
     };
   }
 </script>

@@ -5,14 +5,24 @@
   import { GROUP_RELAY_URLS } from '$lib/ndk/config';
   import {
     buildJoinedRooms,
+    buildRoomSummary,
     groupIdFromEvent,
     type RoomSummary
   } from '$lib/ndk/groups';
+  import { fetchFriendsCommunitiesLists } from '$lib/ndk/lists';
+  import type { PageProps } from './$types';
+  import ExplorerHero from '$lib/features/rooms-explorer/ExplorerHero.svelte';
+  import RoomShelf from '$lib/features/rooms-explorer/RoomShelf.svelte';
+  import RoomShelfCard from '$lib/features/rooms-explorer/RoomShelfCard.svelte';
+  import RoomCard from '$lib/features/groups/RoomCard.svelte';
+
+  let { data }: PageProps = $props();
 
   const currentUser = $derived(ndk.$currentUser);
   const signedIn = $derived(Boolean(currentUser));
 
-  // Subscribe to user's admin/member records across NIP-29 relays
+  // ── Joined rooms (existing logic) ──────────────────────────────────────
+
   const membershipFeed = ndk.$subscribe(() => {
     if (!browser || !currentUser) return undefined;
     return {
@@ -37,7 +47,6 @@
     return [...ids];
   });
 
-  // Fetch metadata for those groups
   const metadataFeed = ndk.$subscribe(() => {
     if (!browser || membershipGroupIds.length === 0) return undefined;
     return {
@@ -53,7 +62,7 @@
     };
   });
 
-  const rooms: RoomSummary[] = $derived(
+  const joinedRooms: RoomSummary[] = $derived(
     currentUser
       ? buildJoinedRooms(
           currentUser.pubkey,
@@ -63,64 +72,207 @@
       : []
   );
 
-  const loading = $derived(signedIn && !membershipFeed.eosed);
+  const joinedGroupIds = $derived(new Set(joinedRooms.map((r) => r.id)));
+
+  // ── Friends shelf — client-side ─────────────────────────────────────────
+
+  const followPubkeys = $derived.by(() => {
+    if (!browser || !currentUser) return [] as string[];
+    return [...(ndk.$follows ?? [])].slice(0, 500);
+  });
+
+  let friendsRooms = $state<RoomSummary[]>([]);
+
+  $effect(() => {
+    if (!browser || followPubkeys.length === 0) {
+      friendsRooms = [];
+      return;
+    }
+
+    const pubkeys = followPubkeys.slice();
+
+    fetchFriendsCommunitiesLists(ndk, pubkeys).then((listsByPubkey) => {
+      const groupIdSet = new Set<string>();
+      for (const refs of listsByPubkey.values()) {
+        for (const ref of refs) {
+          if (ref.groupId) groupIdSet.add(ref.groupId);
+        }
+      }
+
+      const groupIds = [...groupIdSet].slice(0, 12);
+      if (groupIds.length === 0) {
+        friendsRooms = [];
+        return;
+      }
+
+      ndk
+        .fetchEvents(
+          [{ kinds: [NDKKind.GroupMetadata], '#d': groupIds, limit: groupIds.length * 2 }],
+          { closeOnEose: true }
+        )
+        .then((eventSet) => {
+          const events = Array.from(eventSet ?? []);
+          const resolved: RoomSummary[] = [];
+
+          for (const event of events) {
+            try {
+              resolved.push(buildRoomSummary(event));
+            } catch {
+              // skip unresolvable
+            }
+          }
+
+          const byId = new Map(resolved.map((r) => [r.id, r]));
+          friendsRooms = groupIds.flatMap((id) => {
+            const r = byId.get(id);
+            return r ? [r] : [];
+          });
+        })
+        .catch(() => {
+          // friends shelf stays empty on network error
+        });
+    }).catch(() => {
+      // friends shelf stays empty on network error
+    });
+  });
+
+  // ── Derived slices from server data ────────────────────────────────────
+
+  const heroRoom = $derived(data.featured[0] as RoomSummary | undefined);
+  const featuredShelf = $derived(data.featured.slice(1));
+
+  // All rooms grid: filter out rooms already shown in featured/friends
+  const featuredIds = $derived(new Set(data.featured.map((r) => r.id)));
+
+  const allRoomsFiltered = $derived(
+    data.allRooms.filter((r) => !featuredIds.has(r.id))
+  );
 </script>
 
 <svelte:head>
-  <title>Your rooms · Highlighter</title>
+  <title>Rooms · Highlighter</title>
 </svelte:head>
 
-<section class="pt-14 pb-20">
-  <header class="pb-8 border-b border-base-300 mb-11">
-    <div class="flex items-baseline justify-between gap-6 mb-3.5">
-      <h1 class="font-serif font-normal text-[clamp(44px,6vw,68px)] leading-[1.02] tracking-[-0.025em] text-base-content m-0">Your <em class="italic text-primary">rooms.</em></h1>
-      {#if signedIn}
-        <a
-          href="/r/create"
-          class="inline-block px-4 py-[7px] text-[13px] font-medium no-underline rounded bg-base-content text-base-100 transition-colors duration-200 ease hover:bg-primary"
-        >+ Create a room</a>
-      {/if}
-    </div>
-    <p class="font-serif italic text-[19px] leading-[1.5] text-base-content/80 max-w-[52ch] m-0">
-      Rooms you're a member of — small, invitation-only reading groups.
-    </p>
-  </header>
+<div class="explorer">
 
-  {#if !signedIn}
-    <div class="bg-base-100 border border-base-300 rounded px-8 py-11 text-center">
-      <p class="text-base-content/80 text-[15px] m-0 mx-auto max-w-[44ch]">Log in to see your rooms.</p>
-    </div>
-  {:else if loading}
-    <div class="bg-base-100 border border-base-300 rounded px-8 py-11 text-center">
-      <p class="text-base-content/80 text-[15px] m-0 mx-auto max-w-[44ch]">Loading your rooms…</p>
-    </div>
-  {:else if rooms.length === 0}
-    <div class="bg-base-100 border border-base-300 rounded px-8 py-11 text-center">
-      <h2 class="font-serif text-[26px] font-medium text-base-content m-0 mb-2">You're not in any rooms yet.</h2>
-      <p class="text-base-content/80 text-[15px] m-0 mx-auto max-w-[44ch]">Rooms are closed by default. Either bring one of your own, or find a public one to read along with.</p>
-      <div class="flex gap-3 justify-center mt-6 flex-wrap">
-        <a href="/discover" class="inline-block px-5 py-[10px] text-[13px] font-medium no-underline rounded bg-base-content text-base-100 transition-all duration-200 ease hover:bg-primary">Discover rooms</a>
-        <a href="/onboarding" class="inline-block px-5 py-[10px] text-[13px] font-medium no-underline rounded bg-base-100 text-base-content/80 border border-base-300 transition-all duration-200 ease hover:border-primary hover:text-primary">Bring a room</a>
-      </div>
-    </div>
-  {:else}
-    <div class="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
-      {#each rooms as room (room.id)}
-        <a
-          href="/r/{room.id}"
-          class="bg-base-100 border border-base-300 rounded px-6 py-[22px] flex flex-col gap-2.5 no-underline text-inherit transition-[border-color,transform] duration-200 ease hover:border-primary hover:-translate-y-0.5"
-        >
-          <div class="font-mono text-[10px] tracking-[0.14em] uppercase text-base-content/50">
-            {#if room.visibility === 'private'}Private{:else}Public{/if} ·
-            {room.memberCount ?? '?'} members
-          </div>
-          <h3 class="font-serif font-medium text-[24px] leading-[1.1] text-base-content m-0 tracking-[-0.01em]">{room.name}</h3>
-          {#if room.about}
-            <p class="text-[13.5px] leading-[1.5] text-base-content/80 m-0 flex-1 line-clamp-3">{room.about}</p>
-          {/if}
-          <div class="font-mono text-[10px] tracking-[0.1em] uppercase text-primary pt-2.5 border-t border-dotted border-base-300 mt-auto">Open →</div>
-        </a>
-      {/each}
+  <!-- Hero ────────────────────────────────────────────────────────────── -->
+  {#if heroRoom}
+    <div class="explorer-hero">
+      <ExplorerHero rooms={data.featured} />
     </div>
   {/if}
-</section>
+
+  <!-- Friends are here shelf ─────────────────────────────────────────── -->
+  {#if signedIn && friendsRooms.length > 0}
+    <div class="explorer-section">
+      <RoomShelf title="Friends are here" subtitle="People you follow are members">
+        {#each friendsRooms as room (room.id)}
+          <RoomShelfCard {room} />
+        {/each}
+      </RoomShelf>
+    </div>
+  {/if}
+
+  <!-- Featured shelf ─────────────────────────────────────────────────── -->
+  {#if featuredShelf.length > 0}
+    <div class="explorer-section">
+      <RoomShelf title="Featured" subtitle="Curated by Highlighter">
+        {#each featuredShelf as room (room.id)}
+          <RoomShelfCard {room} />
+        {/each}
+      </RoomShelf>
+    </div>
+  {/if}
+
+  <!-- All rooms grid ─────────────────────────────────────────────────── -->
+  {#if allRoomsFiltered.length > 0}
+    <div class="explorer-section">
+      <header class="section-header">
+        <span class="section-title">All rooms</span>
+        <div class="section-actions">
+          {#if signedIn}
+            <a
+              href="/r/create"
+              class="btn btn-sm btn-outline rounded-full text-xs"
+            >+ Create a room</a>
+          {/if}
+        </div>
+      </header>
+      <div class="rooms-grid">
+        {#each allRoomsFiltered as room (room.id)}
+          <RoomCard {room} joined={joinedGroupIds.has(room.id)} />
+        {/each}
+      </div>
+    </div>
+  {:else if data.allRooms.length === 0}
+    <div class="empty-state">
+      <p class="empty-label">No public rooms yet.</p>
+      <p class="empty-copy">Create the first room or check back soon.</p>
+      {#if signedIn}
+        <a href="/r/create" class="btn btn-primary btn-sm rounded-full">Create a room</a>
+      {/if}
+    </div>
+  {/if}
+
+</div>
+
+<style>
+  .explorer {
+    padding-top: 2.5rem;
+    padding-bottom: 5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  .explorer-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .section-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--color-base-content, #111) 50%, transparent);
+  }
+
+  .rooms-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    text-align: center;
+    padding: 3rem 1.5rem;
+    border: 1px solid var(--color-base-300);
+    border-radius: 1.25rem;
+  }
+
+  .empty-label {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-base-content);
+  }
+
+  .empty-copy {
+    margin: 0;
+    font-size: 0.9rem;
+    color: color-mix(in srgb, var(--color-base-content, #111) 55%, transparent);
+  }
+</style>

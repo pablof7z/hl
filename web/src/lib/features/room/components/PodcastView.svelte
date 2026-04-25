@@ -32,7 +32,11 @@
   const showTitle = $derived(podcast?.showTitle || artifact.podcastShowTitle || artifact.author);
   const description = $derived(podcast?.description || artifact.description);
   const image = $derived(podcast?.image || artifact.image);
-  const audioUrl = $derived(podcast?.audioUrl || artifact.audioUrl);
+  const fullAudioUrl = $derived(podcast?.audioUrl || artifact.audioUrl);
+  const audioPreviewUrl = $derived(podcast?.audioPreviewUrl || artifact.audioPreviewUrl);
+  const audioUrl = $derived(fullAudioUrl || audioPreviewUrl);
+  const isPreviewOnly = $derived(!fullAudioUrl && Boolean(audioPreviewUrl));
+  const audioRestrictedReason = $derived(podcast?.audioRestrictedReason ?? '');
   const publishedAt = $derived(podcast?.publishedAt || artifact.publishedAt);
   const durationSeconds = $derived.by(() => {
     const candidate = audioDuration ?? podcast?.durationSeconds ?? artifact.durationSeconds;
@@ -127,6 +131,12 @@
 
   <section class="player-section">
     {#if audioUrl}
+      {#if isPreviewOnly}
+        <div class="preview-banner">
+          <span class="preview-pill">Preview only</span>
+          <p>{audioRestrictedReason || 'This source only exposes a short preview clip.'}</p>
+        </div>
+      {/if}
       <audio
         bind:this={audioEl}
         src={audioUrl}
@@ -137,7 +147,7 @@
         onloadedmetadata={syncPlaybackState}
       ></audio>
 
-      {#if durationSeconds && highlightMarks.length > 0}
+      {#if durationSeconds && highlightMarks.length > 0 && !isPreviewOnly}
         <div class="marker-track" role="presentation">
           {#each highlightMarks as mark (mark.id)}
             <button
@@ -160,7 +170,7 @@
       {/if}
     {:else}
       <div class="audio-unavailable">
-        <p>No playable audio was exposed by this source.</p>
+        <p>{audioRestrictedReason || 'No playable audio was exposed by this source.'}</p>
         {#if artifact.url}
           <a class="external-link" href={artifact.url} target="_blank" rel="noreferrer noopener">
             Open source ↗
@@ -353,6 +363,35 @@
 
   .audio-element {
     width: 100%;
+  }
+
+  .preview-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface-warm);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+  }
+
+  .preview-banner p {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+
+  .preview-pill {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--brand-accent);
+    color: white;
   }
 
   .marker-track {

@@ -10,6 +10,20 @@ import { cleanText } from '$lib/ndk/format';
 
 export const BOOKMARK_LIST_KIND = NDKKind.BookmarkList;
 export const RELAY_FEED_LIST_KIND = NDKKind.RelayFeedList;
+
+/**
+ * NIP-51 kind:10009 — user's "communities" list. Each `group` tag is
+ * `['group', '<group-id>', '<relay-url>']`. iOS publishes this for friends'
+ * rooms; we mirror the shape so the rooms explorer can light up its "friends
+ * are here" shelf and Highlighter's curated featured-rooms list.
+ */
+export const COMMUNITIES_LIST_KIND = 10009 as const;
+
+export type GroupRef = {
+  groupId: string;
+  relayUrl: string;
+};
+
 export type ListTag = string[];
 
 export function latestListEvent(events: NDKEvent[]): NDKEvent | undefined {
@@ -111,6 +125,60 @@ export async function setBookmarkAddressPresence(
   }
 }
 
+export function bookmarkUrlsFromEvent(event: NDKEvent | undefined): string[] {
+  const list = bookmarkListFromEvent(event);
+  if (!list) return [];
+
+  return uniqueValues(
+    list
+      .getItems('r')
+      .map((tag) => cleanText(tag[1]))
+      .filter(Boolean)
+  );
+}
+
+export function bookmarkListHasUrl(event: NDKEvent | undefined, url: string): boolean {
+  const normalizedUrl = cleanText(url);
+  if (!normalizedUrl) return false;
+
+  const list = bookmarkListFromEvent(event);
+  if (!list) return false;
+
+  return list.getItems('r').some((tag) => cleanText(tag[1]) === normalizedUrl);
+}
+
+export async function setBookmarkUrlPresence(
+  ndk: NDK,
+  event: NDKEvent | undefined,
+  url: string,
+  present: boolean
+): Promise<void> {
+  const normalizedUrl = cleanText(url);
+  if (!normalizedUrl) return;
+
+  const list = event ? NDKList.from(event) : new NDKList(ndk);
+  list.kind = BOOKMARK_LIST_KIND;
+
+  const hasUrl = () => list.getItems('r').some((tag) => cleanText(tag[1]) === normalizedUrl);
+
+  if (present) {
+    if (hasUrl()) return;
+    await list.addItem(['r', normalizedUrl]);
+    await list.publishReplaceable();
+    return;
+  }
+
+  let removed = false;
+  while (hasUrl()) {
+    await list.removeItemByValue(normalizedUrl, false);
+    removed = true;
+  }
+
+  if (removed) {
+    await list.publishReplaceable();
+  }
+}
+
 export function relayFeedListFromEvent(event: NDKEvent | undefined): NDKRelayFeedList | undefined {
   return event ? NDKRelayFeedList.from(event) : undefined;
 }
@@ -149,6 +217,54 @@ export async function setRelayFeedUrlPresence(
   if (removed) {
     await list.publishReplaceable();
   }
+}
+
+export function groupRefsFromEvent(event: NDKEvent | undefined): GroupRef[] {
+  if (!event) return [];
+
+  return event.tags
+    .filter((tag) => tag[0] === 'group')
+    .map((tag) => ({
+      groupId: cleanText(tag[1] ?? ''),
+      relayUrl: cleanText(tag[2] ?? '')
+    }))
+    .filter((ref) => ref.groupId.length > 0);
+}
+
+export async function fetchCommunitiesList(
+  ndk: NDK,
+  pubkey: string
+): Promise<NDKEvent | undefined> {
+  return fetchLatestUserList(ndk, COMMUNITIES_LIST_KIND, pubkey);
+}
+
+export async function fetchFriendsCommunitiesLists(
+  ndk: NDK,
+  pubkeys: readonly string[]
+): Promise<Map<string, GroupRef[]>> {
+  const authors = uniqueValues([...pubkeys]);
+  if (authors.length === 0) return new Map();
+
+  const events = Array.from(
+    (await ndk.fetchEvents(
+      [{ kinds: [COMMUNITIES_LIST_KIND], authors, limit: authors.length * 2 }],
+      { closeOnEose: true }
+    )) ?? []
+  );
+
+  const byPubkey = new Map<string, NDKEvent>();
+  for (const event of events) {
+    const existing = byPubkey.get(event.pubkey);
+    if (!existing || (event.created_at ?? 0) > (existing.created_at ?? 0)) {
+      byPubkey.set(event.pubkey, event);
+    }
+  }
+
+  const result = new Map<string, GroupRef[]>();
+  for (const [pubkey, event] of byPubkey) {
+    result.set(pubkey, groupRefsFromEvent(event));
+  }
+  return result;
 }
 
 async function removeAllListItemsByValue(list: NDKList, value: string): Promise<boolean> {

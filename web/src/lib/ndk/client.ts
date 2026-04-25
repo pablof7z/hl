@@ -7,7 +7,7 @@ import { APP_NAME, DEFAULT_RELAYS } from '$lib/ndk/config';
 export const ndk = createNDK({
   explicitRelayUrls: DEFAULT_RELAYS,
   clientName: APP_NAME,
-  enableOutboxModel: false,
+  enableOutboxModel: true,
   session: {
     storage: new LocalStorage('highlighter:sessions'),
     autoSave: true,

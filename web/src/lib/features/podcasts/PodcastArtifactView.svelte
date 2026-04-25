@@ -78,7 +78,10 @@
   const showTitle = $derived(podcast?.showTitle || artifact.podcastShowTitle || artifact.author);
   const description = $derived(podcast?.description || artifact.description);
   const image = $derived(podcast?.image || artifact.image);
-  const audioUrl = $derived(podcast?.audioUrl || artifact.audioUrl);
+  const fullAudioUrl = $derived(podcast?.audioUrl || artifact.audioUrl);
+  const audioPreviewUrl = $derived(podcast?.audioPreviewUrl || artifact.audioPreviewUrl);
+  const audioUrl = $derived(fullAudioUrl || audioPreviewUrl);
+  const isPreviewOnly = $derived(!fullAudioUrl && Boolean(audioPreviewUrl));
   const transcriptUrl = $derived(podcast?.transcriptUrl || artifact.transcriptUrl);
   const durationSeconds = $derived.by(() => {
     const candidate = audioDuration ?? podcast?.durationSeconds ?? artifact.durationSeconds;
@@ -158,7 +161,7 @@
   });
   const selectedTranscriptIds = $derived(selectedTranscriptSegments.map((segment) => segment.id));
   const canPublishClip = $derived(
-    Boolean(currentUser && clipRange && !publishing && !isReadOnly)
+    Boolean(currentUser && clipRange && !publishing && !isReadOnly && !isPreviewOnly)
   );
   const clipMarkerHighlights = $derived(
     highlights.filter((highlight) => highlight.clipStartSeconds != null && Boolean(durationSeconds))
@@ -627,6 +630,12 @@
 
   {#if viewMode === 'listen'}
   <section class="player-shell">
+    {#if isPreviewOnly}
+      <div class="preview-only-banner">
+        <span class="preview-only-pill">Preview only</span>
+        <p>{podcast?.audioRestrictedReason || 'This source only exposes a short preview clip — full episode is not playable here.'}</p>
+      </div>
+    {/if}
     {#if clipMode === 'preview'}
       <div class="preview-badge">
         <span>Previewing clip</span>
@@ -639,7 +648,7 @@
         {isPlaying ? 'Pause' : 'Play'}
       </button>
 
-      {#if playbackAvailable}
+      {#if playbackAvailable && !isPreviewOnly}
         <div class="mark-buttons">
           <button type="button" class="btn btn-ghost btn-sm mark-button" onclick={handleMarkIn} title="Mark clip start (I)">
             Mark In
@@ -1210,6 +1219,35 @@
     color: var(--accent);
     font-size: 0.82rem;
     font-weight: 700;
+  }
+
+  .preview-only-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  .preview-only-banner p {
+    margin: 0;
+    font-size: 0.86rem;
+    line-height: 1.4;
+    color: var(--text-soft, #555);
+  }
+
+  .preview-only-pill {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: white;
   }
 
   .mark-buttons {

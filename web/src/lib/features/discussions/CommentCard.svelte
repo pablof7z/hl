@@ -1,6 +1,10 @@
 <script lang="ts">
   import { ndk } from '$lib/ndk/client';
   import { User } from '$lib/ndk/ui/user';
+  import { MarkdownEventContent } from '$lib/ndk/ui/markdown-event-content';
+  import '$lib/ndk/components/mention';
+  import '$lib/ndk/components/embedded-note';
+  import '$lib/ndk/components/embedded-article';
   import { relativeTime, type CommentRecord } from './discussion';
 
   let {
@@ -43,7 +47,11 @@
     {/if}
   </div>
 
-  <p class="m-0 leading-relaxed whitespace-pre-wrap text-base-content [overflow-wrap:anywhere]">{comment.content}</p>
+  <MarkdownEventContent
+    {ndk}
+    content={comment.content}
+    class="comment-card-content text-base-content [overflow-wrap:anywhere]"
+  />
 
   {#if onReply}
     <div class="flex gap-1.5">
@@ -53,3 +61,15 @@
     </div>
   {/if}
 </div>
+
+<style>
+  :global(.comment-card-content) {
+    line-height: 1.55;
+  }
+  :global(.comment-card-content p) {
+    margin: 0 0 0.5rem;
+  }
+  :global(.comment-card-content p:last-child) {
+    margin-bottom: 0;
+  }
+</style>

@@ -16,6 +16,7 @@
   import UpNextVoting from '$lib/features/room/components/UpNextVoting.svelte';
   import CaptureCta from '$lib/features/room/components/CaptureCta.svelte';
   import DiscussionRow from '$lib/features/room/components/DiscussionRow.svelte';
+  import ChatTab from '$lib/features/room/components/ChatTab.svelte';
   import {
     discussionFromEvent,
     discussionPath,
@@ -207,6 +208,7 @@
     { id: 'shelf', label: 'Library', count: artifacts.length },
     { id: 'highlights', label: 'Highlights', count: highlights.length },
     { id: 'discussions', label: 'Discussions', count: discussions.length },
+    { id: 'chat', label: 'Chat' },
     { id: 'lately', label: 'Activity' }
   ]);
 
@@ -482,6 +484,12 @@
               </div>
             {/if}
           </Block>
+        </Tabs.Content>
+
+        <Tabs.Content value="chat">
+          {#if slug}
+            <ChatTab groupId={slug} {isMember} />
+          {/if}
         </Tabs.Content>
 
         <Tabs.Content value="lately">
