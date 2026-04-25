@@ -144,6 +144,7 @@ mod tests {
                 highlight_tag_name: "i".into(),
                 highlight_tag_value: "isbn:9781234567890".into(),
                 highlight_reference_key: "i:isbn:9781234567890".into(),
+                chapters: Vec::new(),
             },
             group_id: "group-a".into(),
             share_event_id: "share-1".into(),

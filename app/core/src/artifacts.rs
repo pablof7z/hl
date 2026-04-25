@@ -177,6 +177,7 @@ pub fn build_preview_with(input: PreviewInput) -> Result<ArtifactPreview, CoreEr
         highlight_tag_name,
         highlight_tag_value,
         highlight_reference_key,
+        chapters: Vec::new(),
     })
 }
 
@@ -300,6 +301,41 @@ pub(crate) fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a st
     None
 }
 
+/// Lift `chapter` tags off a kind:11 podcast share. Wire format:
+/// `["chapter", "<start_seconds>", "<title>"]`. Skips malformed entries
+/// silently — chapter metadata is best-effort and a bad publisher shouldn't
+/// break the listening surface. Output is sorted by start time.
+pub(crate) fn read_chapters(event: &Event) -> Vec<crate::models::Chapter> {
+    let mut chapters: Vec<crate::models::Chapter> = event
+        .tags
+        .iter()
+        .filter_map(|tag| {
+            let slice = tag.as_slice();
+            if slice.first().map(String::as_str) != Some("chapter") {
+                return None;
+            }
+            let start = slice.get(1)?.parse::<f64>().ok()?;
+            if !start.is_finite() || start < 0.0 {
+                return None;
+            }
+            let title = slice.get(2).map(String::as_str).unwrap_or("").trim();
+            if title.is_empty() {
+                return None;
+            }
+            Some(crate::models::Chapter {
+                start_seconds: start,
+                title: title.to_string(),
+            })
+        })
+        .collect();
+    chapters.sort_by(|a, b| {
+        a.start_seconds
+            .partial_cmp(&b.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    chapters
+}
+
 /// Build an `ArtifactRecord` from a cached kind:11 event. Mirrors the
 /// tag-reading shape of `artifactFromEvent` in `web/src/lib/ndk/artifacts.ts`
 /// — every tag the publisher emits has to be lifted off the event here, or
@@ -372,6 +408,7 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
         highlight_tag_name: String::new(),
         highlight_tag_value: String::new(),
         highlight_reference_key: String::new(),
+        chapters: read_chapters(event),
     };
 
     Some(ArtifactRecord {
@@ -834,6 +871,38 @@ mod tests {
         assert_eq!(record.preview.duration_seconds, Some(3742));
         assert_eq!(record.preview.catalog_kind, "podcast:guid");
         assert_eq!(record.preview.reference_kind, "podcast:guid");
+    }
+
+    #[test]
+    fn artifact_record_lifts_chapter_tags() {
+        let keys = Keys::generate();
+        let event = EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), "")
+            .tags(vec![
+                Tag::parse(vec!["h".to_string(), "room".to_string()]).unwrap(),
+                Tag::identifier("ep1"),
+                Tag::parse(vec!["title".to_string(), "Ep 1".to_string()]).unwrap(),
+                Tag::parse(vec!["source".to_string(), "podcast".to_string()]).unwrap(),
+                Tag::parse(vec!["chapter".to_string(), "0".to_string(), "Cold open".to_string()]).unwrap(),
+                Tag::parse(vec!["chapter".to_string(), "245".to_string(), "First guest".to_string()]).unwrap(),
+                // Out of order: should sort.
+                Tag::parse(vec!["chapter".to_string(), "120".to_string(), "Setup".to_string()]).unwrap(),
+                // Malformed: missing title — should be dropped.
+                Tag::parse(vec!["chapter".to_string(), "999".to_string()]).unwrap(),
+                // Malformed: non-numeric start — should be dropped.
+                Tag::parse(vec!["chapter".to_string(), "junk".to_string(), "Ignored".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign");
+
+        let record = artifact_record_from_event(&event, "room").expect("record");
+        let chapters = &record.preview.chapters;
+        assert_eq!(chapters.len(), 3);
+        assert_eq!(chapters[0].start_seconds, 0.0);
+        assert_eq!(chapters[0].title, "Cold open");
+        assert_eq!(chapters[1].start_seconds, 120.0);
+        assert_eq!(chapters[1].title, "Setup");
+        assert_eq!(chapters[2].start_seconds, 245.0);
+        assert_eq!(chapters[2].title, "First guest");
     }
 
     #[test]

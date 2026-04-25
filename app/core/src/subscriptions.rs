@@ -1324,9 +1324,9 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
     }
 }
 
-/// Minimal kind:11 → ArtifactRecord. Full parity with
-/// `web/src/lib/ndk/artifacts.ts` is Phase 2 #4 work; this covers the fields
-/// RoomStore currently reads (title, preview identity, share id).
+/// kind:11 → ArtifactRecord for live subscription deltas. Mirrors the
+/// tag-reading shape of `artifact_record_from_event` so podcast shares
+/// arriving over a live sub render the same as cached ones.
 fn minimal_artifact_record(event: &Event, group_id: &str) -> Option<ArtifactRecord> {
     let title = first_tag_value(event, "title").unwrap_or("").to_string();
     let url = first_tag_value(event, "r").unwrap_or("").to_string();
@@ -1335,6 +1335,7 @@ fn minimal_artifact_record(event: &Event, group_id: &str) -> Option<ArtifactReco
     let image = first_tag_value(event, "image").unwrap_or("").to_string();
     let summary = first_tag_value(event, "summary").unwrap_or("").to_string();
     let d = first_tag_value(event, "d").unwrap_or("").to_string();
+    let k = first_tag_value(event, "k").unwrap_or("").to_string();
 
     // Reference tag: `i` (catalog) takes precedence over `a`/`e`.
     let (ref_name, ref_value) = if let Some(i) = first_tag_value(event, "i") {
@@ -1347,6 +1348,23 @@ fn minimal_artifact_record(event: &Event, group_id: &str) -> Option<ArtifactReco
         (String::new(), String::new())
     };
 
+    let podcast_item_guid = first_tag_value(event, "podcast_item_guid")
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            ref_value
+                .strip_prefix("podcast:item:guid:")
+                .map(str::to_string)
+                .unwrap_or_default()
+        });
+    let podcast_guid = first_tag_value(event, "podcast_guid")
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            ref_value
+                .strip_prefix("podcast:guid:")
+                .map(str::to_string)
+                .unwrap_or_default()
+        });
+
     let preview = ArtifactPreview {
         id: d.clone(),
         url,
@@ -1357,22 +1375,25 @@ fn minimal_artifact_record(event: &Event, group_id: &str) -> Option<ArtifactReco
         source,
         domain: String::new(),
         catalog_id: if ref_name == "i" { ref_value.clone() } else { String::new() },
-        catalog_kind: first_tag_value(event, "k").unwrap_or("").to_string(),
-        podcast_guid: String::new(),
-        podcast_item_guid: String::new(),
-        podcast_show_title: String::new(),
-        audio_url: String::new(),
-        audio_preview_url: String::new(),
-        transcript_url: String::new(),
-        feed_url: String::new(),
-        published_at: String::new(),
-        duration_seconds: None,
+        catalog_kind: k.clone(),
+        podcast_guid,
+        podcast_item_guid,
+        podcast_show_title: first_tag_value(event, "podcast_show_title")
+            .unwrap_or("")
+            .to_string(),
+        audio_url: first_tag_value(event, "audio").unwrap_or("").to_string(),
+        audio_preview_url: first_tag_value(event, "audio_preview").unwrap_or("").to_string(),
+        transcript_url: first_tag_value(event, "transcript").unwrap_or("").to_string(),
+        feed_url: first_tag_value(event, "feed").unwrap_or("").to_string(),
+        published_at: first_tag_value(event, "published_at").unwrap_or("").to_string(),
+        duration_seconds: first_tag_value(event, "duration").and_then(|v| v.parse::<i64>().ok()),
         reference_tag_name: ref_name.clone(),
         reference_tag_value: ref_value.clone(),
-        reference_kind: String::new(),
+        reference_kind: k,
         highlight_tag_name: String::new(),
         highlight_tag_value: String::new(),
         highlight_reference_key: String::new(),
+        chapters: crate::artifacts::read_chapters(event),
     };
 
     Some(ArtifactRecord {

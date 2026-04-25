@@ -228,6 +228,7 @@ fn build_preview(
         highlight_tag_name: "i".into(),
         highlight_tag_value: catalog_id,
         highlight_reference_key,
+        chapters: Vec::new(),
     }
 }
 
@@ -267,6 +268,7 @@ fn partial_preview(isbn13: &str) -> ArtifactPreview {
         highlight_tag_name: "i".into(),
         highlight_tag_value: catalog_id,
         highlight_reference_key,
+        chapters: Vec::new(),
     }
 }
 

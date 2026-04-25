@@ -3570,6 +3570,12 @@ public struct ArtifactPreview {
     public var highlightTagName: String
     public var highlightTagValue: String
     public var highlightReferenceKey: String
+    /**
+     * NIP-73 podcast chapter list (from `chapter` tags on the kind:11
+     * share). Each entry: `["chapter", "<seconds>", "<title>"]`. Empty when
+     * the source has no chapters or the publisher didn't capture them.
+     */
+    public var chapters: [Chapter]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -3592,7 +3598,12 @@ public struct ArtifactPreview {
          */referenceTagName: String, referenceTagValue: String, referenceKind: String, 
         /**
          * Highlight reference tag: "a" | "e" | "r"
-         */highlightTagName: String, highlightTagValue: String, highlightReferenceKey: String) {
+         */highlightTagName: String, highlightTagValue: String, highlightReferenceKey: String, 
+        /**
+         * NIP-73 podcast chapter list (from `chapter` tags on the kind:11
+         * share). Each entry: `["chapter", "<seconds>", "<title>"]`. Empty when
+         * the source has no chapters or the publisher didn't capture them.
+         */chapters: [Chapter]) {
         self.id = id
         self.url = url
         self.title = title
@@ -3618,6 +3629,7 @@ public struct ArtifactPreview {
         self.highlightTagName = highlightTagName
         self.highlightTagValue = highlightTagValue
         self.highlightReferenceKey = highlightReferenceKey
+        self.chapters = chapters
     }
 }
 
@@ -3703,6 +3715,9 @@ extension ArtifactPreview: Equatable, Hashable {
         if lhs.highlightReferenceKey != rhs.highlightReferenceKey {
             return false
         }
+        if lhs.chapters != rhs.chapters {
+            return false
+        }
         return true
     }
 
@@ -3732,6 +3747,7 @@ extension ArtifactPreview: Equatable, Hashable {
         hasher.combine(highlightTagName)
         hasher.combine(highlightTagValue)
         hasher.combine(highlightReferenceKey)
+        hasher.combine(chapters)
     }
 }
 
@@ -3768,7 +3784,8 @@ public struct FfiConverterTypeArtifactPreview: FfiConverterRustBuffer {
                 referenceKind: FfiConverterString.read(from: &buf), 
                 highlightTagName: FfiConverterString.read(from: &buf), 
                 highlightTagValue: FfiConverterString.read(from: &buf), 
-                highlightReferenceKey: FfiConverterString.read(from: &buf)
+                highlightReferenceKey: FfiConverterString.read(from: &buf), 
+                chapters: FfiConverterSequenceTypeChapter.read(from: &buf)
         )
     }
 
@@ -3798,6 +3815,7 @@ public struct FfiConverterTypeArtifactPreview: FfiConverterRustBuffer {
         FfiConverterString.write(value.highlightTagName, into: &buf)
         FfiConverterString.write(value.highlightTagValue, into: &buf)
         FfiConverterString.write(value.highlightReferenceKey, into: &buf)
+        FfiConverterSequenceTypeChapter.write(value.chapters, into: &buf)
     }
 }
 
@@ -4131,6 +4149,76 @@ public func FfiConverterTypeCacheStats_lift(_ buf: RustBuffer) throws -> CacheSt
 #endif
 public func FfiConverterTypeCacheStats_lower(_ value: CacheStats) -> RustBuffer {
     return FfiConverterTypeCacheStats.lower(value)
+}
+
+
+public struct Chapter {
+    public var startSeconds: Double
+    public var title: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(startSeconds: Double, title: String) {
+        self.startSeconds = startSeconds
+        self.title = title
+    }
+}
+
+#if compiler(>=6)
+extension Chapter: Sendable {}
+#endif
+
+
+extension Chapter: Equatable, Hashable {
+    public static func ==(lhs: Chapter, rhs: Chapter) -> Bool {
+        if lhs.startSeconds != rhs.startSeconds {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(startSeconds)
+        hasher.combine(title)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChapter: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Chapter {
+        return
+            try Chapter(
+                startSeconds: FfiConverterDouble.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Chapter, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.startSeconds, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChapter_lift(_ buf: RustBuffer) throws -> Chapter {
+    return try FfiConverterTypeChapter.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChapter_lower(_ value: Chapter) -> RustBuffer {
+    return FfiConverterTypeChapter.lower(value)
 }
 
 
@@ -8125,6 +8213,31 @@ fileprivate struct FfiConverterSequenceTypeArtifactRecord: FfiConverterRustBuffe
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeArtifactRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeChapter: FfiConverterRustBuffer {
+    typealias SwiftType = [Chapter]
+
+    public static func write(_ value: [Chapter], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeChapter.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Chapter] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Chapter]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeChapter.read(from: &buf))
         }
         return seq
     }

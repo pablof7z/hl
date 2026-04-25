@@ -783,6 +783,7 @@ mod tests {
             highlight_tag_name: "i".into(),
             highlight_tag_value: item_catalog.clone(),
             highlight_reference_key: format!("i:{item_catalog}"),
+            chapters: Vec::new(),
         }
     }
 
@@ -855,6 +856,7 @@ mod tests {
                 highlight_tag_name: "i".into(),
                 highlight_tag_value: catalog_id.clone(),
                 highlight_reference_key: format!("i:{catalog_id}"),
+                chapters: Vec::new(),
             },
             group_id: "group-a".into(),
             share_event_id: "share-isbn-1".into(),

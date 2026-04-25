@@ -63,6 +63,16 @@ pub struct ArtifactPreview {
     pub highlight_tag_name: String,
     pub highlight_tag_value: String,
     pub highlight_reference_key: String,
+    /// NIP-73 podcast chapter list (from `chapter` tags on the kind:11
+    /// share). Each entry: `["chapter", "<seconds>", "<title>"]`. Empty when
+    /// the source has no chapters or the publisher didn't capture them.
+    pub chapters: Vec<Chapter>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct Chapter {
+    pub start_seconds: f64,
+    pub title: String,
 }
 
 /// Mirrors `ArtifactRecord` in `web/src/lib/ndk/artifacts.ts`.
