@@ -180,9 +180,7 @@ private struct ChatMessageRow: View {
                             .foregroundStyle(Color.highlighterInkMuted)
                     }
                 }
-                Text(message.content)
-                    .font(.body)
-                    .foregroundStyle(Color.highlighterInkStrong)
+                NostrRichText(content: message.content, font: .body)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }

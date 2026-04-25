@@ -194,6 +194,7 @@ private struct ReaderScroll: View {
     var onFootnoteBackTap: (Int) -> Void
 
     @State private var rendered: MarkdownRenderer.Output?
+    @Environment(HighlighterStore.self) private var app
 
     private var coverURL: URL? {
         guard !article.image.isEmpty else { return nil }
@@ -227,6 +228,8 @@ private struct ReaderScroll: View {
                     )
                     .frame(maxWidth: .infinity)
                 }
+
+                referencedSection(content: article.content)
             }
         }
         .ignoresSafeArea(edges: coverURL == nil ? [] : .top)
@@ -241,6 +244,30 @@ private struct ReaderScroll: View {
                     muted: UIColor(Color.highlighterInkMuted)
                 )
             }.value
+        }
+    }
+
+    /// Pull every `nostr:` event-reference URI (`note1…`, `nevent1…`,
+    /// `naddr1…`) out of the markdown source and render the referenced
+    /// events as cards below the article body. Inline mentions/refs in
+    /// the body itself are a separate, deeper refactor of the
+    /// NSAttributedString pipeline; this section is the immediate win.
+    @ViewBuilder
+    private func referencedSection(content: String) -> some View {
+        let refs = NostrRichText.extractEventRefs(from: content, using: app.core)
+        if !refs.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("REFERENCED")
+                    .font(.caption.weight(.semibold))
+                    .tracking(1.2)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                ForEach(Array(refs.enumerated()), id: \.offset) { _, ref in
+                    NostrEntityCard(entity: ref)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 28)
+            .padding(.bottom, 12)
         }
     }
 

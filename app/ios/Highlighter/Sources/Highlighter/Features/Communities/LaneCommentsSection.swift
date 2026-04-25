@@ -54,10 +54,7 @@ struct LaneCommentsSection: View {
                     }
                     Spacer(minLength: 0)
                 }
-                Text(comment.body)
-                    .font(.subheadline)
-                    .foregroundStyle(inkColor)
-                    .lineSpacing(2)
+                NostrRichText(content: comment.body, font: .subheadline, ink: inkColor)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }

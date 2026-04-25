@@ -178,6 +178,70 @@ struct NostrRichText: View {
         try? appStore.core.decodeNostrEntity(input: raw)
     }
 
+    /// Pull every `nostr:` event-reference entity (`note1…`, `nevent1…`,
+    /// `naddr1…`) out of `content`, deduped by reference key, in the
+    /// order they first appeared. Profile mentions (`npub1…`,
+    /// `nprofile1…`) are excluded — those render inline via the main
+    /// `body`. Used by the article reader to render a "Referenced"
+    /// section after the article body without doing a full mid-stream
+    /// markdown refactor.
+    static func extractEventRefs(
+        from content: String,
+        using core: HighlighterCore
+    ) -> [NostrEntityRef] {
+        var seen: Set<String> = []
+        var out: [NostrEntityRef] = []
+        for run in tokeniseWithDecoder(content, decoder: { try? core.decodeNostrEntity(input: $0) }) {
+            guard case .entity(let ref) = run else { continue }
+            switch ref {
+            case .profile:
+                continue
+            case .event(let id, _, _, _):
+                if seen.insert("e:\(id)").inserted { out.append(ref) }
+            case .address(let kind, let pk, let d, _):
+                if seen.insert("a:\(kind):\(pk):\(d)").inserted { out.append(ref) }
+            }
+        }
+        return out
+    }
+
+    /// Pure tokeniser variant the static `extractEventRefs` can call
+    /// without needing an `appStore` environment. Mirrors the instance
+    /// `tokenise` but takes the decoder as a parameter.
+    private static func tokeniseWithDecoder(
+        _ s: String,
+        decoder: (String) -> NostrEntityRef?
+    ) -> [Run] {
+        var out: [Run] = []
+        var i = s.startIndex
+        while i < s.endIndex {
+            guard let prefixRange = s.range(of: "nostr:", options: [.literal, .caseInsensitive], range: i..<s.endIndex) else {
+                out.append(.text(String(s[i...])))
+                break
+            }
+            let bodyStart = prefixRange.upperBound
+            var end = bodyStart
+            while end < s.endIndex {
+                let c = s[end]
+                guard let scalar = c.unicodeScalars.first, c.unicodeScalars.count == 1 else { break }
+                let v = scalar.value
+                if (0x30...0x39).contains(v) || (0x61...0x7A).contains(v) {
+                    end = s.index(after: end)
+                } else { break }
+            }
+            if end == bodyStart { i = prefixRange.upperBound; continue }
+            let body = String(s[bodyStart..<end])
+            let lower = body.lowercased()
+            let isEntity = lower.hasPrefix("npub1") || lower.hasPrefix("nprofile1")
+                || lower.hasPrefix("note1") || lower.hasPrefix("nevent1") || lower.hasPrefix("naddr1")
+            if !isEntity { i = prefixRange.upperBound; continue }
+            if prefixRange.lowerBound > i { out.append(.text(String(s[i..<prefixRange.lowerBound]))) }
+            if let entity = decoder(body) { out.append(.entity(entity)) } else { out.append(.text(body)) }
+            i = end
+        }
+        return out
+    }
+
     // MARK: - Run / Block models
 
     private enum Run {

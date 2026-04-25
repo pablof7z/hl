@@ -35,9 +35,7 @@ struct RoomPreviewSheet: View {
                     meta
 
                     if !room.about.isEmpty {
-                        Text(room.about)
-                            .font(.body)
-                            .foregroundStyle(Color.highlighterInkStrong)
+                        NostrRichText(content: room.about, font: .body)
                             .padding(.top, 4)
                     }
                 }
