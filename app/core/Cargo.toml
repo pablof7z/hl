@@ -29,6 +29,7 @@ uniffi = { version = "0.29", features = ["cli", "tokio"] }
 dirs = "5"
 uuid = { version = "1", features = ["v4"] }
 url = "2"
+scraper = "0.20"
 
 [patch.crates-io]
 nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", branch = "master" }

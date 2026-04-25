@@ -45,6 +45,11 @@ struct HighlightFeedCardView: View {
         .task(id: lead.highlight.artifactAddress) {
             await resolveSource()
         }
+        .task(id: webMetadataURL) {
+            if let url = webMetadataURL {
+                await app.requestWebMetadata(url: url)
+            }
+        }
     }
 
     // MARK: - Resource header
@@ -357,6 +362,10 @@ struct HighlightFeedCardView: View {
         if artifactKind == .article, let img = sourceArticle?.image, !img.isEmpty {
             return img
         }
+        if artifactKind == .web, let m = webMetadata {
+            if !m.image.isEmpty { return m.image }
+            if !m.favicon.isEmpty { return m.favicon }
+        }
         return nil
     }
 
@@ -372,6 +381,10 @@ struct HighlightFeedCardView: View {
         case .book:
             return lead.artifact?.preview.author ?? ""
         case .web:
+            if let m = webMetadata {
+                if !m.siteName.isEmpty { return m.siteName }
+                if !m.author.isEmpty { return m.author }
+            }
             if let domain = lead.artifact?.preview.domain, !domain.isEmpty {
                 return domain
             }
@@ -393,6 +406,7 @@ struct HighlightFeedCardView: View {
             if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
             return "Untitled"
         case .web:
+            if let m = webMetadata, !m.title.isEmpty { return m.title }
             if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
             return urlHost ?? "Web page"
         case .unknown:
@@ -425,6 +439,29 @@ struct HighlightFeedCardView: View {
         let raw = lead.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty, let url = URL(string: raw), let host = url.host else { return nil }
         return host
+    }
+
+    /// Source URL the OG/favicon fetcher should hit. Only populated for
+    /// the web kind — article/podcast/book branches own their own
+    /// hydration path. Prefers the artifact's normalized URL (when a
+    /// kind:11 share exists) over the raw highlight `sourceUrl` so the
+    /// cache key matches what Rust would store.
+    private var webMetadataURL: String? {
+        guard artifactKind == .web else { return nil }
+        if let u = lead.artifact?.preview.url, !u.isEmpty { return u }
+        let raw = lead.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? nil : raw
+    }
+
+    /// Cached enrichment for the web URL (if any). Returns nil for
+    /// non-web kinds. The cache key is whatever URL was passed to
+    /// `requestWebMetadata` — Rust canonicalizes it, but stores the entry
+    /// under the canonical key, so we reach in with the canonical URL too.
+    /// In practice the artifact preview URL is already canonical (built
+    /// by `normalize_artifact_url`), so this lookup is a direct hit.
+    private var webMetadata: WebMetadata? {
+        guard let url = webMetadataURL else { return nil }
+        return app.webMetadataCache[url]
     }
 
     // MARK: - Derived: profile / article resolution

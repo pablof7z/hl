@@ -966,6 +966,15 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getUserProfile(pubkeyHex: String) async throws  -> ProfileMetadata?
     
     /**
+     * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
+     * JSON-on-disk cache (7-day positive TTL, 1-hour negative TTL) and
+     * in-flight coalescing — concurrent calls for the same URL share one
+     * HTTP request. Returns `CoreError::NotFound` when the page 404s,
+     * `CoreError::Network` on transport failure.
+     */
+    func getWebMetadata(url: String) async throws  -> WebMetadata
+    
+    /**
      * Fetch another user's kind:10002 via the indexer pool and return the
      * parsed `RelayConfig` rows. Useful for "adopt someone else's relay
      * setup" flows — the Swift caller shows the list with checkboxes
@@ -2152,6 +2161,30 @@ open func getUserProfile(pubkeyHex: String)async throws  -> ProfileMetadata?  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionTypeProfileMetadata.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
+     * JSON-on-disk cache (7-day positive TTL, 1-hour negative TTL) and
+     * in-flight coalescing — concurrent calls for the same URL share one
+     * HTTP request. Returns `CoreError::NotFound` when the page 404s,
+     * `CoreError::Network` on transport failure.
+     */
+open func getWebMetadata(url: String)async throws  -> WebMetadata  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_web_metadata(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(url)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeWebMetadata_lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -6916,6 +6949,128 @@ public func FfiConverterTypeRoomRecommendation_lower(_ value: RoomRecommendation
 }
 
 
+/**
+ * Public record exposed via UniFFI. Empty strings fill missing fields so
+ * Swift call sites don't have to handle `Option` everywhere.
+ */
+public struct WebMetadata {
+    public var url: String
+    public var title: String
+    public var description: String
+    public var image: String
+    public var siteName: String
+    public var author: String
+    public var favicon: String
+    public var fetchedAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, title: String, description: String, image: String, siteName: String, author: String, favicon: String, fetchedAt: UInt64) {
+        self.url = url
+        self.title = title
+        self.description = description
+        self.image = image
+        self.siteName = siteName
+        self.author = author
+        self.favicon = favicon
+        self.fetchedAt = fetchedAt
+    }
+}
+
+#if compiler(>=6)
+extension WebMetadata: Sendable {}
+#endif
+
+
+extension WebMetadata: Equatable, Hashable {
+    public static func ==(lhs: WebMetadata, rhs: WebMetadata) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.image != rhs.image {
+            return false
+        }
+        if lhs.siteName != rhs.siteName {
+            return false
+        }
+        if lhs.author != rhs.author {
+            return false
+        }
+        if lhs.favicon != rhs.favicon {
+            return false
+        }
+        if lhs.fetchedAt != rhs.fetchedAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(title)
+        hasher.combine(description)
+        hasher.combine(image)
+        hasher.combine(siteName)
+        hasher.combine(author)
+        hasher.combine(favicon)
+        hasher.combine(fetchedAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWebMetadata: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebMetadata {
+        return
+            try WebMetadata(
+                url: FfiConverterString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf), 
+                description: FfiConverterString.read(from: &buf), 
+                image: FfiConverterString.read(from: &buf), 
+                siteName: FfiConverterString.read(from: &buf), 
+                author: FfiConverterString.read(from: &buf), 
+                favicon: FfiConverterString.read(from: &buf), 
+                fetchedAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WebMetadata, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.description, into: &buf)
+        FfiConverterString.write(value.image, into: &buf)
+        FfiConverterString.write(value.siteName, into: &buf)
+        FfiConverterString.write(value.author, into: &buf)
+        FfiConverterString.write(value.favicon, into: &buf)
+        FfiConverterUInt64.write(value.fetchedAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebMetadata_lift(_ buf: RustBuffer) throws -> WebMetadata {
+    return try FfiConverterTypeWebMetadata.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebMetadata_lower(_ value: WebMetadata) -> RustBuffer {
+    return FfiConverterTypeWebMetadata.lower(value)
+}
+
+
 public enum CoreError: Swift.Error {
 
     
@@ -8772,6 +8927,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 29632) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 24724) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_import_relays_from_npub() != 20364) {

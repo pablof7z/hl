@@ -37,6 +37,12 @@ final class HighlighterStore {
     /// observing a given pubkey re-render automatically when a fresh kind:0
     /// arrives from a relay.
     var profileCache: [String: ProfileMetadata] = [:]
+    /// OpenGraph + favicon cache for web URL highlights, keyed by the
+    /// canonical URL the metadata was fetched for. Mirrors `profileCache`'s
+    /// shape so card views can look up enrichment synchronously and
+    /// re-render when a fetch lands. The Rust core owns the on-disk cache;
+    /// this dictionary is the in-memory mirror SwiftUI observes.
+    var webMetadataCache: [String: WebMetadata] = [:]
     /// NIP-51 kind:10003 article bookmarks — set of `30023:<pubkey>:<d>`
     /// addresses. Reactive so every row showing a bookmark affordance updates
     /// when the user toggles one anywhere.
@@ -49,6 +55,10 @@ final class HighlighterStore {
     @ObservationIgnored private var joinedCommunitiesHandle: UInt64?
     @ObservationIgnored private var bookmarksHandle: UInt64?
     @ObservationIgnored private var profileCacheHandles: [String: UInt64] = [:]
+    /// In-flight `requestWebMetadata` calls coalesce here so multiple rows
+    /// referencing the same URL share a single Task. Cleared once the
+    /// fetch completes (success or failure).
+    @ObservationIgnored private var webMetadataInflight: [String: Task<Void, Never>] = [:]
 
     var isLoggedIn: Bool { currentUser != nil }
 
@@ -101,6 +111,9 @@ final class HighlighterStore {
         }
         profileCacheHandles.removeAll()
         profileCache.removeAll()
+        for (_, task) in webMetadataInflight { task.cancel() }
+        webMetadataInflight.removeAll()
+        webMetadataCache.removeAll()
         bookmarkedArticleAddresses.removeAll()
         core.logout()
         AppSessionStore.shared.clear()
@@ -165,6 +178,33 @@ final class HighlighterStore {
         if let profile = try? await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
             profileCache[pubkeyHex] = profile
         }
+    }
+
+    /// Fetch OpenGraph + favicon metadata for a web URL via the Rust core
+    /// (which owns the disk cache + in-flight coalescing). Safe to call from
+    /// multiple views for the same URL — the in-memory `webMetadataInflight`
+    /// map deduplicates Swift-side, the Rust store deduplicates HTTP-side.
+    /// No-op when the URL is already cached in `webMetadataCache`.
+    func requestWebMetadata(url: String) async {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if webMetadataCache[trimmed] != nil { return }
+        if let existing = webMetadataInflight[trimmed] {
+            await existing.value
+            return
+        }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let metadata = try? await self.safeCore.getWebMetadata(url: trimmed)
+            await MainActor.run {
+                if let metadata {
+                    self.webMetadataCache[trimmed] = metadata
+                }
+                self.webMetadataInflight.removeValue(forKey: trimmed)
+            }
+        }
+        webMetadataInflight[trimmed] = task
+        await task.value
     }
 
     /// Snapshot `joinedCommunities` into the App Group cache so the Share

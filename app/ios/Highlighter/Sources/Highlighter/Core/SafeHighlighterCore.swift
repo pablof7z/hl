@@ -102,6 +102,10 @@ actor SafeHighlighterCore {
         try await core.buildPreviewFromUrl(url: url)
     }
 
+    func getWebMetadata(url: String) async throws -> WebMetadata {
+        try await core.getWebMetadata(url: url)
+    }
+
     func getDiscussions(groupId: String, limit: UInt32 = 64) async throws -> [DiscussionRecord] {
         try await core.getDiscussions(groupId: groupId, limit: limit)
     }

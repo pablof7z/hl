@@ -33,6 +33,7 @@ pub mod relays;
 pub mod search;
 pub mod session;
 pub mod subscriptions;
+pub mod web_metadata;
 
 pub use client::HighlighterCore;
 pub use errors::CoreError;
@@ -44,3 +45,4 @@ pub use models::{
     NostrConnectOptions, PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem,
     RoomRecommendation, RoomRecommendationReason,
 };
+pub use web_metadata::WebMetadata;

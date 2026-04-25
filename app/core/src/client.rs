@@ -36,6 +36,7 @@ use crate::profile;
 use crate::relays::NOSTR_CONNECT_RELAY;
 use crate::session::{current_user_from_pubkey, Session};
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
+use crate::web_metadata::{self, WebMetadata, WebMetadataStore};
 
 #[derive(uniffi::Object)]
 pub struct HighlighterCore {
@@ -45,6 +46,9 @@ pub struct HighlighterCore {
     /// callback atomically mid-flight.
     callback_slot: Arc<RwLock<Option<Arc<dyn EventCallback>>>>,
     subscriptions: Arc<SubscriptionRegistry>,
+    /// OG/favicon cache shared across all `get_web_metadata` calls. Lives
+    /// on the core so concurrent fetches for the same URL coalesce.
+    web_metadata: Arc<WebMetadataStore>,
 }
 
 struct Inner {
@@ -905,6 +909,15 @@ impl HighlighterCore {
         crate::artifacts::build_preview(&url)
     }
 
+    /// Fetch OpenGraph + favicon metadata for a web URL. Backed by a
+    /// JSON-on-disk cache (7-day positive TTL, 1-hour negative TTL) and
+    /// in-flight coalescing — concurrent calls for the same URL share one
+    /// HTTP request. Returns `CoreError::NotFound` when the page 404s,
+    /// `CoreError::Network` on transport failure.
+    pub async fn get_web_metadata(&self, url: String) -> Result<WebMetadata, CoreError> {
+        web_metadata::get_or_fetch(self.web_metadata.clone(), &url).await
+    }
+
     pub async fn get_discussions(
         &self,
         group_id: String,
@@ -1609,6 +1622,7 @@ impl HighlighterCore {
         // map regardless, and fires deltas once Swift installs a callback
         // via `set_event_callback`.
         runtime.spawn_diagnostics_poller(callback_slot.clone());
+        let web_metadata = Arc::new(WebMetadataStore::open(runtime.data_dir()));
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {
                 session: Session::new(),
@@ -1616,6 +1630,7 @@ impl HighlighterCore {
             runtime,
             callback_slot,
             subscriptions,
+            web_metadata,
         })
     }
 
