@@ -17,18 +17,18 @@ struct CommentsToolbar: View {
 
     var body: some View {
         Button(action: onTap) {
-            if shrunk {
+            if shrunk || count == 0 {
                 shrunkPill
             } else {
                 fullCapsule
             }
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, shrunk ? 12 : 16)
+        .padding(.horizontal, (shrunk || count == 0) ? 12 : 16)
         .padding(.bottom, 6)
-        .frame(maxWidth: .infinity, alignment: shrunk ? .trailing : .center)
+        .frame(maxWidth: .infinity, alignment: (shrunk || count == 0) ? .trailing : .center)
         .animation(.spring(response: 0.38, dampingFraction: 0.82), value: shrunk)
-        .accessibilityLabel("\(count) comments")
+        .accessibilityLabel(count == 0 ? "Start the thread" : "\(count) comments")
         .accessibilityAddTraits(.isButton)
     }
 
@@ -58,16 +58,25 @@ struct CommentsToolbar: View {
 
     private var shrunkPill: some View {
         HStack(spacing: 6) {
-            avatarTrio(size: 18, overlap: 6, max: 1)
-            Text("\(count)")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color.highlighterInkStrong)
-                .monospacedDigit()
+            if count > 0 {
+                avatarTrio(size: 18, overlap: 6, max: 1)
+                Text("\(count)")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.highlighterInkStrong)
+                    .monospacedDigit()
+            } else {
+                Image(systemName: "bubble.left")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color.highlighterInkMuted)
+                Text("Start the thread")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.highlighterInkMuted)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .frame(height: 32)
-        .glassCapsule(cornerRadius: 16)
+        .frame(height: 28)
+        .glassCapsule(cornerRadius: 14)
         .contentShape(Capsule())
     }
 
