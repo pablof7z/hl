@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grouped Highlights v3 — Resource-Centric</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --paper:        #F7F2EC;
+    --paper-warm:   #F4EFE7;
+    --paper-card:   #FCFAF6;
+    --paper-dark:   #EDE7DE;
+    --rule:         #DDD5C8;
+    --rule-faint:   #E8E1D5;
+    --accent:       #B85C38;
+    --accent-soft:  #E8C9B8;
+    --ink:          #1C1510;
+    --ink-strong:   #1C1510;
+    --ink-muted:    #8A7B6E;
+    --ink-faint:    #C4B8AC;
+    --serif:        'Playfair Display', Georgia, serif;
+    --sans:         'Inter', -apple-system, sans-serif;
+  }
+
+  body {
+    background: #2C2520;
+    font-family: var(--sans);
+    padding: 60px 20px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    color: #C4B8AC;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 2px; text-transform: uppercase;
+    text-align: center; margin-bottom: 16px;
+  }
+
+  .h1-sub {
+    color: #6B5F55;
+    font-size: 12px; text-align: center;
+    margin-bottom: 60px; font-weight: 400;
+    max-width: 520px; margin-left: auto; margin-right: auto;
+    line-height: 1.6;
+  }
+
+  .proto-row {
+    display: flex; gap: 36px;
+    justify-content: center; align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .proto-col {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 16px; width: 375px;
+  }
+
+  .proto-label {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 1.8px; text-transform: uppercase;
+    color: #6B5F55;
+  }
+
+  .proto-label-name {
+    font-size: 14px; color: #E8E0D0;
+    font-family: var(--serif); font-weight: 600;
+    margin-top: -8px; font-style: italic;
+  }
+
+  /* Phone shell */
+  .phone {
+    width: 375px; background: var(--paper);
+    border-radius: 44px; overflow: hidden;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.08),
+      0 32px 80px rgba(0,0,0,0.6),
+      0 8px 20px rgba(0,0,0,0.4);
+  }
+
+  .phone-notch {
+    height: 44px; background: var(--paper);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .notch-pill { width: 126px; height: 34px; background: #111; border-radius: 20px; }
+
+  .phone-content { background: var(--paper); }
+
+  .nav-bar {
+    padding: 4px 20px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .nav-title {
+    font-family: var(--serif); font-size: 28px; font-weight: 600;
+    color: var(--ink); letter-spacing: -0.5px;
+  }
+
+  .nav-icons { display: flex; gap: 16px; align-items: center; }
+
+  .nav-icon {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--paper-dark);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  .feed-rule { height: 1px; background: var(--rule); margin: 0 20px; }
+
+  .item-sep { height: 1px; background: var(--rule); margin: 0 20px; }
+
+  /* Group container — visual containment so the reel
+     reads as belonging to the resource above it. */
+  .group-frame {
+    background: var(--paper-card);
+    border: 1px solid var(--rule-faint);
+    border-radius: 18px;
+    margin: 14px 12px 18px;
+    padding: 14px 0 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .group-frame::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    opacity: 0.85;
+  }
+
+  .group-spacer { height: 24px; }
+
+  /* Variant: wrap-only background, no enclosing border */
+  .group-wrap {
+    background:
+      linear-gradient(180deg,
+        var(--paper-card) 0%,
+        var(--paper-card) 92%,
+        transparent 100%);
+    margin: 10px 0 8px;
+    padding: 14px 0 18px;
+    position: relative;
+  }
+
+  .group-wrap::before {
+    content: '';
+    position: absolute;
+    left: 20px; right: 20px; top: 0;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  .group-wrap::after {
+    content: '';
+    position: absolute;
+    left: 20px; right: 20px; bottom: 0;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  /* Variant: floating accent thread */
+  .group-thread {
+    margin: 14px 0 18px;
+    padding: 12px 0 14px;
+    position: relative;
+  }
+  .group-thread::before {
+    content: '';
+    position: absolute;
+    left: 31px;
+    top: 60px; bottom: 24px;
+    width: 1.5px;
+    background: var(--accent);
+    opacity: 0.3;
+    border-radius: 1px;
+  }
+
+  .ghost-row {
+    padding: 18px 20px; opacity: 0.3;
+    pointer-events: none; overflow: hidden; max-height: 60px;
+  }
+  .ghost-line { height: 10px; border-radius: 5px; background: var(--rule); margin-bottom: 8px; }
+  .ghost-line.short { width: 55%; }
+
+  .tab-bar {
+    background: rgba(247, 242, 236, 0.92);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--rule);
+    padding: 8px 0 20px;
+    display: flex; justify-content: space-around;
+  }
+  .tab-item { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; }
+  .tab-icon { font-size: 20px; color: var(--ink-faint); }
+  .tab-icon.active { color: var(--accent); }
+  .tab-label { font-size: 9px; color: var(--ink-faint); font-weight: 500; }
+  .tab-label.active { color: var(--accent); font-weight: 600; }
+
+  /* shared author avatar styles */
+  .h-avatar {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; color: white;
+  }
+  .av-1 { background: linear-gradient(135deg,#8B7355,#5C4A35); }
+  .av-2 { background: linear-gradient(135deg,#6B7B5A,#3F4A30); }
+  .av-3 { background: linear-gradient(135deg,#7A5A8B,#4A3560); }
+  .av-4 { background: linear-gradient(135deg,#A05A55,#683A35); }
+
+  .h-avatar-md {
+    width: 28px; height: 28px;
+    border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: white;
+  }
+
+  /* ─────────────────────────────────────────────
+     V1 — "Article Header + Highlighter Cards"
+     The card sits in the feed with NO top-level
+     byline. The article is the subject. Each quote
+     card carries its own highlighter byline
+     (avatar + name + time) above the quote text.
+  ──────────────────────────────────────────────*/
+
+  .v1-article {
+    margin: 4px 20px 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+
+  .v1-cover {
+    width: 44px; height: 44px;
+    border-radius: 8px; flex-shrink: 0;
+    background:
+      linear-gradient(135deg, #D4C8BA 0%, #9C8975 100%);
+    position: relative; overflow: hidden;
+  }
+  .v1-cover::after {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      -45deg, transparent 0, transparent 4px,
+      rgba(0,0,0,0.06) 4px, rgba(0,0,0,0.06) 5px
+    );
+  }
+
+  .v1-info { flex: 1; min-width: 0; }
+
+  .v1-title {
+    font-family: var(--serif); font-size: 16px; font-weight: 600;
+    color: var(--ink); line-height: 1.25;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+  }
+
+  .v1-by {
+    font-size: 11px; color: var(--ink-muted); margin-top: 2px;
+    display: flex; align-items: center; gap: 4px;
+  }
+
+  .v1-by-strong { color: var(--ink); font-weight: 500; }
+
+  .v1-count-row {
+    margin: 0 20px 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .v1-count-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.4px;
+    color: var(--accent); text-transform: uppercase;
+  }
+
+  .v1-count-stack {
+    display: flex; align-items: center;
+  }
+  .v1-count-stack .h-avatar {
+    margin-left: -6px; border: 2px solid var(--paper);
+    width: 18px; height: 18px; font-size: 8px;
+  }
+  .v1-count-stack .h-avatar:first-child { margin-left: 0; }
+
+  .v1-count-rule { flex: 1; height: 1px; background: var(--rule); }
+
+  .v1-quotes-scroll {
+    overflow-x: auto;
+    padding: 0 20px 20px;
+    display: flex; gap: 12px;
+    scrollbar-width: none;
+  }
+  .v1-quotes-scroll::-webkit-scrollbar { display: none; }
+
+  .v1-card {
+    flex-shrink: 0;
+    width: 240px;
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    padding: 12px 12px 14px;
+    display: flex; flex-direction: column;
+    min-height: 168px;
+  }
+
+  .v1-byline {
+    display: flex; align-items: center; gap: 7px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule-faint);
+  }
+
+  .v1-byline-name {
+    font-size: 11px; font-weight: 600; color: var(--ink);
+  }
+
+  .v1-byline-sep { color: var(--ink-faint); font-size: 10px; }
+
+  .v1-byline-time {
+    font-size: 10px; color: var(--ink-muted);
+  }
+
+  .v1-quote-row {
+    display: flex; gap: 10px; flex: 1;
+  }
+
+  .v1-bar {
+    width: 3px; flex-shrink: 0;
+    background: var(--accent); border-radius: 2px;
+  }
+
+  .v1-quote {
+    font-family: var(--serif); font-size: 14px; font-style: italic;
+    color: var(--ink); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical;
+    overflow: hidden; flex: 1;
+  }
+
+  /* ─────────────────────────────────────────────
+     V2 — "Resource Tile + Stamped Cards"
+     The article is a tall, image-led tile on the
+     left of the row. The horizontal scroll of
+     quote cards starts to its right. Each card
+     is square-ish with a "highlighter stamp" in
+     the corner. Most editorial.
+  ──────────────────────────────────────────────*/
+
+  .v2-row {
+    padding: 8px 0 22px;
+    display: flex; gap: 12px;
+    align-items: stretch;
+    overflow-x: auto;
+    padding-left: 20px; padding-right: 20px;
+    scrollbar-width: none;
+  }
+  .v2-row::-webkit-scrollbar { display: none; }
+
+  .v2-resource {
+    flex-shrink: 0;
+    width: 156px;
+    background: var(--paper-card);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    padding: 12px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+
+  .v2-cover {
+    width: 100%; aspect-ratio: 1/1;
+    border-radius: 8px;
+    background:
+      linear-gradient(135deg,#D4C8BA 0%,#9C8975 100%);
+    position: relative; overflow: hidden;
+  }
+  .v2-cover::after {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      45deg, transparent 0, transparent 5px,
+      rgba(0,0,0,0.06) 5px, rgba(0,0,0,0.06) 6px
+    );
+  }
+
+  .v2-resource-author-tag {
+    font-size: 9px; font-weight: 700; letter-spacing: 1.2px;
+    color: var(--accent); text-transform: uppercase;
+  }
+
+  .v2-resource-title {
+    font-family: var(--serif); font-size: 14px; font-weight: 600;
+    color: var(--ink); line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .v2-resource-author {
+    font-size: 11px; color: var(--ink-muted);
+    display: flex; align-items: center; gap: 5px;
+  }
+
+  .v2-resource-cta {
+    font-size: 11px; font-weight: 600; color: var(--accent);
+    margin-top: 2px;
+  }
+
+  .v2-card {
+    flex-shrink: 0;
+    width: 200px;
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    padding: 14px;
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+
+  .v2-stamp {
+    position: absolute; top: 12px; right: 12px;
+    display: flex; align-items: center; gap: 5px;
+  }
+
+  .v2-stamp-name {
+    font-size: 10px; font-weight: 600; color: var(--ink);
+  }
+
+  .v2-quote {
+    font-family: var(--serif); font-size: 14px; font-style: italic;
+    color: var(--ink); line-height: 1.55;
+    margin-top: 32px;
+    display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical;
+    overflow: hidden; flex: 1;
+  }
+
+  .v2-time {
+    font-size: 9px; color: var(--ink-muted);
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--rule-faint);
+  }
+
+  /* ─────────────────────────────────────────────
+     V3 — "Header Strip + Compact Reel"
+     A wider article header with cover thumb +
+     title + author + a row of mini avatars
+     showing who highlighted. Below: dense
+     horizontal reel of compact cards keyed by
+     highlighter avatar/name on the accent bar.
+  ──────────────────────────────────────────────*/
+
+  .v3-header {
+    margin: 4px 20px 12px;
+    display: flex; gap: 12px;
+    background: var(--paper-card);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    padding: 12px;
+  }
+
+  .v3-cover {
+    width: 56px; height: 56px;
+    border-radius: 8px; flex-shrink: 0;
+    background:
+      linear-gradient(135deg,#D4C8BA 0%,#9C8975 100%);
+    position: relative; overflow: hidden;
+  }
+  .v3-cover::after {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      -30deg, transparent 0, transparent 5px,
+      rgba(0,0,0,0.05) 5px, rgba(0,0,0,0.05) 6px
+    );
+  }
+
+  .v3-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
+
+  .v3-title {
+    font-family: var(--serif); font-size: 14px; font-weight: 600;
+    color: var(--ink); line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .v3-meta {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 6px;
+  }
+
+  .v3-meta-author {
+    font-size: 11px; color: var(--ink-muted);
+    overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .v3-meta-author strong { color: var(--ink); font-weight: 600; }
+
+  .v3-meta-cta {
+    font-size: 10px; font-weight: 600; color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .v3-highlighters-row {
+    margin: 0 20px 14px;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .v3-highlighters-stack {
+    display: flex; align-items: center;
+  }
+  .v3-highlighters-stack .h-avatar {
+    margin-left: -6px; border: 2px solid var(--paper);
+    width: 20px; height: 20px; font-size: 8px;
+  }
+  .v3-highlighters-stack .h-avatar:first-child { margin-left: 0; }
+
+  .v3-highlighters-label {
+    font-size: 11px; color: var(--ink-muted);
+  }
+  .v3-highlighters-label strong { color: var(--ink); font-weight: 600; }
+
+  .v3-quotes-scroll {
+    overflow-x: auto;
+    padding: 0 20px 22px;
+    display: flex; gap: 10px;
+    scrollbar-width: none;
+  }
+  .v3-quotes-scroll::-webkit-scrollbar { display: none; }
+
+  .v3-card {
+    flex-shrink: 0;
+    width: 230px;
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    min-height: 154px;
+  }
+
+  .v3-card-header {
+    padding: 10px 12px;
+    display: flex; align-items: center; gap: 7px;
+    background: var(--paper-card);
+    border-bottom: 1px solid var(--rule-faint);
+  }
+
+  .v3-card-name {
+    font-size: 11px; font-weight: 600; color: var(--ink); flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .v3-card-time { font-size: 10px; color: var(--ink-muted); }
+
+  .v3-card-body {
+    padding: 12px 14px 14px;
+    display: flex; gap: 10px;
+    flex: 1;
+  }
+
+  .v3-bar {
+    width: 3px; flex-shrink: 0;
+    background: var(--accent); border-radius: 2px;
+  }
+
+  .v3-quote {
+    font-family: var(--serif); font-size: 14px; font-style: italic;
+    color: var(--ink); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical;
+    overflow: hidden; flex: 1;
+  }
+
+</style>
+</head>
+<body>
+
+<h1>Variations v3 — Resource on Top, Highlighters Inside</h1>
+<div class="h1-sub">
+  Top of card = article author + title (the resource).<br>
+  Each quote card inside = highlighter's avatar + name + time + quote.<br>
+  Multiple people can highlight the same article.
+</div>
+
+<div class="proto-row">
+
+  <!-- ════════ V1 — Compact Author Header ════════ -->
+  <div class="proto-col">
+    <div class="proto-label">V1</div>
+    <div class="proto-label-name">Compact Author Header</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <!-- Containment frame: tinted card + accent edge → all this belongs together -->
+        <div class="group-frame">
+
+          <div class="v1-article" style="margin-left: 16px; margin-right: 16px;">
+            <div class="v1-cover"></div>
+            <div class="v1-info">
+              <div class="v1-title">Why design still requires a human soul</div>
+              <div class="v1-by">
+                <span class="v1-by-strong">Jeremy Rifkin</span>
+                <span>·</span>
+                <span>designharder.pub</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="v1-count-row" style="margin-left: 16px; margin-right: 16px;">
+            <span class="v1-count-label">3 highlighters</span>
+            <div class="v1-count-stack">
+              <div class="h-avatar av-1" style="border-color: var(--paper-card);">G</div>
+              <div class="h-avatar av-2" style="border-color: var(--paper-card);">A</div>
+              <div class="h-avatar av-3" style="border-color: var(--paper-card);">M</div>
+            </div>
+            <div class="v1-count-rule"></div>
+          </div>
+
+          <div class="v1-quotes-scroll" style="padding-left: 16px; padding-right: 16px;">
+          <div class="v1-card">
+            <div class="v1-byline">
+              <div class="h-avatar av-1">G</div>
+              <span class="v1-byline-name">Gigi</span>
+              <span class="v1-byline-sep">·</span>
+              <span class="v1-byline-time">13h</span>
+            </div>
+            <div class="v1-quote-row">
+              <div class="v1-bar"></div>
+              <div class="v1-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+            </div>
+          </div>
+          <div class="v1-card">
+            <div class="v1-byline">
+              <div class="h-avatar av-1">G</div>
+              <span class="v1-byline-name">Gigi</span>
+              <span class="v1-byline-sep">·</span>
+              <span class="v1-byline-time">13h</span>
+            </div>
+            <div class="v1-quote-row">
+              <div class="v1-bar"></div>
+              <div class="v1-quote">fast, convenient, ugly, and empty</div>
+            </div>
+          </div>
+          <div class="v1-card">
+            <div class="v1-byline">
+              <div class="h-avatar av-2">A</div>
+              <span class="v1-byline-name">Anna</span>
+              <span class="v1-byline-sep">·</span>
+              <span class="v1-byline-time">11h</span>
+            </div>
+            <div class="v1-quote-row">
+              <div class="v1-bar"></div>
+              <div class="v1-quote">AI on its own is fantastic nightmare fuel and a goldmine of memes; just don't use it to replace a real artist.</div>
+            </div>
+          </div>
+          <div class="v1-card">
+            <div class="v1-byline">
+              <div class="h-avatar av-3">M</div>
+              <span class="v1-byline-name">Marco</span>
+              <span class="v1-byline-sep">·</span>
+              <span class="v1-byline-time">8h</span>
+            </div>
+            <div class="v1-quote-row">
+              <div class="v1-bar"></div>
+              <div class="v1-quote">When I realize an image has been made by AI is simply when I stop caring.</div>
+            </div>
+          </div>
+            <div style="flex-shrink:0;width:4px;"></div>
+          </div>
+        </div>
+        <!-- /group-frame -->
+
+        <div class="ghost-row">
+          <div class="ghost-line" style="width:70%;"></div>
+          <div class="ghost-line short"></div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ V2 — Resource Tile In-Reel ════════ -->
+  <div class="proto-col">
+    <div class="proto-label">V2</div>
+    <div class="proto-label-name">Resource Tile In-Reel</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <!-- Containment: full-bleed band with subtle paper-card background -->
+        <div class="group-wrap">
+
+          <div style="padding: 4px 20px 12px;">
+            <div style="font-size:10px;font-weight:700;letter-spacing:1.4px;color:var(--ink-muted);text-transform:uppercase;">
+              <span style="color:var(--accent);">3 friends</span> highlighted from this article
+            </div>
+          </div>
+
+          <!-- Resource tile sits in the same horizontal scroll, leftmost -->
+          <div class="v2-row">
+          <div class="v2-resource">
+            <div class="v2-cover"></div>
+            <div>
+              <div class="v2-resource-author-tag">Article</div>
+              <div class="v2-resource-title">Why design still requires a human soul</div>
+            </div>
+            <div class="v2-resource-author">by <strong style="color:var(--ink);font-weight:600;margin-left:4px;">Jeremy Rifkin</strong></div>
+            <div class="v2-resource-cta">Read →</div>
+          </div>
+
+          <div class="v2-card">
+            <div class="v2-stamp">
+              <div class="h-avatar av-1">G</div>
+            </div>
+            <div class="v2-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+            <div class="v2-time">Gigi · 13h</div>
+          </div>
+
+          <div class="v2-card">
+            <div class="v2-stamp">
+              <div class="h-avatar av-1">G</div>
+            </div>
+            <div class="v2-quote">fast, convenient, ugly, and empty</div>
+            <div class="v2-time">Gigi · 13h</div>
+          </div>
+
+          <div class="v2-card">
+            <div class="v2-stamp">
+              <div class="h-avatar av-2">A</div>
+            </div>
+            <div class="v2-quote">AI on its own is fantastic nightmare fuel and a goldmine of memes; just don't use it to replace a real artist.</div>
+            <div class="v2-time">Anna · 11h</div>
+          </div>
+
+          <div class="v2-card">
+            <div class="v2-stamp">
+              <div class="h-avatar av-3">M</div>
+            </div>
+            <div class="v2-quote">When I realize an image has been made by AI is simply when I stop caring.</div>
+            <div class="v2-time">Marco · 8h</div>
+          </div>
+
+            <div style="flex-shrink:0;width:4px;"></div>
+          </div>
+        </div>
+        <!-- /group-wrap -->
+
+        <div class="ghost-row">
+          <div class="ghost-line" style="width:70%;"></div>
+          <div class="ghost-line short"></div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ V3 — Header Card + Bylined Reels ════════ -->
+  <div class="proto-col">
+    <div class="proto-label">V3</div>
+    <div class="proto-label-name">Header Card + Bylined Reel</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <!-- Containment: the header card has a strong border that "owns" the
+             section; a thin terracotta thread runs from header into the reel
+             so the eye reads top→bottom→cards as one group. -->
+        <div style="position: relative; padding: 14px 0 14px;">
+
+          <!-- The vertical thread connecting header to cards -->
+          <div style="position: absolute; left: 32px; top: 80px; bottom: 22px; width: 2px; background: var(--accent); opacity: 0.18; border-radius: 1px;"></div>
+
+          <div class="v3-header" style="border-color: var(--accent); border-width: 1px; box-shadow: 0 4px 14px rgba(184,92,56,0.06);">
+            <div class="v3-cover"></div>
+            <div class="v3-info">
+              <div class="v3-title">Why design still requires a human soul</div>
+              <div class="v3-meta">
+                <div class="v3-meta-author">
+                  <strong>Jeremy Rifkin</strong> · designharder.pub
+                </div>
+                <span style="flex:1;"></span>
+                <span class="v3-meta-cta">Read →</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="v3-highlighters-row">
+          <div class="v3-highlighters-stack">
+            <div class="h-avatar av-1">G</div>
+            <div class="h-avatar av-2">A</div>
+            <div class="h-avatar av-3">M</div>
+          </div>
+          <span class="v3-highlighters-label">
+            Highlighted by <strong>Gigi</strong>, <strong>Anna</strong> +1
+          </span>
+        </div>
+
+        <div class="v3-quotes-scroll">
+          <div class="v3-card">
+            <div class="v3-card-header">
+              <div class="h-avatar av-1">G</div>
+              <span class="v3-card-name">Gigi</span>
+              <span class="v3-card-time">13h</span>
+            </div>
+            <div class="v3-card-body">
+              <div class="v3-bar"></div>
+              <div class="v3-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+            </div>
+          </div>
+          <div class="v3-card">
+            <div class="v3-card-header">
+              <div class="h-avatar av-1">G</div>
+              <span class="v3-card-name">Gigi</span>
+              <span class="v3-card-time">13h</span>
+            </div>
+            <div class="v3-card-body">
+              <div class="v3-bar"></div>
+              <div class="v3-quote">fast, convenient, ugly, and empty</div>
+            </div>
+          </div>
+          <div class="v3-card">
+            <div class="v3-card-header">
+              <div class="h-avatar av-2">A</div>
+              <span class="v3-card-name">Anna</span>
+              <span class="v3-card-time">11h</span>
+            </div>
+            <div class="v3-card-body">
+              <div class="v3-bar"></div>
+              <div class="v3-quote">AI on its own is fantastic nightmare fuel and a goldmine of memes; just don't use it to replace a real artist.</div>
+            </div>
+          </div>
+          <div class="v3-card">
+            <div class="v3-card-header">
+              <div class="h-avatar av-3">M</div>
+              <span class="v3-card-name">Marco</span>
+              <span class="v3-card-time">8h</span>
+            </div>
+            <div class="v3-card-body">
+              <div class="v3-bar"></div>
+              <div class="v3-quote">When I realize an image has been made by AI is simply when I stop caring about it.</div>
+            </div>
+          </div>
+            <div style="flex-shrink:0;width:4px;"></div>
+          </div>
+        </div>
+        <!-- /containment -->
+
+        <div class="item-sep"></div>
+        <div class="ghost-row">
+          <div class="ghost-line" style="width:70%;"></div>
+          <div class="ghost-line short"></div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

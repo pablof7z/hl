@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grouped Highlights v5 — Apple-Idiomatic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --paper:        #F7F2EC;
+    --paper-tint:   #F1EBE0;
+    --paper-card:   #FCFAF6;
+    --paper-dark:   #EDE7DE;
+    --rule:         #DDD5C8;
+    --rule-faint:   #E8E1D5;
+    --accent:       #B85C38;
+    --ink:          #1C1510;
+    --ink-muted:    #8A7B6E;
+    --ink-faint:    #C4B8AC;
+    --serif:        'Playfair Display', Georgia, serif;
+    --sans:         'Inter', -apple-system, sans-serif;
+  }
+
+  body {
+    background: #2C2520;
+    font-family: var(--sans);
+    padding: 60px 20px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    color: #C4B8AC;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 2px; text-transform: uppercase;
+    text-align: center; margin-bottom: 16px;
+  }
+
+  .h1-sub {
+    color: #6B5F55;
+    font-size: 12px; text-align: center;
+    margin-bottom: 60px; max-width: 540px;
+    margin-left: auto; margin-right: auto;
+    line-height: 1.7;
+  }
+
+  .h1-sub em { color: #9C8975; font-style: italic; }
+
+  .proto-row {
+    display: flex; gap: 48px;
+    justify-content: center; align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .proto-col {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 12px; width: 375px;
+  }
+
+  .proto-label {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 1.8px; text-transform: uppercase;
+    color: #6B5F55;
+  }
+
+  .proto-label-name {
+    font-size: 16px; color: #E8E0D0;
+    font-family: var(--serif); font-weight: 600;
+    margin-top: -4px; font-style: italic;
+  }
+
+  .proto-source {
+    font-size: 11px; color: #8A7B6E; margin-top: -4px;
+    text-align: center; max-width: 320px; line-height: 1.5;
+  }
+
+  /* Phone shell */
+  .phone {
+    width: 375px; background: var(--paper);
+    border-radius: 44px; overflow: hidden;
+    margin-top: 8px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.08),
+      0 32px 80px rgba(0,0,0,0.6),
+      0 8px 20px rgba(0,0,0,0.4);
+  }
+
+  .phone-notch {
+    height: 44px; background: var(--paper);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .notch-pill { width: 126px; height: 34px; background: #111; border-radius: 20px; }
+
+  .phone-content { background: var(--paper); }
+
+  .nav-bar {
+    padding: 4px 20px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .nav-title {
+    font-family: var(--serif); font-size: 28px; font-weight: 600;
+    color: var(--ink); letter-spacing: -0.5px;
+  }
+
+  .nav-icons { display: flex; gap: 16px; align-items: center; }
+  .nav-icon {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--paper-dark);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  .feed-rule { height: 1px; background: var(--rule); margin: 0 20px; }
+
+  .h-avatar {
+    border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700;
+  }
+  .av-1 { background: linear-gradient(135deg,#8B7355,#5C4A35); }
+  .av-2 { background: linear-gradient(135deg,#6B7B5A,#3F4A30); }
+  .av-3 { background: linear-gradient(135deg,#7A5A8B,#4A3560); }
+  .av-art { background: linear-gradient(135deg,#A05A55,#683A35); }
+
+  .tab-bar {
+    background: rgba(247, 242, 236, 0.92);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--rule);
+    padding: 8px 0 20px;
+    display: flex; justify-content: space-around;
+  }
+  .tab-item { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; }
+  .tab-icon { font-size: 20px; color: var(--ink-faint); }
+  .tab-icon.active { color: var(--accent); }
+  .tab-label { font-size: 9px; color: var(--ink-faint); font-weight: 500; }
+  .tab-label.active { color: var(--accent); font-weight: 600; }
+
+  /* ─────────────────────────────────────────────
+     Shared content blocks (used by both proposals)
+  ──────────────────────────────────────────────*/
+
+  .res-header {
+    display: flex; gap: 12px;
+    align-items: flex-start;
+  }
+
+  .res-cover {
+    width: 44px; height: 44px;
+    border-radius: 8px; flex-shrink: 0;
+    background: linear-gradient(135deg,#D4C8BA 0%,#9C8975 100%);
+    position: relative; overflow: hidden;
+  }
+  .res-cover::after {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      -45deg, transparent 0, transparent 4px,
+      rgba(0,0,0,0.06) 4px, rgba(0,0,0,0.06) 5px);
+  }
+
+  .res-info { flex: 1; min-width: 0; }
+
+  .res-meta {
+    font-size: 11px; color: var(--ink-muted);
+    display: flex; align-items: center; gap: 5px;
+    margin-bottom: 3px;
+  }
+  .res-meta strong { color: var(--ink); font-weight: 600; font-size: 12px; }
+  .res-meta-sep { color: var(--ink-faint); }
+
+  .res-title {
+    font-family: var(--serif); font-size: 17px; font-weight: 600;
+    color: var(--ink); line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .res-cta {
+    font-size: 11px; font-weight: 600; color: var(--accent);
+    margin-top: 4px; display: inline-block;
+  }
+
+  .hl-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .hl-stack { display: flex; align-items: center; }
+  .hl-stack .h-avatar {
+    width: 20px; height: 20px; font-size: 9px;
+    margin-left: -6px;
+  }
+  .hl-stack .h-avatar:first-child { margin-left: 0; }
+
+  .hl-label { font-size: 11px; color: var(--ink-muted); }
+  .hl-label strong { color: var(--ink); font-weight: 600; }
+
+  .reel {
+    overflow-x: auto;
+    display: flex; gap: 10px;
+    scrollbar-width: none;
+  }
+  .reel::-webkit-scrollbar { display: none; }
+
+  .qc {
+    flex-shrink: 0;
+    width: 240px;
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    padding: 12px 12px 14px;
+    display: flex; flex-direction: column;
+    min-height: 168px;
+  }
+
+  .qc-byline {
+    display: flex; align-items: center; gap: 7px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule-faint);
+  }
+  .qc-byline .h-avatar { width: 22px; height: 22px; font-size: 9px; }
+  .qc-name { font-size: 11px; font-weight: 600; color: var(--ink); }
+  .qc-sep { color: var(--ink-faint); font-size: 10px; }
+  .qc-time { font-size: 10px; color: var(--ink-muted); }
+
+  .qc-quote-row { display: flex; gap: 10px; flex: 1; }
+
+  .qc-bar {
+    width: 3px; flex-shrink: 0;
+    background: var(--accent); border-radius: 2px;
+  }
+
+  .qc-quote {
+    font-family: var(--serif); font-size: 14px; font-style: italic;
+    color: var(--ink); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical;
+    overflow: hidden; flex: 1;
+  }
+
+  .reel-tail { flex-shrink: 0; width: 4px; }
+
+  .item-sep { height: 1px; background: var(--rule); margin: 0 20px; }
+
+  /* Single highlight item used for the "next item" comparison */
+  .single { padding: 24px 20px; }
+  .single-byline {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+  }
+  .single-byline .h-avatar { width: 26px; height: 26px; font-size: 11px; }
+  .single-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .single-sep { color: var(--ink-faint); font-size: 12px; }
+  .single-time { font-size: 12px; color: var(--ink-muted); }
+  .single-quote-row { display: flex; gap: 14px; }
+  .single-bar { width: 3px; background: var(--accent); border-radius: 2px; }
+  .single-quote {
+    font-family: var(--serif); font-size: 18px; font-style: italic;
+    color: var(--ink); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .single-from {
+    font-size: 11px; color: var(--ink-muted); margin-top: 12px; padding-left: 17px;
+  }
+  .single-from strong { color: var(--ink); font-weight: 600; }
+
+  /* ─────────────────────────────────────────────
+     PROPOSAL 1 — "Shelf"
+     App Store / Music / Books / TV idiom.
+     Typography-led section, no wrapping container.
+     The reel of quote cards IS the contained
+     element (each card is rounded). The section
+     header above is just well-typeset text.
+  ──────────────────────────────────────────────*/
+
+  .p1-item { padding: 24px 0; }
+
+  .p1-section {
+    padding: 0 20px;
+    margin-bottom: 14px;
+  }
+
+  .p1-header { margin-bottom: 12px; }
+
+  .p1-divider {
+    height: 1px; background: var(--rule-faint);
+    margin: 14px 0 12px;
+  }
+
+  /* ─────────────────────────────────────────────
+     PROPOSAL 2 — "Module"
+     Apple News "Top Stories" idiom. Subtle tinted
+     panel (no border, no accent stripe), wraps
+     the section so it reads as one coherent
+     module. Margin from edges so it floats.
+  ──────────────────────────────────────────────*/
+
+  .p2-item { padding: 12px 12px; }
+
+  .p2-module {
+    background: var(--paper-tint);
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .p2-header { margin-bottom: 14px; }
+
+  .p2-divider {
+    height: 1px; background: rgba(28,21,16,0.06);
+    margin: 12px 0 12px;
+  }
+
+  /* The reel inside the module overflows the
+     padding so cards reach the right edge */
+  .p2-reel-wrap {
+    margin: 0 -16px;
+    padding: 0 16px;
+  }
+  .p2-reel-wrap .reel { padding-right: 16px; }
+
+  /* In the module, quote cards are slightly different —
+     white-on-tint reads cleaner without their own border */
+  .p2-module .qc {
+    border: none;
+    box-shadow: 0 1px 2px rgba(28,21,16,0.05);
+  }
+
+</style>
+</head>
+<body>
+
+<h1>v5 — Updated Proposals (Apple-Idiomatic)</h1>
+<div class="h1-sub">
+  Two paths after the research. <em>Both honor the corrected data model</em> —
+  resource on top, highlighter avatars inside cards. <em>Cards in feeds are
+  iOS-idiomatic in iOS 26</em>; the choice is whether the section is wrapped
+  (Apple News module) or unwrapped (App Store / Music shelf).
+</div>
+
+<div class="proto-row">
+
+  <!-- ════════ Proposal 1: Shelf ════════ -->
+  <div class="proto-col">
+    <div class="proto-label">Proposal 1</div>
+    <div class="proto-label-name">Shelf</div>
+    <div class="proto-source">App Store / Music / TV / Books idiom — typography-led header, no wrap, scrollable reel of cards.</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <!-- Grouped item -->
+        <div class="p1-item">
+          <div class="p1-section">
+            <div class="p1-header">
+              <div class="res-header">
+                <div class="res-cover"></div>
+                <div class="res-info">
+                  <div class="res-meta">
+                    <strong>Jeremy Rifkin</strong>
+                    <span class="res-meta-sep">·</span>
+                    <span>designharder.pub</span>
+                  </div>
+                  <div class="res-title">Why design still requires a human soul</div>
+                  <span class="res-cta">Read article →</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="p1-divider"></div>
+
+            <div class="hl-row">
+              <div class="hl-stack">
+                <div class="h-avatar av-1">G</div>
+                <div class="h-avatar av-2">A</div>
+                <div class="h-avatar av-3">M</div>
+              </div>
+              <span class="hl-label">Highlighted by <strong>Gigi</strong>, <strong>Anna</strong> and <strong>Marco</strong></span>
+            </div>
+          </div>
+
+          <div class="reel" style="padding: 0 20px;">
+            <div class="qc">
+              <div class="qc-byline">
+                <div class="h-avatar av-1">G</div>
+                <span class="qc-name">Gigi</span>
+                <span class="qc-sep">·</span>
+                <span class="qc-time">13h</span>
+              </div>
+              <div class="qc-quote-row">
+                <div class="qc-bar"></div>
+                <div class="qc-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+              </div>
+            </div>
+            <div class="qc">
+              <div class="qc-byline">
+                <div class="h-avatar av-1">G</div>
+                <span class="qc-name">Gigi</span>
+                <span class="qc-sep">·</span>
+                <span class="qc-time">13h</span>
+              </div>
+              <div class="qc-quote-row">
+                <div class="qc-bar"></div>
+                <div class="qc-quote">fast, convenient, ugly, and empty</div>
+              </div>
+            </div>
+            <div class="qc">
+              <div class="qc-byline">
+                <div class="h-avatar av-2">A</div>
+                <span class="qc-name">Anna</span>
+                <span class="qc-sep">·</span>
+                <span class="qc-time">11h</span>
+              </div>
+              <div class="qc-quote-row">
+                <div class="qc-bar"></div>
+                <div class="qc-quote">AI on its own is fantastic nightmare fuel and a goldmine of memes; just don't use it to replace a real artist.</div>
+              </div>
+            </div>
+            <div class="qc">
+              <div class="qc-byline">
+                <div class="h-avatar av-3">M</div>
+                <span class="qc-name">Marco</span>
+                <span class="qc-sep">·</span>
+                <span class="qc-time">8h</span>
+              </div>
+              <div class="qc-quote-row">
+                <div class="qc-bar"></div>
+                <div class="qc-quote">When I realize an image has been made by AI is simply when I stop caring.</div>
+              </div>
+            </div>
+            <div class="reel-tail"></div>
+          </div>
+        </div>
+
+        <div class="item-sep"></div>
+
+        <!-- Next item — single highlight -->
+        <div class="single">
+          <div class="single-byline">
+            <div class="h-avatar av-2">A</div>
+            <span class="single-name">Anna</span>
+            <span class="single-sep">·</span>
+            <span class="single-time">2d</span>
+          </div>
+          <div class="single-quote-row">
+            <div class="single-bar"></div>
+            <div class="single-quote">There is something irreducibly human about the moment a maker chooses one form over another.</div>
+          </div>
+          <div class="single-from"><strong>FROM</strong> · The Soul of Design · Mary Choe</div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ Proposal 2: Module ════════ -->
+  <div class="proto-col">
+    <div class="proto-label">Proposal 2</div>
+    <div class="proto-label-name">Module</div>
+    <div class="proto-source">Apple News "Top Stories" idiom — subtle tinted panel that wraps the whole group as one coherent module.</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <!-- Grouped item -->
+        <div class="p2-item">
+          <div class="p2-module">
+            <div class="p2-header">
+              <div class="res-header">
+                <div class="res-cover"></div>
+                <div class="res-info">
+                  <div class="res-meta">
+                    <strong>Jeremy Rifkin</strong>
+                    <span class="res-meta-sep">·</span>
+                    <span>designharder.pub</span>
+                  </div>
+                  <div class="res-title">Why design still requires a human soul</div>
+                  <span class="res-cta">Read article →</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="p2-divider"></div>
+
+            <div class="hl-row" style="margin-bottom: 12px;">
+              <div class="hl-stack">
+                <div class="h-avatar av-1" style="border:1.5px solid var(--paper-tint);">G</div>
+                <div class="h-avatar av-2" style="border:1.5px solid var(--paper-tint);">A</div>
+                <div class="h-avatar av-3" style="border:1.5px solid var(--paper-tint);">M</div>
+              </div>
+              <span class="hl-label">Highlighted by <strong>Gigi</strong>, <strong>Anna</strong> and <strong>Marco</strong></span>
+            </div>
+
+            <div class="p2-reel-wrap">
+              <div class="reel">
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-1">G</div>
+                    <span class="qc-name">Gigi</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">13h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-1">G</div>
+                    <span class="qc-name">Gigi</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">13h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">fast, convenient, ugly, and empty</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-2">A</div>
+                    <span class="qc-name">Anna</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">11h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">AI on its own is fantastic nightmare fuel and a goldmine of memes; just don't use it to replace a real artist.</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-3">M</div>
+                    <span class="qc-name">Marco</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">8h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">When I realize an image has been made by AI is simply when I stop caring.</div>
+                  </div>
+                </div>
+                <div class="reel-tail"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Next item — single highlight (lives outside module) -->
+        <div class="single">
+          <div class="single-byline">
+            <div class="h-avatar av-2">A</div>
+            <span class="single-name">Anna</span>
+            <span class="single-sep">·</span>
+            <span class="single-time">2d</span>
+          </div>
+          <div class="single-quote-row">
+            <div class="single-bar"></div>
+            <div class="single-quote">There is something irreducibly human about the moment a maker chooses one form over another.</div>
+          </div>
+          <div class="single-from"><strong>FROM</strong> · The Soul of Design · Mary Choe</div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top: 64px; padding: 24px; max-width: 760px; margin-left: auto; margin-right: auto; background: rgba(255,255,255,0.04); border-radius: 12px; color: #C4B8AC; font-size: 13px; line-height: 1.7;">
+  <div style="font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: #9C8975; margin-bottom: 12px;">My recommendation</div>
+  <p style="margin-bottom: 12px;">
+    <strong style="color: #E8E0D0;">Proposal 2 (Module)</strong> is the better fit. Here's why:
+  </p>
+  <ul style="padding-left: 20px;">
+    <li style="margin-bottom: 8px;">A grouping of friends-highlighted-the-same-article is genuinely a <em>distinct unit of content</em> — closer to an Apple News topic block than to a generic media shelf. Treating it as a contained module honors that.</li>
+    <li style="margin-bottom: 8px;">The tint also solves the visual hierarchy problem you raised — there is no ambiguity that the reel belongs to the resource above.</li>
+    <li style="margin-bottom: 8px;">The Module variant doesn't use Liquid Glass material on content (which the research says to avoid) — it's just a soft tint.</li>
+    <li>Single highlights stay flat in the feed; the module appears only when there are multiple highlights for one resource. That naturally signals "this is special."</li>
+  </ul>
+</div>
+
+</body>
+</html>

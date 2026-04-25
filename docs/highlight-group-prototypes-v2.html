@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grouped Highlights — Variations on C</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --paper:        #F7F2EC;
+    --paper-warm:   #F4EFE7;
+    --paper-card:   #FCFAF6;
+    --paper-dark:   #EDE7DE;
+    --rule:         #DDD5C8;
+    --rule-faint:   #E8E1D5;
+    --accent:       #B85C38;
+    --accent-soft:  #E8C9B8;
+    --ink:          #1C1510;
+    --ink-strong:   #1C1510;
+    --ink-muted:    #8A7B6E;
+    --ink-faint:    #C4B8AC;
+    --serif:        'Playfair Display', Georgia, serif;
+    --sans:         'Inter', -apple-system, sans-serif;
+  }
+
+  body {
+    background: #2C2520;
+    font-family: var(--sans);
+    padding: 60px 20px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    color: #C4B8AC;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .h1-sub {
+    color: #6B5F55;
+    font-size: 12px;
+    text-align: center;
+    margin-bottom: 60px;
+    font-weight: 400;
+  }
+
+  .proto-row {
+    display: flex;
+    gap: 36px;
+    justify-content: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .proto-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: 375px;
+  }
+
+  .proto-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: #6B5F55;
+  }
+
+  .proto-label-name {
+    font-size: 14px;
+    color: #E8E0D0;
+    font-family: var(--serif);
+    font-weight: 600;
+    margin-top: -8px;
+    font-style: italic;
+  }
+
+  /* Phone shell */
+  .phone {
+    width: 375px;
+    background: var(--paper);
+    border-radius: 44px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.08),
+      0 32px 80px rgba(0,0,0,0.6),
+      0 8px 20px rgba(0,0,0,0.4);
+  }
+
+  .phone-notch {
+    height: 44px;
+    background: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .notch-pill {
+    width: 126px;
+    height: 34px;
+    background: #111;
+    border-radius: 20px;
+  }
+
+  .phone-content { background: var(--paper); }
+
+  .nav-bar {
+    padding: 4px 20px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .nav-title {
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.5px;
+  }
+
+  .nav-icons { display: flex; gap: 16px; align-items: center; }
+
+  .nav-icon {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--paper-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .feed-rule {
+    height: 1px;
+    background: var(--rule);
+    margin: 0 20px;
+  }
+
+  .byline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 20px 20px 14px;
+  }
+
+  .avatar {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #8B7355, #5C4A35);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+  }
+
+  .byline-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .byline-sep { color: var(--ink-faint); font-size: 12px; }
+  .byline-time { font-size: 12px; color: var(--ink-muted); }
+
+  .item-sep {
+    height: 1px;
+    background: var(--rule);
+    margin: 0 20px;
+  }
+
+  .ghost-row {
+    padding: 18px 20px;
+    opacity: 0.3;
+    pointer-events: none;
+    overflow: hidden;
+    max-height: 60px;
+  }
+  .ghost-line {
+    height: 10px;
+    border-radius: 5px;
+    background: var(--rule);
+    margin-bottom: 8px;
+  }
+  .ghost-line.short { width: 55%; }
+
+  .tab-bar {
+    background: rgba(247, 242, 236, 0.92);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--rule);
+    padding: 8px 0 20px;
+    display: flex;
+    justify-content: space-around;
+  }
+  .tab-item { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; }
+  .tab-icon { font-size: 20px; color: var(--ink-faint); }
+  .tab-icon.active { color: var(--accent); }
+  .tab-label { font-size: 9px; color: var(--ink-faint); font-weight: 500; }
+  .tab-label.active { color: var(--accent); font-weight: 600; }
+
+  /* ─────────────────────────────────────────────
+     C1 — "Editorial Numerals"
+     The article ref is a quiet text-only header.
+     Cards lean into typography: huge serif numeral
+     anchors each card; the accent is just a thin
+     hairline between numeral and quote.
+  ──────────────────────────────────────────────*/
+
+  .c1-source-row {
+    margin: 0 20px 18px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 10px;
+  }
+
+  .c1-source-from {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+  }
+
+  .c1-source-title {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    flex: 1;
+    line-height: 1.2;
+  }
+
+  .c1-source-cta {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+  }
+
+  .c1-quotes-scroll {
+    overflow-x: auto;
+    padding: 0 20px 22px;
+    display: flex;
+    gap: 14px;
+    scrollbar-width: none;
+  }
+  .c1-quotes-scroll::-webkit-scrollbar { display: none; }
+
+  .c1-card {
+    flex-shrink: 0;
+    width: 244px;
+    background: var(--paper-card);
+    border: 1px solid var(--rule-faint);
+    border-radius: 12px;
+    padding: 16px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    min-height: 168px;
+    position: relative;
+  }
+
+  .c1-numeral {
+    font-family: var(--serif);
+    font-size: 38px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--accent);
+    margin-bottom: 6px;
+    font-feature-settings: "lnum";
+  }
+
+  .c1-rule {
+    width: 28px;
+    height: 1px;
+    background: var(--ink);
+    opacity: 0.25;
+    margin-bottom: 12px;
+  }
+
+  .c1-quote {
+    font-family: var(--serif);
+    font-size: 15px;
+    font-style: italic;
+    color: var(--ink);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    flex: 1;
+  }
+
+  /* ─────────────────────────────────────────────
+     C2 — "Continuous Spine"
+     A single terracotta line runs the full width
+     of the scroll behind the cards, visually
+     binding them as one source. Cards float on
+     top with subtle paper feel.
+  ──────────────────────────────────────────────*/
+
+  .c2-article-strip {
+    margin: 0 20px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .c2-article-mark {
+    width: 3px;
+    height: 32px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  .c2-article-info { flex: 1; min-width: 0; }
+
+  .c2-article-from {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    margin-bottom: 1px;
+  }
+
+  .c2-article-title {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .c2-article-cta {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .c2-spine-wrap {
+    position: relative;
+    padding: 18px 0 22px;
+  }
+
+  .c2-spine {
+    position: absolute;
+    left: 20px;
+    right: 20px;
+    top: 50%;
+    height: 2px;
+    background: var(--accent);
+    opacity: 0.18;
+    border-radius: 1px;
+  }
+
+  .c2-quotes-scroll {
+    position: relative;
+    overflow-x: auto;
+    padding: 0 20px;
+    display: flex;
+    gap: 12px;
+    scrollbar-width: none;
+  }
+  .c2-quotes-scroll::-webkit-scrollbar { display: none; }
+
+  .c2-card {
+    flex-shrink: 0;
+    width: 220px;
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    padding: 14px 14px 12px;
+    display: flex;
+    flex-direction: column;
+    min-height: 144px;
+    box-shadow: 0 2px 8px rgba(28,21,16,0.04);
+  }
+
+  .c2-quote {
+    font-family: var(--serif);
+    font-size: 15px;
+    font-style: italic;
+    color: var(--ink);
+    line-height: 1.55;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    flex: 1;
+  }
+
+  .c2-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--rule-faint);
+  }
+
+  .c2-dot {
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .c2-time {
+    font-size: 10px;
+    color: var(--ink-muted);
+    font-weight: 500;
+  }
+
+  /* ─────────────────────────────────────────────
+     C3 — "Manuscript Pages"
+     Cards feel like torn pages — slightly off-white,
+     with a worn paper edge. The article ref is a
+     single elegant header line. Quote numbers are
+     small roman numerals in the top corner.
+  ──────────────────────────────────────────────*/
+
+  .c3-article {
+    margin: 0 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .c3-article-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .c3-tag {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .c3-tag-rule {
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  .c3-count {
+    font-size: 10px;
+    color: var(--ink-muted);
+    font-family: var(--serif);
+    font-style: italic;
+  }
+
+  .c3-article-title {
+    font-family: var(--serif);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.25;
+  }
+
+  .c3-article-domain {
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+
+  .c3-quotes-scroll {
+    overflow-x: auto;
+    padding: 12px 20px 22px;
+    display: flex;
+    gap: 12px;
+    scrollbar-width: none;
+  }
+  .c3-quotes-scroll::-webkit-scrollbar { display: none; }
+
+  .c3-card {
+    flex-shrink: 0;
+    width: 230px;
+    background:
+      linear-gradient(180deg, #FBF7F0 0%, #F6F0E5 100%);
+    border-radius: 4px 12px 12px 4px;
+    padding: 14px 16px 12px 18px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 156px;
+    border-top: 1px solid rgba(184,92,56,0.15);
+    border-right: 1px solid rgba(184,92,56,0.1);
+    border-bottom: 1px solid rgba(184,92,56,0.15);
+    box-shadow:
+      inset 4px 0 0 var(--accent),
+      0 1px 2px rgba(28,21,16,0.05);
+  }
+
+  .c3-roman {
+    font-family: var(--serif);
+    font-size: 12px;
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    opacity: 0.7;
+  }
+
+  .c3-quote {
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--ink);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 6;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    flex: 1;
+  }
+
+  /* ─────────────────────────────────────────────
+     C4 — "Index Cards"
+     Each highlight feels like a 3x5 index card
+     with a top-right number stamp. Cards are
+     slightly squarer. Article ref is a tiny
+     header strip. Subtle peer-card behind.
+  ──────────────────────────────────────────────*/
+
+  .c4-header {
+    margin: 0 20px 18px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .c4-thumb {
+    width: 32px; height: 32px;
+    border-radius: 4px;
+    background:
+      linear-gradient(135deg, #C4B8AC 0%, #8A7B6E 100%);
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .c4-thumb::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0, transparent 6px,
+      rgba(0,0,0,0.08) 6px, rgba(0,0,0,0.08) 7px
+    );
+  }
+
+  .c4-meta { flex: 1; min-width: 0; }
+
+  .c4-meta-title {
+    font-family: var(--serif);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .c4-meta-sub {
+    font-size: 10px;
+    color: var(--ink-muted);
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .c4-pill {
+    background: var(--accent);
+    color: white;
+    border-radius: 99px;
+    padding: 2px 7px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+  }
+
+  .c4-quotes-scroll {
+    overflow-x: auto;
+    padding: 0 20px 22px;
+    display: flex;
+    gap: 12px;
+    scrollbar-width: none;
+  }
+  .c4-quotes-scroll::-webkit-scrollbar { display: none; }
+
+  .c4-card {
+    flex-shrink: 0;
+    width: 200px;
+    height: 200px;
+    background: white;
+    border-radius: 8px;
+    padding: 14px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--rule);
+    box-shadow:
+      0 1px 0 rgba(28,21,16,0.04),
+      0 4px 12px rgba(28,21,16,0.06);
+  }
+
+  .c4-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 14px; right: 14px;
+    height: 1px;
+    background: var(--accent);
+    opacity: 0.4;
+  }
+
+  .c4-num {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    font-family: var(--serif);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+    font-feature-settings: "lnum";
+    line-height: 1;
+  }
+
+  .c4-quote-c4 {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-style: italic;
+    color: var(--ink);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 7;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 18px;
+    flex: 1;
+  }
+
+  /* The "more" stack peek */
+  .c4-stack-peek {
+    flex-shrink: 0;
+    width: 32px;
+    height: 200px;
+    border-radius: 8px;
+    background: white;
+    border: 1px solid var(--rule);
+    opacity: 0.4;
+    position: relative;
+  }
+
+</style>
+</head>
+<body>
+
+<h1>Variations on C — Tighter Reels</h1>
+<div class="h1-sub">Article ref + horizontally scrollable quote cards</div>
+
+<div class="proto-row">
+
+  <!-- ════════ C1 — Editorial Numerals ════════ -->
+  <div class="proto-col">
+    <div class="proto-label">C1</div>
+    <div class="proto-label-name">Editorial Numerals</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <div class="byline">
+          <div class="avatar">G</div>
+          <span class="byline-name">Gigi</span>
+          <span class="byline-sep">·</span>
+          <span class="byline-time">13h</span>
+        </div>
+
+        <div class="c1-source-row">
+          <span class="c1-source-from">From</span>
+          <span class="c1-source-title">Why design still requires a human soul</span>
+          <span class="c1-source-cta">Read →</span>
+        </div>
+
+        <div class="c1-quotes-scroll">
+          <div class="c1-card">
+            <div class="c1-numeral">01</div>
+            <div class="c1-rule"></div>
+            <div class="c1-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+          </div>
+          <div class="c1-card">
+            <div class="c1-numeral">02</div>
+            <div class="c1-rule"></div>
+            <div class="c1-quote">fast, convenient, ugly, and empty</div>
+          </div>
+          <div class="c1-card">
+            <div class="c1-numeral">03</div>
+            <div class="c1-rule"></div>
+            <div class="c1-quote">AI on its own is fantastic nightmare fuel and a goldmine of memes; just don't use it to replace a real artist.</div>
+          </div>
+          <div class="c1-card">
+            <div class="c1-numeral">04</div>
+            <div class="c1-rule"></div>
+            <div class="c1-quote">When I realize an image has been made by AI is simply when I stop caring.</div>
+          </div>
+          <div style="flex-shrink:0;width:4px;"></div>
+        </div>
+
+        <div class="item-sep"></div>
+        <div class="ghost-row">
+          <div class="ghost-line" style="width:70%;"></div>
+          <div class="ghost-line short"></div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ C2 — Continuous Spine ════════ -->
+  <div class="proto-col">
+    <div class="proto-label">C2</div>
+    <div class="proto-label-name">Continuous Spine</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <div class="byline">
+          <div class="avatar">G</div>
+          <span class="byline-name">Gigi</span>
+          <span class="byline-sep">·</span>
+          <span class="byline-time">13h</span>
+        </div>
+
+        <div class="c2-article-strip">
+          <div class="c2-article-mark"></div>
+          <div class="c2-article-info">
+            <div class="c2-article-from">4 highlights from</div>
+            <div class="c2-article-title">Why design still requires a human soul</div>
+          </div>
+          <div class="c2-article-cta">Read →</div>
+        </div>
+
+        <div class="c2-spine-wrap">
+          <div class="c2-spine"></div>
+          <div class="c2-quotes-scroll">
+            <div class="c2-card">
+              <div class="c2-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+              <div class="c2-meta">
+                <div class="c2-dot"></div>
+                <span class="c2-time">13h ago</span>
+              </div>
+            </div>
+            <div class="c2-card">
+              <div class="c2-quote">fast, convenient, ugly, and empty</div>
+              <div class="c2-meta">
+                <div class="c2-dot"></div>
+                <span class="c2-time">13h ago</span>
+              </div>
+            </div>
+            <div class="c2-card">
+              <div class="c2-quote">AI on its own is fantastic nightmare fuel and a goldmine of memes; just don't use it to replace a real artist.</div>
+              <div class="c2-meta">
+                <div class="c2-dot"></div>
+                <span class="c2-time">13h ago</span>
+              </div>
+            </div>
+            <div class="c2-card">
+              <div class="c2-quote">When I realize an image has been made by AI is simply when I stop caring about it.</div>
+              <div class="c2-meta">
+                <div class="c2-dot"></div>
+                <span class="c2-time">12h ago</span>
+              </div>
+            </div>
+            <div style="flex-shrink:0;width:4px;"></div>
+          </div>
+        </div>
+
+        <div class="item-sep"></div>
+        <div class="ghost-row">
+          <div class="ghost-line" style="width:70%;"></div>
+          <div class="ghost-line short"></div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ C3 — Manuscript Pages ════════ -->
+  <div class="proto-col">
+    <div class="proto-label">C3</div>
+    <div class="proto-label-name">Manuscript Pages</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <div class="byline">
+          <div class="avatar">G</div>
+          <span class="byline-name">Gigi</span>
+          <span class="byline-sep">·</span>
+          <span class="byline-time">13h</span>
+        </div>
+
+        <div class="c3-article">
+          <div class="c3-article-row">
+            <span class="c3-tag">Reading</span>
+            <span class="c3-tag-rule"></span>
+            <span class="c3-count">four marks</span>
+          </div>
+          <div class="c3-article-title">Why design still requires a human soul</div>
+          <div class="c3-article-domain">designharder.pub · Read →</div>
+        </div>
+
+        <div class="c3-quotes-scroll">
+          <div class="c3-card">
+            <div class="c3-roman">i.</div>
+            <div class="c3-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+          </div>
+          <div class="c3-card">
+            <div class="c3-roman">ii.</div>
+            <div class="c3-quote">fast, convenient, ugly, and empty</div>
+          </div>
+          <div class="c3-card">
+            <div class="c3-roman">iii.</div>
+            <div class="c3-quote">AI on its own is fantastic nightmare fuel and a goldmine of memes; just don't use it to replace a real artist.</div>
+          </div>
+          <div class="c3-card">
+            <div class="c3-roman">iv.</div>
+            <div class="c3-quote">When I realize an image has been made by AI is simply when I stop caring about it.</div>
+          </div>
+          <div style="flex-shrink:0;width:4px;"></div>
+        </div>
+
+        <div class="item-sep"></div>
+        <div class="ghost-row">
+          <div class="ghost-line" style="width:70%;"></div>
+          <div class="ghost-line short"></div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ C4 — Index Cards ════════ -->
+  <div class="proto-col">
+    <div class="proto-label">C4</div>
+    <div class="proto-label-name">Index Cards</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <div class="byline">
+          <div class="avatar">G</div>
+          <span class="byline-name">Gigi</span>
+          <span class="byline-sep">·</span>
+          <span class="byline-time">13h</span>
+        </div>
+
+        <div class="c4-header">
+          <div class="c4-thumb"></div>
+          <div class="c4-meta">
+            <div class="c4-meta-title">Why design still requires a human soul</div>
+            <div class="c4-meta-sub">
+              <span class="c4-pill">4 quotes</span>
+              <span>designharder.pub</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="c4-quotes-scroll">
+          <div class="c4-card">
+            <div class="c4-num">01</div>
+            <div class="c4-quote-c4">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+          </div>
+          <div class="c4-card">
+            <div class="c4-num">02</div>
+            <div class="c4-quote-c4">fast, convenient, ugly, and empty</div>
+          </div>
+          <div class="c4-card">
+            <div class="c4-num">03</div>
+            <div class="c4-quote-c4">AI on its own is fantastic nightmare fuel and a goldmine of memes; just don't use it to replace a real artist.</div>
+          </div>
+          <div class="c4-card">
+            <div class="c4-num">04</div>
+            <div class="c4-quote-c4">When I realize an image has been made by AI is simply when I stop caring about it.</div>
+          </div>
+          <div class="c4-stack-peek"></div>
+        </div>
+
+        <div class="item-sep"></div>
+        <div class="ghost-row">
+          <div class="ghost-line" style="width:70%;"></div>
+          <div class="ghost-line short"></div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

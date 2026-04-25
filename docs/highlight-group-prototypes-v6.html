@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module — State Permutations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --paper:        #F7F2EC;
+    --paper-tint:   #F1EBE0;
+    --paper-card:   #FCFAF6;
+    --paper-dark:   #EDE7DE;
+    --rule:         #DDD5C8;
+    --rule-faint:   #E8E1D5;
+    --accent:       #B85C38;
+    --ink:          #1C1510;
+    --ink-muted:    #8A7B6E;
+    --ink-faint:    #C4B8AC;
+    --serif:        'Playfair Display', Georgia, serif;
+    --sans:         'Inter', -apple-system, sans-serif;
+  }
+
+  body {
+    background: #2C2520;
+    font-family: var(--sans);
+    padding: 60px 20px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    color: #C4B8AC;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 2px; text-transform: uppercase;
+    text-align: center; margin-bottom: 16px;
+  }
+
+  .h1-sub {
+    color: #6B5F55;
+    font-size: 12px; text-align: center;
+    margin-bottom: 60px; max-width: 580px;
+    margin-left: auto; margin-right: auto;
+    line-height: 1.7;
+  }
+  .h1-sub em { color: #9C8975; font-style: italic; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, 410px);
+    gap: 56px 36px;
+    justify-content: center;
+    align-items: start;
+  }
+
+  .cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .cell-label {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 1.8px; text-transform: uppercase;
+    color: #6B5F55;
+  }
+
+  .cell-name {
+    font-size: 16px; color: #E8E0D0;
+    font-family: var(--serif); font-weight: 600;
+    margin-top: -4px; font-style: italic;
+  }
+
+  .cell-source {
+    font-size: 11px; color: #8A7B6E;
+    text-align: center; max-width: 320px; line-height: 1.5;
+    margin-top: -2px;
+  }
+
+  /* ── Phone shell ────────────────────────────── */
+  .phone {
+    width: 375px; background: var(--paper);
+    border-radius: 44px; overflow: hidden;
+    margin-top: 8px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.08),
+      0 32px 80px rgba(0,0,0,0.6),
+      0 8px 20px rgba(0,0,0,0.4);
+  }
+
+  .phone-notch {
+    height: 44px; background: var(--paper);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .notch-pill { width: 126px; height: 34px; background: #111; border-radius: 20px; }
+
+  .phone-content { background: var(--paper); }
+
+  .nav-bar {
+    padding: 4px 20px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .nav-title {
+    font-family: var(--serif); font-size: 28px; font-weight: 600;
+    color: var(--ink); letter-spacing: -0.5px;
+  }
+
+  .nav-icons { display: flex; gap: 16px; align-items: center; }
+  .nav-icon {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--paper-dark);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  .feed-rule { height: 1px; background: var(--rule); margin: 0 20px; }
+  .item-sep { height: 1px; background: var(--rule); margin: 0 20px; }
+
+  .h-avatar {
+    border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700;
+  }
+  .av-1 { background: linear-gradient(135deg,#8B7355,#5C4A35); }
+  .av-2 { background: linear-gradient(135deg,#6B7B5A,#3F4A30); }
+  .av-3 { background: linear-gradient(135deg,#7A5A8B,#4A3560); }
+  .av-4 { background: linear-gradient(135deg,#5A7B7B,#355A5A); }
+  .av-5 { background: linear-gradient(135deg,#A0855A,#6B5535); }
+  .av-art { background: linear-gradient(135deg,#A05A55,#683A35); }
+  .av-podcast { background: linear-gradient(135deg,#7A5A8B,#3F2A50); }
+  .av-domain { background: linear-gradient(135deg,#5C7588,#34495E); }
+
+  .tab-bar {
+    background: rgba(247, 242, 236, 0.92);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--rule);
+    padding: 8px 0 20px;
+    display: flex; justify-content: space-around;
+  }
+  .tab-item { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; }
+  .tab-icon { font-size: 20px; color: var(--ink-faint); }
+  .tab-icon.active { color: var(--accent); }
+  .tab-label { font-size: 9px; color: var(--ink-faint); font-weight: 500; }
+  .tab-label.active { color: var(--accent); font-weight: 600; }
+
+  /* ── Module (proposal 2 base) ───────────────── */
+
+  .item { padding: 12px 12px; }
+
+  .module {
+    background: var(--paper-tint);
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .module-header { margin-bottom: 14px; }
+
+  .module-divider {
+    height: 1px; background: rgba(28,21,16,0.06);
+    margin: 12px 0;
+  }
+
+  /* Resource header */
+  .res-header { display: flex; gap: 12px; align-items: flex-start; }
+
+  .res-cover {
+    width: 44px; height: 44px;
+    border-radius: 8px; flex-shrink: 0;
+    background: linear-gradient(135deg,#D4C8BA 0%,#9C8975 100%);
+    position: relative; overflow: hidden;
+  }
+  .res-cover::after {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      -45deg, transparent 0, transparent 4px,
+      rgba(0,0,0,0.06) 4px, rgba(0,0,0,0.06) 5px);
+  }
+
+  /* Podcast cover variant */
+  .res-cover.podcast {
+    background: linear-gradient(135deg,#9C7AAB 0%,#5C3A6B 100%);
+  }
+  .res-cover.podcast::after {
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18) 0, transparent 50%);
+  }
+
+  /* Web/domain cover variant — favicon-y look */
+  .res-cover.web {
+    background: linear-gradient(135deg,#7C8A9C 0%,#3D4A5C 100%);
+    border-radius: 10px;
+  }
+  .res-cover.web::after {
+    background: none;
+  }
+  .res-cover.web .glyph {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 18px; font-weight: 700;
+    font-family: var(--serif);
+  }
+
+  .res-info { flex: 1; min-width: 0; }
+
+  .res-meta {
+    font-size: 11px; color: var(--ink-muted);
+    display: flex; align-items: center; gap: 5px;
+    margin-bottom: 3px;
+  }
+  .res-meta strong { color: var(--ink); font-weight: 600; font-size: 12px; }
+  .res-meta-sep { color: var(--ink-faint); }
+
+  .res-meta .kind-pill {
+    background: var(--paper-card);
+    border: 1px solid var(--rule-faint);
+    border-radius: 99px;
+    padding: 1px 7px;
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.6px; text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-right: 2px;
+  }
+
+  .res-title {
+    font-family: var(--serif); font-size: 17px; font-weight: 600;
+    color: var(--ink); line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .res-cta {
+    font-size: 11px; font-weight: 600; color: var(--accent);
+    margin-top: 4px; display: inline-flex; align-items: center; gap: 5px;
+  }
+
+  /* Highlighters row */
+  .hl-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+
+  .hl-stack { display: flex; align-items: center; }
+  .hl-stack .h-avatar {
+    width: 20px; height: 20px; font-size: 9px;
+    margin-left: -6px;
+    border: 1.5px solid var(--paper-tint);
+  }
+  .hl-stack .h-avatar:first-child { margin-left: 0; }
+
+  .hl-overflow {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--paper-card);
+    border: 1.5px solid var(--paper-tint);
+    color: var(--ink-muted);
+    font-size: 8px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    margin-left: -6px;
+  }
+
+  .hl-label { font-size: 11px; color: var(--ink-muted); }
+  .hl-label strong { color: var(--ink); font-weight: 600; }
+
+  /* Reel inside module — overflows the padding so cards reach right edge */
+  .reel-wrap {
+    margin: 0 -16px;
+    padding: 0 16px;
+  }
+
+  .reel {
+    overflow-x: auto;
+    display: flex; gap: 10px;
+    scrollbar-width: none;
+  }
+  .reel::-webkit-scrollbar { display: none; }
+  .reel-wrap .reel { padding-right: 16px; }
+
+  .qc {
+    flex-shrink: 0;
+    width: 240px;
+    background: white;
+    border: none;
+    box-shadow: 0 1px 2px rgba(28,21,16,0.05);
+    border-radius: 12px;
+    padding: 12px 12px 14px;
+    display: flex; flex-direction: column;
+    min-height: 168px;
+  }
+
+  .qc-byline {
+    display: flex; align-items: center; gap: 7px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule-faint);
+  }
+  .qc-byline .h-avatar { width: 22px; height: 22px; font-size: 9px; }
+  .qc-name { font-size: 11px; font-weight: 600; color: var(--ink); }
+  .qc-sep { color: var(--ink-faint); font-size: 10px; }
+  .qc-time { font-size: 10px; color: var(--ink-muted); }
+
+  /* Podcast timecode badge inside the byline area */
+  .qc-timecode {
+    margin-left: auto;
+    font-size: 10px; font-weight: 600;
+    color: var(--accent);
+    display: flex; align-items: center; gap: 3px;
+    background: rgba(184,92,56,0.1);
+    padding: 2px 6px; border-radius: 99px;
+  }
+
+  .qc-quote-row { display: flex; gap: 10px; flex: 1; }
+
+  .qc-bar {
+    width: 3px; flex-shrink: 0;
+    background: var(--accent); border-radius: 2px;
+  }
+
+  .qc-quote {
+    font-family: var(--serif); font-size: 14px; font-style: italic;
+    color: var(--ink); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical;
+    overflow: hidden; flex: 1;
+  }
+
+  .reel-tail { flex-shrink: 0; width: 4px; }
+
+  /* ── Single highlight (flat, no module) ─────── */
+
+  .single { padding: 24px 20px; }
+  .single-byline {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+  }
+  .single-byline .h-avatar { width: 26px; height: 26px; font-size: 11px; }
+  .single-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .single-sep { color: var(--ink-faint); font-size: 12px; }
+  .single-time { font-size: 12px; color: var(--ink-muted); }
+  .single-quote-row { display: flex; gap: 14px; }
+  .single-bar { width: 3px; background: var(--accent); border-radius: 2px; }
+  .single-quote {
+    font-family: var(--serif); font-size: 18px; font-style: italic;
+    color: var(--ink); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .single-source-strip {
+    margin-top: 14px; padding: 8px 10px;
+    border: 1px solid var(--rule); border-radius: 8px;
+    background: var(--paper-card);
+    display: flex; align-items: center; gap: 10px;
+    margin-left: 17px;
+  }
+  .single-source-thumb {
+    width: 30px; height: 30px; border-radius: 4px;
+    background: linear-gradient(135deg,#D4C8BA,#9C8975);
+    flex-shrink: 0;
+  }
+  .single-source-info { flex: 1; min-width: 0; }
+  .single-source-title {
+    font-family: var(--serif); font-size: 12px; font-weight: 600;
+    color: var(--ink); line-height: 1.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .single-source-sub {
+    font-size: 10px; color: var(--ink-muted); margin-top: 2px;
+  }
+  .single-source-cta {
+    font-size: 11px; font-weight: 600; color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .single-from {
+    font-size: 11px; color: var(--ink-muted); margin-top: 14px; padding-left: 17px;
+    letter-spacing: 0.4px;
+  }
+  .single-from strong { color: var(--ink-muted); font-weight: 700; letter-spacing: 1px; font-size: 10px; text-transform: uppercase; margin-right: 4px; }
+
+</style>
+</head>
+<body>
+
+<h1>Module — State Permutations</h1>
+<div class="h1-sub">
+  Single highlight stays flat in the feed (the module presence itself signals
+  "this is a cluster"). The module appears for any artifact — <em>article,
+  web URL, podcast episode</em> — when 2+ highlights share the same source.
+  The resource header adapts to what's available for that artifact type.
+</div>
+
+<div class="grid">
+
+  <!-- ════════ State A — Single highlight, web article ════════ -->
+  <div class="cell">
+    <div class="cell-label">State A</div>
+    <div class="cell-name">Single highlight · web article</div>
+    <div class="cell-source">No module — one highlight stays flat.<br>Existing pull-quote card design.</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <div class="single">
+          <div class="single-byline">
+            <div class="h-avatar av-1">G</div>
+            <span class="single-name">Gigi</span>
+            <span class="single-sep">·</span>
+            <span class="single-time">13h</span>
+          </div>
+          <div class="single-quote-row">
+            <div class="single-bar"></div>
+            <div class="single-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+          </div>
+          <div class="single-from"><strong>FROM</strong>designharder.pub</div>
+        </div>
+
+        <div class="item-sep"></div>
+
+        <div class="single">
+          <div class="single-byline">
+            <div class="h-avatar av-2">A</div>
+            <span class="single-name">Anna</span>
+            <span class="single-sep">·</span>
+            <span class="single-time">2d</span>
+          </div>
+          <div class="single-quote-row">
+            <div class="single-bar"></div>
+            <div class="single-quote">There is something irreducibly human about the moment a maker chooses one form over another.</div>
+          </div>
+          <div class="single-source-strip">
+            <div class="single-source-thumb"></div>
+            <div class="single-source-info">
+              <div class="single-source-title">The Soul of Design</div>
+              <div class="single-source-sub">Mary Choe · 12 min read</div>
+            </div>
+            <div class="single-source-cta">Read →</div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ State B — 2 from one person, web article ════════ -->
+  <div class="cell">
+    <div class="cell-label">State B</div>
+    <div class="cell-name">2 highlights · same person · web article</div>
+    <div class="cell-source">No resolved author — domain leads.<br>Lone highlighter shown by name.</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <div class="item">
+          <div class="module">
+            <div class="module-header">
+              <div class="res-header">
+                <div class="res-cover web"><div class="glyph">d</div></div>
+                <div class="res-info">
+                  <div class="res-meta">
+                    <span class="kind-pill">Web</span>
+                    <strong>designharder.pub</strong>
+                  </div>
+                  <div class="res-title">Why design still requires a human soul</div>
+                  <span class="res-cta">Open page →</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="module-divider"></div>
+
+            <div class="hl-row">
+              <div class="hl-stack">
+                <div class="h-avatar av-1">G</div>
+              </div>
+              <span class="hl-label"><strong>Gigi</strong> highlighted twice</span>
+            </div>
+
+            <div class="reel-wrap">
+              <div class="reel">
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-1">G</div>
+                    <span class="qc-name">Gigi</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">13h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-1">G</div>
+                    <span class="qc-name">Gigi</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">13h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">fast, convenient, ugly, and empty</div>
+                  </div>
+                </div>
+                <div class="reel-tail"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="single">
+          <div class="single-byline">
+            <div class="h-avatar av-2">A</div>
+            <span class="single-name">Anna</span>
+            <span class="single-sep">·</span>
+            <span class="single-time">2d</span>
+          </div>
+          <div class="single-quote-row">
+            <div class="single-bar"></div>
+            <div class="single-quote">There is something irreducibly human about the moment a maker chooses one form over another.</div>
+          </div>
+          <div class="single-from"><strong>FROM</strong>The Soul of Design</div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ State C — Multiple people, NIP-23 article ════════ -->
+  <div class="cell">
+    <div class="cell-label">State C</div>
+    <div class="cell-name">4 highlights · 3 people · NIP-23 article</div>
+    <div class="cell-source">Resolved author shown.<br>"Read article →" CTA.</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <div class="item">
+          <div class="module">
+            <div class="module-header">
+              <div class="res-header">
+                <div class="res-cover"></div>
+                <div class="res-info">
+                  <div class="res-meta">
+                    <span class="kind-pill">Article</span>
+                    <strong>Jeremy Rifkin</strong>
+                  </div>
+                  <div class="res-title">Why design still requires a human soul</div>
+                  <span class="res-cta">Read article →</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="module-divider"></div>
+
+            <div class="hl-row">
+              <div class="hl-stack">
+                <div class="h-avatar av-1">G</div>
+                <div class="h-avatar av-2">A</div>
+                <div class="h-avatar av-3">M</div>
+              </div>
+              <span class="hl-label">Highlighted by <strong>Gigi</strong>, <strong>Anna</strong> and <strong>Marco</strong></span>
+            </div>
+
+            <div class="reel-wrap">
+              <div class="reel">
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-1">G</div>
+                    <span class="qc-name">Gigi</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">13h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-1">G</div>
+                    <span class="qc-name">Gigi</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">13h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">fast, convenient, ugly, and empty</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-2">A</div>
+                    <span class="qc-name">Anna</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">11h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">AI on its own is fantastic nightmare fuel and a goldmine of memes; just don't use it to replace a real artist.</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-3">M</div>
+                    <span class="qc-name">Marco</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">8h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">When I realize an image has been made by AI is simply when I stop caring.</div>
+                  </div>
+                </div>
+                <div class="reel-tail"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="single">
+          <div class="single-byline">
+            <div class="h-avatar av-2">A</div>
+            <span class="single-name">Anna</span>
+            <span class="single-sep">·</span>
+            <span class="single-time">2d</span>
+          </div>
+          <div class="single-quote-row">
+            <div class="single-bar"></div>
+            <div class="single-quote">There is something irreducibly human about the moment a maker chooses one form over another.</div>
+          </div>
+          <div class="single-from"><strong>FROM</strong>The Soul of Design</div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ State D — Podcast episode ════════ -->
+  <div class="cell">
+    <div class="cell-label">State D</div>
+    <div class="cell-name">3 highlights · podcast episode</div>
+    <div class="cell-source">Show as primary, episode title secondary.<br>"Play episode" CTA. Each card optionally shows the timecode.</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <div class="item">
+          <div class="module">
+            <div class="module-header">
+              <div class="res-header">
+                <div class="res-cover podcast"></div>
+                <div class="res-info">
+                  <div class="res-meta">
+                    <span class="kind-pill">Podcast</span>
+                    <strong>The Vergecast</strong>
+                  </div>
+                  <div class="res-title">"What does design mean in 2026?"</div>
+                  <span class="res-cta">▸ Play episode · 1h 12m</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="module-divider"></div>
+
+            <div class="hl-row">
+              <div class="hl-stack">
+                <div class="h-avatar av-2">A</div>
+                <div class="h-avatar av-4">P</div>
+              </div>
+              <span class="hl-label">Highlighted by <strong>Anna</strong> and <strong>Petya</strong></span>
+            </div>
+
+            <div class="reel-wrap">
+              <div class="reel">
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-2">A</div>
+                    <span class="qc-name">Anna</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">3h</span>
+                    <span class="qc-timecode">▸ 14:32</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">The thing nobody wants to admit is that the tools shape the taste before the taste shapes the tools.</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-4">P</div>
+                    <span class="qc-name">Petya</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">2h</span>
+                    <span class="qc-timecode">▸ 28:04</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">Software design is the only craft where the apprentice can ship to a million users on day one.</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-4">P</div>
+                    <span class="qc-name">Petya</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">2h</span>
+                    <span class="qc-timecode">▸ 41:55</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">Restraint is a discipline AI hasn't learned yet.</div>
+                  </div>
+                </div>
+                <div class="reel-tail"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="single">
+          <div class="single-byline">
+            <div class="h-avatar av-1">G</div>
+            <span class="single-name">Gigi</span>
+            <span class="single-sep">·</span>
+            <span class="single-time">5h</span>
+          </div>
+          <div class="single-quote-row">
+            <div class="single-bar"></div>
+            <div class="single-quote">A craftsman's confidence is built on knowing why one chisel cuts cleaner than another.</div>
+          </div>
+          <div class="single-from"><strong>FROM</strong>longform.org</div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ State E — Many highlighters (overflow) ════════ -->
+  <div class="cell">
+    <div class="cell-label">State E</div>
+    <div class="cell-name">7 highlights · 5 people · article</div>
+    <div class="cell-source">Avatar overflow chip "+2".<br>"Highlighted by … and 3 others".</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <div class="item">
+          <div class="module">
+            <div class="module-header">
+              <div class="res-header">
+                <div class="res-cover"></div>
+                <div class="res-info">
+                  <div class="res-meta">
+                    <span class="kind-pill">Article</span>
+                    <strong>Lyn Alden</strong>
+                  </div>
+                  <div class="res-title">The petrodollar is still misunderstood</div>
+                  <span class="res-cta">Read article →</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="module-divider"></div>
+
+            <div class="hl-row">
+              <div class="hl-stack">
+                <div class="h-avatar av-1">G</div>
+                <div class="h-avatar av-2">A</div>
+                <div class="h-avatar av-3">M</div>
+                <div class="hl-overflow">+2</div>
+              </div>
+              <span class="hl-label">Highlighted by <strong>Gigi</strong>, <strong>Anna</strong> and <strong>3 others</strong></span>
+            </div>
+
+            <div class="reel-wrap">
+              <div class="reel">
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-1">G</div>
+                    <span class="qc-name">Gigi</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">13h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">The dollar's role isn't backed by oil — it's backed by the fact that everyone needs dollars to buy oil.</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-2">A</div>
+                    <span class="qc-name">Anna</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">11h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">Reserve currency status is a lagging indicator of trust, not a leading one.</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-3">M</div>
+                    <span class="qc-name">Marco</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">8h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">Trade flows are the river; reserve assets are the riverbed.</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-4">P</div>
+                    <span class="qc-name">Petya</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">5h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">Once you understand why the eurodollar exists you stop being surprised by anything in international finance.</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-5">S</div>
+                    <span class="qc-name">Saif</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">2h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">Sanctions aren't a tool; they're an information signal others read.</div>
+                  </div>
+                </div>
+                <div class="reel-tail"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="single">
+          <div class="single-byline">
+            <div class="h-avatar av-2">A</div>
+            <span class="single-name">Anna</span>
+            <span class="single-sep">·</span>
+            <span class="single-time">2d</span>
+          </div>
+          <div class="single-quote-row">
+            <div class="single-bar"></div>
+            <div class="single-quote">There is something irreducibly human about the moment a maker chooses one form over another.</div>
+          </div>
+          <div class="single-from"><strong>FROM</strong>The Soul of Design</div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ State F — Mixed feed (modules + singles together) ════════ -->
+  <div class="cell">
+    <div class="cell-label">State F</div>
+    <div class="cell-name">Mixed feed · modules + singles</div>
+    <div class="cell-source">A typical scroll: modules tucked into the same vertical rhythm as flat highlights. The contrast carries the cluster signal.</div>
+    <div class="phone">
+      <div class="phone-notch"><div class="notch-pill"></div></div>
+      <div class="phone-content">
+        <div class="nav-bar">
+          <div class="nav-title">Highlights</div>
+          <div class="nav-icons">
+            <div class="nav-icon">⚙</div>
+            <div class="nav-icon" style="background:#7A6A50;color:white;font-size:12px;font-weight:700;">P</div>
+            <div class="nav-icon">+</div>
+          </div>
+        </div>
+        <div class="feed-rule"></div>
+
+        <!-- Single -->
+        <div class="single">
+          <div class="single-byline">
+            <div class="h-avatar av-1">G</div>
+            <span class="single-name">Gigi</span>
+            <span class="single-sep">·</span>
+            <span class="single-time">17h</span>
+          </div>
+          <div class="single-quote-row">
+            <div class="single-bar"></div>
+            <div class="single-quote">A craftsman's confidence is built on knowing why one chisel cuts cleaner than another.</div>
+          </div>
+          <div class="single-from"><strong>FROM</strong>longform.org</div>
+        </div>
+
+        <div class="item-sep"></div>
+
+        <!-- Module -->
+        <div class="item">
+          <div class="module">
+            <div class="module-header">
+              <div class="res-header">
+                <div class="res-cover"></div>
+                <div class="res-info">
+                  <div class="res-meta">
+                    <span class="kind-pill">Article</span>
+                    <strong>Jeremy Rifkin</strong>
+                  </div>
+                  <div class="res-title">Why design still requires a human soul</div>
+                  <span class="res-cta">Read article →</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="module-divider"></div>
+
+            <div class="hl-row">
+              <div class="hl-stack">
+                <div class="h-avatar av-1">G</div>
+                <div class="h-avatar av-2">A</div>
+                <div class="h-avatar av-3">M</div>
+              </div>
+              <span class="hl-label">Highlighted by <strong>Gigi</strong>, <strong>Anna</strong> and <strong>Marco</strong></span>
+            </div>
+
+            <div class="reel-wrap">
+              <div class="reel">
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-1">G</div>
+                    <span class="qc-name">Gigi</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">13h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">Utopias, by their very nature, are unattainable—the Greek roots of the word ou-topos literally mean "no place."</div>
+                  </div>
+                </div>
+                <div class="qc">
+                  <div class="qc-byline">
+                    <div class="h-avatar av-2">A</div>
+                    <span class="qc-name">Anna</span>
+                    <span class="qc-sep">·</span>
+                    <span class="qc-time">11h</span>
+                  </div>
+                  <div class="qc-quote-row">
+                    <div class="qc-bar"></div>
+                    <div class="qc-quote">AI on its own is fantastic nightmare fuel and a goldmine of memes; just don't use it to replace a real artist.</div>
+                  </div>
+                </div>
+                <div class="reel-tail"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Single -->
+        <div class="single">
+          <div class="single-byline">
+            <div class="h-avatar av-4">P</div>
+            <span class="single-name">Petya</span>
+            <span class="single-sep">·</span>
+            <span class="single-time">8h</span>
+          </div>
+          <div class="single-quote-row">
+            <div class="single-bar"></div>
+            <div class="single-quote">Restraint is a discipline AI hasn't learned yet.</div>
+          </div>
+          <div class="single-from"><strong>FROM</strong>The Vergecast</div>
+        </div>
+      </div>
+      <div class="tab-bar">
+        <div class="tab-item"><div class="tab-icon active">≡</div><div class="tab-label active">Highlights</div></div>
+        <div class="tab-item"><div class="tab-icon">⊞</div><div class="tab-label">Rooms</div></div>
+        <div class="tab-item"><div class="tab-icon">○</div><div class="tab-label">Search</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top: 64px; padding: 24px 28px; max-width: 760px; margin-left: auto; margin-right: auto; background: rgba(255,255,255,0.04); border-radius: 12px; color: #C4B8AC; font-size: 13px; line-height: 1.7;">
+  <div style="font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: #9C8975; margin-bottom: 12px;">Behavior summary</div>
+  <ul style="padding-left: 20px;">
+    <li style="margin-bottom: 8px;"><strong style="color:#E8E0D0;">1 highlight on a resource</strong> → flat in feed (existing pull-quote card). No module.</li>
+    <li style="margin-bottom: 8px;"><strong style="color:#E8E0D0;">2+ highlights on the same resource</strong> → module appears, regardless of whether they're from the same person or many people.</li>
+    <li style="margin-bottom: 8px;"><strong style="color:#E8E0D0;">Resource header adapts to artifact type</strong>: NIP-23 article (cover + author + title), web URL (favicon-y mark + domain + page title), podcast (cover + show + episode + play CTA), and so on. Same module shape, different fillings.</li>
+    <li style="margin-bottom: 8px;"><strong style="color:#E8E0D0;">Kind pill</strong> ("Article" / "Web" / "Podcast") next to the author/source line makes the artifact type unmissable at a glance.</li>
+    <li><strong style="color:#E8E0D0;">Highlighter avatar overflow</strong>: show first 3 + "+N", with the label collapsing to "Highlighted by Gigi, Anna and N others".</li>
+  </ul>
+</div>
+
+</body>
+</html>
