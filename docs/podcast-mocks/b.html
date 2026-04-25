@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Proposal B — The Clip Studio</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      .ep-strip {
+        padding: 12px 16px 14px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        border-bottom: 1px solid var(--rule-soft);
+      }
+
+      .ep-strip .meta {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .ep-strip .show {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-fade);
+      }
+
+      .ep-strip .title {
+        margin: 2px 0 0;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.25;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      /* ---- Tape strip ---- */
+
+      .tape-shell {
+        padding: 18px 16px 14px;
+      }
+
+      .tape-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+
+      .tape-time {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .tape {
+        position: relative;
+        height: 56px;
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: repeating-linear-gradient(
+          90deg,
+          var(--bg) 0 39px,
+          var(--rule) 39px 40px
+        );
+        overflow: hidden;
+        cursor: ew-resize;
+      }
+
+      .tape-progress {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.06);
+        pointer-events: none;
+        transition: width 0.3s linear;
+      }
+
+      .tape-playhead {
+        position: absolute;
+        top: -4px;
+        bottom: -4px;
+        width: 2px;
+        background: var(--ink);
+        z-index: 4;
+        transition: left 0.3s linear;
+      }
+
+      .tape-playhead::before {
+        content: "";
+        position: absolute;
+        top: -3px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--ink);
+      }
+
+      .tape-marker {
+        position: absolute;
+        top: 8px;
+        bottom: 8px;
+        background: var(--ink);
+        opacity: 0.18;
+        pointer-events: none;
+      }
+
+      .tape-marker.member-clip {
+        opacity: 0.35;
+      }
+
+      .tape-marker.draft {
+        background: transparent;
+        border-top: 2px dashed var(--ink);
+        border-bottom: 2px dashed var(--ink);
+        opacity: 1;
+      }
+
+      .tape-marker.user {
+        background: var(--ink);
+        opacity: 0.6;
+      }
+
+      .tape-avatars {
+        position: absolute;
+        bottom: -28px;
+        left: 0;
+        right: 0;
+        height: 24px;
+        pointer-events: none;
+      }
+
+      .tape-avatar-mini {
+        position: absolute;
+        bottom: 0;
+        transform: translateX(-50%);
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--bg);
+        border: 1px solid var(--ink);
+        font-family: var(--font-mono);
+        font-size: 8px;
+        font-weight: 700;
+        text-align: center;
+        line-height: 16px;
+      }
+
+      /* ---- Mark in / mark out controls ---- */
+
+      .clip-controls {
+        margin: 32px 16px 12px;
+        display: flex;
+        gap: 8px;
+      }
+
+      .clip-controls .btn {
+        flex: 1;
+      }
+
+      /* ---- Active clip card ---- */
+
+      .clip-card {
+        margin: 8px 16px 12px;
+        border: 1px solid var(--ink);
+        border-radius: 14px;
+        padding: 14px 14px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .clip-card .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .clip-card .draft {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--ink-fade);
+      }
+
+      .clip-card .range {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .clip-card .range-detail {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-fade);
+      }
+
+      .clip-card .quote {
+        margin: 0;
+        font-size: 14px;
+        font-style: italic;
+        line-height: 1.5;
+        border-left: 3px solid var(--ink);
+        padding: 4px 0 4px 12px;
+      }
+
+      .clip-card .note {
+        border: 1px dashed var(--rule);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 13px;
+        color: var(--ink-fade);
+        height: 44px;
+      }
+
+      .clip-card .actions {
+        display: flex;
+        gap: 6px;
+      }
+
+      .clip-card .actions .btn {
+        flex: 1;
+      }
+
+      .clip-card .actions .btn.icon-only {
+        flex: 0;
+        width: 36px;
+        padding: 0;
+      }
+
+      /* ---- Stack of saved drafts ---- */
+
+      .drafts-section {
+        margin-top: 8px;
+        padding: 0 16px;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--ink-fade);
+        margin-bottom: 8px;
+      }
+
+      .draft-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        margin-bottom: 6px;
+      }
+
+      .draft-row.published {
+        border-style: solid;
+        border-color: var(--rule);
+        opacity: 0.65;
+      }
+
+      .draft-range {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .draft-text {
+        font-size: 13px;
+        line-height: 1.35;
+        flex: 1;
+        min-width: 0;
+        font-style: italic;
+        color: var(--ink-soft);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+      }
+
+      .draft-status {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--ink-fade);
+        flex-shrink: 0;
+      }
+
+      /* ---- Bottom drawer for room clips ---- */
+
+      .drawer {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: var(--safe-bottom);
+        background: var(--bg);
+        border-top: 1px solid var(--ink);
+        border-radius: 18px 18px 0 0;
+        max-height: 70%;
+        z-index: 10;
+        transform: translateY(calc(100% - 56px));
+        transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .drawer.open {
+        transform: translateY(0);
+      }
+
+      .drawer-handle {
+        padding: 10px 16px 6px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+      }
+
+      .drawer-handle .grip {
+        width: 36px;
+        height: 4px;
+        background: var(--rule);
+        border-radius: 999px;
+        position: absolute;
+        top: 6px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .drawer-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .drawer-title .count {
+        background: var(--ink);
+        color: var(--bg);
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+      }
+
+      .drawer-toggle {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--ink-fade);
+      }
+
+      .drawer-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0 16px 16px;
+      }
+
+      .drawer-clip {
+        display: flex;
+        gap: 10px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--rule-soft);
+        cursor: pointer;
+      }
+
+      .drawer-clip:last-child { border-bottom: none; }
+
+      .drawer-clip .col {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .drawer-clip .when {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-fade);
+        margin-bottom: 4px;
+      }
+
+      .drawer-clip .quote {
+        margin: 0 0 4px;
+        font-size: 13px;
+        line-height: 1.4;
+        font-style: italic;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .drawer-clip .by {
+        font-size: 12px;
+        color: var(--ink-fade);
+      }
+
+      /* ---- Top bar variant ---- */
+
+      .glyph-back {
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 5px 7px 5px 0;
+        border-color: transparent var(--ink) transparent transparent;
+      }
+
+      /* ---- Floating play button (anchored to tape) ---- */
+
+      .player-bar {
+        margin: 0 16px 8px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 4px;
+      }
+
+      .player-bar .play-btn {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: var(--ink);
+        color: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .player-bar .play-btn .play-glyph {
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 8px 0 8px 13px;
+        border-color: transparent transparent transparent var(--bg);
+        margin-left: 3px;
+      }
+
+      .player-bar .play-btn .pause-glyph {
+        width: 14px;
+        height: 14px;
+        position: relative;
+      }
+
+      .player-bar .play-btn .pause-glyph::before,
+      .player-bar .play-btn .pause-glyph::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: var(--bg);
+      }
+
+      .player-bar .play-btn .pause-glyph::before { left: 1px; }
+      .player-bar .play-btn .pause-glyph::after { right: 1px; }
+
+      .player-bar .skip {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--ink-soft);
+      }
+
+      .player-bar .speed {
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--ink-soft);
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        padding: 4px 10px;
+      }
+
+      /* highlight pulse on a fresh clip */
+      @keyframes flash {
+        from { background: var(--surface-warm); }
+        to { background: transparent; }
+      }
+      .clip-card.fresh {
+        animation: flash 600ms ease-out;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="stage-head">
+        <a class="stage-back" href="./">← All proposals</a>
+        <div class="stage-kicker">Proposal B · Wireframe</div>
+        <h1 class="stage-title">The Clip Studio</h1>
+        <p class="stage-blurb">
+          A horizontal tape strip you scrub like film. Drop start/end markers on the fly with two
+          taps. Active clip dominates the middle of the screen with adjustable handles + a note
+          field. Drafts stack below. Other members' clips peek from a bottom drawer that you can
+          pull up without losing your draft. Optimized for active producers.
+        </p>
+      </div>
+
+      <div class="annotations">
+        <div class="phone">
+          <div class="phone-screen" id="screen">
+            <div class="topbar">
+              <button class="icon-btn" aria-label="Back">
+                <span class="glyph-back"></span>
+              </button>
+              <div class="topbar-title">Clip Studio · Curious Minds</div>
+              <button class="icon-btn" aria-label="Share">
+                <span style="font-family: var(--font-mono); font-size: 14px;">↑</span>
+              </button>
+            </div>
+
+            <div class="ep-strip">
+              <div class="show-art sm"></div>
+              <div class="meta">
+                <span class="show">Tucker Carlson Show · 1h 02m</span>
+                <h1 class="title">Tucker Debates Biotech CEO on Baby Customization, Eugenics, and God</h1>
+              </div>
+            </div>
+
+            <div class="tape-shell">
+              <div class="tape-label">
+                <span class="kicker">Episode tape</span>
+                <span class="tape-time" id="tapeTime">0:00 / 1:02:22</span>
+              </div>
+              <div class="tape" id="tape">
+                <div class="tape-progress" id="tapeProgress" style="width: 0;"></div>
+                <div class="tape-playhead" id="tapePlayhead" style="left: 0;"></div>
+                <div class="tape-avatars" id="tapeAvatars"></div>
+                <!-- markers populated by JS -->
+              </div>
+            </div>
+
+            <div class="player-bar">
+              <span class="skip">⟲ 15</span>
+              <button class="play-btn" id="playBtn" aria-label="Play">
+                <span class="play-glyph" id="playGlyph"></span>
+              </button>
+              <span class="skip">30 ⟳</span>
+              <span class="speed">1×</span>
+            </div>
+
+            <div class="clip-controls">
+              <button class="btn ghost" id="markIn">↦ Mark In</button>
+              <button class="btn ghost" id="markOut" disabled>Mark Out ↤</button>
+              <button class="btn solid" id="addClip">+ Quick Clip</button>
+            </div>
+
+            <div class="scroll" style="padding-bottom: 76px;">
+              <div class="clip-card" id="activeClip" style="display: none;">
+                <div class="top">
+                  <span class="draft">Draft clip</span>
+                  <span class="range" id="activeRange">4:08 → 5:36</span>
+                </div>
+                <p class="quote" id="activeQuote">"Three things, usually. State coercion. Loss of human variance. And the idea that some lives are worth more than others."</p>
+                <div class="row" style="gap: 10px; align-items: center;">
+                  <span class="kicker">Range</span>
+                  <span class="range-detail" id="activeDetail">1m 28s · drag handles to adjust</span>
+                </div>
+                <div class="note">Add a note (optional)…</div>
+                <div class="actions">
+                  <button class="btn ghost icon-only" aria-label="Delete">×</button>
+                  <button class="btn solid" id="publishClip">Publish to Curious Minds</button>
+                </div>
+              </div>
+
+              <div class="drafts-section">
+                <div class="section-head">
+                  <span>Your clips this session · 2</span>
+                  <span>publish all →</span>
+                </div>
+                <div class="draft-row">
+                  <span class="draft-range">2:25 — 3:04</span>
+                  <span class="draft-text">"The honest version of that is eugenics."</span>
+                  <span class="draft-status">draft</span>
+                </div>
+                <div class="draft-row published">
+                  <span class="draft-range">9:28 — 10:21</span>
+                  <span class="draft-text">"My company solves zero of those problems and worsens at least one."</span>
+                  <span class="draft-status">posted ↗</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="drawer" id="drawer">
+              <div class="drawer-handle" id="drawerHandle">
+                <span class="grip"></span>
+                <span class="drawer-title">From this room <span class="count">5</span></span>
+                <span class="drawer-toggle" id="drawerToggle">▲ EXPAND</span>
+              </div>
+              <div class="drawer-list" id="drawerList">
+                <!-- populated by JS -->
+              </div>
+            </div>
+
+            <div class="home-indicator"></div>
+          </div>
+        </div>
+
+        <div class="annotation-list">
+          <h3>Technical anchoring</h3>
+          <ul>
+            <li>
+              <span class="num">!</span>
+              <div class="body"><strong>Mark In / Mark Out work on time alone.</strong> The clip is a (start_seconds, end_seconds) pair; transcript text is auto-extracted only if present. No transcript → the clip card shows "Time-only clip" and you write a note.</div>
+            </li>
+            <li>
+              <span class="num">!</span>
+              <div class="body"><strong>Tape strip needs no transcript.</strong> Member-clip bands and avatars come from event tags (start/end times + author). Renders identically with or without transcript availability.</div>
+            </li>
+          </ul>
+
+          <h3 style="margin-top: 16px;">UX notes</h3>
+          <ul>
+            <li>
+              <span class="num">1</span>
+              <div class="body"><strong>The tape is your primary surface.</strong> Drag the playhead, see the whole episode at a glance. Member clips appear as soft gray bands so you can see where the conversation already is.</div>
+            </li>
+            <li>
+              <span class="num">2</span>
+              <div class="body"><strong>Two-tap clipping.</strong> "Mark In" at one moment, "Mark Out" at another. The active clip card slides up with the transcript text already filled. No mode switch.</div>
+            </li>
+            <li>
+              <span class="num">3</span>
+              <div class="body"><strong>Quick Clip = single tap.</strong> Drops a 30-second clip ending at the current playhead. Refine later if you want.</div>
+            </li>
+            <li>
+              <span class="num">4</span>
+              <div class="body"><strong>Drafts accumulate.</strong> You can keep clipping while listening; publish individually or in a batch. Published clips fade into the list with a "posted ↗" badge.</div>
+            </li>
+            <li>
+              <span class="num">5</span>
+              <div class="body"><strong>Room drawer is always one swipe away.</strong> See what others kept without losing your work. Tap any clip to jump audio there. Tap "+" to bookmark to your own vault.</div>
+            </li>
+            <li>
+              <span class="num">6</span>
+              <div class="body"><strong>Member avatars under the tape</strong> show which member clipped which moment — at a glance, you see whose attention is where.</div>
+            </li>
+          </ul>
+
+          <h3 style="margin-top: 8px;">Try it</h3>
+          <ul>
+            <li>
+              <span class="num">▶</span>
+              <div class="body">Tap play. The tape playhead crawls across.</div>
+            </li>
+            <li>
+              <span class="num">·</span>
+              <div class="body">Tap "Mark In", wait a few seconds, tap "Mark Out". The active clip card appears with auto-extracted transcript.</div>
+            </li>
+            <li>
+              <span class="num">↑</span>
+              <div class="body">Tap "From this room" at the bottom to expand the room clips drawer.</div>
+            </li>
+            <li>
+              <span class="num">+</span>
+              <div class="body">Tap "Quick Clip" to drop a 30-sec clip ending at the playhead.</div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { EPISODE, CLIPS, TRANSCRIPT, formatClock, formatRange, Clock, mountStatusBar } from './shared.js';
+
+      const screen = document.getElementById('screen');
+      mountStatusBar(screen);
+
+      const clock = new Clock(EPISODE.durationSeconds);
+
+      const tape = document.getElementById('tape');
+      const tapeProgress = document.getElementById('tapeProgress');
+      const tapePlayhead = document.getElementById('tapePlayhead');
+      const tapeTime = document.getElementById('tapeTime');
+      const tapeAvatars = document.getElementById('tapeAvatars');
+      const playBtn = document.getElementById('playBtn');
+      const playGlyph = document.getElementById('playGlyph');
+      const markInBtn = document.getElementById('markIn');
+      const markOutBtn = document.getElementById('markOut');
+      const addClipBtn = document.getElementById('addClip');
+      const activeClip = document.getElementById('activeClip');
+      const activeRange = document.getElementById('activeRange');
+      const activeDetail = document.getElementById('activeDetail');
+      const activeQuote = document.getElementById('activeQuote');
+      const drawer = document.getElementById('drawer');
+      const drawerHandle = document.getElementById('drawerHandle');
+      const drawerToggle = document.getElementById('drawerToggle');
+      const drawerList = document.getElementById('drawerList');
+
+      // Render member-clip markers on the tape.
+      CLIPS.forEach((clip) => {
+        const startPct = (clip.startSeconds / EPISODE.durationSeconds) * 100;
+        const widthPct = ((clip.endSeconds - clip.startSeconds) / EPISODE.durationSeconds) * 100;
+
+        const marker = document.createElement('div');
+        marker.className = 'tape-marker member-clip';
+        marker.style.left = `${startPct}%`;
+        marker.style.width = `${Math.max(widthPct, 1)}%`;
+        tape.appendChild(marker);
+
+        const avatar = document.createElement('div');
+        avatar.className = 'tape-avatar-mini';
+        avatar.style.left = `${startPct + widthPct / 2}%`;
+        avatar.textContent = clip.by.initials;
+        tapeAvatars.appendChild(avatar);
+      });
+
+      // Drawer list of room clips.
+      CLIPS.forEach((clip) => {
+        const row = document.createElement('div');
+        row.className = 'drawer-clip';
+        row.innerHTML = `
+          <span class="avatar" style="width: 28px; height: 28px; font-size: 11px;">${clip.by.initials}</span>
+          <div class="col">
+            <span class="when">${formatClock(clip.startSeconds)} — ${formatClock(clip.endSeconds)} · ${formatRange(clip.startSeconds, clip.endSeconds)}</span>
+            <p class="quote">"${clip.excerpt}"</p>
+            <span class="by">${clip.by.name} · ${clip.likes} ♥ · ${clip.replies} replies</span>
+          </div>
+        `;
+        row.addEventListener('click', () => {
+          clock.seek(clip.startSeconds);
+          if (!clock.playing) clock.play();
+        });
+        drawerList.appendChild(row);
+      });
+
+      function updatePlayState(playing) {
+        playGlyph.className = playing ? 'pause-glyph' : 'play-glyph';
+        playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+      }
+
+      clock.on((pos, playing) => {
+        const pct = (pos / EPISODE.durationSeconds) * 100;
+        tapeProgress.style.width = `${pct}%`;
+        tapePlayhead.style.left = `${pct}%`;
+        tapeTime.textContent = `${formatClock(pos)} / 1:02:22`;
+        updatePlayState(playing);
+      });
+
+      playBtn.addEventListener('click', () => clock.toggle());
+
+      // Tape scrub
+      tape.addEventListener('click', (e) => {
+        const rect = tape.getBoundingClientRect();
+        const ratio = (e.clientX - rect.left) / rect.width;
+        clock.seek(ratio * EPISODE.durationSeconds);
+      });
+
+      // Mark In / Mark Out
+      let markInTime = null;
+
+      function makeDraftClip(startSeconds, endSeconds) {
+        const segments = TRANSCRIPT.filter(
+          (s) => s.t >= startSeconds && s.t <= endSeconds
+        );
+        if (segments.length > 0) {
+          const text = segments.map((s) => s.text).join(' ').slice(0, 240);
+          activeQuote.textContent = `"${text}"`;
+          activeQuote.style.fontStyle = 'italic';
+          activeQuote.style.color = 'var(--ink)';
+        } else {
+          activeQuote.textContent = 'Time-only clip · no transcript at this range. Add a note below.';
+          activeQuote.style.fontStyle = 'normal';
+          activeQuote.style.color = 'var(--ink-fade)';
+        }
+        activeRange.textContent = `${formatClock(startSeconds)} → ${formatClock(endSeconds)}`;
+        activeDetail.textContent = `${formatRange(startSeconds, endSeconds)} · drag handles to adjust`;
+        activeClip.style.display = 'flex';
+        activeClip.classList.add('fresh');
+        setTimeout(() => activeClip.classList.remove('fresh'), 600);
+      }
+
+      markInBtn.addEventListener('click', () => {
+        markInTime = clock.position;
+        markInBtn.textContent = `↦ Mark In (${formatClock(markInTime)})`;
+        markInBtn.classList.add('solid');
+        markOutBtn.disabled = false;
+      });
+
+      markOutBtn.addEventListener('click', () => {
+        if (markInTime == null) return;
+        const start = Math.min(markInTime, clock.position);
+        const end = Math.max(markInTime, clock.position);
+        makeDraftClip(start, end);
+        markInTime = null;
+        markInBtn.textContent = '↦ Mark In';
+        markInBtn.classList.remove('solid');
+        markOutBtn.disabled = true;
+      });
+
+      addClipBtn.addEventListener('click', () => {
+        const start = Math.max(0, clock.position - 30);
+        const end = clock.position;
+        makeDraftClip(start, end);
+      });
+
+      document.getElementById('publishClip').addEventListener('click', () => {
+        activeClip.style.display = 'none';
+        alert('Clip published to Curious Minds.');
+      });
+
+      // Drawer
+      drawerHandle.addEventListener('click', () => {
+        drawer.classList.toggle('open');
+        drawerToggle.textContent = drawer.classList.contains('open') ? '▼ COLLAPSE' : '▲ EXPAND';
+      });
+
+      // Start with a position that shows context.
+      clock.seek(120);
+    </script>
+  </body>
+</html>

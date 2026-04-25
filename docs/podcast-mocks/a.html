@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Proposal A — The Listening Room</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      /* ---- Listening Room screen ---- */
+
+      .ep-head {
+        display: flex;
+        gap: 12px;
+        padding: 14px 16px 16px;
+        align-items: center;
+      }
+
+      .ep-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .ep-meta .show {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-fade);
+      }
+
+      .ep-meta .title {
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.25;
+        margin: 0;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .ep-meta .stats {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-fade);
+        margin-top: 4px;
+      }
+
+      .listening-meta {
+        padding: 8px 16px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .listening-meta .pulse {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .listening-meta .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--ink);
+        animation: pulse 1.6s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 0.3; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.3); }
+      }
+
+      /* ---- The river ---- */
+
+      .river {
+        position: relative;
+        padding: 0 0 200px;
+      }
+
+      .river-rail {
+        position: absolute;
+        left: 64px;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: var(--rule);
+      }
+
+      .river-tick {
+        position: relative;
+        margin: 0 16px 0 16px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--ink-fade);
+        padding-left: 36px;
+      }
+
+      .river-tick::before {
+        content: "";
+        position: absolute;
+        left: 48px;
+        top: 50%;
+        width: 8px;
+        height: 1px;
+        background: var(--rule);
+      }
+
+      .clip-bubble {
+        position: relative;
+        margin: 4px 16px 12px 16px;
+        padding-left: 60px;
+        cursor: pointer;
+      }
+
+      .clip-bubble::before {
+        content: "";
+        position: absolute;
+        left: 47px;
+        top: 18px;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: var(--ink);
+        z-index: 2;
+      }
+
+      .clip-bubble .meta-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+
+      .clip-bubble .who {
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .clip-bubble .when {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-fade);
+      }
+
+      .clip-bubble .body {
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: var(--bg);
+        position: relative;
+        transition: background 200ms ease, border-color 200ms ease;
+      }
+
+      .clip-bubble.future .body {
+        opacity: 0.45;
+      }
+
+      .clip-bubble.live .body {
+        border-color: var(--ink);
+        background: var(--surface-warm);
+      }
+
+      .clip-bubble .quote {
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--ink);
+        margin: 0 0 8px;
+        font-style: italic;
+      }
+
+      .clip-bubble .note {
+        font-size: 13px;
+        line-height: 1.45;
+        color: var(--ink-soft);
+        margin: 8px 0 0;
+        padding-top: 8px;
+        border-top: 1px dashed var(--rule);
+      }
+
+      .clip-bubble .actions {
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid var(--rule-soft);
+        display: flex;
+        gap: 14px;
+        font-size: 12px;
+        color: var(--ink-fade);
+        font-family: var(--font-mono);
+      }
+
+      .clip-bubble .actions span {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .clip-bubble .actions .glyph {
+        width: 12px;
+        height: 12px;
+        border: 1px solid currentColor;
+        border-radius: 2px;
+        display: inline-block;
+      }
+
+      .clip-bubble .actions .glyph.heart {
+        border-radius: 999px 999px 0 0;
+        transform: rotate(45deg);
+      }
+
+      /* ---- Playhead overlay (animates with audio) ---- */
+
+      .playhead {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--ink);
+        z-index: 10;
+        pointer-events: none;
+        transition: top 0.5s linear;
+      }
+
+      .playhead::before {
+        content: "";
+        position: absolute;
+        left: 60px;
+        top: -3px;
+        width: 8px;
+        height: 8px;
+        background: var(--ink);
+        border-radius: 50%;
+        transform: translateX(-50%);
+      }
+
+      .playhead-time {
+        position: absolute;
+        right: 12px;
+        top: -10px;
+        background: var(--ink);
+        color: var(--bg);
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        padding: 3px 6px;
+        border-radius: 4px;
+      }
+
+      /* ---- Bottom dock ---- */
+
+      .dock {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: var(--safe-bottom);
+        background: var(--bg);
+        border-top: 1px solid var(--rule);
+        padding: 14px 16px 16px;
+        z-index: 20;
+      }
+
+      .dock-scrub {
+        position: relative;
+        height: 4px;
+        background: var(--rule-soft);
+        border-radius: 999px;
+        margin-bottom: 12px;
+      }
+
+      .dock-scrub .filled {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        background: var(--ink);
+        border-radius: 999px;
+      }
+
+      .dock-scrub .clip-tick {
+        position: absolute;
+        top: -4px;
+        width: 1px;
+        height: 12px;
+        background: var(--ink-fade);
+      }
+
+      .dock-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .dock-time {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--ink-soft);
+        min-width: 56px;
+      }
+
+      .dock-time.right { text-align: right; }
+
+      .dock-clip-cta {
+        flex: 1;
+        height: 36px;
+        border-radius: 999px;
+        border: 1px dashed var(--rule);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-family: var(--font-mono);
+        color: var(--ink-fade);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .play-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--ink);
+        color: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .play-btn .play-glyph {
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 7px 0 7px 12px;
+        border-color: transparent transparent transparent var(--bg);
+        margin-left: 3px;
+      }
+
+      .play-btn .pause-glyph {
+        width: 14px;
+        height: 14px;
+        position: relative;
+      }
+
+      .play-btn .pause-glyph::before,
+      .play-btn .pause-glyph::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: var(--bg);
+      }
+
+      .play-btn .pause-glyph::before { left: 1px; }
+      .play-btn .pause-glyph::after { right: 1px; }
+
+      /* ---- Active-clip composer (simulated long-press) ---- */
+
+      .composer-overlay {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 30;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 200ms ease;
+      }
+
+      .composer-overlay.open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .composer-sheet {
+        width: 100%;
+        background: var(--bg);
+        border-top-left-radius: 24px;
+        border-top-right-radius: 24px;
+        padding: 14px 16px calc(var(--safe-bottom) + 16px);
+        transform: translateY(100%);
+        transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .composer-overlay.open .composer-sheet {
+        transform: translateY(0);
+      }
+
+      .composer-handle {
+        width: 36px;
+        height: 4px;
+        background: var(--rule);
+        border-radius: 999px;
+        margin: 0 auto 6px;
+      }
+
+      .composer-range {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        border: 1px solid var(--ink);
+        border-radius: 12px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+      }
+
+      .composer-quote {
+        border-left: 3px solid var(--ink);
+        padding: 8px 12px;
+        background: var(--surface-warm);
+        font-size: 13px;
+        font-style: italic;
+        line-height: 1.5;
+        border-radius: 0 8px 8px 0;
+      }
+
+      .composer-note {
+        border: 1px dashed var(--rule);
+        border-radius: 12px;
+        padding: 10px 12px;
+        font-size: 13px;
+        color: var(--ink-fade);
+        height: 60px;
+      }
+
+      .composer-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .composer-actions .btn { flex: 1; }
+
+      /* ---- Inline reply expand ---- */
+
+      .clip-bubble.expanded .body {
+        border-color: var(--ink);
+        background: var(--bg);
+      }
+
+      .reply-thread {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--rule-soft);
+        display: none;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .clip-bubble.expanded .reply-thread {
+        display: flex;
+      }
+
+      .reply {
+        display: flex;
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      .reply .body-r {
+        flex: 1;
+        background: var(--surface-warm);
+        border-radius: 8px;
+        padding: 6px 10px;
+      }
+
+      .reply-input {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .reply-input .field {
+        flex: 1;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-size: 12px;
+        color: var(--ink-fade);
+      }
+
+      .reply-input .send {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      /* ---- Top bar variant for this screen ---- */
+
+      .topbar-pulse {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--ink-fade);
+      }
+
+      .glyph-back {
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 5px 7px 5px 0;
+        border-color: transparent var(--ink) transparent transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="stage-head">
+        <a class="stage-back" href="./">← All proposals</a>
+        <div class="stage-kicker">Proposal A · Wireframe</div>
+        <h1 class="stage-title">The Listening Room</h1>
+        <p class="stage-blurb">
+          The screen is anchored to <em>audio time</em>. Other members' clips appear as quote
+          bubbles along a vertical river — past clips render fully, clips ahead of the playhead
+          fade. Scrolling = scrubbing. Tapping a clip jumps audio there and expands the thread.
+          Long-pressing the river drops a range selector and slides up the composer.
+        </p>
+      </div>
+
+      <div class="annotations">
+        <div class="phone">
+          <div class="phone-screen" id="screen">
+            <div class="topbar">
+              <button class="icon-btn" aria-label="Back">
+                <span class="glyph-back"></span>
+              </button>
+              <div class="topbar-title">Listening · Curious Minds</div>
+              <button class="icon-btn" aria-label="Share">
+                <span style="font-family: var(--font-mono); font-size: 14px;">↑</span>
+              </button>
+            </div>
+
+            <div class="ep-head">
+              <div class="show-art">
+                <span class="badge">14</span>
+              </div>
+              <div class="ep-meta">
+                <span class="show">The Tucker Carlson Show</span>
+                <h1 class="title">Tucker Debates Biotech CEO on Baby Customization, Eugenics, and God</h1>
+                <span class="stats">1h 02m · 5 clips · 31 in this room have heard it</span>
+              </div>
+            </div>
+
+            <div class="listening-meta">
+              <span class="pulse"><span class="dot"></span> 3 listening now</span>
+              <span style="font-family: var(--font-mono); font-size: 11px;">+ INVITE</span>
+            </div>
+
+            <div class="scroll" id="riverScroll">
+              <div class="river" id="river">
+                <div class="river-rail"></div>
+                <div class="playhead" id="playhead">
+                  <div class="playhead-time" id="playheadTime">0:00</div>
+                </div>
+                <!-- Ticks + clips populated by JS -->
+              </div>
+            </div>
+
+            <div class="dock">
+              <div class="dock-scrub" id="scrub">
+                <div class="filled" id="scrubFilled"></div>
+                <!-- clip ticks populated by JS -->
+              </div>
+              <div class="dock-controls">
+                <span class="dock-time" id="curTime">0:00</span>
+                <button class="play-btn" id="playBtn" aria-label="Play">
+                  <span class="play-glyph" id="playGlyph"></span>
+                </button>
+                <span class="dock-clip-cta">Long-press river to clip</span>
+                <span class="dock-time right">1:02:22</span>
+              </div>
+            </div>
+
+            <div class="composer-overlay" id="composer">
+              <div class="composer-sheet">
+                <div class="composer-handle"></div>
+                <div class="kicker" style="text-align:center;">New clip · time-only</div>
+                <div class="composer-range">
+                  <span id="composerStart">4:08</span>
+                  <span style="color: var(--ink-fade);">— drag to adjust —</span>
+                  <span id="composerEnd">5:36</span>
+                </div>
+                <div class="composer-quote" id="composerQuote">
+                  <span class="kicker" style="display:block; margin-bottom:6px;">Transcript fragment <span style="color:#bbb">(when available)</span></span>
+                  Three things, usually. State coercion. Loss of human variance. And the idea that
+                  some lives are worth more than others.
+                </div>
+                <div class="composer-note">Add a note for the room…</div>
+                <div class="composer-actions">
+                  <button class="btn ghost" id="composerCancel">Cancel</button>
+                  <button class="btn solid" id="composerShare">Share to Curious Minds</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="home-indicator"></div>
+          </div>
+        </div>
+
+        <div class="annotation-list">
+          <h3>Technical anchoring</h3>
+          <ul>
+            <li>
+              <span class="num">!</span>
+              <div class="body"><strong>Audio time is the only required substrate.</strong> The river is built from clip start_seconds, not transcript text. Episodes without transcripts render the same river — clip bubbles still anchor where they were created.</div>
+            </li>
+            <li>
+              <span class="num">!</span>
+              <div class="body"><strong>The composer takes a time range first, transcript text second.</strong> If a transcript is present, the snippet is shown as a preview. If not, you write a note and save the clip with timestamps only.</div>
+            </li>
+          </ul>
+
+          <h3 style="margin-top: 16px;">UX notes</h3>
+          <ul>
+            <li>
+              <span class="num">1</span>
+              <div class="body"><strong>Audio time is the spine.</strong> Scrolling = scrubbing. The playhead is a thin horizontal line that follows your finger and locks to the moving audio when you let go.</div>
+            </li>
+            <li>
+              <span class="num">2</span>
+              <div class="body"><strong>Clips are voices in the margin.</strong> Each member's clip is anchored to the timestamp where it starts. As you listen, you literally see what's coming up.</div>
+            </li>
+            <li>
+              <span class="num">3</span>
+              <div class="body"><strong>Tap a clip = teleport.</strong> The audio jumps there, the bubble expands inline with the thread, and you can resume from that timestamp with one tap.</div>
+            </li>
+            <li>
+              <span class="num">4</span>
+              <div class="body"><strong>Clip = long press + drag.</strong> No "Mark In / Mark Out" button. Long-press anywhere on the river, drag two handles, release. The composer slides up with the transcript prefilled.</div>
+            </li>
+            <li>
+              <span class="num">5</span>
+              <div class="body"><strong>The dock is small and out of the way.</strong> Play/pause + a thin scrubber are the only persistent controls. The clip CTA is contextual — it appears under your finger.</div>
+            </li>
+            <li>
+              <span class="num">6</span>
+              <div class="body"><strong>Presence in the header.</strong> "3 listening now" creates the sense that you're in the room. Other members' clips landing in real-time would animate in.</div>
+            </li>
+          </ul>
+
+          <h3 style="margin-top: 8px;">Try it</h3>
+          <ul>
+            <li>
+              <span class="num">▶</span>
+              <div class="body">Tap the play button — the playhead and time advance. Scroll the river to see future clips arriving at their timestamps.</div>
+            </li>
+            <li>
+              <span class="num">·</span>
+              <div class="body">Tap any clip bubble to jump audio there and expand the thread.</div>
+            </li>
+            <li>
+              <span class="num">↩</span>
+              <div class="body">Press and hold anywhere on the river (300ms) to summon the clip composer.</div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import {
+        EPISODE,
+        CLIPS,
+        TRANSCRIPT,
+        formatClock,
+        formatRange,
+        Clock,
+        mountStatusBar,
+      } from './shared.js';
+
+      const screen = document.getElementById('screen');
+      mountStatusBar(screen);
+
+      const clock = new Clock(EPISODE.durationSeconds);
+
+      const river = document.getElementById('river');
+      const riverScroll = document.getElementById('riverScroll');
+      const playhead = document.getElementById('playhead');
+      const playheadTime = document.getElementById('playheadTime');
+      const playBtn = document.getElementById('playBtn');
+      const playGlyph = document.getElementById('playGlyph');
+      const curTime = document.getElementById('curTime');
+      const scrubFilled = document.getElementById('scrubFilled');
+      const scrubEl = document.getElementById('scrub');
+      const composer = document.getElementById('composer');
+
+      // Scale: 80px per minute of audio time. So 1h 02m ≈ 5000px tall.
+      const PX_PER_MIN = 80;
+      const TOTAL_HEIGHT = (EPISODE.durationSeconds / 60) * PX_PER_MIN;
+      river.style.minHeight = `${TOTAL_HEIGHT + 240}px`;
+
+      // Tick marks every minute.
+      const tickContainer = document.createElement('div');
+      tickContainer.style.position = 'absolute';
+      tickContainer.style.inset = '0';
+      tickContainer.style.pointerEvents = 'none';
+      river.appendChild(tickContainer);
+
+      const totalMinutes = Math.ceil(EPISODE.durationSeconds / 60);
+      for (let m = 0; m <= totalMinutes; m += 5) {
+        const tick = document.createElement('div');
+        tick.className = 'river-tick';
+        tick.style.position = 'absolute';
+        tick.style.top = `${m * PX_PER_MIN - 8}px`;
+        tick.style.left = '0';
+        tick.style.right = '0';
+        tick.textContent = formatClock(m * 60);
+        tickContainer.appendChild(tick);
+      }
+
+      // Render clips along the river.
+      const clipEls = new Map();
+      CLIPS.forEach((clip) => {
+        const el = document.createElement('div');
+        el.className = 'clip-bubble future';
+        el.style.position = 'absolute';
+        el.style.top = `${(clip.startSeconds / 60) * PX_PER_MIN}px`;
+        el.style.left = '0';
+        el.style.right = '0';
+        el.dataset.clipId = clip.id;
+
+        el.innerHTML = `
+          <div class="meta-row">
+            <span class="avatar" style="width: 22px; height: 22px; font-size: 10px;">${clip.by.initials}</span>
+            <span class="who">${clip.by.name}</span>
+            <span class="when">clipped at ${formatClock(clip.startSeconds)}</span>
+          </div>
+          <div class="body">
+            <p class="quote">"${clip.excerpt}"</p>
+            ${clip.note ? `<p class="note">${clip.note}</p>` : ''}
+            <div class="actions">
+              <span><span class="glyph heart"></span>${clip.likes}</span>
+              <span><span class="glyph"></span>${clip.replies}</span>
+              <span><span class="glyph"></span>save</span>
+              <span style="margin-left:auto;">↗ share</span>
+            </div>
+            <div class="reply-thread">
+              <div class="reply">
+                <span class="avatar" style="width: 20px; height: 20px; font-size: 9px;">DK</span>
+                <div class="body-r"><strong>David K.</strong> The "by chance" framing is a really clever rhetorical move.</div>
+              </div>
+              <div class="reply">
+                <span class="avatar" style="width: 20px; height: 20px; font-size: 9px;">SM</span>
+                <div class="body-r"><strong>Sara M.</strong> Tucker doesn't take the bait though — watch the next 90 seconds.</div>
+              </div>
+              <div class="reply-input">
+                <span class="field">Reply…</span>
+                <span class="send">SEND</span>
+              </div>
+            </div>
+          </div>
+        `;
+
+        el.addEventListener('click', (e) => {
+          if (e.target.closest('.actions')) return;
+          // Jump audio + expand
+          clock.seek(clip.startSeconds);
+          clipEls.forEach((other) => other.classList.remove('expanded'));
+          el.classList.toggle('expanded');
+          if (el.classList.contains('expanded')) {
+            // scroll into view
+            requestAnimationFrame(() => {
+              riverScroll.scrollTo({
+                top: (clip.startSeconds / 60) * PX_PER_MIN - 80,
+                behavior: 'smooth',
+              });
+            });
+          }
+        });
+
+        river.appendChild(el);
+        clipEls.set(clip.id, el);
+      });
+
+      // Scrubber clip ticks.
+      CLIPS.forEach((clip) => {
+        const tick = document.createElement('div');
+        tick.className = 'clip-tick';
+        tick.style.left = `${(clip.startSeconds / EPISODE.durationSeconds) * 100}%`;
+        scrubEl.appendChild(tick);
+      });
+
+      function updatePlayhead(pos) {
+        const top = (pos / 60) * PX_PER_MIN;
+        playhead.style.top = `${top}px`;
+        playheadTime.textContent = formatClock(pos);
+        curTime.textContent = formatClock(pos);
+        scrubFilled.style.width = `${(pos / EPISODE.durationSeconds) * 100}%`;
+
+        // Live/future state on clips
+        clipEls.forEach((el, id) => {
+          const clip = CLIPS.find((c) => c.id === id);
+          el.classList.remove('future', 'live');
+          if (clip.startSeconds > pos + 6) {
+            el.classList.add('future');
+          } else if (
+            clip.startSeconds <= pos &&
+            clip.endSeconds + 8 > pos
+          ) {
+            el.classList.add('live');
+          }
+        });
+      }
+
+      function updatePlayState(playing) {
+        playGlyph.className = playing ? 'pause-glyph' : 'play-glyph';
+        playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+      }
+
+      clock.on((pos, playing) => {
+        updatePlayhead(pos);
+        updatePlayState(playing);
+
+        // While playing, auto-scroll the river so the playhead stays roughly
+        // 200px from the top of the visible viewport. Only does this if the
+        // user hasn't scrolled manually in the last 1.5s.
+        if (playing && !manualScrollingRecently()) {
+          const top = (pos / 60) * PX_PER_MIN;
+          riverScroll.scrollTop = top - 200;
+        }
+      });
+
+      playBtn.addEventListener('click', () => clock.toggle());
+
+      // Tap on the scrubber to seek.
+      scrubEl.addEventListener('click', (e) => {
+        const rect = scrubEl.getBoundingClientRect();
+        const ratio = (e.clientX - rect.left) / rect.width;
+        clock.seek(ratio * EPISODE.durationSeconds);
+      });
+
+      // Long-press on the river → composer. The pressed timestamp determines
+      // the clip's *time* — transcript text, if any, is decoration only.
+      let pressTimer = null;
+      let pressTime = null;
+      river.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.clip-bubble')) return;
+        const rect = river.getBoundingClientRect();
+        const yInRiver = e.clientY - rect.top + riverScroll.scrollTop;
+        pressTime = (yInRiver / PX_PER_MIN) * 60;
+        pressTimer = setTimeout(() => {
+          // Build a 90-second clip centered around the press point.
+          const start = Math.max(0, pressTime - 30);
+          const end = Math.min(EPISODE.durationSeconds, pressTime + 60);
+          document.getElementById('composerStart').textContent = formatClock(start);
+          document.getElementById('composerEnd').textContent = formatClock(end);
+          // Try to find transcript fragment in range.
+          const inRange = TRANSCRIPT.filter((s) => s.t >= start && s.t <= end);
+          const composerQuote = document.getElementById('composerQuote');
+          if (inRange.length > 0) {
+            composerQuote.innerHTML = `
+              <span class="kicker" style="display:block; margin-bottom:6px;">Transcript fragment</span>
+              ${inRange.map((s) => s.text).join(' ').slice(0, 300)}
+            `;
+          } else {
+            composerQuote.innerHTML = `
+              <span class="kicker" style="display:block; margin-bottom:6px;">No transcript at this position</span>
+              <span style="color: var(--ink-fade); font-style: normal;">
+                Time-only clip · ${formatRange(start, end)}. Add a note for the room below.
+              </span>
+            `;
+          }
+          composer.classList.add('open');
+          if (clock.playing) clock.pause();
+        }, 300);
+      });
+      river.addEventListener('pointerup', () => {
+        if (pressTimer) clearTimeout(pressTimer);
+      });
+      river.addEventListener('pointercancel', () => {
+        if (pressTimer) clearTimeout(pressTimer);
+      });
+      river.addEventListener('pointerleave', () => {
+        if (pressTimer) clearTimeout(pressTimer);
+      });
+      document
+        .getElementById('composerCancel')
+        .addEventListener('click', () => composer.classList.remove('open'));
+      document
+        .getElementById('composerShare')
+        .addEventListener('click', () => {
+          composer.classList.remove('open');
+          alert('Clip shared to Curious Minds.');
+        });
+
+      // Track manual scrolling so auto-scroll backs off.
+      let lastManualScroll = 0;
+      let isAutoScrolling = false;
+      let lastScrollTop = riverScroll.scrollTop;
+      riverScroll.addEventListener('scroll', () => {
+        const dt = Math.abs(riverScroll.scrollTop - lastScrollTop);
+        lastScrollTop = riverScroll.scrollTop;
+        if (!isAutoScrolling && dt > 0) {
+          lastManualScroll = performance.now();
+        }
+      });
+      function manualScrollingRecently() {
+        return performance.now() - lastManualScroll < 1500;
+      }
+
+      // Start at the first clip's neighborhood for visual interest.
+      clock.seek(60);
+      requestAnimationFrame(() => {
+        riverScroll.scrollTop = 0;
+      });
+    </script>
+  </body>
+</html>

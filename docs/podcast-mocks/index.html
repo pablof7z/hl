@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Highlighter — Podcast UX Proposals</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      .stage-head { max-width: 880px; }
+      .principles {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 18px;
+        margin-top: 16px;
+        max-width: 1100px;
+        width: 100%;
+      }
+      .principle {
+        border: 1px solid var(--rule);
+        background: var(--bg);
+        border-radius: 8px;
+        padding: 14px 16px;
+      }
+      .principle .kicker { margin-bottom: 6px; }
+      .principle .body { font-size: 13px; color: var(--ink-soft); }
+      footer {
+        margin-top: 60px;
+        font-size: 12px;
+        color: var(--ink-fade);
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="stage-head">
+        <div class="stage-kicker">Wireframe proposals · iOS</div>
+        <h1 class="stage-title">A new podcast experience for Highlighter</h1>
+        <p class="stage-blurb">
+          Three first-principles redesigns of the iOS podcast surface — from the moment you tap an
+          episode, through clipping a passage, to seeing what others in the room kept and joining
+          the conversation. Wireframes only; UX over UI.
+        </p>
+      </div>
+
+      <div class="principles">
+        <div class="principle">
+          <div class="kicker">First principle 1</div>
+          <div class="body">The artifact is the hero. Audio time is the spine of every interaction.</div>
+        </div>
+        <div class="principle">
+          <div class="kicker">First principle 2</div>
+          <div class="body">Clipping is a gesture, not a button. It happens where attention already is.</div>
+        </div>
+        <div class="principle">
+          <div class="kicker">First principle 3</div>
+          <div class="body">You are not listening alone. Other members' clips are part of the listening UI, not a separate tab.</div>
+        </div>
+        <div class="principle">
+          <div class="kicker">First principle 4</div>
+          <div class="body">Every clip is a seed. Conversation, bookmark, share — all reachable in one gesture.</div>
+        </div>
+      </div>
+
+      <div style="width: 100%; max-width: 1100px; border: 1px solid var(--ink); border-radius: 12px; padding: 18px 22px; background: var(--bg); display: flex; flex-direction: column; gap: 8px;">
+        <div class="kicker">Technical anchoring</div>
+        <p style="margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.5;">
+          Clips are <strong>(start_seconds, end_seconds)</strong> ranges attached to an episode
+          identifier (NIP-73 <code>podcast:item:guid:&lt;guid&gt;</code> when available, falling
+          back to <code>podcast:guid:&lt;guid&gt;</code>, then to the audio URL). They never
+          require transcript text. <strong>Transcripts are optional decoration</strong> — most
+          podcasts ship without machine-aligned transcripts, so the experience must be complete
+          without one. Each proposal works with or without; toggle the demo to see both modes.
+        </p>
+      </div>
+
+      <div class="proposal-grid">
+        <a class="proposal-card" href="./a.html">
+          <span class="label">Proposal A</span>
+          <h2>The Listening Room</h2>
+          <span class="frame-label">"I am listening with friends."</span>
+          <p style="margin: 0; color: var(--ink-soft); font-size: 14px;">
+            A vertical river anchored to audio time. Other members' clips appear as voices in the
+            margin while you listen — past clips above the playhead, future clips ahead. Scrolling
+            navigates time itself. Most social.
+          </p>
+          <div class="gestures">
+            <span class="pill">scroll = scrub</span>
+            <span class="pill">tap clip = jump</span>
+            <span class="pill">long press = clip</span>
+          </div>
+          <div class="footer">
+            <span class="open">OPEN MOCKUP →</span>
+            <span class="ratio">390 × 844</span>
+          </div>
+        </a>
+
+        <a class="proposal-card" href="./b.html">
+          <span class="label">Proposal B</span>
+          <h2>The Clip Studio</h2>
+          <span class="frame-label">"I am building my highlight reel."</span>
+          <p style="margin: 0; color: var(--ink-soft); font-size: 14px;">
+            A horizontal tape strip you scrub like film. Drop start/end markers on the fly. Drafts
+            stack as cards you can adjust and publish in batches. Room clips peek from a bottom
+            drawer. Most productive for active clippers.
+          </p>
+          <div class="gestures">
+            <span class="pill">tap to mark in</span>
+            <span class="pill">tap to mark out</span>
+            <span class="pill">drag to adjust</span>
+          </div>
+          <div class="footer">
+            <span class="open">OPEN MOCKUP →</span>
+            <span class="ratio">390 × 844</span>
+          </div>
+        </a>
+
+        <a class="proposal-card" href="./c.html">
+          <span class="label">Proposal C</span>
+          <h2>The Track</h2>
+          <span class="frame-label">"I am navigating structure."</span>
+          <p style="margin: 0; color: var(--ink-soft); font-size: 14px;">
+            A single vertical track of navigation markers, sorted by time: chapters, member
+            clips, your bookmarks, and — when available — transcript paragraphs. Layer toggles
+            let you show/hide each. Clipping is purely time-based: arm the clip FAB, tap two
+            rows, save. Works identically with or without transcript.
+          </p>
+          <div class="gestures">
+            <span class="pill">tap row = play</span>
+            <span class="pill">FAB = clip range</span>
+            <span class="pill">layers togglable</span>
+          </div>
+          <div class="footer">
+            <span class="open">OPEN MOCKUP →</span>
+            <span class="ratio">390 × 844</span>
+          </div>
+        </a>
+      </div>
+
+      <footer>
+        Built as wireframes — grayscale only. Each mockup is interactive: tap to play, drag to
+        scrub, long-press to clip. No real audio is played; a simulated playhead drives the UI.
+      </footer>
+    </div>
+  </body>
+</html>

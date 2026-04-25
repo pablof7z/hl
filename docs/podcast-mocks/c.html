@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Proposal C — The Track</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      :root {
+        --left-rail: 64px;
+      }
+
+      .ep-strip {
+        padding: 10px 16px 12px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        border-bottom: 1px solid var(--rule-soft);
+      }
+
+      .ep-strip .meta {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .ep-strip .show {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-fade);
+      }
+
+      .ep-strip .title {
+        margin: 1px 0 0;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.25;
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .toggles {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--rule-soft);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-fade);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .toggle-btn {
+        padding: 4px 10px;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        background: var(--bg);
+        color: var(--ink-soft);
+      }
+
+      .toggle-btn.on {
+        background: var(--ink);
+        color: var(--bg);
+        border-color: var(--ink);
+      }
+
+      /* ---- Track ---- */
+
+      .track {
+        position: relative;
+        padding: 8px 16px 200px;
+      }
+
+      .track-rail {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: var(--left-rail);
+        width: 1px;
+        background: var(--rule);
+      }
+
+      .track-row {
+        position: relative;
+        display: flex;
+        gap: 14px;
+        padding: 4px 0;
+        align-items: stretch;
+      }
+
+      .track-row .ts {
+        flex-shrink: 0;
+        width: 48px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--ink-fade);
+        padding-top: 6px;
+        text-align: right;
+        position: relative;
+      }
+
+      .track-row .dot {
+        position: absolute;
+        right: -10px;
+        top: 12px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--ink-fade);
+        z-index: 2;
+      }
+
+      .track-row .body {
+        flex: 1;
+        min-width: 0;
+        padding: 6px 0 8px;
+      }
+
+      /* Row variants */
+
+      .track-row.chapter .body {
+        font-family: var(--font-sans);
+        font-size: 14px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 16px 0 6px;
+        border-top: 2px solid var(--ink);
+        margin-top: 16px;
+      }
+
+      .track-row.chapter:first-of-type .body {
+        margin-top: 0;
+      }
+
+      .track-row.chapter .dot {
+        width: 10px;
+        height: 10px;
+        background: var(--ink);
+        right: -12px;
+        top: 22px;
+      }
+
+      .track-row.transcript .body {
+        font-size: 14px;
+        line-height: 1.55;
+        color: var(--ink);
+        cursor: pointer;
+        padding: 6px 8px 6px 0;
+        border-radius: 6px;
+      }
+
+      .track-row.transcript .body:hover {
+        background: var(--surface-warm);
+      }
+
+      .track-row.transcript.active .body {
+        background: var(--surface-warm);
+      }
+
+      .track-row.transcript.future .body { opacity: 0.55; }
+      .track-row.transcript.played .body { opacity: 1; }
+
+      .track-row.transcript .body .speaker {
+        display: block;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--ink-fade);
+        margin-bottom: 4px;
+      }
+
+      .track-row.audio-tick .body {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-fade);
+      }
+
+      .track-row.audio-tick .waveform {
+        flex: 1;
+        height: 8px;
+        background: repeating-linear-gradient(
+          90deg,
+          var(--ink-ghost) 0 1px,
+          transparent 1px 4px
+        );
+        opacity: 0.4;
+        border-radius: 999px;
+      }
+
+      .track-row.audio-tick .waveform.speech {
+        opacity: 0.8;
+      }
+
+      .track-row.audio-tick .waveform.silence {
+        opacity: 0.15;
+      }
+
+      .track-row.clip {
+        margin: 4px 0;
+      }
+
+      .track-row.clip .body {
+        background: var(--bg);
+        border: 1px solid var(--ink);
+        border-radius: 12px;
+        padding: 12px 14px;
+        cursor: pointer;
+      }
+
+      .track-row.clip.expanded .body {
+        background: var(--surface-warm);
+      }
+
+      .track-row.clip .dot {
+        background: var(--ink);
+        width: 8px;
+        height: 8px;
+      }
+
+      .track-row.clip .head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+        font-size: 12px;
+      }
+
+      .track-row.clip .who {
+        font-weight: 700;
+      }
+
+      .track-row.clip .range {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-fade);
+        margin-left: auto;
+      }
+
+      .track-row.clip .quote {
+        margin: 0;
+        font-size: 13px;
+        font-style: italic;
+        line-height: 1.5;
+      }
+
+      .track-row.clip .note {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px dashed var(--rule);
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .track-row.clip .actions {
+        display: none;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--rule-soft);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        gap: 14px;
+        color: var(--ink-fade);
+      }
+
+      .track-row.clip.expanded .actions {
+        display: flex;
+      }
+
+      .track-row.clip .actions span:last-child {
+        margin-left: auto;
+      }
+
+      .track-row.clip .replies {
+        display: none;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--rule-soft);
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .track-row.clip.expanded .replies {
+        display: flex;
+      }
+
+      .reply-row {
+        display: flex;
+        gap: 8px;
+        padding: 4px 0;
+      }
+
+      .reply-row .text {
+        flex: 1;
+        background: var(--bg);
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+      }
+
+      /* ---- Range selection (for time-based clipping) ---- */
+
+      .track-row.in-range .body {
+        background: var(--highlight) !important;
+      }
+
+      .selection-tooltip {
+        position: absolute;
+        z-index: 30;
+        background: var(--ink);
+        color: var(--bg);
+        border-radius: 14px;
+        padding: 12px 14px;
+        display: none;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 240px;
+        max-width: 300px;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.18);
+      }
+
+      .selection-tooltip.open { display: flex; }
+
+      .selection-tooltip::after {
+        content: "";
+        position: absolute;
+        bottom: -6px;
+        left: 28px;
+        border-style: solid;
+        border-width: 6px 6px 0 6px;
+        border-color: var(--ink) transparent transparent transparent;
+      }
+
+      .selection-tooltip .range {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        color: rgba(255,255,255,0.7);
+      }
+
+      .selection-tooltip .preview {
+        font-size: 12px;
+        line-height: 1.45;
+        font-style: italic;
+        max-height: 60px;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+      }
+
+      .selection-tooltip .actions {
+        display: flex;
+        gap: 6px;
+      }
+
+      .selection-tooltip .pill-btn {
+        flex: 1;
+        height: 30px;
+        border: 1px solid rgba(255,255,255,0.4);
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        font-family: var(--font-mono);
+        background: transparent;
+        color: var(--bg);
+      }
+
+      .selection-tooltip .pill-btn.solid {
+        background: var(--bg);
+        color: var(--ink);
+        border-color: var(--bg);
+      }
+
+      /* ---- Audio pill (same as before) ---- */
+
+      .audio-pill {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        bottom: calc(var(--safe-bottom) + 8px);
+        height: 56px;
+        background: var(--ink);
+        color: var(--bg);
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        padding: 0 8px 0 16px;
+        gap: 12px;
+        z-index: 20;
+      }
+
+      .audio-pill .play-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--bg);
+        color: var(--ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .audio-pill .play-glyph {
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 6px 0 6px 10px;
+        border-color: transparent transparent transparent var(--ink);
+        margin-left: 2px;
+      }
+
+      .audio-pill .pause-glyph {
+        width: 12px;
+        height: 12px;
+        position: relative;
+      }
+
+      .audio-pill .pause-glyph::before,
+      .audio-pill .pause-glyph::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--ink);
+      }
+
+      .audio-pill .pause-glyph::before { left: 1px; }
+      .audio-pill .pause-glyph::after { right: 1px; }
+
+      .audio-pill .info {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        line-height: 1.1;
+      }
+
+      .audio-pill .info .label {
+        font-size: 11px;
+        color: rgba(255,255,255,0.6);
+        font-family: var(--font-mono);
+      }
+
+      .audio-pill .info .where {
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .audio-pill .progress-mini {
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        bottom: -10px;
+        height: 2px;
+        background: rgba(255,255,255,0.18);
+        border-radius: 999px;
+      }
+
+      .audio-pill .progress-mini .filled {
+        height: 100%;
+        background: var(--bg);
+        border-radius: 999px;
+      }
+
+      .audio-pill .right {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .audio-pill .right .scrub-up {
+        background: rgba(255,255,255,0.15);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 10px;
+      }
+
+      /* Selection-mode overlay button */
+
+      .clip-fab {
+        position: absolute;
+        right: 16px;
+        bottom: calc(var(--safe-bottom) + 80px);
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: var(--ink);
+        color: var(--bg);
+        border: 1px solid var(--ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        z-index: 15;
+        flex-direction: column;
+        line-height: 1;
+        gap: 2px;
+      }
+
+      .clip-fab.armed {
+        background: var(--bg);
+        color: var(--ink);
+      }
+
+      .clip-fab .label {
+        font-size: 9px;
+        letter-spacing: 0.1em;
+      }
+
+      .glyph-back {
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 5px 7px 5px 0;
+        border-color: transparent var(--ink) transparent transparent;
+      }
+
+      .topbar-progress {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 2px;
+        background: var(--rule-soft);
+      }
+      .topbar-progress .filled {
+        height: 100%;
+        background: var(--ink);
+        transition: width 0.3s linear;
+      }
+
+      .topbar-wrap {
+        position: relative;
+      }
+
+      .empty-callout {
+        margin: 16px;
+        padding: 12px 14px;
+        border: 1px dashed var(--rule);
+        border-radius: 12px;
+        background: var(--surface);
+        font-size: 12px;
+        color: var(--ink-fade);
+      }
+      .empty-callout strong { color: var(--ink); }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="stage-head">
+        <a class="stage-back" href="./">← All proposals</a>
+        <div class="stage-kicker">Proposal C · Wireframe</div>
+        <h1 class="stage-title">The Track</h1>
+        <p class="stage-blurb">
+          A vertical <em>navigable structure</em> sorted by audio time. Always shows: chapters
+          (when present), member clips, your own marks, and waveform-detected speech segments.
+          When a transcript is available, paragraphs interleave inline. When not, the track stays
+          dense with member clips and chapter markers — the experience never depends on transcript
+          text. Clipping is purely time-based: tap "Mark In" to start a range, tap rows to extend
+          it, tap "Save" to commit. Toggle the transcript on/off in the demo to see both modes.
+        </p>
+      </div>
+
+      <div class="annotations">
+        <div class="phone">
+          <div class="phone-screen" id="screen">
+            <div class="topbar-wrap">
+              <div class="topbar">
+                <button class="icon-btn" aria-label="Back">
+                  <span class="glyph-back"></span>
+                </button>
+                <div class="topbar-title">Track · Curious Minds</div>
+                <button class="icon-btn" aria-label="Share">
+                  <span style="font-family: var(--font-mono); font-size: 14px;">↑</span>
+                </button>
+              </div>
+              <div class="topbar-progress"><div class="filled" id="topProgress"></div></div>
+            </div>
+
+            <div class="ep-strip">
+              <div class="show-art sm"></div>
+              <div class="meta">
+                <span class="show">Tucker Carlson Show</span>
+                <h1 class="title">Tucker Debates Biotech CEO on Baby Customization</h1>
+              </div>
+            </div>
+
+            <div class="toggles">
+              <span>Layers:</span>
+              <button class="toggle-btn on" id="toggleTranscript">Transcript</button>
+              <button class="toggle-btn on" id="toggleChapters">Chapters</button>
+              <button class="toggle-btn on" id="toggleClips">Clips</button>
+            </div>
+
+            <div class="scroll" id="trackScroll">
+              <div class="track" id="track">
+                <div class="track-rail"></div>
+                <!-- populated by JS -->
+              </div>
+            </div>
+
+            <div class="selection-tooltip" id="selectionTooltip">
+              <span class="range" id="selRange">0:00 — 0:00</span>
+              <div class="preview" id="selPreview"></div>
+              <div class="actions">
+                <button class="pill-btn" id="cancelSel">Cancel</button>
+                <button class="pill-btn solid" id="saveClip">Clip</button>
+              </div>
+            </div>
+
+            <button class="clip-fab" id="clipFab" aria-label="Start range clip">
+              <span style="font-size: 16px;">✎</span>
+              <span class="label">CLIP</span>
+            </button>
+
+            <div class="audio-pill">
+              <button class="play-btn" id="playBtn" aria-label="Play">
+                <span class="play-glyph" id="playGlyph"></span>
+              </button>
+              <div class="info">
+                <span class="label" id="pillLabel">PAUSED</span>
+                <span class="where" id="pillWhere">0:00</span>
+              </div>
+              <div class="progress-mini">
+                <div class="filled" id="pillProgress"></div>
+              </div>
+              <div class="right">
+                <span class="scrub-up">▴ scrub</span>
+              </div>
+            </div>
+
+            <div class="home-indicator"></div>
+          </div>
+        </div>
+
+        <div class="annotation-list">
+          <h3>Technical anchoring</h3>
+          <ul>
+            <li>
+              <span class="num">!</span>
+              <div class="body"><strong>Transcripts are not always available.</strong> Many podcasts ship without machine-aligned transcripts. The Track works without one — chapters, clips, and waveform speech-detection still give the spine.</div>
+            </li>
+            <li>
+              <span class="num">!</span>
+              <div class="body"><strong>Clipping is purely time-based.</strong> A clip is a (start_seconds, end_seconds) pair attached to the episode identifier (NIP-73 podcast:guid or :item:guid). Transcript text, if any, is decoration on top.</div>
+            </li>
+            <li>
+              <span class="num">!</span>
+              <div class="body"><strong>Toggle "Transcript" off</strong> in the demo to see the no-transcript mode — clips and chapters become the dominant rows, with thin waveform ticks between.</div>
+            </li>
+          </ul>
+
+          <h3 style="margin-top: 16px;">UX notes</h3>
+          <ul>
+            <li>
+              <span class="num">1</span>
+              <div class="body"><strong>The track is always navigable.</strong> Every row maps to a precise timestamp. Tap any row to play from there. Member clips are always present; transcript is graceful enhancement.</div>
+            </li>
+            <li>
+              <span class="num">2</span>
+              <div class="body"><strong>Clip via Mark-In + Mark-Out.</strong> Tap the FAB to arm clip mode. The first row you tap becomes the start; the second tap (or the playhead position when you tap "Save") becomes the end.</div>
+            </li>
+            <li>
+              <span class="num">3</span>
+              <div class="body"><strong>Layer toggles up top.</strong> Show or hide transcript, chapters, clips. The track recomposes around what's available.</div>
+            </li>
+            <li>
+              <span class="num">4</span>
+              <div class="body"><strong>Member clips expand inline.</strong> Tap any clip card to see the comment thread + reply, without leaving the timeline.</div>
+            </li>
+            <li>
+              <span class="num">5</span>
+              <div class="body"><strong>The audio pill shows where you are.</strong> When transcript is present, the speaker name; when not, the timestamp. Either way, the playhead is the same — only the label adapts.</div>
+            </li>
+          </ul>
+
+          <h3 style="margin-top: 8px;">Try it</h3>
+          <ul>
+            <li>
+              <span class="num">▶</span>
+              <div class="body">Tap play in the bottom pill. Watch the active row track the audio.</div>
+            </li>
+            <li>
+              <span class="num">·</span>
+              <div class="body">Tap any row to seek there.</div>
+            </li>
+            <li>
+              <span class="num">○</span>
+              <div class="body">Tap a clip card to expand it inline with thread.</div>
+            </li>
+            <li>
+              <span class="num">✎</span>
+              <div class="body">Tap the CLIP fab to arm clip-mode, then tap two rows to set the range. Tap "Save" in the tooltip.</div>
+            </li>
+            <li>
+              <span class="num">⊝</span>
+              <div class="body">Toggle <em>Transcript</em> off to see the experience without one.</div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { EPISODE, CLIPS, TRANSCRIPT, formatClock, formatRange, Clock, mountStatusBar } from './shared.js';
+
+      const screen = document.getElementById('screen');
+      mountStatusBar(screen);
+
+      const clock = new Clock(EPISODE.durationSeconds);
+
+      const trackEl = document.getElementById('track');
+      const trackScroll = document.getElementById('trackScroll');
+      const playBtn = document.getElementById('playBtn');
+      const playGlyph = document.getElementById('playGlyph');
+      const pillLabel = document.getElementById('pillLabel');
+      const pillWhere = document.getElementById('pillWhere');
+      const pillProgress = document.getElementById('pillProgress');
+      const topProgress = document.getElementById('topProgress');
+      const tooltip = document.getElementById('selectionTooltip');
+      const selRange = document.getElementById('selRange');
+      const selPreview = document.getElementById('selPreview');
+      const clipFab = document.getElementById('clipFab');
+
+      // Synthetic chapter list (always available — from podcast metadata).
+      const CHAPTERS = [
+        { t: 0,    title: 'Cold open' },
+        { t: 105,  title: 'A concrete case' },
+        { t: 480,  title: 'The religious objection' },
+        { t: 740,  title: 'Who can afford it' },
+      ];
+
+      // Layer state.
+      const layers = { transcript: true, chapters: true, clips: true };
+
+      function rebuildTrack() {
+        trackEl.innerHTML = '<div class="track-rail"></div>';
+
+        // Build rows: union of chapters + clips + transcript or waveform-ticks.
+        const rows = [];
+
+        if (layers.chapters) {
+          CHAPTERS.forEach((ch) => rows.push({ kind: 'chapter', t: ch.t, data: ch }));
+        }
+
+        if (layers.clips) {
+          CLIPS.forEach((c) => rows.push({ kind: 'clip', t: c.startSeconds, data: c }));
+        }
+
+        if (layers.transcript) {
+          TRANSCRIPT.forEach((seg, idx) => rows.push({ kind: 'transcript', t: seg.t, data: seg, idx }));
+        } else {
+          // Synthetic audio ticks every 30s, marking speech vs silence.
+          const totalSec = EPISODE.durationSeconds;
+          for (let t = 0; t < totalSec; t += 30) {
+            const speechProb = Math.sin(t / 90) * 0.5 + 0.5; // varies smoothly
+            rows.push({
+              kind: 'audio-tick',
+              t,
+              data: { speech: speechProb > 0.5 },
+            });
+          }
+        }
+
+        rows.sort((a, b) => a.t - b.t);
+
+        rows.forEach((row) => {
+          const el = document.createElement('div');
+          el.className = `track-row ${row.kind}`;
+          el.dataset.t = row.t;
+
+          if (row.kind === 'chapter') {
+            el.innerHTML = `
+              <div class="ts">${formatClock(row.t)}<div class="dot"></div></div>
+              <div class="body">${row.data.title}</div>
+            `;
+          } else if (row.kind === 'clip') {
+            const clip = row.data;
+            el.innerHTML = `
+              <div class="ts">${formatClock(row.t)}<div class="dot"></div></div>
+              <div class="body">
+                <div class="head">
+                  <span class="avatar" style="width:22px;height:22px;font-size:10px;">${clip.by.initials}</span>
+                  <span class="who">${clip.by.name}</span>
+                  <span class="range">${formatClock(clip.startSeconds)} → ${formatClock(clip.endSeconds)} · ${formatRange(clip.startSeconds, clip.endSeconds)}</span>
+                </div>
+                <p class="quote">"${clip.excerpt}"</p>
+                ${clip.note ? `<p class="note">${clip.note}</p>` : ''}
+                <div class="actions">
+                  <span>↩ reply</span>
+                  <span>♥ ${clip.likes}</span>
+                  <span>+ save</span>
+                  <span>↗ share</span>
+                </div>
+                <div class="replies">
+                  <div class="reply-row">
+                    <span class="avatar" style="width:20px;height:20px;font-size:9px;">DK</span>
+                    <div class="text"><strong>David K.</strong> Sharp framing — going to share this clip.</div>
+                  </div>
+                  <div class="reply-row">
+                    <span class="avatar" style="width:20px;height:20px;font-size:9px;">SM</span>
+                    <div class="text"><strong>Sara M.</strong> Listen to the next 90 seconds — Tucker doesn't take the bait.</div>
+                  </div>
+                </div>
+              </div>
+            `;
+            el.addEventListener('click', (e) => {
+              if (clipMode) {
+                handleRangeRowTap(row.t, el);
+                return;
+              }
+              if (e.target.closest('.actions')) return;
+              document.querySelectorAll('.track-row.clip.expanded').forEach((other) => {
+                if (other !== el) other.classList.remove('expanded');
+              });
+              el.classList.toggle('expanded');
+              clock.seek(clip.startSeconds);
+            });
+          } else if (row.kind === 'transcript') {
+            const seg = row.data;
+            el.dataset.idx = row.idx;
+            el.innerHTML = `
+              <div class="ts">${formatClock(row.t)}<div class="dot"></div></div>
+              <div class="body">
+                <span class="speaker">${seg.speaker}</span>
+                ${seg.text}
+              </div>
+            `;
+            el.addEventListener('click', () => {
+              if (clipMode) {
+                handleRangeRowTap(row.t, el);
+                return;
+              }
+              clock.seek(seg.t);
+              if (!clock.playing) clock.play();
+            });
+          } else if (row.kind === 'audio-tick') {
+            const cls = row.data.speech ? 'speech' : 'silence';
+            const lbl = row.data.speech ? 'speech' : 'silence';
+            el.innerHTML = `
+              <div class="ts">${formatClock(row.t)}<div class="dot"></div></div>
+              <div class="body">
+                <div class="waveform ${cls}"></div>
+                <span>${lbl}</span>
+              </div>
+            `;
+            el.addEventListener('click', () => {
+              if (clipMode) {
+                handleRangeRowTap(row.t, el);
+                return;
+              }
+              clock.seek(row.t);
+              if (!clock.playing) clock.play();
+            });
+          }
+
+          trackEl.appendChild(el);
+        });
+
+        if (rows.length === 0 || (!layers.transcript && !layers.chapters && !layers.clips)) {
+          const callout = document.createElement('div');
+          callout.className = 'empty-callout';
+          callout.innerHTML = '<strong>No layers visible.</strong> Toggle at least one layer above to navigate the episode.';
+          trackEl.appendChild(callout);
+        }
+
+        // Re-apply active highlight after rebuild.
+        applyActive();
+      }
+
+      function applyActive(pos = clock.position) {
+        const allRows = trackEl.querySelectorAll('.track-row');
+        let active = null;
+        let lastBefore = null;
+        allRows.forEach((el) => {
+          el.classList.remove('active', 'future', 'played');
+          const t = Number(el.dataset.t);
+          if (t <= pos) {
+            lastBefore = el;
+            el.classList.add('played');
+          } else {
+            el.classList.add('future');
+          }
+        });
+        if (lastBefore) {
+          lastBefore.classList.remove('played');
+          lastBefore.classList.add('active');
+          active = lastBefore;
+        }
+        return active;
+      }
+
+      function updatePlayState(playing) {
+        playGlyph.className = playing ? 'pause-glyph' : 'play-glyph';
+        playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+        pillLabel.textContent = playing ? 'NOW PLAYING' : 'PAUSED';
+      }
+
+      let lastActive = null;
+      clock.on((pos, playing) => {
+        updatePlayState(playing);
+        const pct = (pos / EPISODE.durationSeconds) * 100;
+        topProgress.style.width = `${pct}%`;
+        pillProgress.style.width = `${pct}%`;
+
+        const active = applyActive(pos);
+        if (active && layers.transcript && active.classList.contains('transcript')) {
+          const seg = TRANSCRIPT[Number(active.dataset.idx)];
+          if (seg) pillWhere.textContent = `${seg.speaker} · ${formatClock(pos)}`;
+        } else {
+          pillWhere.textContent = formatClock(pos);
+        }
+
+        if (playing && !clipMode && active && active !== lastActive) {
+          const wrapTop = trackScroll.scrollTop;
+          const wrapBot = wrapTop + trackScroll.clientHeight;
+          const elTop = active.offsetTop;
+          const elBot = elTop + active.offsetHeight;
+          if (elTop < wrapTop + 100 || elBot > wrapBot - 200) {
+            trackScroll.scrollTo({ top: elTop - 200, behavior: 'smooth' });
+          }
+        }
+        lastActive = active;
+      });
+
+      playBtn.addEventListener('click', () => clock.toggle());
+
+      // Layer toggles
+      document.getElementById('toggleTranscript').addEventListener('click', (e) => {
+        layers.transcript = !layers.transcript;
+        e.target.classList.toggle('on', layers.transcript);
+        rebuildTrack();
+      });
+      document.getElementById('toggleChapters').addEventListener('click', (e) => {
+        layers.chapters = !layers.chapters;
+        e.target.classList.toggle('on', layers.chapters);
+        rebuildTrack();
+      });
+      document.getElementById('toggleClips').addEventListener('click', (e) => {
+        layers.clips = !layers.clips;
+        e.target.classList.toggle('on', layers.clips);
+        rebuildTrack();
+      });
+
+      // ---- Time-based clipping (no transcript dependency) ----
+
+      let clipMode = false;
+      let rangeStart = null;
+      let rangeEnd = null;
+
+      clipFab.addEventListener('click', () => {
+        if (!clipMode) {
+          clipMode = true;
+          rangeStart = null;
+          rangeEnd = null;
+          clipFab.classList.add('armed');
+          clipFab.querySelector('.label').textContent = 'PICK START';
+          if (clock.playing) clock.pause();
+        } else {
+          // Cancel
+          cancelClipMode();
+        }
+      });
+
+      function cancelClipMode() {
+        clipMode = false;
+        rangeStart = null;
+        rangeEnd = null;
+        clipFab.classList.remove('armed');
+        clipFab.querySelector('.label').textContent = 'CLIP';
+        document.querySelectorAll('.track-row.in-range').forEach((el) => el.classList.remove('in-range'));
+        tooltip.classList.remove('open');
+      }
+
+      function handleRangeRowTap(t, el) {
+        if (rangeStart == null) {
+          rangeStart = t;
+          el.classList.add('in-range');
+          clipFab.querySelector('.label').textContent = 'PICK END';
+        } else {
+          rangeEnd = t;
+          // Highlight all rows between start and end.
+          document.querySelectorAll('.track-row').forEach((row) => {
+            const rt = Number(row.dataset.t);
+            if (rt >= Math.min(rangeStart, rangeEnd) && rt <= Math.max(rangeStart, rangeEnd)) {
+              row.classList.add('in-range');
+            }
+          });
+          showRangeTooltip();
+        }
+      }
+
+      function showRangeTooltip() {
+        const start = Math.min(rangeStart, rangeEnd);
+        const end = Math.max(rangeStart, rangeEnd);
+
+        // Try to assemble preview text from transcript if any rows in range are transcript.
+        const inRangeTranscript = TRANSCRIPT
+          .filter((seg) => seg.t >= start && seg.t <= end)
+          .map((seg) => seg.text);
+        const preview = inRangeTranscript.length
+          ? inRangeTranscript.join(' ')
+          : `Time-only clip · ${formatRange(start, end)}. Add a note when you save.`;
+
+        selRange.textContent = `${formatClock(start)} — ${formatClock(end)} · ${formatRange(start, end)}`;
+        selPreview.textContent = inRangeTranscript.length ? `"${preview}"` : preview;
+
+        // Position tooltip near the start row.
+        const startRow = trackEl.querySelector(`.track-row[data-t="${start}"]`);
+        if (startRow) {
+          tooltip.style.top = `${Math.max(40, startRow.offsetTop - 90)}px`;
+          tooltip.style.left = '16px';
+        }
+        tooltip.classList.add('open');
+      }
+
+      document.getElementById('cancelSel').addEventListener('click', cancelClipMode);
+      document.getElementById('saveClip').addEventListener('click', () => {
+        cancelClipMode();
+        alert('Clip saved to Curious Minds.');
+      });
+
+      // Build initial track and seek for context.
+      rebuildTrack();
+      clock.seek(110);
+    </script>
+  </body>
+</html>
