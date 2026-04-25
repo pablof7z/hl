@@ -142,6 +142,7 @@
 		F4BB417D04CB238F9D18B078 /* AuthorAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481980DFF25F7D1D0440C19D /* AuthorAvatar.swift */; };
 		FA5F4BC45BCBE5001FE66DD9 /* PodcastPlayerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 086CEFC46ADE095C2C280637 /* PodcastPlayerStore.swift */; };
 		FECBBED528157C88F2A6BA54 /* DiscussionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D24086C32EEA1A513E6403D8 /* DiscussionListView.swift */; };
+		87E1FB044A348BF5C42BC6DF /* BookmarkMenuButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F117E771A71AC3CAD6C34D8 /* BookmarkMenuButton.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -306,6 +307,7 @@
 		FFB98694B90B62FBE7A589BF /* SafeHighlighterCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeHighlighterCore.swift; sourceTree = "<group>"; };
 		FFCA926F28A7AA207DEF5AD9 /* FeedbackNewThreadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackNewThreadView.swift; sourceTree = "<group>"; };
 		FFE889FF9DFA914346F22EC8 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		2F117E771A71AC3CAD6C34D8 /* BookmarkMenuButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkMenuButton.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -371,6 +373,7 @@
 				7042FB7E80313E436728C88C /* BookmarkStore.swift */,
 				CC57F4037CA6E551E592EF9B /* BookmarksView.swift */,
 				5CC2FE450E318D4BBEFF2A8E /* SetDetailView.swift */,
+				2F117E771A71AC3CAD6C34D8 /* BookmarkMenuButton.swift */,
 			);
 			name = Bookmarks;
 			path = Bookmarks;
@@ -975,6 +978,7 @@
 				30D43ABCD94220B9F9FEA076 /* CommentsToolbar.swift in Sources */,
 				EDCE4887FD5E9D34A2A7077D /* CommentTreeBuilder.swift in Sources */,
 				084277A15B2B225D0A5BD25A /* ThreadView.swift in Sources */,
+				87E1FB044A348BF5C42BC6DF /* BookmarkMenuButton.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

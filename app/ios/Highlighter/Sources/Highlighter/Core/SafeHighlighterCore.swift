@@ -132,6 +132,19 @@ actor SafeHighlighterCore {
         try await core.getFollowingCurationSets()
     }
 
+    func createCurationSet(title: String) async throws -> BookmarkSetRecord {
+        try await core.createCurationSet(title: title)
+    }
+
+    @discardableResult
+    func setAddressInCurationSet(
+        dTag: String,
+        address: String,
+        member: Bool
+    ) async throws -> Bool {
+        try await core.setAddressInCurationSet(dTag: dTag, address: address, member: member)
+    }
+
     func getMyWebBookmarks() async throws -> [WebBookmarkRecord] {
         try await core.getMyWebBookmarks()
     }

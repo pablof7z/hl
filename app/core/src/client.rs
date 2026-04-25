@@ -1012,6 +1012,40 @@ impl HighlighterCore {
         crate::lists::query_following_curation_sets(self.runtime.ndb(), &follows)
     }
 
+    /// Create a new empty kind:30004 curation set with `title`. Returns
+    /// the freshly published record so the UI can immediately use its
+    /// `id` (d-tag) to add items.
+    pub async fn create_curation_set(
+        &self,
+        title: String,
+    ) -> Result<crate::models::BookmarkSetRecord, CoreError> {
+        let user_hex = self.inner.read().session.current_user()
+            .map(|u| u.pubkey).ok_or(CoreError::NotAuthenticated)?;
+        crate::lists::create_curation_set(&self.runtime, &user_hex, title.trim()).await
+    }
+
+    /// Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
+    /// `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
+    /// by `d_tag`. `member == true` ensures presence; `false` ensures
+    /// absence. Returns the new membership state.
+    pub async fn set_address_in_curation_set(
+        &self,
+        d_tag: String,
+        address: String,
+        member: bool,
+    ) -> Result<bool, CoreError> {
+        let user_hex = self.inner.read().session.current_user()
+            .map(|u| u.pubkey).ok_or(CoreError::NotAuthenticated)?;
+        crate::lists::set_address_in_curation_set(
+            &self.runtime,
+            &user_hex,
+            d_tag.trim(),
+            address.trim(),
+            member,
+        )
+        .await
+    }
+
     /// Open a live subscription for the current user's kind:30003/30004 sets.
     /// Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
     pub async fn subscribe_bookmark_sets(&self) -> Result<u64, CoreError> {

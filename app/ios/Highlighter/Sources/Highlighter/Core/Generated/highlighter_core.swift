@@ -759,6 +759,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func buildPreviewFromUrl(url: String) async throws  -> ArtifactPreview
     
     /**
+     * Create a new empty kind:30004 curation set with `title`. Returns
+     * the freshly published record so the UI can immediately use its
+     * `id` (d-tag) to add items.
+     */
+    func createCurationSet(title: String) async throws  -> BookmarkSetRecord
+    
+    /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
      * kind:9002 (edit-metadata) signed by the current user. Returns the
      * freshly-generated group id on success — the relay's 39000/39001/39002
@@ -1143,6 +1150,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func searchProfiles(query: String, limit: UInt32) async throws  -> [ProfileMetadata]
     
     /**
+     * Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
+     * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
+     * by `d_tag`. `member == true` ensures presence; `false` ensures
+     * absence. Returns the new membership state.
+     */
+    func setAddressInCurationSet(dTag: String, address: String, member: Bool) async throws  -> Bool
+    
+    /**
      * Replace the user's Blossom server list with `servers` (must be
      * non-empty). Order is preserved — first server is the upload default.
      */
@@ -1500,6 +1515,28 @@ open func buildPreviewFromUrl(url: String)async throws  -> ArtifactPreview  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeArtifactPreview_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Create a new empty kind:30004 curation set with `title`. Returns
+     * the freshly published record so the UI can immediately use its
+     * `id` (d-tag) to add items.
+     */
+open func createCurationSet(title: String)async throws  -> BookmarkSetRecord  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_create_curation_set(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(title)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBookmarkSetRecord_lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -2901,6 +2938,29 @@ open func searchProfiles(query: String, limit: UInt32)async throws  -> [ProfileM
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeProfileMetadata.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
+     * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
+     * by `d_tag`. `member == true` ensures presence; `false` ensures
+     * absence. Returns the new membership state.
+     */
+open func setAddressInCurationSet(dTag: String, address: String, member: Bool)async throws  -> Bool  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_set_address_in_curation_set(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(dTag),FfiConverterString.lower(address),FfiConverterBool.lower(member)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
+            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
+            freeFunc: ffi_highlighter_core_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -9636,6 +9696,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 53328) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set() != 35369) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 43966) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -9847,6 +9910,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_profiles() != 3897) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_address_in_curation_set() != 55665) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_blossom_servers() != 8768) {
