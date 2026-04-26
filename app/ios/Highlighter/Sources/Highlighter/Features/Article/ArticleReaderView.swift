@@ -207,6 +207,8 @@ private struct ReaderScroll: View {
 
     @State private var rendered: MarkdownRenderer.Output?
     @State private var imageToOpen: IdentifiableURL?
+    @State private var profileNavPubkey: String?
+    @State private var profileNavActive = false
     @Environment(HighlighterStore.self) private var app
 
     private struct IdentifiableURL: Identifiable {
@@ -235,14 +237,30 @@ private struct ReaderScroll: View {
                     bodySegments(rendered)
                 }
 
-                referencedSection(content: article.content)
+                NavigationLink(
+                    destination: Group {
+                        if let pk = profileNavPubkey {
+                            ProfileView(pubkey: pk)
+                        }
+                    },
+                    isActive: $profileNavActive
+                ) { EmptyView() }
+                    .hidden()
             }
         }
         .ignoresSafeArea(edges: coverURL == nil ? [] : .top)
         .fullScreenCover(item: $imageToOpen) { item in
             ImageZoomView(url: item.url, onDismiss: { imageToOpen = nil })
         }
-        .task(id: "\(article.eventId)-\(highlights.count)") {
+        .task(id: "\(article.eventId)-\(highlights.count)-\(app.profileCache.count)") {
+            let profileSnapshot = Dictionary(
+                uniqueKeysWithValues: app.profileCache.compactMap { (pk, meta) -> (String, String)? in
+                    let name = meta.displayName.isEmpty ? meta.name : meta.displayName
+                    guard !name.isEmpty else { return nil }
+                    return (pk, name)
+                }
+            )
+            let safeCore = app.safeCore
             rendered = await Task.detached(priority: .userInitiated) {
                 MarkdownRenderer.render(
                     content: article.content,
@@ -250,33 +268,11 @@ private struct ReaderScroll: View {
                     accent: UIColor(Color.highlighterAccent),
                     tint: UIColor(Color.highlighterAccent),
                     ink: UIColor(Color.highlighterInkStrong),
-                    muted: UIColor(Color.highlighterInkMuted)
+                    muted: UIColor(Color.highlighterInkMuted),
+                    nostrDecoder: { input in try? safeCore.decodeNostrEntity(input) },
+                    profileNames: profileSnapshot
                 )
             }.value
-        }
-    }
-
-    /// Pull every `nostr:` event-reference URI (`note1…`, `nevent1…`,
-    /// `naddr1…`) out of the markdown source and render the referenced
-    /// events as cards below the article body. Inline mentions/refs in
-    /// the body itself are a separate, deeper refactor of the
-    /// NSAttributedString pipeline; this section is the immediate win.
-    @ViewBuilder
-    private func referencedSection(content: String) -> some View {
-        let refs = NostrRichText.extractEventRefs(from: content, using: app.core)
-        if !refs.isEmpty {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("REFERENCED")
-                    .font(.caption.weight(.semibold))
-                    .tracking(1.2)
-                    .foregroundStyle(Color.highlighterInkMuted)
-                ForEach(Array(refs.enumerated()), id: \.offset) { _, ref in
-                    NostrEntityCard(entity: ref)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 28)
-            .padding(.bottom, 12)
         }
     }
 
@@ -297,11 +293,19 @@ private struct ReaderScroll: View {
                     onHighlightTap: onHighlightTap,
                     onFootnoteTap: onFootnoteTap,
                     onFootnoteBackTap: onFootnoteBackTap,
-                    onImageTap: { url in imageToOpen = IdentifiableURL(url: url) }
+                    onImageTap: { url in imageToOpen = IdentifiableURL(url: url) },
+                    onProfileTap: { pk in
+                        profileNavPubkey = pk
+                        profileNavActive = true
+                    }
                 )
                 .frame(maxWidth: .infinity)
             case .image(let url, let alt):
                 InlineArticleImage(url: url, alt: alt)
+            case .nostrEntity(let ref):
+                NostrEntityCard(entity: ref)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 4)
             }
         }
     }

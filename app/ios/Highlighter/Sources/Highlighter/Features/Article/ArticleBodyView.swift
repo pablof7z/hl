@@ -42,6 +42,10 @@ struct ArticleBodyView: UIViewRepresentable {
     /// text paragraph; standalone images render as SwiftUI views).
     var onImageTap: (_ url: URL) -> Void
 
+    /// User tapped a `nostr:npub1…` / `nostr:nprofile1…` mention rendered as
+    /// a tappable `@name` run. The argument is the hex pubkey.
+    var onProfileTap: (_ pubkey: String) -> Void
+
     func makeUIView(context: Context) -> UITextView {
         let tv = ReaderTextView(usingTextLayoutManager: true)
         tv.coordinator = context.coordinator
@@ -248,6 +252,9 @@ struct ArticleBodyView: UIViewRepresentable {
                 if let imageURL = URL(string: decoded) {
                     parent.onImageTap(imageURL)
                 }
+            case "profile":
+                let pubkey = url.lastPathComponent
+                if !pubkey.isEmpty { parent.onProfileTap(pubkey) }
             default:
                 break
             }
