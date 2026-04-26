@@ -157,6 +157,10 @@ pub struct HighlightRecord {
     pub clip_end_seconds: Option<f64>,
     pub clip_speaker: String,
     pub clip_transcript_segment_ids: Vec<String>,
+    /// NIP-92 `imeta` image URL — the photo of the page the highlight was
+    /// captured from (e.g. a Blossom-hosted scan with the passage marked
+    /// in yellow). Empty when the highlight has no attached image.
+    pub image_url: String,
     pub created_at: Option<u64>,
 }
 

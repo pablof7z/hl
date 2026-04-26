@@ -9,6 +9,7 @@ struct RoomHomeView: View {
     @State private var room = RoomStore()
     @State private var selectedTab: Tab = .home
     @State private var composerPresented: Bool = false
+    @State private var suggestPresented: Bool = false
     @State private var capturePresented: Bool = false
     @State private var shareTarget: ShareToCommunityTarget?
     @State private var inviteSheetPresented: Bool = false
@@ -27,15 +28,23 @@ struct RoomHomeView: View {
             .navigationDestination(for: ArtifactRecord.self) { artifact in
                 ArtifactDetailView(artifact: artifact)
             }
+            .navigationDestination(for: DiscussionRecord.self) { discussion in
+                DiscussionDetailView(discussion: discussion)
+            }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if selectedTab == .discussions {
+                    if selectedTab == .home {
+                        Button { capturePresented = true } label: {
+                            Image(systemName: "camera")
+                        }
+                    } else if selectedTab == .library {
+                        Button { suggestPresented = true } label: {
+                            Image(systemName: "plus")
+                        }
+                    } else if selectedTab == .discussions {
                         Button { composerPresented = true } label: {
                             Image(systemName: "square.and.pencil")
                         }
-                    }
-                    Button { capturePresented = true } label: {
-                        Image(systemName: "camera")
                     }
                     Button { inviteSheetPresented = true } label: {
                         Image(systemName: "person.badge.plus")
@@ -76,6 +85,13 @@ struct RoomHomeView: View {
                 .presentationDetents([.large])
             }
             .captureFlow(isPresented: $capturePresented, preselectedGroupId: groupId)
+            .sheet(isPresented: $suggestPresented) {
+                DiscussionComposerView(
+                    groupId: groupId,
+                    navigationTitle: "Suggest an artifact"
+                ) { _ in }
+                .presentationDetents([.medium, .large])
+            }
     }
 
     @ViewBuilder

@@ -6033,6 +6033,12 @@ public struct HighlightRecord {
     public var clipEndSeconds: Double?
     public var clipSpeaker: String
     public var clipTranscriptSegmentIds: [String]
+    /**
+     * NIP-92 `imeta` image URL — the photo of the page the highlight was
+     * captured from (e.g. a Blossom-hosted scan with the passage marked
+     * in yellow). Empty when the highlight has no attached image.
+     */
+    public var imageUrl: String
     public var createdAt: UInt64?
 
     // Default memberwise initializers are never public by default, so we
@@ -6042,7 +6048,12 @@ public struct HighlightRecord {
          * NIP-73 external content identifier from the `i` tag (e.g.
          * `podcast:item:guid:<episode-guid>`, `isbn:…`). Empty when the
          * highlight uses a different reference scheme.
-         */externalReference: String, sourceUrl: String, sourceReferenceKey: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String, clipTranscriptSegmentIds: [String], createdAt: UInt64?) {
+         */externalReference: String, sourceUrl: String, sourceReferenceKey: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String, clipTranscriptSegmentIds: [String], 
+        /**
+         * NIP-92 `imeta` image URL — the photo of the page the highlight was
+         * captured from (e.g. a Blossom-hosted scan with the passage marked
+         * in yellow). Empty when the highlight has no attached image.
+         */imageUrl: String, createdAt: UInt64?) {
         self.eventId = eventId
         self.pubkey = pubkey
         self.quote = quote
@@ -6057,6 +6068,7 @@ public struct HighlightRecord {
         self.clipEndSeconds = clipEndSeconds
         self.clipSpeaker = clipSpeaker
         self.clipTranscriptSegmentIds = clipTranscriptSegmentIds
+        self.imageUrl = imageUrl
         self.createdAt = createdAt
     }
 }
@@ -6110,6 +6122,9 @@ extension HighlightRecord: Equatable, Hashable {
         if lhs.clipTranscriptSegmentIds != rhs.clipTranscriptSegmentIds {
             return false
         }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
         if lhs.createdAt != rhs.createdAt {
             return false
         }
@@ -6131,6 +6146,7 @@ extension HighlightRecord: Equatable, Hashable {
         hasher.combine(clipEndSeconds)
         hasher.combine(clipSpeaker)
         hasher.combine(clipTranscriptSegmentIds)
+        hasher.combine(imageUrl)
         hasher.combine(createdAt)
     }
 }
@@ -6158,6 +6174,7 @@ public struct FfiConverterTypeHighlightRecord: FfiConverterRustBuffer {
                 clipEndSeconds: FfiConverterOptionDouble.read(from: &buf), 
                 clipSpeaker: FfiConverterString.read(from: &buf), 
                 clipTranscriptSegmentIds: FfiConverterSequenceString.read(from: &buf), 
+                imageUrl: FfiConverterString.read(from: &buf), 
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -6177,6 +6194,7 @@ public struct FfiConverterTypeHighlightRecord: FfiConverterRustBuffer {
         FfiConverterOptionDouble.write(value.clipEndSeconds, into: &buf)
         FfiConverterString.write(value.clipSpeaker, into: &buf)
         FfiConverterSequenceString.write(value.clipTranscriptSegmentIds, into: &buf)
+        FfiConverterString.write(value.imageUrl, into: &buf)
         FfiConverterOptionUInt64.write(value.createdAt, into: &buf)
     }
 }

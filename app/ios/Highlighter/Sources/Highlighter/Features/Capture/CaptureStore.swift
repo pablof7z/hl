@@ -32,6 +32,9 @@ final class CaptureStore {
     /// Structurally reconstructed markdown derived from OCR. Editable via the
     /// review screen's pencil escape hatch; re-rendered on change.
     var ocrMarkdown: String = ""
+    /// Raw OCR lines with normalized bounding boxes — used by the photo-canvas
+    /// review screen so the user can drag to select text directly on the image.
+    var ocrLines: [OCRLine] = []
     /// The quote the user stashed by selecting text + tapping Highlight.
     /// `nil` means no stash — publishing becomes a kind:20 picture.
     var stashedQuote: String?
@@ -90,6 +93,7 @@ final class CaptureStore {
                 async let uploadTask = upload(processed: processed, alt: "")
 
                 let (lines, uploaded) = try await (ocrTask, uploadTask)
+                self.ocrLines = lines
                 let markdown = OCRStructureReconstructor.toMarkdown(lines)
                 self.ocrMarkdown = markdown
 
@@ -280,6 +284,7 @@ final class CaptureStore {
         phase = .idle
         thumbnail = nil
         ocrMarkdown = ""
+        ocrLines = []
         stashedQuote = nil
         stashedContext = ""
         note = ""

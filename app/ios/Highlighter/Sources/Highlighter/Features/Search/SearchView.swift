@@ -627,10 +627,14 @@ private struct SearchHighlightRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            Rectangle()
-                .fill(Color.highlighterAccent)
-                .frame(width: 2.5)
-                .clipShape(RoundedRectangle(cornerRadius: 1.25))
+            if let pageURL = pageImageURL {
+                HighlightPageImage(url: pageURL, treatment: .row)
+            } else {
+                Rectangle()
+                    .fill(Color.highlighterAccent)
+                    .frame(width: 2.5)
+                    .clipShape(RoundedRectangle(cornerRadius: 1.25))
+            }
             VStack(alignment: .leading, spacing: 6) {
                 HighlightMatchedText(
                     text: highlight.quote,
@@ -651,6 +655,12 @@ private struct SearchHighlightRow: View {
         }
         .padding(.vertical, 14)
         .contentShape(Rectangle())
+    }
+
+    private var pageImageURL: URL? {
+        let raw = highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        return URL(string: raw)
     }
 }
 

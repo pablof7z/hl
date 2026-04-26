@@ -7,7 +7,14 @@ import SwiftUI
 /// the caller can optimistically insert it into the list.
 struct DiscussionComposerView: View {
     let groupId: String
+    let navigationTitle: String
     let onPublished: (DiscussionRecord) -> Void
+
+    init(groupId: String, navigationTitle: String = "New discussion", onPublished: @escaping (DiscussionRecord) -> Void) {
+        self.groupId = groupId
+        self.navigationTitle = navigationTitle
+        self.onPublished = onPublished
+    }
 
     @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
@@ -50,7 +57,7 @@ struct DiscussionComposerView: View {
                     }
                 }
             }
-            .navigationTitle("New discussion")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

@@ -2,300 +2,517 @@ import Kingfisher
 import SwiftUI
 import UIKit
 
-/// Full-screen review after a photo is snapped. Renders the OCR'd page as a
-/// book-like attributed view the user reads from, selects from, and publishes
-/// — replacing the old raw-TextEditor sheet.
+/// Review screen after capture. The corrected photo is the primary surface:
+/// the user drags across text to underline and select it, then swipes up
+/// (or taps Publish) to share.
 ///
-/// Flow:
-/// 1. User sees the page typeset as serif markdown; photo lives as a pinned
-///    thumbnail in the top bar so it's reference-close but not consuming
-///    vertical real estate.
-/// 2. Select any span → edit menu shows "Highlight" → quote stashes with a
-///    yellow highlight overlaid on the page.
-/// 3. Bottom tray always visible with book + community pills, optional note,
-///    and a single Publish CTA whose label reflects state
-///    ("Share photo" vs "Publish highlight").
-/// 4. Pencil icon opens a plain-text OCR escape hatch if structure is off.
+/// Layout:
+///   ┌─ close/title bar ─────────────────────┐
+///   │  photo canvas (drag-to-select)        │
+///   │   · yellow underlines for selected    │
+///   │     OCR lines while dragging           │
+///   ├───────────────────────────────────────┤
+///   │  book pill  ·  community chip         │
+///   │  note field                           │
+///   │  ──── swipe up to publish ────        │
+///   └───────────────────────────────────────┘
 struct CapturePageView: View {
     @Bindable var store: CaptureStore
     let onDismiss: () -> Void
 
     @Environment(HighlighterStore.self) private var appStore
 
-    @State private var rendered: NSAttributedString?
+    // Drag-select state
+    @State private var sortedLines: [OCRLine] = []
+    @State private var selectionRange: ClosedRange<Int>? = nil
+    @State private var dragAnchorIdx: Int? = nil
+
+    // Image display geometry (populated by GeometryReader)
+    @State private var imageDisplaySize: CGSize = .zero
+    @State private var imageDisplayOffset: CGPoint = .zero
+
+    // Spring-in animation
+    @State private var imageScale: CGFloat = 0.88
+    @State private var imageOpacity: Double = 0
+
+    // Swipe-up publish
+    @State private var swipeTranslation: CGFloat = 0
+    @State private var gestureMode: DragMode? = nil
+
+    // Sheets
     @State private var showBookPicker = false
     @State private var showCommunityPicker = false
-    @State private var showOCREdit = false
-    @State private var showPhotoZoom = false
+
+    private enum DragMode { case selecting, publishing }
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            pageScroll
-        }
-        .background(Color.highlighterPaper.ignoresSafeArea())
-        .safeAreaInset(edge: .bottom, spacing: 0) { tray }
-        .task(id: store.ocrMarkdown) { await renderMarkdown() }
-        .sheet(isPresented: $showBookPicker) {
-            BookPicker(selection: $store.selectedBook)
-                .environment(appStore)
-        }
-        .sheet(isPresented: $showCommunityPicker) {
-            CommunityPicker(selection: $store.selectedGroupId)
-                .environment(appStore)
-        }
-        .sheet(isPresented: $showOCREdit) {
-            OCREditSheet(markdown: $store.ocrMarkdown) { store.clearStash() }
-        }
-        .fullScreenCover(isPresented: $showPhotoZoom) {
-            PhotoZoomView(image: store.thumbnail, onDismiss: { showPhotoZoom = false })
-        }
-        .overlay {
-            if store.phase == .publishing {
-                ZStack {
-                    Color.black.opacity(0.2).ignoresSafeArea()
-                    ProgressView("Publishing…")
-                        .padding(20)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                }
+        content
+            .sheet(isPresented: $showBookPicker) {
+                BookPicker(selection: $store.selectedBook).environment(appStore)
             }
+            .sheet(isPresented: $showCommunityPicker) {
+                CommunityPicker(selection: $store.selectedGroupId).environment(appStore)
+            }
+            .overlay { publishingOverlay }
+    }
+
+    private var content: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                titleBar
+                photoCanvas
+                bottomPanel
+            }
+            .ignoresSafeArea(edges: .bottom)
+        }
+        .onAppear { setupLines() }
+        .onAppear { triggerSpringIfReady() }
+        .onChange(of: store.ocrLines) { _, lines in sortedLines = lines.sorted { $0.bbox.midY > $1.bbox.midY } }
+        .onChange(of: store.thumbnail) { old, new in
+            guard old == nil, new != nil else { return }
+            springIn()
         }
     }
 
-    // MARK: - Top bar
+    private func setupLines() {
+        sortedLines = store.ocrLines.sorted { $0.bbox.midY > $1.bbox.midY }
+    }
 
-    private var topBar: some View {
-        HStack(spacing: 16) {
+    private func triggerSpringIfReady() {
+        if store.thumbnail != nil { springIn() }
+    }
+
+    private func springIn() {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) {
+            imageScale = 1.0
+            imageOpacity = 1.0
+        }
+    }
+
+    @ViewBuilder
+    private var publishingOverlay: some View {
+        if store.phase == .publishing {
+            ZStack {
+                Color.black.opacity(0.35).ignoresSafeArea()
+                VStack(spacing: 8) {
+                    ProgressView().tint(.white)
+                    Text("Publishing…").font(.footnote).foregroundStyle(.white)
+                }
+            }
+            .transition(.opacity)
+        }
+    }
+
+    // MARK: - Title bar
+
+    private var titleBar: some View {
+        HStack {
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .font(.body.weight(.medium))
-                    .foregroundStyle(Color.highlighterInkStrong)
+                    .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background(Color.highlighterRule.opacity(0.4), in: Circle())
+                    .background(.ultraThinMaterial, in: Circle())
             }
-            Spacer(minLength: 0)
-            Text(store.stashedQuote == nil ? "Review page" : "New highlight")
-                .font(.system(.subheadline, design: .serif).weight(.semibold))
-                .foregroundStyle(Color.highlighterInkStrong)
-            Spacer(minLength: 0)
-            Button {
-                showOCREdit = true
-            } label: {
-                Image(systemName: "pencil")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(Color.highlighterInkStrong)
-                    .frame(width: 36, height: 36)
-                    .background(Color.highlighterRule.opacity(0.4), in: Circle())
-            }
-            .accessibilityLabel("Edit recognized text")
-            if let image = store.thumbnail {
-                Button {
-                    showPhotoZoom = true
-                } label: {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 36, height: 36)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.highlighterRule, lineWidth: 1))
+            Spacer()
+            if store.phase == .processing {
+                HStack(spacing: 6) {
+                    ProgressView().scaleEffect(0.7).tint(.white)
+                    Text("Reading the page…")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.8))
                 }
-                .accessibilityLabel("View source photo")
+            } else if store.stashedQuote != nil {
+                Text("Highlight ready")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+            } else if !sortedLines.isEmpty {
+                Text("Drag to select")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.7))
             }
+            Spacer()
+            // Spacer to balance the close button
+            Color.clear.frame(width: 36, height: 36)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(
-            Color.highlighterPaper
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(Color.highlighterRule).frame(height: 0.5)
-                }
+            LinearGradient(
+                colors: [.black.opacity(0.6), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .top)
         )
     }
 
-    // MARK: - Page scroll
+    // MARK: - Photo canvas
 
     @ViewBuilder
-    private var pageScroll: some View {
-        if store.phase == .processing && rendered == nil {
-            VStack(spacing: 16) {
-                ProgressView()
-                Text("Reading the page…")
-                    .font(.footnote)
-                    .foregroundStyle(Color.highlighterInkMuted)
+    private var photoCanvas: some View {
+        if store.phase == .processing && store.thumbnail == nil {
+            loadingState
+        } else if let thumbnail = store.thumbnail {
+            GeometryReader { geo in
+                let (dispSize, dispOffset) = computeLayout(thumbnail: thumbnail, container: geo.size)
+
+                ZStack(alignment: .topLeading) {
+                    Color.black
+
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: dispSize.width, height: dispSize.height)
+                        .offset(x: dispOffset.x, y: dispOffset.y)
+                        .scaleEffect(imageScale)
+                        .opacity(imageOpacity)
+
+                    // OCR selection overlay
+                    if !sortedLines.isEmpty {
+                        Canvas { ctx, _ in
+                            drawSelectionOverlay(ctx: ctx, dispSize: dispSize, dispOffset: dispOffset)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .gesture(canvasGesture(dispSize: dispSize, dispOffset: dispOffset))
+                    }
+
+                    // Stashed quote badge
+                    if let quote = store.stashedQuote {
+                        stashedBadge(quote: quote)
+                            .offset(x: dispOffset.x + 12, y: dispOffset.y + 12)
+                    }
+                }
+                .onAppear {
+                    imageDisplaySize = dispSize
+                    imageDisplayOffset = dispOffset
+                }
+                .onChange(of: geo.size) { _, newSize in
+                    let (s, o) = computeLayout(thumbnail: thumbnail, container: newSize)
+                    imageDisplaySize = s
+                    imageDisplayOffset = o
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let rendered, !store.ocrMarkdown.isEmpty {
-            ScrollView {
-                CapturePageBodyView(
-                    attributedText: rendered,
-                    stashedQuote: store.stashedQuote,
-                    accent: UIColor(Color.highlighterAccent),
-                    highlightTint: UIColor(Color.highlighterAccent),
-                    paperColor: UIColor(Color.highlighterPaper),
-                    onStash: { quote, ctx in store.stashHighlight(quote: quote, context: ctx) }
-                )
-                .frame(maxWidth: .infinity)
-            }
-            .background(Color.highlighterPaper)
         } else {
             emptyState
         }
     }
 
-    private var emptyState: some View {
+    private var loadingState: some View {
         VStack(spacing: 12) {
-            Image(systemName: "text.viewfinder")
-                .font(.system(size: 42, weight: .light))
-                .foregroundStyle(Color.highlighterInkMuted)
-            Text("No text recognized")
-                .font(.headline)
-                .foregroundStyle(Color.highlighterInkStrong)
-            Text("You can still share this as a photo, or tap the pencil to type the page yourself.")
+            ProgressView().tint(.white)
+            Text("Reading the page…")
                 .font(.footnote)
-                .foregroundStyle(Color.highlighterInkMuted)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .foregroundStyle(.white.opacity(0.7))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Bottom tray
-
-    private var tray: some View {
+    private var emptyState: some View {
         VStack(spacing: 12) {
-            if let quote = store.stashedQuote {
-                stashedCard(quote: quote)
-            } else if !store.ocrMarkdown.isEmpty {
-                hint("Select any text above and tap Highlight")
-            }
+            Image(systemName: "text.viewfinder")
+                .font(.system(size: 40, weight: .light))
+                .foregroundStyle(.white.opacity(0.5))
+            Text("No text recognized")
+                .font(.headline)
+                .foregroundStyle(.white)
+            Text("Drag to add a note, or share as a photo.")
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.6))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 
-            bookPill
+    // MARK: - OCR selection
 
-            pickerRow(
-                label: "Room",
-                value: communityName,
-                placeholder: "Optional",
-                icon: "number",
-                action: { showCommunityPicker = true }
+    private func drawSelectionOverlay(ctx: GraphicsContext, dispSize: CGSize, dispOffset: CGPoint) {
+        guard let range = selectionRange else { return }
+        for idx in range {
+            guard idx < sortedLines.count else { continue }
+            let line = sortedLines[idx]
+            let rect = visionToScreen(line.bbox, size: dispSize, offset: dispOffset)
+            // Yellow underline bar at the bottom of each text line
+            let underline = CGRect(x: rect.minX, y: rect.maxY - 4, width: rect.width, height: 4)
+            ctx.fill(
+                Path(underline.insetBy(dx: 0, dy: 0)),
+                with: .color(Color.yellow.opacity(0.85))
             )
+            // Light yellow wash over the full line
+            ctx.fill(
+                Path(rect),
+                with: .color(Color.yellow.opacity(0.25))
+            )
+        }
+    }
 
-            TextField("Add a note (optional)", text: $store.note, axis: .vertical)
-                .lineLimit(1...4)
-                .font(.callout)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Color.highlighterPaper, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.highlighterRule, lineWidth: 1)
-                )
+    private func canvasGesture(dispSize: CGSize, dispOffset: CGPoint) -> some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                let dx = abs(value.translation.width)
+                let dy = abs(value.translation.height)
 
+                if gestureMode == nil {
+                    gestureMode = dx >= dy * 0.8 ? .selecting : .publishing
+                }
+
+                switch gestureMode {
+                case .selecting:
+                    updateSelection(
+                        start: value.startLocation,
+                        current: value.location,
+                        dispSize: dispSize,
+                        dispOffset: dispOffset
+                    )
+                case .publishing:
+                    let up = min(0, value.translation.height)
+                    swipeTranslation = up
+                case nil:
+                    break
+                }
+            }
+            .onEnded { value in
+                switch gestureMode {
+                case .selecting:
+                    commitSelection()
+                case .publishing:
+                    if swipeTranslation < -90, store.canPublish {
+                        store.publish()
+                    }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        swipeTranslation = 0
+                    }
+                case nil:
+                    break
+                }
+                gestureMode = nil
+            }
+    }
+
+    private func updateSelection(
+        start: CGPoint, current: CGPoint,
+        dispSize: CGSize, dispOffset: CGPoint
+    ) {
+        guard !sortedLines.isEmpty else { return }
+        let vStart = screenToVision(start, size: dispSize, offset: dispOffset)
+        let vCurrent = screenToVision(current, size: dispSize, offset: dispOffset)
+
+        let anchor = nearestLineIndex(to: vStart)
+        let cursor = nearestLineIndex(to: vCurrent)
+        dragAnchorIdx = anchor
+        selectionRange = min(anchor, cursor)...max(anchor, cursor)
+    }
+
+    private func commitSelection() {
+        guard let range = selectionRange, !sortedLines.isEmpty else {
+            selectionRange = nil
+            dragAnchorIdx = nil
+            return
+        }
+        let selected = Array(sortedLines[range])
+        let quote = selected.map { $0.text }.joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        selectionRange = nil
+        dragAnchorIdx = nil
+
+        guard !quote.isEmpty else { return }
+        store.stashHighlight(quote: quote, context: "")
+    }
+
+    private func nearestLineIndex(to pt: CGPoint) -> Int {
+        sortedLines.indices.min(by: {
+            pointToBBoxDistance(pt, bbox: sortedLines[$0].bbox)
+            < pointToBBoxDistance(pt, bbox: sortedLines[$1].bbox)
+        }) ?? 0
+    }
+
+    private func pointToBBoxDistance(_ pt: CGPoint, bbox: CGRect) -> CGFloat {
+        let cx = min(max(pt.x, bbox.minX), bbox.maxX)
+        let cy = min(max(pt.y, bbox.minY), bbox.maxY)
+        let dx = pt.x - cx
+        let dy = pt.y - cy
+        return sqrt(dx * dx + dy * dy)
+    }
+
+    // MARK: - Coordinate helpers
+
+    private func computeLayout(thumbnail: UIImage, container: CGSize) -> (size: CGSize, offset: CGPoint) {
+        let iw = thumbnail.size.width
+        let ih = thumbnail.size.height
+        guard iw > 0, ih > 0 else { return (.zero, .zero) }
+        let imageAR = iw / ih
+        let containerAR = container.width / container.height
+
+        let dispSize: CGSize
+        if imageAR > containerAR {
+            dispSize = CGSize(width: container.width, height: container.width / imageAR)
+        } else {
+            dispSize = CGSize(width: container.height * imageAR, height: container.height)
+        }
+        let offset = CGPoint(
+            x: (container.width - dispSize.width) / 2,
+            y: (container.height - dispSize.height) / 2
+        )
+        return (dispSize, offset)
+    }
+
+    /// Vision normalized coords (bottom-left origin) → screen rect.
+    private func visionToScreen(_ bbox: CGRect, size: CGSize, offset: CGPoint) -> CGRect {
+        CGRect(
+            x: offset.x + bbox.minX * size.width,
+            y: offset.y + (1.0 - bbox.maxY) * size.height,
+            width: bbox.width * size.width,
+            height: bbox.height * size.height
+        )
+    }
+
+    /// Screen point → Vision normalized coords (bottom-left origin).
+    private func screenToVision(_ pt: CGPoint, size: CGSize, offset: CGPoint) -> CGPoint {
+        CGPoint(
+            x: (pt.x - offset.x) / size.width,
+            y: 1.0 - (pt.y - offset.y) / size.height
+        )
+    }
+
+    // MARK: - Stashed badge
+
+    private func stashedBadge(quote: String) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            Rectangle()
+                .fill(Color.highlighterAccent)
+                .frame(width: 3)
+            HStack {
+                Text(quote)
+                    .font(.system(.caption, design: .serif).italic())
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+                Button {
+                    store.clearStash()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.white.opacity(0.7))
+                        .font(.caption)
+                }
+            }
+            .padding(8)
+        }
+        .background(.ultraThinMaterial.opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: 260)
+    }
+
+    // MARK: - Bottom panel
+
+    private var bottomPanel: some View {
+        VStack(spacing: 10) {
+            // Upload status
             if store.isUploading {
-                HStack(spacing: 8) {
-                    ProgressView().scaleEffect(0.8)
-                    Text("Uploading photo…")
-                        .font(.footnote)
+                HStack(spacing: 6) {
+                    ProgressView().scaleEffect(0.7).tint(Color.highlighterInkMuted)
+                    Text("Uploading…")
+                        .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
                     Spacer()
                 }
-            } else if let uploadError = store.uploadError {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                    Text(uploadError)
-                        .font(.footnote)
-                        .foregroundStyle(Color.highlighterInkStrong)
-                        .lineLimit(2)
+            } else if let err = store.uploadError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                    Text(err).font(.caption).lineLimit(1)
                     Spacer()
                     Button("Retry") { store.retryUpload() }
-                        .font(.footnote.weight(.semibold))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.highlighterAccent)
                 }
             }
 
-            Button {
-                store.publish()
-            } label: {
-                HStack {
-                    Image(systemName: store.stashedQuote == nil ? "photo" : "highlighter")
-                    Text(publishLabel)
-                        .fontWeight(.semibold)
-                    Spacer()
-                    Image(systemName: "arrow.up")
-                }
-                .font(.body)
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 14)
-                .frame(maxWidth: .infinity)
-                .background(
-                    store.canPublish ? Color.highlighterAccent : Color.highlighterInkMuted.opacity(0.5),
-                    in: RoundedRectangle(cornerRadius: 14)
-                )
-            }
-            .disabled(!store.canPublish)
+            // Book
+            bookPill
+
+            // Community
+            communityRow
+
+            // Note
+            TextField("Add a note (optional)", text: $store.note, axis: .vertical)
+                .lineLimit(1...3)
+                .font(.callout)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.highlighterPaper, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.highlighterRule, lineWidth: 1))
+
+            // Publish / swipe-up area
+            publishArea
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 32)
         .background(
             Color.highlighterPaper
                 .overlay(alignment: .top) {
                     Rectangle().fill(Color.highlighterRule).frame(height: 0.5)
                 }
-                .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: -2)
+                .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: -3)
                 .ignoresSafeArea(edges: .bottom)
         )
+        .offset(y: swipeTranslation)
     }
 
     @ViewBuilder
-    private func stashedCard(quote: String) -> some View {
-        HStack(alignment: .top, spacing: 0) {
-            Rectangle()
-                .fill(Color.highlighterAccent)
-                .frame(width: 3)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(quote)
-                    .font(.system(.callout, design: .serif))
-                    .foregroundStyle(Color.highlighterInkStrong)
-                    .lineLimit(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Button {
-                    store.clearStash()
-                } label: {
-                    Label("Remove", systemImage: "xmark.circle.fill")
-                        .labelStyle(.iconOnly)
-                        .foregroundStyle(Color.highlighterInkMuted)
-                        .font(.footnote)
-                }
+    private var publishArea: some View {
+        Button {
+            store.publish()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: store.stashedQuote != nil ? "highlighter" : "photo")
+                Text(publishLabel).fontWeight(.semibold)
+                Spacer()
+                Image(systemName: "arrow.up")
             }
-            .padding(12)
+            .font(.body)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .background(
+                store.canPublish ? Color.highlighterAccent : Color.highlighterInkMuted.opacity(0.4),
+                in: RoundedRectangle(cornerRadius: 14)
+            )
         }
-        .background(Color.highlighterAccent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .disabled(!store.canPublish)
+
+        if store.canPublish && store.stashedQuote != nil {
+            Text("or swipe up on the photo")
+                .font(.caption2)
+                .foregroundStyle(Color.highlighterInkMuted)
+        }
     }
 
-    private func hint(_ text: String) -> some View {
-        Text(text)
-            .font(.footnote)
-            .foregroundStyle(Color.highlighterInkMuted)
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private var publishLabel: String {
+        if let q = store.stashedQuote, !q.isEmpty {
+            return store.selectedBook != nil ? "Publish highlight" : "Pick a book first"
+        }
+        return "Share photo"
     }
 
-    /// Book-selection row. When a book is picked, shows its cover + title
-    /// + author in a short-stack so the user sees what will travel with
-    /// the highlight; otherwise falls back to a neutral "Add a book" pill.
+    // MARK: - Book pill
+
     @ViewBuilder
     private var bookPill: some View {
-        Button {
-            showBookPicker = true
-        } label: {
-            HStack(spacing: 12) {
-                bookPillLeading
-                bookPillText
+        Button { showBookPicker = true } label: {
+            HStack(spacing: 10) {
+                bookCover
+                bookText
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Color.highlighterInkMuted)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, 8)
             .background(Color.highlighterPaper, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.highlighterRule, lineWidth: 1))
         }
@@ -303,54 +520,45 @@ struct CapturePageView: View {
     }
 
     @ViewBuilder
-    private var bookPillLeading: some View {
-        if let selection = store.selectedBook {
-            let cover = selection.coverURL
-            if !cover.isEmpty, let url = URL(string: cover) {
-                KFImage(url)
-                    .placeholder { bookPillFallback }
-                    .fade(duration: 0.15)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 34, height: 48)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-            } else {
-                bookPillFallback
-            }
+    private var bookCover: some View {
+        if let sel = store.selectedBook, !sel.coverURL.isEmpty, let url = URL(string: sel.coverURL) {
+            KFImage(url)
+                .placeholder { bookCoverPlaceholder }
+                .fade(duration: 0.15)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 30, height: 42)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+        } else if store.selectedBook != nil {
+            bookCoverPlaceholder
         } else {
             Image(systemName: "book.closed")
                 .font(.body)
                 .foregroundStyle(Color.highlighterInkMuted)
-                .frame(width: 34, height: 48)
+                .frame(width: 30, height: 42)
         }
     }
 
-    private var bookPillFallback: some View {
+    private var bookCoverPlaceholder: some View {
         ZStack {
-            Color.highlighterRule.opacity(0.6)
-            Image(systemName: "book.closed")
-                .foregroundStyle(Color.highlighterInkMuted)
+            Color.highlighterRule.opacity(0.5)
+            Image(systemName: "book.closed").foregroundStyle(Color.highlighterInkMuted)
         }
-        .frame(width: 34, height: 48)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .frame(width: 30, height: 42)
+        .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 
     @ViewBuilder
-    private var bookPillText: some View {
-        if let selection = store.selectedBook {
+    private var bookText: some View {
+        if let sel = store.selectedBook {
             VStack(alignment: .leading, spacing: 2) {
-                Text(selection.title.isEmpty ? "Untitled book" : selection.title)
+                Text(sel.title.isEmpty ? "Untitled" : sel.title)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
-                if !selection.author.isEmpty {
-                    Text(selection.author)
+                if !sel.author.isEmpty {
+                    Text(sel.author)
                         .font(.caption)
-                        .foregroundStyle(Color.highlighterInkMuted)
-                        .lineLimit(1)
-                } else if !selection.catalogId.isEmpty {
-                    Text(selection.catalogId)
-                        .font(.caption.monospacedDigit())
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(1)
                 }
@@ -360,7 +568,7 @@ struct CapturePageView: View {
                 Text("Add a book")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
-                Text("Scan a barcode, search, or share as photo only")
+                Text("Optional — scan barcode or search")
                     .font(.caption)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(1)
@@ -368,153 +576,37 @@ struct CapturePageView: View {
         }
     }
 
-    @ViewBuilder
-    private func pickerRow(
-        label: String,
-        value: String,
-        placeholder: String?,
-        icon: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.footnote)
+    // MARK: - Community row
+
+    private var communityRow: some View {
+        Button { showCommunityPicker = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "number")
+                    .font(.caption)
                     .foregroundStyle(Color.highlighterInkMuted)
-                    .frame(width: 20)
-                Text(label)
+                    .frame(width: 18)
+                Text("Room")
                     .font(.callout)
                     .foregroundStyle(Color.highlighterInkStrong)
                 Spacer()
-                Text(value.isEmpty ? (placeholder ?? "") : value)
+                Text(communityName.isEmpty ? "Optional" : communityName)
                     .font(.callout)
-                    .foregroundStyle(value.isEmpty ? Color.highlighterInkMuted : Color.highlighterAccent)
+                    .foregroundStyle(communityName.isEmpty ? Color.highlighterInkMuted : Color.highlighterAccent)
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Color.highlighterInkMuted)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.vertical, 10)
             .background(Color.highlighterPaper, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.highlighterRule, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
 
-    private var publishLabel: String {
-        store.stashedQuote != nil && store.selectedBook != nil
-            ? "Publish highlight"
-            : (store.stashedQuote != nil ? "Pick a book to highlight" : "Share photo")
-    }
-
     private var communityName: String {
         guard let id = store.selectedGroupId else { return "" }
-        if let community = appStore.joinedCommunities.first(where: { $0.id == id }) {
-            return community.name.isEmpty ? id : community.name
-        }
-        return id
-    }
-
-    private func renderMarkdown() async {
-        let markdown = store.ocrMarkdown
-        guard !markdown.isEmpty else {
-            rendered = nil
-            return
-        }
-        let accent = UIColor(Color.highlighterAccent)
-        let ink = UIColor(Color.highlighterInkStrong)
-        let muted = UIColor(Color.highlighterInkMuted)
-        let output = await Task.detached(priority: .userInitiated) {
-            MarkdownRenderer.render(
-                content: markdown,
-                highlights: [],
-                accent: accent,
-                tint: accent,
-                ink: ink,
-                muted: muted
-            )
-        }.value
-        rendered = output.body
-    }
-}
-
-// MARK: - OCR plain-text escape hatch
-
-private struct OCREditSheet: View {
-    @Binding var markdown: String
-    let onChange: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var working: String = ""
-
-    var body: some View {
-        NavigationStack {
-            TextEditor(text: $working)
-                .font(.system(.body, design: .monospaced))
-                .padding(12)
-                .background(Color.highlighterPaper)
-                .navigationTitle("Edit text")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") {
-                            if working != markdown {
-                                markdown = working
-                                onChange()
-                            }
-                            dismiss()
-                        }
-                        .fontWeight(.semibold)
-                    }
-                }
-        }
-        .onAppear { working = markdown }
-    }
-}
-
-// MARK: - Photo zoom
-
-private struct PhotoZoomView: View {
-    let image: UIImage?
-    let onDismiss: () -> Void
-
-    @State private var scale: CGFloat = 1
-    @State private var lastScale: CGFloat = 1
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .scaleEffect(scale)
-                    .gesture(
-                        MagnificationGesture()
-                            .onChanged { value in
-                                scale = max(1, min(5, lastScale * value))
-                            }
-                            .onEnded { _ in lastScale = scale }
-                    )
-            }
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(12)
-                            .background(.ultraThinMaterial, in: Circle())
-                    }
-                    .padding()
-                }
-                Spacer()
-            }
-        }
+        return appStore.joinedCommunities.first(where: { $0.id == id })?.name ?? id
     }
 }

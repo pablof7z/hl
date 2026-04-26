@@ -404,6 +404,7 @@ fn highlight_record_from_event(event: &Event) -> Option<HighlightRecord> {
                 }
             })
             .collect(),
+        image_url: crate::highlights::imeta_image_url(event),
         created_at: Some(event.created_at.as_secs()),
     })
 }

@@ -499,6 +499,7 @@ fn record_from_cached_event(event: &Event) -> Option<HighlightRecord> {
         clip_end_seconds,
         clip_speaker,
         clip_transcript_segment_ids,
+        image_url: imeta_image_url(event),
         created_at: Some(event.created_at.as_secs()),
     })
 }
@@ -511,6 +512,27 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
         }
     }
     None
+}
+
+/// Extract the image URL from a NIP-92 `imeta` tag on a highlight event.
+/// Tag shape: `["imeta", "url <url>", "m <mime>", ...]`. Returns the first
+/// `url <…>` value found, or empty when no imeta tag carries a url.
+pub(crate) fn imeta_image_url(event: &Event) -> String {
+    for tag in event.tags.iter() {
+        let slice = tag.as_slice();
+        if slice.first().map(String::as_str) != Some("imeta") {
+            continue;
+        }
+        for part in slice.iter().skip(1) {
+            if let Some(rest) = part.strip_prefix("url ") {
+                let url = rest.trim();
+                if !url.is_empty() {
+                    return url.to_string();
+                }
+            }
+        }
+    }
+    String::new()
 }
 
 // -- Builders (pure: no IO, unit-testable) --
@@ -726,6 +748,11 @@ fn record_from_event(
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect(),
+        image_url: draft
+            .image
+            .as_ref()
+            .map(|img| img.url.clone())
+            .unwrap_or_default(),
         created_at: Some(event.created_at.as_secs()),
     }
 }

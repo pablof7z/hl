@@ -226,36 +226,80 @@ struct HighlightFeedCardView: View {
     }
 
     private func singleHighlight(_ h: HydratedHighlight) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             highlighterByline(for: h)
 
-            HStack(alignment: .top, spacing: 14) {
-                Rectangle()
-                    .fill(Color.highlighterAccent)
-                    .frame(width: 3)
-                    .clipShape(RoundedRectangle(cornerRadius: 1.5))
+            if let pageURL = pageImageURL(for: h.highlight) {
+                pageHighlight(h, pageURL: pageURL)
+            } else {
+                textHighlight(h)
+            }
+        }
+    }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(h.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
-                        .font(.system(size: 18, design: .serif).italic())
-                        .foregroundStyle(Color.highlighterInkStrong)
-                        .lineSpacing(4)
-                        .lineLimit(8)
-                        .truncationMode(.tail)
+    /// Text-only treatment: accent rail + serif italic pull-quote + note.
+    private func textHighlight(_ h: HydratedHighlight) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Rectangle()
+                .fill(Color.highlighterAccent)
+                .frame(width: 3)
+                .clipShape(RoundedRectangle(cornerRadius: 1.5))
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(h.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                    .font(.system(size: 18, design: .serif).italic())
+                    .foregroundStyle(Color.highlighterInkStrong)
+                    .lineSpacing(4)
+                    .lineLimit(8)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !h.highlight.note.isEmpty {
+                    Text(h.highlight.note)
+                        .font(.system(.subheadline, design: .serif))
+                        .foregroundStyle(Color.highlighterInkMuted)
+                        .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if !h.highlight.note.isEmpty {
-                        Text(h.highlight.note)
-                            .font(.system(.subheadline, design: .serif))
-                            .foregroundStyle(Color.highlighterInkMuted)
-                            .lineSpacing(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
                 }
             }
         }
+    }
+
+    /// Page-photo treatment: the scan is the centerpiece, with the quote as
+    /// a serif pull-quote underneath. No accent rail — let the image breathe.
+    private func pageHighlight(_ h: HydratedHighlight, pageURL: URL) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HighlightPageImage(url: pageURL, treatment: .feature)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(h.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                    .font(.system(size: 18, design: .serif).italic())
+                    .foregroundStyle(Color.highlighterInkStrong)
+                    .lineSpacing(4)
+                    .lineLimit(8)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !h.highlight.note.isEmpty {
+                    Text(h.highlight.note)
+                        .font(.system(.subheadline, design: .serif))
+                        .foregroundStyle(Color.highlighterInkMuted)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+
+    private func pageImageURL(for highlight: HighlightRecord) -> URL? {
+        let raw = highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        return URL(string: raw)
     }
 
     private var reel: some View {
@@ -586,33 +630,23 @@ private struct HighlightQuoteCard: View {
                         .padding(.horizontal, 12)
                 }
 
-            HStack(alignment: .top, spacing: 10) {
-                Rectangle()
-                    .fill(Color.highlighterAccent)
-                    .frame(width: 3)
-                    .clipShape(RoundedRectangle(cornerRadius: 1.5))
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(highlight.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
-                        .font(.system(size: 14, design: .serif).italic())
-                        .foregroundStyle(Color.highlighterInkStrong)
-                        .lineSpacing(3)
-                        .lineLimit(6)
-                        .truncationMode(.tail)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if !highlight.highlight.note.isEmpty {
-                        Text(highlight.highlight.note)
-                            .font(.caption)
-                            .foregroundStyle(Color.highlighterInkMuted)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+            if let pageURL = pageImageURL {
+                VStack(alignment: .leading, spacing: 8) {
+                    HighlightPageImage(url: pageURL, treatment: .card)
+                    quoteBlock
                 }
+                .padding(12)
+            } else {
+                HStack(alignment: .top, spacing: 10) {
+                    Rectangle()
+                        .fill(Color.highlighterAccent)
+                        .frame(width: 3)
+                        .clipShape(RoundedRectangle(cornerRadius: 1.5))
+
+                    quoteBlock
+                }
+                .padding(12)
             }
-            .padding(12)
         }
         .frame(width: 240, alignment: .topLeading)
         .background(
@@ -622,6 +656,34 @@ private struct HighlightQuoteCard: View {
         .task(id: highlight.highlight.pubkey) {
             await app.requestProfile(pubkeyHex: highlight.highlight.pubkey)
         }
+    }
+
+    private var quoteBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(highlight.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                .font(.system(size: 14, design: .serif).italic())
+                .foregroundStyle(Color.highlighterInkStrong)
+                .lineSpacing(3)
+                .lineLimit(6)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !highlight.highlight.note.isEmpty {
+                Text(highlight.highlight.note)
+                    .font(.caption)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var pageImageURL: URL? {
+        let raw = highlight.highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        return URL(string: raw)
     }
 
     private var byline: some View {

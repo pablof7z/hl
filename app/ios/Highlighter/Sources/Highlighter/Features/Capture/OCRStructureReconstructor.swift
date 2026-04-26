@@ -4,7 +4,7 @@ import Foundation
 /// A single recognized line from Vision with the geometry we need to
 /// reconstruct page structure. `bbox` is in normalized image coordinates,
 /// origin bottom-left (matches `VNRecognizedTextObservation.boundingBox`).
-struct OCRLine: Sendable {
+struct OCRLine: Sendable, Equatable {
     let text: String
     let bbox: CGRect
     let confidence: Float

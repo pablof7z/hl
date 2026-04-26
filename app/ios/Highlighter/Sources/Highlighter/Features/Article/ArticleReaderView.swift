@@ -206,7 +206,13 @@ private struct ReaderScroll: View {
     var onFootnoteBackTap: (Int) -> Void
 
     @State private var rendered: MarkdownRenderer.Output?
+    @State private var imageToOpen: IdentifiableURL?
     @Environment(HighlighterStore.self) private var app
+
+    private struct IdentifiableURL: Identifiable {
+        let url: URL
+        var id: String { url.absoluteString }
+    }
 
     private var coverURL: URL? {
         guard !article.image.isEmpty else { return nil }
@@ -226,25 +232,16 @@ private struct ReaderScroll: View {
                     .padding(.bottom, 12)
 
                 if let rendered {
-                    ArticleBodyView(
-                        attributedText: composed(rendered),
-                        footnoteAnchors: rendered.footnoteAnchors,
-                        footnoteBackAnchors: [:],
-                        highlightsById: rendered.highlightsById,
-                        paperColor: UIColor(Color.highlighterPaper),
-                        onPublishHighlight: onPublishHighlight,
-                        onRequestNote: onRequestNote,
-                        onHighlightTap: onHighlightTap,
-                        onFootnoteTap: onFootnoteTap,
-                        onFootnoteBackTap: onFootnoteBackTap
-                    )
-                    .frame(maxWidth: .infinity)
+                    bodySegments(rendered)
                 }
 
                 referencedSection(content: article.content)
             }
         }
         .ignoresSafeArea(edges: coverURL == nil ? [] : .top)
+        .fullScreenCover(item: $imageToOpen) { item in
+            ImageZoomView(url: item.url, onDismiss: { imageToOpen = nil })
+        }
         .task(id: "\(article.eventId)-\(highlights.count)") {
             rendered = await Task.detached(priority: .userInitiated) {
                 MarkdownRenderer.render(
@@ -283,29 +280,81 @@ private struct ReaderScroll: View {
         }
     }
 
-    private func composed(_ output: MarkdownRenderer.Output) -> NSAttributedString {
-        let out = NSMutableAttributedString(attributedString: output.body)
-        if output.footnotes.length > 0 {
-            let divider = NSAttributedString(
-                string: "\n———\n\n",
-                attributes: [
-                    .font: UIFont.systemFont(ofSize: 14, weight: .semibold),
-                    .foregroundColor: UIColor(Color.highlighterInkMuted)
-                ]
-            )
-            out.append(divider)
-            let label = NSAttributedString(
-                string: "Footnotes\n\n",
-                attributes: [
-                    .font: UIFont.systemFont(ofSize: 12, weight: .bold),
-                    .foregroundColor: UIColor(Color.highlighterInkMuted),
-                    .kern: 0.6
-                ]
-            )
-            out.append(label)
-            out.append(output.footnotes)
+    @ViewBuilder
+    private func bodySegments(_ output: MarkdownRenderer.Output) -> some View {
+        ForEach(Array(output.segments.enumerated()), id: \.offset) { idx, segment in
+            switch segment {
+            case .text(let attrStr):
+                let isLast = idx == output.segments.count - 1
+                ArticleBodyView(
+                    attributedText: isLast ? withFootnotes(attrStr, output) : attrStr,
+                    footnoteAnchors: isLast ? output.footnoteAnchors : [:],
+                    footnoteBackAnchors: [:],
+                    highlightsById: output.highlightsById,
+                    paperColor: UIColor(Color.highlighterPaper),
+                    onPublishHighlight: onPublishHighlight,
+                    onRequestNote: onRequestNote,
+                    onHighlightTap: onHighlightTap,
+                    onFootnoteTap: onFootnoteTap,
+                    onFootnoteBackTap: onFootnoteBackTap,
+                    onImageTap: { url in imageToOpen = IdentifiableURL(url: url) }
+                )
+                .frame(maxWidth: .infinity)
+            case .image(let url, let alt):
+                InlineArticleImage(url: url, alt: alt)
+            }
         }
+    }
+
+    private func withFootnotes(_ body: NSAttributedString, _ output: MarkdownRenderer.Output) -> NSAttributedString {
+        guard output.footnotes.length > 0 else { return body }
+        let out = NSMutableAttributedString(attributedString: body)
+        out.append(NSAttributedString(
+            string: "\n———\n\n",
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 14, weight: .semibold),
+                .foregroundColor: UIColor(Color.highlighterInkMuted)
+            ]
+        ))
+        out.append(NSAttributedString(
+            string: "Footnotes\n\n",
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 12, weight: .bold),
+                .foregroundColor: UIColor(Color.highlighterInkMuted),
+                .kern: 0.6
+            ]
+        ))
+        out.append(output.footnotes)
         return out
+    }
+}
+
+// MARK: - Inline image
+
+private struct InlineArticleImage: View {
+    let url: URL
+    let alt: String
+
+    @State private var showFullScreen = false
+
+    var body: some View {
+        KFImage(url)
+            .placeholder {
+                Color.highlighterRule.opacity(0.4)
+                    .frame(height: 200)
+            }
+            .fade(duration: 0.2)
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
+            .onTapGesture { showFullScreen = true }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+            .fullScreenCover(isPresented: $showFullScreen) {
+                ImageZoomView(url: url, onDismiss: { showFullScreen = false })
+            }
     }
 }
 

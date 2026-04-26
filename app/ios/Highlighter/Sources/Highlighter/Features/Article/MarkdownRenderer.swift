@@ -16,8 +16,13 @@ import Markdown
 /// holding the event id. The reader uses this to resolve taps without a
 /// separate hit-test pass.
 enum MarkdownRenderer {
+    enum BodySegment: @unchecked Sendable {
+        case text(NSAttributedString)
+        case image(url: URL, alt: String)
+    }
+
     struct Output: @unchecked Sendable {
-        let body: NSAttributedString
+        let segments: [BodySegment]
         let footnotes: NSAttributedString
         /// Keyed by highlight event id so the reader can resolve a tap back
         /// to the record.
@@ -60,30 +65,27 @@ enum MarkdownRenderer {
             bodyPointSize: bodyPointSize,
             definitionsById: Dictionary(uniqueKeysWithValues: preprocessed.definitions.map { ($0.id, $0) })
         )
-        let body = walker.render(document)
+        let rawSegments = walker.render(document)
 
-        // Overlay highlights on the flattened body after walking. We do this
-        // in a single pass over the event list, finding each quote with
-        // `range(of:)`; unmatched highlights are silently dropped (mirrors
-        // the web behavior).
-        let overlaidBody = body.mutableCopy() as! NSMutableAttributedString
+        // Overlay highlights on each text segment. A highlight is applied to
+        // whichever segment contains the matching text run; unmatched
+        // highlights are silently dropped.
         var highlightsById: [String: HighlightRecord] = [:]
-        for highlight in highlights {
-            let quote = highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !quote.isEmpty, quote.count >= 4 else { continue }
-            let plain = overlaidBody.string
-            if let range = plain.range(of: quote) {
-                let nsRange = NSRange(range, in: plain)
-                // Don't overwrite existing attributes wholesale — layer the
-                // highlight attribute + background color.
-                overlaidBody.addAttribute(highlightAttribute, value: highlight.eventId, range: nsRange)
-                overlaidBody.addAttribute(
-                    .backgroundColor,
-                    value: tint.withAlphaComponent(0.35),
-                    range: nsRange
-                )
-                highlightsById[highlight.eventId] = highlight
+        let segments: [BodySegment] = rawSegments.map { segment in
+            guard case .text(let attrStr) = segment else { return segment }
+            let mutable = attrStr.mutableCopy() as! NSMutableAttributedString
+            for highlight in highlights {
+                let quote = highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !quote.isEmpty, quote.count >= 4 else { continue }
+                let plain = mutable.string
+                if let range = plain.range(of: quote) {
+                    let nsRange = NSRange(range, in: plain)
+                    mutable.addAttribute(highlightAttribute, value: highlight.eventId, range: nsRange)
+                    mutable.addAttribute(.backgroundColor, value: tint.withAlphaComponent(0.35), range: nsRange)
+                    highlightsById[highlight.eventId] = highlight
+                }
             }
+            return .text(mutable)
         }
 
         // Footnote definitions — rendered separately as a smaller attributed
@@ -97,7 +99,7 @@ enum MarkdownRenderer {
         )
 
         return Output(
-            body: overlaidBody,
+            segments: segments,
             footnotes: footnotes,
             highlightsById: highlightsById,
             footnoteAnchors: walker.footnoteAnchors
@@ -146,7 +148,10 @@ enum MarkdownRenderer {
                 definitionsById: [:]
             )
             let innerDoc = Document(parsing: def.markdown)
-            let innerString = inner.render(innerDoc).mutableCopy() as! NSMutableAttributedString
+            let innerSegments = inner.render(innerDoc)
+            let innerMerged = NSMutableAttributedString()
+            for seg in innerSegments { if case .text(let t) = seg { innerMerged.append(t) } }
+            let innerString = innerMerged
             // Strip the trailing newline BodyWalker appends after the last
             // block — we want one newline between definitions, not two.
             if innerString.string.hasSuffix("\n\n") {
@@ -204,12 +209,34 @@ private struct BodyWalker {
     }
     private var mono: UIFont { UIFont.monospacedSystemFont(ofSize: bodyPointSize - 2, weight: .regular) }
 
-    mutating func render(_ document: Document) -> NSAttributedString {
-        let out = NSMutableAttributedString()
+    mutating func render(_ document: Document) -> [MarkdownRenderer.BodySegment] {
+        var segments: [MarkdownRenderer.BodySegment] = []
+        var currentText = NSMutableAttributedString()
+
         for child in document.children {
-            out.append(renderBlock(child))
+            if let para = child as? Paragraph, let (url, alt) = imageOnlyParagraph(para) {
+                if currentText.length > 0 {
+                    segments.append(.text(currentText))
+                    currentText = NSMutableAttributedString()
+                }
+                segments.append(.image(url: url, alt: alt))
+            } else {
+                currentText.append(renderBlock(child))
+            }
         }
-        return out
+        if currentText.length > 0 {
+            segments.append(.text(currentText))
+        }
+        return segments
+    }
+
+    private func imageOnlyParagraph(_ para: Paragraph) -> (URL, String)? {
+        let children = Array(para.inlineChildren)
+        guard children.count == 1,
+              let img = children.first as? Image,
+              let src = img.source,
+              let url = URL(string: src) else { return nil }
+        return (url, img.plainText)
     }
 
     // MARK: - Block
@@ -419,13 +446,26 @@ private struct BodyWalker {
             }
             return out
         case let image as Image:
-            // Render an image placeholder line. Full inline image loading is
-            // v2 — we leave a readable marker so the reader can decide later.
+            // Standalone image paragraphs are handled as BodySegment.image in
+            // BodyWalker.render(); this branch only fires for images embedded
+            // inside a mixed paragraph. Render as a tappable link so the
+            // reader can open the full-screen viewer via highlighter://image/.
             let alt = image.plainText
             let dest = image.source ?? ""
-            let label = alt.isEmpty ? (dest.isEmpty ? "(image)" : dest) : alt
+            let label = alt.isEmpty ? "Image" : alt
+            if !dest.isEmpty,
+               let encoded = dest.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+               let linkURL = URL(string: "highlighter://image/\(encoded)") {
+                return NSAttributedString(string: "[\(label)]", attributes: [
+                    .font: serifItalic,
+                    .foregroundColor: accent,
+                    .underlineStyle: NSUnderlineStyle.single.rawValue,
+                    .underlineColor: accent.withAlphaComponent(0.4),
+                    .link: linkURL
+                ])
+            }
             return NSAttributedString(
-                string: "🖼 \(label)\n",
+                string: "[\(label)]",
                 attributes: [.font: serifItalic, .foregroundColor: muted]
             )
         case is LineBreak:

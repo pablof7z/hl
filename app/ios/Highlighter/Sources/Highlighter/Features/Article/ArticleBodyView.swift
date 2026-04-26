@@ -38,6 +38,10 @@ struct ArticleBodyView: UIViewRepresentable {
     /// to the inline reference.
     var onFootnoteBackTap: (_ number: Int) -> Void
 
+    /// User tapped an inline image link (images that appear inside a mixed
+    /// text paragraph; standalone images render as SwiftUI views).
+    var onImageTap: (_ url: URL) -> Void
+
     func makeUIView(context: Context) -> UITextView {
         let tv = ReaderTextView(usingTextLayoutManager: true)
         tv.coordinator = context.coordinator
@@ -238,6 +242,12 @@ struct ArticleBodyView: UIViewRepresentable {
                 parent.onFootnoteTap(n)
             case "footnote-back":
                 parent.onFootnoteBackTap(n)
+            case "image":
+                let encoded = url.absoluteString.dropFirst("highlighter://image/".count)
+                let decoded = String(encoded).removingPercentEncoding ?? String(encoded)
+                if let imageURL = URL(string: decoded) {
+                    parent.onImageTap(imageURL)
+                }
             default:
                 break
             }
