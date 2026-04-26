@@ -119,10 +119,9 @@ struct OnboardingInterestsView: View {
         isWorking = true
         let chosenIds = selected
 
-        UserDefaults.standard.set(true, forKey: "onboardingComplete")
-
         Task {
             await store.completeLogin(user: account.user)
+            UserDefaults.standard.set(true, forKey: "onboardingComplete")
 
             let pubkeys = InterestCatalog.pubkeys(for: chosenIds)
             for pubkey in pubkeys {

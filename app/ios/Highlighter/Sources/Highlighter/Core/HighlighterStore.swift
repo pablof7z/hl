@@ -93,7 +93,9 @@ final class HighlighterStore {
 
     func completeLogin(user: CurrentUser) async {
         currentUser = user
-        registerEventBridge()
+        if eventBridge == nil {
+            registerEventBridge()
+        }
         await loadAppScopeData()
     }
 
@@ -119,6 +121,7 @@ final class HighlighterStore {
         webMetadataCache.removeAll()
         bookmarkedArticleAddresses.removeAll()
         core.logout()
+        eventBridge = nil
         AppSessionStore.shared.clear()
         UserDefaults.standard.removeObject(forKey: "onboardingComplete")
         currentUser = nil

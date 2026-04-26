@@ -1626,6 +1626,19 @@ impl HighlighterCore {
         blossom::sign_nip98_auth(&self.runtime, &url, &method, payload_hash.as_deref()).await
     }
 
+    /// Sign a NIP-05 registration authorization event (kind:27235) for
+    /// claiming `name@domain` on the Highlighter managed NIP-05 service.
+    /// Returns the raw JSON of the signed event for use in the `auth` field
+    /// of the POST `/api/nip05` request body.
+    pub async fn sign_nip05_registration_auth(
+        &self,
+        name: String,
+        domain: String,
+    ) -> Result<String, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        blossom::sign_nip05_registration_auth(&self.runtime, &name, &domain).await
+    }
+
     // -- Capture flow (BUD-01 upload + kind:20 picture publish) --
 
     /// Upload a photo to the default Blossom server (`blossom.primal.net`)

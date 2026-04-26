@@ -8,9 +8,7 @@ struct RootSceneView: View {
     /// iOS often delivers two within ~250ms.
     @State private var lastShakeAt: Date = .distantPast
 
-    private var isOnboardingComplete: Bool {
-        UserDefaults.standard.bool(forKey: "onboardingComplete")
-    }
+    @AppStorage("onboardingComplete") private var isOnboardingComplete: Bool = false
 
     var body: some View {
         Group {

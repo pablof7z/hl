@@ -183,6 +183,30 @@ pub async fn sign_nip98_auth(
     Ok(event.as_json())
 }
 
+/// Build and sign a kind:27235 NIP-05 registration authorization event.
+/// Returns the raw JSON of the signed event for use in the `auth` field of the
+/// POST `/api/nip05` request body.
+pub async fn sign_nip05_registration_auth(
+    runtime: &NostrRuntime,
+    name: &str,
+    domain: &str,
+) -> Result<String, CoreError> {
+    let tags = vec![
+        parse_tag(&["t", "nip05-registration"])?,
+        parse_tag(&["action", "register"])?,
+        parse_tag(&["domain", domain])?,
+        parse_tag(&["name", name])?,
+    ];
+
+    let builder = EventBuilder::new(Kind::Custom(KIND_NIP98_HTTP_AUTH), "").tags(tags);
+    let client = runtime.client();
+    let event = client
+        .sign_event_builder(builder)
+        .await
+        .map_err(|e| CoreError::Signer(format!("sign nip05 registration auth: {e}")))?;
+    Ok(event.as_json())
+}
+
 // -- BUD-01 upload --
 
 /// Lowercase hex SHA-256 of `bytes`.

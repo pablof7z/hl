@@ -523,6 +523,10 @@ actor SafeHighlighterCore {
         try await core.signNip98Auth(url: url, method: method, payloadHash: payloadHash)
     }
 
+    func signNip05RegistrationAuth(name: String, domain: String) async throws -> String {
+        try await core.signNip05RegistrationAuth(name: name, domain: domain)
+    }
+
     // MARK: - Capture (Blossom upload + kind:20 picture)
 
     func uploadPhoto(

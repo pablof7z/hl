@@ -1192,6 +1192,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async throws 
     
     /**
+     * Sign a NIP-05 registration authorization event (kind:27235) for
+     * claiming `name@domain` on the Highlighter managed NIP-05 service.
+     * Returns the raw JSON of the signed event for use in the `auth` field
+     * of the POST `/api/nip05` request body.
+     */
+    func signNip05RegistrationAuth(name: String, domain: String) async throws  -> String
+    
+    /**
      * Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
      * request. Returns the raw JSON of the signed event; the Swift caller
      * base64-encodes it and uses it as `Authorization: Nostr <base64>`.
@@ -3067,6 +3075,29 @@ open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: St
             completeFunc: ffi_highlighter_core_rust_future_complete_void,
             freeFunc: ffi_highlighter_core_rust_future_free_void,
             liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Sign a NIP-05 registration authorization event (kind:27235) for
+     * claiming `name@domain` on the Highlighter managed NIP-05 service.
+     * Returns the raw JSON of the signed event for use in the `auth` field
+     * of the POST `/api/nip05` request body.
+     */
+open func signNip05RegistrationAuth(name: String, domain: String)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_sign_nip05_registration_auth(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(name),FfiConverterString.lower(domain)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -10028,6 +10059,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 10741) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_sign_nip05_registration_auth() != 26895) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_sign_nip98_auth() != 43473) {
