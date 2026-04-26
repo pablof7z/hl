@@ -138,6 +138,16 @@ impl HighlighterCore {
         Ok(user)
     }
 
+    pub fn generate_account(&self) -> Result<crate::models::GeneratedAccount, CoreError> {
+        let keys = Keys::generate();
+        let nsec = keys
+            .secret_key()
+            .to_bech32()
+            .map_err(|e| CoreError::Other(format!("nsec encoding failed: {e}")))?;
+        let user = self.login_nsec(nsec.clone())?;
+        Ok(crate::models::GeneratedAccount { user, nsec })
+    }
+
     pub fn logout(&self) {
         self.subscriptions.clear(&self.runtime);
         {

@@ -798,6 +798,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func disconnectAll() async throws 
     
+    func generateAccount() throws  -> GeneratedAccount
+    
     /**
      * Every cached room, newest first, truncated to `limit`. Powers the
      * explorer's "Browse all" grid.
@@ -1619,6 +1621,13 @@ open func disconnectAll()async throws   {
             liftFunc: { $0 },
             errorHandler: FfiConverterTypeCoreError_lift
         )
+}
+    
+open func generateAccount()throws  -> GeneratedAccount  {
+    return try  FfiConverterTypeGeneratedAccount_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_highlighter_core_fn_method_highlightercore_generate_account(self.uniffiClonePointer(),$0
+    )
+})
 }
     
     /**
@@ -5861,6 +5870,76 @@ public func FfiConverterTypeFeedbackThreadRecord_lower(_ value: FeedbackThreadRe
 }
 
 
+public struct GeneratedAccount {
+    public var user: CurrentUser
+    public var nsec: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(user: CurrentUser, nsec: String) {
+        self.user = user
+        self.nsec = nsec
+    }
+}
+
+#if compiler(>=6)
+extension GeneratedAccount: Sendable {}
+#endif
+
+
+extension GeneratedAccount: Equatable, Hashable {
+    public static func ==(lhs: GeneratedAccount, rhs: GeneratedAccount) -> Bool {
+        if lhs.user != rhs.user {
+            return false
+        }
+        if lhs.nsec != rhs.nsec {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(user)
+        hasher.combine(nsec)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGeneratedAccount: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GeneratedAccount {
+        return
+            try GeneratedAccount(
+                user: FfiConverterTypeCurrentUser.read(from: &buf), 
+                nsec: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GeneratedAccount, into buf: inout [UInt8]) {
+        FfiConverterTypeCurrentUser.write(value.user, into: &buf)
+        FfiConverterString.write(value.nsec, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGeneratedAccount_lift(_ buf: RustBuffer) throws -> GeneratedAccount {
+    return try FfiConverterTypeGeneratedAccount.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGeneratedAccount_lower(_ value: GeneratedAccount) -> RustBuffer {
+    return FfiConverterTypeGeneratedAccount.lower(value)
+}
+
+
 /**
  * A pending highlight to publish — text + optional context/note.
  */
@@ -9730,6 +9809,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 46894) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 54846) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_all_rooms() != 20905) {

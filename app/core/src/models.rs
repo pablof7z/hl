@@ -8,6 +8,12 @@ pub struct CurrentUser {
     pub npub: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct GeneratedAccount {
+    pub user: CurrentUser,
+    pub nsec: String,
+}
+
 /// Mirrors `CommunitySummary` in `web/src/lib/ndk/groups.ts:23-35`.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CommunitySummary {

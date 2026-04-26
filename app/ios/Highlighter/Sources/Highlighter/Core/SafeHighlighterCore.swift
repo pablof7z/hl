@@ -24,6 +24,10 @@ actor SafeHighlighterCore {
         try await core.pairBunker(uri: uri)
     }
 
+    func generateAccount() throws -> GeneratedAccount {
+        try core.generateAccount()
+    }
+
     func currentUser() -> CurrentUser? {
         core.currentUser()
     }

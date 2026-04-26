@@ -297,7 +297,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     private func dispatchAppScope(_ change: DataChangeType) {
         switch change {
         case .signerConnected(let user):
-            appStore?.currentUser = user
+            if let appStore { Task { await appStore.completeLogin(user: user) } }
         case .relayStatusChanged(let url, let state):
             let store = registry.withLock { reg in reg.networkStore?.value }
             store?.applyStatus(url: url, state: state)

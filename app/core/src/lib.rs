@@ -43,9 +43,10 @@ pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
     ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, BookmarkSetRecord,
     ChatMessageRecord, CommentRecord, CommunitySummary, CurrentUser, DiscussionAttachment,
-    DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft, HighlightRecord,
-    HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord, ProfileMetadata,
-    ReadingFeedItem, RoomRecommendation, RoomRecommendationReason, WebBookmarkRecord,
+    DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightDraft,
+    HighlightRecord, HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord,
+    ProfileMetadata, ReadingFeedItem, RoomRecommendation, RoomRecommendationReason,
+    WebBookmarkRecord,
 };
 pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;
