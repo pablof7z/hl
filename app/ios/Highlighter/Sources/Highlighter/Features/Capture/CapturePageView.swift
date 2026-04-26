@@ -180,11 +180,6 @@ struct CapturePageView: View {
                         .gesture(canvasGesture(dispSize: dispSize, dispOffset: dispOffset))
                     }
 
-                    // Stashed quote badge
-                    if let quote = store.stashedQuote {
-                        stashedBadge(quote: quote)
-                            .offset(x: dispOffset.x + 12, y: dispOffset.y + 12)
-                    }
                 }
                 .onAppear {
                     imageDisplaySize = dispSize
@@ -258,6 +253,7 @@ struct CapturePageView: View {
 
                 if gestureMode == nil {
                     gestureMode = dx >= dy * 0.8 ? .selecting : .publishing
+                    if gestureMode == .selecting { selectionRange = nil }
                 }
 
                 switch gestureMode {
@@ -317,8 +313,8 @@ struct CapturePageView: View {
         let quote = selected.map { $0.text }.joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        selectionRange = nil
         dragAnchorIdx = nil
+        // Keep selectionRange so the highlight stays visible on the image.
 
         guard !quote.isEmpty else { return }
         store.stashHighlight(quote: quote, context: "")
@@ -377,33 +373,6 @@ struct CapturePageView: View {
             x: (pt.x - offset.x) / size.width,
             y: 1.0 - (pt.y - offset.y) / size.height
         )
-    }
-
-    // MARK: - Stashed badge
-
-    private func stashedBadge(quote: String) -> some View {
-        HStack(alignment: .top, spacing: 0) {
-            Rectangle()
-                .fill(Color.highlighterAccent)
-                .frame(width: 3)
-            HStack {
-                Text(quote)
-                    .font(.system(.caption, design: .serif).italic())
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                Spacer(minLength: 0)
-                Button {
-                    store.clearStash()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.white.opacity(0.7))
-                        .font(.caption)
-                }
-            }
-            .padding(8)
-        }
-        .background(.ultraThinMaterial.opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
-        .frame(maxWidth: 260)
     }
 
     // MARK: - Bottom panel
