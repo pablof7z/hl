@@ -1,20 +1,16 @@
-import Kingfisher
 import SwiftUI
 import UIKit
 
 /// Review screen after capture. The corrected photo is the primary surface:
-/// the user drags across text to underline and select it, then swipes up
-/// (or taps Publish) to share.
+/// the user drags across text to underline and select it, then taps Next →
+/// to proceed to the destination/metadata sheet.
 ///
 /// Layout:
 ///   ┌─ close/title bar ─────────────────────┐
-///   │  photo canvas (drag-to-select)        │
-///   │   · yellow underlines for selected    │
-///   │     OCR lines while dragging           │
-///   ├───────────────────────────────────────┤
-///   │  book pill  ·  community chip         │
-///   │  note field                           │
-///   │  ──── swipe up to publish ────        │
+///   │  photo canvas (drag-to-select,        │
+///   │               pinch-to-zoom)          │
+///   │                                       │
+///   │                   [ Next → ]          │
 ///   └───────────────────────────────────────┘
 struct CapturePageView: View {
     @Bindable var store: CaptureStore
@@ -25,33 +21,32 @@ struct CapturePageView: View {
     // Drag-select state
     @State private var sortedLines: [OCRLine] = []
     @State private var selectionRange: ClosedRange<Int>? = nil
-    @State private var dragAnchorIdx: Int? = nil
-
-    // Image display geometry (populated by GeometryReader)
-    @State private var imageDisplaySize: CGSize = .zero
-    @State private var imageDisplayOffset: CGPoint = .zero
 
     // Spring-in animation
     @State private var imageScale: CGFloat = 0.88
     @State private var imageOpacity: Double = 0
 
-    // Swipe-up publish
-    @State private var swipeTranslation: CGFloat = 0
-    @State private var gestureMode: DragMode? = nil
+    // Zoom / pan state — committed values
+    @State private var zoomScale: CGFloat = 1.0
+    @State private var zoomOffset: CGSize = .zero
+    // Active values (updated live during gesture)
+    @State private var activeZoomScale: CGFloat = 1.0
+    @State private var activeZoomOffset: CGSize = .zero
 
-    // Sheets
-    @State private var showBookPicker = false
-    @State private var showCommunityPicker = false
+    // Tracks whether a magnify gesture is in progress to suppress one-finger selection
+    @GestureState private var isMagnifying: Bool = false
 
-    private enum DragMode { case selecting, publishing }
+    // Metadata sheet
+    @State private var showMetadataSheet = false
 
     var body: some View {
         content
-            .sheet(isPresented: $showBookPicker) {
-                BookPicker(selection: $store.selectedBook).environment(appStore)
-            }
-            .sheet(isPresented: $showCommunityPicker) {
-                CommunityPicker(selection: $store.selectedGroupId).environment(appStore)
+            .sheet(isPresented: $showMetadataSheet) {
+                CaptureMetadataSheet(store: store, onPublish: {
+                    showMetadataSheet = false
+                    store.publish()
+                })
+                .environment(appStore)
             }
             .overlay { publishingOverlay }
     }
@@ -63,9 +58,12 @@ struct CapturePageView: View {
             VStack(spacing: 0) {
                 titleBar
                 photoCanvas
-                bottomPanel
             }
             .ignoresSafeArea(edges: .bottom)
+
+            nextButton
+                .padding(.bottom, 48)
+                .padding(.horizontal, 20)
         }
         .onAppear { setupLines() }
         .onAppear { triggerSpringIfReady() }
@@ -73,6 +71,10 @@ struct CapturePageView: View {
         .onChange(of: store.thumbnail) { old, new in
             guard old == nil, new != nil else { return }
             springIn()
+            zoomScale = 1.0
+            zoomOffset = .zero
+            activeZoomScale = 1.0
+            activeZoomOffset = .zero
         }
     }
 
@@ -134,8 +136,25 @@ struct CapturePageView: View {
                     .foregroundStyle(.white.opacity(0.7))
             }
             Spacer()
-            // Spacer to balance the close button
-            Color.clear.frame(width: 36, height: 36)
+            // Zoom reset — visible only when zoomed
+            if zoomScale > 1.01 {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                        zoomScale = 1.0
+                        zoomOffset = .zero
+                        activeZoomScale = 1.0
+                        activeZoomOffset = .zero
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+            } else {
+                Color.clear.frame(width: 36, height: 36)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -147,6 +166,34 @@ struct CapturePageView: View {
             )
             .ignoresSafeArea(edges: .top)
         )
+    }
+
+    // MARK: - Next button
+
+    private var nextButton: some View {
+        Button {
+            showMetadataSheet = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: store.stashedQuote != nil ? "highlighter" : "photo")
+                Text("Next")
+                    .fontWeight(.semibold)
+                Image(systemName: "arrow.right")
+            }
+            .font(.body)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
+            .background(
+                store.canPublish ? Color.highlighterAccent : Color.black.opacity(0.55),
+                in: Capsule()
+            )
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(store.canPublish ? 0 : 0.25), lineWidth: 1)
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     // MARK: - Photo canvas
@@ -169,27 +216,34 @@ struct CapturePageView: View {
                         .offset(x: dispOffset.x, y: dispOffset.y)
                         .scaleEffect(imageScale)
                         .opacity(imageOpacity)
+                        .scaleEffect(activeZoomScale, anchor: .center)
+                        .offset(activeZoomOffset)
 
-                    // OCR selection overlay
+                    // OCR overlay — follows the same zoom/pan transform
                     if !sortedLines.isEmpty {
                         Canvas { ctx, _ in
                             drawSelectionOverlay(ctx: ctx, dispSize: dispSize, dispOffset: dispOffset)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .contentShape(Rectangle())
-                        .gesture(canvasGesture(dispSize: dispSize, dispOffset: dispOffset))
+                        .scaleEffect(activeZoomScale, anchor: .center)
+                        .offset(activeZoomOffset)
+                        .gesture(
+                            isMagnifying ? nil : canvasSelectionGesture(
+                                containerSize: geo.size,
+                                dispSize: dispSize,
+                                dispOffset: dispOffset
+                            )
+                        )
                     }
 
+                    // Stashed quote badge
+                    if let quote = store.stashedQuote {
+                        stashedBadge(quote: quote)
+                            .offset(x: dispOffset.x + 12, y: dispOffset.y + 12)
+                    }
                 }
-                .onAppear {
-                    imageDisplaySize = dispSize
-                    imageDisplayOffset = dispOffset
-                }
-                .onChange(of: geo.size) { _, newSize in
-                    let (s, o) = computeLayout(thumbnail: thumbnail, container: newSize)
-                    imageDisplaySize = s
-                    imageDisplayOffset = o
-                }
+                .gesture(zoomGesture(containerSize: geo.size))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -223,7 +277,48 @@ struct CapturePageView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - OCR selection
+    // MARK: - Zoom gesture (two-finger pinch + pan)
+
+    private func zoomGesture(containerSize: CGSize) -> some Gesture {
+        MagnifyGesture()
+            .updating($isMagnifying) { _, state, _ in state = true }
+            .onChanged { value in
+                activeZoomScale = (zoomScale * value.magnification).clamped(to: 1.0...5.0)
+            }
+            .onEnded { value in
+                let newScale = (zoomScale * value.magnification).clamped(to: 1.0...5.0)
+                zoomScale = newScale
+                activeZoomScale = newScale
+                if newScale <= 1.0 {
+                    zoomOffset = .zero
+                    activeZoomOffset = .zero
+                }
+            }
+            .simultaneously(with:
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        guard activeZoomScale > 1.01 else { return }
+                        let maxOffset = maxAllowedOffset(containerSize: containerSize, scale: activeZoomScale)
+                        activeZoomOffset = CGSize(
+                            width: (zoomOffset.width + value.translation.width).clamped(to: -maxOffset.width...maxOffset.width),
+                            height: (zoomOffset.height + value.translation.height).clamped(to: -maxOffset.height...maxOffset.height)
+                        )
+                    }
+                    .onEnded { _ in
+                        guard activeZoomScale > 1.01 else { return }
+                        zoomOffset = activeZoomOffset
+                    }
+            )
+    }
+
+    private func maxAllowedOffset(containerSize: CGSize, scale: CGFloat) -> CGSize {
+        CGSize(
+            width: containerSize.width * (scale - 1) / 2,
+            height: containerSize.height * (scale - 1) / 2
+        )
+    }
+
+    // MARK: - OCR selection overlay drawing
 
     private func drawSelectionOverlay(ctx: GraphicsContext, dispSize: CGSize, dispOffset: CGPoint) {
         guard let range = selectionRange else { return }
@@ -231,90 +326,57 @@ struct CapturePageView: View {
             guard idx < sortedLines.count else { continue }
             let line = sortedLines[idx]
             let rect = visionToScreen(line.bbox, size: dispSize, offset: dispOffset)
-            // Yellow underline bar at the bottom of each text line
             let underline = CGRect(x: rect.minX, y: rect.maxY - 4, width: rect.width, height: 4)
-            ctx.fill(
-                Path(underline.insetBy(dx: 0, dy: 0)),
-                with: .color(Color.yellow.opacity(0.85))
-            )
-            // Light yellow wash over the full line
-            ctx.fill(
-                Path(rect),
-                with: .color(Color.yellow.opacity(0.25))
-            )
+            ctx.fill(Path(underline), with: .color(Color.yellow.opacity(0.85)))
+            ctx.fill(Path(rect), with: .color(Color.yellow.opacity(0.25)))
         }
     }
 
-    private func canvasGesture(dispSize: CGSize, dispOffset: CGPoint) -> some Gesture {
+    // MARK: - One-finger selection gesture
+
+    private func canvasSelectionGesture(
+        containerSize: CGSize,
+        dispSize: CGSize,
+        dispOffset: CGPoint
+    ) -> some Gesture {
         DragGesture(minimumDistance: 8)
             .onChanged { value in
-                let dx = abs(value.translation.width)
-                let dy = abs(value.translation.height)
-
-                if gestureMode == nil {
-                    gestureMode = dx >= dy * 0.8 ? .selecting : .publishing
-                    if gestureMode == .selecting { selectionRange = nil }
-                }
-
-                switch gestureMode {
-                case .selecting:
-                    updateSelection(
-                        start: value.startLocation,
-                        current: value.location,
-                        dispSize: dispSize,
-                        dispOffset: dispOffset
-                    )
-                case .publishing:
-                    let up = min(0, value.translation.height)
-                    swipeTranslation = up
-                case nil:
-                    break
-                }
+                updateSelection(
+                    start: value.startLocation,
+                    current: value.location,
+                    containerSize: containerSize,
+                    dispSize: dispSize,
+                    dispOffset: dispOffset
+                )
             }
-            .onEnded { value in
-                switch gestureMode {
-                case .selecting:
-                    commitSelection()
-                case .publishing:
-                    if swipeTranslation < -90, store.canPublish {
-                        store.publish()
-                    }
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        swipeTranslation = 0
-                    }
-                case nil:
-                    break
-                }
-                gestureMode = nil
-            }
+            .onEnded { _ in commitSelection() }
     }
 
     private func updateSelection(
         start: CGPoint, current: CGPoint,
+        containerSize: CGSize,
         dispSize: CGSize, dispOffset: CGPoint
     ) {
         guard !sortedLines.isEmpty else { return }
-        let vStart = screenToVision(start, size: dispSize, offset: dispOffset)
-        let vCurrent = screenToVision(current, size: dispSize, offset: dispOffset)
+        let vStart = screenToVision(start, containerSize: containerSize, dispSize: dispSize, dispOffset: dispOffset)
+        let vCurrent = screenToVision(current, containerSize: containerSize, dispSize: dispSize, dispOffset: dispOffset)
 
         let anchor = nearestLineIndex(to: vStart)
         let cursor = nearestLineIndex(to: vCurrent)
-        dragAnchorIdx = anchor
+
         selectionRange = min(anchor, cursor)...max(anchor, cursor)
     }
 
     private func commitSelection() {
         guard let range = selectionRange, !sortedLines.isEmpty else {
             selectionRange = nil
-            dragAnchorIdx = nil
             return
         }
         let selected = Array(sortedLines[range])
         let quote = selected.map { $0.text }.joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        dragAnchorIdx = nil
-        // Keep selectionRange so the highlight stays visible on the image.
+        selectionRange = nil
 
         guard !quote.isEmpty else { return }
         store.stashHighlight(quote: quote, context: "")
@@ -323,16 +385,14 @@ struct CapturePageView: View {
     private func nearestLineIndex(to pt: CGPoint) -> Int {
         sortedLines.indices.min(by: {
             pointToBBoxDistance(pt, bbox: sortedLines[$0].bbox)
-            < pointToBBoxDistance(pt, bbox: sortedLines[$1].bbox)
+                < pointToBBoxDistance(pt, bbox: sortedLines[$1].bbox)
         }) ?? 0
     }
 
     private func pointToBBoxDistance(_ pt: CGPoint, bbox: CGRect) -> CGFloat {
         let cx = min(max(pt.x, bbox.minX), bbox.maxX)
         let cy = min(max(pt.y, bbox.minY), bbox.maxY)
-        let dx = pt.x - cx
-        let dy = pt.y - cy
-        return sqrt(dx * dx + dy * dy)
+        return sqrt((pt.x - cx) * (pt.x - cx) + (pt.y - cy) * (pt.y - cy))
     }
 
     // MARK: - Coordinate helpers
@@ -368,214 +428,59 @@ struct CapturePageView: View {
     }
 
     /// Screen point → Vision normalized coords (bottom-left origin).
-    private func screenToVision(_ pt: CGPoint, size: CGSize, offset: CGPoint) -> CGPoint {
-        CGPoint(
-            x: (pt.x - offset.x) / size.width,
-            y: 1.0 - (pt.y - offset.y) / size.height
+    /// Inverts the active zoom/pan transform so a touch on the zoomed canvas
+    /// maps back to the correct image-space coordinate.
+    private func screenToVision(
+        _ pt: CGPoint,
+        containerSize: CGSize,
+        dispSize: CGSize,
+        dispOffset: CGPoint
+    ) -> CGPoint {
+        let cx = containerSize.width / 2
+        let cy = containerSize.height / 2
+        // Undo pan, then undo scale (pivot = container center)
+        let unscaled = CGPoint(
+            x: (pt.x - activeZoomOffset.width - cx) / activeZoomScale + cx,
+            y: (pt.y - activeZoomOffset.height - cy) / activeZoomScale + cy
+        )
+        return CGPoint(
+            x: (unscaled.x - dispOffset.x) / dispSize.width,
+            y: 1.0 - (unscaled.y - dispOffset.y) / dispSize.height
         )
     }
 
-    // MARK: - Bottom panel
+    // MARK: - Stashed badge
 
-    private var bottomPanel: some View {
-        VStack(spacing: 10) {
-            // Upload status
-            if store.isUploading {
-                HStack(spacing: 6) {
-                    ProgressView().scaleEffect(0.7).tint(Color.highlighterInkMuted)
-                    Text("Uploading…")
-                        .font(.caption)
-                        .foregroundStyle(Color.highlighterInkMuted)
-                    Spacer()
-                }
-            } else if let err = store.uploadError {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
-                    Text(err).font(.caption).lineLimit(1)
-                    Spacer()
-                    Button("Retry") { store.retryUpload() }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.highlighterAccent)
-                }
-            }
-
-            // Book
-            bookPill
-
-            // Community
-            communityRow
-
-            // Note
-            TextField("Add a note (optional)", text: $store.note, axis: .vertical)
-                .lineLimit(1...3)
-                .font(.callout)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.highlighterPaper, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.highlighterRule, lineWidth: 1))
-
-            // Publish / swipe-up area
-            publishArea
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 14)
-        .padding(.bottom, 32)
-        .background(
-            Color.highlighterPaper
-                .overlay(alignment: .top) {
-                    Rectangle().fill(Color.highlighterRule).frame(height: 0.5)
-                }
-                .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: -3)
-                .ignoresSafeArea(edges: .bottom)
-        )
-        .offset(y: swipeTranslation)
-    }
-
-    @ViewBuilder
-    private var publishArea: some View {
-        Button {
-            store.publish()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: store.stashedQuote != nil ? "highlighter" : "photo")
-                Text(publishLabel).fontWeight(.semibold)
-                Spacer()
-                Image(systemName: "arrow.up")
-            }
-            .font(.body)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .background(
-                store.canPublish ? Color.highlighterAccent : Color.highlighterInkMuted.opacity(0.4),
-                in: RoundedRectangle(cornerRadius: 14)
-            )
-        }
-        .disabled(!store.canPublish)
-
-        if store.canPublish && store.stashedQuote != nil {
-            Text("or swipe up on the photo")
-                .font(.caption2)
-                .foregroundStyle(Color.highlighterInkMuted)
-        }
-    }
-
-    private var publishLabel: String {
-        if let q = store.stashedQuote, !q.isEmpty {
-            return store.selectedBook != nil ? "Publish highlight" : "Pick a book first"
-        }
-        return "Share photo"
-    }
-
-    // MARK: - Book pill
-
-    @ViewBuilder
-    private var bookPill: some View {
-        Button { showBookPicker = true } label: {
-            HStack(spacing: 10) {
-                bookCover
-                bookText
+    private func stashedBadge(quote: String) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            Rectangle()
+                .fill(Color.highlighterAccent)
+                .frame(width: 3)
+            HStack {
+                Text(quote)
+                    .font(.system(.caption, design: .serif).italic())
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.highlighterInkMuted)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.highlighterPaper, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.highlighterRule, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
-    private var bookCover: some View {
-        if let sel = store.selectedBook, !sel.coverURL.isEmpty, let url = URL(string: sel.coverURL) {
-            KFImage(url)
-                .placeholder { bookCoverPlaceholder }
-                .fade(duration: 0.15)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 30, height: 42)
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-        } else if store.selectedBook != nil {
-            bookCoverPlaceholder
-        } else {
-            Image(systemName: "book.closed")
-                .font(.body)
-                .foregroundStyle(Color.highlighterInkMuted)
-                .frame(width: 30, height: 42)
-        }
-    }
-
-    private var bookCoverPlaceholder: some View {
-        ZStack {
-            Color.highlighterRule.opacity(0.5)
-            Image(systemName: "book.closed").foregroundStyle(Color.highlighterInkMuted)
-        }
-        .frame(width: 30, height: 42)
-        .clipShape(RoundedRectangle(cornerRadius: 3))
-    }
-
-    @ViewBuilder
-    private var bookText: some View {
-        if let sel = store.selectedBook {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(sel.title.isEmpty ? "Untitled" : sel.title)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(Color.highlighterInkStrong)
-                    .lineLimit(1)
-                if !sel.author.isEmpty {
-                    Text(sel.author)
+                Button {
+                    store.clearStash()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.white.opacity(0.7))
                         .font(.caption)
-                        .foregroundStyle(Color.highlighterInkMuted)
-                        .lineLimit(1)
                 }
             }
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Add a book")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(Color.highlighterInkStrong)
-                Text("Optional — scan barcode or search")
-                    .font(.caption)
-                    .foregroundStyle(Color.highlighterInkMuted)
-                    .lineLimit(1)
-            }
+            .padding(8)
         }
+        .background(.ultraThinMaterial.opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: 260)
     }
+}
 
-    // MARK: - Community row
+// MARK: - Comparable clamped
 
-    private var communityRow: some View {
-        Button { showCommunityPicker = true } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "number")
-                    .font(.caption)
-                    .foregroundStyle(Color.highlighterInkMuted)
-                    .frame(width: 18)
-                Text("Room")
-                    .font(.callout)
-                    .foregroundStyle(Color.highlighterInkStrong)
-                Spacer()
-                Text(communityName.isEmpty ? "Optional" : communityName)
-                    .font(.callout)
-                    .foregroundStyle(communityName.isEmpty ? Color.highlighterInkMuted : Color.highlighterAccent)
-                    .lineLimit(1)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.highlighterInkMuted)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color.highlighterPaper, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.highlighterRule, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var communityName: String {
-        guard let id = store.selectedGroupId else { return "" }
-        return appStore.joinedCommunities.first(where: { $0.id == id })?.name ?? id
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }
