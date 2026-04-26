@@ -599,7 +599,8 @@ struct HighlightFeedCardView: View {
         guard !addr.isEmpty else { return }
 
         if addr.hasPrefix("isbn:") {
-            bookPreview = try? await app.safeCore.lookupIsbn(addr)
+            let isbn = String(addr.dropFirst("isbn:".count))
+            bookPreview = try? await app.safeCore.lookupIsbn(isbn)
             return
         }
 
