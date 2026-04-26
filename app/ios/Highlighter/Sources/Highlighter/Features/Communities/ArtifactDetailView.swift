@@ -1,27 +1,20 @@
 import SwiftUI
 
 /// Dispatch view for an artifact row. Routes by `preview.source`:
-/// - `podcast` → loads the global podcast player and dismisses the detail
-///   stack so the user lands back on the room with the MiniPlayer surfaced.
-///   The Listening Room itself opens by tapping the MiniPlayer.
+/// - `podcast` → pushes `PodcastListeningView`, which loads the artifact
+///   into the global player on appear. The MiniPlayer accessory still
+///   surfaces (mounted on `MainTabView`); back chevron returns to the room.
 /// - `article` → NIP-23 reader, built from the artifact's `a`-tag reference
 ///   (`30023:<pubkey>:<d>`).
 /// - everything else → "Coming soon" placeholder.
 struct ArtifactDetailView: View {
     let artifact: ArtifactRecord
 
-    @Environment(HighlighterStore.self) private var app
-    @Environment(\.dismiss) private var dismiss
-
     var body: some View {
         Group {
             switch artifact.preview.source {
             case "podcast":
-                Color.clear
-                    .task {
-                        app.podcastPlayer.load(artifact: artifact)
-                        dismiss()
-                    }
+                PodcastListeningView(presentation: .pushed, artifact: artifact)
             case "article":
                 if let target = articleTarget {
                     ArticleReaderView(target: target)

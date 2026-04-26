@@ -39,6 +39,19 @@ private let waveformTickWindow: Double = 30
 // MARK: - Main view
 
 struct PodcastListeningView: View {
+    enum Presentation { case sheet, pushed }
+
+    /// How this view is being shown. `.sheet` (the MiniPlayer entry point)
+    /// wraps in its own NavigationStack and shows a "Done" toolbar button.
+    /// `.pushed` (e.g. tapping a podcast row in a room) renders inline so
+    /// the host stack supplies the back chevron.
+    var presentation: Presentation = .sheet
+
+    /// When provided, the player loads this artifact on appear if it's not
+    /// already the current episode. Used by pushed entry points so the user
+    /// doesn't need a separate "load + dismiss" hop.
+    var artifact: ArtifactRecord? = nil
+
     /// `matchedTransitionSource` ID from the MiniPlayer artwork. The hero
     /// artwork in this sheet adopts the same source so iOS 26's zoom transition
     /// morphs the MiniPlayer pill into this view.
@@ -66,24 +79,12 @@ struct PodcastListeningView: View {
     private var player: PodcastPlayerStore { app.podcastPlayer }
 
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .bottomTrailing) {
-                VStack(spacing: 0) {
-                    episodeHeader
-                    layerToggles
-                    timeline
-                }
-
-                clipFab
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 80)
-            }
-            .navigationTitle("Now Playing")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Done") { dismiss() }
-                }
+        Group {
+            switch presentation {
+            case .sheet:
+                NavigationStack { content }
+            case .pushed:
+                content
             }
         }
         .sheet(isPresented: $showComposer, onDismiss: {
@@ -106,8 +107,37 @@ struct PodcastListeningView: View {
                 .environment(app)
             }
         }
+        .task(id: artifact?.shareEventId) {
+            if let artifact, artifact.shareEventId != player.currentArtifact?.shareEventId {
+                player.load(artifact: artifact)
+            }
+        }
         .task(id: player.currentArtifact?.shareEventId) {
             await loadClips()
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 0) {
+                episodeHeader
+                layerToggles
+                timeline
+            }
+
+            clipFab
+                .padding(.trailing, 20)
+                .padding(.bottom, 80)
+        }
+        .navigationTitle("Now Playing")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                if presentation == .sheet {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
     }
 
