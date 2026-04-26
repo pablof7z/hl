@@ -237,11 +237,6 @@ struct CapturePageView: View {
                         )
                     }
 
-                    // Stashed quote badge
-                    if let quote = store.stashedQuote {
-                        stashedBadge(quote: quote)
-                            .offset(x: dispOffset.x + 12, y: dispOffset.y + 12)
-                    }
                 }
                 .gesture(zoomGesture(containerSize: geo.size))
             }
@@ -376,8 +371,7 @@ struct CapturePageView: View {
         let quote = selected.map { $0.text }.joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        selectionRange = nil
-
+        // Keep selectionRange so the yellow highlight stays visible.
         guard !quote.isEmpty else { return }
         store.stashHighlight(quote: quote, context: "")
     }
@@ -449,32 +443,6 @@ struct CapturePageView: View {
         )
     }
 
-    // MARK: - Stashed badge
-
-    private func stashedBadge(quote: String) -> some View {
-        HStack(alignment: .top, spacing: 0) {
-            Rectangle()
-                .fill(Color.highlighterAccent)
-                .frame(width: 3)
-            HStack {
-                Text(quote)
-                    .font(.system(.caption, design: .serif).italic())
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                Spacer(minLength: 0)
-                Button {
-                    store.clearStash()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.white.opacity(0.7))
-                        .font(.caption)
-                }
-            }
-            .padding(8)
-        }
-        .background(.ultraThinMaterial.opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
-        .frame(maxWidth: 260)
-    }
 }
 
 // MARK: - Comparable clamped
