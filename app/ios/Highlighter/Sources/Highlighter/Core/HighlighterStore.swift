@@ -43,6 +43,8 @@ final class HighlighterStore {
     /// re-render when a fetch lands. The Rust core owns the on-disk cache;
     /// this dictionary is the in-memory mirror SwiftUI observes.
     var webMetadataCache: [String: WebMetadata] = [:]
+    /// ArtifactPreview cache for ISBN lookups, keyed by bare ISBN-13 (e.g. "9780593716717").
+    var isbnPreviewCache: [String: ArtifactPreview] = [:]
     /// NIP-51 kind:10003 article bookmarks — set of `30023:<pubkey>:<d>`
     /// addresses. Reactive so every row showing a bookmark affordance updates
     /// when the user toggles one anywhere.
@@ -59,6 +61,7 @@ final class HighlighterStore {
     /// referencing the same URL share a single Task. Cleared once the
     /// fetch completes (success or failure).
     @ObservationIgnored private var webMetadataInflight: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var isbnInflight: [String: Task<Void, Never>] = [:]
 
     var isLoggedIn: Bool { currentUser != nil }
 
@@ -204,6 +207,31 @@ final class HighlighterStore {
             }
         }
         webMetadataInflight[trimmed] = task
+        await task.value
+    }
+
+    /// Fetch + cache an ISBN preview. Concurrent callers for the same ISBN
+    /// coalesce onto one in-flight Task. No-op when already cached.
+    /// `isbn` must be the bare 13-digit string (no "isbn:" prefix).
+    func requestIsbnPreview(isbn: String) async {
+        let key = isbn.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        if isbnPreviewCache[key] != nil { return }
+        if let existing = isbnInflight[key] {
+            await existing.value
+            return
+        }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let preview = try? await self.safeCore.lookupIsbn(key)
+            await MainActor.run {
+                if let preview {
+                    self.isbnPreviewCache[key] = preview
+                }
+                self.isbnInflight.removeValue(forKey: key)
+            }
+        }
+        isbnInflight[key] = task
         await task.value
     }
 

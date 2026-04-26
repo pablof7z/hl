@@ -25,7 +25,19 @@ struct HighlightFeedCardView: View {
     private var lead: HydratedHighlight { items[0] }
 
     @State private var sourceArticle: ArticleRecord?
-    @State private var bookPreview: ArtifactPreview?
+
+    private var bookPreview: ArtifactPreview? {
+        guard let isbn = isbnFromLead else { return nil }
+        return app.isbnPreviewCache[isbn]
+    }
+
+    private var isbnFromLead: String? {
+        let extRef = lead.highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
+        if extRef.hasPrefix("isbn:") { return String(extRef.dropFirst("isbn:".count)) }
+        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        if addr.hasPrefix("isbn:") { return String(addr.dropFirst("isbn:".count)) }
+        return nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -573,24 +585,14 @@ struct HighlightFeedCardView: View {
 
     private func resolveSource() async {
         sourceArticle = nil
-        bookPreview = nil
 
-        // NIP-73 `i` tag → externalReference (used for ISBNs)
-        let extRef = lead.highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
-        if extRef.hasPrefix("isbn:") {
-            let isbn = String(extRef.dropFirst("isbn:".count))
-            bookPreview = try? await app.safeCore.lookupIsbn(isbn)
+        if let isbn = isbnFromLead {
+            await app.requestIsbnPreview(isbn: isbn)
             return
         }
 
         let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !addr.isEmpty else { return }
-
-        if addr.hasPrefix("isbn:") {
-            let isbn = String(addr.dropFirst("isbn:".count))
-            bookPreview = try? await app.safeCore.lookupIsbn(isbn)
-            return
-        }
 
         let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
         guard parts.count == 3, parts[0] == "30023" else { return }

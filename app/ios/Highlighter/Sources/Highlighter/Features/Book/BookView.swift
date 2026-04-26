@@ -5,13 +5,14 @@ struct BookView: View {
     let catalogId: String
 
     @Environment(HighlighterStore.self) private var app
-    @State private var preview: ArtifactPreview?
     @State private var highlights: [HighlightRecord] = []
     @State private var descriptionExpanded = false
 
     private var isbn: String {
         catalogId.hasPrefix("isbn:") ? String(catalogId.dropFirst("isbn:".count)) : catalogId
     }
+
+    private var preview: ArtifactPreview? { app.isbnPreviewCache[isbn] }
 
     var body: some View {
         ScrollView {
@@ -235,10 +236,7 @@ struct BookView: View {
     // MARK: - Data loading
 
     private func load() async {
-        let isbn = self.isbn
-        if let p = try? await app.safeCore.lookupIsbn(isbn) {
-            await MainActor.run { preview = p }
-        }
+        await app.requestIsbnPreview(isbn: isbn)
         let tagValue = catalogId.hasPrefix("isbn:") ? catalogId : "isbn:\(catalogId)"
         if let hs = try? await app.safeCore.getHighlightsForReference(
             tagName: "i",
