@@ -33,7 +33,8 @@ use crate::models::{RelayDiagnostic, RelayStatus as AppRelayStatus};
 /// `group` tag with the group id and relay.
 const KIND_SIMPLE_GROUPS_LIST: u16 = 10009;
 use crate::relays::{
-    query_relays, seed_defaults, RelayConfig, NEGENTROPY_SYNC_RELAYS, PURPLE_PAGES_RELAY,
+    query_relays, seed_defaults, RelayConfig, HIGHLIGHTER_RELAY, NEGENTROPY_SYNC_RELAYS,
+    PURPLE_PAGES_RELAY,
 };
 
 /// Shared pointer to the app's event-callback slot. `HighlighterCore` owns
@@ -420,6 +421,8 @@ impl NostrRuntime {
                 seed_defaults()
             });
             apply_relay_config(&client, &rows).await;
+            pin_relay_for_read(&client, PURPLE_PAGES_RELAY).await;
+            pin_relay_for_read(&client, HIGHLIGHTER_RELAY).await;
             client.connect().await;
             *cache.write() = rows.clone();
             tracing::info!(
@@ -610,6 +613,7 @@ impl NostrRuntime {
         self.rt().spawn(async move {
             apply_relay_config(&client, &rows).await;
             pin_relay_for_read(&client, PURPLE_PAGES_RELAY).await;
+            pin_relay_for_read(&client, HIGHLIGHTER_RELAY).await;
             client.connect().await;
             *cache.write() = rows;
         });
@@ -634,6 +638,7 @@ impl NostrRuntime {
             };
             apply_relay_config(&client, &rows).await;
             pin_relay_for_read(&client, PURPLE_PAGES_RELAY).await;
+            pin_relay_for_read(&client, HIGHLIGHTER_RELAY).await;
             client.connect().await;
             *cache.write() = rows;
         });
@@ -646,14 +651,22 @@ impl NostrRuntime {
     }
 
     /// URLs of relays the user has marked for NIP-29 group traffic. Used by
-    /// per-role subscription targeting for rooms/groups subs.
+    /// URLs of relays the user has marked for NIP-29 group traffic.
+    /// `HIGHLIGHTER_RELAY` is always included — it's the canonical groups
+    /// host. Falls back to it alone when no rooms relay is configured, and
+    /// adds it to any user-configured set that doesn't already contain it.
     pub fn rooms_urls(&self) -> Vec<String> {
-        self.current_relays
+        let mut urls: Vec<String> = self
+            .current_relays
             .read()
             .iter()
             .filter(|r| r.rooms)
             .map(|r| r.url.clone())
-            .collect()
+            .collect();
+        if !urls.iter().any(|u| u == HIGHLIGHTER_RELAY) {
+            urls.push(HIGHLIGHTER_RELAY.to_string());
+        }
+        urls
     }
 
     /// URLs of relays serving as the outbox-model bootstrap pool for

@@ -327,23 +327,32 @@ pub fn query_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<RelayConfig>, CoreE
         }
     }
 
-    // Rooms default: if the user hasn't picked a rooms relay (no NIP-78
-    // entry with rooms=true), surface Highlighter as the default. Don't
-    // touch read/write — those live in NIP-65 and shouldn't change just
-    // because rooms needs a host.
-    if !rows.iter().any(|r| r.rooms) {
-        if let Some(row) = rows.iter_mut().find(|r| r.url == HIGHLIGHTER_RELAY) {
-            row.rooms = true;
-        } else {
-            rows.push(RelayConfig {
-                url: HIGHLIGHTER_RELAY.to_string(),
-                read: false,
-                write: false,
-                rooms: true,
-                indexer: false,
-            });
-        }
+    // Rooms invariant: relay.highlighter.com is always present with rooms=true.
+    if let Some(row) = rows.iter_mut().find(|r| r.url == HIGHLIGHTER_RELAY) {
+        row.rooms = true;
+    } else {
+        rows.push(RelayConfig {
+            url: HIGHLIGHTER_RELAY.to_string(),
+            read: false,
+            write: false,
+            rooms: true,
+            indexer: false,
+        });
     }
+
+    // Indexer invariant: purplepag.es is always present with indexer=true.
+    if let Some(row) = rows.iter_mut().find(|r| r.url == PURPLE_PAGES_RELAY) {
+        row.indexer = true;
+    } else {
+        rows.push(RelayConfig {
+            url: PURPLE_PAGES_RELAY.to_string(),
+            read: false,
+            write: false,
+            rooms: false,
+            indexer: true,
+        });
+    }
+
     Ok(rows)
 }
 
