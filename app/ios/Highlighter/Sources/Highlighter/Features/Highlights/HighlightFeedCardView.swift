@@ -25,6 +25,7 @@ struct HighlightFeedCardView: View {
     private var lead: HydratedHighlight { items[0] }
 
     @State private var sourceArticle: ArticleRecord?
+    @State private var bookPreview: ArtifactPreview?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -367,6 +368,7 @@ struct HighlightFeedCardView: View {
         }
         let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         if addr.hasPrefix("30023:") { return .article }
+        if addr.hasPrefix("isbn:") { return .book }
         if !lead.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return .web
         }
@@ -400,12 +402,9 @@ struct HighlightFeedCardView: View {
     // MARK: - Derived: resource fields
 
     private var resourceCoverURL: String? {
-        if let img = lead.artifact?.preview.image, !img.isEmpty {
-            return img
-        }
-        if artifactKind == .article, let img = sourceArticle?.image, !img.isEmpty {
-            return img
-        }
+        if let img = lead.artifact?.preview.image, !img.isEmpty { return img }
+        if artifactKind == .book, let img = bookPreview?.image, !img.isEmpty { return img }
+        if artifactKind == .article, let img = sourceArticle?.image, !img.isEmpty { return img }
         if artifactKind == .web, let m = webMetadata {
             if !m.image.isEmpty { return m.image }
             if !m.favicon.isEmpty { return m.favicon }
@@ -423,7 +422,7 @@ struct HighlightFeedCardView: View {
             if !show.isEmpty { return show }
             return lead.artifact?.preview.author ?? ""
         case .book:
-            return lead.artifact?.preview.author ?? ""
+            return lead.artifact?.preview.author ?? bookPreview?.author ?? ""
         case .web:
             if let m = webMetadata {
                 if !m.siteName.isEmpty { return m.siteName }
@@ -446,8 +445,12 @@ struct HighlightFeedCardView: View {
             if let t = sourceArticle?.title, !t.isEmpty { return t }
             if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
             return "Untitled"
-        case .podcast, .book, .video, .paper:
+        case .podcast, .video, .paper:
             if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
+            return "Untitled"
+        case .book:
+            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
+            if let t = bookPreview?.title, !t.isEmpty { return t }
             return "Untitled"
         case .web:
             if let m = webMetadata, !m.title.isEmpty { return m.title }
@@ -588,14 +591,18 @@ struct HighlightFeedCardView: View {
         }
     }
 
-    /// Hydrate the NIP-23 article (title + content) and the article
-    /// author's profile when the highlight points at one. No-op for
-    /// other artifact kinds.
     private func resolveSource() async {
         sourceArticle = nil
+        bookPreview = nil
 
         let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !addr.isEmpty else { return }
+
+        if addr.hasPrefix("isbn:") {
+            bookPreview = try? await app.safeCore.lookupIsbn(addr)
+            return
+        }
+
         let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
         guard parts.count == 3, parts[0] == "30023" else { return }
         let pubkey = String(parts[1])
