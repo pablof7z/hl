@@ -38,6 +38,9 @@ struct HighlightsTabView: View {
             .navigationDestination(for: WebReaderTarget.self) { target in
                 WebReaderView(target: target)
             }
+            .navigationDestination(for: BookTarget.self) { target in
+                BookView(catalogId: target.catalogId)
+            }
             .navigationDestination(for: ProfileDestination.self) { destination in
                 if case .pubkey(let pk) = destination {
                     ProfileView(pubkey: pk)
@@ -128,6 +131,12 @@ struct HighlightsTabView: View {
             }
             .buttonStyle(.plain)
             .contextMenu { highlightContextMenu(lead) }
+        } else if let bookTarget = bookReaderTarget(for: lead) {
+            NavigationLink(value: bookTarget) {
+                HighlightFeedCardView(items: items)
+            }
+            .buttonStyle(.plain)
+            .contextMenu { highlightContextMenu(lead) }
         } else if let webTarget = webReaderTarget(for: lead) {
             NavigationLink(value: webTarget) {
                 HighlightFeedCardView(items: items)
@@ -192,6 +201,14 @@ struct HighlightsTabView: View {
         let dTag = String(parts[2])
         guard !pubkey.isEmpty, !dTag.isEmpty else { return nil }
         return ArticleReaderTarget(pubkey: pubkey, dTag: dTag, seed: nil)
+    }
+
+    private func bookReaderTarget(for item: HydratedHighlight) -> BookTarget? {
+        let extRef = item.highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
+        if extRef.hasPrefix("isbn:") { return BookTarget(catalogId: extRef) }
+        let addr = item.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        if addr.hasPrefix("isbn:") { return BookTarget(catalogId: addr) }
+        return nil
     }
 
     private func webReaderTarget(for item: HydratedHighlight) -> WebReaderTarget? {

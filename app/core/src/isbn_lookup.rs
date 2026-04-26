@@ -112,13 +112,16 @@ async fn fetch_open_library(isbn13: &str) -> Result<ArtifactPreview, String> {
 
     let description = extract_description(body.get("description"));
 
+    // Prefer the cover ID from the book JSON (higher quality, redirects avoided).
+    // Fall back to the ISBN-based cover URL which Open Library always serves
+    // for known ISBNs even when the book record omits the `covers` array.
     let image = body
         .get("covers")
         .and_then(Value::as_array)
         .and_then(|arr| arr.first())
         .and_then(Value::as_i64)
         .map(|id| format!("https://covers.openlibrary.org/b/id/{id}-L.jpg"))
-        .unwrap_or_default();
+        .unwrap_or_else(|| format!("https://covers.openlibrary.org/b/isbn/{isbn13}-L.jpg"));
 
     // Authors: best-effort. Resolve each `/authors/OLxxxA` ref to a name. If
     // the resolution fails (timeout/error), fall back to an empty name for

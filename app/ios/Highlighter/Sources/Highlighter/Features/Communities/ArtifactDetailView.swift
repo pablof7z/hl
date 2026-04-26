@@ -10,6 +10,8 @@ import SwiftUI
 struct ArtifactDetailView: View {
     let artifact: ArtifactRecord
 
+    @Environment(HighlighterStore.self) private var app
+
     var body: some View {
         Group {
             switch artifact.preview.source {
@@ -25,6 +27,12 @@ struct ArtifactDetailView: View {
                         description: Text("This share doesn't carry a valid NIP-23 address.")
                     )
                 }
+            case "book":
+                let catalogId = artifact.preview.catalogId.isEmpty
+                    ? artifact.preview.highlightTagValue
+                    : artifact.preview.catalogId
+                BookView(catalogId: catalogId)
+                    .environment(app)
             default:
                 ContentUnavailableView(
                     "Coming soon",
