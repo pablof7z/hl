@@ -1,7 +1,9 @@
 import AVFoundation
 import Foundation
+import MediaPlayer
 import Observation
 import os
+import UIKit
 
 private struct PositionRecord: Codable {
     var guid: String
@@ -238,6 +240,10 @@ final class PodcastPlayerStore {
         newPlayer.play()
         isPlaying = true
 
+        configureRemoteCommandCenter()
+        updateNowPlayingInfo()
+        fetchAndApplyArtwork(from: artifact.preview.image)
+
         startPositionPersistence()
 
         let transcriptUrl = artifact.preview.transcriptUrl
@@ -311,12 +317,14 @@ final class PodcastPlayerStore {
         logger.info("play")
         player?.play()
         isPlaying = true
+        updateNowPlayingInfo()
     }
 
     func pause() {
         logger.info("pause")
         player?.pause()
         isPlaying = false
+        updateNowPlayingInfo()
     }
 
     func toggle() {
@@ -499,7 +507,14 @@ final class PodcastPlayerStore {
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.currentTime = time.seconds.isFinite ? time.seconds : 0
+                let seconds = time.seconds.isFinite ? time.seconds : 0
+                let previousWhole = Int(self.currentTime)
+                self.currentTime = seconds
+                // Update Now Playing elapsed time once per second to keep the
+                // lock screen scrubber accurate without excessive churn.
+                if Int(seconds) != previousWhole {
+                    self.updateNowPlayingInfo()
+                }
             }
         }
     }
@@ -517,6 +532,7 @@ final class PodcastPlayerStore {
                     if seconds.isFinite, seconds > 0 {
                         self.duration = seconds
                         self.logger.info("duration=\(seconds, format: .fixed(precision: 1))s")
+                        self.updateNowPlayingInfo()
                     }
                 } catch {
                     self.logger.error("duration load failed: \(error.localizedDescription, privacy: .public)")
@@ -588,6 +604,126 @@ final class PodcastPlayerStore {
         }
     }
 
+    // MARK: - Remote Command Center
+
+    /// Call once per loaded episode. Registers play/pause/skip/seek handlers
+    /// on MPRemoteCommandCenter so the lock screen and Control Center controls
+    /// actually work.
+    private func configureRemoteCommandCenter() {
+        let center = MPRemoteCommandCenter.shared()
+
+        center.playCommand.isEnabled = true
+        center.playCommand.addTarget { [weak self] _ in
+            self?.play()
+            return .success
+        }
+
+        center.pauseCommand.isEnabled = true
+        center.pauseCommand.addTarget { [weak self] _ in
+            self?.pause()
+            return .success
+        }
+
+        center.togglePlayPauseCommand.isEnabled = true
+        center.togglePlayPauseCommand.addTarget { [weak self] _ in
+            self?.toggle()
+            return .success
+        }
+
+        center.skipForwardCommand.isEnabled = true
+        center.skipForwardCommand.preferredIntervals = [30]
+        center.skipForwardCommand.addTarget { [weak self] event in
+            guard let self, let e = event as? MPSkipIntervalCommandEvent else { return .commandFailed }
+            skip(by: e.interval)
+            return .success
+        }
+
+        center.skipBackwardCommand.isEnabled = true
+        center.skipBackwardCommand.preferredIntervals = [15]
+        center.skipBackwardCommand.addTarget { [weak self] event in
+            guard let self, let e = event as? MPSkipIntervalCommandEvent else { return .commandFailed }
+            skip(by: -e.interval)
+            return .success
+        }
+
+        center.changePlaybackPositionCommand.isEnabled = true
+        center.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let self, let e = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            seek(to: e.positionTime)
+            return .success
+        }
+
+        // Lock Screen custom actions note:
+        // iOS does not expose a public API for adding arbitrary buttons (e.g.
+        // "Clip") to the Now Playing lock-screen widget or Control Center.
+        // MPRemoteCommandCenter only exposes a fixed set of well-known
+        // commands. Lock Screen Widgets (WidgetKit) cannot interact with an
+        // in-process media player. A Now Playing ActivityExtension / Live
+        // Activity could show metadata but still cannot inject custom
+        // commands. Therefore a "Clip" lock screen button is not viable with
+        // current public APIs.
+    }
+
+    private func tearDownRemoteCommandCenter() {
+        let center = MPRemoteCommandCenter.shared()
+        center.playCommand.removeTarget(nil)
+        center.pauseCommand.removeTarget(nil)
+        center.togglePlayPauseCommand.removeTarget(nil)
+        center.skipForwardCommand.removeTarget(nil)
+        center.skipBackwardCommand.removeTarget(nil)
+        center.changePlaybackPositionCommand.removeTarget(nil)
+    }
+
+    // MARK: - Now Playing Info Center
+
+    /// Pushes current episode metadata + playback state to the system's
+    /// Now Playing Info Center. Call whenever playback state or position
+    /// changes. This drives the lock screen and Control Center artwork, title,
+    /// progress bar, and elapsed/remaining counters.
+    private func updateNowPlayingInfo(artwork: MPMediaItemArtwork? = nil) {
+        guard let artifact = currentArtifact else {
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            return
+        }
+
+        var info: [String: Any] = [:]
+        info[MPMediaItemPropertyTitle] = artifact.preview.title.isEmpty ? "Untitled episode" : artifact.preview.title
+        info[MPMediaItemPropertyArtist] = artifact.preview.podcastShowTitle.isEmpty
+            ? artifact.preview.author
+            : artifact.preview.podcastShowTitle
+        info[MPMediaItemPropertyMediaType] = MPMediaType.podcast.rawValue
+
+        if duration > 0 {
+            info[MPMediaItemPropertyPlaybackDuration] = duration
+        }
+        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
+        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
+
+        if let artwork {
+            info[MPMediaItemPropertyArtwork] = artwork
+        } else if let existing = MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyArtwork] {
+            // Preserve previously loaded artwork while async fetch runs.
+            info[MPMediaItemPropertyArtwork] = existing
+        }
+
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    /// Fetches episode artwork from the network and updates Now Playing Info.
+    /// Runs entirely off the main thread; hops back to update state.
+    private func fetchAndApplyArtwork(from urlString: String) {
+        guard !urlString.isEmpty, let url = URL(string: urlString) else { return }
+        Task(priority: .userInitiated) { [weak self] in
+            guard let data = try? Data(contentsOf: url),
+                  let uiImage = UIImage(data: data) else { return }
+            let artwork = MPMediaItemArtwork(boundsSize: uiImage.size) { _ in uiImage }
+            await MainActor.run { [weak self] in
+                self?.updateNowPlayingInfo(artwork: artwork)
+            }
+        }
+    }
+
     private func tearDownPlayer() {
         positionPersistenceTask?.cancel()
         positionPersistenceTask = nil
@@ -614,6 +750,9 @@ final class PodcastPlayerStore {
         playbackEndObserver = nil
         player?.pause()
         player = nil
+
+        tearDownRemoteCommandCenter()
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 }
 
