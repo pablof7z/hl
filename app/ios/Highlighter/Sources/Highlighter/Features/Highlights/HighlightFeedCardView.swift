@@ -43,7 +43,7 @@ struct HighlightFeedCardView: View {
         .task(id: lead.highlight.pubkey) {
             await app.requestProfile(pubkeyHex: lead.highlight.pubkey)
         }
-        .task(id: lead.highlight.artifactAddress) {
+        .task(id: lead.highlight.artifactAddress + lead.highlight.externalReference) {
             await resolveSource()
         }
         .task(id: webMetadataURL) {
@@ -364,6 +364,8 @@ struct HighlightFeedCardView: View {
             default:        return .unknown
             }
         }
+        let extRef = lead.highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
+        if extRef.hasPrefix("isbn:") { return .book }
         let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         if addr.hasPrefix("30023:") { return .article }
         if addr.hasPrefix("isbn:") { return .book }
@@ -572,6 +574,14 @@ struct HighlightFeedCardView: View {
     private func resolveSource() async {
         sourceArticle = nil
         bookPreview = nil
+
+        // NIP-73 `i` tag → externalReference (used for ISBNs)
+        let extRef = lead.highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
+        if extRef.hasPrefix("isbn:") {
+            let isbn = String(extRef.dropFirst("isbn:".count))
+            bookPreview = try? await app.safeCore.lookupIsbn(isbn)
+            return
+        }
 
         let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !addr.isEmpty else { return }
