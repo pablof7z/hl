@@ -82,6 +82,9 @@ struct WebReaderView: View {
         } message: {
             Text(shareError ?? "")
         }
+        .commentsAttachment(
+            artifact: .external(id: target.url.absoluteString, kind: 0)
+        )
     }
 
     /// Build an `ArtifactPreview` from the URL via the Rust core (which
