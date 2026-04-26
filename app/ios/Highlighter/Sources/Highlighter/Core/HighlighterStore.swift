@@ -120,6 +120,7 @@ final class HighlighterStore {
         bookmarkedArticleAddresses.removeAll()
         core.logout()
         AppSessionStore.shared.clear()
+        UserDefaults.standard.removeObject(forKey: "onboardingComplete")
         currentUser = nil
         currentUserProfile = nil
         joinedCommunities.removeAll()
