@@ -596,16 +596,20 @@ private struct ISBNPreviewSheet: View {
 
     private func commit() {
         guard !effectiveTitle.isEmpty else { return }
-        let base = preview ?? ArtifactPreview(
-            id: "",
-            url: "",
-            title: "",
-            author: "",
-            image: "",
-            description: "",
+        let base = preview
+        // Always derive reference/highlight tags from the ISBN we scanned —
+        // the catalog API may return these empty or wrong.
+        let catalogId = "isbn:\(isbn)"
+        let updated = ArtifactPreview(
+            id: base?.id ?? "",
+            url: base?.url ?? "",
+            title: effectiveTitle,
+            author: manualAuthor.trimmingCharacters(in: .whitespacesAndNewlines),
+            image: base?.image ?? "",
+            description: base?.description ?? "",
             source: "book",
-            domain: "",
-            catalogId: "isbn:\(isbn)",
+            domain: base?.domain ?? "",
+            catalogId: catalogId,
             catalogKind: "isbn",
             podcastGuid: "",
             podcastItemGuid: "",
@@ -614,43 +618,15 @@ private struct ISBNPreviewSheet: View {
             audioPreviewUrl: "",
             transcriptUrl: "",
             feedUrl: "",
-            publishedAt: "",
+            publishedAt: base?.publishedAt ?? "",
             durationSeconds: nil,
             referenceTagName: "i",
-            referenceTagValue: "isbn:\(isbn)",
+            referenceTagValue: catalogId,
             referenceKind: "isbn",
             highlightTagName: "i",
-            highlightTagValue: "isbn:\(isbn)",
-            highlightReferenceKey: "i:isbn:\(isbn)",
+            highlightTagValue: catalogId,
+            highlightReferenceKey: "i:\(catalogId)",
             chapters: []
-        )
-        let updated = ArtifactPreview(
-            id: base.id,
-            url: base.url,
-            title: effectiveTitle,
-            author: manualAuthor.trimmingCharacters(in: .whitespacesAndNewlines),
-            image: base.image,
-            description: base.description,
-            source: "book",
-            domain: base.domain,
-            catalogId: base.catalogId,
-            catalogKind: base.catalogKind,
-            podcastGuid: base.podcastGuid,
-            podcastItemGuid: base.podcastItemGuid,
-            podcastShowTitle: base.podcastShowTitle,
-            audioUrl: base.audioUrl,
-            audioPreviewUrl: base.audioPreviewUrl,
-            transcriptUrl: base.transcriptUrl,
-            feedUrl: base.feedUrl,
-            publishedAt: base.publishedAt,
-            durationSeconds: base.durationSeconds,
-            referenceTagName: base.referenceTagName,
-            referenceTagValue: base.referenceTagValue,
-            referenceKind: base.referenceKind,
-            highlightTagName: base.highlightTagName,
-            highlightTagValue: base.highlightTagValue,
-            highlightReferenceKey: base.highlightReferenceKey,
-            chapters: base.chapters
         )
         onEditTitle(updated)
         onUse(updated)

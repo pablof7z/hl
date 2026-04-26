@@ -7,9 +7,7 @@ struct RoomLibraryPodcastCardView: View {
     let artifact: ArtifactRecord
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            attributionRow
-
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(artifact.preview.title.isEmpty ? "Untitled" : artifact.preview.title)
@@ -25,11 +23,26 @@ struct RoomLibraryPodcastCardView: View {
                     let showTitle = artifact.preview.podcastShowTitle.isEmpty
                         ? artifact.preview.author
                         : artifact.preview.podcastShowTitle
-                    if !showTitle.isEmpty {
-                        Text(showTitle)
-                            .font(.subheadline)
-                            .foregroundStyle(Color.highlighterInkMuted)
-                            .lineLimit(1)
+                    HStack(spacing: 4) {
+                        if !showTitle.isEmpty {
+                            Text(showTitle.uppercased())
+                                .font(.caption2.weight(.bold))
+                                .tracking(0.6)
+                                .foregroundStyle(Color.highlighterInkMuted)
+                                .lineLimit(1)
+                        }
+                        if let duration = formattedDuration, !showTitle.isEmpty {
+                            Text("·")
+                                .font(.caption2)
+                                .foregroundStyle(Color.highlighterInkMuted)
+                            Text(duration)
+                                .font(.caption2)
+                                .foregroundStyle(Color.highlighterInkMuted)
+                        } else if let duration = formattedDuration {
+                            Text(duration)
+                                .font(.caption2)
+                                .foregroundStyle(Color.highlighterInkMuted)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -37,11 +50,7 @@ struct RoomLibraryPodcastCardView: View {
                 podcastArtwork
             }
 
-            if let duration = formattedDuration {
-                Text(duration)
-                    .font(.caption)
-                    .foregroundStyle(Color.highlighterInkMuted)
-            }
+            sharerRow
         }
         .padding(.vertical, 18)
         .contentShape(Rectangle())
@@ -50,25 +59,27 @@ struct RoomLibraryPodcastCardView: View {
         }
     }
 
-    private var attributionRow: some View {
-        HStack(spacing: 8) {
+    private var sharerRow: some View {
+        HStack(spacing: 6) {
             AuthorAvatar(
                 pubkey: artifact.pubkey,
                 pictureURL: app.profileCache[artifact.pubkey]?.picture ?? "",
                 displayInitial: sharerInitial,
-                size: 22
+                size: 18
             )
 
-            Text(sharerName)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.highlighterInkStrong)
+            Text(sharerName.uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(0.6)
+                .foregroundStyle(Color.highlighterInkMuted)
                 .lineLimit(1)
 
             if let date = relativeDate {
                 Text("·")
+                    .font(.caption2)
                     .foregroundStyle(Color.highlighterInkMuted)
                 Text(date)
-                    .font(.footnote)
+                    .font(.caption2)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(1)
             }

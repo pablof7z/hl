@@ -7,9 +7,7 @@ struct RoomLibraryBookCardView: View {
     let artifact: ArtifactRecord
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            attributionRow
-
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(artifact.preview.title.isEmpty ? "Untitled" : artifact.preview.title)
@@ -23,8 +21,9 @@ struct RoomLibraryBookCardView: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     if !artifact.preview.author.isEmpty {
-                        Text(artifact.preview.author)
-                            .font(.subheadline)
+                        Text(artifact.preview.author.uppercased())
+                            .font(.caption2.weight(.bold))
+                            .tracking(0.6)
                             .foregroundStyle(Color.highlighterInkMuted)
                             .lineLimit(1)
                     }
@@ -41,6 +40,8 @@ struct RoomLibraryBookCardView: View {
 
                 bookCover
             }
+
+            sharerRow
         }
         .padding(.vertical, 18)
         .contentShape(Rectangle())
@@ -49,25 +50,27 @@ struct RoomLibraryBookCardView: View {
         }
     }
 
-    private var attributionRow: some View {
-        HStack(spacing: 8) {
+    private var sharerRow: some View {
+        HStack(spacing: 6) {
             AuthorAvatar(
                 pubkey: artifact.pubkey,
                 pictureURL: app.profileCache[artifact.pubkey]?.picture ?? "",
                 displayInitial: sharerInitial,
-                size: 22
+                size: 18
             )
 
-            Text(sharerName)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.highlighterInkStrong)
+            Text(sharerName.uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(0.6)
+                .foregroundStyle(Color.highlighterInkMuted)
                 .lineLimit(1)
 
             if let date = relativeDate {
                 Text("·")
+                    .font(.caption2)
                     .foregroundStyle(Color.highlighterInkMuted)
                 Text(date)
-                    .font(.footnote)
+                    .font(.caption2)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(1)
             }

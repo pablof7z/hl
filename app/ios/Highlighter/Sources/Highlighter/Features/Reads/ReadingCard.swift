@@ -42,11 +42,9 @@ struct ReadingCard<Avatar: View, Trailing: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            attributionRow
-
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(title.isEmpty ? "Untitled" : title)
                         .font(.system(.title3, design: .serif).weight(.semibold))
                         .foregroundStyle(
@@ -57,13 +55,7 @@ struct ReadingCard<Avatar: View, Trailing: View>: View {
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if !summary.isEmpty {
-                        Text(summary)
-                            .font(.subheadline)
-                            .foregroundStyle(Color.highlighterInkMuted)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    attributionContent
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -79,36 +71,30 @@ struct ReadingCard<Avatar: View, Trailing: View>: View {
     }
 
     @ViewBuilder
-    private var attributionRow: some View {
-        if let authorPubkey, !authorPubkey.isEmpty {
-            NavigationLink(value: ProfileDestination.pubkey(authorPubkey)) {
-                attributionContent
-            }
-            .buttonStyle(.plain)
-        } else {
-            attributionContent
-        }
-    }
-
     private var attributionContent: some View {
-        HStack(spacing: 8) {
+        let row = HStack(spacing: 6) {
             avatar()
-
-            Text(authorName)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.highlighterInkStrong)
+            Text(authorName.uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(0.6)
+                .foregroundStyle(Color.highlighterInkMuted)
                 .lineLimit(1)
-
             if let relativeDate {
                 Text("·")
+                    .font(.caption2)
                     .foregroundStyle(Color.highlighterInkMuted)
                 Text(relativeDate)
-                    .font(.footnote)
+                    .font(.caption2)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(1)
             }
-
             Spacer(minLength: 0)
+        }
+        if let authorPubkey, !authorPubkey.isEmpty {
+            NavigationLink(value: ProfileDestination.pubkey(authorPubkey)) { row }
+                .buttonStyle(.plain)
+        } else {
+            row
         }
     }
 

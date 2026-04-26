@@ -61,15 +61,7 @@ struct HighlightFeedCardView: View {
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    kindPill
-                    Text(resourceAuthorOrDomain)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.highlighterInkStrong)
-                        .lineLimit(1)
-                }
-
+            VStack(alignment: .leading, spacing: 3) {
                 Text(resourceTitle)
                     .font(.system(.headline, design: .serif).weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
@@ -78,13 +70,37 @@ struct HighlightFeedCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let cta = resourceCTA {
-                    Text(cta)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.highlighterAccent)
-                        .padding(.top, 1)
-                }
+                resourceSubtitleRow
             }
+        }
+    }
+
+    private var resourceSubtitleRow: some View {
+        HStack(spacing: 4) {
+            let author = resourceAuthorOrDomain
+            let time = resourceTimeLabel
+            if !author.isEmpty {
+                Text(author.uppercased())
+                    .font(.caption2.weight(.bold))
+                    .tracking(0.6)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                    .lineLimit(1)
+            }
+            if let time, !author.isEmpty {
+                Text("·")
+                    .font(.caption2)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                Text(time)
+                    .font(.caption2)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                    .lineLimit(1)
+            } else if let time {
+                Text(time)
+                    .font(.caption2)
+                    .foregroundStyle(Color.highlighterInkMuted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
         }
     }
 
@@ -121,24 +137,6 @@ struct HighlightFeedCardView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.highlighterInkStrong.opacity(0.55))
         }
-    }
-
-    private var kindPill: some View {
-        Text(artifactKindLabel)
-            .font(.caption2.weight(.bold))
-            .tracking(0.6)
-            .textCase(.uppercase)
-            .foregroundStyle(Color.highlighterInkMuted)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1.5)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.highlighterPaper)
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(Color.highlighterRule, lineWidth: 0.5)
-                    )
-            )
     }
 
     // MARK: - Highlighters strip (only when 2+ unique highlighters)
@@ -375,18 +373,6 @@ struct HighlightFeedCardView: View {
         return .unknown
     }
 
-    private var artifactKindLabel: String {
-        switch artifactKind {
-        case .article: return "Article"
-        case .web:     return "Web"
-        case .podcast: return "Podcast"
-        case .book:    return "Book"
-        case .video:   return "Video"
-        case .paper:   return "Paper"
-        case .unknown: return "Highlight"
-        }
-    }
-
     private var kindIconName: String {
         switch artifactKind {
         case .article: return "doc.text"
@@ -462,23 +448,15 @@ struct HighlightFeedCardView: View {
         }
     }
 
-    private var resourceCTA: String? {
+    private var resourceTimeLabel: String? {
         switch artifactKind {
         case .article:
-            if let mins = articleReadMinutes {
-                return "Read article · \(mins) min →"
-            }
-            return "Read article →"
+            guard let mins = articleReadMinutes else { return nil }
+            return "\(mins) min"
         case .podcast:
-            if let secs = lead.artifact?.preview.durationSeconds, secs > 0 {
-                return "▸ Play episode · \(formatDuration(seconds: Int(secs)))"
-            }
-            return "▸ Play episode"
-        case .book:    return "Open book →"
-        case .web:     return "Open page →"
-        case .video:   return "Watch video →"
-        case .paper:   return "Read paper →"
-        case .unknown: return nil
+            guard let secs = lead.artifact?.preview.durationSeconds, secs > 0 else { return nil }
+            return formatDuration(seconds: Int(secs))
+        default: return nil
         }
     }
 

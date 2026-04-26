@@ -393,10 +393,6 @@ private struct ArticleEntityCard: View {
                         .frame(width: 88, height: 88)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("ARTICLE")
-                        .font(.caption2.weight(.semibold))
-                        .tracking(0.8)
-                        .foregroundStyle(Color.highlighterInkMuted)
                     Text(title.isEmpty ? "Untitled" : title)
                         .font(.system(.headline, design: .serif))
                         .foregroundStyle(Color.highlighterInkStrong)
@@ -407,17 +403,20 @@ private struct ArticleEntityCard: View {
                             .foregroundStyle(Color.highlighterInkMuted)
                             .lineLimit(2)
                     }
+                    let authorName = profile?.displayName ?? profile?.name ?? String(event.pubkeyHex.prefix(8))
                     HStack(spacing: 6) {
                         AuthorAvatar(
                             pubkey: event.pubkeyHex,
                             pictureURL: profile?.picture ?? "",
-                            displayInitial: (profile?.displayName ?? profile?.name ?? event.pubkeyHex).prefix(1).description,
-                            size: 18,
+                            displayInitial: authorName.prefix(1).description.uppercased(),
+                            size: 16,
                             ringWidth: 0
                         )
-                        Text(profile?.displayName ?? profile?.name ?? String(event.pubkeyHex.prefix(8)))
-                            .font(.caption)
+                        Text(authorName.uppercased())
+                            .font(.caption2.weight(.bold))
+                            .tracking(0.6)
                             .foregroundStyle(Color.highlighterInkMuted)
+                            .lineLimit(1)
                     }
                     .padding(.top, 2)
                 }
