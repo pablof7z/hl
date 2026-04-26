@@ -124,6 +124,16 @@ struct LoginView: View {
             }
             .buttonStyle(.glassProminent)
             .disabled(isWorking || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            NavigationLink {
+                OnboardingCreateAccountView()
+            } label: {
+                Text("Create a new account")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 4)
+            }
         }
     }
 

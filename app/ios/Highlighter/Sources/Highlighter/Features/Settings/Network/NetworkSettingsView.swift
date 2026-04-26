@@ -18,7 +18,7 @@ struct NetworkSettingsView: View {
 
     var body: some View {
         List {
-            if let store {
+            if let store, !store.isLoading {
                 headerSection(store)
                 safetySection(store)
                 relaysSection(store)
