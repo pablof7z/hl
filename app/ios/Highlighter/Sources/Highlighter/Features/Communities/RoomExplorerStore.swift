@@ -29,28 +29,26 @@ final class RoomExplorerStore {
 
     /// Run all shelf queries in parallel. Safe to call on every view appear —
     /// each query reads cached ndb state and returns in milliseconds.
+    /// Relay subscriptions are fired-and-forgotten so they never block the
+    /// nostrdb reads or delay `isFirstLoad → false`.
     func refresh() async {
         guard let appStore else { return }
         let safeCore = appStore.safeCore
 
-        // Install backfill subscriptions on first appear so the relay sends
-        // fresh catalogue entries while the user browses. Idempotent in
-        // Rust; cheap to call repeatedly but we gate here anyway.
+        // Fire relay subscriptions in background — don't await them.
+        // They'll push events into nostrdb; the user can pull-to-refresh
+        // or the next appear will pick up the new data.
         if !hasStartedDiscovery {
-            await safeCore.startRoomDiscovery()
             hasStartedDiscovery = true
+            Task { await safeCore.startRoomDiscovery() }
         }
-        // Pull kind:10009 from each follow + kind:39001/39002 where any follow
-        // is #p-tagged. Powers the "Friends are here" shelf.
-        try? await safeCore.startFriendsRoomsDiscovery()
-        await ensureCurationSubscription(safeCore: safeCore)
+        Task { try? await safeCore.startFriendsRoomsDiscovery() }
+        Task { await ensureCurationSubscription(safeCore: safeCore) }
 
         let curatorPubkey = RoomExplorerConfig.cachedCuratorPubkeyHex
 
-        async let featuredTask: [CommunitySummary] = {
-            guard !curatorPubkey.isEmpty else { return [] }
-            return (try? await safeCore.getFeaturedRooms(curatorPubkeyHex: curatorPubkey)) ?? []
-        }()
+        async let featuredTask: [CommunitySummary] =
+            (try? await safeCore.getFeaturedRooms(curatorPubkeyHex: curatorPubkey)) ?? []
         async let newTask: [CommunitySummary] = (try? await safeCore.getNewRooms(limit: 24)) ?? []
         async let friendsTask: [RoomRecommendation] =
             (try? await safeCore.getRoomsWithFriends(limit: 16)) ?? []
@@ -83,6 +81,26 @@ final class RoomExplorerStore {
             // debugging, and the relay-error path is rare.
             print("requestJoinRoom failed for \(room.id): \(error)")
         }
+    }
+
+    /// Lightweight re-read of nostrdb — no subscription side-effects.
+    /// Called by EventBridge whenever a CommunityUpserted delta arrives so
+    /// newly-discovered rooms appear without a pull-to-refresh.
+    func reloadFromCache() async {
+        guard let appStore else { return }
+        let safeCore = appStore.safeCore
+        let curatorPubkey = RoomExplorerConfig.cachedCuratorPubkeyHex
+
+        async let featuredTask = (try? await safeCore.getFeaturedRooms(curatorPubkeyHex: curatorPubkey)) ?? []
+        async let newTask = (try? await safeCore.getNewRooms(limit: 24)) ?? []
+        async let friendsTask = (try? await safeCore.getRoomsWithFriends(limit: 16)) ?? []
+        async let authorsTask = (try? await safeCore.getRoomsFromReadAuthors(limit: 16)) ?? []
+
+        let (f, n, fr, a) = await (featuredTask, newTask, friendsTask, authorsTask)
+        featured = f
+        newNoteworthy = filter(n, excludingJoined: appStore.joinedCommunities)
+        friendsShelf = fr
+        authorsShelf = a
     }
 
     // MARK: - Private

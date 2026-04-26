@@ -13,12 +13,20 @@ import Foundation
 enum RoomExplorerConfig {
     static let curatorRelayURL = URL(string: "https://relay.highlighter.com")!
 
+    /// Hardcoded fallback — relay.highlighter.com's stable pubkey.
+    /// Used immediately on first install so the featured shelf never
+    /// blocks on a NIP-11 network round-trip.
+    static let defaultCuratorPubkeyHex = "7e1eabe25256545cfe0c534a99bfa5c6cd224e04b614182a9993feff54196c95"
+
     private static let cachedCuratorKey = "highlighter.explorer.curatorPubkeyHex"
 
-    /// The curator pubkey cached from a previous NIP-11 fetch. Empty string
-    /// until the first successful fetch completes.
+    /// The curator pubkey. Falls back to the hardcoded default when no
+    /// UserDefaults value has been persisted yet.
     static var cachedCuratorPubkeyHex: String {
-        get { UserDefaults.standard.string(forKey: cachedCuratorKey) ?? "" }
+        get {
+            let stored = UserDefaults.standard.string(forKey: cachedCuratorKey) ?? ""
+            return stored.isEmpty ? defaultCuratorPubkeyHex : stored
+        }
         set { UserDefaults.standard.set(newValue, forKey: cachedCuratorKey) }
     }
 

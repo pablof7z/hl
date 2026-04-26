@@ -79,6 +79,9 @@ struct RoomExplorerView: View {
             if explorer == nil {
                 explorer = RoomExplorerStore(appStore: appStore)
             }
+            if let e = explorer {
+                appStore.eventBridge?.registerExplorer(e)
+            }
             await explorer?.refresh()
         }
         .refreshable {
