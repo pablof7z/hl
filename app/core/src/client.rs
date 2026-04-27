@@ -239,7 +239,13 @@ impl HighlighterCore {
                             }
                         };
                         let signer = Arc::new(signer);
-                        runtime.set_signer((*signer).clone());
+                        // We're inside NostrRuntime's tokio runtime here
+                        // (spawned via `runtime_handle().spawn`). The sync
+                        // `runtime.set_signer` wrapper uses `block_on`, which
+                        // panics ("Cannot start a runtime from within a
+                        // runtime") when called from inside that same
+                        // runtime — talk to the client directly instead.
+                        client.set_signer((*signer).clone()).await;
                         runtime.spawn_apply_user_relay_config(user_pubkey.to_hex());
                         let sub_id = runtime.spawn_membership_subscription(user_pubkey);
                         let contacts_id = runtime.spawn_contacts_subscription(user_pubkey);

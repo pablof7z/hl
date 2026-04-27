@@ -84,9 +84,14 @@ final class HighlighterStore {
         isBootstrapping = true
         defer { isBootstrapping = false }
 
+        // Register the EventBridge unconditionally, before any login attempt.
+        // The NIP-46 nostrconnect:// flow fires `SignerConnected` from a
+        // background tokio task; if no callback is wired by then, the delta
+        // is dropped silently and the UI never transitions to logged-in.
+        registerEventBridge()
+
         if let user = await AppSessionStore.shared.restoreSession(into: safeCore) {
             currentUser = user
-            registerEventBridge()
             await loadAppScopeData()
         }
     }

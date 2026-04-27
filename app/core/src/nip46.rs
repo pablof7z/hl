@@ -112,10 +112,15 @@ impl BunkerSigner {
     ) -> Result<(Self, PublicKey), CoreError> {
         let mut notifications = client.notifications();
 
+        // `.since(now)` instead of `.limit(0)` so the relay replays anything
+        // that arrived during a backgrounding gap. With `limit=0` the relay
+        // would treat reconnect-after-iOS-suspend as "from now on" and the
+        // signer's `connect` event — sent while we were backgrounded after
+        // the user tapped OK in Primal — would be lost forever.
         let filter = Filter::new()
             .kind(Kind::NostrConnect)
             .pubkey(local_keys.public_key())
-            .limit(0);
+            .since(Timestamp::now());
 
         let sub_id = SubscriptionId::generate();
         client
@@ -148,49 +153,43 @@ impl BunkerSigner {
                 event.content.as_str(),
             ) {
                 Ok(v) => v,
-                Err(e) => {
-                    tracing::debug!(error = %e, "skip undecryptable nip46 event");
-                    continue;
-                }
+                Err(_) => continue,
             };
             let Ok(msg) = NostrConnectMessage::from_json(&decrypted) else {
                 continue;
             };
 
-            let NostrConnectMessage::Request {
-                id, method, params, ..
-            } = msg
-            else {
-                // The inbound flow expects a *request* from the signer, not
-                // a response. Skip anything else.
+            // Per NIP-46 nostrconnect:// flow, the signer replies with a
+            // Response whose `result` echoes the secret we put in the URI
+            // (or "ack"). We do NOT receive a `connect` Request here — that's
+            // the bunker:// flow where the *client* initiates. Confirmed
+            // against Olas/NDKSwift `NDKBunkerSigner.handleResponse` and
+            // Primal's on-the-wire behavior (kind:24133 with
+            // `{"id":..,"result":"<secret>"}`).
+            let NostrConnectMessage::Response { result, error, .. } = msg else {
                 continue;
             };
-            if method != NostrConnectMethod::Connect {
-                continue;
+
+            if let Some(err) = error {
+                return Err(CoreError::Signer(format!(
+                    "signer rejected pairing: {err}"
+                )));
             }
 
-            // Validate the optional secret: params[0] is the remote signer
-            // pubkey as hex, params[1] is the secret (if any).
-            let secret_matches = match (&expected_secret, params.get(1)) {
-                (Some(expected), Some(received)) => expected == received,
-                (None, _) => true,
-                (Some(_), None) => false,
+            let result_str = result.unwrap_or_default();
+            let secret_matches = match &expected_secret {
+                Some(expected) => result_str == *expected || result_str == "ack",
+                None => true,
             };
-            let response = if secret_matches {
-                NostrConnectResponse::with_result(ResponseResult::Ack)
-            } else {
-                NostrConnectResponse::with_error("secret mismatch")
-            };
-
-            // ACK must be sent before we consider the pairing live.
-            send_response(&client, &local_keys, event.pubkey, id, response).await?;
-
             if !secret_matches {
-                return Err(CoreError::Signer(
-                    "remote signer presented wrong secret".into(),
-                ));
+                return Err(CoreError::Signer(format!(
+                    "remote signer presented wrong secret: result={result_str}"
+                )));
             }
 
+            // The signer's response IS the ack — no return event to send.
+            // The signer pubkey is the event author. Resolve user pubkey via
+            // get_public_key on the same subscription (kept open below).
             let signer = Self {
                 client: client.clone(),
                 local_keys: local_keys.clone(),
@@ -213,10 +212,13 @@ impl BunkerSigner {
     }
 
     async fn install_response_subscription(&self) -> Result<(), CoreError> {
+        // See `await_inbound`: `.since(now)` instead of `.limit(0)` so that
+        // sign_event responses delivered while iOS had us suspended get
+        // replayed on the resub after foregrounding.
         let filter = Filter::new()
             .kind(Kind::NostrConnect)
             .pubkey(self.local_keys.public_key())
-            .limit(0);
+            .since(Timestamp::now());
         let sub_id = SubscriptionId::generate();
         self.client
             .subscribe_with_id(sub_id, filter, None)
@@ -460,25 +462,6 @@ impl NostrSigner for BunkerSigner {
                 .map_err(|e| SignerError::from(e.to_string()))
         })
     }
-}
-
-async fn send_response(
-    client: &Client,
-    local_keys: &Keys,
-    to: PublicKey,
-    req_id: String,
-    response: NostrConnectResponse,
-) -> Result<(), CoreError> {
-    let msg = NostrConnectMessage::response(req_id, response);
-    let event = EventBuilder::nostr_connect(local_keys, to, msg)
-        .map_err(|e| CoreError::Signer(format!("build nip46 response: {e}")))?
-        .sign_with_keys(local_keys)
-        .map_err(|e| CoreError::Signer(format!("sign nip46 response: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("send nip46 response: {e}")))?;
-    Ok(())
 }
 
 /// Build the outgoing `nostrconnect://<local>?…` URI that we show as a QR to

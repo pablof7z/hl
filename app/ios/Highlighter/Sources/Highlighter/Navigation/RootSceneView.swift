@@ -26,6 +26,16 @@ struct RootSceneView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 Task { await ShareQueueProcessor.drain(app: store) }
+                // iOS suspends WebSockets while we're backgrounded; nostr-sdk's
+                // `connect()` is idempotent and skips relays it still believes
+                // are connected, so disconnect first to force a fresh socket
+                // and subscription re-issue. Without this the NIP-46
+                // nostrconnect:// flow misses Primal's response when the user
+                // comes back from the signer app.
+                Task {
+                    try? await store.safeCore.disconnectAll()
+                    try? await store.safeCore.reconnectAll()
+                }
             }
         }
         .overlay(alignment: .top) {
