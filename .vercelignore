@@ -1,0 +1,15 @@
+app/
+relay/
+docs/
+tests/
+ci_scripts/
+skills/
+croissant/
+.worktrees/
+.agents/
+.git/
+node_modules/
+**/node_modules/
+**/.svelte-kit/
+**/.vercel/
+**/.DS_Store
