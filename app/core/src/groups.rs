@@ -37,6 +37,19 @@ pub const KIND_CREATE_GROUP: u16 = 9007;
 /// includes the requester's pubkey, or holds the request for moderator
 /// approval (closed rooms).
 pub const KIND_JOIN_REQUEST: u16 = 9021;
+/// NIP-29 admin-minted invite-code event. Admin-signed; carries the
+/// group's `h` tag and one or more `code` tags. relay29 consumes codes
+/// on use (single-use), so callers mint more whenever they need.
+pub const KIND_CREATE_INVITE: u16 = 9009;
+/// Cap enforced by relay29 on the number of `code` tags per kind:9009
+/// event. Mirrors `MAX_CODES_PER_INVITE_EVENT` in `web/src/lib/ndk/groups.ts`.
+pub const MAX_CODES_PER_INVITE_EVENT: usize = 10;
+
+/// 56-glyph alphabet for invite codes — same set as the web client's
+/// `INVITE_CODE_ALPHABET` so codes mint identically across platforms.
+/// Look-alikes (0/O, 1/I/l) are omitted so codes survive being dictated.
+const INVITE_CODE_ALPHABET: &[u8] =
+    b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 
 /// Query the local nostrdb cache for the current user's joined communities.
 /// Returns `[]` if the cache has no relevant events yet (cold start).
@@ -355,6 +368,68 @@ pub async fn add_member(
         .await
         .map_err(|e| CoreError::Relay(format!("publish put-user: {e}")))?;
     Ok(event.id.to_hex())
+}
+
+/// Mint `count` invite codes for `group_id` by publishing a kind:9009 event
+/// signed by the current user. Must be signed by an admin — non-admin
+/// attempts are rejected by the relay. Codes are 24-char strings drawn
+/// from `INVITE_CODE_ALPHABET`; relay29 consumes each code on first use,
+/// so codes are inherently single-use.
+///
+/// The relay caps each event at `MAX_CODES_PER_INVITE_EVENT` codes; this
+/// function fans out to multiple events if `count` exceeds that. Returns
+/// every minted code in order, regardless of which event carried it.
+pub async fn create_invite_codes(
+    runtime: &NostrRuntime,
+    group_id: &str,
+    count: u32,
+) -> Result<Vec<String>, CoreError> {
+    let group_id = group_id.trim();
+    if group_id.is_empty() {
+        return Err(CoreError::InvalidInput("group_id must not be empty".into()));
+    }
+    let count = count.clamp(1, 100) as usize;
+
+    let client = runtime.client();
+    let mut all_codes: Vec<String> = Vec::with_capacity(count);
+
+    let mut remaining = count;
+    while remaining > 0 {
+        let batch_size = remaining.min(MAX_CODES_PER_INVITE_EVENT);
+        let batch: Vec<String> = (0..batch_size).map(|_| generate_invite_code(24)).collect();
+
+        let mut tags: Vec<Tag> = Vec::with_capacity(1 + batch_size);
+        tags.push(h_tag(group_id)?);
+        for code in &batch {
+            tags.push(named_tag("code", code)?);
+        }
+        let builder = EventBuilder::new(Kind::Custom(KIND_CREATE_INVITE), "").tags(tags);
+
+        let event = client
+            .sign_event_builder(builder)
+            .await
+            .map_err(|e| CoreError::Signer(format!("sign create-invite: {e}")))?;
+        client
+            .send_event(&event)
+            .await
+            .map_err(|e| CoreError::Relay(format!("publish create-invite: {e}")))?;
+
+        all_codes.extend(batch);
+        remaining -= batch_size;
+    }
+
+    Ok(all_codes)
+}
+
+fn generate_invite_code(length: usize) -> String {
+    use secp256k1::rand::{rngs::OsRng, RngCore};
+    let mut buf = vec![0u8; length];
+    OsRng.fill_bytes(&mut buf);
+    let alphabet = INVITE_CODE_ALPHABET;
+    let n = alphabet.len() as u32;
+    buf.iter()
+        .map(|byte| alphabet[(*byte as u32 % n) as usize] as char)
+        .collect()
 }
 
 fn h_tag(group_id: &str) -> Result<Tag, CoreError> {

@@ -773,6 +773,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async throws  -> String
     
+    /**
+     * Mint `count` single-use invite codes for `group_id` by publishing a
+     * kind:9009 event. Must be signed by an admin — the relay rejects
+     * non-admin attempts. Returns the minted codes in order.
+     */
+    func createRoomInviteCodes(groupId: String, count: UInt32) async throws  -> [String]
+    
     func currentUser()  -> CurrentUser?
     
     /**
@@ -1570,6 +1577,28 @@ open func createRoom(name: String, about: String, picture: String, visibility: R
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+    
+    /**
+     * Mint `count` single-use invite codes for `group_id` by publishing a
+     * kind:9009 event. Must be signed by an admin — the relay rejects
+     * non-admin attempts. Returns the minted codes in order.
+     */
+open func createRoomInviteCodes(groupId: String, count: UInt32)async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_create_room_invite_codes(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(count)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -9828,6 +9857,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 43966) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_create_room_invite_codes() != 29452) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_current_user() != 38772) {

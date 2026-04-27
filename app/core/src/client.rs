@@ -1512,6 +1512,18 @@ impl HighlighterCore {
         groups::add_member(&self.runtime, group_id.trim(), pubkey_hex.trim()).await
     }
 
+    /// Mint `count` single-use invite codes for `group_id` by publishing a
+    /// kind:9009 event. Must be signed by an admin — the relay rejects
+    /// non-admin attempts. Returns the minted codes in order.
+    pub async fn create_room_invite_codes(
+        &self,
+        group_id: String,
+        count: u32,
+    ) -> Result<Vec<String>, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        groups::create_invite_codes(&self.runtime, group_id.trim(), count).await
+    }
+
     /// Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
     /// `nostr:` URI prefix) to a 64-char hex pubkey. Returns
     /// `CoreError::InvalidInput` if the input isn't a recognised pubkey

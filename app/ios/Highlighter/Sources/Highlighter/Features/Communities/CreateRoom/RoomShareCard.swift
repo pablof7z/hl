@@ -7,17 +7,21 @@ import SwiftUI
 /// expandable QR. Mirrors the existing room-card aesthetic — accent
 /// gradient fallback, ink-on-paper QR rather than black-on-white.
 ///
-/// The shareable URL is a plain universal link (`https://highlighter.com/r/<id>`).
-/// Open rooms join via the existing preview sheet on tap; closed rooms
-/// land on the same preview but require approval. No auth tokens in v1 —
-/// admins can always directly add specific people from the search field
-/// below.
+/// The shareable URL is `https://highlighter.com/r/<id>/join/<code>` where
+/// `<code>` is a single-use NIP-29 invite minted on appear (kind:9009).
+/// relay29 consumes codes on first use, so each card render produces a
+/// fresh code suitable for one new member. For batch sharing, admins use
+/// the web `/r/<id>/invite` page.
 struct RoomShareCard: View {
     let groupId: String
     let room: CommunitySummary?
 
+    @Environment(HighlighterStore.self) private var appStore
+
     @State private var qrShown = false
     @State private var copied = false
+    @State private var inviteCode: String?
+    @State private var mintError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -39,7 +43,7 @@ struct RoomShareCard: View {
                     Image(systemName: "link")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.highlighterInkMuted)
-                    Text(shareURL)
+                    Text(linkLabel)
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(1)
@@ -59,16 +63,20 @@ struct RoomShareCard: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .disabled(shareURL == nil)
+                    .opacity(shareURL == nil ? 0.5 : 1)
 
-                    ShareLink(item: URL(string: shareURL) ?? URL(string: "https://highlighter.com")!) {
-                        Label("Share", systemImage: "square.and.arrow.up")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(Color.highlighterInkStrong)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 9)
-                            .background(
-                                Capsule().fill(Color.highlighterTintPale)
-                            )
+                    if let url = URL(string: shareURL ?? "") {
+                        ShareLink(item: url) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(Color.highlighterInkStrong)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .background(
+                                    Capsule().fill(Color.highlighterTintPale)
+                                )
+                        }
                     }
 
                     Spacer(minLength: 0)
@@ -85,10 +93,18 @@ struct RoomShareCard: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .disabled(shareURL == nil)
+                    .opacity(shareURL == nil ? 0.4 : 1)
                     .accessibilityLabel(qrShown ? "Hide QR" : "Show QR")
                 }
 
-                if qrShown {
+                if let mintError {
+                    Text(mintError)
+                        .font(.caption)
+                        .foregroundStyle(Color.highlighterAccent)
+                }
+
+                if qrShown, let _ = shareURL {
                     qrView
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -101,14 +117,43 @@ struct RoomShareCard: View {
                 .stroke(Color.highlighterRule, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 18))
+        .task(id: groupId) {
+            await mintInviteIfNeeded()
+        }
     }
 
-    private var shareURL: String {
-        "https://highlighter.com/r/\(groupId)"
+    private var shareURL: String? {
+        guard let code = inviteCode else { return nil }
+        return "https://highlighter.com/r/\(groupId)/join/\(code)"
+    }
+
+    private var linkLabel: String {
+        if let url = shareURL { return url }
+        if mintError != nil { return "Couldn't create invite link" }
+        return "Creating invite link…"
+    }
+
+    private func mintInviteIfNeeded() async {
+        guard inviteCode == nil else { return }
+        do {
+            let codes = try await appStore.safeCore.createRoomInviteCodes(
+                groupId: groupId,
+                count: 1
+            )
+            await MainActor.run {
+                inviteCode = codes.first
+                mintError = inviteCode == nil ? "No code returned." : nil
+            }
+        } catch {
+            await MainActor.run {
+                mintError = "Couldn't mint invite link. Add people directly below."
+            }
+        }
     }
 
     private func copy() {
-        UIPasteboard.general.string = shareURL
+        guard let url = shareURL else { return }
+        UIPasteboard.general.string = url
         UISelectionFeedbackGenerator().selectionChanged()
         copied = true
         Task {
@@ -143,7 +188,7 @@ struct RoomShareCard: View {
 
     @ViewBuilder
     private var qrView: some View {
-        if let image = QRCodeGenerator.image(for: shareURL) {
+        if let url = shareURL, let image = QRCodeGenerator.image(for: url) {
             HStack {
                 Spacer()
                 VStack(spacing: 8) {

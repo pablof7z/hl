@@ -383,6 +383,10 @@ actor SafeHighlighterCore {
         try await core.addRoomMember(groupId: groupId, pubkeyHex: pubkeyHex)
     }
 
+    func createRoomInviteCodes(groupId: String, count: UInt32) async throws -> [String] {
+        try await core.createRoomInviteCodes(groupId: groupId, count: count)
+    }
+
     func getFollows() async throws -> [String] {
         try await core.getFollows()
     }
