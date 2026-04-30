@@ -8,6 +8,13 @@
     formatPodcastReleaseDate,
     parseTimeInput
   } from '$lib/features/podcasts/format';
+  import {
+    pause as pausePlayer,
+    playEpisode,
+    podcastPlayer,
+    resume as resumePlayer,
+    seek as seekPlayer
+  } from '$lib/features/podcasts/playerStore';
   import type { PodcastArtifactData, PodcastTranscriptSegment } from '$lib/features/podcasts/types';
   import type { ArtifactRecord } from '$lib/ndk/artifacts';
   import { ensureClientNdk, ndk } from '$lib/ndk/client';
@@ -53,11 +60,7 @@
     };
   });
 
-  let audioEl = $state<HTMLAudioElement | null>(null);
   let timelineEl = $state<HTMLElement | null>(null);
-  let audioDuration = $state<number | null>(null);
-  let currentTime = $state(0);
-  let isPlaying = $state(false);
   let sortMode = $state<SortMode>('top');
   let clipStart = $state<number | null>(null);
   let clipEnd = $state<number | null>(null);
@@ -74,6 +77,15 @@
 
   const currentUser = $derived(ndk.$currentUser);
   const isReadOnly = $derived(Boolean(ndk.$sessions?.isReadOnly()));
+  const playerState = $derived(podcastPlayer.snapshot());
+  const episodePlayerId = $derived(artifact.id);
+  const isCurrentEpisode = $derived(playerState.episode?.id === episodePlayerId);
+  // Surface player state through these derived values so the rest of
+  // the component (timeline, transcript scroll-into-view, clip preview)
+  // can stay structurally identical to the pre-store version.
+  const currentTime = $derived(isCurrentEpisode ? playerState.position : 0);
+  const isPlaying = $derived(isCurrentEpisode && playerState.playing);
+  const audioDuration = $derived(isCurrentEpisode ? playerState.duration : null);
   const episodeTitle = $derived(podcast?.episodeTitle || artifact.title);
   const showTitle = $derived(podcast?.showTitle || artifact.podcastShowTitle || artifact.author);
   const description = $derived(podcast?.description || artifact.description);
@@ -283,16 +295,29 @@
   });
 
   function togglePlayback() {
-    if (!audioEl || !playbackAvailable) return;
+    if (!playbackAvailable || !audioUrl) return;
 
-    if (isPlaying) {
-      audioEl.pause();
-      isPlaying = false;
+    if (isCurrentEpisode) {
+      if (isPlaying) {
+        pausePlayer();
+      } else {
+        resumePlayer();
+      }
       return;
     }
 
-    void audioEl.play();
-    isPlaying = true;
+    // First-time play of this episode within the global store. Use the
+    // artifact id as the stable player id so position autosave keys to
+    // a consistent value across navigations and reloads.
+    playEpisode({
+      id: episodePlayerId,
+      title: episodeTitle || 'Untitled episode',
+      showTitle: showTitle || undefined,
+      imageUrl: image || undefined,
+      audioUrl,
+      durationSeconds: durationSeconds ?? null,
+      detailHref: artifact.url
+    });
   }
 
   function handleTimelinePointerDown(event: PointerEvent) {
@@ -314,10 +339,24 @@
   }
 
   function seekToTime(seconds: number) {
-    currentTime = Math.max(0, seconds);
-    if (audioEl && playbackAvailable) {
-      audioEl.currentTime = Math.max(0, seconds);
+    if (!playbackAvailable || !audioUrl) return;
+    if (!isCurrentEpisode) {
+      // Load episode into the global store at the requested offset.
+      playEpisode({
+        id: episodePlayerId,
+        title: episodeTitle || 'Untitled episode',
+        showTitle: showTitle || undefined,
+        imageUrl: image || undefined,
+        audioUrl,
+        durationSeconds: durationSeconds ?? null,
+        detailHref: artifact.url
+      });
+      // playEpisode starts from persisted position; coerce to the
+      // requested offset right after.
+      seekPlayer(Math.max(0, seconds));
+      return;
     }
+    seekPlayer(Math.max(0, seconds));
   }
 
   function handleSegmentClick(segment: PodcastTranscriptSegment, index: number) {
@@ -386,18 +425,27 @@
   }
 
   function startPreview() {
-    if (!canPreviewClip || !audioEl || !clipRange) return;
+    if (!canPreviewClip || !clipRange || !audioUrl) return;
     clipMode = 'preview';
-    audioEl.currentTime = clipRange.start;
-    void audioEl.play();
-    isPlaying = true;
+    if (!isCurrentEpisode) {
+      playEpisode({
+        id: episodePlayerId,
+        title: episodeTitle || 'Untitled episode',
+        showTitle: showTitle || undefined,
+        imageUrl: image || undefined,
+        audioUrl,
+        durationSeconds: durationSeconds ?? null,
+        detailHref: artifact.url
+      });
+    }
+    seekPlayer(clipRange.start);
+    resumePlayer();
   }
 
   function stopPreview() {
     clipMode = 'fine-tune';
-    if (audioEl && isPlaying) {
-      audioEl.pause();
-      isPlaying = false;
+    if (isCurrentEpisode && isPlaying) {
+      pausePlayer();
     }
   }
 
@@ -504,16 +552,16 @@
     return `${((clipRange.end - clipRange.start) / durationSeconds) * 100}%`;
   }
 
-  function syncPlaybackState() {
-    if (!audioEl) return;
-    currentTime = audioEl.currentTime;
-    isPlaying = !audioEl.paused;
-    audioDuration = Number.isFinite(audioEl.duration) ? audioEl.duration : audioDuration;
-
-    if (clipMode === 'preview' && clipRange && currentTime >= clipRange.end) {
-      audioEl.currentTime = clipRange.start;
+  // Loop preview playback inside the clip range. The global player drives
+  // currentTime updates, so we just react when the playhead crosses the
+  // clip end.
+  $effect(() => {
+    if (clipMode !== 'preview') return;
+    if (!clipRange || !isCurrentEpisode) return;
+    if (currentTime >= clipRange.end) {
+      seekPlayer(clipRange.start);
     }
-  }
+  });
 
   function buildWaveformBars(seed: string, count: number) {
     const values: number[] = [];
@@ -614,19 +662,6 @@
       {/if}
     </div>
   </header>
-
-  {#if playbackAvailable}
-    <audio
-      bind:this={audioEl}
-      src={audioUrl}
-      preload="metadata"
-      ontimeupdate={syncPlaybackState}
-      onloadedmetadata={syncPlaybackState}
-      onplay={syncPlaybackState}
-      onpause={syncPlaybackState}
-      onended={syncPlaybackState}
-    ></audio>
-  {/if}
 
   {#if viewMode === 'listen'}
   <section class="player-shell">

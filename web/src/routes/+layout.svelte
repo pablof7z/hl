@@ -9,6 +9,19 @@
   import SeoHead from '$lib/components/SeoHead.svelte';
   import TopNav from '$lib/features/room/components/TopNav.svelte';
   import Footer from '$lib/features/room/components/Footer.svelte';
+  import MiniPlayer from '$lib/features/podcasts/MiniPlayer.svelte';
+  import {
+    attachAudioElement,
+    pause,
+    podcastPlayer,
+    reportEnded,
+    reportLoadedMetadata,
+    reportPause,
+    reportPlay,
+    reportTimeUpdate,
+    resume,
+    seek
+  } from '$lib/features/podcasts/playerStore';
   import { ndk, ensureClientNdk } from '$lib/ndk/client';
   import type { SeoMetadata } from '$lib/seo';
   import { NDK_CONTEXT_KEY } from '$lib/ndk/utils/ndk';
@@ -30,6 +43,47 @@
   );
 
   setContext(NDK_CONTEXT_KEY, ndk);
+
+  let audioEl = $state<HTMLAudioElement | null>(null);
+  const playerState = $derived(podcastPlayer.snapshot());
+
+  $effect(() => {
+    attachAudioElement(audioEl);
+    return () => attachAudioElement(null);
+  });
+
+  // Wire navigator.mediaSession (Chrome / Safari) so OS-level controls
+  // (lock screen / media keys / AirPods double-tap) drive playback.
+  // Best-effort — no-op when the API is missing.
+  $effect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+    const ms = navigator.mediaSession;
+    const episode = playerState.episode;
+    if (!episode) {
+      try {
+        ms.metadata = null;
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    try {
+      ms.metadata = new MediaMetadata({
+        title: episode.title,
+        artist: episode.showTitle ?? '',
+        artwork: episode.imageUrl ? [{ src: episode.imageUrl, sizes: '512x512' }] : []
+      });
+      ms.setActionHandler('play', () => resume());
+      ms.setActionHandler('pause', () => pause());
+      ms.setActionHandler('seekto', (details) => {
+        if (typeof details.seekTime === 'number') seek(details.seekTime);
+      });
+      ms.setActionHandler('seekforward', () => seek(playerState.position + 15));
+      ms.setActionHandler('seekbackward', () => seek(Math.max(0, playerState.position - 15)));
+    } catch {
+      // ignore — older browsers throw on unsupported actions
+    }
+  });
 
   onMount(() => {
     void ensureClientNdk().catch((error) => {
@@ -68,6 +122,21 @@
     <Footer variant="app" />
   </div>
 {/if}
+
+<!-- Persistent global podcast player. The hidden <audio> element lives
+     in the root layout so navigation never tears it down; the
+     MiniPlayer is the visible affordance and shows whenever a podcast
+     is loaded. -->
+<audio
+  bind:this={audioEl}
+  preload="metadata"
+  ontimeupdate={reportTimeUpdate}
+  onloadedmetadata={reportLoadedMetadata}
+  onplay={reportPlay}
+  onpause={reportPause}
+  onended={reportEnded}
+></audio>
+<MiniPlayer />
 
 <style>
   :global(html, body) {

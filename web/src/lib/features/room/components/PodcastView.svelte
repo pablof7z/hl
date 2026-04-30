@@ -6,6 +6,13 @@
   import { ensureClientNdk, ndk } from '$lib/ndk/client';
   import { buildArtifactHighlightFilters } from '$lib/ndk/highlights';
   import { formatPodcastClock, formatPodcastDuration, formatPodcastReleaseDate } from '$lib/features/podcasts/format';
+  import {
+    pause as pausePlayer,
+    playEpisode,
+    podcastPlayer,
+    resume as resumePlayer,
+    seek as seekPlayer
+  } from '$lib/features/podcasts/playerStore';
   import { User } from '$lib/ndk/ui/user';
 
   let {
@@ -20,9 +27,12 @@
     onBack: () => void;
   } = $props();
 
-  let audioEl = $state<HTMLAudioElement | null>(null);
-  let currentTime = $state(0);
-  let audioDuration = $state<number | null>(null);
+  const playerState = $derived(podcastPlayer.snapshot());
+  const episodePlayerId = $derived(artifact.id);
+  const isCurrentEpisode = $derived(playerState.episode?.id === episodePlayerId);
+  const currentTime = $derived(isCurrentEpisode ? playerState.position : 0);
+  const audioDuration = $derived(isCurrentEpisode ? playerState.duration : null);
+  const isPlaying = $derived(isCurrentEpisode && playerState.playing);
 
   onMount(() => {
     void ensureClientNdk();
@@ -69,17 +79,33 @@
       .toSorted((a, b) => a.startSeconds - b.startSeconds);
   });
 
-  function seekTo(seconds: number) {
-    if (!audioEl) return;
-    audioEl.currentTime = Math.max(0, seconds);
-    void audioEl.play();
+  function ensureEpisodeLoaded(): boolean {
+    if (!audioUrl) return false;
+    if (isCurrentEpisode) return true;
+    playEpisode({
+      id: episodePlayerId,
+      title: episodeTitle || 'Untitled episode',
+      showTitle: showTitle || undefined,
+      imageUrl: image || undefined,
+      audioUrl,
+      durationSeconds: durationSeconds ?? null,
+      detailHref: artifact.url
+    });
+    return true;
   }
 
-  function syncPlaybackState() {
-    if (!audioEl) return;
-    currentTime = audioEl.currentTime;
-    if (Number.isFinite(audioEl.duration)) {
-      audioDuration = audioEl.duration;
+  function seekTo(seconds: number) {
+    if (!ensureEpisodeLoaded()) return;
+    seekPlayer(Math.max(0, seconds));
+    resumePlayer();
+  }
+
+  function togglePlayback() {
+    if (!ensureEpisodeLoaded()) return;
+    if (isPlaying) {
+      pausePlayer();
+    } else {
+      resumePlayer();
     }
   }
 
@@ -137,15 +163,17 @@
           <p>{audioRestrictedReason || 'This source only exposes a short preview clip.'}</p>
         </div>
       {/if}
-      <audio
-        bind:this={audioEl}
-        src={audioUrl}
-        controls
-        preload="metadata"
-        class="audio-element"
-        ontimeupdate={syncPlaybackState}
-        onloadedmetadata={syncPlaybackState}
-      ></audio>
+      <div class="audio-controls">
+        <button type="button" class="play-pill" class:active={isCurrentEpisode} onclick={togglePlayback}>
+          <span aria-hidden="true">{isPlaying ? '⏸' : '▶'}</span>
+          <span>{isPlaying ? 'Pause' : isCurrentEpisode ? 'Resume' : 'Play episode'}</span>
+        </button>
+        {#if isCurrentEpisode}
+          <span class="audio-clock">
+            {formatPodcastClock(currentTime)} {audioDuration ? `/ ${formatPodcastClock(audioDuration)}` : ''}
+          </span>
+        {/if}
+      </div>
 
       {#if durationSeconds && highlightMarks.length > 0 && !isPreviewOnly}
         <div class="marker-track" role="presentation">
@@ -361,8 +389,43 @@
     gap: 6px;
   }
 
-  .audio-element {
-    width: 100%;
+  .audio-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .play-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--rule, #e8d8cb);
+    background: var(--surface, #fffaf3);
+    color: var(--ink, #1a1410);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .play-pill:hover {
+    border-color: var(--brand-accent, #d05a2d);
+    color: var(--brand-accent, #d05a2d);
+  }
+
+  .play-pill.active {
+    background: var(--brand-accent, #d05a2d);
+    color: #fff8f2;
+    border-color: var(--brand-accent, #d05a2d);
+  }
+
+  .audio-clock {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--ink-soft, #695747);
   }
 
   .preview-banner {
