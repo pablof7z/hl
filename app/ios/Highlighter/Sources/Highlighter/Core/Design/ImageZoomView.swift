@@ -14,7 +14,7 @@ struct ImageZoomView: View {
     var body: some View {
         ZStack {
             Color.black
-                .opacity(1 - min(1, abs(dragOffset.height) / 300))
+                .opacity(1 - min(1, abs(dragOffset.height) / 300.0))
                 .ignoresSafeArea()
             if let url {
                 KFImage(url)
