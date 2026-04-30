@@ -23,6 +23,11 @@ export type BookMetadata = {
   title: string;
   author: string;
   coverUrl: string;
+  /// Full description (markdown). Resolved from the linked `works` record
+  /// when the ISBN edition has a `works[]` ref. Empty when unavailable.
+  description?: string;
+  /// Subjects / topic tags surfaced on the works record.
+  subjects?: string[];
 };
 
 export async function lookupIsbn(rawIsbn: string): Promise<BookMetadata | undefined> {
@@ -67,12 +72,74 @@ export async function lookupIsbn(rawIsbn: string): Promise<BookMetadata | undefi
       : [];
     const author = await resolveAuthors(authorRefs);
 
-    return { isbn13, title: title || fallback.title, author, coverUrl };
+    // Edition-level description occasionally lives on the ISBN record;
+    // more often we have to follow the `works[]` reference. Prefer the
+    // edition-level one (it tends to be tighter for a specific edition).
+    let description = stringifyMaybeTextNode(body.description);
+    let subjects: string[] = [];
+    const worksRefs = Array.isArray((body as { works?: unknown[] }).works)
+      ? ((body as { works: unknown[] }).works as Array<{ key?: string }>)
+          .map((entry) => entry.key)
+          .filter((k): k is string => typeof k === 'string')
+      : [];
+
+    if (worksRefs.length > 0) {
+      const worksBody = await fetchOpenLibraryJsonSafe(
+        `https://openlibrary.org${worksRefs[0].startsWith('/') ? '' : '/'}${worksRefs[0]}.json`
+      );
+      if (worksBody) {
+        if (!description) {
+          description = stringifyMaybeTextNode(
+            (worksBody as Record<string, unknown>).description
+          );
+        }
+        const worksSubjects = (worksBody as { subjects?: unknown }).subjects;
+        if (Array.isArray(worksSubjects)) {
+          subjects = worksSubjects
+            .filter((value): value is string => typeof value === 'string')
+            .map((value) => value.trim())
+            .filter(Boolean)
+            .slice(0, 8);
+        }
+      }
+    }
+
+    return {
+      isbn13,
+      title: title || fallback.title,
+      author,
+      coverUrl,
+      description: description || undefined,
+      subjects
+    };
   } catch {
     return fallback;
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchOpenLibraryJsonSafe(url: string): Promise<unknown | undefined> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OPEN_LIBRARY_TIMEOUT_MS);
+  try {
+    return await fetchOpenLibraryJson(url, controller.signal);
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/// Open Library encodes descriptions either as a plain string or as
+/// `{ type: '/type/text', value: '…' }`. Normalise both shapes.
+function stringifyMaybeTextNode(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (value && typeof value === 'object' && 'value' in (value as Record<string, unknown>)) {
+    const inner = (value as { value?: unknown }).value;
+    if (typeof inner === 'string') return inner.trim();
+  }
+  return '';
 }
 
 /// Resolve up to two author refs (`/authors/OLxxxA`) to display names.

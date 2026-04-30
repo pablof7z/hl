@@ -161,6 +161,75 @@ export function buildHighlightSeo(args: {
   };
 }
 
+export function buildBookSeo(args: {
+  url: URL;
+  isbn13: string;
+  title: string;
+  author: string;
+  description?: string;
+  highlightCount: number;
+}): SeoMetadata {
+  const safeTitle = cleanText(args.title) || `Book ISBN ${args.isbn13}`;
+  const authorBit = cleanText(args.author);
+  const descriptionBit =
+    cleanText(args.description?.replace(/[\r\n]+/g, ' ')) ||
+    `${safeTitle} on ${SITE_NAME}.`;
+  const summary = truncate(
+    [authorBit ? `${authorBit}.` : '', descriptionBit].filter(Boolean).join(' '),
+    190
+  );
+
+  return {
+    title: `${safeTitle}${authorBit ? ` by ${authorBit}` : ''} • ${SITE_NAME}`,
+    description: summary || `${safeTitle} on ${SITE_NAME}.`,
+    canonical: canonicalUrl(args.url),
+    type: 'book',
+    image: {
+      url: bookOgImage(args.url, args.isbn13),
+      alt: `${safeTitle} cover`,
+      width: DEFAULT_SOCIAL_IMAGE_WIDTH,
+      height: DEFAULT_SOCIAL_IMAGE_HEIGHT
+    },
+    author: authorBit || undefined
+  };
+}
+
+export function buildPodcastSeo(args: {
+  url: URL;
+  id: string;
+  episodeTitle: string;
+  showTitle: string;
+  highlightCount: number;
+}): SeoMetadata {
+  const safeTitle = cleanText(args.episodeTitle) || cleanText(args.showTitle) || 'Podcast episode';
+  const showBit = cleanText(args.showTitle);
+  const description =
+    args.highlightCount > 0
+      ? `${args.highlightCount} highlight${args.highlightCount === 1 ? '' : 's'} on ${SITE_NAME}.`
+      : `${safeTitle} on ${SITE_NAME}.`;
+
+  return {
+    title: `${safeTitle}${showBit ? ` • ${showBit}` : ''} • ${SITE_NAME}`,
+    description: truncate(description, 190),
+    canonical: canonicalUrl(args.url),
+    type: 'website',
+    image: {
+      url: podcastOgImage(args.url, args.id),
+      alt: `${safeTitle} preview`,
+      width: DEFAULT_SOCIAL_IMAGE_WIDTH,
+      height: DEFAULT_SOCIAL_IMAGE_HEIGHT
+    }
+  };
+}
+
+function bookOgImage(url: URL, isbn13: string): string {
+  return new URL(`/og/book/${encodeURIComponent(isbn13)}`, url.origin).toString();
+}
+
+function podcastOgImage(url: URL, id: string): string {
+  return new URL(`/og/podcast/${encodeURIComponent(id)}`, url.origin).toString();
+}
+
 export function buildMissingSeo(url: URL, label: string): SeoMetadata {
   return {
     title: `${label} • ${SITE_NAME}`,

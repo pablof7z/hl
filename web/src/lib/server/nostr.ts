@@ -12,6 +12,8 @@ import NDK, {
 import { APP_NAME, DEFAULT_RELAYS } from '$lib/ndk/config';
 import { getServerCacheAdapter } from '$lib/server/ndk-cache';
 import { imetaImageUrl, lookupIsbn } from '$lib/server/openlibrary';
+import { parsePodcastITag } from '$lib/server/podcast-highlights';
+import { slugify, withSlug } from '$lib/utils/slug';
 
 const CONNECT_TIMEOUT_MS = 2500;
 const CACHE_FETCH_TIMEOUT_MS = 800;
@@ -429,11 +431,13 @@ export async function fetchNoteWithAuthor(identifier: string): Promise<{
 /// iOS `HighlightDetailView` resource header data shape so the web
 /// version can render the same affordance.
 export type HighlightSourceCard = {
-  kind: 'article' | 'book' | 'web';
+  kind: 'article' | 'book' | 'podcast' | 'web';
   title: string;
   author: string;
   coverUrl: string;
-  /// External link to open the source (NIP-23 reader path, raw URL, …).
+  /// Link to open the source. Internal routes (`/note/...`, `/book/...`,
+  /// `/podcast/...`) for things we render natively; raw URL for plain
+  /// web sources.
   href: string;
 };
 
@@ -480,6 +484,14 @@ export async function fetchHighlightWithAuthor(identifier: string): Promise<{
     .getMatchingTags('i')
     .map((tag) => tag[1] ?? '')
     .find((value) => value.toLowerCase().startsWith('isbn:'));
+
+  const podcastRef = event
+    .getMatchingTags('i')
+    .map((tag) => tag[1] ?? '')
+    .find((value) => {
+      const lower = value.toLowerCase();
+      return lower.startsWith('podcast:item:guid:') || lower.startsWith('podcast:guid:');
+    });
 
   const sourceUrl = event.tagValue('r')?.trim() ?? '';
 
@@ -528,12 +540,35 @@ export async function fetchHighlightWithAuthor(identifier: string): Promise<{
     const book = await lookupIsbn(isbn);
     if (book) {
       sourceTitle = book.title || undefined;
+      // Internal SEO-friendly book route: `/book/<title-slug>-<isbn13>`.
+      // Bare `/book/<isbn>` also resolves; the loader extracts the ISBN
+      // by parsing the trailing 10/13 digits.
+      const bookPath = withSlug(slugify(book.title), book.isbn13);
       source = {
         kind: 'book',
         title: book.title || 'Book',
         author: book.author,
         coverUrl: book.coverUrl,
-        href: `https://openlibrary.org/isbn/${book.isbn13}`
+        href: `/book/${bookPath}`
+      };
+    }
+  } else if (podcastRef) {
+    const components = parsePodcastITag(podcastRef);
+    if (components) {
+      // `title` and `image` tags on the highlight are best-effort —
+      // most clients don't set them. The podcast page itself does the
+      // metadata heavy lifting on its own.
+      const titleTag = (event.tagValue('title') || event.tagValue('episode_title') || '').trim();
+      const showTag = (event.tagValue('show_title') || event.tagValue('podcast') || '').trim();
+      const imageTag = (event.tagValue('image') || event.tagValue('thumb') || '').trim();
+      if (titleTag) sourceTitle = titleTag;
+      const podcastPath = withSlug(slugify(titleTag || showTag), components.id);
+      source = {
+        kind: 'podcast',
+        title: titleTag || showTag || 'Podcast episode',
+        author: showTag,
+        coverUrl: imageTag,
+        href: `/podcast/${podcastPath}`
       };
     }
   } else if (sourceUrl) {
@@ -847,6 +882,29 @@ function buildReferenceFilters(
   }
 
   return filters;
+}
+
+/// kind:9802 highlights tagged with `i isbn:<isbn13>`. Sorted newest first.
+export async function fetchHighlightsForIsbn(isbn13: string, limit = 200): Promise<NDKEvent[]> {
+  const normalized = isbn13.trim();
+  if (!normalized) return [];
+
+  // Books may be tagged with several `isbn:` variants — the ISBN-13, the
+  // ISBN-10 if the publisher had one, and occasionally with leading
+  // zero-padded variants. We keep the canonical 13-digit form here and
+  // rely on the writer side using `setBookmarkAddressPresence`-style
+  // canonicalisation. If callers need ISBN-10 cross-matching they can
+  // pre-resolve before calling.
+  const filter: NDKFilter = {
+    kinds: [9802],
+    '#i': [`isbn:${normalized}`],
+    limit
+  } as NDKFilter;
+
+  const events = await fetchEventsForSsr([filter], `fetchHighlightsForIsbn(${normalized})`);
+  return Array.from(events ?? [])
+    .filter((event) => event.kind === 9802)
+    .sort((left, right) => (right.created_at ?? 0) - (left.created_at ?? 0));
 }
 
 export async function fetchRecentHighlights(limit = 100): Promise<NDKEvent[]> {

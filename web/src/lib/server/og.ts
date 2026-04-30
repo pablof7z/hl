@@ -308,6 +308,204 @@ export async function renderHighlightOgImage(args: HighlightOgArgs): Promise<Buf
   return await base.composite(overlays).png().toBuffer();
 }
 
+type BookOgArgs = {
+  isbn13: string;
+  title: string;
+  author: string;
+  description?: string;
+  highlightCount: number;
+};
+
+/// Book OG card. Title + author dominate, with a quoted-passage badge in
+/// the corner stating how many highlights are tracked. Reuses the same
+/// palette + serif treatment as the highlight card so book/podcast/note
+/// cards feel like a family.
+export async function renderBookOgImage(args: BookOgArgs): Promise<Buffer> {
+  const fontfile = await ensureInterFontFile();
+  const palette = paletteFor(`book:${args.isbn13}:${args.title}`);
+  const title = cleanText(args.title) || `ISBN ${args.isbn13}`;
+  const author = cleanText(args.author);
+  const description = cleanText(args.description ?? '');
+
+  const titleLines = wrapText(title, 22, 3);
+  const titleFontSize = title.length <= 40 ? 64 : title.length <= 80 ? 54 : 44;
+  const titleLineHeight = Math.round(titleFontSize * 1.18);
+  const titleBlockHeight = titleLines.length * titleLineHeight;
+
+  const summaryLines = wrapText(
+    description || (author ? `By ${author}` : 'A book on Nostr.'),
+    52,
+    4
+  );
+  const summaryY = 180 + titleBlockHeight + 30;
+
+  const highlightBadge =
+    args.highlightCount > 0
+      ? `${args.highlightCount} HIGHLIGHT${args.highlightCount === 1 ? '' : 'S'}`
+      : 'BOOK';
+  const badgeWidth = highlightBadge.length * 11 + 36;
+
+  const base = sharp(
+    Buffer.from(`
+      <svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${WIDTH}" height="${HEIGHT}" fill="${palette.paper}" />
+        <circle cx="1080" cy="92" r="220" fill="${palette.accentSoft}" opacity="0.55" />
+        <circle cx="92" cy="538" r="180" fill="${palette.accentSoft}" opacity="0.35" />
+        <rect x="44" y="40" width="1112" height="550" rx="28" fill="${palette.panel}" stroke="${palette.border}" stroke-width="2" />
+        <rect x="44" y="40" width="14" height="550" rx="7" fill="${palette.accent}" />
+        <rect x="${1156 - badgeWidth - 30}" y="70" width="${badgeWidth}" height="46" rx="23" fill="${palette.accent}" />
+        <rect x="108" y="160" width="180" height="240" rx="6" fill="${palette.accentSoft}" stroke="${palette.border}" stroke-width="2" />
+        <rect x="108" y="160" width="14" height="240" rx="3" fill="${palette.accent}" />
+        <text x="198" y="290" fill="${palette.accent}" font-family="Georgia, 'Times New Roman', serif" font-size="80" font-weight="700" text-anchor="middle">📖</text>
+      </svg>
+    `)
+  );
+
+  const overlays = await Promise.all([
+    createTextOverlay({
+      text: APP_NAME.toUpperCase(),
+      color: palette.accent,
+      font: 'Inter OG Bold 20',
+      fontfile,
+      left: 108,
+      top: 72
+    }),
+    createTextOverlay({
+      text: highlightBadge,
+      color: palette.badgeText,
+      font: 'Inter OG Bold 20',
+      fontfile,
+      width: badgeWidth,
+      align: 'center',
+      left: 1156 - badgeWidth - 30,
+      top: 79
+    }),
+    createTextOverlay({
+      text: titleLines.join('\n'),
+      color: palette.ink,
+      font: `Inter OG Bold ${titleFontSize}`,
+      fontfile,
+      width: 720,
+      spacing: 6,
+      left: 320,
+      top: 180
+    }),
+    createTextOverlay({
+      text: author ? `BY ${author.toUpperCase()}` : '',
+      color: palette.muted,
+      font: 'Inter OG Bold 22',
+      fontfile,
+      width: 720,
+      left: 320,
+      top: 180 + titleBlockHeight
+    }),
+    createTextOverlay({
+      text: summaryLines.join('\n'),
+      color: palette.muted,
+      font: 'Inter OG 22',
+      fontfile,
+      width: 720,
+      spacing: 4,
+      left: 320,
+      top: summaryY
+    }),
+    createTextOverlay({
+      text: `ISBN ${args.isbn13}`,
+      color: palette.muted,
+      font: 'Inter OG 18',
+      fontfile,
+      left: 108,
+      top: 540
+    })
+  ]);
+
+  return await base.composite(overlays).png().toBuffer();
+}
+
+type PodcastOgArgs = {
+  id: string;
+  episodeTitle: string;
+  showTitle: string;
+  highlightCount: number;
+};
+
+export async function renderPodcastOgImage(args: PodcastOgArgs): Promise<Buffer> {
+  const fontfile = await ensureInterFontFile();
+  const palette = paletteFor(`podcast:${args.id}:${args.episodeTitle}`);
+  const title = cleanText(args.episodeTitle) || cleanText(args.showTitle) || 'Podcast episode';
+  const show = cleanText(args.showTitle);
+
+  const titleLines = wrapText(title, 24, 3);
+  const titleFontSize = title.length <= 40 ? 60 : title.length <= 80 ? 50 : 42;
+  const titleLineHeight = Math.round(titleFontSize * 1.18);
+  const titleBlockHeight = titleLines.length * titleLineHeight;
+
+  const highlightBadge =
+    args.highlightCount > 0
+      ? `${args.highlightCount} CLIPPED MOMENT${args.highlightCount === 1 ? '' : 'S'}`
+      : 'PODCAST';
+  const badgeWidth = highlightBadge.length * 10 + 36;
+
+  const base = sharp(
+    Buffer.from(`
+      <svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${WIDTH}" height="${HEIGHT}" fill="${palette.paper}" />
+        <circle cx="1080" cy="92" r="220" fill="${palette.accentSoft}" opacity="0.55" />
+        <circle cx="92" cy="538" r="180" fill="${palette.accentSoft}" opacity="0.35" />
+        <rect x="44" y="40" width="1112" height="550" rx="28" fill="${palette.panel}" stroke="${palette.border}" stroke-width="2" />
+        <rect x="44" y="40" width="14" height="550" rx="7" fill="${palette.accent}" />
+        <rect x="${1156 - badgeWidth - 30}" y="70" width="${badgeWidth}" height="46" rx="23" fill="${palette.accent}" />
+        <circle cx="222" cy="280" r="118" fill="${palette.accentSoft}" stroke="${palette.border}" stroke-width="2" />
+        <circle cx="222" cy="280" r="38" fill="${palette.accent}" />
+        <text x="222" y="305" fill="${palette.badgeText}" font-family="Georgia, 'Times New Roman', serif" font-size="46" font-weight="700" text-anchor="middle">▶</text>
+        <path d="M 110 460 Q 200 430, 300 450 T 470 460" stroke="${palette.accent}" stroke-width="3" fill="none" opacity="0.65" />
+      </svg>
+    `)
+  );
+
+  const overlays = await Promise.all([
+    createTextOverlay({
+      text: APP_NAME.toUpperCase(),
+      color: palette.accent,
+      font: 'Inter OG Bold 20',
+      fontfile,
+      left: 108,
+      top: 72
+    }),
+    createTextOverlay({
+      text: highlightBadge,
+      color: palette.badgeText,
+      font: 'Inter OG Bold 18',
+      fontfile,
+      width: badgeWidth,
+      align: 'center',
+      left: 1156 - badgeWidth - 30,
+      top: 81
+    }),
+    createTextOverlay({
+      text: titleLines.join('\n'),
+      color: palette.ink,
+      font: `Inter OG Bold ${titleFontSize}`,
+      fontfile,
+      width: 700,
+      spacing: 6,
+      left: 380,
+      top: 180
+    }),
+    createTextOverlay({
+      text: show ? show.toUpperCase() : 'PODCAST',
+      color: palette.muted,
+      font: 'Inter OG Bold 20',
+      fontfile,
+      width: 700,
+      left: 380,
+      top: 180 + titleBlockHeight + 12
+    })
+  ]);
+
+  return await base.composite(overlays).png().toBuffer();
+}
+
 /// Pick a font size + line cap so the quote breathes. Short quotes get
 /// the loudest treatment; longer ones step down so we never overflow
 /// the panel.

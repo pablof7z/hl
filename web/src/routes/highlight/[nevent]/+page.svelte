@@ -8,6 +8,7 @@
   import { displayName, avatarUrl, cleanText } from '$lib/ndk/format';
   import { profileIdentifier } from '$lib/ndk/format';
   import HighlightComments from './HighlightComments.svelte';
+  import HighlightActions from './HighlightActions.svelte';
 
   let { data }: PageProps = $props();
 
@@ -67,7 +68,13 @@
           <img class="source-cover" src={source.coverUrl} alt="" />
         {:else}
           <div class="source-cover source-cover--fallback" aria-hidden="true">
-            {source.kind === 'book' ? '📖' : source.kind === 'article' ? '📄' : '🌐'}
+            {source.kind === 'book'
+              ? '📖'
+              : source.kind === 'article'
+                ? '📄'
+                : source.kind === 'podcast'
+                  ? '🎙'
+                  : '🌐'}
           </div>
         {/if}
         <div class="source-meta">
@@ -96,6 +103,10 @@
         </div>
       </a>
     </div>
+
+    {#if event.id}
+      <HighlightActions highlightEventId={event.id} highlightAuthorPubkey={authorPubkey} />
+    {/if}
 
     {#if pageImageUrl}
       <div class="page-photo">
