@@ -7,6 +7,6 @@ export const load: PageServerLoad = async ({ setHeaders }) => {
   });
 
   return {
-    rooms: await fetchRooms({ limit: 64, visibility: 'public' })
+    rooms: await fetchRooms({ limit: 64, access: 'open', visibility: 'public' })
   };
 };

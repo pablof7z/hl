@@ -2,6 +2,7 @@ import { NDKKind, NDKSimpleGroupMetadata, type NDKEvent } from '@nostr-dev-kit/n
 import { GROUP_RELAY_URLS, HIGHLIGHTER_RELAY_URL } from '$lib/ndk/config';
 import {
   buildRoomSummary,
+  type RoomAccess,
   type RoomSummary,
   type RoomVisibility
 } from '$lib/ndk/groups';
@@ -12,6 +13,7 @@ import type { Room, RoomMember } from '$lib/features/room/api/room';
 
 type FetchRoomsOptions = {
   limit?: number;
+  access?: RoomAccess | 'all';
   visibility?: RoomVisibility | 'all';
 };
 
@@ -51,10 +53,10 @@ export async function fetchFeaturedRooms(): Promise<RoomSummary[]> {
   const summaries = await buildRoomSummariesFromMetadataEvents(metadataEvents);
   const byId = new Map(summaries.map((s) => [s.id, s]));
 
-  // Preserve curator order, drop unresolvable
+  // Preserve curator order, drop unresolvable and non-public/invite-only rooms
   return groupIds.flatMap((id) => {
     const s = byId.get(id);
-    return s ? [s] : [];
+    return s && isPublicOpenRoom(s) ? [s] : [];
   });
 }
 
@@ -63,12 +65,14 @@ export async function fetchRooms(
 ): Promise<RoomSummary[]> {
   const {
     limit,
+    access,
     visibility
   } = typeof options === 'number' ? { limit: options, visibility: 'all' as const } : {
     limit: options.limit ?? 32,
+    access: options.access ?? 'all',
     visibility: options.visibility ?? 'all'
   };
-  const fetchLimit = visibility === 'all' ? limit : Math.max(limit * 4, 96);
+  const fetchLimit = visibility === 'all' && access === 'all' ? limit : Math.max(limit * 4, 96);
   const metadataEvents = Array.from(
     (await fetchEventsForSsr(
       {
@@ -85,7 +89,12 @@ export async function fetchRooms(
   return (await buildRoomSummariesFromMetadataEvents(metadataEvents))
     .filter((room): room is RoomSummary => Boolean(room))
     .filter((room) => visibility === 'all' || room.visibility === visibility)
+    .filter((room) => access === 'all' || room.access === access)
     .slice(0, limit);
+}
+
+function isPublicOpenRoom(room: RoomSummary): boolean {
+  return room.visibility === 'public' && room.access === 'open';
 }
 
 export async function buildRoomSummariesFromMetadataEvents(

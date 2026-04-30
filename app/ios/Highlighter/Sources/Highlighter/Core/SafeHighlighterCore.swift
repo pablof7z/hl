@@ -65,7 +65,8 @@ actor SafeHighlighterCore {
     }
 
     func searchCommunities(query: String, limit: UInt32 = 20) async throws -> [CommunitySummary] {
-        try await core.searchCommunities(query: query, limit: limit)
+        let candidates = try await core.searchCommunities(query: query, limit: publicRoomCandidateLimit(limit))
+        return Array(candidates.filter(\.isPublicOpenRoom).prefix(Int(limit)))
     }
 
     func searchProfiles(query: String, limit: UInt32 = 20) async throws -> [ProfileMetadata] {
@@ -340,23 +341,27 @@ actor SafeHighlighterCore {
     }
 
     func getFeaturedRooms(curatorPubkeyHex: String) async throws -> [CommunitySummary] {
-        try await core.getFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
+        try await core.getFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex).filter(\.isPublicOpenRoom)
     }
 
     func getAllRooms(limit: UInt32 = 120) async throws -> [CommunitySummary] {
-        try await core.getAllRooms(limit: limit)
+        let candidates = try await core.getAllRooms(limit: publicRoomCandidateLimit(limit))
+        return Array(candidates.filter(\.isPublicOpenRoom).prefix(Int(limit)))
     }
 
     func getNewRooms(limit: UInt32 = 24) async throws -> [CommunitySummary] {
-        try await core.getNewRooms(limit: limit)
+        let candidates = try await core.getNewRooms(limit: publicRoomCandidateLimit(limit))
+        return Array(candidates.filter(\.isPublicOpenRoom).prefix(Int(limit)))
     }
 
     func getRoomsWithFriends(limit: UInt32 = 16) async throws -> [RoomRecommendation] {
-        try await core.getRoomsWithFriends(limit: limit)
+        let candidates = try await core.getRoomsWithFriends(limit: publicRoomCandidateLimit(limit))
+        return Array(candidates.filter { $0.summary.isPublicOpenRoom }.prefix(Int(limit)))
     }
 
     func getRoomsFromReadAuthors(limit: UInt32 = 16) async throws -> [RoomRecommendation] {
-        try await core.getRoomsFromReadAuthors(limit: limit)
+        let candidates = try await core.getRoomsFromReadAuthors(limit: publicRoomCandidateLimit(limit))
+        return Array(candidates.filter { $0.summary.isPublicOpenRoom }.prefix(Int(limit)))
     }
 
     func requestJoinRoom(groupId: String) async throws -> String {
@@ -611,5 +616,16 @@ actor SafeHighlighterCore {
 
     func getCacheStats() async throws -> CacheStats {
         try await core.getCacheStats()
+    }
+
+    private func publicRoomCandidateLimit(_ limit: UInt32) -> UInt32 {
+        let expanded = limit > UInt32.max / 4 ? UInt32.max : limit * 4
+        return max(limit, min(expanded, 512))
+    }
+}
+
+private extension CommunitySummary {
+    var isPublicOpenRoom: Bool {
+        visibility == "public" && access == "open"
     }
 }

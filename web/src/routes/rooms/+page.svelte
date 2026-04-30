@@ -83,6 +83,10 @@
 
   let friendsRooms = $state<RoomSummary[]>([]);
 
+  function isPublicOpenRoom(room: RoomSummary): boolean {
+    return room.visibility === 'public' && room.access === 'open';
+  }
+
   $effect(() => {
     if (!browser || followPubkeys.length === 0) {
       friendsRooms = [];
@@ -125,7 +129,7 @@
           const byId = new Map(resolved.map((r) => [r.id, r]));
           friendsRooms = groupIds.flatMap((id) => {
             const r = byId.get(id);
-            return r ? [r] : [];
+            return r && isPublicOpenRoom(r) ? [r] : [];
           });
         })
         .catch(() => {
@@ -138,14 +142,15 @@
 
   // ── Derived slices from server data ────────────────────────────────────
 
-  const heroRoom = $derived(data.featured[0] as RoomSummary | undefined);
-  const featuredShelf = $derived(data.featured.slice(1));
+  const openFeatured = $derived(data.featured.filter(isPublicOpenRoom));
+  const heroRoom = $derived(openFeatured[0] as RoomSummary | undefined);
+  const featuredShelf = $derived(openFeatured.slice(1));
 
   // All rooms grid: filter out rooms already shown in featured/friends
-  const featuredIds = $derived(new Set(data.featured.map((r) => r.id)));
+  const featuredIds = $derived(new Set(openFeatured.map((r) => r.id)));
 
   const allRoomsFiltered = $derived(
-    data.allRooms.filter((r) => !featuredIds.has(r.id))
+    data.allRooms.filter((r) => isPublicOpenRoom(r) && !featuredIds.has(r.id))
   );
 </script>
 
@@ -158,7 +163,7 @@
   <!-- Hero ────────────────────────────────────────────────────────────── -->
   {#if heroRoom}
     <div class="explorer-hero">
-      <ExplorerHero rooms={data.featured} />
+      <ExplorerHero rooms={openFeatured} />
     </div>
   {/if}
 

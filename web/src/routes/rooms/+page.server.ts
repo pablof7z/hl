@@ -8,7 +8,7 @@ export const load: PageServerLoad = async ({ setHeaders }) => {
 
   const [featured, allRooms] = await Promise.all([
     fetchFeaturedRooms(),
-    fetchRooms({ limit: 64, visibility: 'public' })
+    fetchRooms({ limit: 64, access: 'open', visibility: 'public' })
   ]);
 
   return { featured, allRooms };
