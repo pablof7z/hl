@@ -125,6 +125,51 @@ export async function setBookmarkAddressPresence(
   }
 }
 
+/// Bookmark presence test for a non-replaceable event (kind:9802 highlights,
+/// kind:1 notes, etc.). NIP-51 stores these as `e` tags on the kind:10003
+/// list — sibling to `a` (addressable) and `r` (URL).
+export function bookmarkListHasEventId(
+  event: NDKEvent | undefined,
+  eventId: string
+): boolean {
+  const normalized = cleanText(eventId);
+  if (!normalized) return false;
+  const list = bookmarkListFromEvent(event);
+  if (!list) return false;
+  return list.getItems('e').some((tag) => cleanText(tag[1]) === normalized);
+}
+
+export async function setBookmarkEventIdPresence(
+  ndk: NDK,
+  event: NDKEvent | undefined,
+  eventId: string,
+  present: boolean
+): Promise<void> {
+  const normalized = cleanText(eventId);
+  if (!normalized) return;
+
+  const list = event ? NDKList.from(event) : new NDKList(ndk);
+  list.kind = BOOKMARK_LIST_KIND;
+
+  const has = () => list.getItems('e').some((tag) => cleanText(tag[1]) === normalized);
+
+  if (present) {
+    if (has()) return;
+    await list.addItem(['e', normalized]);
+    await list.publishReplaceable();
+    return;
+  }
+
+  let removed = false;
+  while (has()) {
+    await list.removeItemByValue(normalized, false);
+    removed = true;
+  }
+  if (removed) {
+    await list.publishReplaceable();
+  }
+}
+
 export function bookmarkUrlsFromEvent(event: NDKEvent | undefined): string[] {
   const list = bookmarkListFromEvent(event);
   if (!list) return [];
