@@ -62,7 +62,12 @@ final class CaptureStore {
     }
 
     var isUploading: Bool {
-        if case .processing = phase { return upload == nil && uploadError == nil }
+        switch phase {
+        case .processing, .reviewing:
+            return upload == nil && uploadError == nil
+        default:
+            break
+        }
         return false
     }
 
@@ -148,11 +153,12 @@ final class CaptureStore {
 
     /// Stash the user's current text selection as a pending highlight. Does
     /// not publish — Publish is the terminal action.
-    func stashHighlight(quote: String, context: String) {
+    func stashHighlight(quote: String, context: String, selectedLines: [OCRLine] = []) {
         let trimmedQuote = quote.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuote.isEmpty else { return }
         stashedQuote = trimmedQuote
         stashedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
+        prepareHighlightedCrop(from: selectedLines)
     }
 
     func clearStash() {
@@ -323,6 +329,46 @@ final class CaptureStore {
             height: UInt32(processed.height),
             alt: alt
         )
+    }
+
+    private func prepareHighlightedCrop(from selectedLines: [OCRLine]) {
+        guard !selectedLines.isEmpty, let processed = processedJPEG else { return }
+
+        do {
+            let highlighted = try ImageProcessing.cropAndAnnotateHighlight(
+                processed,
+                highlightBoxes: selectedLines.map(\.bbox)
+            )
+            processedJPEG = highlighted
+            if let image = UIImage(data: highlighted.data) {
+                thumbnail = image
+            }
+            upload = nil
+            uploadError = nil
+
+            Task {
+                do {
+                    let altText = flattenForAlt(ocrMarkdown)
+                    let uploaded = try await upload(processed: highlighted, alt: altText)
+                    self.upload = BlossomUpload(
+                        url: uploaded.url,
+                        sha256Hex: uploaded.sha256Hex,
+                        mime: uploaded.mime,
+                        sizeBytes: uploaded.sizeBytes,
+                        width: uploaded.width,
+                        height: uploaded.height,
+                        alt: altText
+                    )
+                } catch {
+                    self.uploadError = (error as? LocalizedError)?.errorDescription
+                        ?? error.localizedDescription
+                }
+            }
+        } catch {
+            upload = nil
+            uploadError = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+        }
     }
 
     private func flattenForAlt(_ markdown: String) -> String {

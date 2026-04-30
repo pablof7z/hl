@@ -69,8 +69,13 @@ struct CapturePageView: View {
         .onAppear { triggerSpringIfReady() }
         .onChange(of: store.ocrLines) { _, lines in sortedLines = lines.sorted { $0.bbox.midY > $1.bbox.midY } }
         .onChange(of: store.thumbnail) { old, new in
-            guard old == nil, new != nil else { return }
-            springIn()
+            guard new != nil else { return }
+            if old == nil {
+                springIn()
+            } else {
+                imageScale = 1.0
+                imageOpacity = 1.0
+            }
             zoomScale = 1.0
             zoomOffset = .zero
             activeZoomScale = 1.0
@@ -220,7 +225,7 @@ struct CapturePageView: View {
                         .offset(activeZoomOffset)
 
                     // OCR overlay — follows the same zoom/pan transform
-                    if !sortedLines.isEmpty {
+                    if !sortedLines.isEmpty && store.stashedQuote == nil {
                         Canvas { ctx, _ in
                             drawSelectionOverlay(ctx: ctx, dispSize: dispSize, dispOffset: dispOffset)
                         }
@@ -373,7 +378,7 @@ struct CapturePageView: View {
 
         // Keep selectionRange so the yellow highlight stays visible.
         guard !quote.isEmpty else { return }
-        store.stashHighlight(quote: quote, context: "")
+        store.stashHighlight(quote: quote, context: "", selectedLines: selected)
     }
 
     private func nearestLineIndex(to pt: CGPoint) -> Int {
