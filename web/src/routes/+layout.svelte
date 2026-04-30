@@ -21,7 +21,7 @@
     reportTimeUpdate,
     resume,
     seek
-  } from '$lib/features/podcasts/playerStore';
+  } from '$lib/features/podcasts/playerStore.svelte';
   import { ndk, ensureClientNdk } from '$lib/ndk/client';
   import type { SeoMetadata } from '$lib/seo';
   import { NDK_CONTEXT_KEY } from '$lib/ndk/utils/ndk';

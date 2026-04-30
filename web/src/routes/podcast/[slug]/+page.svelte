@@ -4,7 +4,7 @@
   import { ndk } from '$lib/ndk/client';
   import { displayName, avatarUrl, cleanText } from '$lib/ndk/format';
   import { relativeTime } from '$lib/utils/time';
-  import { pause, playEpisode, podcastPlayer, resume } from '$lib/features/podcasts/playerStore';
+  import { pause, playEpisode, podcastPlayer, resume } from '$lib/features/podcasts/playerStore.svelte';
 
   /// Public podcast episode detail. Mirrors iOS PodcastListeningView at
   /// a high level: hero header (show + episode + duration), play pill

@@ -5,7 +5,7 @@
     podcastPlayer,
     resume,
     seek
-  } from './playerStore';
+  } from './playerStore.svelte';
 
   /// Sticky bottom bar that appears whenever the global podcast player
   /// has an active episode. Hidden when the user closes it explicitly

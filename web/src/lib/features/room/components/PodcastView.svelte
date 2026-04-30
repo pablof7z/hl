@@ -12,7 +12,7 @@
     podcastPlayer,
     resume as resumePlayer,
     seek as seekPlayer
-  } from '$lib/features/podcasts/playerStore';
+  } from '$lib/features/podcasts/playerStore.svelte';
   import { User } from '$lib/ndk/ui/user';
 
   let {

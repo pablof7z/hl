@@ -14,7 +14,7 @@
     podcastPlayer,
     resume as resumePlayer,
     seek as seekPlayer
-  } from '$lib/features/podcasts/playerStore';
+  } from '$lib/features/podcasts/playerStore.svelte';
   import type { PodcastArtifactData, PodcastTranscriptSegment } from '$lib/features/podcasts/types';
   import type { ArtifactRecord } from '$lib/ndk/artifacts';
   import { ensureClientNdk, ndk } from '$lib/ndk/client';
