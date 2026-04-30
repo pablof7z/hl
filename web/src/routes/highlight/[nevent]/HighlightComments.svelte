@@ -9,6 +9,12 @@
     type CommentThread
   } from '$lib/features/discussions/discussion';
   import CommentThreadRenderer from '$lib/features/discussions/CommentThread.svelte';
+  import { buildReactionMap, type CommentReactions } from '$lib/features/discussions/reactions';
+  import {
+    BOOKMARK_LIST_KIND,
+    bookmarkListHasEventId,
+    latestListEvent
+  } from '$lib/ndk/lists';
 
   /// Public NIP-22 thread on a highlight (kind:9802). Filters by `#E:<id>`
   /// only — no group scope, so the same set of comments is visible to
@@ -55,6 +61,60 @@
   });
 
   const threads = $derived<CommentThread[]>(buildCommentTree(allComments));
+
+  // Flat list of comment ids in the visible thread — used as the seed
+  // for the batched reactions + bookmark subscriptions below.
+  const commentIds = $derived(allComments.map((comment) => comment.eventId).filter(Boolean));
+
+  // Single per-thread reaction subscription. Pulls every kind:7 reacting
+  // to any comment in the visible tree plus kind:5 deletions targeting
+  // those reactions, and groups them per-comment in `reactionByComment`.
+  const reactionFeed = ndk.$subscribe(() => {
+    if (!browser || commentIds.length === 0) return undefined;
+    return {
+      filters: [
+        { kinds: [NDKKind.Reaction], '#e': commentIds },
+        { kinds: [NDKKind.EventDeletion], '#e': commentIds }
+      ],
+      closeOnEose: false
+    };
+  });
+
+  const reactionByComment = $derived.by(() => {
+    const reactions: NDKEvent[] = [];
+    const deletions: NDKEvent[] = [];
+    for (const event of reactionFeed.events) {
+      if (event.kind === NDKKind.Reaction) reactions.push(event);
+      else if (event.kind === NDKKind.EventDeletion) deletions.push(event);
+    }
+    return buildReactionMap(reactions, deletions, currentUser?.pubkey);
+  });
+
+  function getReactions(commentId: string): CommentReactions {
+    return (
+      reactionByComment.get(commentId) ?? {
+        likers: new Set<string>(),
+        likeCount: 0,
+        iLiked: false,
+        myReactionEventId: undefined
+      }
+    );
+  }
+
+  // Single bookmark-list subscription for the current user. CommentCard
+  // reads presence per-comment off the resulting `bookmarkedCommentIds`.
+  const bookmarkFeed = ndk.$subscribe(() => {
+    if (!browser || !currentUser) return undefined;
+    return {
+      filters: [
+        { kinds: [BOOKMARK_LIST_KIND], authors: [currentUser.pubkey], limit: 8 }
+      ],
+      closeOnEose: false
+    };
+  });
+  const bookmarkListEvent = $derived(latestListEvent([...bookmarkFeed.events]));
+  const isBookmarked = (commentId: string) =>
+    bookmarkListHasEventId(bookmarkListEvent, commentId);
 
   function handleReply(comment: CommentRecord) {
     replyingTo = comment;
@@ -159,7 +219,13 @@
   {/if}
 
   {#if threads.length > 0}
-    <CommentThreadRenderer {threads} onReply={handleReply} />
+    <CommentThreadRenderer
+      {threads}
+      onReply={handleReply}
+      {getReactions}
+      bookmarkListEvent={bookmarkListEvent}
+      {isBookmarked}
+    />
   {:else if commentFeed.eosed}
     <p class="empty">No comments yet. Be the first to respond.</p>
   {:else}

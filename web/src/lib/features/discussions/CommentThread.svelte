@@ -1,16 +1,24 @@
 <script lang="ts">
+  import type { NDKEvent } from '@nostr-dev-kit/ndk';
   import CommentCard from './CommentCard.svelte';
   import CommentThread from './CommentThread.svelte';
   import type { CommentRecord, CommentThread as CommentThreadType } from './discussion';
+  import type { CommentReactions } from './reactions';
 
   let {
     threads,
     depth = 0,
-    onReply
+    onReply,
+    getReactions,
+    bookmarkListEvent,
+    isBookmarked
   }: {
     threads: CommentThreadType[];
     depth?: number;
     onReply?: (comment: CommentRecord) => void;
+    getReactions?: (commentId: string) => CommentReactions;
+    bookmarkListEvent?: NDKEvent | undefined;
+    isBookmarked?: (commentId: string) => boolean;
   } = $props();
 
   let expandedDeep = $state<Set<string>>(new Set());
@@ -37,13 +45,34 @@
 <div class="thread-list" class:indented={depth > 0}>
   {#each threads as thread (thread.comment.eventId)}
     <div class="thread-node">
-      <CommentCard comment={thread.comment} {depth} {onReply} />
+      <CommentCard
+        comment={thread.comment}
+        {depth}
+        {onReply}
+        reactions={getReactions?.(thread.comment.eventId)}
+        bookmarked={isBookmarked?.(thread.comment.eventId) ?? false}
+        {bookmarkListEvent}
+      />
 
       {#if thread.replies.length > 0}
         {#if depth < 1}
-          <CommentThread threads={thread.replies} depth={depth + 1} {onReply} />
+          <CommentThread
+            threads={thread.replies}
+            depth={depth + 1}
+            {onReply}
+            {getReactions}
+            {bookmarkListEvent}
+            {isBookmarked}
+          />
         {:else if expandedDeep.has(thread.comment.eventId)}
-          <CommentThread threads={thread.replies} depth={depth + 1} {onReply} />
+          <CommentThread
+            threads={thread.replies}
+            depth={depth + 1}
+            {onReply}
+            {getReactions}
+            {bookmarkListEvent}
+            {isBookmarked}
+          />
         {:else}
           <button
             type="button"
