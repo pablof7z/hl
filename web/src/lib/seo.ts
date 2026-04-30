@@ -126,6 +126,41 @@ export function buildNoteSeo(args: {
   };
 }
 
+export function buildHighlightSeo(args: {
+  url: URL;
+  identifier: string;
+  event: NostrEvent;
+  authorPubkey: string;
+  profile?: NDKUserProfile;
+  sourceTitle?: string;
+}): SeoMetadata {
+  const authorName = displayName(args.profile, 'A reader');
+  const quote = highlightQuoteFromEvent(args.event);
+  // The page title is the quote itself (truncated). Wrap in curly
+  // typographic quotes so when the link is pasted into Twitter / iMessage
+  // the headline reads as a real pull-quote.
+  const titleQuote = truncate(quote, 80) || 'Highlight';
+  const sourceFragment = args.sourceTitle ? `from ${args.sourceTitle}` : 'on Nostr';
+  const description = truncate(`${authorName} highlighted ${sourceFragment}.`, 190);
+
+  return {
+    title: `“${titleQuote}” • ${SITE_NAME}`,
+    description,
+    canonical: canonicalUrl(args.url),
+    type: 'article',
+    image: {
+      url: highlightImage(args.url, args.identifier),
+      alt: `${authorName} highlight: ${truncate(quote, 60)}`,
+      width: DEFAULT_SOCIAL_IMAGE_WIDTH,
+      height: DEFAULT_SOCIAL_IMAGE_HEIGHT
+    },
+    author: authorName,
+    publishedTime: args.event.created_at
+      ? new Date(args.event.created_at * 1000).toISOString()
+      : undefined
+  };
+}
+
 export function buildMissingSeo(url: URL, label: string): SeoMetadata {
   return {
     title: `${label} • ${SITE_NAME}`,
@@ -148,6 +183,16 @@ function defaultImage(url: URL, alt: string): SeoImage {
 
 function noteImage(url: URL, identifier: string): string {
   return new URL(`/og/note/${encodeURIComponent(identifier)}`, url.origin).toString();
+}
+
+function highlightImage(url: URL, identifier: string): string {
+  return new URL(`/og/highlight/${encodeURIComponent(identifier)}`, url.origin).toString();
+}
+
+function highlightQuoteFromEvent(event: NostrEvent): string {
+  // NIP-84: kind:9802 highlights carry the quoted text in `content`.
+  const raw = typeof event.content === 'string' ? event.content : '';
+  return cleanText(raw);
 }
 
 function canonicalUrl(url: URL): string {

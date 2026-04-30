@@ -11,6 +11,7 @@ import NDK, {
 } from '@nostr-dev-kit/ndk';
 import { APP_NAME, DEFAULT_RELAYS } from '$lib/ndk/config';
 import { getServerCacheAdapter } from '$lib/server/ndk-cache';
+import { imetaImageUrl, lookupIsbn } from '$lib/server/openlibrary';
 
 const CONNECT_TIMEOUT_MS = 2500;
 const CACHE_FETCH_TIMEOUT_MS = 800;
@@ -422,6 +423,162 @@ export async function fetchNoteWithAuthor(identifier: string): Promise<{
     undefined;
 
   return { event, author, profile };
+}
+
+/// Source artifact behind a highlight, when resolvable. Mirrors the
+/// iOS `HighlightDetailView` resource header data shape so the web
+/// version can render the same affordance.
+export type HighlightSourceCard = {
+  kind: 'article' | 'book' | 'web';
+  title: string;
+  author: string;
+  coverUrl: string;
+  /// External link to open the source (NIP-23 reader path, raw URL, …).
+  href: string;
+};
+
+/// Fetch a kind:9802 highlight + its author for SSR. Accepts a NIP-19
+/// `nevent` (preferred — carries relay hints), bare `note1…`, or a raw
+/// 32-byte hex event id. We best-effort resolve the source artifact
+/// (NIP-23 article via the `a` tag, or ISBN-tagged book via the `i` tag,
+/// or plain web page via the `r` tag) so the page + OG card can carry
+/// real attribution instead of a generic "highlighted on Nostr".
+export async function fetchHighlightWithAuthor(identifier: string): Promise<{
+  event?: NDKEvent;
+  author?: NDKUser;
+  profile?: NDKUserProfile;
+  sourceTitle?: string;
+  sourceAuthorPubkey?: string;
+  source?: HighlightSourceCard;
+  pageImageUrl?: string;
+}> {
+  const ndk = await getServerNdk(DEFAULT_RELAYS, { connect: false });
+  const event = await fetchEventByIdentifier(identifier);
+  if (!event) return {};
+
+  const author = ndk.getUser({ pubkey: event.pubkey });
+  const profile =
+    author.profile ??
+    (await withTimeout(
+      author.fetchProfile({ closeOnEose: true }).catch(() => null),
+      null,
+      `fetchHighlightWithAuthor:profile(${identifier})`
+    )) ??
+    undefined;
+
+  // Source resolution. Three cases, in priority order:
+  //  - `a` tag with `30023:<pk>:<d>` → fetch the NIP-23 article event
+  //    for title + author.
+  //  - `i` tag starting `isbn:` → call Open Library for book metadata.
+  //  - `r` tag (raw URL) → present as a generic web source.
+  const articleAddress = event
+    .getMatchingTags('a')
+    .map((tag) => tag[1] ?? '')
+    .find((value) => value.startsWith('30023:'));
+
+  const isbnRef = event
+    .getMatchingTags('i')
+    .map((tag) => tag[1] ?? '')
+    .find((value) => value.toLowerCase().startsWith('isbn:'));
+
+  const sourceUrl = event.tagValue('r')?.trim() ?? '';
+
+  let sourceTitle: string | undefined;
+  let sourceAuthorPubkey: string | undefined;
+  let source: HighlightSourceCard | undefined;
+
+  if (articleAddress) {
+    const sourceEvent = await fetchEventForSsr(
+      articleAddress,
+      `fetchHighlightWithAuthor:article(${identifier})`
+    );
+    if (sourceEvent) {
+      const titleTag = sourceEvent.tagValue('title');
+      if (titleTag && titleTag.trim()) sourceTitle = titleTag.trim();
+      sourceAuthorPubkey = sourceEvent.pubkey;
+      const articleAuthor = ndk.getUser({ pubkey: sourceEvent.pubkey });
+      const articleProfile =
+        articleAuthor.profile ??
+        (await withTimeout(
+          articleAuthor.fetchProfile({ closeOnEose: true }).catch(() => null),
+          null,
+          `fetchHighlightWithAuthor:articleProfile(${identifier})`
+        )) ??
+        undefined;
+      const dTag = articleAddress.split(':', 3)[2] ?? '';
+      const articleNaddr = nip19.naddrEncode({
+        kind: 30023,
+        pubkey: sourceEvent.pubkey,
+        identifier: dTag,
+        relays: []
+      });
+      source = {
+        kind: 'article',
+        title: sourceTitle ?? 'Untitled',
+        author:
+          articleProfile?.displayName ||
+          articleProfile?.name ||
+          sourceEvent.pubkey.slice(0, 10),
+        coverUrl: sourceEvent.tagValue('image')?.trim() ?? '',
+        href: `/note/${articleNaddr}`
+      };
+    }
+  } else if (isbnRef) {
+    const isbn = isbnRef.replace(/^isbn:/i, '').trim();
+    const book = await lookupIsbn(isbn);
+    if (book) {
+      sourceTitle = book.title || undefined;
+      source = {
+        kind: 'book',
+        title: book.title || 'Book',
+        author: book.author,
+        coverUrl: book.coverUrl,
+        href: `https://openlibrary.org/isbn/${book.isbn13}`
+      };
+    }
+  } else if (sourceUrl) {
+    let host = '';
+    try {
+      host = new URL(sourceUrl).host;
+    } catch {
+      host = '';
+    }
+    source = {
+      kind: 'web',
+      title: host || 'Web page',
+      author: '',
+      coverUrl: '',
+      href: sourceUrl
+    };
+  }
+
+  // NIP-92 imeta image URL — the photographed page (e.g. a Blossom-hosted
+  // book scan with the passage marked).
+  const pageImageUrl = imetaImageUrl(event.tags as string[][]);
+
+  return {
+    event,
+    author,
+    profile,
+    sourceTitle,
+    sourceAuthorPubkey,
+    source,
+    pageImageUrl
+  };
+}
+
+/// NIP-22 comment thread on a highlight (kind:1111 events with
+/// `#E:<highlight-id>`). Public scope — no NIP-29 group filter so the
+/// thread is the same set of comments anyone on the open network sees.
+export async function fetchHighlightComments(highlightEventId: string, limit = 200): Promise<NDKEvent[]> {
+  if (!highlightEventId) return [];
+  const events = await fetchEventsForSsr(
+    [{ kinds: [1111], '#E': [highlightEventId], limit }],
+    `fetchHighlightComments(${highlightEventId})`
+  );
+  return Array.from(events ?? [])
+    .filter((event) => event.kind === 1111)
+    .sort((left, right) => (left.created_at ?? 0) - (right.created_at ?? 0));
 }
 
 async function fetchEventByIdentifier(identifier: string): Promise<NDKEvent | undefined> {

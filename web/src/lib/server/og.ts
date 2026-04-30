@@ -199,6 +199,145 @@ export async function renderNoteOgImage(args: OgRenderArgs): Promise<Buffer> {
   return await base.composite(overlays).png().toBuffer();
 }
 
+type HighlightOgArgs = {
+  event?: NostrEvent;
+  authorPubkey?: string;
+  profile?: NDKUserProfile;
+  sourceTitle?: string;
+};
+
+/// Quote-centric OG card for `/highlight/<nevent>`. The quote is the
+/// hero — set in oversized Inter, framed by a giant curly quote glyph
+/// in the accent colour, with a thin accent rail down the left edge to
+/// echo the iOS treatment. Author + source attribution sit in the
+/// footer. Palette is selected from `PALETTES` based on a hash of the
+/// content so cards have variety without per-render config.
+export async function renderHighlightOgImage(args: HighlightOgArgs): Promise<Buffer> {
+  const fontfile = await ensureInterFontFile();
+  const event = args.event;
+  const rawQuote = event ? cleanText(event.content ?? '') : '';
+  const quote = rawQuote || 'Highlight unavailable';
+  const author = displayName(args.profile, 'A reader');
+  const sourceLine = args.sourceTitle
+    ? `from ${args.sourceTitle}`
+    : 'highlighted on Nostr';
+
+  // Wrap so the quote dominates the canvas. We size between 4 and 6
+  // lines depending on length to keep the typographic colour even.
+  const palette = paletteFor(`${args.authorPubkey ?? ''}${quote}`);
+  const { lines, fontSize, lineHeight } = layoutQuote(quote);
+  const quoteBlockHeight = lines.length * lineHeight;
+  const quoteTop = Math.round((HEIGHT - quoteBlockHeight) / 2) - 30;
+  const footerY = 540;
+
+  const base = sharp(
+    Buffer.from(`
+      <svg width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${WIDTH}" height="${HEIGHT}" fill="${palette.paper}" />
+        <circle cx="1080" cy="92" r="220" fill="${palette.accentSoft}" opacity="0.65" />
+        <circle cx="92" cy="538" r="180" fill="${palette.accentSoft}" opacity="0.40" />
+        <rect x="44" y="40" width="1112" height="550" rx="28" fill="${palette.panel}" stroke="${palette.border}" stroke-width="2" />
+        <rect x="44" y="40" width="14" height="550" rx="7" fill="${palette.accent}" />
+        <rect x="956" y="70" width="170" height="46" rx="23" fill="${palette.accent}" />
+        <rect x="108" y="${footerY - 12}" width="68" height="68" rx="34" fill="${palette.accent}" />
+        <text x="100" y="200" fill="${palette.accent}" font-family="Georgia, 'Times New Roman', serif" font-size="240" font-weight="700" opacity="0.18">“</text>
+        <text x="1080" y="${footerY - 30}" fill="${palette.accent}" font-family="Georgia, 'Times New Roman', serif" font-size="240" font-weight="700" opacity="0.18" text-anchor="end">”</text>
+      </svg>
+    `)
+  );
+
+  const overlays = await Promise.all([
+    createTextOverlay({
+      text: APP_NAME.toUpperCase(),
+      color: palette.accent,
+      font: 'Inter OG Bold 20',
+      fontfile,
+      left: 108,
+      top: 72
+    }),
+    createTextOverlay({
+      text: 'HIGHLIGHT',
+      color: palette.badgeText,
+      font: 'Inter OG Bold 20',
+      fontfile,
+      width: 170,
+      align: 'center',
+      left: 956,
+      top: 79
+    }),
+    createTextOverlay({
+      text: lines.join('\n'),
+      color: palette.ink,
+      font: `Inter OG Bold ${fontSize}`,
+      fontfile,
+      width: 940,
+      spacing: 6,
+      left: 130,
+      top: quoteTop
+    }),
+    createTextOverlay({
+      text: authorInitials(author),
+      color: palette.badgeText,
+      font: 'Inter OG Bold 26',
+      fontfile,
+      width: 68,
+      align: 'center',
+      left: 108,
+      top: footerY + 6
+    }),
+    createTextOverlay({
+      text: cleanText(author),
+      color: palette.ink,
+      font: 'Inter OG Bold 26',
+      fontfile,
+      width: 700,
+      left: 196,
+      top: footerY
+    }),
+    createTextOverlay({
+      text: cleanText(sourceLine),
+      color: palette.muted,
+      font: 'Inter OG 20',
+      fontfile,
+      width: 700,
+      left: 196,
+      top: footerY + 36
+    })
+  ]);
+
+  return await base.composite(overlays).png().toBuffer();
+}
+
+/// Pick a font size + line cap so the quote breathes. Short quotes get
+/// the loudest treatment; longer ones step down so we never overflow
+/// the panel.
+function layoutQuote(quote: string): { lines: string[]; fontSize: number; lineHeight: number } {
+  const text = cleanText(quote);
+  const length = text.length;
+
+  // Three tiers — tuned by eye against typical kind:9802 quote lengths.
+  let fontSize: number;
+  let maxChars: number;
+  let maxLines: number;
+  if (length <= 80) {
+    fontSize = 64;
+    maxChars = 22;
+    maxLines = 4;
+  } else if (length <= 160) {
+    fontSize = 52;
+    maxChars = 28;
+    maxLines = 5;
+  } else {
+    fontSize = 42;
+    maxChars = 36;
+    maxLines = 6;
+  }
+
+  const lines = wrapText(text, maxChars, maxLines);
+  const lineHeight = Math.round(fontSize * 1.18);
+  return { lines, fontSize, lineHeight };
+}
+
 async function createTextOverlay(args: {
   text: string;
   color: string;
@@ -293,7 +432,9 @@ function authorInitials(name: string): string {
 }
 
 function paletteFor(seed: string): Palette {
-  const hash = [...seed].reduce((total, char) => total * 33 + char.charCodeAt(0), 5381);
+  // `| 0` forces 32-bit integer math so long seeds (full highlight quotes)
+  // don't overflow to Infinity and produce a NaN index.
+  const hash = [...seed].reduce((total, char) => (total * 33 + char.charCodeAt(0)) | 0, 5381);
   return PALETTES[Math.abs(hash) % PALETTES.length];
 }
 
