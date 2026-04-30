@@ -18,9 +18,25 @@ struct CapturePageView: View {
 
     @Environment(HighlighterStore.self) private var appStore
 
+    private enum CropDragMode: Equatable {
+        case move
+        case minXMinY
+        case minXMaxY
+        case maxXMinY
+        case maxXMaxY
+    }
+
+    private struct ActiveCropDrag {
+        let mode: CropDragMode
+        let startCropBox: CGRect
+        let startPoint: CGPoint
+    }
+
     // Drag-select state
     @State private var sortedLines: [OCRLine] = []
+    @State private var selectableWords: [OCRWord] = []
     @State private var selectionRange: ClosedRange<Int>? = nil
+    @State private var activeCropDrag: ActiveCropDrag?
 
     // Spring-in animation
     @State private var imageScale: CGFloat = 0.88
@@ -61,13 +77,13 @@ struct CapturePageView: View {
             }
             .ignoresSafeArea(edges: .bottom)
 
-            nextButton
+            bottomControls
                 .padding(.bottom, 48)
                 .padding(.horizontal, 20)
         }
         .onAppear { setupLines() }
         .onAppear { triggerSpringIfReady() }
-        .onChange(of: store.ocrLines) { _, lines in sortedLines = lines.sorted { $0.bbox.midY > $1.bbox.midY } }
+        .onChange(of: store.ocrLines) { _, lines in rebuildSelectionTargets(from: lines) }
         .onChange(of: store.thumbnail) { old, new in
             guard new != nil else { return }
             if old == nil {
@@ -84,7 +100,23 @@ struct CapturePageView: View {
     }
 
     private func setupLines() {
-        sortedLines = store.ocrLines.sorted { $0.bbox.midY > $1.bbox.midY }
+        rebuildSelectionTargets(from: store.ocrLines)
+    }
+
+    private func rebuildSelectionTargets(from lines: [OCRLine]) {
+        sortedLines = lines.sorted { lhs, rhs in
+            if abs(lhs.bbox.midY - rhs.bbox.midY) < 0.006 {
+                return lhs.bbox.minX < rhs.bbox.minX
+            }
+            return lhs.bbox.midY > rhs.bbox.midY
+        }
+        selectableWords = sortedLines.flatMap { line -> [OCRWord] in
+            let words = line.words.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            if words.isEmpty {
+                return [OCRWord(text: line.text, bbox: line.bbox, confidence: line.confidence)]
+            }
+            return words.sorted { $0.bbox.minX < $1.bbox.minX }
+        }
     }
 
     private func triggerSpringIfReady() {
@@ -175,6 +207,31 @@ struct CapturePageView: View {
 
     // MARK: - Next button
 
+    private var bottomControls: some View {
+        HStack(spacing: 12) {
+            if store.stashedQuote != nil {
+                resetButton
+            }
+            Spacer(minLength: 0)
+            nextButton
+        }
+    }
+
+    private var resetButton: some View {
+        Button {
+            clearHighlightSelection()
+        } label: {
+            Label("Reset", systemImage: "arrow.counterclockwise")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 14)
+                .background(.ultraThinMaterial, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Reset highlight")
+    }
+
     private var nextButton: some View {
         Button {
             showMetadataSheet = true
@@ -198,7 +255,6 @@ struct CapturePageView: View {
                     .stroke(Color.white.opacity(store.canPublish ? 0 : 0.25), lineWidth: 1)
             )
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     // MARK: - Photo canvas
@@ -224,17 +280,18 @@ struct CapturePageView: View {
                         .scaleEffect(activeZoomScale, anchor: .center)
                         .offset(activeZoomOffset)
 
-                    // OCR overlay — follows the same zoom/pan transform
-                    if !sortedLines.isEmpty && store.stashedQuote == nil {
+                    // OCR + crop overlay — follows the same zoom/pan transform.
+                    if !selectableWords.isEmpty {
                         Canvas { ctx, _ in
                             drawSelectionOverlay(ctx: ctx, dispSize: dispSize, dispOffset: dispOffset)
+                            drawCropOverlay(ctx: ctx, dispSize: dispSize, dispOffset: dispOffset)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .contentShape(Rectangle())
                         .scaleEffect(activeZoomScale, anchor: .center)
                         .offset(activeZoomOffset)
                         .gesture(
-                            isMagnifying ? nil : canvasSelectionGesture(
+                            isMagnifying ? nil : canvasInteractionGesture(
                                 containerSize: geo.size,
                                 dispSize: dispSize,
                                 dispOffset: dispOffset
@@ -323,33 +380,99 @@ struct CapturePageView: View {
     private func drawSelectionOverlay(ctx: GraphicsContext, dispSize: CGSize, dispOffset: CGPoint) {
         guard let range = selectionRange else { return }
         for idx in range {
-            guard idx < sortedLines.count else { continue }
-            let line = sortedLines[idx]
-            let rect = visionToScreen(line.bbox, size: dispSize, offset: dispOffset)
+            guard idx < selectableWords.count else { continue }
+            let word = selectableWords[idx]
+            let rect = visionToScreen(word.bbox, size: dispSize, offset: dispOffset)
             let underline = CGRect(x: rect.minX, y: rect.maxY - 4, width: rect.width, height: 4)
             ctx.fill(Path(underline), with: .color(Color.yellow.opacity(0.85)))
             ctx.fill(Path(rect), with: .color(Color.yellow.opacity(0.25)))
         }
     }
 
+    private func drawCropOverlay(ctx: GraphicsContext, dispSize: CGSize, dispOffset: CGPoint) {
+        guard store.stashedQuote != nil, let cropBox = store.highlightCropBox else { return }
+
+        let imageRect = CGRect(origin: dispOffset, size: dispSize)
+        let cropRect = visionToScreen(cropBox, size: dispSize, offset: dispOffset)
+            .intersection(imageRect)
+        guard !cropRect.isNull, !cropRect.isEmpty else { return }
+
+        let dim = Color.black.opacity(0.34)
+        let outsideRects = [
+            CGRect(x: imageRect.minX, y: imageRect.minY, width: imageRect.width, height: cropRect.minY - imageRect.minY),
+            CGRect(x: imageRect.minX, y: cropRect.maxY, width: imageRect.width, height: imageRect.maxY - cropRect.maxY),
+            CGRect(x: imageRect.minX, y: cropRect.minY, width: cropRect.minX - imageRect.minX, height: cropRect.height),
+            CGRect(x: cropRect.maxX, y: cropRect.minY, width: imageRect.maxX - cropRect.maxX, height: cropRect.height)
+        ]
+        for rect in outsideRects where rect.width > 0 && rect.height > 0 {
+            ctx.fill(Path(rect), with: .color(dim))
+        }
+
+        var grid = Path()
+        for fraction in [CGFloat(1.0 / 3.0), CGFloat(2.0 / 3.0)] {
+            let x = cropRect.minX + cropRect.width * fraction
+            grid.move(to: CGPoint(x: x, y: cropRect.minY))
+            grid.addLine(to: CGPoint(x: x, y: cropRect.maxY))
+
+            let y = cropRect.minY + cropRect.height * fraction
+            grid.move(to: CGPoint(x: cropRect.minX, y: y))
+            grid.addLine(to: CGPoint(x: cropRect.maxX, y: y))
+        }
+        ctx.stroke(grid, with: .color(Color.white.opacity(0.55)), lineWidth: 1)
+        ctx.stroke(Path(cropRect), with: .color(Color.white.opacity(0.95)), lineWidth: 2)
+
+        let handleSize: CGFloat = 12
+        for point in [
+            CGPoint(x: cropRect.minX, y: cropRect.minY),
+            CGPoint(x: cropRect.maxX, y: cropRect.minY),
+            CGPoint(x: cropRect.minX, y: cropRect.maxY),
+            CGPoint(x: cropRect.maxX, y: cropRect.maxY)
+        ] {
+            let handle = CGRect(
+                x: point.x - handleSize / 2,
+                y: point.y - handleSize / 2,
+                width: handleSize,
+                height: handleSize
+            )
+            ctx.fill(Path(ellipseIn: handle), with: .color(.white))
+            ctx.stroke(Path(ellipseIn: handle), with: .color(Color.black.opacity(0.25)), lineWidth: 1)
+        }
+    }
+
     // MARK: - One-finger selection gesture
 
-    private func canvasSelectionGesture(
+    private func canvasInteractionGesture(
         containerSize: CGSize,
         dispSize: CGSize,
         dispOffset: CGPoint
     ) -> some Gesture {
-        DragGesture(minimumDistance: 8)
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
-                updateSelection(
-                    start: value.startLocation,
-                    current: value.location,
-                    containerSize: containerSize,
-                    dispSize: dispSize,
-                    dispOffset: dispOffset
-                )
+                if store.stashedQuote != nil {
+                    updateCropBox(
+                        start: value.startLocation,
+                        current: value.location,
+                        containerSize: containerSize,
+                        dispSize: dispSize,
+                        dispOffset: dispOffset
+                    )
+                } else {
+                    updateSelection(
+                        start: value.startLocation,
+                        current: value.location,
+                        containerSize: containerSize,
+                        dispSize: dispSize,
+                        dispOffset: dispOffset
+                    )
+                }
             }
-            .onEnded { _ in commitSelection() }
+            .onEnded { _ in
+                if store.stashedQuote != nil {
+                    finishCropAdjustment()
+                } else {
+                    commitSelection()
+                }
+            }
     }
 
     private func updateSelection(
@@ -357,41 +480,144 @@ struct CapturePageView: View {
         containerSize: CGSize,
         dispSize: CGSize, dispOffset: CGPoint
     ) {
-        guard !sortedLines.isEmpty else { return }
+        guard !selectableWords.isEmpty else { return }
         let vStart = screenToVision(start, containerSize: containerSize, dispSize: dispSize, dispOffset: dispOffset)
         let vCurrent = screenToVision(current, containerSize: containerSize, dispSize: dispSize, dispOffset: dispOffset)
 
-        let anchor = nearestLineIndex(to: vStart)
-        let cursor = nearestLineIndex(to: vCurrent)
+        let anchor = nearestWordIndex(to: vStart)
+        let cursor = nearestWordIndex(to: vCurrent)
 
         selectionRange = min(anchor, cursor)...max(anchor, cursor)
     }
 
+    private func updateCropBox(
+        start: CGPoint,
+        current: CGPoint,
+        containerSize: CGSize,
+        dispSize: CGSize,
+        dispOffset: CGPoint
+    ) {
+        guard let cropBox = store.highlightCropBox else { return }
+        let vStart = screenToVision(start, containerSize: containerSize, dispSize: dispSize, dispOffset: dispOffset)
+        let vCurrent = screenToVision(current, containerSize: containerSize, dispSize: dispSize, dispOffset: dispOffset)
+
+        if activeCropDrag == nil {
+            let mode = cropDragMode(at: start, cropBox: cropBox, dispSize: dispSize, dispOffset: dispOffset)
+            activeCropDrag = ActiveCropDrag(mode: mode, startCropBox: cropBox, startPoint: vStart)
+        }
+        guard let drag = activeCropDrag else { return }
+
+        let delta = CGPoint(x: vCurrent.x - drag.startPoint.x, y: vCurrent.y - drag.startPoint.y)
+        store.updateHighlightCropBox(adjustedCropBox(from: drag.startCropBox, mode: drag.mode, delta: delta), reupload: false)
+    }
+
+    private func finishCropAdjustment() {
+        activeCropDrag = nil
+        guard let cropBox = store.highlightCropBox else { return }
+        store.updateHighlightCropBox(cropBox, reupload: true)
+    }
+
     private func commitSelection() {
-        guard let range = selectionRange, !sortedLines.isEmpty else {
+        guard let range = selectionRange, !selectableWords.isEmpty else {
             selectionRange = nil
             return
         }
-        let selected = Array(sortedLines[range])
-        let quote = selected.map { $0.text }.joined(separator: " ")
+        let selected = Array(selectableWords[range])
+        let quote = joinedQuote(from: selected)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Keep selectionRange so the yellow highlight stays visible.
         guard !quote.isEmpty else { return }
-        store.stashHighlight(quote: quote, context: "", selectedLines: selected)
+        store.stashHighlight(quote: quote, context: "", selectedBoxes: selected.map(\.bbox))
     }
 
-    private func nearestLineIndex(to pt: CGPoint) -> Int {
-        sortedLines.indices.min(by: {
-            pointToBBoxDistance(pt, bbox: sortedLines[$0].bbox)
-                < pointToBBoxDistance(pt, bbox: sortedLines[$1].bbox)
+    private func clearHighlightSelection() {
+        selectionRange = nil
+        store.clearStash()
+        activeCropDrag = nil
+    }
+
+    private func nearestWordIndex(to pt: CGPoint) -> Int {
+        selectableWords.indices.min(by: {
+            pointToBBoxDistance(pt, bbox: selectableWords[$0].bbox)
+                < pointToBBoxDistance(pt, bbox: selectableWords[$1].bbox)
         }) ?? 0
+    }
+
+    private func joinedQuote(from words: [OCRWord]) -> String {
+        words.map(\.text)
+            .joined(separator: " ")
+            .replacingOccurrences(of: " ,", with: ",")
+            .replacingOccurrences(of: " .", with: ".")
+            .replacingOccurrences(of: " ;", with: ";")
+            .replacingOccurrences(of: " :", with: ":")
+            .replacingOccurrences(of: " !", with: "!")
+            .replacingOccurrences(of: " ?", with: "?")
+    }
+
+    private func cropDragMode(
+        at point: CGPoint,
+        cropBox: CGRect,
+        dispSize: CGSize,
+        dispOffset: CGPoint
+    ) -> CropDragMode {
+        let rect = visionToScreen(cropBox, size: dispSize, offset: dispOffset)
+        let threshold: CGFloat = 34
+        let corners: [(CGPoint, CropDragMode)] = [
+            (CGPoint(x: rect.minX, y: rect.minY), .minXMaxY),
+            (CGPoint(x: rect.maxX, y: rect.minY), .maxXMaxY),
+            (CGPoint(x: rect.minX, y: rect.maxY), .minXMinY),
+            (CGPoint(x: rect.maxX, y: rect.maxY), .maxXMinY)
+        ]
+        if let nearest = corners.min(by: { distance(point, $0.0) < distance(point, $1.0) }),
+           distance(point, nearest.0) <= threshold {
+            return nearest.1
+        }
+        return .move
+    }
+
+    private func adjustedCropBox(from start: CGRect, mode: CropDragMode, delta: CGPoint) -> CGRect {
+        let minSize: CGFloat = 0.08
+
+        if mode == .move {
+            let x = (start.minX + delta.x).clamped(to: 0...(1 - start.width))
+            let y = (start.minY + delta.y).clamped(to: 0...(1 - start.height))
+            return CGRect(x: x, y: y, width: start.width, height: start.height)
+        }
+
+        var minX = start.minX
+        var minY = start.minY
+        var maxX = start.maxX
+        var maxY = start.maxY
+
+        switch mode {
+        case .move:
+            break
+        case .minXMinY:
+            minX = (start.minX + delta.x).clamped(to: 0...max(0, start.maxX - minSize))
+            minY = (start.minY + delta.y).clamped(to: 0...max(0, start.maxY - minSize))
+        case .minXMaxY:
+            minX = (start.minX + delta.x).clamped(to: 0...max(0, start.maxX - minSize))
+            maxY = (start.maxY + delta.y).clamped(to: min(1, start.minY + minSize)...1)
+        case .maxXMinY:
+            maxX = (start.maxX + delta.x).clamped(to: min(1, start.minX + minSize)...1)
+            minY = (start.minY + delta.y).clamped(to: 0...max(0, start.maxY - minSize))
+        case .maxXMaxY:
+            maxX = (start.maxX + delta.x).clamped(to: min(1, start.minX + minSize)...1)
+            maxY = (start.maxY + delta.y).clamped(to: min(1, start.minY + minSize)...1)
+        }
+
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
 
     private func pointToBBoxDistance(_ pt: CGPoint, bbox: CGRect) -> CGFloat {
         let cx = min(max(pt.x, bbox.minX), bbox.maxX)
         let cy = min(max(pt.y, bbox.minY), bbox.maxY)
         return sqrt((pt.x - cx) * (pt.x - cx) + (pt.y - cy) * (pt.y - cy))
+    }
+
+    private func distance(_ lhs: CGPoint, _ rhs: CGPoint) -> CGFloat {
+        sqrt((lhs.x - rhs.x) * (lhs.x - rhs.x) + (lhs.y - rhs.y) * (lhs.y - rhs.y))
     }
 
     // MARK: - Coordinate helpers

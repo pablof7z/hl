@@ -1,6 +1,14 @@
 import CoreGraphics
 import Foundation
 
+/// A single recognized word from Vision. `bbox` is in normalized image
+/// coordinates, origin bottom-left.
+struct OCRWord: Sendable, Equatable {
+    let text: String
+    let bbox: CGRect
+    let confidence: Float
+}
+
 /// A single recognized line from Vision with the geometry we need to
 /// reconstruct page structure. `bbox` is in normalized image coordinates,
 /// origin bottom-left (matches `VNRecognizedTextObservation.boundingBox`).
@@ -8,6 +16,14 @@ struct OCRLine: Sendable, Equatable {
     let text: String
     let bbox: CGRect
     let confidence: Float
+    let words: [OCRWord]
+
+    init(text: String, bbox: CGRect, confidence: Float, words: [OCRWord] = []) {
+        self.text = text
+        self.bbox = bbox
+        self.confidence = confidence
+        self.words = words
+    }
 }
 
 /// Turns Vision's line-by-line output into structured markdown that respects

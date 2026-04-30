@@ -22,10 +22,17 @@ enum OCRService {
                 }
                 let lines: [OCRLine] = observations.compactMap { obs in
                     guard let candidate = obs.topCandidates(1).first else { return nil }
+                    let words = wordRanges(in: candidate.string).compactMap { word, range -> OCRWord? in
+                        guard let bbox = try? candidate.boundingBox(for: range)?.boundingBox else {
+                            return nil
+                        }
+                        return OCRWord(text: word, bbox: bbox, confidence: candidate.confidence)
+                    }
                     return OCRLine(
                         text: candidate.string,
                         bbox: obs.boundingBox,
-                        confidence: candidate.confidence
+                        confidence: candidate.confidence,
+                        words: words
                     )
                 }
                 continuation.resume(returning: lines)
@@ -40,5 +47,28 @@ enum OCRService {
                 continuation.resume(throwing: error)
             }
         }
+    }
+
+    private static func wordRanges(in text: String) -> [(String, Range<String.Index>)] {
+        var ranges: [(String, Range<String.Index>)] = []
+        var wordStart: String.Index?
+        var index = text.startIndex
+
+        while index < text.endIndex {
+            if text[index].isWhitespace {
+                if let start = wordStart {
+                    ranges.append((String(text[start..<index]), start..<index))
+                    wordStart = nil
+                }
+            } else if wordStart == nil {
+                wordStart = index
+            }
+            index = text.index(after: index)
+        }
+
+        if let start = wordStart {
+            ranges.append((String(text[start..<text.endIndex]), start..<text.endIndex))
+        }
+        return ranges
     }
 }

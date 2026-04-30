@@ -66,11 +66,78 @@ enum ImageProcessing {
         )
     }
 
-    /// Crop the already-sanitized capture around the selected OCR lines and
+    /// Crop a processed JPEG to a page rect expressed in Vision normalized
+    /// (bottom-left origin) coordinates and re-encode at high quality. Used
+    /// by the post-OCR auto-crop that reduces a two-page spread down to the
+    /// dominant page before upload.
+    static func cropToPage(
+        _ processed: Result,
+        pageRect: CGRect,
+        quality: CGFloat = 0.88
+    ) throws -> Result {
+        guard let provider = CGDataProvider(data: processed.data as CFData),
+              let sourceImage = CGImage(
+                jpegDataProviderSource: provider,
+                decode: nil,
+                shouldInterpolate: true,
+                intent: .defaultIntent
+              ) else {
+            throw Error.noCGImage
+        }
+
+        let imageBounds = CGRect(
+            x: 0,
+            y: 0,
+            width: CGFloat(sourceImage.width),
+            height: CGFloat(sourceImage.height)
+        )
+        let pixelRect = CGRect(
+            x: pageRect.minX * imageBounds.width,
+            y: (1.0 - pageRect.maxY) * imageBounds.height,
+            width: pageRect.width * imageBounds.width,
+            height: pageRect.height * imageBounds.height
+        ).intersection(imageBounds).integral
+
+        guard !pixelRect.isNull, !pixelRect.isEmpty,
+              let cropped = sourceImage.cropping(to: pixelRect) else {
+            throw Error.noCGImage
+        }
+        let data = try encodeJPEG(cropped, quality: quality)
+        return Result(
+            data: data,
+            width: cropped.width,
+            height: cropped.height,
+            mime: "image/jpeg"
+        )
+    }
+
+    /// Build a normalized crop box around the selected OCR boxes. Coordinates
+    /// use Vision's normalized bottom-left origin.
+    static func defaultHighlightCropBox(
+        highlightBoxes: [CGRect],
+        imageSize: CGSize,
+        marginFraction: CGFloat = 0.08
+    ) -> CGRect? {
+        guard let selectedBounds = highlightBoxes
+            .filter({ !$0.isNull && !$0.isEmpty })
+            .union()
+        else {
+            return nil
+        }
+
+        let marginX = max(marginFraction, 48 / max(imageSize.width, 1))
+        let marginY = max(marginFraction, selectedBounds.height * 0.55, 48 / max(imageSize.height, 1))
+        return selectedBounds
+            .insetBy(dx: -marginX, dy: -marginY)
+            .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+    }
+
+    /// Crop the already-sanitized capture around the selected OCR boxes and
     /// bake the yellow highlight treatment into the pixels that get uploaded.
     static func cropAndAnnotateHighlight(
         _ processed: Result,
         highlightBoxes: [CGRect],
+        cropBox: CGRect? = nil,
         marginFraction: CGFloat = 0.08,
         quality: CGFloat = 0.88
     ) throws -> Result {
@@ -98,12 +165,19 @@ enum ImageProcessing {
             return processed
         }
 
-        let marginX = max(imageBounds.width * marginFraction, 48)
-        let marginY = max(imageBounds.height * marginFraction, selectedBounds.height * 0.55, 48)
-        let cropRect = selectedBounds
-            .insetBy(dx: -marginX, dy: -marginY)
-            .intersection(imageBounds)
-            .integral
+        let cropRect: CGRect
+        if let cropBox {
+            cropRect = visionToPixelRect(cropBox, imageSize: imageBounds.size)
+                .intersection(imageBounds)
+                .integral
+        } else {
+            let marginX = max(imageBounds.width * marginFraction, 48)
+            let marginY = max(imageBounds.height * marginFraction, selectedBounds.height * 0.55, 48)
+            cropRect = selectedBounds
+                .insetBy(dx: -marginX, dy: -marginY)
+                .intersection(imageBounds)
+                .integral
+        }
 
         guard let croppedImage = sourceImage.cropping(to: cropRect) else {
             throw Error.noCGImage
