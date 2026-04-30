@@ -88,6 +88,7 @@ final class CaptureStore {
         reset(keepingPickerSelection: false)
         phase = .processing
         thumbnail = image
+        prefillRecentBook()
 
         Task {
             do {
@@ -125,6 +126,20 @@ final class CaptureStore {
                         ?? error.localizedDescription
                 }
                 self.phase = .reviewing
+            }
+        }
+    }
+
+    /// Default the picker to the user's most recent book — typically the one
+    /// they're actively reading. Skipped if a selection already exists, and
+    /// we re-check before assigning so we never overwrite a deliberate pick.
+    private func prefillRecentBook() {
+        guard selectedBook == nil else { return }
+        Task {
+            guard let recent = try? await safeCore.getRecentBooks(limit: 1),
+                  let book = recent.first else { return }
+            if self.selectedBook == nil {
+                self.selectedBook = .existing(book)
             }
         }
     }

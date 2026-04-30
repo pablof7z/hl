@@ -10,16 +10,19 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use crate::artifacts::{artifact_record_from_event, first_tag_value};
 use crate::errors::CoreError;
 use crate::groups::{KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS};
-use crate::models::ArtifactRecord;
+use crate::models::{ArtifactPreview, ArtifactRecord};
 
 const KIND_ARTIFACT_SHARE: u16 = 11;
+const KIND_HIGHLIGHT: u16 = 9802;
 
-/// 1. Joined group IDs are derived from cached kind:39001/39002 events.
-/// 2. Query nostrdb for kind:11 artifact shares within those groups.
-/// 3. Keep artifacts where `source == "book"` OR the reference tag is `i=isbn:…`.
-/// 4. Dedupe by `(reference_tag_name, reference_tag_value)`, keeping the
-///    most-recent occurrence.
-/// 5. Sort by `created_at` desc, cap at `limit`.
+/// Source signals (combined, deduped by `(reference_tag_name, reference_tag_value)`):
+/// 1. kind:11 artifact shares in joined groups (the original "books from my rooms" set).
+/// 2. kind:9802 highlights authored by the user — a book the user highlighted is by
+///    definition recent, even if it was never formally "shared" as a kind:11.
+///
+/// For each book key we keep the most recent timestamp across both signals
+/// and prefer the kind:11 record (with title/cover) when one exists, falling
+/// back to a synthesized record carrying just the catalog id when not.
 pub fn query_recent_books(
     ndb: &Ndb,
     user_pubkey_hex: &str,
@@ -33,50 +36,109 @@ pub fn query_recent_books(
         .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let joined: HashSet<String> = joined_group_ids(ndb, &txn, user)?;
-    if joined.is_empty() {
-        return Ok(Vec::new());
+
+    // Dedupe by reference key — same book referenced from multiple groups or
+    // from both kind:11 and kind:9802 collapses to the most-recent occurrence.
+    let mut by_ref: HashMap<String, ArtifactRecord> = HashMap::new();
+    // Full kind:11 book index regardless of joined-group membership. Used to
+    // backfill title/cover for books seen via highlight signals when their
+    // kind:11 share lives in a group the user isn't in.
+    let mut metadata_by_ref: HashMap<String, ArtifactRecord> = HashMap::new();
+
+    // 1. kind:11 artifact shares. We scan everything once and split into two
+    //    buckets — `by_ref` requires the share to be in a joined group, while
+    //    `metadata_by_ref` collects every book share for later backfill.
+    {
+        let cap = (limit.saturating_mul(8)).max(256) as i32;
+        let filter = NdbFilter::new()
+            .kinds([KIND_ARTIFACT_SHARE as u64])
+            .build();
+        let results = ndb
+            .query(&txn, &[filter], cap)
+            .map_err(|e| CoreError::Cache(format!("query artifacts: {e}")))?;
+
+        for r in &results {
+            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+            let Ok(json) = note.json() else { continue };
+            let Ok(event) = Event::from_json(&json) else { continue };
+
+            let Some(group_id) = first_tag_value(&event, "h") else { continue };
+            if crate::discussions::is_discussion(&event) {
+                continue;
+            }
+            if !is_book(&event) {
+                continue;
+            }
+
+            let Some(rec) = artifact_record_from_event(&event, group_id) else { continue };
+            let key = reference_key(&rec);
+            if key.is_empty() {
+                continue;
+            }
+
+            // Always remember the share for metadata, newest wins.
+            match metadata_by_ref.get(&key) {
+                Some(existing)
+                    if existing.created_at.unwrap_or(0) >= rec.created_at.unwrap_or(0) => {}
+                _ => {
+                    metadata_by_ref.insert(key.clone(), rec.clone());
+                }
+            }
+
+            if !joined.contains(group_id) {
+                continue;
+            }
+            match by_ref.get(&key) {
+                Some(existing)
+                    if existing.created_at.unwrap_or(0) >= rec.created_at.unwrap_or(0) => {}
+                _ => {
+                    by_ref.insert(key, rec);
+                }
+            }
+        }
     }
 
-    let cap = (limit.saturating_mul(8)).max(256) as i32;
-    let filter = NdbFilter::new()
-        .kinds([KIND_ARTIFACT_SHARE as u64])
-        .build();
-    let results = ndb
-        .query(&txn, &[filter], cap)
-        .map_err(|e| CoreError::Cache(format!("query artifacts: {e}")))?;
+    // 2. kind:9802 highlights authored by the user. Bypasses the joined-group
+    //    filter — a vault-only highlight still counts as "I'm reading this".
+    //    For each book we haven't already surfaced via kind:11, prefer pulling
+    //    title/cover from any cached kind:11 share before falling back to a
+    //    synthesized ISBN-only record.
+    if let Ok(author) = PublicKey::from_hex(user) {
+        let cap = (limit.saturating_mul(16)).max(512) as i32;
+        let author_bytes = author.to_bytes();
+        let filter = NdbFilter::new()
+            .kinds([KIND_HIGHLIGHT as u64])
+            .authors([&author_bytes])
+            .build();
 
-    // Dedupe by reference key — same book referenced from multiple groups
-    // collapses to the most-recent share.
-    let mut by_ref: HashMap<String, ArtifactRecord> = HashMap::new();
-    for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
-        let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        if let Ok(results) = ndb.query(&txn, &[filter], cap) {
+            for r in &results {
+                let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+                let Ok(json) = note.json() else { continue };
+                let Ok(event) = Event::from_json(&json) else { continue };
 
-        let Some(group_id) = first_tag_value(&event, "h") else { continue };
-        if !joined.contains(group_id) {
-            continue;
-        }
-        if crate::discussions::is_discussion(&event) {
-            continue;
-        }
-        if !is_book(&event) {
-            continue;
-        }
+                let Some(catalog_id) = book_catalog_id_from_highlight(&event) else {
+                    continue;
+                };
+                let key = format!("i:{catalog_id}");
+                let ts = event.created_at.as_secs();
 
-        let Some(rec) = artifact_record_from_event(&event, group_id) else { continue };
-        let key = reference_key(&rec);
-        if key.is_empty() {
-            continue;
-        }
-        match by_ref.get(&key) {
-            Some(existing)
-                if existing.created_at.unwrap_or(0) >= rec.created_at.unwrap_or(0) =>
-            {
-                // keep existing newer
-            }
-            _ => {
-                by_ref.insert(key, rec);
+                if let Some(existing) = by_ref.get_mut(&key) {
+                    // Bump the recency to whichever signal is newer.
+                    if existing.created_at.unwrap_or(0) < ts {
+                        existing.created_at = Some(ts);
+                    }
+                    continue;
+                }
+
+                let mut record = metadata_by_ref
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or_else(|| synthesize_book_record(&catalog_id, ts));
+                if record.created_at.unwrap_or(0) < ts {
+                    record.created_at = Some(ts);
+                }
+                by_ref.insert(key, record);
             }
         }
     }
@@ -85,6 +147,66 @@ pub fn query_recent_books(
     out.sort_by(|a, b| b.created_at.unwrap_or(0).cmp(&a.created_at.unwrap_or(0)));
     out.truncate(limit as usize);
     Ok(out)
+}
+
+/// Pull a book catalog id (e.g. `isbn:9780…`) off a kind:9802 highlight. Looks
+/// at every `i` tag because the canonical NIP-73 tag may sit alongside the
+/// primary `i` reference (build_highlight_event mirrors the catalog id).
+fn book_catalog_id_from_highlight(event: &Event) -> Option<String> {
+    for tag in event.tags.iter() {
+        let slice = tag.as_slice();
+        if slice.first().map(String::as_str) != Some("i") {
+            continue;
+        }
+        let Some(value) = slice.get(1) else { continue };
+        if value.to_ascii_lowercase().starts_with("isbn:") {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+/// Minimal ArtifactRecord we can build when we have only an `isbn:…` reference
+/// and no kind:11 cover/title source. Title and image are empty — the picker
+/// renders a placeholder cell — but the highlight reference tags are correct
+/// so picking it still produces a valid kind:9802.
+fn synthesize_book_record(catalog_id: &str, created_at: u64) -> ArtifactRecord {
+    let preview = ArtifactPreview {
+        id: String::new(),
+        url: String::new(),
+        title: String::new(),
+        author: String::new(),
+        image: String::new(),
+        description: String::new(),
+        source: "book".to_string(),
+        domain: String::new(),
+        catalog_id: catalog_id.to_string(),
+        catalog_kind: "isbn".to_string(),
+        podcast_guid: String::new(),
+        podcast_item_guid: String::new(),
+        podcast_show_title: String::new(),
+        audio_url: String::new(),
+        audio_preview_url: String::new(),
+        transcript_url: String::new(),
+        feed_url: String::new(),
+        published_at: String::new(),
+        duration_seconds: None,
+        reference_tag_name: "i".to_string(),
+        reference_tag_value: catalog_id.to_string(),
+        reference_kind: "isbn".to_string(),
+        highlight_tag_name: "i".to_string(),
+        highlight_tag_value: catalog_id.to_string(),
+        highlight_reference_key: format!("i:{catalog_id}"),
+        chapters: Vec::new(),
+    };
+    ArtifactRecord {
+        preview,
+        group_id: String::new(),
+        share_event_id: String::new(),
+        pubkey: String::new(),
+        created_at: Some(created_at),
+        note: String::new(),
+    }
 }
 
 /// Collect group ids the user appears in (admin or member). Pure scan over
@@ -221,6 +343,16 @@ mod tests {
             .expect("sign article")
     }
 
+    fn book_highlight(keys: &Keys, isbn: &str, ts: u64) -> Event {
+        EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "quote")
+            .tags(vec![
+                Tag::parse(vec!["i".to_string(), format!("isbn:{isbn}")]).unwrap(),
+            ])
+            .custom_created_at(Timestamp::from(ts))
+            .sign_with_keys(keys)
+            .expect("sign highlight")
+    }
+
     #[test]
     fn returns_empty_when_no_groups_joined() {
         let (ndb, _tmp) = isolated_ndb();
@@ -281,6 +413,70 @@ mod tests {
         let out = query_recent_books(&ndb, &user, 10).expect("query");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].preview.title, "Mine");
+    }
+
+    #[test]
+    fn highlight_surfaces_book_with_no_share_in_joined_group() {
+        // Reproduces the user-reported bug: I publish highlights of a book I'm
+        // reading but the picker never lists it because no kind:11 share exists
+        // in any group I'm in. The highlight itself should be enough.
+        let (ndb, _tmp) = isolated_ndb();
+        let user_keys = Keys::generate();
+        let user = user_keys.public_key().to_hex();
+
+        ingest(&ndb, &book_highlight(&user_keys, "111", 500));
+        wait_for_ndb();
+
+        let out = query_recent_books(&ndb, &user, 10).expect("query");
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].preview.catalog_id, "isbn:111");
+        assert_eq!(out[0].preview.highlight_tag_name, "i");
+        assert_eq!(out[0].preview.highlight_tag_value, "isbn:111");
+        assert_eq!(out[0].created_at, Some(500));
+    }
+
+    #[test]
+    fn highlight_backfills_metadata_from_kind11_in_other_group() {
+        // Highlight signal exists for the book, but the only kind:11 share for
+        // it lives in a group the user isn't joined to. We should still surface
+        // the book with the title/cover from that share rather than a blank
+        // placeholder.
+        let (ndb, _tmp) = isolated_ndb();
+        let user_keys = Keys::generate();
+        let user = user_keys.public_key().to_hex();
+        let other = Keys::generate();
+
+        ingest(&ndb, &book_share(&other, "elsewhere", "b1", "isbn:111", "Real Title", 100));
+        ingest(&ndb, &book_highlight(&user_keys, "111", 500));
+        wait_for_ndb();
+
+        let out = query_recent_books(&ndb, &user, 10).expect("query");
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].preview.title, "Real Title");
+        // Recency reflects the highlight, which is newer than the kind:11.
+        assert_eq!(out[0].created_at, Some(500));
+    }
+
+    #[test]
+    fn highlight_bumps_recency_for_existing_share() {
+        // A book is already in recents via a kind:11 share in a joined group.
+        // A newer highlight on the same ISBN should bump it back to the top.
+        let (ndb, _tmp) = isolated_ndb();
+        let user_keys = Keys::generate();
+        let user = user_keys.public_key().to_hex();
+        let admin = Keys::generate();
+
+        ingest(&ndb, &membership(&admin, "alpha", &user, 1));
+        ingest(&ndb, &book_share(&admin, "alpha", "b1", "isbn:111", "Older Share", 100));
+        ingest(&ndb, &book_share(&admin, "alpha", "b2", "isbn:222", "Newer Share", 200));
+        ingest(&ndb, &book_highlight(&user_keys, "111", 300));
+        wait_for_ndb();
+
+        let out = query_recent_books(&ndb, &user, 10).expect("query");
+        assert_eq!(out.len(), 2);
+        // The book with the recent highlight is now first.
+        assert_eq!(out[0].preview.catalog_id, "isbn:111");
+        assert_eq!(out[0].created_at, Some(300));
     }
 
     #[test]
