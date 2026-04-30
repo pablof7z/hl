@@ -6,6 +6,22 @@ import Foundation
 actor SafeHighlighterCore {
     private let core: HighlighterCore
 
+    // Persistent ISBN metadata cache — avoids re-fetching Open Library for
+    // books the user has already scanned, even across app launches.
+    private struct CachedISBNPreview: Codable {
+        var id: String
+        var url: String
+        var title: String
+        var author: String
+        var image: String
+        var description: String
+        var domain: String
+        var publishedAt: String
+    }
+    private static let isbnCacheKey = "app.highlighter.isbn_cache_v1"
+    private var isbnCache: [String: CachedISBNPreview] = [:]
+    private var isbnCacheLoaded = false
+
     init(core: HighlighterCore) {
         self.core = core
     }
@@ -167,7 +183,69 @@ actor SafeHighlighterCore {
     }
 
     func lookupIsbn(_ isbn: String) async throws -> ArtifactPreview {
-        try await core.lookupIsbn(isbn: isbn)
+        loadIsbnCacheIfNeeded()
+        if let hit = isbnCache[isbn] {
+            return makePreview(from: hit, isbn: isbn)
+        }
+        let preview = try await core.lookupIsbn(isbn: isbn)
+        isbnCache[isbn] = CachedISBNPreview(
+            id: preview.id,
+            url: preview.url,
+            title: preview.title,
+            author: preview.author,
+            image: preview.image,
+            description: preview.description,
+            domain: preview.domain,
+            publishedAt: preview.publishedAt
+        )
+        persistIsbnCache()
+        return preview
+    }
+
+    private func loadIsbnCacheIfNeeded() {
+        guard !isbnCacheLoaded else { return }
+        isbnCacheLoaded = true
+        guard let data = UserDefaults.standard.data(forKey: Self.isbnCacheKey),
+              let dict = try? JSONDecoder().decode([String: CachedISBNPreview].self, from: data)
+        else { return }
+        isbnCache = dict
+    }
+
+    private func persistIsbnCache() {
+        guard let data = try? JSONEncoder().encode(isbnCache) else { return }
+        UserDefaults.standard.set(data, forKey: Self.isbnCacheKey)
+    }
+
+    private func makePreview(from cached: CachedISBNPreview, isbn: String) -> ArtifactPreview {
+        let catalogId = "isbn:\(isbn)"
+        return ArtifactPreview(
+            id: cached.id,
+            url: cached.url,
+            title: cached.title,
+            author: cached.author,
+            image: cached.image,
+            description: cached.description,
+            source: "book",
+            domain: cached.domain,
+            catalogId: catalogId,
+            catalogKind: "isbn",
+            podcastGuid: "",
+            podcastItemGuid: "",
+            podcastShowTitle: "",
+            audioUrl: "",
+            audioPreviewUrl: "",
+            transcriptUrl: "",
+            feedUrl: "",
+            publishedAt: cached.publishedAt,
+            durationSeconds: nil,
+            referenceTagName: "i",
+            referenceTagValue: catalogId,
+            referenceKind: "isbn",
+            highlightTagName: "i",
+            highlightTagValue: catalogId,
+            highlightReferenceKey: "i:\(catalogId)",
+            chapters: []
+        )
     }
 
     func buildPreviewFromUrl(_ url: String) async throws -> ArtifactPreview {
