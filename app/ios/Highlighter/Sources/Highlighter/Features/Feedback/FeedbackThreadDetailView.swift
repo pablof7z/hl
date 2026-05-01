@@ -149,7 +149,7 @@ private struct FeedbackMessageBubble: View {
                         .padding(.horizontal, 4)
                         .padding(.top, 8)
                 }
-                Text(event.content)
+                Text(markdownContent)
                     .font(.body)
                     .foregroundStyle(isFromMe ? Color.white : Color.primary)
                     .padding(.horizontal, 12)
@@ -188,6 +188,15 @@ private struct FeedbackMessageBubble: View {
         } else {
             Color.clear.frame(width: 28, height: 1)
         }
+    }
+
+    private var markdownContent: AttributedString {
+        (try? AttributedString(
+            markdown: event.content,
+            options: AttributedString.MarkdownParsingOptions(
+                interpretedSyntax: .inlineOnlyPreservingWhitespace
+            )
+        )) ?? AttributedString(event.content)
     }
 
     private var displayName: String {

@@ -51,7 +51,13 @@ struct NostrRichText: View {
         runs.reduce(Text(""), { acc, run in
             switch run {
             case .text(let s):
-                return acc + Text(s).foregroundStyle(ink)
+                let a = (try? AttributedString(
+                    markdown: s,
+                    options: AttributedString.MarkdownParsingOptions(
+                        interpretedSyntax: .inlineOnlyPreservingWhitespace
+                    )
+                )) ?? AttributedString(s)
+                return acc + Text(a)
             case .entity(let ref):
                 guard case .profile(let pubkey, _) = ref else {
                     // Event refs at this layer are guaranteed to be the
