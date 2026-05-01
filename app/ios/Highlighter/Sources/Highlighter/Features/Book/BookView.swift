@@ -101,7 +101,7 @@ struct BookView: View {
     private var infoSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(preview?.title ?? "")
-                .font(.system(.title2, design: .serif).weight(.semibold))
+                .font(.title2.weight(.semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -328,6 +328,23 @@ actor SafeHighlighterCore {
         try core.decodeNostrEntity(input: input)
     }
 
+    /// Mint a NIP-19 `nevent` for an event id with optional author / kind / relay
+    /// hints. Used to build shareable highlight URLs (e.g. for the
+    /// `https://highlighter.com/highlight/<nevent>` social-card flow).
+    func encodeNevent(
+        eventIdHex: String,
+        authorPubkeyHex: String?,
+        relayHints: [String],
+        kind: UInt32?
+    ) throws -> String {
+        try core.encodeEventToNevent(
+            eventIdHex: eventIdHex,
+            authorPubkeyHex: authorPubkeyHex,
+            relayHints: relayHints,
+            kind: kind
+        )
+    }
+
     func resolveNostrEntity(_ entity: NostrEntityRef) async throws -> NostrEntityEvent? {
         try await core.resolveNostrEntity(entity: entity)
     }

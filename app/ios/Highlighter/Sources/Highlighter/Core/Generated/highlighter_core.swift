@@ -805,6 +805,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func disconnectAll() async throws 
     
+    /**
+     * Mint a NIP-19 `nevent` bech32 reference for an event id with
+     * optional author / kind / relay hints. Used to build shareable
+     * highlight URLs (e.g. the `https://highlighter.com/highlight/<nevent>`
+     * social-card flow). Bad relay URLs are silently dropped.
+     */
+    func encodeEventToNevent(eventIdHex: String, authorPubkeyHex: String?, relayHints: [String], kind: UInt32?) throws  -> String
+    
     func generateAccount() throws  -> GeneratedAccount
     
     /**
@@ -1658,6 +1666,23 @@ open func disconnectAll()async throws   {
             liftFunc: { $0 },
             errorHandler: FfiConverterTypeCoreError_lift
         )
+}
+    
+    /**
+     * Mint a NIP-19 `nevent` bech32 reference for an event id with
+     * optional author / kind / relay hints. Used to build shareable
+     * highlight URLs (e.g. the `https://highlighter.com/highlight/<nevent>`
+     * social-card flow). Bad relay URLs are silently dropped.
+     */
+open func encodeEventToNevent(eventIdHex: String, authorPubkeyHex: String?, relayHints: [String], kind: UInt32?)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_highlighter_core_fn_method_highlightercore_encode_event_to_nevent(self.uniffiClonePointer(),
+        FfiConverterString.lower(eventIdHex),
+        FfiConverterOptionString.lower(authorPubkeyHex),
+        FfiConverterSequenceString.lower(relayHints),
+        FfiConverterOptionUInt32.lower(kind),$0
+    )
+})
 }
     
 open func generateAccount()throws  -> GeneratedAccount  {
@@ -9872,6 +9897,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 46894) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_encode_event_to_nevent() != 36762) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 54846) {

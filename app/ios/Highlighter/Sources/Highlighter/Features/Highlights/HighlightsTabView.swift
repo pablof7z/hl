@@ -32,6 +32,9 @@ struct HighlightsTabView: View {
                     .accessibilityLabel("Capture highlight")
                 }
             }
+            .navigationDestination(for: HighlightDetailTarget.self) { target in
+                HighlightDetailView(item: target.item)
+            }
             .navigationDestination(for: ArticleReaderTarget.self) { target in
                 ArticleReaderView(target: target)
             }
@@ -78,13 +81,17 @@ struct HighlightsTabView: View {
 
     private func feedList(store: HomeFeedStore) -> some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
-                ForEach(store.items, id: \.stableId) { item in
+            LazyVStack(spacing: 0) {
+                ForEach(Array(store.items.enumerated()), id: \.element.stableId) { index, item in
                     row(for: item)
+                    if index < store.items.count - 1 {
+                        Rectangle()
+                            .fill(Color.highlighterRule)
+                            .frame(height: 1)
+                    }
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 12)
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
     }
@@ -125,28 +132,11 @@ struct HighlightsTabView: View {
     @ViewBuilder
     private func highlightRow(_ items: [HydratedHighlight]) -> some View {
         let lead = items[0]
-        if let articleTarget = articleReaderTarget(for: lead) {
-            NavigationLink(value: articleTarget) {
-                HighlightFeedCardView(items: items)
-            }
-            .buttonStyle(.plain)
-            .contextMenu { highlightContextMenu(lead) }
-        } else if let bookTarget = bookReaderTarget(for: lead) {
-            NavigationLink(value: bookTarget) {
-                HighlightFeedCardView(items: items)
-            }
-            .buttonStyle(.plain)
-            .contextMenu { highlightContextMenu(lead) }
-        } else if let webTarget = webReaderTarget(for: lead) {
-            NavigationLink(value: webTarget) {
-                HighlightFeedCardView(items: items)
-            }
-            .buttonStyle(.plain)
-            .contextMenu { highlightContextMenu(lead) }
-        } else {
+        NavigationLink(value: HighlightDetailTarget(item: lead)) {
             HighlightFeedCardView(items: items)
-                .contextMenu { highlightContextMenu(lead) }
         }
+        .buttonStyle(.plain)
+        .contextMenu { highlightContextMenu(lead) }
     }
 
     @ViewBuilder
@@ -188,35 +178,6 @@ struct HighlightsTabView: View {
                 Label("Share to community", systemImage: "square.and.arrow.up")
             }
         }
-    }
-
-    // MARK: - Navigation targets
-
-    private func articleReaderTarget(for item: HydratedHighlight) -> ArticleReaderTarget? {
-        let addr = item.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        let pubkey = String(parts[1])
-        let dTag = String(parts[2])
-        guard !pubkey.isEmpty, !dTag.isEmpty else { return nil }
-        return ArticleReaderTarget(pubkey: pubkey, dTag: dTag, seed: nil)
-    }
-
-    private func bookReaderTarget(for item: HydratedHighlight) -> BookTarget? {
-        let extRef = item.highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
-        if extRef.hasPrefix("isbn:") { return BookTarget(catalogId: extRef) }
-        let addr = item.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if addr.hasPrefix("isbn:") { return BookTarget(catalogId: addr) }
-        return nil
-    }
-
-    private func webReaderTarget(for item: HydratedHighlight) -> WebReaderTarget? {
-        let raw = item.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty, let url = URL(string: raw) else { return nil }
-        guard let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else { return nil }
-        return WebReaderTarget(url: url, highlightQuote: item.highlight.quote)
     }
 
     /// Share-to-community target. Only supported for NIP-23 article

@@ -190,7 +190,7 @@ struct RoomHomeView: View {
                     if !room.artifacts.isEmpty {
                         ForEach(Array(room.artifacts.enumerated()), id: \.element.shareEventId) { index, a in
                             NavigationLink(value: a) {
-                                artifactRow(a)
+                                artifactRow(a, commentCount: commentCount(for: a))
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
@@ -220,14 +220,14 @@ struct RoomHomeView: View {
     }
 
     @ViewBuilder
-    private func artifactRow(_ a: ArtifactRecord) -> some View {
+    private func artifactRow(_ a: ArtifactRecord, commentCount: Int) -> some View {
         switch a.preview.source {
         case "article":
-            RoomLibraryArticleCardView(artifact: a)
+            RoomLibraryArticleCardView(artifact: a, commentCount: commentCount)
         case "book":
-            RoomLibraryBookCardView(artifact: a)
+            RoomLibraryBookCardView(artifact: a, commentCount: commentCount)
         case "podcast":
-            RoomLibraryPodcastCardView(artifact: a)
+            RoomLibraryPodcastCardView(artifact: a, commentCount: commentCount)
         default:
             HStack {
                 Text(a.preview.title.isEmpty ? "Untitled" : a.preview.title)
@@ -239,6 +239,24 @@ struct RoomHomeView: View {
             }
             .padding(.vertical, 14)
         }
+    }
+
+    /// Resolve the count of NIP-22 comments anchored to an artifact, using
+    /// the same uppercase reference key convention as `Lane.build`.
+    private func commentCount(for artifact: ArtifactRecord) -> Int {
+        let pv = artifact.preview
+        let upperTag: String
+        let value: String
+        if !pv.referenceTagName.isEmpty, !pv.referenceTagValue.isEmpty {
+            upperTag = pv.referenceTagName.uppercased()
+            value = pv.referenceTagValue
+        } else if !pv.highlightTagName.isEmpty, !pv.highlightTagValue.isEmpty {
+            upperTag = pv.highlightTagName.uppercased()
+            value = pv.highlightTagValue
+        } else {
+            return 0
+        }
+        return room.commentsByReference["\(upperTag):\(value)"]?.count ?? 0
     }
 
     @ViewBuilder

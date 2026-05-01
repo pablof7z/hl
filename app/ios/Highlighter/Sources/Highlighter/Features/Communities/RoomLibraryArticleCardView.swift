@@ -8,6 +8,7 @@ struct RoomLibraryArticleCardView: View {
     @Environment(HighlighterStore.self) private var app
 
     let artifact: ArtifactRecord
+    var commentCount: Int = 0
 
     var body: some View {
         ReadingCard(
@@ -85,6 +86,9 @@ struct RoomLibraryArticleCardView: View {
     private var metaBits: [String] {
         var out: [String] = []
         if !artifact.preview.domain.isEmpty { out.append(artifact.preview.domain) }
+        if commentCount > 0 {
+            out.append("\(commentCount) comment\(commentCount == 1 ? "" : "s")")
+        }
         return out
     }
 }

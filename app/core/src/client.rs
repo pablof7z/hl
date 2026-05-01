@@ -1562,6 +1562,25 @@ impl HighlighterCore {
         crate::nostr_entities::decode_nostr_entity(&input)
     }
 
+    /// Mint a NIP-19 `nevent` bech32 reference for an event id with
+    /// optional author / kind / relay hints. Used to build shareable
+    /// highlight URLs (e.g. the `https://highlighter.com/highlight/<nevent>`
+    /// social-card flow). Bad relay URLs are silently dropped.
+    pub fn encode_event_to_nevent(
+        &self,
+        event_id_hex: String,
+        author_pubkey_hex: Option<String>,
+        relay_hints: Vec<String>,
+        kind: Option<u32>,
+    ) -> Result<String, CoreError> {
+        crate::nostr_entities::encode_event_to_nevent(
+            event_id_hex,
+            author_pubkey_hex,
+            relay_hints,
+            kind,
+        )
+    }
+
     /// Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
     /// resolved event when nostrdb already has it, `None` otherwise.
     /// The caller should pair this with `subscribe_nostr_entity` so a

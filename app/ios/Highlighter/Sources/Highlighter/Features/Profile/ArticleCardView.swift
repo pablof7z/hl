@@ -2,8 +2,8 @@ import Kingfisher
 import SwiftUI
 
 /// Article row on a profile's Writing tab. Mirrors the web `ArticleCard`:
-/// title (serif) + summary (2-line clamp) on the left, 96×72 thumbnail on
-/// the right, metadata row underneath.
+/// title + summary (2-line clamp) on the left, 96×72 thumbnail on the
+/// right, metadata row underneath.
 struct ArticleCardView: View {
     let article: ArticleRecord
 
@@ -12,12 +12,12 @@ struct ArticleCardView: View {
             VStack(alignment: .leading, spacing: 8) {
                 if !article.title.isEmpty {
                     Text(article.title)
-                        .font(.system(.title3, design: .serif).weight(.semibold))
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
                         .lineLimit(3)
                 } else {
                     Text("Untitled")
-                        .font(.system(.title3, design: .serif).weight(.semibold))
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(Color.highlighterInkMuted)
                 }
 

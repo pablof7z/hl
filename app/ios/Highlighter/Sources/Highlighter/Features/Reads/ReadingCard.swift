@@ -46,7 +46,7 @@ struct ReadingCard<Avatar: View, Trailing: View>: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title.isEmpty ? "Untitled" : title)
-                        .font(.system(.title3, design: .serif).weight(.semibold))
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(
                             title.isEmpty
                                 ? Color.highlighterInkMuted

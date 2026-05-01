@@ -133,7 +133,7 @@ struct ShareToCommunitySheet: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(target.displayTitle)
-                    .font(.system(.subheadline, design: .serif).weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(3)
                 if !target.displaySubtitle.isEmpty {

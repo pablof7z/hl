@@ -99,14 +99,14 @@ final class HomeFeedStore {
         }
     }
 
-    /// Source-only grouping key. Returns nil for highlights with no
-    /// identifiable source (those land as solo entries via event id).
+    /// Source-only grouping key. Uses the canonical `sourceReferenceKey`
+    /// produced by core, which covers articles (`a:`), nostr events (`e:`),
+    /// external entities like ISBN-keyed books (`i:`), and plain URLs (`r:`).
+    /// Returns nil for highlights with no identifiable source (those land as
+    /// solo entries via event id).
     private func groupKey(for h: HydratedHighlight) -> String? {
-        let addr = h.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !addr.isEmpty { return addr }
-        let url = h.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !url.isEmpty { return url }
-        return nil
+        let key = h.highlight.sourceReferenceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        return key.isEmpty ? nil : key
     }
 
     private func recompute() {

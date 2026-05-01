@@ -47,11 +47,7 @@ struct HighlightFeedCardView: View {
             }
             highlightsBody
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.highlighterPaperTint)
-        )
+        .padding(.vertical, 18)
         .task(id: lead.highlight.pubkey) {
             await app.requestProfile(pubkeyHex: lead.highlight.pubkey)
         }
@@ -75,7 +71,7 @@ struct HighlightFeedCardView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(resourceTitle)
-                    .font(.system(.headline, design: .serif).weight(.semibold))
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -314,9 +310,6 @@ struct HighlightFeedCardView: View {
     }
 
     private var reel: some View {
-        // Bleed the scroll edge-to-edge of the module so the cards reach
-        // the inner padding boundary, with a leading inset that re-aligns
-        // the first card to the resource header.
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 10) {
                 ForEach(items, id: \.highlight.eventId) { h in
@@ -324,9 +317,7 @@ struct HighlightFeedCardView: View {
                 }
                 Color.clear.frame(width: 4)
             }
-            .padding(.horizontal, 16)
         }
-        .padding(.horizontal, -16)
     }
 
     private func highlighterByline(for h: HydratedHighlight) -> some View {

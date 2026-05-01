@@ -16,7 +16,9 @@
 //!   relay hints carried by the entity, so a cold cache warms up
 //!   without blocking the first paint.
 
-use nostr_sdk::nips::nip19::{FromBech32, Nip19, Nip19Coordinate, Nip19Event, Nip19Profile};
+use nostr_sdk::nips::nip19::{
+    FromBech32, Nip19, Nip19Coordinate, Nip19Event, Nip19Profile, ToBech32,
+};
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
@@ -129,6 +131,56 @@ pub fn decode_nostr_entity(input: &str) -> Result<NostrEntityRef, CoreError> {
             ))
         }
     })
+}
+
+/// Encode a NIP-19 `nevent` for an event id, optionally carrying an
+/// author pubkey, kind hint, and relay hints. Used by clients (iOS app,
+/// share-link builder) to produce a single bech32 reference that the
+/// web SSR layer + any other relay-aware consumer can resolve.
+///
+/// The `author_pubkey_hex` and `kind` are advisory: NIP-19 nevent allows
+/// both to be omitted, but including them shrinks resolution time and
+/// lets the renderer pick a skeleton before the event lands. Empty /
+/// `None` arguments are skipped.
+///
+/// Relay hints that fail to parse are silently dropped so a single bad
+/// URL doesn't break the encode; an empty list is fine (decoders
+/// fall back to default relay sets).
+pub fn encode_event_to_nevent(
+    event_id_hex: String,
+    author_pubkey_hex: Option<String>,
+    relay_hints: Vec<String>,
+    kind: Option<u32>,
+) -> Result<String, CoreError> {
+    let id = EventId::from_hex(&event_id_hex)
+        .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
+
+    let mut nevent = Nip19Event::new(id);
+
+    if let Some(pk_hex) = author_pubkey_hex {
+        let trimmed = pk_hex.trim();
+        if !trimmed.is_empty() {
+            let author = PublicKey::from_hex(trimmed)
+                .map_err(|e| CoreError::InvalidInput(format!("bad author pubkey: {e}")))?;
+            nevent = nevent.author(author);
+        }
+    }
+
+    if let Some(k) = kind {
+        nevent = nevent.kind(Kind::from(k as u16));
+    }
+
+    let relays: Vec<RelayUrl> = relay_hints
+        .into_iter()
+        .filter_map(|r| RelayUrl::parse(r.trim()).ok())
+        .collect();
+    if !relays.is_empty() {
+        nevent = nevent.relays(relays);
+    }
+
+    nevent
+        .to_bech32()
+        .map_err(|e| CoreError::InvalidInput(format!("encode nevent: {e}")))
 }
 
 /// Look up a [`NostrEntityRef`] in nostrdb and return a renderable
@@ -301,5 +353,72 @@ mod tests {
     fn garbage_input_rejected() {
         assert!(decode_nostr_entity("nostr:nope").is_err());
         assert!(decode_nostr_entity("literally not bech32").is_err());
+    }
+
+    #[test]
+    fn encode_nevent_round_trips_with_author_kind_and_relay() {
+        let event_id_hex =
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string();
+        let author_hex =
+            "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d".to_string();
+        let relay = "wss://relay.highlighter.com".to_string();
+
+        let bech = encode_event_to_nevent(
+            event_id_hex.clone(),
+            Some(author_hex.clone()),
+            vec![relay.clone()],
+            Some(9802),
+        )
+        .expect("encode");
+        assert!(bech.starts_with("nevent1"), "got {bech}");
+
+        let decoded = decode_nostr_entity(&bech).expect("decode round-trip");
+        match decoded {
+            NostrEntityRef::Event {
+                event_id_hex: id,
+                author_hint_hex,
+                kind_hint,
+                relays,
+            } => {
+                assert_eq!(id, event_id_hex);
+                assert_eq!(author_hint_hex.as_deref(), Some(author_hex.as_str()));
+                assert_eq!(kind_hint, Some(9802));
+                assert!(
+                    relays.iter().any(|r| r.contains("relay.highlighter.com")),
+                    "relays: {relays:?}"
+                );
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn encode_nevent_minimal_event_id_only() {
+        let event_id_hex =
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string();
+        let bech =
+            encode_event_to_nevent(event_id_hex.clone(), None, Vec::new(), None).expect("encode");
+        assert!(bech.starts_with("nevent1"));
+
+        let decoded = decode_nostr_entity(&bech).expect("decode");
+        match decoded {
+            NostrEntityRef::Event {
+                event_id_hex: id,
+                author_hint_hex,
+                kind_hint,
+                ..
+            } => {
+                assert_eq!(id, event_id_hex);
+                assert_eq!(author_hint_hex, None);
+                assert_eq!(kind_hint, None);
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn encode_nevent_rejects_bad_event_id() {
+        let err = encode_event_to_nevent("not-hex".to_string(), None, Vec::new(), None);
+        assert!(err.is_err());
     }
 }

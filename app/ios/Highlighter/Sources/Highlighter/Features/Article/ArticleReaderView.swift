@@ -399,7 +399,7 @@ private struct Header: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(article.title.isEmpty ? "Untitled" : article.title)
-                .font(.system(.largeTitle, design: .serif).weight(.bold))
+                .font(.largeTitle.weight(.bold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .fixedSize(horizontal: false, vertical: true)
 

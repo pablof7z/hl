@@ -5,13 +5,14 @@ struct RoomLibraryPodcastCardView: View {
     @Environment(HighlighterStore.self) private var app
 
     let artifact: ArtifactRecord
+    var commentCount: Int = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(artifact.preview.title.isEmpty ? "Untitled" : artifact.preview.title)
-                        .font(.system(.title3, design: .serif).weight(.semibold))
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(
                             artifact.preview.title.isEmpty
                                 ? Color.highlighterInkMuted
@@ -85,6 +86,16 @@ struct RoomLibraryPodcastCardView: View {
             }
 
             Spacer(minLength: 0)
+
+            if commentCount > 0 {
+                HStack(spacing: 3) {
+                    Image(systemName: "bubble.left")
+                        .font(.caption2)
+                    Text("\(commentCount)")
+                        .font(.caption2.weight(.semibold))
+                }
+                .foregroundStyle(Color.highlighterInkMuted)
+            }
         }
     }
 

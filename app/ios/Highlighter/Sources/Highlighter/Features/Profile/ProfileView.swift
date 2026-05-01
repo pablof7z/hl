@@ -396,7 +396,14 @@ private struct TabContent: View {
         } else {
             LazyVStack(spacing: 16) {
                 ForEach(store.highlights, id: \.eventId) { highlight in
-                    HighlightQuoteView(highlight: highlight)
+                    HighlightFeedCardView(items: [
+                        HydratedHighlight(
+                            highlight: highlight,
+                            artifact: nil,
+                            sharedByEventId: nil,
+                            sharedByPubkey: nil
+                        )
+                    ])
                 }
             }
             .padding(.top, 8)

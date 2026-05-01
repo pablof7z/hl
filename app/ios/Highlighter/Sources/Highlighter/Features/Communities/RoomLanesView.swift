@@ -34,13 +34,17 @@ struct RoomLanesView: View {
             )
         } else {
             ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(visibleLanes, id: \.id) { lane in
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(visibleLanes.enumerated()), id: \.element.id) { index, lane in
                         laneView(for: lane)
+                        if index < visibleLanes.count - 1 {
+                            Rectangle()
+                                .fill(Color.highlighterRule)
+                                .frame(height: 1)
+                        }
                     }
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 12)
             }
             .background(Color.highlighterPaper.ignoresSafeArea())
         }
@@ -58,24 +62,17 @@ struct RoomLanesView: View {
 
     @ViewBuilder
     private func laneView(for lane: Lane) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if !lane.highlights.isEmpty {
-                NavigationLink(value: lane.artifact) {
-                    HighlightFeedCardView(items: lane.highlights)
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    Button {
-                        onShareToCommunity(lane.artifact)
-                    } label: {
-                        Label("Share to community", systemImage: "square.and.arrow.up")
-                    }
-                }
+        if !lane.highlights.isEmpty {
+            NavigationLink(value: lane.artifact) {
+                HighlightFeedCardView(items: lane.highlights)
             }
-
-            if !lane.comments.isEmpty {
-                LaneCommentsSection(comments: lane.comments)
-                    .padding(.top, 8)
+            .buttonStyle(.plain)
+            .contextMenu {
+                Button {
+                    onShareToCommunity(lane.artifact)
+                } label: {
+                    Label("Share to community", systemImage: "square.and.arrow.up")
+                }
             }
         }
     }

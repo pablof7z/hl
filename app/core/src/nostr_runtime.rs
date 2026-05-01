@@ -1183,7 +1183,7 @@ mod tests {
     }
 
     #[test]
-    fn rooms_urls_returns_only_rooms_rows() {
+    fn rooms_urls_returns_room_rows_plus_default_highlighter() {
         let (rt, _tmp) = runtime_with_config(vec![
             RelayConfig {
                 url: "wss://hl.example".into(),
@@ -1207,7 +1207,13 @@ mod tests {
                 indexer: true,
             },
         ]);
-        assert_eq!(rt.rooms_urls(), vec!["wss://hl.example".to_string()]);
+        assert_eq!(
+            rt.rooms_urls(),
+            vec![
+                "wss://hl.example".to_string(),
+                HIGHLIGHTER_RELAY.to_string(),
+            ]
+        );
     }
 
     #[test]
