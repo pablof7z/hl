@@ -157,7 +157,7 @@ struct BookView: View {
                 .padding(.horizontal, 20)
 
             Text("Passages")
-                .font(.system(.title3, design: .serif).weight(.semibold))
+                .font(.system(.title3, design: .default).weight(.semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
@@ -187,7 +187,7 @@ struct BookView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(h.quote.trimmingCharacters(in: .whitespacesAndNewlines))
-                    .font(.system(.body, design: .serif).italic())
+                    .font(.system(.body, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)

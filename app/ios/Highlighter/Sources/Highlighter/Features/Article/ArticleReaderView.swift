@@ -405,7 +405,7 @@ private struct Header: View {
 
             if !article.summary.isEmpty {
                 Text(article.summary)
-                    .font(.system(.title3, design: .serif))
+                    .font(.system(.title3, design: .default))
                     .foregroundStyle(Color.highlighterInkMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -514,7 +514,7 @@ private struct NoteComposerSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 Text(quote)
-                    .font(.system(.body, design: .serif).italic())
+                    .font(.system(.body, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -610,7 +610,7 @@ private struct HighlightDetailSheet: View {
                 .fill(Color.highlighterAccent)
                 .frame(width: 3)
             Text(highlight.quote)
-                .font(.system(.body, design: .serif))
+                .font(.system(.body, design: .default))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)

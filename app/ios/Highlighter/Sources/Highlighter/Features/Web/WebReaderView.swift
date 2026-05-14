@@ -298,11 +298,11 @@ private struct WebView: UIViewRepresentable {
                   }
                   body { font: 18px/1.65 'Iowan Old Style', 'Palatino', Georgia, serif; }
                   .reader-article { max-width: 680px; margin: 0 auto; padding: 34px 22px 60px; }
-                  .reader-title { font: 700 30px/1.2 'Iowan Old Style', 'Palatino', Georgia, serif; margin: 0 0 10px; }
+                  .reader-title { font: 700 30px/1.2 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; margin: 0 0 10px; }
                   .reader-byline { font: 14px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; color: #7a7468; margin: 0 0 6px; }
                   .reader-rule { border: 0; border-top: 1px solid #e5ddc9; margin: 22px 0 26px; }
                   .reader-body p { margin: 0 0 1em; }
-                  .reader-body h1, .reader-body h2, .reader-body h3 { font-family: 'Iowan Old Style', 'Palatino', Georgia, serif; }
+                  .reader-body h1, .reader-body h2, .reader-body h3 { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; }
                   .reader-body img, .reader-body figure { max-width: 100%; height: auto; display: block; margin: 1.2em auto; }
                   .reader-body figure figcaption { font: 13px/1.4 -apple-system, sans-serif; color: #7a7468; text-align: center; margin-top: 4px; }
                   .reader-body a { color: #c57d5f; text-decoration: underline; text-decoration-color: rgba(197,125,95,0.35); text-underline-offset: 2px; }

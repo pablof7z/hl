@@ -30,12 +30,12 @@ struct RoomShareCard: View {
             VStack(alignment: .leading, spacing: 14) {
                 if let room {
                     Text(room.name)
-                        .font(.system(.title3, design: .serif).weight(.semibold))
+                        .font(.system(.title3, design: .default).weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
                         .lineLimit(1)
                 } else {
                     Text("New room")
-                        .font(.system(.title3, design: .serif).weight(.semibold))
+                        .font(.system(.title3, design: .default).weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
                 }
 

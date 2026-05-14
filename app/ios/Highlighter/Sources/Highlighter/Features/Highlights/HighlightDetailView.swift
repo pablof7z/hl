@@ -217,7 +217,7 @@ struct HighlightDetailView: View {
 
     private var quoteText: some View {
         Text(highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
-            .font(.system(size: 21, design: .serif).italic())
+            .font(.system(size: 21, design: .default).italic())
             .foregroundStyle(Color.highlighterInkStrong)
             .lineSpacing(5)
             .fixedSize(horizontal: false, vertical: true)
@@ -232,7 +232,7 @@ struct HighlightDetailView: View {
                 .tracking(0.6)
                 .foregroundStyle(Color.highlighterInkMuted)
             Text(highlight.note)
-                .font(.system(.body, design: .serif))
+                .font(.system(.body, design: .default))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)

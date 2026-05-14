@@ -215,7 +215,7 @@ struct SearchView: View {
     private func browseHighlightsPreviewSection(store: SearchStore) -> some View {
         SectionKicker(text: "The library")
         Text("Your nostrdb cache holds every highlight, article, community, and profile you've ever loaded. Search finds them instantly. Anything not yet on your device — searched across your configured search relays.")
-            .font(.system(.subheadline, design: .serif))
+            .font(.system(.subheadline, design: .default))
             .foregroundStyle(Color.highlighterInkMuted)
             .lineSpacing(4)
             .padding(.top, -4)
@@ -287,7 +287,7 @@ struct SearchView: View {
                 .frame(width: 3, height: 24)
                 .clipShape(RoundedRectangle(cornerRadius: 1.5))
             Text("Nothing yet for \u{201C}\(store.query)\u{201D}")
-                .font(.system(.title3, design: .serif).weight(.semibold))
+                .font(.system(.title3, design: .default).weight(.semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
             Text("Relay search is still running in the background — results may arrive in a moment.")
                 .font(.footnote)
@@ -490,7 +490,7 @@ private struct SearchSectionHeader: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(title)
-                .font(.system(.title3, design: .serif).weight(.semibold))
+                .font(.system(.title3, design: .default).weight(.semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
             if count > 0 {
                 Text("\(count)")
@@ -607,7 +607,7 @@ private struct RoomCoverArt: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
                 Text(String(name.prefix(1)))
-                    .font(.system(size: size * 0.38, design: .serif).weight(.semibold))
+                    .font(.system(size: size * 0.38, design: .default).weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong.opacity(0.75))
             }
         }
@@ -639,7 +639,7 @@ private struct SearchHighlightRow: View {
                 HighlightMatchedText(
                     text: highlight.quote,
                     query: query,
-                    font: .system(size: 18, design: .serif).italic()
+                    font: .system(size: 18, design: .default).italic()
                 )
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineSpacing(3)

@@ -100,7 +100,7 @@ struct OnboardingWelcomeView: View {
             }
 
             Text(content.title)
-                .font(.system(.title, design: .serif).weight(.semibold))
+                .font(.system(.title, design: .default).weight(.semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)

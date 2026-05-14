@@ -154,7 +154,7 @@ private struct IdentityBlock: View {
             )
 
             Text(displayName)
-                .font(.system(.largeTitle, design: .serif).weight(.semibold))
+                .font(.system(.largeTitle, design: .default).weight(.semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)

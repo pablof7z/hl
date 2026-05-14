@@ -566,7 +566,7 @@ private struct ISBNPreviewSheet: View {
                     .tracking(0.5)
                     .foregroundStyle(Color.highlighterInkMuted)
                 TextField("Book title", text: $manualTitle)
-                    .font(.system(.body, design: .serif))
+                    .font(.system(.body, design: .default))
                     .padding(12)
                     .background(Color.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.highlighterRule, lineWidth: 1))

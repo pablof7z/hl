@@ -30,7 +30,7 @@ struct AuthorAvatar: View {
             gradient
             if let initial = initialCharacter {
                 Text(initial)
-                    .font(.system(size: size * 0.42, weight: .semibold, design: .serif))
+                    .font(.system(size: size * 0.42, weight: .semibold, design: .default))
                     .foregroundStyle(.white.opacity(0.92))
             }
 

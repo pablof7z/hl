@@ -254,7 +254,7 @@ struct HighlightFeedCardView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(h.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
-                    .font(.system(size: 18, design: .serif).italic())
+                    .font(.system(size: 18, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(4)
                     .lineLimit(8)
@@ -264,7 +264,7 @@ struct HighlightFeedCardView: View {
 
                 if !h.highlight.note.isEmpty {
                     Text(h.highlight.note)
-                        .font(.system(.subheadline, design: .serif))
+                        .font(.system(.subheadline, design: .default))
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -282,7 +282,7 @@ struct HighlightFeedCardView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(h.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
-                    .font(.system(size: 18, design: .serif).italic())
+                    .font(.system(size: 18, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(4)
                     .lineLimit(8)
@@ -292,7 +292,7 @@ struct HighlightFeedCardView: View {
 
                 if !h.highlight.note.isEmpty {
                     Text(h.highlight.note)
-                        .font(.system(.subheadline, design: .serif))
+                        .font(.system(.subheadline, design: .default))
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -650,7 +650,7 @@ private struct HighlightQuoteCard: View {
     private var quoteBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(highlight.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
-                .font(.system(size: 14, design: .serif).italic())
+                .font(.system(size: 14, design: .default).italic())
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineSpacing(3)
                 .lineLimit(6)

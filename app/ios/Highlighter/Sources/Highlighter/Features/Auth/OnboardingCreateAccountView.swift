@@ -36,7 +36,7 @@ struct OnboardingCreateAccountView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("What should we call you?")
-                        .font(.system(.title, design: .serif).weight(.semibold))
+                        .font(.system(.title, design: .default).weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
 
                     Text("Display name is visible to everyone. Username lets others find you on Nostr.")

@@ -107,7 +107,7 @@ struct RoomInviteView: View {
     private var welcomeHeader: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Your room is open.")
-                .font(.system(.title2, design: .serif).italic())
+                .font(.system(.title2, design: .default).italic())
                 .foregroundStyle(Color.highlighterInkStrong)
             Text("Invite the first guests below — or share the link.")
                 .font(.subheadline)
@@ -505,7 +505,7 @@ private struct AvatarView: View {
         ZStack {
             Color.highlighterTintPale
             Text(initial)
-                .font(.system(size: size * 0.4, weight: .semibold, design: .serif))
+                .font(.system(size: size * 0.4, weight: .semibold, design: .default))
                 .foregroundStyle(Color.highlighterInkStrong)
         }
     }

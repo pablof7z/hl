@@ -154,7 +154,7 @@ private struct SeeAllHighlightRow: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(matched(highlight.quote, query))
-                    .font(.system(size: 17, design: .serif).italic())
+                    .font(.system(size: 17, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(3)
                     .lineLimit(6)
@@ -206,7 +206,7 @@ private struct SeeAllCommunityRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     } else {
                         Text(String(community.name.prefix(1)))
-                            .font(.system(size: 22, design: .serif).weight(.semibold))
+                            .font(.system(size: 22, design: .default).weight(.semibold))
                             .foregroundStyle(Color.highlighterInkStrong.opacity(0.8))
                     }
                 }

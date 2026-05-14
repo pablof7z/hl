@@ -400,7 +400,7 @@ private struct ArticleEntityCard: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title.isEmpty ? "Untitled" : title)
-                        .font(.system(.headline, design: .serif))
+                        .font(.system(.headline, design: .default))
                         .foregroundStyle(Color.highlighterInkStrong)
                         .lineLimit(2)
                     if !summary.isEmpty {
@@ -503,7 +503,7 @@ private struct HighlightEntityCard: View {
                 .frame(maxHeight: .infinity)
             VStack(alignment: .leading, spacing: 8) {
                 Text(event.content)
-                    .font(.system(.body, design: .serif).italic())
+                    .font(.system(.body, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                 Text("— \(profile?.displayName ?? profile?.name ?? String(event.pubkeyHex.prefix(8)))")
                     .font(.caption)

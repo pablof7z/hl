@@ -159,7 +159,7 @@ struct CreateRoomSheet: View {
                 text: $name,
                 prompt: Text("Name your room").foregroundColor(Color.highlighterInkMuted.opacity(0.7))
             )
-            .font(.system(.largeTitle, design: .serif).weight(.semibold))
+            .font(.system(.largeTitle, design: .default).weight(.semibold))
             .foregroundStyle(Color.highlighterInkStrong)
             .focused($focused, equals: .name)
             .submitLabel(.next)

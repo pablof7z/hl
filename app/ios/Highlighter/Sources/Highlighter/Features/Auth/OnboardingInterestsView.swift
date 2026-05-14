@@ -17,7 +17,7 @@ struct OnboardingInterestsView: View {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("What do you read?")
-                        .font(.system(.title, design: .serif).weight(.semibold))
+                        .font(.system(.title, design: .default).weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
 
                     Text("Pick at least three — we'll pre-fill your feed with highlights from readers like you.")
