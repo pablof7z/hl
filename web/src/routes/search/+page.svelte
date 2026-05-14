@@ -32,9 +32,9 @@
 <section class="grid gap-8 pt-14 pb-20">
   <header class="pb-8 border-b border-base-300 mb-3">
     {#if data.results.query.length < MIN_SEARCH_QUERY_LENGTH}
-      <h1 class="font-serif font-normal text-[clamp(44px,6vw,68px)] leading-[1.02] tracking-[-0.025em] text-base-content m-0 mb-3.5">Search.</h1>
+      <h1 class="font-sans font-normal text-[clamp(44px,6vw,68px)] leading-[1.02] tracking-[-0.025em] text-base-content m-0 mb-3.5">Search.</h1>
     {:else}
-      <h1 class="font-serif font-normal text-[clamp(44px,6vw,68px)] leading-[1.02] tracking-[-0.025em] text-base-content m-0 mb-3.5">Results for <em class="italic text-primary">"{data.results.query}"</em></h1>
+      <h1 class="font-sans font-normal text-[clamp(44px,6vw,68px)] leading-[1.02] tracking-[-0.025em] text-base-content m-0 mb-3.5">Results for <em class="italic text-primary">"{data.results.query}"</em></h1>
     {/if}
     <p class="text-[19px] leading-[1.5] text-base-content/80 max-w-[52ch] m-0">Search articles, rooms, people, and highlights.</p>
   </header>
@@ -90,7 +90,7 @@
       <div class="grid gap-10">
         {#if data.results.articles.length > 0}
           <section class="grid gap-4">
-            <h2 class="font-serif font-normal text-[clamp(1.5rem,2.5vw,1.8rem)] leading-[1.1] tracking-[-0.015em] text-base-content m-0">
+            <h2 class="font-sans font-normal text-[clamp(1.5rem,2.5vw,1.8rem)] leading-[1.1] tracking-[-0.015em] text-base-content m-0">
               Articles
             </h2>
             <div class="grid gap-0">
@@ -104,7 +104,7 @@
                       <span class="inline-flex items-center min-h-[1.8rem] px-[0.65rem] rounded-full bg-base-200 border border-base-300 text-base-content/50 font-mono text-[10px] tracking-[0.08em] uppercase">{article.publishedLabel}</span>
                       <span class="inline-flex items-center min-h-[1.8rem] px-[0.65rem] rounded-full bg-base-200 border border-base-300 text-base-content/50 font-mono text-[10px] tracking-[0.08em] uppercase">By {article.authorName}</span>
                     </div>
-                    <h3 class="font-serif font-medium text-[1.15rem] leading-[1.25] tracking-[-0.01em] text-base-content m-0">{article.title}</h3>
+                    <h3 class="font-sans font-medium text-[1.15rem] leading-[1.25] tracking-[-0.01em] text-base-content m-0">{article.title}</h3>
                     <p class="m-0 text-sm leading-[1.6] text-base-content/80">{article.summary}</p>
                   </div>
                   {#if article.image}
@@ -123,7 +123,7 @@
 
         {#if data.results.rooms.length > 0}
           <section class="grid gap-4">
-            <h2 class="font-serif font-normal text-[clamp(1.5rem,2.5vw,1.8rem)] leading-[1.1] tracking-[-0.015em] text-base-content m-0">
+            <h2 class="font-sans font-normal text-[clamp(1.5rem,2.5vw,1.8rem)] leading-[1.1] tracking-[-0.015em] text-base-content m-0">
               Rooms
             </h2>
             <div class="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(18rem,1fr))]">
@@ -141,7 +141,7 @@
 
         {#if data.results.profiles.length > 0}
           <section class="grid gap-4">
-            <h2 class="font-serif font-normal text-[clamp(1.5rem,2.5vw,1.8rem)] leading-[1.1] tracking-[-0.015em] text-base-content m-0">
+            <h2 class="font-sans font-normal text-[clamp(1.5rem,2.5vw,1.8rem)] leading-[1.1] tracking-[-0.015em] text-base-content m-0">
               People
             </h2>
             <div class="grid gap-0">
@@ -179,7 +179,7 @@
 
         {#if data.results.highlights.length > 0}
           <section class="grid gap-4">
-            <h2 class="font-serif font-normal text-[clamp(1.5rem,2.5vw,1.8rem)] leading-[1.1] tracking-[-0.015em] text-base-content m-0">
+            <h2 class="font-sans font-normal text-[clamp(1.5rem,2.5vw,1.8rem)] leading-[1.1] tracking-[-0.015em] text-base-content m-0">
               Highlights
             </h2>
             <div class="grid gap-0">
@@ -230,7 +230,7 @@
                   <span class="inline-flex items-center min-h-[1.8rem] px-[0.65rem] rounded-full bg-base-200 border border-base-300 text-base-content/50 font-mono text-[10px] tracking-[0.08em] uppercase">{article.publishedLabel}</span>
                   <span class="inline-flex items-center min-h-[1.8rem] px-[0.65rem] rounded-full bg-base-200 border border-base-300 text-base-content/50 font-mono text-[10px] tracking-[0.08em] uppercase">By {article.authorName}</span>
                 </div>
-                <h3 class="font-serif font-medium text-[1.15rem] leading-[1.25] tracking-[-0.01em] text-base-content m-0">{article.title}</h3>
+                <h3 class="font-sans font-medium text-[1.15rem] leading-[1.25] tracking-[-0.01em] text-base-content m-0">{article.title}</h3>
                 <p class="m-0 text-sm leading-[1.6] text-base-content/80">{article.summary}</p>
               </div>
               {#if article.image}

@@ -187,7 +187,7 @@
 
 <section class="grid gap-6">
   <header class="grid gap-[0.35rem]">
-    <h2 class="m-0 font-serif text-base-content leading-[1.1] tracking-[-0.02em]" style="font-size: clamp(1.6rem, 3vw, 2.2rem);">
+    <h2 class="m-0 font-sans text-base-content leading-[1.1] tracking-[-0.02em]" style="font-size: clamp(1.6rem, 3vw, 2.2rem);">
       Highlights
     </h2>
   </header>
@@ -217,17 +217,17 @@
     <section class="grid gap-[0.9rem]" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
       <div class="grid gap-[0.4rem] p-4 border border-base-300 rounded-[1.1rem] bg-base-100">
         <p class="m-0 text-primary text-[0.8rem] font-bold tracking-[0.08em] uppercase">Saved highlights</p>
-        <strong class="font-serif text-[2rem] leading-none text-base-content">{highlights.length}</strong>
+        <strong class="font-sans text-[2rem] leading-none text-base-content">{highlights.length}</strong>
         <span class="m-0 text-base-content/50 leading-relaxed">You can share the same highlight into more than one room.</span>
       </div>
       <div class="grid gap-[0.4rem] p-4 border border-base-300 rounded-[1.1rem] bg-base-100">
         <p class="m-0 text-primary text-[0.8rem] font-bold tracking-[0.08em] uppercase">Loaded rooms</p>
-        <strong class="font-serif text-[2rem] leading-none text-base-content">{rooms.length}</strong>
+        <strong class="font-sans text-[2rem] leading-none text-base-content">{rooms.length}</strong>
         <span class="m-0 text-base-content/50 leading-relaxed">Available as share-again targets on each card.</span>
       </div>
       <div class="grid gap-[0.4rem] p-4 border border-base-300 rounded-[1.1rem] bg-base-100">
         <p class="m-0 text-primary text-[0.8rem] font-bold tracking-[0.08em] uppercase">Sources checked</p>
-        <strong class="font-serif text-[2rem] leading-none text-base-content">{highlightRelayUrls.length}</strong>
+        <strong class="font-sans text-[2rem] leading-none text-base-content">{highlightRelayUrls.length}</strong>
         <span class="m-0 text-base-content/50 leading-relaxed">Loaded from the places where your highlights are stored, plus Highlighter's fallback.</span>
       </div>
     </section>

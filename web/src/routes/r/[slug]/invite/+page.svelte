@@ -163,7 +163,7 @@
     <header class="grid gap-[0.65rem]">
       <a class="text-primary text-[0.85rem] font-medium no-underline hover:underline" href="/r/{slug}">← {room.name}</a>
       {#if isFresh}
-        <h1 class="m-0 text-base-content font-serif text-[clamp(1.8rem,4vw,2.6rem)] leading-[1.05] tracking-[-0.03em]">Your room is live.</h1>
+        <h1 class="m-0 text-base-content font-sans text-[clamp(1.8rem,4vw,2.6rem)] leading-[1.05] tracking-[-0.03em]">Your room is live.</h1>
         <p class="m-0 text-base-content/50 text-base leading-[1.55]">
           {#if isOpen}
             It's open — anyone with the link below can join and read along.
@@ -172,7 +172,7 @@
           {/if}
         </p>
       {:else}
-        <h1 class="m-0 text-base-content font-serif text-[clamp(1.8rem,4vw,2.6rem)] leading-[1.05] tracking-[-0.03em]">Invites</h1>
+        <h1 class="m-0 text-base-content font-sans text-[clamp(1.8rem,4vw,2.6rem)] leading-[1.05] tracking-[-0.03em]">Invites</h1>
         <p class="m-0 text-base-content/50 text-base leading-[1.55]">
           {#if isOpen}
             This room is open — anyone with the room link can join.
@@ -301,9 +301,9 @@
                 <div class="grid gap-[0.35rem] min-w-0">
                   <div class="flex items-baseline gap-[0.35rem] flex-wrap">
                     {#if invite.label}
-                      <strong class="text-base-content font-serif text-base font-medium">{invite.label}</strong>
+                      <strong class="text-base-content font-sans text-base font-medium">{invite.label}</strong>
                     {:else}
-                      <span class="text-base-content/50 font-serif text-base font-normal italic">Shareable link</span>
+                      <span class="text-base-content/50 font-sans text-base font-normal italic">Shareable link</span>
                     {/if}
                     <span class="text-base-content/50 text-[0.82rem]">· {formatDate(invite.createdAt)}</span>
                   </div>

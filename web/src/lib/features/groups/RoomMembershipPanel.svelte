@@ -146,7 +146,7 @@
   h2 {
     margin: 0;
     color: var(--text-strong);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: 1.65rem;
     line-height: 1.08;
     letter-spacing: -0.03em;

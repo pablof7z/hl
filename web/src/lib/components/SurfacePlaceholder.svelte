@@ -70,7 +70,7 @@
   .surface-title {
     margin: 0;
     color: var(--text-strong);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: clamp(2rem, 5vw, 3.25rem);
     line-height: 1.05;
     letter-spacing: -0.03em;

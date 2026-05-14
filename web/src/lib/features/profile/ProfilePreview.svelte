@@ -148,7 +148,7 @@
     font-size: 1.1rem;
     font-weight: 700;
     color: inherit;
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
   }
 
   .pp-bio {

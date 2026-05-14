@@ -229,7 +229,7 @@
   </div>
 
   <blockquote class="m-0 border-l-2 border-primary pl-4">
-    <p class="m-0 font-serif text-lg leading-snug text-base-content [&_mark]:rounded-sm [&_mark]:bg-primary/15 [&_mark]:px-0.5 [&_mark]:text-inherit">
+    <p class="m-0 font-sans text-lg leading-snug text-base-content [&_mark]:rounded-sm [&_mark]:bg-primary/15 [&_mark]:px-0.5 [&_mark]:text-inherit">
       {#each excerptSegments as segment (segment.text)}
         {#if segment.marked}
           <mark>{segment.text}</mark>

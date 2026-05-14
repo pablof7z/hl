@@ -88,7 +88,7 @@
   }
 
   .topnav.marketing .nav-logo {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 22px;
     letter-spacing: -0.01em;

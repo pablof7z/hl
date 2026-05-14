@@ -5,7 +5,7 @@
 </script>
 
 <section class="max-w-3xl">
-  <h1 class="font-serif text-4xl font-bold text-base-content mb-1">Changelog</h1>
+  <h1 class="font-sans text-4xl font-bold text-base-content mb-1">Changelog</h1>
   <p class="text-base-content/50 text-sm mb-8">Recent commits deployed to beta</p>
 
   <ul class="list-none p-0 flex flex-col">

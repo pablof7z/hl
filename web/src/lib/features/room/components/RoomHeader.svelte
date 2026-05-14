@@ -47,7 +47,7 @@
   }
 
   .room-title {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: 400;
     font-size: clamp(44px, 6vw, 68px);
     line-height: 1.02;

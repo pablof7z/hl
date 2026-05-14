@@ -152,7 +152,7 @@
   .highlight-form-copy h2 {
     margin: 0;
     color: var(--text-strong);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: 1.5rem;
     line-height: 1.15;
     letter-spacing: -0.02em;

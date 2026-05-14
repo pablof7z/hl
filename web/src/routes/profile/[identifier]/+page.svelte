@@ -318,7 +318,7 @@
         {#each sortedHighlights as highlight (highlight.id)}
           {@const source = highlightSourceLink(highlight)}
           <div class="grid gap-1.5 py-5 border-b border-base-300 first:pt-0 last:border-b-0">
-            <blockquote class="m-0 py-3 px-4 border-l-[3px] border-l-[rgba(31,108,159,0.35)] rounded-r font-serif text-[0.95rem] leading-relaxed text-base-content" style="background: var(--pale-blue)">
+            <blockquote class="m-0 py-3 px-4 border-l-[3px] border-l-[rgba(31,108,159,0.35)] rounded-r font-sans text-[0.95rem] leading-relaxed text-base-content" style="background: var(--pale-blue)">
               {noteExcerpt(highlight.content, 400)}
             </blockquote>
             {#if source}

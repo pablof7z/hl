@@ -85,7 +85,7 @@
   }
 
   .hr-quote {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-style: italic;
     font-size: 17px;
     line-height: 1.5;

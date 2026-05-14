@@ -76,7 +76,7 @@
 
 {#if !artifact}
   <div class="py-20 text-center flex flex-col gap-4 items-center">
-    <h1 class="font-serif text-4xl font-normal text-base-content m-0">Artifact not available</h1>
+    <h1 class="font-sans text-4xl font-normal text-base-content m-0">Artifact not available</h1>
     <p class="text-base-content/80 text-[15px] max-w-[44ch] m-0">The event for this artifact wasn't found on the relays we queried.</p>
     {#if room}
       <a href={`/r/${room.id}`} class="btn">Back to {room.name}</a>

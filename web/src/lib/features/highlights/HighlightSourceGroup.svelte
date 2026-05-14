@@ -125,7 +125,7 @@
   .group-title {
     margin: 0;
     color: var(--text-strong);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: 1.2rem;
     font-weight: 700;
     line-height: 1.2;

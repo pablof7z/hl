@@ -33,7 +33,7 @@
 
 {#if !room || !discussion}
   <div class="py-20 text-center flex flex-col gap-4 items-center">
-    <h1 class="font-serif text-[34px] font-normal text-base-content m-0">Discussion not found</h1>
+    <h1 class="font-sans text-[34px] font-normal text-base-content m-0">Discussion not found</h1>
     <p class="text-base-content/80 text-[15px] max-w-[44ch] m-0">The post isn't on the relays we queried, or it has been removed.</p>
     <a href={room ? `/r/${room.id}` : '/rooms'} class="inline-flex items-center px-5 py-2.5 bg-base-content text-base-100 font-sans text-[13px] font-medium no-underline rounded hover:bg-primary transition-colors duration-200">Back to the room</a>
   </div>
@@ -56,7 +56,7 @@
           </span>
         </User.Root>
       </div>
-      <h1 class="font-serif text-[34px] leading-[1.15] tracking-[-0.015em] text-base-content m-0 font-normal max-sm:text-[26px]">{discussion.title}</h1>
+      <h1 class="font-sans text-[34px] leading-[1.15] tracking-[-0.015em] text-base-content m-0 font-normal max-sm:text-[26px]">{discussion.title}</h1>
     </header>
 
     {#if discussion.attachment}
@@ -69,7 +69,7 @@
         {#if discussion.attachment.image}
           <img src={discussion.attachment.image} alt="" loading="lazy" class="w-full h-full aspect-[4/5] object-cover rounded-[6px] max-sm:aspect-video" />
         {:else}
-          <div class="flex items-center justify-center aspect-[4/5] bg-base-content text-base-100 font-serif text-[22px] rounded-[6px] max-sm:aspect-video" aria-hidden="true">
+          <div class="flex items-center justify-center aspect-[4/5] bg-base-content text-base-100 font-sans text-[22px] rounded-[6px] max-sm:aspect-video" aria-hidden="true">
             {(discussion.attachment.title || discussion.attachment.source).slice(0, 2).toUpperCase()}
           </div>
         {/if}

@@ -227,7 +227,7 @@
   h2 {
     margin: 0;
     color: var(--text-strong);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: clamp(1.3rem, 2vw, 1.7rem);
     line-height: 1.15;
     letter-spacing: -0.02em;

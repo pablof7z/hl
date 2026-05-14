@@ -38,7 +38,7 @@
   .capture-cta-ico {
     font-size: 20px;
     line-height: 1;
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-style: italic;
   }
 

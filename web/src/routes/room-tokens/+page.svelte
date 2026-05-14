@@ -198,7 +198,7 @@
   }
 
   h1 {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: clamp(44px, 6vw, 68px);
     font-weight: 400;
     letter-spacing: -0.025em;
@@ -292,7 +292,7 @@
   }
 
   .type-room-title {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: clamp(44px, 6vw, 68px);
     font-weight: 400;
     letter-spacing: -0.025em;
@@ -329,7 +329,7 @@
   }
 
   .type-body {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: 17px;
     font-weight: 400;
     line-height: 1.65;
@@ -338,7 +338,7 @@
   }
 
   .type-highlight-quote {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-style: italic;
     font-size: 20px;
     color: var(--ink-soft);
@@ -348,7 +348,7 @@
   }
 
   .type-member-status {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-style: italic;
     font-size: 13px;
     line-height: 1.4;

@@ -14,8 +14,8 @@
 
 <section class="pt-14 pb-20">
   <header class="pb-8 border-b border-base-300 mb-11">
-    <h1 class="font-serif font-normal text-[clamp(44px,6vw,68px)] leading-[1.02] tracking-[-0.025em] text-base-content m-0 mb-3.5">Public <em class="italic text-primary">rooms.</em></h1>
-    <p class="font-serif italic text-[19px] leading-[1.5] text-base-content/80 max-w-[52ch] m-0 mb-6">
+    <h1 class="font-sans font-normal text-[clamp(44px,6vw,68px)] leading-[1.02] tracking-[-0.025em] text-base-content m-0 mb-3.5">Public <em class="italic text-primary">rooms.</em></h1>
+    <p class="font-sans italic text-[19px] leading-[1.5] text-base-content/80 max-w-[52ch] m-0 mb-6">
       Open reading groups anyone can join — find a room that matches your interests.
     </p>
     <div class="flex gap-3 flex-wrap">

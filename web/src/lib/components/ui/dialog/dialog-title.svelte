@@ -7,7 +7,7 @@
 
 <DialogPrimitive.Title
   {...restProps}
-  class={cn('m-0 font-serif text-2xl font-bold leading-tight tracking-tight text-base-content', className)}
+  class={cn('m-0 font-sans text-2xl font-bold leading-tight tracking-tight text-base-content', className)}
 >
   {@render children?.()}
 </DialogPrimitive.Title>

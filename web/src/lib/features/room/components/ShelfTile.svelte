@@ -165,7 +165,7 @@
   .shelf-cover.book {
     background: linear-gradient(140deg, #1C1814 0%, #3A2D1E 55%, #1C1814 100%);
     color: #E6D9BC;
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
   }
   .shelf-cover.book.blue { background: linear-gradient(140deg, #141C2E 0%, #1C2D4D 55%, #141C2E 100%); color: #D6DBE6; }
   .shelf-cover.book.red { background: linear-gradient(140deg, #3A1818 0%, #5A2A2A 55%, #3A1818 100%); color: #E8D0C8; }
@@ -221,7 +221,7 @@
   }
 
   .shelf-cover.podcast .sc-title {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 13px;
     line-height: 1.12;
@@ -248,7 +248,7 @@
   }
 
   .essay-mark {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-style: italic;
     font-size: 44px;
     color: var(--brand-accent);
@@ -257,7 +257,7 @@
   }
 
   .shelf-cover.essay .sc-title {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 13px;
     line-height: 1.18;
@@ -327,7 +327,7 @@
   }
 
   .archive-mark {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-style: italic;
     font-size: 36px;
     color: rgba(58, 46, 24, 0.5);
@@ -336,7 +336,7 @@
   }
 
   .shelf-cover.archive .sc-title {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: 500;
     font-style: italic;
     font-size: 13px;

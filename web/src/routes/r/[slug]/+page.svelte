@@ -308,7 +308,7 @@
 
 {#if !data.room}
   <div class="flex flex-col items-center text-center py-20 gap-4">
-    <h1 class="font-serif text-4xl font-normal text-base-content m-0">Room not found</h1>
+    <h1 class="font-sans text-4xl font-normal text-base-content m-0">Room not found</h1>
     <p class="text-base-content/80 text-[15px] max-w-[44ch] m-0">No room was found at this address, or the relay doesn't hold its metadata yet.</p>
     <a href="/rooms" class="btn">Back to your rooms</a>
   </div>

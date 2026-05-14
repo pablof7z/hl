@@ -121,7 +121,7 @@
         {/if}
 
         <div class="grid gap-[0.45rem] max-w-[42rem]">
-          <h1 class="m-0 font-serif text-base-content leading-none tracking-[-0.04em]" style="font-size: clamp(2.1rem, 5vw, 3rem);">
+          <h1 class="m-0 font-sans text-base-content leading-none tracking-[-0.04em]" style="font-size: clamp(2.1rem, 5vw, 3rem);">
             {displayLabel}
           </h1>
           <div class="flex flex-wrap gap-[0.7rem]">
@@ -145,11 +145,11 @@
       <div class="flex flex-wrap gap-[0.7rem] content-start justify-end max-[820px]:justify-start">
         <div class="grid gap-1 min-w-[5rem] text-center">
           <span class="text-base-content/50 text-[0.72rem] font-semibold uppercase tracking-[0.06em]">Highlights</span>
-          <strong class="font-serif text-[1.9rem] leading-none text-base-content">{authoredHighlightFeed.events.length}</strong>
+          <strong class="font-sans text-[1.9rem] leading-none text-base-content">{authoredHighlightFeed.events.length}</strong>
         </div>
         <div class="grid gap-1 min-w-[5rem] text-center">
           <span class="text-base-content/50 text-[0.72rem] font-semibold uppercase tracking-[0.06em]">Rooms</span>
-          <strong class="font-serif text-[1.9rem] leading-none text-base-content">{roomCount}</strong>
+          <strong class="font-sans text-[1.9rem] leading-none text-base-content">{roomCount}</strong>
         </div>
       </div>
     </header>

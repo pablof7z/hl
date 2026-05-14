@@ -68,7 +68,7 @@
   {#if heroEntry}
     <section>
       <a class="grid gap-5 px-10 py-9 bg-[var(--pale-blue)] border-l-4 border-l-[rgba(31,108,159,0.45)] rounded-r-box text-inherit no-underline transition-[border-left-color] duration-200 hover:border-l-[var(--accent)]" href={`/note/${heroEntry.encode()}`}>
-        <blockquote class="m-0 font-serif text-[clamp(1.3rem,2.2vw,1.85rem)] font-normal leading-[1.5] text-[var(--text-strong)]">
+        <blockquote class="m-0 font-sans text-[clamp(1.3rem,2.2vw,1.85rem)] font-normal leading-[1.5] text-[var(--text-strong)]">
           {noteExcerpt(bestQuote(heroEntry), 500)}
         </blockquote>
         <div class="grid gap-[0.65rem]">
@@ -107,7 +107,7 @@
               href={`/note/${article.encode()}`}
             >
               <div class="grid gap-[0.4rem]">
-                <span class="font-serif text-[1.1rem] font-bold text-[var(--text-strong)] leading-[1.25] tracking-[-0.01em] transition-colors duration-[160ms]">
+                <span class="font-sans text-[1.1rem] font-bold text-[var(--text-strong)] leading-[1.25] tracking-[-0.01em] transition-colors duration-[160ms]">
                   {articleTitle(article.rawEvent())}
                 </span>
                 <p class="m-0 text-base-content/50 text-[0.85rem] leading-[1.5] line-clamp-2">
@@ -125,7 +125,7 @@
 
               <div class="grid gap-[0.6rem]">
                 {#each quotes as quote}
-                  <blockquote class="m-0 px-[0.85rem] py-[0.65rem] border-l-[3px] border-l-[rgba(31,108,159,0.3)] rounded-r bg-[var(--pale-blue)] text-[var(--text-strong)] font-serif text-[0.88rem] leading-[1.55]">
+                  <blockquote class="m-0 px-[0.85rem] py-[0.65rem] border-l-[3px] border-l-[rgba(31,108,159,0.3)] rounded-r bg-[var(--pale-blue)] text-[var(--text-strong)] font-sans text-[0.88rem] leading-[1.55]">
                     {noteExcerpt(quote, isWide ? 280 : 160)}
                   </blockquote>
                 {/each}
@@ -151,7 +151,7 @@
         <div class="grid">
           {#each sidebarEntries as article (article.tagId())}
             <a class="grid gap-[0.4rem] py-[0.85rem] border-b border-b-[var(--border-light)] text-inherit no-underline first:pt-0 last:border-b-0" href={`/note/${article.encode()}`}>
-              <blockquote class="m-0 px-[0.6rem] py-[0.45rem] border-l-2 border-l-[rgba(31,108,159,0.3)] bg-[var(--surface-soft)] text-[var(--text)] font-serif text-[0.8rem] leading-[1.45] line-clamp-2">
+              <blockquote class="m-0 px-[0.6rem] py-[0.45rem] border-l-2 border-l-[rgba(31,108,159,0.3)] bg-[var(--surface-soft)] text-[var(--text)] font-sans text-[0.8rem] leading-[1.45] line-clamp-2">
                 {noteExcerpt(bestQuote(article), 100)}
               </blockquote>
               <span class="text-[0.82rem] font-semibold text-[var(--text-strong)] leading-[1.3] overflow-hidden whitespace-nowrap text-ellipsis transition-colors duration-[160ms]">

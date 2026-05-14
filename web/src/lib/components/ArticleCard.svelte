@@ -80,7 +80,7 @@
 
   .article-feed-title {
     margin: 0;
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: 1.35rem;
     font-weight: 700;
     color: var(--text-strong);

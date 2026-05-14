@@ -124,13 +124,13 @@
 
   {#if step === 1}
     <div class="grid gap-6 min-h-[18rem]">
-      <h1 class="m-0 text-base-content font-serif text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">What do you want to call it?</h1>
+      <h1 class="m-0 text-base-content font-sans text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">What do you want to call it?</h1>
 
       <label class="grid gap-[0.4rem]">
         <span class="font-mono text-[0.72rem] tracking-[0.18em] uppercase text-base-content/50">Room name</span>
         <!-- svelte-ignore a11y_autofocus -->
         <input
-          class="w-full py-[0.9rem] border-0 border-b border-base-300 bg-transparent text-base-content font-serif text-[clamp(1.5rem,3.5vw,2rem)] leading-[1.15] tracking-[-0.02em] outline-none transition-[border-color] duration-[120ms] ease-in-out placeholder:text-base-content/50 focus:border-primary"
+          class="w-full py-[0.9rem] border-0 border-b border-base-300 bg-transparent text-base-content font-sans text-[clamp(1.5rem,3.5vw,2rem)] leading-[1.15] tracking-[-0.02em] outline-none transition-[border-color] duration-[120ms] ease-in-out placeholder:text-base-content/50 focus:border-primary"
           type="text"
           bind:value={name}
           placeholder="Signal over noise"
@@ -162,13 +162,13 @@
 
   {#if step === 2}
     <div class="grid gap-6 min-h-[18rem]">
-      <h1 class="m-0 text-base-content font-serif text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">Who can read and join?</h1>
+      <h1 class="m-0 text-base-content font-sans text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">Who can read and join?</h1>
 
       <div class="grid gap-3">
         <label class="grid grid-cols-[auto_1fr] gap-4 items-start px-5 py-[1.1rem] border border-base-300 rounded-2xl bg-base-100 cursor-pointer transition-[border-color,background] duration-[120ms] ease-in-out hover:border-base-content {preset === 'invite' ? 'border-primary bg-primary/[0.04]' : ''}">
           <input class="mt-[0.35rem]" type="radio" bind:group={preset} value="invite" />
           <div class="grid gap-1">
-            <strong class="text-base-content font-serif text-[1.15rem] font-medium tracking-[-0.01em]">By invitation</strong>
+            <strong class="text-base-content font-sans text-[1.15rem] font-medium tracking-[-0.01em]">By invitation</strong>
             <p class="m-0 text-base-content/50 text-[0.9rem] leading-[1.55]">Only people you invite can join. Anyone with the link can read along.</p>
           </div>
         </label>
@@ -176,7 +176,7 @@
         <label class="grid grid-cols-[auto_1fr] gap-4 items-start px-5 py-[1.1rem] border border-base-300 rounded-2xl bg-base-100 cursor-pointer transition-[border-color,background] duration-[120ms] ease-in-out hover:border-base-content {preset === 'open' ? 'border-primary bg-primary/[0.04]' : ''}">
           <input class="mt-[0.35rem]" type="radio" bind:group={preset} value="open" />
           <div class="grid gap-1">
-            <strong class="text-base-content font-serif text-[1.15rem] font-medium tracking-[-0.01em]">Open to anyone</strong>
+            <strong class="text-base-content font-sans text-[1.15rem] font-medium tracking-[-0.01em]">Open to anyone</strong>
             <p class="m-0 text-base-content/50 text-[0.9rem] leading-[1.55]">Anyone can join. Anyone can read.</p>
           </div>
         </label>
@@ -184,7 +184,7 @@
         <label class="grid grid-cols-[auto_1fr] gap-4 items-start px-5 py-[1.1rem] border border-base-300 rounded-2xl bg-base-100 cursor-pointer transition-[border-color,background] duration-[120ms] ease-in-out hover:border-base-content {preset === 'members' ? 'border-primary bg-primary/[0.04]' : ''}">
           <input class="mt-[0.35rem]" type="radio" bind:group={preset} value="members" />
           <div class="grid gap-1">
-            <strong class="text-base-content font-serif text-[1.15rem] font-medium tracking-[-0.01em]">Members only</strong>
+            <strong class="text-base-content font-sans text-[1.15rem] font-medium tracking-[-0.01em]">Members only</strong>
             <p class="m-0 text-base-content/50 text-[0.9rem] leading-[1.55]">Only members can join. Only members can see what's inside.</p>
           </div>
         </label>
@@ -196,7 +196,7 @@
 
   {#if step === 3}
     <div class="grid gap-6 min-h-[18rem]">
-      <h1 class="m-0 text-base-content font-serif text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">Describe it.</h1>
+      <h1 class="m-0 text-base-content font-sans text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">Describe it.</h1>
 
       <fieldset class="grid gap-2 border-none p-0 m-0">
         <legend class="font-mono text-[0.72rem] tracking-[0.18em] uppercase text-base-content/50">What's this room about?</legend>

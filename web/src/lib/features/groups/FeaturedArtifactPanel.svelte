@@ -175,7 +175,7 @@
   h2 {
     margin: 0;
     color: var(--text-strong);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: clamp(2rem, 4vw, 3rem);
     line-height: 1.02;
     letter-spacing: -0.03em;
@@ -215,7 +215,7 @@
 
   .featured-highlight blockquote p {
     color: var(--text-strong);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: 1.08rem;
   }
 

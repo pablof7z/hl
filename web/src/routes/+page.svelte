@@ -172,7 +172,7 @@
   <!-- ═══ SIGNED-IN FEED ═══ -->
   <section class="flex items-end justify-between gap-4 pt-6 max-sm:flex-col max-sm:items-start">
     <div>
-      <h1 class="m-0 text-base-content font-serif text-[clamp(1.5rem,3.5vw,2rem)] leading-[1.15] tracking-[-0.02em]">Your feed</h1>
+      <h1 class="m-0 text-base-content font-sans text-[clamp(1.5rem,3.5vw,2rem)] leading-[1.15] tracking-[-0.02em]">Your feed</h1>
     </div>
     <div class="flex flex-wrap gap-[0.625rem] shrink-0">
       {#each memberActions as action (action.href)}
@@ -197,7 +197,7 @@
         <p class="m-0 text-base-content/50 text-[0.88rem]">Loading your feed...</p>
       {:else if isEmpty && !hasRooms && !hasFollows}
         <div class="grid gap-2 px-8 py-10 border border-base-300 rounded-2xl bg-base-100 text-center">
-          <h2 class="m-0 text-base-content font-serif text-[1.35rem]">Your feed starts here.</h2>
+          <h2 class="m-0 text-base-content font-sans text-[1.35rem]">Your feed starts here.</h2>
           <p class="m-0 text-base-content/50 text-[0.95rem] leading-relaxed">Join a room or follow someone to see highlights appear in your feed.</p>
           <div class="flex justify-center gap-3 mt-4">
             <a href="/discover" class="btn btn-primary btn-sm">Discover rooms</a>
@@ -206,7 +206,7 @@
         </div>
       {:else if isEmpty && hasRooms}
         <div class="grid gap-2 px-8 py-10 border border-base-300 rounded-2xl bg-base-100 text-center">
-          <h2 class="m-0 text-base-content font-serif text-[1.35rem]">Your rooms are quiet.</h2>
+          <h2 class="m-0 text-base-content font-sans text-[1.35rem]">Your rooms are quiet.</h2>
           <p class="m-0 text-base-content/50 text-[0.95rem] leading-relaxed">No highlights have been shared yet. Be the first.</p>
           <div class="flex justify-center gap-3 mt-4">
             <a href="/rooms" class="btn btn-primary btn-sm">Visit your rooms</a>
@@ -214,7 +214,7 @@
         </div>
       {:else if isEmpty && hasFollows}
         <div class="grid gap-2 px-8 py-10 border border-base-300 rounded-2xl bg-base-100 text-center">
-          <h2 class="m-0 text-base-content font-serif text-[1.35rem]">Nothing new from your network.</h2>
+          <h2 class="m-0 text-base-content font-sans text-[1.35rem]">Nothing new from your network.</h2>
           <p class="m-0 text-base-content/50 text-[0.95rem] leading-relaxed">The people you follow haven't shared highlights recently.</p>
           <div class="flex justify-center gap-3 mt-4">
             <a href="/discover" class="btn btn-primary btn-sm">Discover rooms</a>
@@ -574,7 +574,7 @@
 
   /* The passage uses Fraunces — this is the artifact (a book quote). */
   .passage-text {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-weight: 400;
     font-size: 17px;
     line-height: 1.65;

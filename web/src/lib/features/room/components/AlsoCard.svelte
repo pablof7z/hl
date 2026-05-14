@@ -163,7 +163,7 @@
     align-items: center;
     justify-content: center;
     color: #D8E3F2;
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-style: italic;
     font-size: 10px;
     line-height: 1.1;
@@ -223,7 +223,7 @@
   }
 
   .also-quote {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-style: italic;
     font-size: 14.5px;
     line-height: 1.55;

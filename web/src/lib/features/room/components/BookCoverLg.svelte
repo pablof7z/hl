@@ -31,7 +31,7 @@
     border-radius: 2px;
     padding: 22px 18px;
     color: #E6D9BC;
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: 400;
     display: flex;
     flex-direction: column;

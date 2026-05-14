@@ -121,7 +121,7 @@
 
 {#if !room}
   <div class="grid gap-3 justify-items-center py-20 px-4 text-center">
-    <h1 class="m-0 text-base-content font-serif text-[1.8rem] tracking-[-0.02em]">This room isn't here.</h1>
+    <h1 class="m-0 text-base-content font-sans text-[1.8rem] tracking-[-0.02em]">This room isn't here.</h1>
     <p class="m-0 text-base-content/50">The link might be broken, or the room may have been removed.</p>
     <a href="/" class="btn">Back to Highlighter</a>
   </div>
@@ -136,7 +136,7 @@
       {/if}
 
       <div class="grid gap-4 p-[1.75rem_1.75rem_2rem]">
-        <h1 class="m-0 text-base-content font-serif text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">{room.name}</h1>
+        <h1 class="m-0 text-base-content font-sans text-[clamp(2rem,5vw,2.8rem)] leading-[1.05] tracking-[-0.03em]">{room.name}</h1>
 
         {#if inviterPubkey}
           <div class="inline-flex items-center gap-2 text-base-content/50 text-[0.92rem]">

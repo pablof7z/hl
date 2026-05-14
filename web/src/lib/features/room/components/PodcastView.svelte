@@ -350,7 +350,7 @@
   }
 
   .podcast-title {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: 400;
     font-size: clamp(28px, 4vw, 48px);
     color: var(--ink);
@@ -377,7 +377,7 @@
 
   .podcast-description {
     margin: 0;
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: 16px;
     line-height: 1.6;
     color: var(--ink-soft);
@@ -596,7 +596,7 @@
 
   .timeline-body blockquote {
     margin: 0;
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-style: italic;
     font-size: 14px;
     color: var(--ink-soft);
@@ -642,7 +642,7 @@
   }
 
   .transcript-copy {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-size: 14px;
     line-height: 1.55;
     color: var(--ink);

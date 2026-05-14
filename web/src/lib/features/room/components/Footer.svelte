@@ -126,7 +126,7 @@
   }
 
   .footer-mark {
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     font-weight: 400;
     font-size: 20px;
     color: var(--ink);

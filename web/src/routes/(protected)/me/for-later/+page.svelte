@@ -102,7 +102,7 @@
 
 <section class="grid gap-6">
   <header class="grid gap-[0.35rem]">
-    <h2 class="m-0 font-serif text-base-content leading-[1.1] tracking-[-0.02em]" style="font-size: clamp(1.6rem, 3vw, 2.2rem);">
+    <h2 class="m-0 font-sans text-base-content leading-[1.1] tracking-[-0.02em]" style="font-size: clamp(1.6rem, 3vw, 2.2rem);">
       Your For Later bookmarks
     </h2>
     <p class="m-0 text-base-content/50 leading-relaxed">Saved directly as standard NIP-51 bookmark tags on your Nostr identity.</p>
@@ -111,17 +111,17 @@
   <section class="grid gap-[0.9rem]" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
     <div class="grid gap-[0.35rem] p-4 border border-base-300 rounded-[1.1rem] bg-base-100">
       <p class="m-0 text-primary text-[0.8rem] font-bold tracking-[0.08em] uppercase">Saved items</p>
-      <strong class="font-serif text-[2rem] leading-none text-base-content">{items.length}</strong>
+      <strong class="font-sans text-[2rem] leading-none text-base-content">{items.length}</strong>
       <span class="m-0 text-base-content/50 leading-relaxed">Public tags in your NIP-51 bookmark list.</span>
     </div>
     <div class="grid gap-[0.35rem] p-4 border border-base-300 rounded-[1.1rem] bg-base-100">
       <p class="m-0 text-primary text-[0.8rem] font-bold tracking-[0.08em] uppercase">Nostr refs</p>
-      <strong class="font-serif text-[2rem] leading-none text-base-content">{nostrBookmarkCount}</strong>
+      <strong class="font-sans text-[2rem] leading-none text-base-content">{nostrBookmarkCount}</strong>
       <span class="m-0 text-base-content/50 leading-relaxed">Address or event bookmarks.</span>
     </div>
     <div class="grid gap-[0.35rem] p-4 border border-base-300 rounded-[1.1rem] bg-base-100">
       <p class="m-0 text-primary text-[0.8rem] font-bold tracking-[0.08em] uppercase">URLs</p>
-      <strong class="font-serif text-[2rem] leading-none text-base-content">{urlBookmarkCount}</strong>
+      <strong class="font-sans text-[2rem] leading-none text-base-content">{urlBookmarkCount}</strong>
       <span class="m-0 text-base-content/50 leading-relaxed">External links saved as r tags.</span>
     </div>
   </section>

@@ -1001,7 +1001,7 @@
   h2 {
     margin: 0;
     color: var(--text-strong);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     letter-spacing: -0.02em;
   }
 
@@ -1148,7 +1148,7 @@
     border-radius: 0 1rem 1rem 0;
     background: color-mix(in srgb, var(--surface-soft) 78%, white);
     color: var(--text-strong);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
     line-height: 1.6;
   }
 

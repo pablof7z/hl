@@ -195,12 +195,12 @@
 
 {#if !data.room}
   <div class="py-15 text-center text-base-content/80 font-sans text-[14px]">
-    <h1 class="font-serif text-[32px] font-normal text-base-content m-0 mb-3">Room not found</h1>
+    <h1 class="font-sans text-[32px] font-normal text-base-content m-0 mb-3">Room not found</h1>
     <a href="/rooms" class="inline-flex items-center px-5 py-2.5 bg-base-content text-base-100 font-sans text-[13px] font-medium no-underline rounded hover:bg-primary transition-colors duration-200">Back to your rooms</a>
   </div>
 {:else if currentUser && !isAdmin && adminFeed.events.length > 0}
   <div class="py-15 text-center text-base-content/80 font-sans text-[14px]">
-    <h1 class="font-serif text-[32px] font-normal text-base-content m-0 mb-3">Not authorized</h1>
+    <h1 class="font-sans text-[32px] font-normal text-base-content m-0 mb-3">Not authorized</h1>
     <p class="m-0 mb-3">Only room admins can access settings.</p>
     <a href="/r/{slug}" class="inline-flex items-center px-5 py-2.5 bg-base-content text-base-100 font-sans text-[13px] font-medium no-underline rounded hover:bg-primary transition-colors duration-200">Back to room</a>
   </div>
@@ -208,7 +208,7 @@
   <div class="grid gap-6 py-8 pb-12">
     <header class="grid gap-[0.35rem]">
       <a href="/r/{slug}" class="text-primary font-sans text-[0.85rem] font-medium no-underline hover:underline">← {data.room.name}</a>
-      <h1 class="m-0 text-base-content font-serif text-[clamp(1.8rem,4vw,2.6rem)] leading-[1.05] tracking-[-0.03em]">Room settings</h1>
+      <h1 class="m-0 text-base-content font-sans text-[clamp(1.8rem,4vw,2.6rem)] leading-[1.05] tracking-[-0.03em]">Room settings</h1>
     </header>
 
     <div class="flex gap-0 border-b border-base-300" role="tablist">

@@ -131,7 +131,7 @@
 <div class="flex justify-center px-5 py-16">
   <div class="grid w-full max-w-[28rem] gap-7">
     <div class="grid gap-[0.35rem]">
-      <h1 class="m-0 font-serif text-[1.65rem] font-bold text-base-content leading-[1.2] tracking-[-0.02em]">
+      <h1 class="m-0 font-sans text-[1.65rem] font-bold text-base-content leading-[1.2] tracking-[-0.02em]">
         Set up your profile
       </h1>
       <p class="m-0 text-base-content/50 text-[0.95rem]">Let readers know who you are.</p>

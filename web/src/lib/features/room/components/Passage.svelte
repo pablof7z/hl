@@ -35,7 +35,7 @@
     </div>
   {/if}
 
-  <p class="m-0 mb-7 max-w-[62ch] font-serif text-[22px] leading-[1.65] text-base-content">
+  <p class="m-0 mb-7 max-w-[62ch] font-sans text-[22px] leading-[1.65] text-base-content">
     {#each spans as span, i (i)}
       {#if span.colorIndex}
         <span

@@ -188,7 +188,7 @@
   .mt-progress-label :global(em) {
     font-style: italic;
     color: var(--ink-fade);
-    font-family: var(--font-serif);
+    font-family: var(--font-sans);
   }
 
   .mt-contribution {

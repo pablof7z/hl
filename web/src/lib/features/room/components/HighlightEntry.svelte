@@ -40,7 +40,7 @@
     </div>
   </User.Root>
 
-  <p class="m-0 mb-2.5 border-l-2 border-accent pl-3.5 font-serif text-lg italic leading-normal text-base-content">
+  <p class="m-0 mb-2.5 border-l-2 border-accent pl-3.5 font-sans text-lg italic leading-normal text-base-content">
     {quote}
   </p>
 

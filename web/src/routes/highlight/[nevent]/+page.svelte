@@ -218,7 +218,7 @@
   }
 
   .source-title {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-weight: 600;
     font-size: 1.05rem;
     color: var(--color-ink, #1a1410);
@@ -315,7 +315,7 @@
 
   .open-quote,
   .close-quote {
-    font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-size: 5rem;
     line-height: 0.5;
     color: var(--color-accent, #d05a2d);
@@ -335,7 +335,7 @@
   }
 
   .quote-text {
-    font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-style: italic;
     font-weight: 500;
     font-size: clamp(1.4rem, 2.4vw, 1.85rem);
@@ -347,7 +347,7 @@
 
   .note {
     margin: 0 0 1.5rem 0;
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-size: 1rem;
     line-height: 1.55;
     color: var(--color-muted, #695747);
@@ -364,7 +364,7 @@
   }
 
   .comments-heading {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-weight: 600;
     font-size: 1.25rem;
     color: var(--color-ink, #1a1410);
@@ -381,7 +381,7 @@
   }
 
   .missing h1 {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-weight: 600;
   }
 

@@ -123,7 +123,7 @@
     {#if currentUser}
       <section class="grid gap-6">
         <div class="grid gap-1.5">
-          <h2 class="m-0 font-serif text-[clamp(1.6rem,3.5vw,2.2rem)] font-bold text-base-content tracking-tight leading-[1.1]">My Reading List</h2>
+          <h2 class="m-0 font-sans text-[clamp(1.6rem,3.5vw,2.2rem)] font-bold text-base-content tracking-tight leading-[1.1]">My Reading List</h2>
           <p class="m-0 text-base-content/50 text-[0.95rem]">Articles you've saved for later</p>
         </div>
 
@@ -157,7 +157,7 @@
     {:else}
       <section class="grid gap-6">
         <div class="grid gap-1.5">
-          <h2 class="m-0 font-serif text-[clamp(1.6rem,3.5vw,2.2rem)] font-bold text-base-content tracking-tight leading-[1.1]">My Reading List</h2>
+          <h2 class="m-0 font-sans text-[clamp(1.6rem,3.5vw,2.2rem)] font-bold text-base-content tracking-tight leading-[1.1]">My Reading List</h2>
           <p class="m-0 text-base-content/50 text-[0.95rem]">Log in to save and manage your bookmarks</p>
         </div>
       </section>
@@ -165,7 +165,7 @@
 
     <section class="grid gap-6">
       <div class="grid gap-1.5">
-        <h2 class="m-0 font-serif text-[clamp(1.6rem,3.5vw,2.2rem)] font-bold text-base-content tracking-tight leading-[1.1]">What Readers Are Saving</h2>
+        <h2 class="m-0 font-sans text-[clamp(1.6rem,3.5vw,2.2rem)] font-bold text-base-content tracking-tight leading-[1.1]">What Readers Are Saving</h2>
         <p class="m-0 text-base-content/50 text-[0.95rem]">Discover articles readers find worth keeping</p>
       </div>
 
@@ -184,7 +184,7 @@
                 <div class="w-full aspect-video bg-gradient-to-br from-base-200 to-base-300"></div>
               {/if}
               <div class="grid gap-2.5 px-5 pt-[1.1rem] pb-5">
-                <h3 class="m-0 font-serif text-[1.15rem] font-bold text-base-content leading-[1.25] tracking-[-0.01em] line-clamp-2 transition-colors duration-[160ms] ease group-hover:text-primary">{articleTitle(article.rawEvent())}</h3>
+                <h3 class="m-0 font-sans text-[1.15rem] font-bold text-base-content leading-[1.25] tracking-[-0.01em] line-clamp-2 transition-colors duration-[160ms] ease group-hover:text-primary">{articleTitle(article.rawEvent())}</h3>
                 <p class="m-0 text-base-content/50 text-[0.88rem] leading-[1.5] line-clamp-2">{articleSummary(article.rawEvent(), 120)}</p>
                 <div class="flex flex-wrap items-center justify-between gap-2 pt-[0.35rem]">
                   <StoryAuthor

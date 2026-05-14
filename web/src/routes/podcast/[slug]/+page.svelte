@@ -233,7 +233,7 @@
   }
 
   h1 {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-weight: 600;
     font-size: clamp(1.4rem, 2.8vw, 1.85rem);
     line-height: 1.2;
@@ -305,7 +305,7 @@
   }
 
   .passages h2 {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-weight: 600;
     font-size: 1.25rem;
     margin: 0 0 0.85rem 0;
@@ -338,7 +338,7 @@
 
   .passage blockquote {
     margin: 0;
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-style: italic;
     font-weight: 500;
     line-height: 1.5;
@@ -351,7 +351,7 @@
   .passage-note {
     margin: 0.6rem 0 0;
     color: var(--color-muted, #695747);
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Inter', system-ui, sans-serif;
     line-height: 1.5;
   }
 
@@ -399,7 +399,7 @@
   }
 
   .missing h1 {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Inter', system-ui, sans-serif;
     font-weight: 600;
   }
 
