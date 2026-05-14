@@ -694,4 +694,135 @@ mod tests {
         assert_eq!(out.chars().count(), 140);
         assert!(out.ends_with('…'));
     }
+
+    /// Reproduces the user-reported bug: replies arrive on relay.tenex.chat
+    /// (verified via `nak req -k 1 -e <root> wss://relay.tenex.chat`) but
+    /// don't render in the iOS chat. Process the EXACT events captured from
+    /// the relay and verify `query_thread_events` returns all three.
+    #[test]
+    fn query_thread_events_returns_replies_from_real_relay_payload() {
+        let (ndb, _tmp) = open_ndb();
+
+        let root_json = r#"{"kind":1,"id":"4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949","pubkey":"fcccc04fd113df1e58740c270733b33b211d1dfe2f730861ac7080125f86503f","created_at":1777553395,"tags":[["a","31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter"]],"content":"Sending from outside","sig":"5eb7e2be92a0b46feeb82383c6144083c2ed5b6b5de91964f0e7f0b2f1956de54baee92be5e4010d9926c3d81540052f0699175037c246678f70489ae1f48abe"}"#;
+        let user_followup_json = r#"{"kind":1,"id":"58c920d4533c45e1354c861182ada0d8441235356a24630928c07d62452ed6bc","pubkey":"09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7","created_at":1777553426,"tags":[["e","4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949","","root"],["a","31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter"],["client","tenex-tui"],["p","4108cd882d5bd7446b4b5cb0688b14694f3d0dbb52bd24f16e1e29ff1636adab"]],"content":"from where did I send this?","sig":"fe430bcf9e064819f942d15f033ed4261ecd7cf1a3cadaecb37b12cb774c55a37ea8c601e30402251dfa48d3b2fb9ff4dbdb56c364c1dbe2cf63b9f816ad0a21"}"#;
+        let agent_reply_json = r##"{"kind":1,"id":"7035a5148075421b71eda6f76426c89bc49bce7d3a89a3122e8d859dc1963cd1","pubkey":"4108cd882d5bd7446b4b5cb0688b14694f3d0dbb52bd24f16e1e29ff1636adab","created_at":1777553548,"tags":[["e","4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949","","root"],["e","58c920d4533c45e1354c861182ada0d8441235356a24630928c07d62452ed6bc","","reply"],["p","09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7"],["status","completed"],["llm-prompt-tokens","10711"],["llm-completion-tokens","126"],["llm-total-tokens","10837"],["llm-cached-input-tokens","0"],["a","31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter"],["llm-model","openrouter:openai/gpt-4o-mini"],["llm-ral","1"],["branch","main"]],"content":"It looks like the message you sent may have originated from one of the active conversations in the \"Highlighter\" project. Here are the currently active conversations:\n\n1. **Message from Tenex-TUI** [id: 0cbd143a] — last activity 2 minutes ago\n2. **Agent Category Discussion** [id: 28640a67] — last activity 7 minutes ago\n3. **Initial Greeting** [id: d89c7624] — last activity 11 minutes ago\n\nIf you have a specific message in mind, could you clarify which one you are referring to?","sig":"016faba108484dbb1a00a12372d428e6f9980d54a41c5889fd2e0e9fb6296690bb25bb3873e5a38e49ecc3feb05258216114e93ccb4fc2a1232b501516026c5f"}"##;
+
+        for json in [root_json, user_followup_json, agent_reply_json] {
+            let line = format!("[\"EVENT\",\"sub\",{}]", json);
+            ndb.process_event(&line).expect("process event");
+        }
+        flush();
+
+        let root_id = "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949";
+        let events = query_thread_events(&ndb, root_id).expect("query");
+        let order: Vec<&str> = events.iter().map(|e| e.content.as_str()).collect();
+        assert_eq!(
+            order,
+            vec![
+                "Sending from outside",
+                "from where did I send this?",
+                "It looks like the message you sent may have originated from one of the active conversations in the \"Highlighter\" project. Here are the currently active conversations:\n\n1. **Message from Tenex-TUI** [id: 0cbd143a] — last activity 2 minutes ago\n2. **Agent Category Discussion** [id: 28640a67] — last activity 7 minutes ago\n3. **Initial Greeting** [id: d89c7624] — last activity 11 minutes ago\n\nIf you have a specific message in mind, could you clarify which one you are referring to?"
+            ],
+            "expected root + both replies"
+        );
+    }
+
+    /// Live integration test against `wss://relay.tenex.chat`: opens the
+    /// EXACT subscription the iOS app opens for a thread (kind:1 + #e:<root>),
+    /// waits, and asserts the per-thread query returns all 3 events. Requires
+    /// network — run with `cargo test live_subscribe -- --ignored --nocapture`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore]
+    async fn live_subscribe_to_real_thread_lands_replies_in_ndb() {
+        let tmp = tempdir().expect("tempdir");
+        let ndb = Ndb::new(
+            tmp.path().to_str().unwrap(),
+            &NdbConfig::new().set_mapsize(64 * 1024 * 1024),
+        )
+        .expect("open ndb");
+
+        let ndb_database = nostr_ndb::NdbDatabase::from(ndb.clone());
+        let client = Client::builder().database(ndb_database).build();
+        client.add_relay(FEEDBACK_RELAY).await.expect("add relay");
+        client.connect_relay(FEEDBACK_RELAY).await.expect("connect");
+
+        let root_hex = "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949";
+        let id = SubscriptionId::generate();
+        let filter = Filter::new()
+            .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
+            .custom_tag(SingleLetterTag::lowercase(Alphabet::E), root_hex);
+        client
+            .subscribe_with_id_to([FEEDBACK_RELAY], id, filter, None)
+            .await
+            .expect("subscribe");
+
+        // Wait for events to arrive and be persisted.
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+        let txn = Transaction::new(&ndb).expect("txn");
+        let all = ndb
+            .query(&txn, &[NdbFilter::new().kinds([1u64]).build()], 100)
+            .expect("query");
+        eprintln!("after live sub: ndb has {} kind:1 events", all.len());
+        for r in &all {
+            let n = ndb.get_note_by_key(&txn, r.note_key).unwrap();
+            eprintln!("  id={} content={:?}", hex::encode(n.id()), n.content());
+        }
+        assert!(
+            all.len() >= 2,
+            "expected the relay's two replies to land in ndb, got {}",
+            all.len()
+        );
+    }
+
+    /// Mirrors the iOS app's full path: spin up a real `HighlighterCore`,
+    /// call `subscribe_feedback_thread`, wait, then call
+    /// `get_feedback_thread_events` — the same Swift-facing functions
+    /// `FeedbackThreadStore.start()` calls in order. Verifies the events the
+    /// user is missing actually surface end-to-end.
+    /// Requires network — run with `--ignored --nocapture`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore]
+    async fn live_full_ios_flow_returns_all_thread_events() {
+        let tmp = tempdir().expect("tempdir");
+        let core = crate::client::HighlighterCore::new_with_data_dir(
+            tmp.path().to_path_buf(),
+        );
+
+        let root_hex =
+            "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949".to_string();
+
+        // Step 1 (cache miss expected on a fresh ndb).
+        let initial = core
+            .get_feedback_thread_events(root_hex.clone())
+            .await
+            .expect("initial query");
+        eprintln!("initial cache events: {}", initial.len());
+
+        // Step 2: open the subscription — this is where ensure_feedback_relay
+        // adds + connects the relay and the REQ goes out.
+        let _handle = core
+            .subscribe_feedback_thread(root_hex.clone())
+            .await
+            .expect("subscribe");
+
+        // Wait for the relay to backfill historical events.
+        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+
+        // Step 3: re-query — by now the subscription should have populated ndb.
+        let after = core
+            .get_feedback_thread_events(root_hex.clone())
+            .await
+            .expect("after query");
+        eprintln!("after subscription: {} events", after.len());
+        for e in &after {
+            eprintln!("  id={} content={:?}", e.event_id, e.content);
+        }
+        assert!(
+            after.len() >= 3,
+            "expected root + both replies, got {}",
+            after.len()
+        );
+    }
+
 }

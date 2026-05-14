@@ -466,30 +466,14 @@ fn build_summary(
     let id = group_id.to_string();
 
     // Tag presence, per the webapp's getters (`["public"]` / `["closed"]` etc.)
-    let has_public = metadata_event.map(|e| has_marker_tag(e, "public")).unwrap_or(false);
     let has_private = metadata_event.map(|e| has_marker_tag(e, "private")).unwrap_or(false);
-    let has_open = metadata_event.map(|e| has_marker_tag(e, "open")).unwrap_or(false);
     let has_closed = metadata_event.map(|e| has_marker_tag(e, "closed")).unwrap_or(false);
 
-    // Deviation from the TS defaults: we use paranoid defaults
-    // (`closed` / `private` when both visibility/access tags are missing)
-    // per the Phase 2 #2 spec. The webapp defaults to `public`/`open`.
-    let visibility = if has_public {
-        "public"
-    } else if has_private {
-        "private"
-    } else {
-        "private"
-    };
-    let access = if visibility == "private" {
-        "closed"
-    } else if has_open {
-        "open"
-    } else if has_closed {
-        "closed"
-    } else {
-        "closed"
-    };
+    // Match the webapp defaults: no visibility tag → public, no access tag → open.
+    // Rooms created by the webapp carry no explicit marker tags, so they must
+    // default to public/open or they will be invisible to the explorer.
+    let visibility = if has_private { "private" } else { "public" };
+    let access = if visibility == "private" || has_closed { "closed" } else { "open" };
 
     let name = {
         let raw = metadata_event.map(|e| clean_text(first_tag_value(e, "name"))).unwrap_or_default();
@@ -716,7 +700,9 @@ mod tests {
     }
 
     #[test]
-    fn paranoid_defaults_when_tags_missing() {
+    fn public_open_defaults_when_tags_missing() {
+        // Rooms created without explicit marker tags (the webapp default) must
+        // surface as public/open so the explorer shows them.
         let me = Keys::generate();
         let other = Keys::generate();
 
@@ -730,8 +716,8 @@ mod tests {
         );
 
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].access, "closed", "access defaults to closed when tag missing");
-        assert_eq!(out[0].visibility, "private", "visibility defaults to private when tag missing");
+        assert_eq!(out[0].access, "open", "access defaults to open when tag missing");
+        assert_eq!(out[0].visibility, "public", "visibility defaults to public when tag missing");
     }
 
     #[test]
