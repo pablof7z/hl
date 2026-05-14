@@ -1,20 +1,17 @@
 import SwiftUI
 
-/// Native-feeling Settings surface. Mirrors the layout of iOS System
-/// Settings: inset-grouped list, account card on top, small grouped
-/// sections below, destructive Log Out at the bottom.
 struct SettingsView: View {
     @Environment(HighlighterStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
     @State private var showLogoutConfirm = false
-    @State private var copiedNpub = false
 
     var body: some View {
         NavigationStack {
             List {
                 accountSection
-                mediaSection
+                connectionsSection
+                keysSection
                 aboutSection
                 logOutSection
             }
@@ -24,6 +21,7 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
+                        .fontWeight(.semibold)
                 }
             }
             .confirmationDialog(
@@ -48,53 +46,55 @@ struct SettingsView: View {
     private var accountSection: some View {
         if let user = store.currentUser {
             Section {
-                HStack(spacing: 14) {
-                    ZStack {
-                        Circle()
-                            .fill(.tertiary)
-                            .frame(width: 60, height: 60)
-                        Image(systemName: "person.fill")
-                            .font(.title)
-                            .foregroundStyle(.secondary)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Nostr Account")
-                            .font(.headline)
+                HStack(spacing: 16) {
+                    AuthorAvatar(
+                        pubkey: user.pubkey,
+                        pictureURL: store.currentUserProfile?.picture ?? "",
+                        displayInitial: displayInitial,
+                        size: 68
+                    )
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(profileDisplayName)
+                            .font(.title3.weight(.semibold))
                         Text(shortenedNpub(user.npub))
-                            .font(.subheadline)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                             .monospaced()
+                            .lineLimit(1)
                     }
                     Spacer()
                 }
                 .padding(.vertical, 6)
-
-                Button {
-                    UIPasteboard.general.string = user.npub
-                    copiedNpub = true
-                    Task {
-                        try? await Task.sleep(for: .seconds(2))
-                        copiedNpub = false
-                    }
-                } label: {
-                    HStack {
-                        Label(copiedNpub ? "Copied" : "Copy npub",
-                              systemImage: copiedNpub ? "checkmark" : "doc.on.doc")
-                        Spacer()
-                    }
-                }
             }
         }
     }
 
-    private var mediaSection: some View {
+    private var connectionsSection: some View {
         Section {
-            NavigationLink("Network") {
+            NavigationLink {
                 NetworkSettingsView()
+            } label: {
+                Label("Network", systemImage: "network")
             }
-            NavigationLink("Media") {
+            NavigationLink {
                 MediaSettingsView()
+            } label: {
+                Label("Media", systemImage: "photo.on.rectangle.angled")
             }
+        }
+    }
+
+    private var keysSection: some View {
+        Section {
+            NavigationLink {
+                KeysView()
+            } label: {
+                Label("Secret Key", systemImage: "key.fill")
+            }
+        } header: {
+            Text("Keys")
+        } footer: {
+            Text("Your nsec is the master key to your Nostr identity. Never share it.")
         }
     }
 
@@ -121,9 +121,25 @@ struct SettingsView: View {
 
     // MARK: - Helpers
 
+    private var profileDisplayName: String {
+        if let profile = store.currentUserProfile {
+            let name = profile.displayName.isEmpty ? profile.name : profile.displayName
+            if !name.isEmpty { return name }
+        }
+        return "Nostr Account"
+    }
+
+    private var displayInitial: String {
+        if let profile = store.currentUserProfile {
+            let name = profile.displayName.isEmpty ? profile.name : profile.displayName
+            return name
+        }
+        return ""
+    }
+
     private func shortenedNpub(_ npub: String) -> String {
         guard npub.count > 20 else { return npub }
-        return "\(npub.prefix(12))…\(npub.suffix(6))"
+        return "\(npub.prefix(10))…\(npub.suffix(8))"
     }
 
     private var appVersionString: String {
