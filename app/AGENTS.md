@@ -226,6 +226,26 @@ cargo tauri build
 - Use SwiftUI for all views
 - `@Observable` / `@State` for view state
 
+## What's New Changelog
+
+The iOS app ships a bundled `app/ios/Highlighter/Sources/Highlighter/Resources/whats-new.json` that drives an in-app "What's New" sheet shown once per cold launch.
+
+**Rule: every user-facing change committed to the iOS app must have a corresponding entry in `whats-new.json`.**
+
+Entry format:
+```json
+{
+  "shipped_at": "2026-05-14T20:03:00Z",
+  "lines": [
+    "One sentence describing the user-visible change."
+  ]
+}
+```
+
+- `shipped_at` is ISO-8601 UTC (`Z` suffix). It is the primary key — **must be unique across all entries**. Use the next minute if you need to disambiguate.
+- Add the entry at the top of the `entries` array (newest first is conventional, though the service re-sorts at runtime).
+- Do not add entries for internal refactors, test changes, or non-visible fixes.
+
 ## Common Patterns
 
 - **Adding a new Rust API**: Define in `core/src/`, expose via FFI in `core/src/ffi/`, regenerate bindings, implement UI on each platform

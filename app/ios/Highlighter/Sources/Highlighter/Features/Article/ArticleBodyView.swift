@@ -47,7 +47,11 @@ struct ArticleBodyView: UIViewRepresentable {
     var onProfileTap: (_ pubkey: String) -> Void
 
     func makeUIView(context: Context) -> UITextView {
-        let tv = ReaderTextView(usingTextLayoutManager: true)
+        // TextKit 2 (`usingTextLayoutManager: true`) has a known bug where it
+        // under-reports intrinsic content height for very long attributed strings
+        // when `isScrollEnabled = false`, causing the parent ScrollView to clip
+        // the article body before the end. TextKit 1 computes the correct height.
+        let tv = ReaderTextView(usingTextLayoutManager: false)
         tv.coordinator = context.coordinator
         tv.isEditable = false
         tv.isSelectable = true

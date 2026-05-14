@@ -345,6 +345,8 @@ private struct TabContent: View {
     let store: ProfileStore
     @Environment(HighlighterStore.self) private var appStore
     @State private var previewRoom: CommunitySummary?
+    @State private var pendingOpenRoomId: String?
+    @State private var openRoomGroupId: String?
 
     var body: some View {
         switch store.activeTab {
@@ -432,7 +434,12 @@ private struct TabContent: View {
                     }
                 }
             }
-            .sheet(item: $previewRoom) { room in
+            .sheet(item: $previewRoom, onDismiss: {
+                if let id = pendingOpenRoomId {
+                    openRoomGroupId = id
+                    pendingOpenRoomId = nil
+                }
+            }) { room in
                 NavigationStack {
                     RoomPreviewSheet(
                         room: room,
@@ -442,10 +449,17 @@ private struct TabContent: View {
                                 _ = try? await appStore.safeCore.requestJoinRoom(groupId: room.id)
                             }
                             previewRoom = nil
+                        },
+                        onOpenRoom: {
+                            pendingOpenRoomId = room.id
+                            previewRoom = nil
                         }
                     )
                 }
                 .environment(appStore)
+            }
+            .navigationDestination(item: $openRoomGroupId) { id in
+                RoomHomeView(groupId: id)
             }
         }
     }

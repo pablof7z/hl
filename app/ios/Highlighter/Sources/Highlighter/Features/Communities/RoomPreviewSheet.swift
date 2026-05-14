@@ -9,6 +9,7 @@ import SwiftUI
 struct RoomPreviewSheet: View {
     let room: CommunitySummary
     let onJoin: () -> Void
+    var onOpenRoom: (() -> Void)? = nil
 
     @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
@@ -171,8 +172,12 @@ struct RoomPreviewSheet: View {
     @ViewBuilder
     private var actionStack: some View {
         if alreadyJoined {
-            NavigationLink {
-                RoomHomeView(groupId: room.id)
+            Button {
+                if let onOpenRoom {
+                    onOpenRoom()
+                } else {
+                    dismiss()
+                }
             } label: {
                 Text("Open room")
                     .font(.headline)
@@ -184,7 +189,7 @@ struct RoomPreviewSheet: View {
                     )
                     .foregroundStyle(.white)
             }
-            .simultaneousGesture(TapGesture().onEnded { dismiss() })
+            .buttonStyle(.plain)
         } else {
             VStack(spacing: 10) {
                 Button(action: onJoin) {
@@ -202,8 +207,12 @@ struct RoomPreviewSheet: View {
 
                 if room.access == "open" {
                     if isExpanded {
-                        NavigationLink {
-                            RoomHomeView(groupId: room.id)
+                        Button {
+                            if let onOpenRoom {
+                                onOpenRoom()
+                            } else {
+                                dismiss()
+                            }
                         } label: {
                             Text("Open full room")
                                 .font(.subheadline.weight(.medium))
@@ -215,7 +224,7 @@ struct RoomPreviewSheet: View {
                                         .stroke(Color.highlighterRule, lineWidth: 1)
                                 )
                         }
-                        .simultaneousGesture(TapGesture().onEnded { dismiss() })
+                        .buttonStyle(.plain)
                     } else {
                         Button {
                             detent = .large
