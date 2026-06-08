@@ -93,8 +93,8 @@ final class RoomStore {
         }
         // Merge into the reference-scoped bucket too so per-artifact lanes
         // reflect live arrivals without waiting for the next refresh.
-        if let (tagName, tagValue) = lowercaseReference(for: highlight.highlight) {
-            let key = "\(tagName):\(tagValue)"
+        if let target = core?.getHighlightReferenceTarget(highlight: highlight.highlight) {
+            let key = target.lookupKey
             var bucket = highlightsByReference[key] ?? []
             if let i = bucket.firstIndex(where: { $0.eventId == highlight.highlight.eventId }) {
                 bucket[i] = highlight.highlight
@@ -113,17 +113,19 @@ final class RoomStore {
     /// fetches in parallel; failures keep whatever was previously there.
     private func refreshReferenceQueries() async {
         guard let core else { return }
-        let targets: [ReferenceTarget] = artifacts.compactMap { referenceTarget(for: $0, core: core) }
+        let targets: [ArtifactReferenceTarget] = artifacts.compactMap {
+            core.getArtifactReferenceTarget(artifact: $0)
+        }
         guard !targets.isEmpty else { return }
         commentKeysByArtifactId = Dictionary(
             uniqueKeysWithValues: targets.compactMap { target in
-                guard let key = target.commentKey else { return nil }
-                return (target.artifactId, key)
+                guard !target.commentKey.isEmpty else { return nil }
+                return (target.artifactId, target.commentKey)
             }
         )
 
         struct FetchResult {
-            let target: ReferenceTarget
+            let target: ArtifactReferenceTarget
             let highlights: [HighlightRecord]?
             let comments: [CommentRecord]?
         }
@@ -151,19 +153,19 @@ final class RoomStore {
             for await result in group {
                 let t = result.target
                 if let hl = result.highlights {
-                    highlightsByReference["\(t.lowercaseTag):\(t.value)"] = hl
+                    highlightsByReference[t.lookupKey] = hl
                 }
-                if let cm = result.comments, let key = t.commentKey {
-                    commentsByReference[key] = cm
+                if let cm = result.comments, !t.commentKey.isEmpty {
+                    commentsByReference[t.commentKey] = cm
                 }
             }
         }
     }
 
     private func refreshReferenceQueries(for artifact: ArtifactRecord) async {
-        guard let core, let target = referenceTarget(for: artifact, core: core) else { return }
-        if let key = target.commentKey {
-            commentKeysByArtifactId[target.artifactId] = key
+        guard let core, let target = core.getArtifactReferenceTarget(artifact: artifact) else { return }
+        if !target.commentKey.isEmpty {
+            commentKeysByArtifactId[target.artifactId] = target.commentKey
         } else {
             commentKeysByArtifactId.removeValue(forKey: target.artifactId)
         }
@@ -172,73 +174,22 @@ final class RoomStore {
             tagValue: target.value
         )
         if highlightOutcome.error.isEmpty {
-            highlightsByReference["\(target.lowercaseTag):\(target.value)"] = highlightOutcome.values
+            highlightsByReference[target.lookupKey] = highlightOutcome.values
         }
-        if let scope = target.commentScope, let key = target.commentKey {
+        if let scope = target.commentScope, !target.commentKey.isEmpty {
             let commentOutcome = await core.getCommentsForScope(scope: scope, limit: 128)
             if commentOutcome.error.isEmpty {
-                commentsByReference[key] = commentOutcome.values
+                commentsByReference[target.commentKey] = commentOutcome.values
             }
         }
     }
 
     func commentCount(for artifact: ArtifactRecord) -> Int {
-        guard let key = commentKeysByArtifactId[artifactId(for: artifact)] else { return 0 }
-        return commentsByReference[key]?.count ?? 0
-    }
-
-    // MARK: - Reference targets
-
-    /// The lowercase + uppercase tag pair to query for an artifact, plus
-    /// the shared value. Returns `nil` for artifacts lacking a usable
-    /// reference (no `i` / `a` / `r` information).
-    private struct ReferenceTarget: Sendable {
-        let artifactId: String
-        let lowercaseTag: String  // "a" | "i" | "e" | "r"
-        let value: String
-        let commentScope: CommentScope?
-        let commentKey: String?
-    }
-
-    private func referenceTarget(for artifact: ArtifactRecord, core: SafeHighlighterCore) -> ReferenceTarget? {
-        let pv = artifact.preview
-        let commentScope = core.getArtifactCommentScope(preview: pv).value
-        let commentKey = commentScope.map { "\($0.rootTagName):\($0.rootTagValue)" }
-        if !pv.referenceTagName.isEmpty, !pv.referenceTagValue.isEmpty {
-            return ReferenceTarget(
-                artifactId: artifactId(for: artifact),
-                lowercaseTag: pv.referenceTagName.lowercased(),
-                value: pv.referenceTagValue,
-                commentScope: commentScope,
-                commentKey: commentKey
-            )
+        guard let core,
+              let target = core.getArtifactReferenceTarget(artifact: artifact),
+              !target.commentKey.isEmpty else {
+            return 0
         }
-        if !pv.highlightTagName.isEmpty, !pv.highlightTagValue.isEmpty {
-            return ReferenceTarget(
-                artifactId: artifactId(for: artifact),
-                lowercaseTag: pv.highlightTagName.lowercased(),
-                value: pv.highlightTagValue,
-                commentScope: commentScope,
-                commentKey: commentKey
-            )
-        }
-        return nil
-    }
-
-    private func artifactId(for artifact: ArtifactRecord) -> String {
-        artifact.shareEventId.isEmpty ? artifact.preview.id : artifact.shareEventId
-    }
-
-    private func lowercaseReference(for highlight: HighlightRecord) -> (String, String)? {
-        if !highlight.artifactAddress.isEmpty {
-            return ("a", highlight.artifactAddress)
-        }
-        if !highlight.eventReference.isEmpty {
-            return ("e", highlight.eventReference)
-        }
-        if !highlight.sourceUrl.isEmpty {
-            return ("r", highlight.sourceUrl)
-        }
-        return nil
+        return commentsByReference[target.commentKey]?.count ?? 0
     }
 }

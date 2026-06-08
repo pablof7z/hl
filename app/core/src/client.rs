@@ -26,20 +26,21 @@ use crate::isbn_lookup;
 use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArticleUpdateAction, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome,
-    ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome,
-    BookRoute, BookRouteOutcome, BookmarkSetListOutcome, BookmarkSetOutcome, BookmarkSetRecord,
-    BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord,
-    CommentListOutcome, CommentOutcome, CommentRecord, CommentScope, CommentScopeOutcome,
-    CommunityListOutcome, CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome,
-    CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
-    FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft,
-    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind,
-    HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction, MutationOutcome,
-    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestSelection, OptionalStringOutcome,
-    PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome,
-    ProfileMetadata, ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
+    ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget,
+    BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetListOutcome,
+    BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome,
+    ChatMessageOutcome, ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord,
+    CommentScope, CommentScopeOutcome, CommunityListOutcome, CommunitySummary, CurationMenuItem,
+    CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
+    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
+    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
+    GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
+    HighlightRecord, HighlightReferenceTarget, HighlightSourceKind, HydratedHighlight,
+    HydratedHighlightListOutcome, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
+    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
+    OnboardingInterest, OnboardingInterestSelection, OptionalStringOutcome, PictureDraft,
+    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
     ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
     RelayDiagnosticListOutcome, RoomRecommendation, RoomRecommendationListOutcome,
     StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
@@ -56,6 +57,7 @@ use crate::profile;
 use crate::reads;
 use crate::recent_searches;
 use crate::recommendations;
+use crate::reference_targets;
 use crate::relays::nostr_connect_relay;
 use crate::room_explorer_config;
 use crate::session::{current_user_from_pubkey, Session};
@@ -1816,6 +1818,25 @@ impl HighlighterCore {
     /// preview's Rust-owned protocol reference fields.
     pub fn get_artifact_comment_scope(&self, preview: ArtifactPreview) -> CommentScopeOutcome {
         comment_scope_outcome(comments::scope_from_preview(&preview))
+    }
+
+    /// Project an artifact record into the room lane reference target used for
+    /// highlight and comment reads. Rust owns reference precedence, artifact
+    /// identity, and NIP-22 comment keys.
+    pub fn get_artifact_reference_target(
+        &self,
+        artifact: ArtifactRecord,
+    ) -> Option<ArtifactReferenceTarget> {
+        reference_targets::artifact_reference_target(&artifact)
+    }
+
+    /// Project a highlight into the room lane reference bucket used for live
+    /// updates. Native shells only use this to place the raw delta.
+    pub fn get_highlight_reference_target(
+        &self,
+        highlight: HighlightRecord,
+    ) -> Option<HighlightReferenceTarget> {
+        reference_targets::highlight_reference_target(&highlight)
     }
 
     /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.

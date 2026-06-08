@@ -584,6 +584,18 @@ actor SafeHighlighterCore {
         core.getArtifactCommentScope(preview: preview)
     }
 
+    nonisolated func getArtifactReferenceTarget(
+        artifact: ArtifactRecord
+    ) -> ArtifactReferenceTarget? {
+        core.getArtifactReferenceTarget(artifact: artifact)
+    }
+
+    nonisolated func getHighlightReferenceTarget(
+        highlight: HighlightRecord
+    ) -> HighlightReferenceTarget? {
+        core.getHighlightReferenceTarget(highlight: highlight)
+    }
+
     nonisolated func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome {
         core.getHighlightCommentScope(eventIdHex: eventIdHex)
     }

@@ -38,6 +38,7 @@ pub mod reads;
 pub mod recent_books;
 pub mod recent_searches;
 pub mod recommendations;
+pub mod reference_targets;
 pub mod relay_polish;
 pub mod relays;
 pub mod room_explorer_config;
@@ -54,20 +55,21 @@ pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactListOutcome, ArtifactOutcome,
-    ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome,
-    BookRoute, BookRouteOutcome, BookmarkSetListOutcome, BookmarkSetOutcome, BookmarkSetRecord,
-    BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord,
-    CommentListOutcome, CommentOutcome, CommentRecord, CommunityListOutcome, CommunitySummary,
-    CurationMenuItem, CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
-    DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
-    FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome,
-    FeedbackThreadRecord, GeneratedAccount, GeneratedAccountOutcome, HighlightDraft,
-    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind,
-    HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction, MutationOutcome,
-    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome,
-    OnboardingInterest, OnboardingInterestSelection, OptionalStringOutcome, PictureDraft,
-    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem,
+    ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget,
+    BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetListOutcome,
+    BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome,
+    ChatMessageOutcome, ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord,
+    CommunityListOutcome, CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome,
+    CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionAttachment, DiscussionListOutcome,
+    DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome,
+    FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccount,
+    GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
+    HighlightRecord, HighlightReferenceTarget, HighlightSourceKind, HydratedHighlight,
+    HydratedHighlightListOutcome, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
+    Nip11DocumentOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestSelection, OptionalStringOutcome, PictureDraft, PictureOutcome,
+    PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
+    ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem,
     ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
     RoomRecommendationListOutcome, RoomRecommendationReason, StringListOutcome, StringOutcome,
     SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,

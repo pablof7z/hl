@@ -946,6 +946,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
 
+    /**
+     * Project an artifact record into the room lane reference target used for
+     * highlight and comment reads. Rust owns reference precedence, artifact
+     * identity, and NIP-22 comment keys.
+     */
+    func getArtifactReferenceTarget(artifact: ArtifactRecord)  -> ArtifactReferenceTarget?
+
     func getArtifacts(groupId: String, limit: UInt32) async  -> ArtifactListOutcome
 
     /**
@@ -1073,6 +1080,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * comment reads/writes.
      */
     func getHighlightCommentScope(eventIdHex: String)  -> CommentScopeOutcome
+
+    /**
+     * Project a highlight into the room lane reference bucket used for live
+     * updates. Native shells only use this to place the raw delta.
+     */
+    func getHighlightReferenceTarget(highlight: HighlightRecord)  -> HighlightReferenceTarget?
 
     /**
      * Classify a highlight source for native icon/label rendering. Rust owns
@@ -2299,6 +2312,19 @@ open func getArtifactDetailRoute(artifact: ArtifactRecord) -> ArtifactDetailRout
 })
 }
 
+    /**
+     * Project an artifact record into the room lane reference target used for
+     * highlight and comment reads. Rust owns reference precedence, artifact
+     * identity, and NIP-22 comment keys.
+     */
+open func getArtifactReferenceTarget(artifact: ArtifactRecord) -> ArtifactReferenceTarget?  {
+    return try!  FfiConverterOptionTypeArtifactReferenceTarget.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_artifact_reference_target(self.uniffiClonePointer(),
+        FfiConverterTypeArtifactRecord_lower(artifact),$0
+    )
+})
+}
+
 open func getArtifacts(groupId: String, limit: UInt32)async  -> ArtifactListOutcome  {
     return
         try!  await uniffiRustCallAsync(
@@ -2736,6 +2762,18 @@ open func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome  {
     return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_highlight_comment_scope(self.uniffiClonePointer(),
         FfiConverterString.lower(eventIdHex),$0
+    )
+})
+}
+
+    /**
+     * Project a highlight into the room lane reference bucket used for live
+     * updates. Native shells only use this to place the raw delta.
+     */
+open func getHighlightReferenceTarget(highlight: HighlightRecord) -> HighlightReferenceTarget?  {
+    return try!  FfiConverterOptionTypeHighlightReferenceTarget.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_highlight_reference_target(self.uniffiClonePointer(),
+        FfiConverterTypeHighlightRecord_lower(highlight),$0
     )
 })
 }
@@ -6252,6 +6290,113 @@ public func FfiConverterTypeArtifactRecord_lift(_ buf: RustBuffer) throws -> Art
 #endif
 public func FfiConverterTypeArtifactRecord_lower(_ value: ArtifactRecord) -> RustBuffer {
     return FfiConverterTypeArtifactRecord.lower(value)
+}
+
+
+/**
+ * Reference query target for room artifact lanes. Rust owns the artifact id,
+ * highlight lookup key, and NIP-22 comment scope/key so native shells do not
+ * duplicate protocol reference precedence.
+ */
+public struct ArtifactReferenceTarget {
+    public var artifactId: String
+    public var lowercaseTag: String
+    public var value: String
+    public var lookupKey: String
+    public var commentScope: CommentScope?
+    public var commentKey: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifactId: String, lowercaseTag: String, value: String, lookupKey: String, commentScope: CommentScope?, commentKey: String) {
+        self.artifactId = artifactId
+        self.lowercaseTag = lowercaseTag
+        self.value = value
+        self.lookupKey = lookupKey
+        self.commentScope = commentScope
+        self.commentKey = commentKey
+    }
+}
+
+#if compiler(>=6)
+extension ArtifactReferenceTarget: Sendable {}
+#endif
+
+
+extension ArtifactReferenceTarget: Equatable, Hashable {
+    public static func ==(lhs: ArtifactReferenceTarget, rhs: ArtifactReferenceTarget) -> Bool {
+        if lhs.artifactId != rhs.artifactId {
+            return false
+        }
+        if lhs.lowercaseTag != rhs.lowercaseTag {
+            return false
+        }
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.lookupKey != rhs.lookupKey {
+            return false
+        }
+        if lhs.commentScope != rhs.commentScope {
+            return false
+        }
+        if lhs.commentKey != rhs.commentKey {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifactId)
+        hasher.combine(lowercaseTag)
+        hasher.combine(value)
+        hasher.combine(lookupKey)
+        hasher.combine(commentScope)
+        hasher.combine(commentKey)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArtifactReferenceTarget: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactReferenceTarget {
+        return
+            try ArtifactReferenceTarget(
+                artifactId: FfiConverterString.read(from: &buf),
+                lowercaseTag: FfiConverterString.read(from: &buf),
+                value: FfiConverterString.read(from: &buf),
+                lookupKey: FfiConverterString.read(from: &buf),
+                commentScope: FfiConverterOptionTypeCommentScope.read(from: &buf),
+                commentKey: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArtifactReferenceTarget, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.artifactId, into: &buf)
+        FfiConverterString.write(value.lowercaseTag, into: &buf)
+        FfiConverterString.write(value.value, into: &buf)
+        FfiConverterString.write(value.lookupKey, into: &buf)
+        FfiConverterOptionTypeCommentScope.write(value.commentScope, into: &buf)
+        FfiConverterString.write(value.commentKey, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactReferenceTarget_lift(_ buf: RustBuffer) throws -> ArtifactReferenceTarget {
+    return try FfiConverterTypeArtifactReferenceTarget.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactReferenceTarget_lower(_ value: ArtifactReferenceTarget) -> RustBuffer {
+    return FfiConverterTypeArtifactReferenceTarget.lower(value)
 }
 
 
@@ -10021,6 +10166,88 @@ public func FfiConverterTypeHighlightRecord_lift(_ buf: RustBuffer) throws -> Hi
 #endif
 public func FfiConverterTypeHighlightRecord_lower(_ value: HighlightRecord) -> RustBuffer {
     return FfiConverterTypeHighlightRecord.lower(value)
+}
+
+
+/**
+ * Reference query target for a live highlight delta. Used by native shells
+ * only to place an already-received highlight into a Rust-owned lookup bucket.
+ */
+public struct HighlightReferenceTarget {
+    public var lowercaseTag: String
+    public var value: String
+    public var lookupKey: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(lowercaseTag: String, value: String, lookupKey: String) {
+        self.lowercaseTag = lowercaseTag
+        self.value = value
+        self.lookupKey = lookupKey
+    }
+}
+
+#if compiler(>=6)
+extension HighlightReferenceTarget: Sendable {}
+#endif
+
+
+extension HighlightReferenceTarget: Equatable, Hashable {
+    public static func ==(lhs: HighlightReferenceTarget, rhs: HighlightReferenceTarget) -> Bool {
+        if lhs.lowercaseTag != rhs.lowercaseTag {
+            return false
+        }
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.lookupKey != rhs.lookupKey {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(lowercaseTag)
+        hasher.combine(value)
+        hasher.combine(lookupKey)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightReferenceTarget: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightReferenceTarget {
+        return
+            try HighlightReferenceTarget(
+                lowercaseTag: FfiConverterString.read(from: &buf),
+                value: FfiConverterString.read(from: &buf),
+                lookupKey: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightReferenceTarget, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.lowercaseTag, into: &buf)
+        FfiConverterString.write(value.value, into: &buf)
+        FfiConverterString.write(value.lookupKey, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightReferenceTarget_lift(_ buf: RustBuffer) throws -> HighlightReferenceTarget {
+    return try FfiConverterTypeHighlightReferenceTarget.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightReferenceTarget_lower(_ value: HighlightReferenceTarget) -> RustBuffer {
+    return FfiConverterTypeHighlightReferenceTarget.lower(value)
 }
 
 
@@ -16197,6 +16424,30 @@ fileprivate struct FfiConverterOptionTypeArtifactRecord: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeArtifactReferenceTarget: FfiConverterRustBuffer {
+    typealias SwiftType = ArtifactReferenceTarget?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeArtifactReferenceTarget.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeArtifactReferenceTarget.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeBlossomUpload: FfiConverterRustBuffer {
     typealias SwiftType = BlossomUpload?
 
@@ -16501,6 +16752,30 @@ fileprivate struct FfiConverterOptionTypeHighlightRecord: FfiConverterRustBuffer
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeHighlightRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeHighlightReferenceTarget: FfiConverterRustBuffer {
+    typealias SwiftType = HighlightReferenceTarget?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeHighlightReferenceTarget.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeHighlightReferenceTarget.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -17719,6 +17994,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_route() != 10925) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_reference_target() != 4174) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifacts() != 37995) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17783,6 +18061,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_comment_scope() != 65340) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_reference_target() != 14075) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_source_kind() != 42257) {

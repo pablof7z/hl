@@ -595,6 +595,28 @@ pub struct CommentScope {
     pub root_kind: u16,
 }
 
+/// Reference query target for room artifact lanes. Rust owns the artifact id,
+/// highlight lookup key, and NIP-22 comment scope/key so native shells do not
+/// duplicate protocol reference precedence.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArtifactReferenceTarget {
+    pub artifact_id: String,
+    pub lowercase_tag: String,
+    pub value: String,
+    pub lookup_key: String,
+    pub comment_scope: Option<CommentScope>,
+    pub comment_key: String,
+}
+
+/// Reference query target for a live highlight delta. Used by native shells
+/// only to place an already-received highlight into a Rust-owned lookup bucket.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightReferenceTarget {
+    pub lowercase_tag: String,
+    pub value: String,
+    pub lookup_key: String,
+}
+
 /// Highlight + its associated artifact (for feed rendering).
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct HydratedHighlight {
