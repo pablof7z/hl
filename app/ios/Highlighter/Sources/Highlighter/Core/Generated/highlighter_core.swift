@@ -1179,6 +1179,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getNewRooms(limit: UInt32) async  -> CommunityListOutcome
 
+    func getOnboardingInterestProjection(selectedIds: [String])  -> OnboardingInterestProjection
+
     func getOnboardingInterestSelection(selectedIds: [String])  -> OnboardingInterestSelection
 
     func getOnboardingInterests()  -> [OnboardingInterest]
@@ -3229,6 +3231,14 @@ open func getNewRooms(limit: UInt32)async  -> CommunityListOutcome  {
             errorHandler: nil
 
         )
+}
+
+open func getOnboardingInterestProjection(selectedIds: [String]) -> OnboardingInterestProjection  {
+    return try!  FfiConverterTypeOnboardingInterestProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_onboarding_interest_projection(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(selectedIds),$0
+    )
+})
 }
 
 open func getOnboardingInterestSelection(selectedIds: [String]) -> OnboardingInterestSelection  {
@@ -12369,6 +12379,162 @@ public func FfiConverterTypeOnboardingInterest_lower(_ value: OnboardingInterest
 }
 
 
+public struct OnboardingInterestChip {
+    public var id: String
+    public var emoji: String
+    public var label: String
+    public var isSelected: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, emoji: String, label: String, isSelected: Bool) {
+        self.id = id
+        self.emoji = emoji
+        self.label = label
+        self.isSelected = isSelected
+    }
+}
+
+#if compiler(>=6)
+extension OnboardingInterestChip: Sendable {}
+#endif
+
+
+extension OnboardingInterestChip: Equatable, Hashable {
+    public static func ==(lhs: OnboardingInterestChip, rhs: OnboardingInterestChip) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.emoji != rhs.emoji {
+            return false
+        }
+        if lhs.label != rhs.label {
+            return false
+        }
+        if lhs.isSelected != rhs.isSelected {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(emoji)
+        hasher.combine(label)
+        hasher.combine(isSelected)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnboardingInterestChip: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingInterestChip {
+        return
+            try OnboardingInterestChip(
+                id: FfiConverterString.read(from: &buf),
+                emoji: FfiConverterString.read(from: &buf),
+                label: FfiConverterString.read(from: &buf),
+                isSelected: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnboardingInterestChip, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.emoji, into: &buf)
+        FfiConverterString.write(value.label, into: &buf)
+        FfiConverterBool.write(value.isSelected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingInterestChip_lift(_ buf: RustBuffer) throws -> OnboardingInterestChip {
+    return try FfiConverterTypeOnboardingInterestChip.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingInterestChip_lower(_ value: OnboardingInterestChip) -> RustBuffer {
+    return FfiConverterTypeOnboardingInterestChip.lower(value)
+}
+
+
+public struct OnboardingInterestProjection {
+    public var interests: [OnboardingInterestChip]
+    public var selection: OnboardingInterestSelection
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(interests: [OnboardingInterestChip], selection: OnboardingInterestSelection) {
+        self.interests = interests
+        self.selection = selection
+    }
+}
+
+#if compiler(>=6)
+extension OnboardingInterestProjection: Sendable {}
+#endif
+
+
+extension OnboardingInterestProjection: Equatable, Hashable {
+    public static func ==(lhs: OnboardingInterestProjection, rhs: OnboardingInterestProjection) -> Bool {
+        if lhs.interests != rhs.interests {
+            return false
+        }
+        if lhs.selection != rhs.selection {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(interests)
+        hasher.combine(selection)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnboardingInterestProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingInterestProjection {
+        return
+            try OnboardingInterestProjection(
+                interests: FfiConverterSequenceTypeOnboardingInterestChip.read(from: &buf),
+                selection: FfiConverterTypeOnboardingInterestSelection.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnboardingInterestProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeOnboardingInterestChip.write(value.interests, into: &buf)
+        FfiConverterTypeOnboardingInterestSelection.write(value.selection, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingInterestProjection_lift(_ buf: RustBuffer) throws -> OnboardingInterestProjection {
+    return try FfiConverterTypeOnboardingInterestProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingInterestProjection_lower(_ value: OnboardingInterestProjection) -> RustBuffer {
+    return FfiConverterTypeOnboardingInterestProjection.lower(value)
+}
+
+
 public struct OnboardingInterestSelection {
     public var minimumRequired: UInt32
     public var selectedCount: UInt32
@@ -20592,6 +20758,31 @@ fileprivate struct FfiConverterSequenceTypeOnboardingInterest: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeOnboardingInterestChip: FfiConverterRustBuffer {
+    typealias SwiftType = [OnboardingInterestChip]
+
+    public static func write(_ value: [OnboardingInterestChip], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeOnboardingInterestChip.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [OnboardingInterestChip] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [OnboardingInterestChip]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeOnboardingInterestChip.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypePodcastTimelineRow: FfiConverterRustBuffer {
     typealias SwiftType = [PodcastTimelineRow]
 
@@ -21266,6 +21457,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_new_rooms() != 59476) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_onboarding_interest_projection() != 3646) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_onboarding_interest_selection() != 25595) {

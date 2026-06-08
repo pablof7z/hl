@@ -8,15 +8,14 @@ struct OnboardingInterestsView: View {
     @State private var selected: Set<String> = []
     @State private var isWorking = false
 
-    private var interests: [OnboardingInterest] {
-        store.safeCore.getOnboardingInterests()
-    }
-
-    private var selectionState: OnboardingInterestSelection {
-        store.safeCore.getOnboardingInterestSelection(selectedIds: Array(selected))
+    private var projection: OnboardingInterestProjection {
+        store.safeCore.getOnboardingInterestProjection(selectedIds: Array(selected))
     }
 
     var body: some View {
+        let currentProjection = projection
+        let selectionState = currentProjection.selection
+
         ZStack {
             Color.highlighterPaper.ignoresSafeArea()
 
@@ -37,7 +36,7 @@ struct OnboardingInterestsView: View {
                 .padding(.bottom, 24)
 
                 ScrollView {
-                    chipGrid
+                    chipGrid(projection: currentProjection)
                         .padding(.horizontal, 20)
                         .padding(.bottom, 120)
                 }
@@ -88,16 +87,16 @@ struct OnboardingInterestsView: View {
         .animation(.easeInOut(duration: 0.1), value: selected)
     }
 
-    private var chipGrid: some View {
+    private func chipGrid(projection: OnboardingInterestProjection) -> some View {
         FlowLayout(spacing: 10) {
-            ForEach(interests, id: \.id) { interest in
+            ForEach(projection.interests, id: \.id) { interest in
                 chip(interest)
             }
         }
     }
 
-    private func chip(_ interest: OnboardingInterest) -> some View {
-        let active = selected.contains(interest.id)
+    private func chip(_ interest: OnboardingInterestChip) -> some View {
+        let active = interest.isSelected
         return Button {
             if active {
                 selected.remove(interest.id)

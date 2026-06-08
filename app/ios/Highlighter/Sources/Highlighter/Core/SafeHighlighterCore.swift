@@ -52,6 +52,10 @@ actor SafeHighlighterCore {
         core.getOnboardingInterestSelection(selectedIds: selectedIds)
     }
 
+    nonisolated func getOnboardingInterestProjection(selectedIds: [String]) -> OnboardingInterestProjection {
+        core.getOnboardingInterestProjection(selectedIds: selectedIds)
+    }
+
     func completeOnboardingInterests(selectedIds: [String]) async -> MutationOutcome {
         await core.completeOnboardingInterests(selectedIds: selectedIds)
     }

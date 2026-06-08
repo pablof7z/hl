@@ -72,13 +72,14 @@ pub use models::{
     HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind,
     HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction,
     MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestSelection, OptionalStringOutcome,
-    PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome,
-    ProfileMetadata, ProfileOutcome, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome,
-    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
-    RoomLane, RoomRecommendation, RoomRecommendationListOutcome, RoomRecommendationReason,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
+    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome, PictureDraft,
+    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem,
+    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomLane,
+    RoomRecommendation, RoomRecommendationListOutcome, RoomRecommendationReason, StringListOutcome,
+    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome,
+    WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};

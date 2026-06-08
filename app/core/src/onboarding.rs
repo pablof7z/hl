@@ -12,7 +12,10 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::errors::CoreError;
-use crate::models::{OnboardingInterest, OnboardingInterestSelection};
+use crate::models::{
+    OnboardingInterest, OnboardingInterestChip, OnboardingInterestProjection,
+    OnboardingInterestSelection,
+};
 
 const STATE_FILE_NAME: &str = "onboarding-state-v1.json";
 const MINIMUM_INTERESTS: u32 = 3;
@@ -162,6 +165,26 @@ pub fn interest_catalog() -> Vec<OnboardingInterest> {
 
 pub fn interest_selection(selected_ids: Vec<String>) -> OnboardingInterestSelection {
     let selected: HashSet<&str> = selected_ids.iter().map(String::as_str).collect();
+    interest_selection_for_set(&selected)
+}
+
+pub fn interest_projection(selected_ids: Vec<String>) -> OnboardingInterestProjection {
+    let selected: HashSet<&str> = selected_ids.iter().map(String::as_str).collect();
+    OnboardingInterestProjection {
+        interests: INTERESTS
+            .iter()
+            .map(|interest| OnboardingInterestChip {
+                id: interest.id.into(),
+                emoji: interest.emoji.into(),
+                label: interest.label.into(),
+                is_selected: selected.contains(interest.id),
+            })
+            .collect(),
+        selection: interest_selection_for_set(&selected),
+    }
+}
+
+fn interest_selection_for_set(selected: &HashSet<&str>) -> OnboardingInterestSelection {
     let selected_count = selected.len() as u32;
     let remaining = MINIMUM_INTERESTS.saturating_sub(selected_count);
     OnboardingInterestSelection {
@@ -169,7 +192,7 @@ pub fn interest_selection(selected_ids: Vec<String>) -> OnboardingInterestSelect
         selected_count,
         remaining,
         can_continue: remaining == 0,
-        follow_pubkeys: interest_follow_pubkeys(&selected),
+        follow_pubkeys: interest_follow_pubkeys(selected),
     }
 }
 
@@ -302,6 +325,33 @@ mod tests {
         assert_eq!(incomplete.remaining, 2);
         assert!(!incomplete.can_continue);
         assert!(incomplete.follow_pubkeys.is_empty());
+    }
+
+    #[test]
+    fn interest_projection_marks_selected_chips_and_reuses_selection_policy() {
+        let projection = interest_projection(vec![
+            "bitcoin".into(),
+            "technology".into(),
+            "nostr".into(),
+            "technology".into(),
+        ]);
+
+        assert_eq!(projection.interests.len(), INTERESTS.len());
+        let selected_ids: Vec<&str> = projection
+            .interests
+            .iter()
+            .filter(|interest| interest.is_selected)
+            .map(|interest| interest.id.as_str())
+            .collect();
+        assert_eq!(selected_ids, vec!["technology", "bitcoin", "nostr"]);
+        assert_eq!(projection.selection.minimum_required, 3);
+        assert_eq!(projection.selection.selected_count, 3);
+        assert_eq!(projection.selection.remaining, 0);
+        assert!(projection.selection.can_continue);
+        assert_eq!(
+            projection.selection.follow_pubkeys,
+            vec![FIATJAF_PUBKEY.to_string(), JACK_PUBKEY.to_string()]
+        );
     }
 
     #[test]

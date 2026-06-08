@@ -40,13 +40,14 @@ use crate::models::{
     HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction,
     MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
     NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
-    OnboardingInterestSelection, OptionalStringOutcome, PictureDraft, PictureOutcome,
-    PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
-    ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome,
-    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnostic,
-    RelayDiagnosticListOutcome, RoomLane, RoomRecommendation, RoomRecommendationListOutcome,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome, PictureDraft,
+    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
+    ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
+    RelayDiagnostic, RelayDiagnosticListOutcome, RoomLane, RoomRecommendation,
+    RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
+    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
+    WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -1100,6 +1101,13 @@ impl HighlighterCore {
         selected_ids: Vec<String>,
     ) -> OnboardingInterestSelection {
         onboarding::interest_selection(selected_ids)
+    }
+
+    pub fn get_onboarding_interest_projection(
+        &self,
+        selected_ids: Vec<String>,
+    ) -> OnboardingInterestProjection {
+        onboarding::interest_projection(selected_ids)
     }
 
     pub async fn complete_onboarding_interests(
