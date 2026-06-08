@@ -3069,6 +3069,26 @@ impl HighlighterCore {
         ))
     }
 
+    /// Remove rooms the user has already joined while preserving discovery
+    /// order. Rust owns explorer shelf duplicate suppression.
+    pub fn exclude_joined_rooms(
+        &self,
+        rooms: Vec<CommunitySummary>,
+        joined: Vec<CommunitySummary>,
+    ) -> Vec<CommunitySummary> {
+        discovery::exclude_joined_rooms(&rooms, &joined)
+    }
+
+    /// Filter already-projected rooms by user query. Rust owns the search
+    /// normalization and match fields for the browse-all room grid.
+    pub fn search_rooms(
+        &self,
+        rooms: Vec<CommunitySummary>,
+        query: String,
+    ) -> Vec<CommunitySummary> {
+        discovery::search_rooms(&rooms, &query)
+    }
+
     /// Rooms where 2+ of the user's follows are members. Empty when the user
     /// isn't logged in, has no follows cached, or no room satisfies the
     /// threshold.

@@ -7,7 +7,7 @@
 //! arrive via a long-lived relay subscription installed from `client.rs` on
 //! explorer appearance.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
@@ -67,6 +67,32 @@ pub fn query_all_rooms_from_ndb(ndb: &Ndb, limit: u32) -> Result<Vec<CommunitySu
     });
     summaries.truncate(limit as usize);
     Ok(summaries)
+}
+
+pub fn exclude_joined_rooms(
+    rooms: &[CommunitySummary],
+    joined: &[CommunitySummary],
+) -> Vec<CommunitySummary> {
+    let joined_ids: HashSet<&str> = joined.iter().map(|room| room.id.as_str()).collect();
+    rooms
+        .iter()
+        .filter(|room| !joined_ids.contains(room.id.as_str()))
+        .cloned()
+        .collect()
+}
+
+pub fn search_rooms(rooms: &[CommunitySummary], query: &str) -> Vec<CommunitySummary> {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return rooms.to_vec();
+    }
+    rooms
+        .iter()
+        .filter(|room| {
+            room.name.to_lowercase().contains(&query) || room.about.to_lowercase().contains(&query)
+        })
+        .cloned()
+        .collect()
 }
 
 fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
@@ -194,5 +220,53 @@ mod tests {
         let out = query_all_rooms_from_ndb(&ndb, 32).expect("ok");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].name, "New Alpha");
+    }
+
+    #[test]
+    fn exclude_joined_rooms_preserves_order_and_removes_joined_ids() {
+        let rooms = vec![
+            summary("alpha", "Alpha", ""),
+            summary("bravo", "Bravo", ""),
+            summary("charlie", "Charlie", ""),
+        ];
+        let joined = vec![summary("bravo", "Bravo", "")];
+
+        let out = exclude_joined_rooms(&rooms, &joined);
+
+        assert_eq!(
+            out.iter().map(|room| room.id.as_str()).collect::<Vec<_>>(),
+            vec!["alpha", "charlie"]
+        );
+    }
+
+    #[test]
+    fn search_rooms_matches_name_or_about_case_insensitive() {
+        let rooms = vec![
+            summary("alpha", "Design Systems", "quiet product work"),
+            summary("bravo", "Reading Room", "Bitcoin and markets"),
+            summary("charlie", "History", "Archive research"),
+        ];
+
+        let out = search_rooms(&rooms, "  BITCOIN ");
+
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].id, "bravo");
+        assert_eq!(search_rooms(&rooms, "").len(), 3);
+    }
+
+    fn summary(id: &str, name: &str, about: &str) -> CommunitySummary {
+        CommunitySummary {
+            id: id.into(),
+            name: name.into(),
+            about: about.into(),
+            picture: String::new(),
+            access: "open".into(),
+            visibility: "public".into(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: String::new(),
+            metadata_event_id: format!("event-{id}"),
+            created_at: None,
+        }
     }
 }

@@ -886,6 +886,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String)  -> StringOutcome
 
+    /**
+     * Remove rooms the user has already joined while preserving discovery
+     * order. Rust owns explorer shelf duplicate suppression.
+     */
+    func excludeJoinedRooms(rooms: [CommunitySummary], joined: [CommunitySummary])  -> [CommunitySummary]
+
     func extractNostrEventRefs(content: String)  -> [NostrEntityRef]
 
     /**
@@ -1446,6 +1452,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func searchHighlights(query: String, limit: UInt32) async  -> HighlightListOutcome
 
     func searchProfiles(query: String, limit: UInt32) async  -> ProfileListOutcome
+
+    /**
+     * Filter already-projected rooms by user query. Rust owns the search
+     * normalization and match fields for the browse-all room grid.
+     */
+    func searchRooms(rooms: [CommunitySummary], query: String)  -> [CommunitySummary]
 
     func selectableOcrWords(lines: [OcrLine])  -> [OcrWord]
 
@@ -2209,6 +2221,19 @@ open func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String
     uniffi_highlighter_core_fn_method_highlightercore_encode_highlight_share_nevent(self.uniffiClonePointer(),
         FfiConverterString.lower(eventIdHex),
         FfiConverterString.lower(authorPubkeyHex),$0
+    )
+})
+}
+
+    /**
+     * Remove rooms the user has already joined while preserving discovery
+     * order. Rust owns explorer shelf duplicate suppression.
+     */
+open func excludeJoinedRooms(rooms: [CommunitySummary], joined: [CommunitySummary]) -> [CommunitySummary]  {
+    return try!  FfiConverterSequenceTypeCommunitySummary.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_exclude_joined_rooms(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeCommunitySummary.lower(rooms),
+        FfiConverterSequenceTypeCommunitySummary.lower(joined),$0
     )
 })
 }
@@ -4275,6 +4300,19 @@ open func searchProfiles(query: String, limit: UInt32)async  -> ProfileListOutco
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Filter already-projected rooms by user query. Rust owns the search
+     * normalization and match fields for the browse-all room grid.
+     */
+open func searchRooms(rooms: [CommunitySummary], query: String) -> [CommunitySummary]  {
+    return try!  FfiConverterSequenceTypeCommunitySummary.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_search_rooms(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeCommunitySummary.lower(rooms),
+        FfiConverterString.lower(query),$0
+    )
+})
 }
 
 open func selectableOcrWords(lines: [OcrLine]) -> [OcrWord]  {
@@ -18718,6 +18756,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_encode_highlight_share_nevent() != 64061) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_exclude_joined_rooms() != 28890) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_extract_nostr_event_refs() != 37795) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19076,6 +19117,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_profiles() != 13489) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_search_rooms() != 42451) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_selectable_ocr_words() != 2832) {

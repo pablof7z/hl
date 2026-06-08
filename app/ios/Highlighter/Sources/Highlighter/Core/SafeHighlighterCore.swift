@@ -766,6 +766,26 @@ actor SafeHighlighterCore {
         await core.getNewRooms(limit: limit)
     }
 
+    nonisolated func excludeJoinedRooms(
+        rooms: [CommunitySummary],
+        joined: [CommunitySummary]
+    ) -> [CommunitySummary] {
+        core.excludeJoinedRooms(
+            rooms: rooms,
+            joined: joined
+        )
+    }
+
+    nonisolated func searchRooms(
+        rooms: [CommunitySummary],
+        query: String
+    ) -> [CommunitySummary] {
+        core.searchRooms(
+            rooms: rooms,
+            query: query
+        )
+    }
+
     func getRoomsWithFriends(limit: UInt32 = 16) async -> RoomRecommendationListOutcome {
         await core.getRoomsWithFriends(limit: limit)
     }

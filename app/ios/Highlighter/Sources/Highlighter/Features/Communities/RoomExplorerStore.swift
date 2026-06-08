@@ -69,7 +69,10 @@ final class RoomExplorerStore {
             await (featuredTask, newTask, friendsTask, authorsTask)
 
         featured = fetchedFeatured
-        newNoteworthy = filter(fetchedNew, excludingJoined: appStore.joinedCommunities)
+        newNoteworthy = safeCore.excludeJoinedRooms(
+            rooms: fetchedNew,
+            joined: appStore.joinedCommunities
+        )
         friendsShelf = fetchedFriends
         authorsShelf = fetchedAuthors
         isFirstLoad = false
@@ -113,7 +116,10 @@ final class RoomExplorerStore {
 
         let (f, n, fr, a) = await (featuredTask, newTask, friendsTask, authorsTask)
         featured = f
-        newNoteworthy = filter(n, excludingJoined: appStore.joinedCommunities)
+        newNoteworthy = safeCore.excludeJoinedRooms(
+            rooms: n,
+            joined: appStore.joinedCommunities
+        )
         friendsShelf = fr
         authorsShelf = a
     }
@@ -129,13 +135,5 @@ final class RoomExplorerStore {
                 print("startRoomExplorerFeaturedRooms failed: \(outcome.error)")
             }
         }
-    }
-
-    private func filter(
-        _ rooms: [CommunitySummary],
-        excludingJoined joined: [CommunitySummary]
-    ) -> [CommunitySummary] {
-        let joinedIds = Set(joined.map(\.id))
-        return rooms.filter { !joinedIds.contains($0.id) }
     }
 }

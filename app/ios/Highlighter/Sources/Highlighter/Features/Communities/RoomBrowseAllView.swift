@@ -16,11 +16,7 @@ struct RoomBrowseAllView: View {
     ]
 
     private var visible: [CommunitySummary] {
-        let q = search.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !q.isEmpty else { return rooms }
-        return rooms.filter {
-            $0.name.lowercased().contains(q) || $0.about.lowercased().contains(q)
-        }
+        appStore.safeCore.searchRooms(rooms: rooms, query: search)
     }
 
     var body: some View {
