@@ -33,10 +33,10 @@ use crate::models::{
     DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
     FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft,
     HighlightListOutcome, HighlightOutcome, HighlightRecord, HydratedHighlight,
-    HydratedHighlightListOutcome, MutationOutcome, NostrConnectOptions, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord,
+    HydratedHighlightListOutcome, MutationOutcome, Nip05AvailabilityOutcome, NostrConnectOptions,
+    NostrEntityEventOutcome, NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord,
     PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
-    ReactionListOutcome, ReactionOutcome, ReadingFeedItem, RoomRecommendation,
+    ReactionListOutcome, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome, RoomRecommendation,
     RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
     TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
     WhatsNewEntriesOutcome,
@@ -140,6 +140,21 @@ fn string_outcome(result: Result<String, CoreError>) -> StringOutcome {
         },
         Err(error) => StringOutcome {
             value: String::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn nip05_availability_outcome(
+    result: Result<Nip05Availability, CoreError>,
+) -> Nip05AvailabilityOutcome {
+    match result {
+        Ok(value) => Nip05AvailabilityOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => Nip05AvailabilityOutcome {
+            value: None,
             error: error.to_string(),
         },
     }
@@ -538,6 +553,21 @@ fn hydrated_highlight_list_outcome(
             error: String::new(),
         },
         Err(error) => HydratedHighlightListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn reading_feed_list_outcome(
+    result: Result<Vec<ReadingFeedItem>, CoreError>,
+) -> ReadingFeedListOutcome {
+    match result {
+        Ok(values) => ReadingFeedListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => ReadingFeedListOutcome {
             values: Vec::new(),
             error: error.to_string(),
         },
@@ -1317,11 +1347,18 @@ impl HighlighterCore {
     pub async fn get_following_reads(
         &self,
         limit: u32,
-    ) -> Result<Vec<ReadingFeedItem>, CoreError> {
+    ) -> ReadingFeedListOutcome {
         let Some(user) = self.inner.read().session.current_user() else {
-            return Err(CoreError::NotAuthenticated);
+            return ReadingFeedListOutcome {
+                values: Vec::new(),
+                error: CoreError::NotAuthenticated.to_string(),
+            };
         };
-        reads::query_following_reads(self.runtime.ndb(), &user.pubkey, limit)
+        reading_feed_list_outcome(reads::query_following_reads(
+            self.runtime.ndb(),
+            &user.pubkey,
+            limit,
+        ))
     }
 
     /// Highlights home feed — kind:9802 events authored by follows plus
@@ -1330,19 +1367,22 @@ impl HighlighterCore {
     pub async fn get_following_highlights(
         &self,
         limit: u32,
-    ) -> Result<Vec<HydratedHighlight>, CoreError> {
-        let Some(user) = self.inner.read().session.current_user() else {
-            return Err(CoreError::NotAuthenticated);
-        };
-        let joined =
-            groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user.pubkey)?;
-        let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
-        highlights::query_following_highlights(
-            self.runtime.ndb(),
-            &user.pubkey,
-            &group_ids,
-            limit,
-        )
+    ) -> HydratedHighlightListOutcome {
+        let result: Result<Vec<HydratedHighlight>, CoreError> = (|| {
+            let Some(user) = self.inner.read().session.current_user() else {
+                return Err(CoreError::NotAuthenticated);
+            };
+            let joined =
+                groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user.pubkey)?;
+            let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
+            highlights::query_following_highlights(
+                self.runtime.ndb(),
+                &user.pubkey,
+                &group_ids,
+                limit,
+            )
+        })();
+        hydrated_highlight_list_outcome(result)
     }
 
     // -- Profile reads (per-pubkey, no auth required) --
@@ -1408,17 +1448,21 @@ impl HighlighterCore {
     pub async fn check_nip05_availability(
         &self,
         name: String,
-    ) -> Result<Nip05Availability, CoreError> {
-        nip05::check_availability(&name).await
+    ) -> Nip05AvailabilityOutcome {
+        nip05_availability_outcome(nip05::check_availability(&name).await)
     }
 
     pub async fn register_nip05(
         &self,
         name: String,
         domain: String,
-    ) -> Result<String, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        nip05::register_username(&self.runtime, &name, &domain).await
+    ) -> StringOutcome {
+        let result: Result<String, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            nip05::register_username(&self.runtime, &name, &domain).await
+        }
+        .await;
+        string_outcome(result)
     }
 
     pub async fn get_user_articles(

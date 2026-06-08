@@ -41,8 +41,9 @@ final class ReadsStore {
     }
 
     func refresh() async {
-        if let updated = try? await safeCore.getFollowingReads() {
-            items = updated
+        let outcome = await safeCore.getFollowingReads()
+        if outcome.error.isEmpty {
+            items = outcome.values
         }
     }
 

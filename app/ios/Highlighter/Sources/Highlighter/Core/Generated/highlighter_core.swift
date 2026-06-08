@@ -760,7 +760,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func buildPreviewFromUrl(url: String) async  -> ArtifactPreviewOutcome
 
-    func checkNip05Availability(name: String) async throws  -> Nip05Availability
+    func checkNip05Availability(name: String) async  -> Nip05AvailabilityOutcome
 
     func clearRecentSearches() async  -> StringListOutcome
 
@@ -902,14 +902,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * highlights tagged into joined rooms. See
      * `highlights::query_following_highlights` for semantics.
      */
-    func getFollowingHighlights(limit: UInt32) async throws  -> [HydratedHighlight]
+    func getFollowingHighlights(limit: UInt32) async  -> HydratedHighlightListOutcome
 
     /**
      * Following Reads feed — articles surfaced through the user's follow
      * graph. See `reads::query_following_reads` for semantics. Returns an
      * empty list if the user isn't logged in or has no follows cached yet.
      */
-    func getFollowingReads(limit: UInt32) async throws  -> [ReadingFeedItem]
+    func getFollowingReads(limit: UInt32) async  -> ReadingFeedListOutcome
 
     /**
      * Pubkeys (hex) the current user follows per their cached kind:3 contact
@@ -1168,7 +1168,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func recordRecentSearch(query: String) async  -> StringListOutcome
 
-    func registerNip05(name: String, domain: String) async throws  -> String
+    func registerNip05(name: String, domain: String) async  -> StringOutcome
 
     /**
      * Remove a relay by URL.
@@ -1585,9 +1585,9 @@ open func buildPreviewFromUrl(url: String)async  -> ArtifactPreviewOutcome  {
         )
 }
 
-open func checkNip05Availability(name: String)async throws  -> Nip05Availability  {
+open func checkNip05Availability(name: String)async  -> Nip05AvailabilityOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_check_nip05_availability(
                     self.uniffiClonePointer(),
@@ -1597,8 +1597,9 @@ open func checkNip05Availability(name: String)async throws  -> Nip05Availability
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeNip05Availability_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeNip05AvailabilityOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2078,9 +2079,9 @@ open func getFollowingCurationSets()async  -> BookmarkSetListOutcome  {
      * highlights tagged into joined rooms. See
      * `highlights::query_following_highlights` for semantics.
      */
-open func getFollowingHighlights(limit: UInt32)async throws  -> [HydratedHighlight]  {
+open func getFollowingHighlights(limit: UInt32)async  -> HydratedHighlightListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_following_highlights(
                     self.uniffiClonePointer(),
@@ -2090,8 +2091,9 @@ open func getFollowingHighlights(limit: UInt32)async throws  -> [HydratedHighlig
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHydratedHighlight.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeHydratedHighlightListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2100,9 +2102,9 @@ open func getFollowingHighlights(limit: UInt32)async throws  -> [HydratedHighlig
      * graph. See `reads::query_following_reads` for semantics. Returns an
      * empty list if the user isn't logged in or has no follows cached yet.
      */
-open func getFollowingReads(limit: UInt32)async throws  -> [ReadingFeedItem]  {
+open func getFollowingReads(limit: UInt32)async  -> ReadingFeedListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_following_reads(
                     self.uniffiClonePointer(),
@@ -2112,8 +2114,9 @@ open func getFollowingReads(limit: UInt32)async throws  -> [ReadingFeedItem]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeReadingFeedItem.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeReadingFeedListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3162,9 +3165,9 @@ open func recordRecentSearch(query: String)async  -> StringListOutcome  {
         )
 }
 
-open func registerNip05(name: String, domain: String)async throws  -> String  {
+open func registerNip05(name: String, domain: String)async  -> StringOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_register_nip05(
                     self.uniffiClonePointer(),
@@ -3174,8 +3177,9 @@ open func registerNip05(name: String, domain: String)async throws  -> String  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeStringOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -8866,6 +8870,76 @@ public func FfiConverterTypeNip05Availability_lower(_ value: Nip05Availability) 
 }
 
 
+public struct Nip05AvailabilityOutcome {
+    public var value: Nip05Availability?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: Nip05Availability?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension Nip05AvailabilityOutcome: Sendable {}
+#endif
+
+
+extension Nip05AvailabilityOutcome: Equatable, Hashable {
+    public static func ==(lhs: Nip05AvailabilityOutcome, rhs: Nip05AvailabilityOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNip05AvailabilityOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05AvailabilityOutcome {
+        return
+            try Nip05AvailabilityOutcome(
+                value: FfiConverterOptionTypeNip05Availability.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Nip05AvailabilityOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeNip05Availability.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNip05AvailabilityOutcome_lift(_ buf: RustBuffer) throws -> Nip05AvailabilityOutcome {
+    return try FfiConverterTypeNip05AvailabilityOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNip05AvailabilityOutcome_lower(_ value: Nip05AvailabilityOutcome) -> RustBuffer {
+    return FfiConverterTypeNip05AvailabilityOutcome.lower(value)
+}
+
+
 /**
  * Minimal projection of a relay's NIP-11 information document. Populated
  * by `probe_relay_nip11` via a one-shot HTTPS GET to the relay's base URL
@@ -10475,6 +10549,76 @@ public func FfiConverterTypeReadingFeedItem_lift(_ buf: RustBuffer) throws -> Re
 #endif
 public func FfiConverterTypeReadingFeedItem_lower(_ value: ReadingFeedItem) -> RustBuffer {
     return FfiConverterTypeReadingFeedItem.lower(value)
+}
+
+
+public struct ReadingFeedListOutcome {
+    public var values: [ReadingFeedItem]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [ReadingFeedItem], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ReadingFeedListOutcome: Sendable {}
+#endif
+
+
+extension ReadingFeedListOutcome: Equatable, Hashable {
+    public static func ==(lhs: ReadingFeedListOutcome, rhs: ReadingFeedListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReadingFeedListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadingFeedListOutcome {
+        return
+            try ReadingFeedListOutcome(
+                values: FfiConverterSequenceTypeReadingFeedItem.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReadingFeedListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeReadingFeedItem.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadingFeedListOutcome_lift(_ buf: RustBuffer) throws -> ReadingFeedListOutcome {
+    return try FfiConverterTypeReadingFeedListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadingFeedListOutcome_lower(_ value: ReadingFeedListOutcome) -> RustBuffer {
+    return FfiConverterTypeReadingFeedListOutcome.lower(value)
 }
 
 
@@ -13276,6 +13420,30 @@ fileprivate struct FfiConverterOptionTypeHighlightRecord: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeNip05Availability: FfiConverterRustBuffer {
+    typealias SwiftType = Nip05Availability?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeNip05Availability.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeNip05Availability.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeNostrEntityEvent: FfiConverterRustBuffer {
     typealias SwiftType = NostrEntityEvent?
 
@@ -14114,7 +14282,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 40366) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 2201) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 22195) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches() != 18871) {
@@ -14192,10 +14360,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_curation_sets() != 3269) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_highlights() != 12124) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_highlights() != 55300) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_reads() != 29016) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_reads() != 64700) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_follows() != 13105) {
@@ -14363,7 +14531,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_record_recent_search() != 32384) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_register_nip05() != 47895) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_register_nip05() != 29734) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 27189) {

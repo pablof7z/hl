@@ -209,19 +209,18 @@ struct OnboardingCreateAccountView: View {
     }
 
     private func checkAvailability(name: String) async {
-        do {
-            let decoded = try await store.safeCore.checkNip05Availability(name: name)
-            guard username == name else { return }
-            if !decoded.valid {
-                usernameState = .invalid
-            } else if decoded.available {
-                usernameState = .available(identifier: decoded.identifier, domain: decoded.domain)
-            } else {
-                usernameState = .taken
-            }
-        } catch {
-            guard username == name else { return }
+        let outcome = await store.safeCore.checkNip05Availability(name: name)
+        guard username == name else { return }
+        guard outcome.error.isEmpty, let decoded = outcome.value else {
             usernameState = .idle
+            return
+        }
+        if !decoded.valid {
+            usernameState = .invalid
+        } else if decoded.available {
+            usernameState = .available(identifier: decoded.identifier, domain: decoded.domain)
+        } else {
+            usernameState = .taken
         }
     }
 
@@ -235,43 +234,43 @@ struct OnboardingCreateAccountView: View {
 
         Task {
             defer { isWorking = false }
-            do {
-                let accountOutcome = await store.safeCore.generateAccount()
-                guard accountOutcome.error.isEmpty, let account = accountOutcome.value else {
-                    errorMessage = accountOutcome.error.isEmpty ? "Account creation failed." : accountOutcome.error
+            let accountOutcome = await store.safeCore.generateAccount()
+            guard accountOutcome.error.isEmpty, let account = accountOutcome.value else {
+                errorMessage = accountOutcome.error.isEmpty ? "Account creation failed." : accountOutcome.error
+                return
+            }
+            AppSessionStore.shared.persistNsec(account.nsec)
+
+            let claimedUsername: String
+            if case .available(let identifier, let domain) = usernameState, !username.isEmpty {
+                let registerOutcome = await store.safeCore.registerNip05(
+                    name: username,
+                    domain: domain
+                )
+                guard registerOutcome.error.isEmpty else {
+                    errorMessage = registerOutcome.error
                     return
                 }
-                AppSessionStore.shared.persistNsec(account.nsec)
-
-                let claimedUsername: String
-                if case .available(let identifier, let domain) = usernameState, !username.isEmpty {
-                    let registered = try await store.safeCore.registerNip05(
-                        name: username,
-                        domain: domain
-                    )
-                    claimedUsername = registered.isEmpty ? identifier : registered
-                } else {
-                    claimedUsername = ""
-                }
-
-                Task {
-                    _ = await store.safeCore.updateProfile(
-                        name: "",
-                        displayName: name,
-                        about: "",
-                        picture: "",
-                        banner: "",
-                        nip05: claimedUsername,
-                        website: "",
-                        lud16: ""
-                    )
-                }
-
-                createdAccount = account
-                navigateToInterests = true
-            } catch {
-                errorMessage = error.localizedDescription
+                claimedUsername = registerOutcome.value.isEmpty ? identifier : registerOutcome.value
+            } else {
+                claimedUsername = ""
             }
+
+            Task {
+                _ = await store.safeCore.updateProfile(
+                    name: "",
+                    displayName: name,
+                    about: "",
+                    picture: "",
+                    banner: "",
+                    nip05: claimedUsername,
+                    website: "",
+                    lud16: ""
+                )
+            }
+
+            createdAccount = account
+            navigateToInterests = true
         }
     }
 }

@@ -36,12 +36,12 @@ final class HighlightsStore {
     }
 
     func refresh() async {
-        do {
-            let updated = try await safeCore.getFollowingHighlights(limit: 120)
-            items = updated
+        let outcome = await safeCore.getFollowingHighlights(limit: 120)
+        if outcome.error.isEmpty {
+            items = outcome.values
             loadError = nil
-        } catch {
-            loadError = String(describing: error)
+        } else {
+            loadError = outcome.error
         }
     }
 

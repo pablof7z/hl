@@ -372,12 +372,12 @@ actor SafeHighlighterCore {
         core.isNip05UsernameValid(input: input)
     }
 
-    func checkNip05Availability(name: String) async throws -> Nip05Availability {
-        try await core.checkNip05Availability(name: name)
+    func checkNip05Availability(name: String) async -> Nip05AvailabilityOutcome {
+        await core.checkNip05Availability(name: name)
     }
 
-    func registerNip05(name: String, domain: String) async throws -> String {
-        try await core.registerNip05(name: name, domain: domain)
+    func registerNip05(name: String, domain: String) async -> StringOutcome {
+        await core.registerNip05(name: name, domain: domain)
     }
 
     func getUserArticles(pubkeyHex: String, limit: UInt32 = 32) async -> ArticleListOutcome {
@@ -539,14 +539,14 @@ actor SafeHighlighterCore {
 
     // MARK: - Following Reads
 
-    func getFollowingReads(limit: UInt32 = 40) async throws -> [ReadingFeedItem] {
-        try await core.getFollowingReads(limit: limit)
+    func getFollowingReads(limit: UInt32 = 40) async -> ReadingFeedListOutcome {
+        await core.getFollowingReads(limit: limit)
     }
 
     // MARK: - Following Highlights
 
-    func getFollowingHighlights(limit: UInt32 = 120) async throws -> [HydratedHighlight] {
-        try await core.getFollowingHighlights(limit: limit)
+    func getFollowingHighlights(limit: UInt32 = 120) async -> HydratedHighlightListOutcome {
+        await core.getFollowingHighlights(limit: limit)
     }
 
     // MARK: - Subscriptions

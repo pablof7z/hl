@@ -53,6 +53,12 @@ pub struct StringOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct Nip05AvailabilityOutcome {
+    pub value: Option<crate::nip05::Nip05Availability>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct OptionalStringOutcome {
     pub value: Option<String>,
     pub error: String,
@@ -211,6 +217,12 @@ pub struct HighlightListOutcome {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct HydratedHighlightListOutcome {
     pub values: Vec<HydratedHighlight>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ReadingFeedListOutcome {
+    pub values: Vec<ReadingFeedItem>,
     pub error: String,
 }
 
