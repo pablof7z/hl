@@ -21,7 +21,7 @@ struct AddRelaySheet: View {
     @State private var probeResult: Nip11Document?
     @State private var probeError: String?
     @State private var probeInFlight = false
-    @State private var debounceTask: Task<Void, Never>?
+    @State private var probeTask: Task<Void, Never>?
 
     /// Whether the URL looks like a wss:// or ws:// URL.
     private var isValid: Bool {
@@ -167,17 +167,15 @@ struct AddRelaySheet: View {
         return joined.isEmpty ? "Reachable (no NIP-11 metadata)" : joined
     }
 
-    /// Debounce the probe so it runs at most once per 600ms of idle typing.
     /// Cancels an in-flight probe if the URL changes before it resolves.
     private func scheduleProbe() {
-        debounceTask?.cancel()
+        probeTask?.cancel()
         probeResult = nil
         probeError = nil
         guard isValid else { return }
         let url = urlText.trimmingCharacters(in: .whitespaces)
         let core = appStore.safeCore
-        debounceTask = Task { [url] in
-            try? await Task.sleep(for: .milliseconds(600))
+        probeTask = Task { [url] in
             guard !Task.isCancelled else { return }
             probeInFlight = true
             defer { probeInFlight = false }

@@ -203,11 +203,6 @@ struct OnboardingCreateAccountView: View {
         usernameState = .checking
 
         usernameCheckTask = Task {
-            do {
-                try await Task.sleep(nanoseconds: 400_000_000)
-            } catch {
-                return
-            }
             guard !Task.isCancelled, username == trimmed else { return }
             await checkAvailability(name: trimmed)
         }
