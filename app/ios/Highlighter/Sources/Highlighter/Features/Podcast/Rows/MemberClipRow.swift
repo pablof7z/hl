@@ -26,6 +26,8 @@ struct MemberClipRow: View {
                     }
                 }
             } label: {
+                let author = authorDisplay
+
                 HStack(alignment: .top, spacing: 14) {
                     Text(rangeLabel)
                         .font(.caption.weight(.medium).monospacedDigit())
@@ -36,13 +38,13 @@ struct MemberClipRow: View {
                         HStack(alignment: .top, spacing: 10) {
                             AuthorAvatar(
                                 pubkey: highlight.pubkey,
-                                pictureURL: app.profileSnapshots[highlight.pubkey]?.picture ?? "",
-                                displayInitial: authorInitial,
+                                pictureURL: author.pictureUrl,
+                                displayInitial: author.displayInitial,
                                 size: 28
                             )
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(authorName)
+                                Text(author.displayName)
                                     .font(.footnote.weight(.semibold))
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
@@ -125,15 +127,14 @@ struct MemberClipRow: View {
         return "—"
     }
 
-    private var authorName: String {
-        let profile = app.profileSnapshots[highlight.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(highlight.pubkey.prefix(10))
-    }
-
-    private var authorInitial: String {
-        authorName.first.map { String($0).uppercased() } ?? ""
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: highlight.pubkey,
+                profile: app.profileSnapshots[highlight.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 }
 

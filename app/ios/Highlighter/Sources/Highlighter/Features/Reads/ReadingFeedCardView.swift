@@ -9,11 +9,13 @@ struct ReadingFeedCardView: View {
     let item: ReadingFeedItem
 
     var body: some View {
+        let author = authorDisplay
+
         ReadingCard(
             title: item.article.title,
             summary: item.article.summary,
             imageURL: coverURL,
-            authorName: authorDisplayName,
+            authorName: author.displayName,
             authorPubkey: item.article.pubkey,
             relativeDate: relativeDate,
             metaBits: metaBits,
@@ -21,8 +23,8 @@ struct ReadingFeedCardView: View {
             avatar: {
                 AuthorAvatar(
                     pubkey: item.article.pubkey,
-                    pictureURL: app.profileSnapshots[item.article.pubkey]?.picture ?? "",
-                    displayInitial: authorInitial,
+                    pictureURL: author.pictureUrl,
+                    displayInitial: author.displayInitial,
                     size: 22
                 )
             },
@@ -94,25 +96,27 @@ struct ReadingFeedCardView: View {
         }
     }
 
-    // MARK: - Author name / initial resolution
+    // MARK: - Author display
 
-    private var authorDisplayName: String {
-        let profile = app.profileSnapshots[item.article.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return shortPubkey(item.article.pubkey)
-    }
-
-    private var authorInitial: String {
-        authorDisplayName.first.map { String($0).uppercased() } ?? ""
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: item.article.pubkey,
+                profile: app.profileSnapshots[item.article.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var firstInteractorName: String {
         guard let pk = primaryInteractor else { return "Someone" }
-        let profile = app.profileSnapshots[pk]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return shortPubkey(pk)
+        return app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: pk,
+                profile: app.profileSnapshots[pk],
+                fallback: .pubkey10
+            )
+        ).displayName
     }
 
     private var primaryInteractor: String? {
@@ -143,7 +147,4 @@ struct ReadingFeedCardView: View {
         return max(1, words / 240)
     }
 
-    private func shortPubkey(_ hex: String) -> String {
-        String(hex.prefix(10))
-    }
 }

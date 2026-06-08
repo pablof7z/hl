@@ -11,17 +11,6 @@ struct SetDetailView: View {
         record.title.isEmpty ? (record.id.isEmpty ? "Collection" : record.id) : record.title
     }
 
-    private var curatorName: String {
-        let profile = app.profileSnapshots[record.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(record.pubkey.prefix(10))
-    }
-
-    private var curatorInitial: String {
-        curatorName.first.map { String($0).uppercased() } ?? ""
-    }
-
     var body: some View {
         Group {
             if isLoading {
@@ -45,12 +34,15 @@ struct SetDetailView: View {
         }
     }
 
+    @ViewBuilder
     private var curatorHeader: some View {
+        let curator = curatorDisplay
+
         HStack(spacing: 10) {
             AuthorAvatar(
                 pubkey: record.pubkey,
-                pictureURL: app.profileSnapshots[record.pubkey]?.picture ?? "",
-                displayInitial: curatorInitial,
+                pictureURL: curator.pictureUrl,
+                displayInitial: curator.displayInitial,
                 size: 32
             )
             VStack(alignment: .leading, spacing: 1) {
@@ -59,7 +51,7 @@ struct SetDetailView: View {
                     .foregroundStyle(Color.highlighterInkMuted)
                     .textCase(.uppercase)
                     .tracking(0.6)
-                Text(curatorName)
+                Text(curator.displayName)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
@@ -69,6 +61,16 @@ struct SetDetailView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(Color.highlighterAccent.opacity(0.06))
+    }
+
+    private var curatorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: record.pubkey,
+                profile: app.profileSnapshots[record.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var articleList: some View {

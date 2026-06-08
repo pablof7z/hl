@@ -55,11 +55,13 @@ private struct DiscussionRow: View {
     @Environment(HighlighterStore.self) private var app
 
     var body: some View {
+        let author = authorDisplay
+
         HStack(alignment: .top, spacing: 12) {
             AuthorAvatar(
                 pubkey: discussion.pubkey,
-                pictureURL: app.profileSnapshots[discussion.pubkey]?.picture ?? "",
-                displayInitial: displayInitial,
+                pictureURL: author.pictureUrl,
+                displayInitial: author.displayInitial,
                 size: 36
             )
 
@@ -83,7 +85,7 @@ private struct DiscussionRow: View {
                 }
 
                 HStack(spacing: 4) {
-                    Text(authorName)
+                    Text(author.displayName)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(Color.highlighterInkMuted)
                     if let ts = discussion.createdAt, ts > 0 {
@@ -106,17 +108,14 @@ private struct DiscussionRow: View {
         }
     }
 
-    private var authorName: String {
-        let profile = app.profileSnapshots[discussion.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(discussion.pubkey.prefix(8))
-    }
-
-    private var displayInitial: String {
-        let profile = app.profileSnapshots[discussion.pubkey]
-        let name = profile?.displayName ?? profile?.name ?? ""
-        return name.first.map { String($0).uppercased() } ?? String(discussion.pubkey.prefix(1).uppercased())
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: discussion.pubkey,
+                profile: app.profileSnapshots[discussion.pubkey],
+                fallback: .pubkey8
+            )
+        )
     }
 
     private func relativeTime(_ timestamp: UInt64) -> String {

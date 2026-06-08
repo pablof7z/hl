@@ -59,18 +59,21 @@ struct DiscussionDetailView: View {
 
     // MARK: - OP header
 
+    @ViewBuilder
     private var opHeader: some View {
+        let author = authorDisplay
+
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 10) {
                 AuthorAvatar(
                     pubkey: discussion.pubkey,
-                    pictureURL: app.profileSnapshots[discussion.pubkey]?.picture ?? "",
-                    displayInitial: displayInitial,
+                    pictureURL: author.pictureUrl,
+                    displayInitial: author.displayInitial,
                     size: 38
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(authorName)
+                    Text(author.displayName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
                     if let ts = discussion.createdAt, ts > 0 {
@@ -228,17 +231,14 @@ struct DiscussionDetailView: View {
 
     // MARK: - Helpers
 
-    private var authorName: String {
-        let profile = app.profileSnapshots[discussion.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(discussion.pubkey.prefix(8))
-    }
-
-    private var displayInitial: String {
-        let profile = app.profileSnapshots[discussion.pubkey]
-        let name = profile?.displayName ?? profile?.name ?? ""
-        return name.first.map { String($0).uppercased() } ?? String(discussion.pubkey.prefix(1).uppercased())
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: discussion.pubkey,
+                profile: app.profileSnapshots[discussion.pubkey],
+                fallback: .pubkey8
+            )
+        )
     }
 
     private func relativeTime(_ timestamp: UInt64) -> String {
