@@ -225,6 +225,26 @@ pub async fn create_curation_set(
     })
 }
 
+/// Toggle an `a`-tag (NIP-33 article address) in the curation set keyed
+/// by `(user_hex, d_tag)`. Reads the newest cached version, mutates the
+/// membership, re-publishes the full set preserving every other tag.
+/// Returns the new membership state.
+pub async fn toggle_address_in_curation_set(
+    runtime: &NostrRuntime,
+    user_hex: &str,
+    d_tag: &str,
+    address: &str,
+) -> Result<bool, CoreError> {
+    update_address_in_curation_set(
+        runtime,
+        user_hex,
+        d_tag,
+        address,
+        CurationMembershipChange::Toggle,
+    )
+    .await
+}
+
 /// Idempotently add or remove an `a`-tag (NIP-33 article address) from
 /// the curation set keyed by `(user_hex, d_tag)`. Reads the newest
 /// cached version, mutates the membership, re-publishes the full set
@@ -239,6 +259,29 @@ pub async fn set_address_in_curation_set(
     d_tag: &str,
     address: &str,
     member: bool,
+) -> Result<bool, CoreError> {
+    update_address_in_curation_set(
+        runtime,
+        user_hex,
+        d_tag,
+        address,
+        CurationMembershipChange::Set(member),
+    )
+    .await
+}
+
+#[derive(Clone, Copy)]
+enum CurationMembershipChange {
+    Set(bool),
+    Toggle,
+}
+
+async fn update_address_in_curation_set(
+    runtime: &NostrRuntime,
+    user_hex: &str,
+    d_tag: &str,
+    address: &str,
+    change: CurationMembershipChange,
 ) -> Result<bool, CoreError> {
     let d_tag = d_tag.trim();
     let address = address.trim();
@@ -272,10 +315,11 @@ pub async fn set_address_in_curation_set(
     }
 
     let was_present = a_addresses.iter().any(|a| a == address);
-    if was_present == member {
-        return Ok(member);
+    let next_member = next_curation_address_membership(was_present, change);
+    if was_present == next_member {
+        return Ok(next_member);
     }
-    if member {
+    if next_member {
         a_addresses.push(address.to_string());
     } else {
         a_addresses.retain(|a| a != address);
@@ -306,7 +350,14 @@ pub async fn set_address_in_curation_set(
         .await
         .map_err(|e| CoreError::Relay(format!("publish curation set: {e}")))?;
 
-    Ok(member)
+    Ok(next_member)
+}
+
+fn next_curation_address_membership(was_present: bool, change: CurationMembershipChange) -> bool {
+    match change {
+        CurationMembershipChange::Set(member) => member,
+        CurationMembershipChange::Toggle => !was_present,
+    }
 }
 
 /// Read the newest cached event for `(user_hex, kind, d_tag)`. Used by
@@ -418,5 +469,42 @@ fn parse_web_bookmark_event(event: Event) -> WebBookmarkRecord {
         topics,
         published_at,
         created_at: Some(event.created_at.as_secs()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{next_curation_address_membership, CurationMembershipChange};
+
+    #[test]
+    fn curation_membership_toggle_flips_current_state() {
+        assert!(next_curation_address_membership(
+            false,
+            CurationMembershipChange::Toggle
+        ));
+        assert!(!next_curation_address_membership(
+            true,
+            CurationMembershipChange::Toggle
+        ));
+    }
+
+    #[test]
+    fn curation_membership_set_uses_requested_state() {
+        assert!(next_curation_address_membership(
+            false,
+            CurationMembershipChange::Set(true)
+        ));
+        assert!(next_curation_address_membership(
+            true,
+            CurationMembershipChange::Set(true)
+        ));
+        assert!(!next_curation_address_membership(
+            false,
+            CurationMembershipChange::Set(false)
+        ));
+        assert!(!next_curation_address_membership(
+            true,
+            CurationMembershipChange::Set(false)
+        ));
     }
 }

@@ -88,16 +88,14 @@ struct BookmarkMenuButton: View {
     private func loadCurations() async {
         let outcome = await app.safeCore.getMyCurationSets()
         if outcome.error.isEmpty {
-            curationSets = outcome.values.sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
+            curationSets = outcome.values
         }
     }
 
     private func toggleInCuration(_ set: BookmarkSetRecord) async {
-        let nowMember = !set.articleAddresses.contains(articleAddress)
-        let outcome = await app.safeCore.setAddressInCurationSet(
+        let outcome = await app.safeCore.toggleAddressInCurationSet(
             dTag: set.id,
-            address: articleAddress,
-            member: nowMember
+            address: articleAddress
         )
         guard outcome.error.isEmpty else {
             errorMessage = "Couldn't update collection — \(outcome.error)"

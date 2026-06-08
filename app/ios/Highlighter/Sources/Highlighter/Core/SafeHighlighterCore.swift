@@ -225,6 +225,11 @@ actor SafeHighlighterCore {
         await core.setAddressInCurationSet(dTag: dTag, address: address, member: member)
     }
 
+    @discardableResult
+    func toggleAddressInCurationSet(dTag: String, address: String) async -> BoolOutcome {
+        await core.toggleAddressInCurationSet(dTag: dTag, address: address)
+    }
+
     func getMyWebBookmarks() async -> WebBookmarkListOutcome {
         await core.getMyWebBookmarks()
     }

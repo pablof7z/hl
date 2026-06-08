@@ -1447,6 +1447,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func suggestNip05Username(displayName: String)  -> String
 
     /**
+     * Toggle membership of `address` (NIP-33 a-tag value, e.g.
+     * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
+     * by `d_tag`. Rust owns the current-membership read and returns the
+     * new membership state.
+     */
+    func toggleAddressInCurationSet(dTag: String, address: String) async  -> BoolOutcome
+
+    /**
      * Toggle `address` in the user's kind:10003 list. Returns the new
      * membership state — `true` if the address is now bookmarked, `false`
      * if it was removed.
@@ -4181,6 +4189,30 @@ open func suggestNip05Username(displayName: String) -> String  {
         FfiConverterString.lower(displayName),$0
     )
 })
+}
+
+    /**
+     * Toggle membership of `address` (NIP-33 a-tag value, e.g.
+     * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
+     * by `d_tag`. Rust owns the current-membership read and returns the
+     * new membership state.
+     */
+open func toggleAddressInCurationSet(dTag: String, address: String)async  -> BoolOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_toggle_address_in_curation_set(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(dTag),FfiConverterString.lower(address)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBoolOutcome_lift,
+            errorHandler: nil
+
+        )
 }
 
     /**
@@ -15266,6 +15298,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_suggest_nip05_username() != 36133) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_address_in_curation_set() != 15884) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark() != 27334) {

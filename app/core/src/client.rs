@@ -2090,6 +2090,35 @@ impl HighlighterCore {
         bool_outcome(result)
     }
 
+    /// Toggle membership of `address` (NIP-33 a-tag value, e.g.
+    /// `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
+    /// by `d_tag`. Rust owns the current-membership read and returns the
+    /// new membership state.
+    pub async fn toggle_address_in_curation_set(
+        &self,
+        d_tag: String,
+        address: String,
+    ) -> BoolOutcome {
+        let result: Result<bool, CoreError> = async {
+            let user_hex = self
+                .inner
+                .read()
+                .session
+                .current_user()
+                .map(|u| u.pubkey)
+                .ok_or(CoreError::NotAuthenticated)?;
+            crate::lists::toggle_address_in_curation_set(
+                &self.runtime,
+                &user_hex,
+                d_tag.trim(),
+                address.trim(),
+            )
+            .await
+        }
+        .await;
+        bool_outcome(result)
+    }
+
     /// Open a live subscription for the current user's kind:30003/30004 sets.
     /// Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
     pub async fn subscribe_bookmark_sets(&self) -> SubscriptionOutcome {
