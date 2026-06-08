@@ -21097,6 +21097,7 @@ extension PodcastTimelineRowState: Equatable, Hashable {}
 public enum ProfileDisplayFallback {
 
     case pubkey8
+    case pubkey10
     case pubkey12
     case accountLabel
 }
@@ -21118,9 +21119,11 @@ public struct FfiConverterTypeProfileDisplayFallback: FfiConverterRustBuffer {
 
         case 1: return .pubkey8
 
-        case 2: return .pubkey12
+        case 2: return .pubkey10
 
-        case 3: return .accountLabel
+        case 3: return .pubkey12
+
+        case 4: return .accountLabel
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -21134,12 +21137,16 @@ public struct FfiConverterTypeProfileDisplayFallback: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
 
 
-        case .pubkey12:
+        case .pubkey10:
             writeInt(&buf, Int32(2))
 
 
-        case .accountLabel:
+        case .pubkey12:
             writeInt(&buf, Int32(3))
+
+
+        case .accountLabel:
+            writeInt(&buf, Int32(4))
 
         }
     }

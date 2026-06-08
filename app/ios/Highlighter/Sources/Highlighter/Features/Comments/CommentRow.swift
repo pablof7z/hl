@@ -24,6 +24,8 @@ struct CommentRow: View {
 
     var body: some View {
         Button(action: onTap) {
+            let author = authorDisplay
+
             HStack(alignment: .top, spacing: 0) {
                 if depth > 0 {
                     threadRail
@@ -33,8 +35,8 @@ struct CommentRow: View {
                 HStack(alignment: .top, spacing: 12) {
                     AuthorAvatar(
                         pubkey: node.record.pubkey,
-                        pictureURL: app.profileSnapshots[node.record.pubkey]?.picture ?? "",
-                        displayInitial: initial(for: node.record.pubkey),
+                        pictureURL: author.pictureUrl,
+                        displayInitial: author.displayInitial,
                         size: depth == 0 ? 40 : 30,
                         ringWidth: 1.5
                     )
@@ -73,8 +75,10 @@ struct CommentRow: View {
 
     @ViewBuilder
     private var headerLine: some View {
+        let author = authorDisplay
+
         HStack(spacing: 6) {
-            Text(displayName)
+            Text(author.displayName)
                 .font(.system(size: depth == 0 ? 15 : 13, weight: .semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineLimit(1)
@@ -177,15 +181,14 @@ struct CommentRow: View {
 
     // MARK: - Helpers
 
-    private var displayName: String {
-        let profile = app.profileSnapshots[node.record.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(node.record.pubkey.prefix(10))
-    }
-
-    private func initial(for pubkey: String) -> String {
-        displayName.first.map { String($0).uppercased() } ?? ""
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: node.record.pubkey,
+                profile: app.profileSnapshots[node.record.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var relativeTime: String? {

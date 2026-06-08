@@ -414,6 +414,8 @@ private struct Header: View {
     let article: ArticleRecord
     let authorProfile: ProfileMetadata?
 
+    @Environment(HighlighterStore.self) private var app
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(article.title.isEmpty ? "Untitled" : article.title)
@@ -456,18 +458,20 @@ private struct Header: View {
 
     @ViewBuilder
     private var authorRow: some View {
+        let author = authorDisplay
+
         NavigationLink(value: ProfileDestination.pubkey(article.pubkey)) {
             HStack(spacing: 12) {
                 AuthorAvatar(
                     pubkey: article.pubkey,
-                    pictureURL: authorProfile?.picture ?? "",
-                    displayInitial: initial,
+                    pictureURL: author.pictureUrl,
+                    displayInitial: author.displayInitial,
                     size: 40,
                     ringWidth: 2
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(authorDisplayName)
+                    Text(author.displayName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
                     HStack(spacing: 6) {
@@ -488,16 +492,14 @@ private struct Header: View {
         .buttonStyle(.plain)
     }
 
-    private var initial: String {
-        authorDisplayName.first.map { String($0).uppercased() } ?? "?"
-    }
-
-    private var authorDisplayName: String {
-        let dn = authorProfile?.displayName ?? ""
-        if !dn.isEmpty { return dn }
-        let n = authorProfile?.name ?? ""
-        if !n.isEmpty { return n }
-        return String(article.pubkey.prefix(10))
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: article.pubkey,
+                profile: authorProfile,
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var displayDate: String? {
@@ -601,17 +603,20 @@ private struct HighlightDetailSheet: View {
         }
     }
 
+    @ViewBuilder
     private var authorRow: some View {
+        let author = authorDisplay
+
         HStack(spacing: 12) {
             AuthorAvatar(
                 pubkey: highlight.pubkey,
-                pictureURL: app.profileSnapshots[highlight.pubkey]?.picture ?? "",
-                displayInitial: initial,
+                pictureURL: author.pictureUrl,
+                displayInitial: author.displayInitial,
                 size: 40,
                 ringWidth: 2
             )
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayName)
+                Text(author.displayName)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                 Text("highlighted")
@@ -620,6 +625,16 @@ private struct HighlightDetailSheet: View {
             }
             Spacer(minLength: 0)
         }
+    }
+
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: highlight.pubkey,
+                profile: app.profileSnapshots[highlight.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var quoteBlock: some View {
@@ -645,16 +660,4 @@ private struct HighlightDetailSheet: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var displayName: String {
-        let profile = app.profileSnapshots[highlight.pubkey]
-        let dn = profile?.displayName ?? ""
-        if !dn.isEmpty { return dn }
-        let n = profile?.name ?? ""
-        if !n.isEmpty { return n }
-        return String(highlight.pubkey.prefix(10))
-    }
-
-    private var initial: String {
-        displayName.first.map { String($0).uppercased() } ?? "?"
-    }
 }

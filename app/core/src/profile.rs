@@ -123,6 +123,7 @@ pub struct ProfileDisplayProjectionInput {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum ProfileDisplayFallback {
     Pubkey8,
+    Pubkey10,
     Pubkey12,
     AccountLabel,
 }
@@ -212,6 +213,7 @@ pub fn profile_identity_projection(
 fn profile_display_fallback_name(pubkey: &str, fallback: ProfileDisplayFallback) -> String {
     match fallback {
         ProfileDisplayFallback::Pubkey8 => pubkey.chars().take(8).collect(),
+        ProfileDisplayFallback::Pubkey10 => pubkey.chars().take(10).collect(),
         ProfileDisplayFallback::Pubkey12 => pubkey.chars().take(12).collect(),
         ProfileDisplayFallback::AccountLabel => "Nostr Account".to_string(),
     }
@@ -219,9 +221,9 @@ fn profile_display_fallback_name(pubkey: &str, fallback: ProfileDisplayFallback)
 
 fn profile_display_fallback_initial(pubkey: &str, fallback: ProfileDisplayFallback) -> String {
     match fallback {
-        ProfileDisplayFallback::Pubkey8 | ProfileDisplayFallback::Pubkey12 => {
-            pubkey.chars().take(1).collect()
-        }
+        ProfileDisplayFallback::Pubkey8
+        | ProfileDisplayFallback::Pubkey10
+        | ProfileDisplayFallback::Pubkey12 => pubkey.chars().take(1).collect(),
         ProfileDisplayFallback::AccountLabel => String::new(),
     }
 }
@@ -498,6 +500,24 @@ mod tests {
             projection,
             ProfileDisplayProjection {
                 display_name: "abcdef123456".to_string(),
+                display_initial: "a".to_string(),
+                picture_url: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn profile_display_projection_supports_row_pubkey_fallback() {
+        let projection = profile_display_projection(ProfileDisplayProjectionInput {
+            pubkey: "abcdef1234567890".to_string(),
+            fallback: ProfileDisplayFallback::Pubkey10,
+            profile: None,
+        });
+
+        assert_eq!(
+            projection,
+            ProfileDisplayProjection {
+                display_name: "abcdef1234".to_string(),
                 display_initial: "a".to_string(),
                 picture_url: String::new(),
             }
