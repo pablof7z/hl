@@ -164,7 +164,6 @@ struct RoomHomeView: View {
             highlights: room.highlights,
             highlightsByReference: room.highlightsByReference,
             commentsByReference: room.commentsByReference,
-            commentKeysByArtifactId: room.commentKeysByArtifactId,
             isLoading: room.isLoading,
             onShareToCommunity: { artifact in
                 shareTarget = .artifact(artifact)

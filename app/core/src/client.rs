@@ -30,21 +30,22 @@ use crate::models::{
     BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetListOutcome,
     BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome,
     ChatMessageOutcome, ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord,
-    CommentScope, CommentScopeOutcome, CommunityListOutcome, CommunitySummary, CurationMenuItem,
-    CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
-    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
-    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
-    GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HighlightReferenceTarget, HighlightSourceKind, HydratedHighlight,
-    HydratedHighlightListOutcome, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
-    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
-    OnboardingInterest, OnboardingInterestSelection, OptionalStringOutcome, PictureDraft,
-    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
-    ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
-    RelayDiagnosticListOutcome, RoomRecommendation, RoomRecommendationListOutcome,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    CommentReferenceBucket, CommentScope, CommentScopeOutcome, CommunityListOutcome,
+    CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome, CurrentUser,
+    CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
+    FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome,
+    FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome,
+    HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
+    HighlightSourceKind, HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction,
+    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
+    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestSelection, OptionalStringOutcome, PictureDraft, PictureOutcome,
+    PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
+    ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome,
+    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
+    RoomLane, RoomRecommendation, RoomRecommendationListOutcome, StringListOutcome, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -60,6 +61,7 @@ use crate::recommendations;
 use crate::reference_targets;
 use crate::relays::nostr_connect_relay;
 use crate::room_explorer_config;
+use crate::room_lanes;
 use crate::session::{current_user_from_pubkey, Session};
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
 use crate::web_metadata::{self, WebMetadata, WebMetadataStore};
@@ -1837,6 +1839,24 @@ impl HighlighterCore {
         highlight: HighlightRecord,
     ) -> Option<HighlightReferenceTarget> {
         reference_targets::highlight_reference_target(&highlight)
+    }
+
+    /// Build the visible community-home artifact lanes from bounded screen
+    /// inputs. Rust owns artifact/highlight matching, de-duplication, dormant
+    /// filtering, and activity ordering.
+    pub fn build_visible_room_lanes(
+        &self,
+        artifacts: Vec<ArtifactRecord>,
+        highlights: Vec<HydratedHighlight>,
+        highlights_by_reference: Vec<HighlightReferenceBucket>,
+        comments_by_reference: Vec<CommentReferenceBucket>,
+    ) -> Vec<RoomLane> {
+        room_lanes::build_visible_room_lanes(
+            &artifacts,
+            &highlights,
+            &highlights_by_reference,
+            &comments_by_reference,
+        )
     }
 
     /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.

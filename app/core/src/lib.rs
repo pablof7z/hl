@@ -42,6 +42,7 @@ pub mod reference_targets;
 pub mod relay_polish;
 pub mod relays;
 pub mod room_explorer_config;
+pub mod room_lanes;
 pub mod search;
 pub mod session;
 pub mod share_extension;
@@ -59,21 +60,22 @@ pub use models::{
     BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetListOutcome,
     BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome,
     ChatMessageOutcome, ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord,
-    CommunityListOutcome, CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome,
-    CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionAttachment, DiscussionListOutcome,
-    DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome,
-    FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccount,
-    GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HighlightReferenceTarget, HighlightSourceKind, HydratedHighlight,
-    HydratedHighlightListOutcome, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
-    Nip11DocumentOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    CommentReferenceBucket, CommunityListOutcome, CommunitySummary, CurationMenuItem,
+    CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
+    DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
+    FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome,
+    FeedbackThreadRecord, GeneratedAccount, GeneratedAccountOutcome, HighlightDraft,
+    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightReferenceBucket,
+    HighlightReferenceTarget, HighlightSourceKind, HydratedHighlight, HydratedHighlightListOutcome,
+    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
+    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
     OnboardingInterestSelection, OptionalStringOutcome, PictureDraft, PictureOutcome,
     PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
     ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem,
-    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
-    RoomRecommendationListOutcome, RoomRecommendationReason, StringListOutcome, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
-    WebMetadataOutcome, WhatsNewEntriesOutcome,
+    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomLane,
+    RoomRecommendation, RoomRecommendationListOutcome, RoomRecommendationReason, StringListOutcome,
+    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome,
+    WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};

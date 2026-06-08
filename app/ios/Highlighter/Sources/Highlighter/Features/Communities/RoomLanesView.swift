@@ -14,11 +14,12 @@ import SwiftUI
 /// equivalent per-artifact query; their lanes appear without pull-quotes
 /// until that lands.
 struct RoomLanesView: View {
+    @Environment(HighlighterStore.self) private var appStore
+
     let artifacts: [ArtifactRecord]
     let highlights: [HydratedHighlight]
     let highlightsByReference: [String: [HighlightRecord]]
     let commentsByReference: [String: [CommentRecord]]
-    let commentKeysByArtifactId: [String: String]
     let isLoading: Bool
     let onShareToCommunity: (ArtifactRecord) -> Void
 
@@ -51,19 +52,23 @@ struct RoomLanesView: View {
         }
     }
 
-    private var visibleLanes: [Lane] {
-        Lane.build(
+    private var visibleLanes: [RoomLane] {
+        let highlightBuckets = highlightsByReference.map { key, values in
+            HighlightReferenceBucket(lookupKey: key, highlights: values)
+        }
+        let commentBuckets = commentsByReference.map { key, values in
+            CommentReferenceBucket(commentKey: key, comments: values)
+        }
+        return appStore.safeCore.buildVisibleRoomLanes(
             artifacts: artifacts,
             highlights: highlights,
-            highlightsByReference: highlightsByReference,
-            commentsByReference: commentsByReference,
-            commentKeysByArtifactId: commentKeysByArtifactId
+            highlightsByReference: highlightBuckets,
+            commentsByReference: commentBuckets
         )
-        .filter { !$0.isDormant }
     }
 
     @ViewBuilder
-    private func laneView(for lane: Lane) -> some View {
+    private func laneView(for lane: RoomLane) -> some View {
         if !lane.highlights.isEmpty {
             NavigationLink(value: lane.artifact) {
                 HighlightFeedCardView(items: lane.highlights)
@@ -77,148 +82,5 @@ struct RoomLanesView: View {
                 }
             }
         }
-    }
-}
-
-// MARK: - Lane model
-
-/// A single lane on the community home: an artifact together with the
-/// community's recent highlights and NIP-22 comments on it.
-struct Lane: Identifiable {
-    let id: String
-    let artifact: ArtifactRecord
-    /// Newest-first.
-    let highlights: [HydratedHighlight]
-    /// Newest-first.
-    let comments: [CommentRecord]
-
-    var latestActivity: UInt64? {
-        var ts: UInt64 = 0
-        if let h = highlights.compactMap({ $0.highlight.createdAt }).max() { ts = max(ts, h) }
-        if let c = comments.compactMap({ $0.createdAt }).max() { ts = max(ts, c) }
-        if ts > 0 { return ts }
-        return artifact.createdAt
-    }
-
-    var isDormant: Bool { highlights.isEmpty && comments.isEmpty }
-
-    /// Build lanes from `artifacts` + reference-scoped highlight / comment
-    /// fetches. `highlightsByReference` is keyed `"<lowercase>:<value>"`,
-    /// while comment lookup keys come from Rust-owned NIP-22 scopes. Falls
-    /// back to a permissive match against the group-scoped `highlights`
-    /// stream for any artifact that didn't pull a per-reference result.
-    static func build(
-        artifacts: [ArtifactRecord],
-        highlights: [HydratedHighlight],
-        highlightsByReference: [String: [HighlightRecord]],
-        commentsByReference: [String: [CommentRecord]],
-        commentKeysByArtifactId: [String: String]
-    ) -> [Lane] {
-        var lanes: [Lane] = artifacts.map { art in
-            var highlightBucket: [HydratedHighlight] = []
-            var commentBucket: [CommentRecord] = []
-
-            let artifactId = laneId(for: art)
-            let (lowerTag, value) = referencePair(for: art)
-            if !value.isEmpty {
-                if !lowerTag.isEmpty, let recs = highlightsByReference["\(lowerTag):\(value)"] {
-                    highlightBucket.append(contentsOf: recs.map { rec in
-                        HydratedHighlight(
-                            highlight: rec,
-                            artifact: art,
-                            sharedByEventId: nil,
-                            sharedByPubkey: nil
-                        )
-                    })
-                }
-                if let commentKey = commentKeysByArtifactId[artifactId],
-                   let recs = commentsByReference[commentKey] {
-                    commentBucket = recs
-                }
-            }
-
-            for h in highlights where matches(h, art) {
-                if highlightBucket.contains(where: { $0.highlight.eventId == h.highlight.eventId }) {
-                    continue
-                }
-                highlightBucket.append(h)
-            }
-
-            highlightBucket.sort { ($0.highlight.createdAt ?? 0) > ($1.highlight.createdAt ?? 0) }
-            commentBucket.sort { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
-
-            return Lane(
-                id: artifactId,
-                artifact: art,
-                highlights: highlightBucket,
-                comments: commentBucket
-            )
-        }
-
-        lanes.sort { a, b in
-            switch (a.isDormant, b.isDormant) {
-            case (false, true): return true
-            case (true, false): return false
-            default: return (a.latestActivity ?? 0) > (b.latestActivity ?? 0)
-            }
-        }
-        return lanes
-    }
-
-    /// Permissive predicate for the group-scoped `highlights` fallback —
-    /// used only when the per-reference fetch hasn't provided a match.
-    private static func matches(_ h: HydratedHighlight, _ art: ArtifactRecord) -> Bool {
-        let hl = h.highlight
-        let pv = art.preview
-
-        if !pv.referenceTagName.isEmpty, !pv.referenceTagValue.isEmpty {
-            let artKey = "\(pv.referenceTagName):\(pv.referenceTagValue)"
-            if !hl.sourceReferenceKey.isEmpty, hl.sourceReferenceKey == artKey {
-                return true
-            }
-        }
-
-        if !hl.artifactAddress.isEmpty {
-            if hl.artifactAddress == pv.referenceTagValue { return true }
-            if hl.artifactAddress == pv.highlightTagValue { return true }
-        }
-
-        if !hl.externalReference.isEmpty {
-            if hl.externalReference == pv.referenceTagValue { return true }
-            if hl.externalReference == pv.highlightTagValue { return true }
-            if !pv.podcastItemGuid.isEmpty,
-               hl.externalReference == "podcast:item:guid:\(pv.podcastItemGuid)" {
-                return true
-            }
-        }
-
-        if !hl.eventReference.isEmpty {
-            if hl.eventReference == pv.referenceTagValue { return true }
-            if hl.eventReference == art.shareEventId { return true }
-        }
-
-        if !hl.sourceUrl.isEmpty {
-            if hl.sourceUrl == pv.url { return true }
-            if !pv.audioUrl.isEmpty, hl.sourceUrl == pv.audioUrl { return true }
-        }
-
-        return false
-    }
-
-    /// Returns `(lowercaseTag, value)` for the artifact's primary highlight
-    /// reference, or empty strings for artifacts without one.
-    private static func referencePair(for art: ArtifactRecord) -> (String, String) {
-        let pv = art.preview
-        if !pv.referenceTagName.isEmpty, !pv.referenceTagValue.isEmpty {
-            return (pv.referenceTagName.lowercased(), pv.referenceTagValue)
-        }
-        if !pv.highlightTagName.isEmpty, !pv.highlightTagValue.isEmpty {
-            return (pv.highlightTagName.lowercased(), pv.highlightTagValue)
-        }
-        return ("", "")
-    }
-
-    private static func laneId(for art: ArtifactRecord) -> String {
-        art.shareEventId.isEmpty ? art.preview.id : art.shareEventId
     }
 }

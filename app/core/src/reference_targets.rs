@@ -57,7 +57,7 @@ pub fn highlight_reference_target(highlight: &HighlightRecord) -> Option<Highlig
     None
 }
 
-fn artifact_id(artifact: &ArtifactRecord) -> String {
+pub(crate) fn artifact_id(artifact: &ArtifactRecord) -> String {
     let share_event_id = artifact.share_event_id.trim();
     if share_event_id.is_empty() {
         artifact.preview.id.trim().to_string()

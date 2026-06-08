@@ -617,6 +617,29 @@ pub struct HighlightReferenceTarget {
     pub lookup_key: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightReferenceBucket {
+    pub lookup_key: String,
+    pub highlights: Vec<HighlightRecord>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentReferenceBucket {
+    pub comment_key: String,
+    pub comments: Vec<CommentRecord>,
+}
+
+/// A visible lane on the community home surface. Rust owns artifact/highlight
+/// matching, de-duplication, activity ordering, and dormant-lane filtering;
+/// native shells render this bounded screen projection.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomLane {
+    pub id: String,
+    pub artifact: ArtifactRecord,
+    pub highlights: Vec<HydratedHighlight>,
+    pub comments: Vec<CommentRecord>,
+}
+
 /// Highlight + its associated artifact (for feed rendering).
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct HydratedHighlight {

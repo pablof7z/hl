@@ -783,6 +783,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func buildPreviewFromUrl(url: String) async  -> ArtifactPreviewOutcome
 
+    /**
+     * Build the visible community-home artifact lanes from bounded screen
+     * inputs. Rust owns artifact/highlight matching, de-duplication, dormant
+     * filtering, and activity ordering.
+     */
+    func buildVisibleRoomLanes(artifacts: [ArtifactRecord], highlights: [HydratedHighlight], highlightsByReference: [HighlightReferenceBucket], commentsByReference: [CommentReferenceBucket])  -> [RoomLane]
+
     func checkNip05Availability(name: String) async  -> Nip05AvailabilityOutcome
 
     func classifyLoginInput(input: String)  -> LoginInputAction
@@ -1825,6 +1832,22 @@ open func buildPreviewFromUrl(url: String)async  -> ArtifactPreviewOutcome  {
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Build the visible community-home artifact lanes from bounded screen
+     * inputs. Rust owns artifact/highlight matching, de-duplication, dormant
+     * filtering, and activity ordering.
+     */
+open func buildVisibleRoomLanes(artifacts: [ArtifactRecord], highlights: [HydratedHighlight], highlightsByReference: [HighlightReferenceBucket], commentsByReference: [CommentReferenceBucket]) -> [RoomLane]  {
+    return try!  FfiConverterSequenceTypeRoomLane.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_build_visible_room_lanes(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeArtifactRecord.lower(artifacts),
+        FfiConverterSequenceTypeHydratedHighlight.lower(highlights),
+        FfiConverterSequenceTypeHighlightReferenceBucket.lower(highlightsByReference),
+        FfiConverterSequenceTypeCommentReferenceBucket.lower(commentsByReference),$0
+    )
+})
 }
 
 open func checkNip05Availability(name: String)async  -> Nip05AvailabilityOutcome  {
@@ -7858,6 +7881,76 @@ public func FfiConverterTypeCommentRecord_lower(_ value: CommentRecord) -> RustB
 }
 
 
+public struct CommentReferenceBucket {
+    public var commentKey: String
+    public var comments: [CommentRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(commentKey: String, comments: [CommentRecord]) {
+        self.commentKey = commentKey
+        self.comments = comments
+    }
+}
+
+#if compiler(>=6)
+extension CommentReferenceBucket: Sendable {}
+#endif
+
+
+extension CommentReferenceBucket: Equatable, Hashable {
+    public static func ==(lhs: CommentReferenceBucket, rhs: CommentReferenceBucket) -> Bool {
+        if lhs.commentKey != rhs.commentKey {
+            return false
+        }
+        if lhs.comments != rhs.comments {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(commentKey)
+        hasher.combine(comments)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentReferenceBucket: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentReferenceBucket {
+        return
+            try CommentReferenceBucket(
+                commentKey: FfiConverterString.read(from: &buf),
+                comments: FfiConverterSequenceTypeCommentRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentReferenceBucket, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.commentKey, into: &buf)
+        FfiConverterSequenceTypeCommentRecord.write(value.comments, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentReferenceBucket_lift(_ buf: RustBuffer) throws -> CommentReferenceBucket {
+    return try FfiConverterTypeCommentReferenceBucket.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentReferenceBucket_lower(_ value: CommentReferenceBucket) -> RustBuffer {
+    return FfiConverterTypeCommentReferenceBucket.lower(value)
+}
+
+
 /**
  * Rust-owned NIP-22 root scope projection. Native shells keep this record
  * opaque and pass it back for comment reads/writes.
@@ -10166,6 +10259,76 @@ public func FfiConverterTypeHighlightRecord_lift(_ buf: RustBuffer) throws -> Hi
 #endif
 public func FfiConverterTypeHighlightRecord_lower(_ value: HighlightRecord) -> RustBuffer {
     return FfiConverterTypeHighlightRecord.lower(value)
+}
+
+
+public struct HighlightReferenceBucket {
+    public var lookupKey: String
+    public var highlights: [HighlightRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(lookupKey: String, highlights: [HighlightRecord]) {
+        self.lookupKey = lookupKey
+        self.highlights = highlights
+    }
+}
+
+#if compiler(>=6)
+extension HighlightReferenceBucket: Sendable {}
+#endif
+
+
+extension HighlightReferenceBucket: Equatable, Hashable {
+    public static func ==(lhs: HighlightReferenceBucket, rhs: HighlightReferenceBucket) -> Bool {
+        if lhs.lookupKey != rhs.lookupKey {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(lookupKey)
+        hasher.combine(highlights)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightReferenceBucket: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightReferenceBucket {
+        return
+            try HighlightReferenceBucket(
+                lookupKey: FfiConverterString.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightReferenceBucket, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.lookupKey, into: &buf)
+        FfiConverterSequenceTypeHighlightRecord.write(value.highlights, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightReferenceBucket_lift(_ buf: RustBuffer) throws -> HighlightReferenceBucket {
+    return try FfiConverterTypeHighlightReferenceBucket.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightReferenceBucket_lower(_ value: HighlightReferenceBucket) -> RustBuffer {
+    return FfiConverterTypeHighlightReferenceBucket.lower(value)
 }
 
 
@@ -13367,6 +13530,97 @@ public func FfiConverterTypeRelayDiagnosticListOutcome_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeRelayDiagnosticListOutcome_lower(_ value: RelayDiagnosticListOutcome) -> RustBuffer {
     return FfiConverterTypeRelayDiagnosticListOutcome.lower(value)
+}
+
+
+/**
+ * A visible lane on the community home surface. Rust owns artifact/highlight
+ * matching, de-duplication, activity ordering, and dormant-lane filtering;
+ * native shells render this bounded screen projection.
+ */
+public struct RoomLane {
+    public var id: String
+    public var artifact: ArtifactRecord
+    public var highlights: [HydratedHighlight]
+    public var comments: [CommentRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, artifact: ArtifactRecord, highlights: [HydratedHighlight], comments: [CommentRecord]) {
+        self.id = id
+        self.artifact = artifact
+        self.highlights = highlights
+        self.comments = comments
+    }
+}
+
+#if compiler(>=6)
+extension RoomLane: Sendable {}
+#endif
+
+
+extension RoomLane: Equatable, Hashable {
+    public static func ==(lhs: RoomLane, rhs: RoomLane) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.comments != rhs.comments {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(artifact)
+        hasher.combine(highlights)
+        hasher.combine(comments)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLane: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLane {
+        return
+            try RoomLane(
+                id: FfiConverterString.read(from: &buf),
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
+                comments: FfiConverterSequenceTypeCommentRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLane, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterSequenceTypeHydratedHighlight.write(value.highlights, into: &buf)
+        FfiConverterSequenceTypeCommentRecord.write(value.comments, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLane_lift(_ buf: RustBuffer) throws -> RoomLane {
+    return try FfiConverterTypeRoomLane.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLane_lower(_ value: RoomLane) -> RustBuffer {
+    return FfiConverterTypeRoomLane.lower(value)
 }
 
 
@@ -17272,6 +17526,31 @@ fileprivate struct FfiConverterSequenceTypeCommentRecord: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCommentReferenceBucket: FfiConverterRustBuffer {
+    typealias SwiftType = [CommentReferenceBucket]
+
+    public static func write(_ value: [CommentReferenceBucket], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCommentReferenceBucket.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommentReferenceBucket] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CommentReferenceBucket]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCommentReferenceBucket.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCommunitySummary: FfiConverterRustBuffer {
     typealias SwiftType = [CommunitySummary]
 
@@ -17439,6 +17718,31 @@ fileprivate struct FfiConverterSequenceTypeHighlightRecord: FfiConverterRustBuff
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeHighlightRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlightReferenceBucket: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlightReferenceBucket]
+
+    public static func write(_ value: [HighlightReferenceBucket], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlightReferenceBucket.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlightReferenceBucket] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlightReferenceBucket]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlightReferenceBucket.read(from: &buf))
         }
         return seq
     }
@@ -17672,6 +17976,31 @@ fileprivate struct FfiConverterSequenceTypeRelayDiagnostic: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRoomLane: FfiConverterRustBuffer {
+    typealias SwiftType = [RoomLane]
+
+    public static func write(_ value: [RoomLane], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRoomLane.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomLane] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RoomLane]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRoomLane.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRoomRecommendation: FfiConverterRustBuffer {
     typealias SwiftType = [RoomRecommendation]
 
@@ -17893,6 +18222,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 40366) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_build_visible_room_lanes() != 39759) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 22195) {

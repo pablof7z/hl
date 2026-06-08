@@ -596,6 +596,20 @@ actor SafeHighlighterCore {
         core.getHighlightReferenceTarget(highlight: highlight)
     }
 
+    nonisolated func buildVisibleRoomLanes(
+        artifacts: [ArtifactRecord],
+        highlights: [HydratedHighlight],
+        highlightsByReference: [HighlightReferenceBucket],
+        commentsByReference: [CommentReferenceBucket]
+    ) -> [RoomLane] {
+        core.buildVisibleRoomLanes(
+            artifacts: artifacts,
+            highlights: highlights,
+            highlightsByReference: highlightsByReference,
+            commentsByReference: commentsByReference
+        )
+    }
+
     nonisolated func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome {
         core.getHighlightCommentScope(eventIdHex: eventIdHex)
     }
