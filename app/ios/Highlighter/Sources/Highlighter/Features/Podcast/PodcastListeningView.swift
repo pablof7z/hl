@@ -526,12 +526,13 @@ struct PodcastListeningView: View {
         let tagValue = guid.isEmpty
             ? artifact.shareEventId
             : "podcast:item:guid:\(guid)"
-        if let clips = try? await app.safeCore.getHighlightsForReference(
+        let outcome = await app.safeCore.getHighlightsForReference(
             tagName: "i",
             tagValue: tagValue,
             limit: 128
-        ) {
-            memberClips = clips.sorted { ($0.clipStartSeconds ?? 0) < ($1.clipStartSeconds ?? 0) }
+        )
+        if outcome.error.isEmpty {
+            memberClips = outcome.values.sorted { ($0.clipStartSeconds ?? 0) < ($1.clipStartSeconds ?? 0) }
         }
     }
 }

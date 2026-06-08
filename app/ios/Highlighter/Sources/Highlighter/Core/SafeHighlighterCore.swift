@@ -380,32 +380,32 @@ actor SafeHighlighterCore {
         try await core.registerNip05(name: name, domain: domain)
     }
 
-    func getUserArticles(pubkeyHex: String, limit: UInt32 = 32) async throws -> [ArticleRecord] {
-        try await core.getUserArticles(pubkeyHex: pubkeyHex, limit: limit)
+    func getUserArticles(pubkeyHex: String, limit: UInt32 = 32) async -> ArticleListOutcome {
+        await core.getUserArticles(pubkeyHex: pubkeyHex, limit: limit)
     }
 
-    func getArticle(pubkeyHex: String, dTag: String) async throws -> ArticleRecord? {
-        try await core.getArticle(pubkeyHex: pubkeyHex, dTag: dTag)
+    func getArticle(pubkeyHex: String, dTag: String) async -> ArticleOutcome {
+        await core.getArticle(pubkeyHex: pubkeyHex, dTag: dTag)
     }
 
-    func getHighlightsForArticle(address: String, limit: UInt32 = 128) async throws -> [HighlightRecord] {
-        try await core.getHighlightsForArticle(address: address, limit: limit)
+    func getHighlightsForArticle(address: String, limit: UInt32 = 128) async -> HighlightListOutcome {
+        await core.getHighlightsForArticle(address: address, limit: limit)
     }
 
     func getHighlightsForReference(
         tagName: String,
         tagValue: String,
         limit: UInt32 = 128
-    ) async throws -> [HighlightRecord] {
-        try await core.getHighlightsForReference(tagName: tagName, tagValue: tagValue, limit: limit)
+    ) async -> HighlightListOutcome {
+        await core.getHighlightsForReference(tagName: tagName, tagValue: tagValue, limit: limit)
     }
 
     func getCommentsForReference(
         tagName: String,
         tagValue: String,
         limit: UInt32 = 128
-    ) async throws -> [CommentRecord] {
-        try await core.getCommentsForReference(tagName: tagName, tagValue: tagValue, limit: limit)
+    ) async -> CommentListOutcome {
+        await core.getCommentsForReference(tagName: tagName, tagValue: tagValue, limit: limit)
     }
 
     func publishComment(
@@ -418,12 +418,12 @@ actor SafeHighlighterCore {
         await core.publishComment(rootTagName: rootTagName, rootTagValue: rootTagValue, rootKind: rootKind, parentEventId: parentEventId, content: content)
     }
 
-    func getUserHighlights(pubkeyHex: String, limit: UInt32 = 64) async throws -> [HighlightRecord] {
-        try await core.getUserHighlights(pubkeyHex: pubkeyHex, limit: limit)
+    func getUserHighlights(pubkeyHex: String, limit: UInt32 = 64) async -> HighlightListOutcome {
+        await core.getUserHighlights(pubkeyHex: pubkeyHex, limit: limit)
     }
 
-    func getUserCommunities(pubkeyHex: String) async throws -> [CommunitySummary] {
-        try await core.getUserCommunities(pubkeyHex: pubkeyHex)
+    func getUserCommunities(pubkeyHex: String) async -> CommunityListOutcome {
+        await core.getUserCommunities(pubkeyHex: pubkeyHex)
     }
 
     // MARK: - Rooms explorer

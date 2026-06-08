@@ -123,15 +123,19 @@ final class RoomStore {
         await withTaskGroup(of: FetchResult.self) { group in
             for target in targets {
                 group.addTask {
-                    let hl: [HighlightRecord]? = try? await core.getHighlightsForReference(
+                    let highlightOutcome = await core.getHighlightsForReference(
                         tagName: target.lowercaseTag,
                         tagValue: target.value
                     )
-                    let cm: [CommentRecord]? = try? await core.getCommentsForReference(
+                    let commentOutcome = await core.getCommentsForReference(
                         tagName: target.uppercaseTag,
                         tagValue: target.value
                     )
-                    return FetchResult(target: target, highlights: hl, comments: cm)
+                    return FetchResult(
+                        target: target,
+                        highlights: highlightOutcome.error.isEmpty ? highlightOutcome.values : nil,
+                        comments: commentOutcome.error.isEmpty ? commentOutcome.values : nil
+                    )
                 }
             }
             for await result in group {
@@ -148,19 +152,19 @@ final class RoomStore {
 
     private func refreshReferenceQueries(for artifact: ArtifactRecord) async {
         guard let core, let target = referenceTarget(for: artifact) else { return }
-        let hl: [HighlightRecord]? = try? await core.getHighlightsForReference(
+        let highlightOutcome = await core.getHighlightsForReference(
             tagName: target.lowercaseTag,
             tagValue: target.value
         )
-        let cm: [CommentRecord]? = try? await core.getCommentsForReference(
+        let commentOutcome = await core.getCommentsForReference(
             tagName: target.uppercaseTag,
             tagValue: target.value
         )
-        if let hl {
-            highlightsByReference["\(target.lowercaseTag):\(target.value)"] = hl
+        if highlightOutcome.error.isEmpty {
+            highlightsByReference["\(target.lowercaseTag):\(target.value)"] = highlightOutcome.values
         }
-        if let cm {
-            commentsByReference["\(target.uppercaseTag):\(target.value)"] = cm
+        if commentOutcome.error.isEmpty {
+            commentsByReference["\(target.uppercaseTag):\(target.value)"] = commentOutcome.values
         }
     }
 

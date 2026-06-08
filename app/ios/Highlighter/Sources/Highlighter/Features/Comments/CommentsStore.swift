@@ -51,20 +51,20 @@ final class CommentsStore {
         guard let core, let artifact else { return }
         isLoading = true
         loadError = nil
-        do {
-            let fetched = try await core.getCommentsForReference(
-                tagName: artifact.rootTagName,
-                tagValue: artifact.rootTagValue,
-                limit: 256
-            )
-            records = fetched
+        let outcome = await core.getCommentsForReference(
+            tagName: artifact.rootTagName,
+            tagValue: artifact.rootTagValue,
+            limit: 256
+        )
+        if outcome.error.isEmpty {
+            records = outcome.values
             tree = CommentTreeBuilder.build(
-                records: fetched,
+                records: outcome.values,
                 rootTagValue: artifact.rootTagValue
             )
-            await refreshReactionsAndBookmarks(for: fetched)
-        } catch {
-            loadError = (error as? CoreError).map { "\($0)" } ?? "Couldn't load comments."
+            await refreshReactionsAndBookmarks(for: outcome.values)
+        } else {
+            loadError = outcome.error
         }
         isLoading = false
     }

@@ -78,10 +78,12 @@ final class ArticleReaderStore {
 
     func loadAll() async {
         async let articleTask: ArticleRecord? = {
-            try? await safeCore.getArticle(pubkeyHex: target.pubkey, dTag: target.dTag)
+            let outcome = await safeCore.getArticle(pubkeyHex: target.pubkey, dTag: target.dTag)
+            return outcome.error.isEmpty ? outcome.value : nil
         }()
         async let highlightsTask: [HighlightRecord] = {
-            (try? await safeCore.getHighlightsForArticle(address: target.address)) ?? []
+            let outcome = await safeCore.getHighlightsForArticle(address: target.address)
+            return outcome.error.isEmpty ? outcome.values : []
         }()
         async let profileTask: ProfileMetadata? = {
             let outcome = await safeCore.getUserProfile(pubkeyHex: target.pubkey)
@@ -103,15 +105,17 @@ final class ArticleReaderStore {
     func applyUpdate(kind: UInt32) async {
         switch kind {
         case 30023:
-            if let article = try? await safeCore.getArticle(
+            let outcome = await safeCore.getArticle(
                 pubkeyHex: target.pubkey,
                 dTag: target.dTag
-            ) {
+            )
+            if outcome.error.isEmpty, let article = outcome.value {
                 self.article = article
             }
         case 9802:
-            if let list = try? await safeCore.getHighlightsForArticle(address: target.address) {
-                self.highlights = list
+            let outcome = await safeCore.getHighlightsForArticle(address: target.address)
+            if outcome.error.isEmpty {
+                self.highlights = outcome.values
             }
         default:
             break

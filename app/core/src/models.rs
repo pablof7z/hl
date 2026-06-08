@@ -143,6 +143,18 @@ pub struct CommentOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentListOutcome {
+    pub values: Vec<CommentRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleOutcome {
+    pub value: Option<ArticleRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct ArticleListOutcome {
     pub values: Vec<ArticleRecord>,
     pub error: String,

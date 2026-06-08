@@ -24,11 +24,11 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleListOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome,
+    ArticleListOutcome, ArticleOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome,
     ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload,
     BlossomUploadOutcome, BookmarkSetListOutcome, BookmarkSetOutcome,
     BookmarkSetRecord, BoolOutcome, ChatMessageListOutcome, ChatMessageOutcome,
-    ChatMessageRecord, CommentOutcome, CommentRecord, CommunityListOutcome, CommunitySummary,
+    ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord, CommunityListOutcome, CommunitySummary,
     CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
     DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
     FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft,
@@ -283,6 +283,19 @@ fn article_list_outcome(result: Result<Vec<ArticleRecord>, CoreError>) -> Articl
     }
 }
 
+fn optional_article_outcome(result: Result<Option<ArticleRecord>, CoreError>) -> ArticleOutcome {
+    match result {
+        Ok(value) => ArticleOutcome {
+            value,
+            error: String::new(),
+        },
+        Err(error) => ArticleOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
 fn artifact_outcome(result: Result<ArtifactRecord, CoreError>) -> ArtifactOutcome {
     match result {
         Ok(value) => ArtifactOutcome {
@@ -384,6 +397,19 @@ fn comment_outcome(result: Result<CommentRecord, CoreError>) -> CommentOutcome {
         },
         Err(error) => CommentOutcome {
             value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn comment_list_outcome(result: Result<Vec<CommentRecord>, CoreError>) -> CommentListOutcome {
+    match result {
+        Ok(values) => CommentListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => CommentListOutcome {
+            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -1384,8 +1410,12 @@ impl HighlighterCore {
         &self,
         pubkey_hex: String,
         limit: u32,
-    ) -> Result<Vec<ArticleRecord>, CoreError> {
-        articles::query_articles_by_author(self.runtime.ndb(), pubkey_hex.trim(), limit)
+    ) -> ArticleListOutcome {
+        article_list_outcome(articles::query_articles_by_author(
+            self.runtime.ndb(),
+            pubkey_hex.trim(),
+            limit,
+        ))
     }
 
     /// Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
@@ -1395,8 +1425,12 @@ impl HighlighterCore {
         &self,
         pubkey_hex: String,
         d_tag: String,
-    ) -> Result<Option<ArticleRecord>, CoreError> {
-        articles::query_article(self.runtime.ndb(), pubkey_hex.trim(), d_tag.trim())
+    ) -> ArticleOutcome {
+        optional_article_outcome(articles::query_article(
+            self.runtime.ndb(),
+            pubkey_hex.trim(),
+            d_tag.trim(),
+        ))
     }
 
     /// Read all highlights referencing the given NIP-23 article address
@@ -1405,8 +1439,12 @@ impl HighlighterCore {
         &self,
         address: String,
         limit: u32,
-    ) -> Result<Vec<HighlightRecord>, CoreError> {
-        highlights::query_for_article(self.runtime.ndb(), address.trim(), limit)
+    ) -> HighlightListOutcome {
+        highlight_list_outcome(highlights::query_for_article(
+            self.runtime.ndb(),
+            address.trim(),
+            limit,
+        ))
     }
 
     /// Read highlights whose `tag_name` tag holds `tag_value`, newest
@@ -1418,11 +1456,19 @@ impl HighlighterCore {
         tag_name: String,
         tag_value: String,
         limit: u32,
-    ) -> Result<Vec<HighlightRecord>, CoreError> {
+    ) -> HighlightListOutcome {
         let Some(ch) = tag_name.trim().chars().next() else {
-            return Ok(Vec::new());
+            return HighlightListOutcome {
+                values: Vec::new(),
+                error: String::new(),
+            };
         };
-        highlights::query_for_reference(self.runtime.ndb(), ch, tag_value.trim(), limit)
+        highlight_list_outcome(highlights::query_for_reference(
+            self.runtime.ndb(),
+            ch,
+            tag_value.trim(),
+            limit,
+        ))
     }
 
     /// Read NIP-22 comments (kind:1111) rooted at the given uppercase
@@ -1433,11 +1479,19 @@ impl HighlighterCore {
         tag_name: String,
         tag_value: String,
         limit: u32,
-    ) -> Result<Vec<CommentRecord>, CoreError> {
+    ) -> CommentListOutcome {
         let Some(ch) = tag_name.trim().chars().next() else {
-            return Ok(Vec::new());
+            return CommentListOutcome {
+                values: Vec::new(),
+                error: String::new(),
+            };
         };
-        comments::query_for_reference(self.runtime.ndb(), ch, tag_value.trim(), limit)
+        comment_list_outcome(comments::query_for_reference(
+            self.runtime.ndb(),
+            ch,
+            tag_value.trim(),
+            limit,
+        ))
     }
 
     /// Publish a NIP-22 kind:1111 comment scoped to any artifact.
@@ -1534,15 +1588,22 @@ impl HighlighterCore {
         &self,
         pubkey_hex: String,
         limit: u32,
-    ) -> Result<Vec<HighlightRecord>, CoreError> {
-        highlights::query_highlights_by_author(self.runtime.ndb(), pubkey_hex.trim(), limit)
+    ) -> HighlightListOutcome {
+        highlight_list_outcome(highlights::query_highlights_by_author(
+            self.runtime.ndb(),
+            pubkey_hex.trim(),
+            limit,
+        ))
     }
 
     pub async fn get_user_communities(
         &self,
         pubkey_hex: String,
-    ) -> Result<Vec<CommunitySummary>, CoreError> {
-        groups::query_joined_communities_from_ndb(self.runtime.ndb(), pubkey_hex.trim())
+    ) -> CommunityListOutcome {
+        community_list_outcome(groups::query_joined_communities_from_ndb(
+            self.runtime.ndb(),
+            pubkey_hex.trim(),
+        ))
     }
 
     // -- Follow state (kind:3) --

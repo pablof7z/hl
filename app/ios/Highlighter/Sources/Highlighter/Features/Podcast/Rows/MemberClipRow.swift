@@ -106,12 +106,12 @@ struct MemberClipRow: View {
             let id = highlight.eventId
             guard app.podcastPlayer.comments[id] == nil else { return }
             Task {
-                let records = (try? await app.safeCore.getCommentsForReference(
+                let outcome = await app.safeCore.getCommentsForReference(
                     tagName: "e",
                     tagValue: id,
                     limit: 200
-                )) ?? []
-                app.podcastPlayer.comments[id] = records
+                )
+                app.podcastPlayer.comments[id] = outcome.error.isEmpty ? outcome.values : []
             }
         }
     }

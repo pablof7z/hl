@@ -591,7 +591,8 @@ struct HighlightFeedCardView: View {
         let dTag = String(parts[2])
         guard !pubkey.isEmpty, !dTag.isEmpty else { return }
 
-        sourceArticle = try? await app.safeCore.getArticle(pubkeyHex: pubkey, dTag: dTag)
+        let outcome = await app.safeCore.getArticle(pubkeyHex: pubkey, dTag: dTag)
+        sourceArticle = outcome.error.isEmpty ? outcome.value : nil
         await app.requestProfile(pubkeyHex: pubkey)
     }
 }

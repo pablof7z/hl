@@ -72,13 +72,16 @@ final class ProfileStore {
             return outcome.error.isEmpty ? outcome.value : nil
         }()
         async let articlesTask: [ArticleRecord] = {
-            (try? await safeCore.getUserArticles(pubkeyHex: pubkey)) ?? []
+            let outcome = await safeCore.getUserArticles(pubkeyHex: pubkey)
+            return outcome.error.isEmpty ? outcome.values : []
         }()
         async let highlightsTask: [HighlightRecord] = {
-            (try? await safeCore.getUserHighlights(pubkeyHex: pubkey)) ?? []
+            let outcome = await safeCore.getUserHighlights(pubkeyHex: pubkey)
+            return outcome.error.isEmpty ? outcome.values : []
         }()
         async let communitiesTask: [CommunitySummary] = {
-            (try? await safeCore.getUserCommunities(pubkeyHex: pubkey)) ?? []
+            let outcome = await safeCore.getUserCommunities(pubkeyHex: pubkey)
+            return outcome.error.isEmpty ? outcome.values : []
         }()
         async let followTask: Bool = {
             guard let viewer = viewerPubkey, viewer.lowercased() != pubkey.lowercased() else {
@@ -115,16 +118,19 @@ final class ProfileStore {
                 }
             }
         case 30023:
-            if let list = try? await safeCore.getUserArticles(pubkeyHex: pubkey) {
-                self.articles = list
+            let outcome = await safeCore.getUserArticles(pubkeyHex: pubkey)
+            if outcome.error.isEmpty {
+                self.articles = outcome.values
             }
         case 9802:
-            if let list = try? await safeCore.getUserHighlights(pubkeyHex: pubkey) {
-                self.highlights = list
+            let outcome = await safeCore.getUserHighlights(pubkeyHex: pubkey)
+            if outcome.error.isEmpty {
+                self.highlights = outcome.values
             }
         case 39001, 39002:
-            if let list = try? await safeCore.getUserCommunities(pubkeyHex: pubkey) {
-                self.communities = list
+            let outcome = await safeCore.getUserCommunities(pubkeyHex: pubkey)
+            if outcome.error.isEmpty {
+                self.communities = outcome.values
             }
         default:
             break

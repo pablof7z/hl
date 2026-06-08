@@ -100,7 +100,8 @@ struct SetDetailView: View {
             let pubkey = String(parts[1])
             let dTag = String(parts[2])
             guard !pubkey.isEmpty, !dTag.isEmpty else { continue }
-            if let article = try? await app.safeCore.getArticle(pubkeyHex: pubkey, dTag: dTag) {
+            let outcome = await app.safeCore.getArticle(pubkeyHex: pubkey, dTag: dTag)
+            if outcome.error.isEmpty, let article = outcome.value {
                 loaded.append(article)
             }
         }

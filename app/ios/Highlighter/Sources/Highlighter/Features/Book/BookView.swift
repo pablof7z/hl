@@ -238,12 +238,13 @@ struct BookView: View {
     private func load() async {
         await app.requestIsbnPreview(isbn: isbn)
         let tagValue = catalogId.hasPrefix("isbn:") ? catalogId : "isbn:\(catalogId)"
-        if let hs = try? await app.safeCore.getHighlightsForReference(
+        let outcome = await app.safeCore.getHighlightsForReference(
             tagName: "i",
             tagValue: tagValue,
             limit: 64
-        ) {
-            await MainActor.run { highlights = hs }
+        )
+        if outcome.error.isEmpty {
+            await MainActor.run { highlights = outcome.values }
         }
     }
 

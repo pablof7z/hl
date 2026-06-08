@@ -833,7 +833,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
      * backfills via relays, and a later call returns `Some`.
      */
-    func getArticle(pubkeyHex: String, dTag: String) async throws  -> ArticleRecord?
+    func getArticle(pubkeyHex: String, dTag: String) async  -> ArticleOutcome
 
     func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
 
@@ -869,7 +869,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
      * books, etc. Newest first.
      */
-    func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32) async throws  -> [CommentRecord]
+    func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32) async  -> CommentListOutcome
 
     func getDiscussions(groupId: String, limit: UInt32) async  -> DiscussionListOutcome
 
@@ -925,7 +925,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Read all highlights referencing the given NIP-23 article address
      * (`30023:<pubkey>:<d>`) from nostrdb, newest first.
      */
-    func getHighlightsForArticle(address: String, limit: UInt32) async throws  -> [HighlightRecord]
+    func getHighlightsForArticle(address: String, limit: UInt32) async  -> HighlightListOutcome
 
     /**
      * Read highlights whose `tag_name` tag holds `tag_value`, newest
@@ -933,7 +933,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * for articles, `("i", "isbn:…")` for ISBN books, `("r", "<url>")` for
      * podcasts. `tag_name` must be a single character.
      */
-    func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32) async throws  -> [HighlightRecord]
+    func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32) async  -> HighlightListOutcome
 
     func getJoinedCommunities() async  -> CommunityListOutcome
 
@@ -1023,11 +1023,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getSearchRelays() async  -> StringListOutcome
 
-    func getUserArticles(pubkeyHex: String, limit: UInt32) async throws  -> [ArticleRecord]
+    func getUserArticles(pubkeyHex: String, limit: UInt32) async  -> ArticleListOutcome
 
-    func getUserCommunities(pubkeyHex: String) async throws  -> [CommunitySummary]
+    func getUserCommunities(pubkeyHex: String) async  -> CommunityListOutcome
 
-    func getUserHighlights(pubkeyHex: String, limit: UInt32) async throws  -> [HighlightRecord]
+    func getUserHighlights(pubkeyHex: String, limit: UInt32) async  -> HighlightListOutcome
 
     func getUserProfile(pubkeyHex: String) async  -> ProfileOutcome
 
@@ -1809,9 +1809,9 @@ open func getAllRooms(limit: UInt32)async throws  -> [CommunitySummary]  {
      * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
      * backfills via relays, and a later call returns `Some`.
      */
-open func getArticle(pubkeyHex: String, dTag: String)async throws  -> ArticleRecord?  {
+open func getArticle(pubkeyHex: String, dTag: String)async  -> ArticleOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_article(
                     self.uniffiClonePointer(),
@@ -1821,8 +1821,9 @@ open func getArticle(pubkeyHex: String, dTag: String)async throws  -> ArticleRec
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterOptionTypeArticleRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeArticleOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -1944,9 +1945,9 @@ open func getChatMessages(groupId: String, limit: UInt32)async  -> ChatMessageLi
      * scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
      * books, etc. Newest first.
      */
-open func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32)async throws  -> [CommentRecord]  {
+open func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32)async  -> CommentListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_comments_for_reference(
                     self.uniffiClonePointer(),
@@ -1956,8 +1957,9 @@ open func getCommentsForReference(tagName: String, tagValue: String, limit: UInt
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeCommentRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeCommentListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2155,9 +2157,9 @@ open func getHighlights(groupId: String, limit: UInt32)async  -> HydratedHighlig
      * Read all highlights referencing the given NIP-23 article address
      * (`30023:<pubkey>:<d>`) from nostrdb, newest first.
      */
-open func getHighlightsForArticle(address: String, limit: UInt32)async throws  -> [HighlightRecord]  {
+open func getHighlightsForArticle(address: String, limit: UInt32)async  -> HighlightListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_highlights_for_article(
                     self.uniffiClonePointer(),
@@ -2167,8 +2169,9 @@ open func getHighlightsForArticle(address: String, limit: UInt32)async throws  -
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2178,9 +2181,9 @@ open func getHighlightsForArticle(address: String, limit: UInt32)async throws  -
      * for articles, `("i", "isbn:…")` for ISBN books, `("r", "<url>")` for
      * podcasts. `tag_name` must be a single character.
      */
-open func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32)async throws  -> [HighlightRecord]  {
+open func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32)async  -> HighlightListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_highlights_for_reference(
                     self.uniffiClonePointer(),
@@ -2190,8 +2193,9 @@ open func getHighlightsForReference(tagName: String, tagValue: String, limit: UI
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2543,9 +2547,9 @@ open func getSearchRelays()async  -> StringListOutcome  {
         )
 }
 
-open func getUserArticles(pubkeyHex: String, limit: UInt32)async throws  -> [ArticleRecord]  {
+open func getUserArticles(pubkeyHex: String, limit: UInt32)async  -> ArticleListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_user_articles(
                     self.uniffiClonePointer(),
@@ -2555,14 +2559,15 @@ open func getUserArticles(pubkeyHex: String, limit: UInt32)async throws  -> [Art
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeArticleRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeArticleListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
-open func getUserCommunities(pubkeyHex: String)async throws  -> [CommunitySummary]  {
+open func getUserCommunities(pubkeyHex: String)async  -> CommunityListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_user_communities(
                     self.uniffiClonePointer(),
@@ -2572,14 +2577,15 @@ open func getUserCommunities(pubkeyHex: String)async throws  -> [CommunitySummar
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeCommunityListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
-open func getUserHighlights(pubkeyHex: String, limit: UInt32)async throws  -> [HighlightRecord]  {
+open func getUserHighlights(pubkeyHex: String, limit: UInt32)async  -> HighlightListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_user_highlights(
                     self.uniffiClonePointer(),
@@ -2589,8 +2595,9 @@ open func getUserHighlights(pubkeyHex: String, limit: UInt32)async throws  -> [H
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -4305,6 +4312,76 @@ public func FfiConverterTypeArticleListOutcome_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeArticleListOutcome_lower(_ value: ArticleListOutcome) -> RustBuffer {
     return FfiConverterTypeArticleListOutcome.lower(value)
+}
+
+
+public struct ArticleOutcome {
+    public var value: ArticleRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: ArticleRecord?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ArticleOutcome: Sendable {}
+#endif
+
+
+extension ArticleOutcome: Equatable, Hashable {
+    public static func ==(lhs: ArticleOutcome, rhs: ArticleOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleOutcome {
+        return
+            try ArticleOutcome(
+                value: FfiConverterOptionTypeArticleRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArticleRecord.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleOutcome_lift(_ buf: RustBuffer) throws -> ArticleOutcome {
+    return try FfiConverterTypeArticleOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleOutcome_lower(_ value: ArticleOutcome) -> RustBuffer {
+    return FfiConverterTypeArticleOutcome.lower(value)
 }
 
 
@@ -6163,6 +6240,76 @@ public func FfiConverterTypeChatMessageRecord_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeChatMessageRecord_lower(_ value: ChatMessageRecord) -> RustBuffer {
     return FfiConverterTypeChatMessageRecord.lower(value)
+}
+
+
+public struct CommentListOutcome {
+    public var values: [CommentRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [CommentRecord], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CommentListOutcome: Sendable {}
+#endif
+
+
+extension CommentListOutcome: Equatable, Hashable {
+    public static func ==(lhs: CommentListOutcome, rhs: CommentListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentListOutcome {
+        return
+            try CommentListOutcome(
+                values: FfiConverterSequenceTypeCommentRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommentRecord.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentListOutcome_lift(_ buf: RustBuffer) throws -> CommentListOutcome {
+    return try FfiConverterTypeCommentListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentListOutcome_lower(_ value: CommentListOutcome) -> RustBuffer {
+    return FfiConverterTypeCommentListOutcome.lower(value)
 }
 
 
@@ -13920,7 +14067,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_all_rooms() != 20905) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article() != 17849) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article() != 62635) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_route() != 10925) {
@@ -13941,7 +14088,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_messages() != 59404) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_reference() != 23769) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_reference() != 62284) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 7889) {
@@ -13971,10 +14118,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights() != 24276) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_article() != 24140) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_article() != 21511) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_reference() != 19698) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_reference() != 12852) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 28655) {
@@ -14031,13 +14178,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_relays() != 44280) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_articles() != 2405) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_articles() != 49199) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_communities() != 15418) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_communities() != 40783) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_highlights() != 58884) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_highlights() != 58652) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 11410) {

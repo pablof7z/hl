@@ -51,12 +51,12 @@ pub use client::HighlighterCore;
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
-    ArticleListOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget,
+    ArticleListOutcome, ArticleOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget,
     ArtifactListOutcome, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord,
     BlossomUpload, BlossomUploadOutcome, BookmarkSetListOutcome,
     BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, ChatMessageListOutcome,
-    ChatMessageOutcome, ChatMessageRecord, CommentOutcome, CommentRecord, CommunityListOutcome,
-    CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionAttachment,
+    ChatMessageOutcome, ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord,
+    CommunityListOutcome, CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionAttachment,
     DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
     FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
     GeneratedAccount, GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome,
