@@ -12,20 +12,20 @@ actor SafeHighlighterCore {
 
     // MARK: - Auth
 
-    func loginNsec(_ nsec: String) throws -> CurrentUser {
-        try core.loginNsec(nsec: nsec)
+    func loginNsec(_ nsec: String) -> CurrentUserOutcome {
+        core.loginNsec(nsec: nsec)
     }
 
-    func startNostrConnect(_ options: NostrConnectOptions) async throws -> String {
-        try await core.startNostrConnect(options: options)
+    func startNostrConnect(_ options: NostrConnectOptions) async -> StringOutcome {
+        await core.startNostrConnect(options: options)
     }
 
-    func pairBunker(_ uri: String) async throws -> CurrentUser {
-        try await core.pairBunker(uri: uri)
+    func pairBunker(_ uri: String) async -> CurrentUserOutcome {
+        await core.pairBunker(uri: uri)
     }
 
-    func generateAccount() throws -> GeneratedAccount {
-        try core.generateAccount()
+    func generateAccount() -> GeneratedAccountOutcome {
+        core.generateAccount()
     }
 
     func currentUser() -> CurrentUser? {

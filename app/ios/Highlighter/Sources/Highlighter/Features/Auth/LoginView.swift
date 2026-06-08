@@ -148,20 +148,24 @@ struct LoginView: View {
         errorMessage = nil
         defer { isWorking = false }
 
-        do {
-            if normalized.hasPrefix("nsec1") {
-                let user = try await store.safeCore.loginNsec(normalized)
+        if normalized.hasPrefix("nsec1") {
+            let outcome = await store.safeCore.loginNsec(normalized)
+            if outcome.error.isEmpty, let user = outcome.value {
                 AppSessionStore.shared.persistNsec(normalized)
                 await store.completeLogin(user: user)
-            } else if normalized.hasPrefix("bunker://") || normalized.hasPrefix("nostrconnect://") {
-                let user = try await store.safeCore.pairBunker(normalized)
+            } else {
+                errorMessage = outcome.error.isEmpty ? "Sign in failed." : outcome.error
+            }
+        } else if normalized.hasPrefix("bunker://") || normalized.hasPrefix("nostrconnect://") {
+            let outcome = await store.safeCore.pairBunker(normalized)
+            if outcome.error.isEmpty, let user = outcome.value {
                 AppSessionStore.shared.persistBunkerURI(normalized)
                 await store.completeLogin(user: user)
             } else {
-                errorMessage = "Enter an nsec1… or bunker:// URI."
+                errorMessage = outcome.error.isEmpty ? "Sign in failed." : outcome.error
             }
-        } catch {
-            errorMessage = error.localizedDescription
+        } else {
+            errorMessage = "Enter an nsec1… or bunker:// URI."
         }
     }
 
@@ -170,29 +174,34 @@ struct LoginView: View {
         errorMessage = nil
         defer { isWorking = false }
 
-        do {
-            let options = NostrConnectOptions(
-                name: "Highlighter",
-                url: "https://highlighter.com",
-                image: "https://highlighter.com/icon.png",
-                perms: "sign_event:11,sign_event:1111,sign_event:9802,sign_event:16,nip04_encrypt,nip04_decrypt,nip44_encrypt,nip44_decrypt"
-            )
-            let uri = try await store.safeCore.startNostrConnect(options)
-
-            // Attach a return-to-foreground callback; actual pairing happens
-            // over the relay that the Rust core is already subscribed to.
-            let callback = "highlighter://nip46"
-            let encodedCallback = callback.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? callback
-            let separator = uri.contains("?") ? "&" : "?"
-            let urlWithCallback = "\(uri)\(separator)callback=\(encodedCallback)"
-
-            if let url = URL(string: urlWithCallback) {
-                openURL(url)
-            }
-            // `EventBridge` receives `.signerConnected(user)` once the remote
-            // signer responds on the relay and `completeLogin` runs from there.
-        } catch {
-            errorMessage = error.localizedDescription
+        let options = NostrConnectOptions(
+            name: "Highlighter",
+            url: "https://highlighter.com",
+            image: "https://highlighter.com/icon.png",
+            perms: "sign_event:11,sign_event:1111,sign_event:9802,sign_event:16,nip04_encrypt,nip04_decrypt,nip44_encrypt,nip44_decrypt"
+        )
+        let outcome = await store.safeCore.startNostrConnect(options)
+        guard outcome.error.isEmpty else {
+            errorMessage = outcome.error
+            return
         }
+        let uri = outcome.value
+        guard !uri.isEmpty else {
+            errorMessage = "Could not start Nostr Connect."
+            return
+        }
+
+        // Attach a return-to-foreground callback; actual pairing happens
+        // over the relay that the Rust core is already subscribed to.
+        let callback = "highlighter://nip46"
+        let encodedCallback = callback.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? callback
+        let separator = uri.contains("?") ? "&" : "?"
+        let urlWithCallback = "\(uri)\(separator)callback=\(encodedCallback)"
+
+        if let url = URL(string: urlWithCallback) {
+            openURL(url)
+        }
+        // `EventBridge` receives `.signerConnected(user)` once the remote
+        // signer responds on the relay and `completeLogin` runs from there.
     }
 }

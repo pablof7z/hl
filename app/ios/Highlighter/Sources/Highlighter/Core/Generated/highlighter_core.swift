@@ -820,7 +820,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String) throws  -> String
 
-    func generateAccount() throws  -> GeneratedAccount
+    func generateAccount()  -> GeneratedAccountOutcome
 
     /**
      * Every cached room, newest first, truncated to `limit`. Powers the
@@ -1080,7 +1080,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func loadPodcastTranscript(url: String) async throws  -> [TranscriptSegment]
 
-    func loginNsec(nsec: String) throws  -> CurrentUser
+    func loginNsec(nsec: String)  -> CurrentUserOutcome
 
     func logout()
 
@@ -1090,7 +1090,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func normalizeNip05Username(input: String)  -> String
 
-    func pairBunker(uri: String) async throws  -> CurrentUser
+    func pairBunker(uri: String) async  -> CurrentUserOutcome
 
     func prepareWhatsNew() async  -> WhatsNewEntriesOutcome
 
@@ -1275,7 +1275,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func startFriendsRoomsDiscovery() async throws
 
-    func startNostrConnect(options: NostrConnectOptions) async throws  -> String
+    func startNostrConnect(options: NostrConnectOptions) async  -> StringOutcome
 
     /**
      * Install (if not already installed) a long-lived relay sub for every
@@ -1774,8 +1774,8 @@ open func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String
 })
 }
 
-open func generateAccount()throws  -> GeneratedAccount  {
-    return try  FfiConverterTypeGeneratedAccount_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+open func generateAccount() -> GeneratedAccountOutcome  {
+    return try!  FfiConverterTypeGeneratedAccountOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_generate_account(self.uniffiClonePointer(),$0
     )
 })
@@ -2771,8 +2771,8 @@ open func loadPodcastTranscript(url: String)async throws  -> [TranscriptSegment]
         )
 }
 
-open func loginNsec(nsec: String)throws  -> CurrentUser  {
-    return try  FfiConverterTypeCurrentUser_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+open func loginNsec(nsec: String) -> CurrentUserOutcome  {
+    return try!  FfiConverterTypeCurrentUserOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_login_nsec(self.uniffiClonePointer(),
         FfiConverterString.lower(nsec),$0
     )
@@ -2828,9 +2828,9 @@ open func normalizeNip05Username(input: String) -> String  {
 })
 }
 
-open func pairBunker(uri: String)async throws  -> CurrentUser  {
+open func pairBunker(uri: String)async  -> CurrentUserOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_pair_bunker(
                     self.uniffiClonePointer(),
@@ -2840,8 +2840,9 @@ open func pairBunker(uri: String)async throws  -> CurrentUser  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCurrentUser_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeCurrentUserOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3521,9 +3522,9 @@ open func startFriendsRoomsDiscovery()async throws   {
         )
 }
 
-open func startNostrConnect(options: NostrConnectOptions)async throws  -> String  {
+open func startNostrConnect(options: NostrConnectOptions)async  -> StringOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_start_nostr_connect(
                     self.uniffiClonePointer(),
@@ -3533,8 +3534,9 @@ open func startNostrConnect(options: NostrConnectOptions)async throws  -> String
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeStringOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -6288,6 +6290,76 @@ public func FfiConverterTypeCurrentUser_lower(_ value: CurrentUser) -> RustBuffe
 }
 
 
+public struct CurrentUserOutcome {
+    public var value: CurrentUser?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: CurrentUser?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CurrentUserOutcome: Sendable {}
+#endif
+
+
+extension CurrentUserOutcome: Equatable, Hashable {
+    public static func ==(lhs: CurrentUserOutcome, rhs: CurrentUserOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCurrentUserOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurrentUserOutcome {
+        return
+            try CurrentUserOutcome(
+                value: FfiConverterOptionTypeCurrentUser.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CurrentUserOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeCurrentUser.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurrentUserOutcome_lift(_ buf: RustBuffer) throws -> CurrentUserOutcome {
+    return try FfiConverterTypeCurrentUserOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurrentUserOutcome_lower(_ value: CurrentUserOutcome) -> RustBuffer {
+    return FfiConverterTypeCurrentUserOutcome.lower(value)
+}
+
+
 /**
  * Every delta delivered to Swift. The `subscription_id` routes the change
  * to the specific Swift store that installed the subscription. `0` is
@@ -7082,6 +7154,76 @@ public func FfiConverterTypeGeneratedAccount_lift(_ buf: RustBuffer) throws -> G
 #endif
 public func FfiConverterTypeGeneratedAccount_lower(_ value: GeneratedAccount) -> RustBuffer {
     return FfiConverterTypeGeneratedAccount.lower(value)
+}
+
+
+public struct GeneratedAccountOutcome {
+    public var value: GeneratedAccount?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: GeneratedAccount?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension GeneratedAccountOutcome: Sendable {}
+#endif
+
+
+extension GeneratedAccountOutcome: Equatable, Hashable {
+    public static func ==(lhs: GeneratedAccountOutcome, rhs: GeneratedAccountOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGeneratedAccountOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GeneratedAccountOutcome {
+        return
+            try GeneratedAccountOutcome(
+                value: FfiConverterOptionTypeGeneratedAccount.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GeneratedAccountOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeGeneratedAccount.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGeneratedAccountOutcome_lift(_ buf: RustBuffer) throws -> GeneratedAccountOutcome {
+    return try FfiConverterTypeGeneratedAccountOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGeneratedAccountOutcome_lower(_ value: GeneratedAccountOutcome) -> RustBuffer {
+    return FfiConverterTypeGeneratedAccountOutcome.lower(value)
 }
 
 
@@ -9356,6 +9498,76 @@ public func FfiConverterTypeStringListOutcome_lower(_ value: StringListOutcome) 
 }
 
 
+public struct StringOutcome {
+    public var value: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: String, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension StringOutcome: Sendable {}
+#endif
+
+
+extension StringOutcome: Equatable, Hashable {
+    public static func ==(lhs: StringOutcome, rhs: StringOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStringOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StringOutcome {
+        return
+            try StringOutcome(
+                value: FfiConverterString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StringOutcome, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStringOutcome_lift(_ buf: RustBuffer) throws -> StringOutcome {
+    return try FfiConverterTypeStringOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStringOutcome_lower(_ value: StringOutcome) -> RustBuffer {
+    return FfiConverterTypeStringOutcome.lower(value)
+}
+
+
 public struct SubscriptionOutcome {
     public var handle: UInt64
     public var error: String
@@ -11428,6 +11640,30 @@ fileprivate struct FfiConverterOptionTypeFeedbackEventRecord: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeGeneratedAccount: FfiConverterRustBuffer {
+    typealias SwiftType = GeneratedAccount?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeGeneratedAccount.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeGeneratedAccount.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeHighlightRecord: FfiConverterRustBuffer {
     typealias SwiftType = HighlightRecord?
 
@@ -12251,7 +12487,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_encode_highlight_share_nevent() != 14836) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 54846) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 356) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_all_rooms() != 20905) {
@@ -12410,7 +12646,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_load_podcast_transcript() != 61313) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_login_nsec() != 30089) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_login_nsec() != 40335) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_logout() != 15288) {
@@ -12425,7 +12661,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_normalize_nip05_username() != 21732) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 63581) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 14588) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_prepare_whats_new() != 21865) {
@@ -12533,7 +12769,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_friends_rooms_discovery() != 37507) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_start_nostr_connect() != 46145) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_start_nostr_connect() != 45790) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_discovery() != 41569) {

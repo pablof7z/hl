@@ -17,6 +17,18 @@ pub struct GeneratedAccount {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct CurrentUserOutcome {
+    pub value: Option<CurrentUser>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct GeneratedAccountOutcome {
+    pub value: Option<GeneratedAccount>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct MutationOutcome {
     pub applied: bool,
     pub error: String,
@@ -31,6 +43,12 @@ pub struct BoolOutcome {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct StringListOutcome {
     pub values: Vec<String>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct StringOutcome {
+    pub value: String,
     pub error: String,
 }
 

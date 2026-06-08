@@ -236,7 +236,11 @@ struct OnboardingCreateAccountView: View {
         Task {
             defer { isWorking = false }
             do {
-                let account = try await store.safeCore.generateAccount()
+                let accountOutcome = await store.safeCore.generateAccount()
+                guard accountOutcome.error.isEmpty, let account = accountOutcome.value else {
+                    errorMessage = accountOutcome.error.isEmpty ? "Account creation failed." : accountOutcome.error
+                    return
+                }
                 AppSessionStore.shared.persistNsec(account.nsec)
 
                 let claimedUsername: String

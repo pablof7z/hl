@@ -1690,6 +1690,11 @@ mod tests {
         outcome.handle
     }
 
+    fn expect_login(outcome: crate::models::CurrentUserOutcome) -> crate::models::CurrentUser {
+        assert!(outcome.error.is_empty(), "login: {}", outcome.error);
+        outcome.value.expect("login returned no user")
+    }
+
     fn isolated_core() -> (Arc<HighlighterCore>, TempDir) {
         let tmp = tempfile::tempdir().expect("tempdir");
         let core = HighlighterCore::new_with_data_dir(tmp.path().join("ndb"));
@@ -1733,8 +1738,7 @@ mod tests {
         let me = Keys::generate();
         let other = Keys::generate();
 
-        core.login_nsec(me.secret_key().to_bech32().unwrap())
-            .expect("login");
+        expect_login(core.login_nsec(me.secret_key().to_bech32().unwrap()));
 
         let (cb, rx) = channel_callback();
         core.set_event_callback(cb);
@@ -1816,8 +1820,7 @@ mod tests {
         let me = Keys::generate();
         let other = Keys::generate();
 
-        core.login_nsec(me.secret_key().to_bech32().unwrap())
-            .expect("login");
+        expect_login(core.login_nsec(me.secret_key().to_bech32().unwrap()));
         let (cb, rx) = channel_callback();
         core.set_event_callback(cb);
 
@@ -1906,8 +1909,7 @@ mod tests {
         let me = Keys::generate();
         let other = Keys::generate();
 
-        core.login_nsec(me.secret_key().to_bech32().unwrap())
-            .expect("login");
+        expect_login(core.login_nsec(me.secret_key().to_bech32().unwrap()));
         let (cb, rx) = channel_callback();
         core.set_event_callback(cb);
 
@@ -1974,8 +1976,7 @@ mod tests {
         let me = Keys::generate();
         let other = Keys::generate();
 
-        core.login_nsec(me.secret_key().to_bech32().unwrap())
-            .expect("login");
+        expect_login(core.login_nsec(me.secret_key().to_bech32().unwrap()));
         let (cb, rx) = channel_callback();
         core.set_event_callback(cb);
 
@@ -2035,8 +2036,7 @@ mod tests {
         let other = Keys::generate();
         let stranger = Keys::generate();
 
-        core.login_nsec(me.secret_key().to_bech32().unwrap())
-            .expect("login");
+        expect_login(core.login_nsec(me.secret_key().to_bech32().unwrap()));
         let (cb, rx) = channel_callback();
         core.set_event_callback(cb);
 
@@ -2138,8 +2138,7 @@ mod tests {
         let me = Keys::generate();
         let other = Keys::generate();
 
-        core.login_nsec(me.secret_key().to_bech32().unwrap())
-            .expect("login");
+        expect_login(core.login_nsec(me.secret_key().to_bech32().unwrap()));
         let (cb, rx) = channel_callback();
         core.set_event_callback(cb);
 

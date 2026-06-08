@@ -27,11 +27,12 @@ use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactRecord,
     BlossomUpload, BlossomUploadOutcome, BookmarkSetListOutcome, BookmarkSetOutcome,
     BookmarkSetRecord, BoolOutcome, ChatMessageOutcome, ChatMessageRecord, CommentOutcome,
-    CommentRecord, CommunitySummary, CurrentUser, DiscussionOutcome, DiscussionRecord,
-    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft,
-    HighlightListOutcome, HighlightOutcome, HighlightRecord, HydratedHighlight, MutationOutcome,
-    NostrConnectOptions, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
-    ProfileMetadata, ReadingFeedItem, RoomRecommendation, StringListOutcome, SubscriptionOutcome,
+    CommentRecord, CommunitySummary, CurrentUser, CurrentUserOutcome, DiscussionOutcome,
+    DiscussionRecord, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadRecord,
+    GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
+    HighlightRecord, HydratedHighlight, MutationOutcome, NostrConnectOptions, PictureDraft,
+    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileMetadata, ReadingFeedItem,
+    RoomRecommendation, StringListOutcome, StringOutcome, SubscriptionOutcome,
     WebBookmarkListOutcome, WebBookmarkRecord, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
@@ -120,6 +121,47 @@ fn string_list_outcome(result: Result<Vec<String>, CoreError>) -> StringListOutc
         },
         Err(error) => StringListOutcome {
             values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn string_outcome(result: Result<String, CoreError>) -> StringOutcome {
+    match result {
+        Ok(value) => StringOutcome {
+            value,
+            error: String::new(),
+        },
+        Err(error) => StringOutcome {
+            value: String::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn current_user_outcome(result: Result<CurrentUser, CoreError>) -> CurrentUserOutcome {
+    match result {
+        Ok(value) => CurrentUserOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => CurrentUserOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn generated_account_outcome(
+    result: Result<crate::models::GeneratedAccount, CoreError>,
+) -> GeneratedAccountOutcome {
+    match result {
+        Ok(value) => GeneratedAccountOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => GeneratedAccountOutcome {
+            value: None,
             error: error.to_string(),
         },
     }
@@ -324,86 +366,99 @@ impl HighlighterCore {
 
     // -- Auth (sync) --
 
-    pub fn login_nsec(&self, nsec: String) -> Result<CurrentUser, CoreError> {
-        // Do the session mutation + keys extraction in a single write-guard
-        // scope. Binding both values to locals ensures the guard drops
-        // before the subsequent `self.inner.write()` call — without this,
-        // Rust keeps the guard alive for the whole expression chain and
-        // parking_lot deadlocks on re-entry.
-        let (user, keys) = {
-            let mut guard = self.inner.write();
-            let user = guard.session.login_nsec(&nsec)?;
-            let keys = guard.session.keys().cloned();
-            (user, keys)
-        };
+    pub fn login_nsec(&self, nsec: String) -> CurrentUserOutcome {
+        let result: Result<CurrentUser, CoreError> = (|| {
+            // Do the session mutation + keys extraction in a single write-guard
+            // scope. Binding both values to locals ensures the guard drops
+            // before the subsequent `self.inner.write()` call — without this,
+            // Rust keeps the guard alive for the whole expression chain and
+            // parking_lot deadlocks on re-entry.
+            let (user, keys) = {
+                let mut guard = self.inner.write();
+                let user = guard.session.login_nsec(&nsec)?;
+                let keys = guard.session.keys().cloned();
+                (user, keys)
+            };
 
-        if let Some(keys) = keys {
-            self.runtime.set_signer(keys.clone());
-            let pubkey = keys.public_key();
-            // First-pass: apply whatever's in cache so subscriptions have a
-            // pool to talk to immediately. The bootstrap below races to
-            // fetch the user's actual NIP-65 from the network and re-apply
-            // — without it, a fresh install with cold cache stays on
-            // seed_defaults forever.
-            self.runtime
-                .spawn_apply_user_relay_config(pubkey.to_hex());
-            let user_relay_config_id = self
-                .runtime
-                .spawn_user_relay_config_bootstrap(pubkey);
-            let sub_id = self.runtime.spawn_membership_subscription(pubkey);
-            let contacts_id = self.runtime.spawn_contacts_subscription(pubkey);
-            // Eagerly fetch 39000 metadata for any groups already in the
-            // nostrdb cache. Without this, the first `getJoinedCommunities`
-            // call on a warm cache would return summaries with name=id because
-            // the stage-2 metadata sub would only be installed after the pump
-            // sees a live membership delta.
-            let cached_ids = crate::subscriptions::collect_cached_group_ids(
-                self.runtime.ndb(),
-                &pubkey,
-            );
-            if !cached_ids.is_empty() {
+            if let Some(keys) = keys {
+                self.runtime.set_signer(keys.clone());
+                let pubkey = keys.public_key();
+                // First-pass: apply whatever's in cache so subscriptions have a
+                // pool to talk to immediately. The bootstrap below races to
+                // fetch the user's actual NIP-65 from the network and re-apply
+                // — without it, a fresh install with cold cache stays on
+                // seed_defaults forever.
                 self.runtime
-                    .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
-            }
-            // Best-effort outbox bootstrap: fetch follows' kind:10002 so the
-            // home-feed planner has data to work with. Empty on first login
-            // (no kind:3 cached yet) — `subscribe_following_*` will re-arm
-            // this whenever it's called, picking up follows discovered since.
-            //
-            // Also kick off a NIP-77 negentropy sync against purplepag.es
-            // for the social trio (kind:0/3/10002) of the same set. Live
-            // subscriptions catch incremental updates; negentropy sync is
-            // the cheap cold-start path that closes the "no kind:10002
-            // cached" gap so the planner stops dumping authors into the
-            // fallback shard.
-            let cached_follows = current_followed_pubkeys(self.runtime.ndb(), &pubkey);
-            self.runtime
-                .spawn_negentropy_sync_for_follows(cached_follows.clone());
-            let follows_nip65_id = self
-                .runtime
-                .spawn_follows_relay_lists_subscription(cached_follows);
+                    .spawn_apply_user_relay_config(pubkey.to_hex());
+                let user_relay_config_id = self
+                    .runtime
+                    .spawn_user_relay_config_bootstrap(pubkey);
+                let sub_id = self.runtime.spawn_membership_subscription(pubkey);
+                let contacts_id = self.runtime.spawn_contacts_subscription(pubkey);
+                // Eagerly fetch 39000 metadata for any groups already in the
+                // nostrdb cache. Without this, the first `getJoinedCommunities`
+                // call on a warm cache would return summaries with name=id because
+                // the stage-2 metadata sub would only be installed after the pump
+                // sees a live membership delta.
+                let cached_ids = crate::subscriptions::collect_cached_group_ids(
+                    self.runtime.ndb(),
+                    &pubkey,
+                );
+                if !cached_ids.is_empty() {
+                    self.runtime
+                        .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
+                }
+                // Best-effort outbox bootstrap: fetch follows' kind:10002 so the
+                // home-feed planner has data to work with. Empty on first login
+                // (no kind:3 cached yet) — `subscribe_following_*` will re-arm
+                // this whenever it's called, picking up follows discovered since.
+                //
+                // Also kick off a NIP-77 negentropy sync against purplepag.es
+                // for the social trio (kind:0/3/10002) of the same set. Live
+                // subscriptions catch incremental updates; negentropy sync is
+                // the cheap cold-start path that closes the "no kind:10002
+                // cached" gap so the planner stops dumping authors into the
+                // fallback shard.
+                let cached_follows = current_followed_pubkeys(self.runtime.ndb(), &pubkey);
+                self.runtime
+                    .spawn_negentropy_sync_for_follows(cached_follows.clone());
+                let follows_nip65_id = self
+                    .runtime
+                    .spawn_follows_relay_lists_subscription(cached_follows);
 
-            let mut guard = self.inner.write();
-            guard.session.set_membership_subscription(sub_id);
-            guard.session.set_contacts_subscription(contacts_id);
-            guard
-                .session
-                .set_user_relay_config_subscription(user_relay_config_id);
-            if let Some(id) = follows_nip65_id {
-                guard.session.set_follows_nip65_subscription(id);
+                let mut guard = self.inner.write();
+                guard.session.set_membership_subscription(sub_id);
+                guard.session.set_contacts_subscription(contacts_id);
+                guard
+                    .session
+                    .set_user_relay_config_subscription(user_relay_config_id);
+                if let Some(id) = follows_nip65_id {
+                    guard.session.set_follows_nip65_subscription(id);
+                }
             }
-        }
-        Ok(user)
+
+            Ok(user)
+        })();
+        current_user_outcome(result)
     }
 
-    pub fn generate_account(&self) -> Result<crate::models::GeneratedAccount, CoreError> {
-        let keys = Keys::generate();
-        let nsec = keys
-            .secret_key()
-            .to_bech32()
-            .map_err(|e| CoreError::Other(format!("nsec encoding failed: {e}")))?;
-        let user = self.login_nsec(nsec.clone())?;
-        Ok(crate::models::GeneratedAccount { user, nsec })
+    pub fn generate_account(&self) -> GeneratedAccountOutcome {
+        let result: Result<crate::models::GeneratedAccount, CoreError> = (|| {
+            let keys = Keys::generate();
+            let nsec = keys
+                .secret_key()
+                .to_bech32()
+                .map_err(|e| CoreError::Other(format!("nsec encoding failed: {e}")))?;
+            let outcome = self.login_nsec(nsec.clone());
+            if !outcome.error.is_empty() {
+                return Err(CoreError::Other(outcome.error));
+            }
+            let user = outcome
+                .value
+                .ok_or_else(|| CoreError::Other("login did not return a user".into()))?;
+            Ok(crate::models::GeneratedAccount { user, nsec })
+        })();
+        generated_account_outcome(result)
     }
 
     pub fn logout(&self) {
@@ -513,140 +568,148 @@ impl HighlighterCore {
     pub async fn start_nostr_connect(
         &self,
         options: NostrConnectOptions,
-    ) -> Result<String, CoreError> {
-        // Local ephemeral keypair. The remote signer uses this pubkey to
-        // address its messages to us over the relay; after pair completion
-        // the user's pubkey comes from the remote signer via GetPublicKey.
-        let local_keys = Keys::generate();
-        let secret = nip46::random_secret();
+    ) -> StringOutcome {
+        let result: Result<String, CoreError> = async {
+            // Local ephemeral keypair. The remote signer uses this pubkey to
+            // address its messages to us over the relay; after pair completion
+            // the user's pubkey comes from the remote signer via GetPublicKey.
+            let local_keys = Keys::generate();
+            let secret = nip46::random_secret();
 
-        let pairing_relay = nostr_connect_relay();
-        let uri = nip46::build_nostr_connect_uri(
-            local_keys.public_key(),
-            pairing_relay,
-            &options.name,
-            &options.url,
-            &options.image,
-            &options.perms,
-            &secret,
-        )?;
+            let pairing_relay = nostr_connect_relay();
+            let uri = nip46::build_nostr_connect_uri(
+                local_keys.public_key(),
+                pairing_relay,
+                &options.name,
+                &options.url,
+                &options.image,
+                &options.perms,
+                &secret,
+            )?;
 
-        // Ensure the NIP-46 relay is part of the pool before we start
-        // listening for the inbound `connect` request. `add_relay` is a
-        // no-op if the relay is already known — but we can't rely on the
-        // initial pool reconcile having completed yet.
-        let client = self.runtime.client().clone();
-        if let Err(e) = client.add_relay(pairing_relay).await {
-            tracing::warn!(relay = %pairing_relay, error = %e, "add_relay");
-        }
-        client.connect().await;
+            // Ensure the NIP-46 relay is part of the pool before we start
+            // listening for the inbound `connect` request. `add_relay` is a
+            // no-op if the relay is already known — but we can't rely on the
+            // initial pool reconcile having completed yet.
+            let client = self.runtime.client().clone();
+            if let Err(e) = client.add_relay(pairing_relay).await {
+                tracing::warn!(relay = %pairing_relay, error = %e, "add_relay");
+            }
+            client.connect().await;
 
-        // Spawn a background task that waits for the remote signer to
-        // connect and then installs the resulting BunkerSigner. The task
-        // must own: the client (for set_signer after pairing), the callback
-        // slot (to fire SignerConnected), the Session guard slot (to store
-        // the active signer), and the local keys.
-        let inner = self.inner.clone();
-        let runtime = self.runtime.clone();
-        let callback_slot = self.callback_slot.clone();
-        let clock = self.clock.clone();
-        self.runtime
-            .runtime_handle()
-            .spawn(async move {
-                let result = BunkerSigner::await_inbound_with_clock(
-                    client.clone(),
-                    local_keys,
-                    Some(secret),
-                    clock,
-                )
-                .await;
-                match result {
-                    Ok((signer, user_pubkey)) => {
-                        let user = match current_user_from_pubkey(&user_pubkey) {
-                            Ok(u) => u,
-                            Err(e) => {
-                                tracing::warn!(error = %e, "npub encode after bunker pair");
-                                return;
+            // Spawn a background task that waits for the remote signer to
+            // connect and then installs the resulting BunkerSigner. The task
+            // must own: the client (for set_signer after pairing), the callback
+            // slot (to fire SignerConnected), the Session guard slot (to store
+            // the active signer), and the local keys.
+            let inner = self.inner.clone();
+            let runtime = self.runtime.clone();
+            let callback_slot = self.callback_slot.clone();
+            let clock = self.clock.clone();
+            self.runtime
+                .runtime_handle()
+                .spawn(async move {
+                    let result = BunkerSigner::await_inbound_with_clock(
+                        client.clone(),
+                        local_keys,
+                        Some(secret),
+                        clock,
+                    )
+                    .await;
+                    match result {
+                        Ok((signer, user_pubkey)) => {
+                            let user = match current_user_from_pubkey(&user_pubkey) {
+                                Ok(u) => u,
+                                Err(e) => {
+                                    tracing::warn!(error = %e, "npub encode after bunker pair");
+                                    return;
+                                }
+                            };
+                            let signer = Arc::new(signer);
+                            // We're inside NostrRuntime's tokio runtime here
+                            // (spawned via `runtime_handle().spawn`). The sync
+                            // `runtime.set_signer` wrapper uses `block_on`, which
+                            // panics ("Cannot start a runtime from within a
+                            // runtime") when called from inside that same
+                            // runtime — talk to the client directly instead.
+                            client.set_signer((*signer).clone()).await;
+                            runtime.spawn_apply_user_relay_config(user_pubkey.to_hex());
+                            let sub_id = runtime.spawn_membership_subscription(user_pubkey);
+                            let contacts_id = runtime.spawn_contacts_subscription(user_pubkey);
+                            {
+                                let mut guard = inner.write();
+                                guard.session.set_bunker(signer, user.clone());
+                                guard.session.set_membership_subscription(sub_id);
+                                guard.session.set_contacts_subscription(contacts_id);
                             }
-                        };
-                        let signer = Arc::new(signer);
-                        // We're inside NostrRuntime's tokio runtime here
-                        // (spawned via `runtime_handle().spawn`). The sync
-                        // `runtime.set_signer` wrapper uses `block_on`, which
-                        // panics ("Cannot start a runtime from within a
-                        // runtime") when called from inside that same
-                        // runtime — talk to the client directly instead.
-                        client.set_signer((*signer).clone()).await;
-                        runtime.spawn_apply_user_relay_config(user_pubkey.to_hex());
-                        let sub_id = runtime.spawn_membership_subscription(user_pubkey);
-                        let contacts_id = runtime.spawn_contacts_subscription(user_pubkey);
-                        {
-                            let mut guard = inner.write();
-                            guard.session.set_bunker(signer, user.clone());
-                            guard.session.set_membership_subscription(sub_id);
-                            guard.session.set_contacts_subscription(contacts_id);
+                            let cb = { callback_slot.read().clone() };
+                            if let Some(cb) = cb {
+                                cb.on_data_changed(Delta {
+                                    subscription_id: 0,
+                                    change: DataChangeType::SignerConnected { user },
+                                });
+                            }
                         }
-                        let cb = { callback_slot.read().clone() };
-                        if let Some(cb) = cb {
-                            cb.on_data_changed(Delta {
-                                subscription_id: 0,
-                                change: DataChangeType::SignerConnected { user },
-                            });
+                        Err(e) => {
+                            tracing::warn!(error = %e, "nostrconnect inbound pairing failed");
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "nostrconnect inbound pairing failed");
-                    }
-                }
-            });
+                });
 
-        Ok(uri)
+            Ok(uri)
+        }
+        .await;
+        string_outcome(result)
     }
 
-    pub async fn pair_bunker(&self, uri: String) -> Result<CurrentUser, CoreError> {
-        let normalized = normalize_bunker_uri(&uri);
-        if normalized.is_empty() {
-            return Err(CoreError::InvalidInput("empty bunker URI".into()));
-        }
+    pub async fn pair_bunker(&self, uri: String) -> CurrentUserOutcome {
+        let result: Result<CurrentUser, CoreError> = async {
+            let normalized = normalize_bunker_uri(&uri);
+            if normalized.is_empty() {
+                Err(CoreError::InvalidInput("empty bunker URI".into()))?;
+            }
 
-        let client = self.runtime.client().clone();
-        let (signer, user_pubkey) =
-            BunkerSigner::pair_with_clock(client, &normalized, self.clock.clone()).await?;
-        let user = current_user_from_pubkey(&user_pubkey)?;
+            let client = self.runtime.client().clone();
+            let (signer, user_pubkey) =
+                BunkerSigner::pair_with_clock(client, &normalized, self.clock.clone()).await?;
+            let user = current_user_from_pubkey(&user_pubkey)?;
 
-        let signer = Arc::new(signer);
-        self.runtime.set_signer((*signer).clone());
-        self.runtime
-            .spawn_apply_user_relay_config(user_pubkey.to_hex());
-
-        let sub_id = self
-            .runtime
-            .spawn_membership_subscription(user_pubkey);
-        let contacts_id = self.runtime.spawn_contacts_subscription(user_pubkey);
-        let cached_ids = crate::subscriptions::collect_cached_group_ids(
-            self.runtime.ndb(),
-            &user_pubkey,
-        );
-        if !cached_ids.is_empty() {
+            let signer = Arc::new(signer);
+            self.runtime.set_signer((*signer).clone());
             self.runtime
-                .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
-        }
-        {
-            let mut guard = self.inner.write();
-            guard.session.set_bunker(signer, user.clone());
-            guard.session.set_membership_subscription(sub_id);
-            guard.session.set_contacts_subscription(contacts_id);
-        }
+                .spawn_apply_user_relay_config(user_pubkey.to_hex());
 
-        let cb = { self.callback_slot.read().clone() };
-        if let Some(cb) = cb {
-            cb.on_data_changed(Delta {
-                subscription_id: 0,
-                change: DataChangeType::SignerConnected { user: user.clone() },
-            });
-        }
+            let sub_id = self
+                .runtime
+                .spawn_membership_subscription(user_pubkey);
+            let contacts_id = self.runtime.spawn_contacts_subscription(user_pubkey);
+            let cached_ids = crate::subscriptions::collect_cached_group_ids(
+                self.runtime.ndb(),
+                &user_pubkey,
+            );
+            if !cached_ids.is_empty() {
+                self.runtime
+                    .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
+            }
+            {
+                let mut guard = self.inner.write();
+                guard.session.set_bunker(signer, user.clone());
+                guard.session.set_membership_subscription(sub_id);
+                guard.session.set_contacts_subscription(contacts_id);
+            }
 
-        Ok(user)
+            let cb = { self.callback_slot.read().clone() };
+            if let Some(cb) = cb {
+                cb.on_data_changed(Delta {
+                    subscription_id: 0,
+                    change: DataChangeType::SignerConnected { user: user.clone() },
+                });
+            }
+
+            Ok(user)
+        }
+        .await;
+        current_user_outcome(result)
     }
 
     // -- Subscriptions --

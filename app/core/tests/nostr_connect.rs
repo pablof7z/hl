@@ -23,10 +23,13 @@ async fn start_nostr_connect_returns_valid_uri() {
         perms: "sign_event:11,sign_event:9802,nip44_encrypt".into(),
     };
 
-    let uri = core
-        .start_nostr_connect(options)
-        .await
-        .expect("start_nostr_connect should return a URI");
+    let outcome = core.start_nostr_connect(options).await;
+    assert!(
+        outcome.error.is_empty(),
+        "start_nostr_connect: {}",
+        outcome.error
+    );
+    let uri = outcome.value;
 
     // Shape: nostrconnect://<64-hex pubkey>?<query>
     assert!(uri.starts_with("nostrconnect://"), "got: {uri}");
@@ -76,7 +79,7 @@ async fn pair_bunker_rejects_garbage() {
     for case in cases {
         let res = core.pair_bunker(case.to_string()).await;
         assert!(
-            res.is_err(),
+            !res.error.is_empty(),
             "pair_bunker should reject {case:?} but got {:?}",
             res
         );
