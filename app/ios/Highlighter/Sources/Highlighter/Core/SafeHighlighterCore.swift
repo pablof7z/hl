@@ -620,6 +620,46 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func upsertRoomArtifact(
+        artifacts: [ArtifactRecord],
+        artifact: ArtifactRecord
+    ) -> [ArtifactRecord] {
+        core.upsertRoomArtifact(
+            artifacts: artifacts,
+            artifact: artifact
+        )
+    }
+
+    nonisolated func upsertRoomHighlight(
+        highlights: [HydratedHighlight],
+        highlight: HydratedHighlight
+    ) -> [HydratedHighlight] {
+        core.upsertRoomHighlight(
+            highlights: highlights,
+            highlight: highlight
+        )
+    }
+
+    nonisolated func upsertHighlightReferenceBucket(
+        bucket: [HighlightRecord],
+        highlight: HighlightRecord
+    ) -> [HighlightRecord] {
+        core.upsertHighlightReferenceBucket(
+            bucket: bucket,
+            highlight: highlight
+        )
+    }
+
+    nonisolated func countArtifactComments(
+        artifact: ArtifactRecord,
+        commentsByReference: [CommentReferenceBucket]
+    ) -> UInt32 {
+        core.countArtifactComments(
+            artifact: artifact,
+            commentsByReference: commentsByReference
+        )
+    }
+
     nonisolated func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome {
         core.getHighlightCommentScope(eventIdHex: eventIdHex)
     }

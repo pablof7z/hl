@@ -228,17 +228,4 @@ extension CommentsStore {
         records.count
     }
 
-    /// The N most-recent commenter pubkeys (for the toolbar avatar trio).
-    func recentCommenterPubkeys(limit: Int = 3) -> [String] {
-        let sorted = records.sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
-        var seen = Set<String>()
-        var out: [String] = []
-        for r in sorted {
-            if seen.insert(r.pubkey).inserted {
-                out.append(r.pubkey)
-                if out.count >= limit { break }
-            }
-        }
-        return out
-    }
 }

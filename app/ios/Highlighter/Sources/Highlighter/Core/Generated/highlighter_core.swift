@@ -813,6 +813,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func confirmPendingJoin(groupId: String)
 
     /**
+     * Count comments for an artifact using Rust-owned reference keys.
+     */
+    func countArtifactComments(artifact: ArtifactRecord, commentsByReference: [CommentReferenceBucket])  -> UInt32
+
+    /**
      * Create a new empty kind:30004 curation set with `title`. Returns
      * the freshly published record so the UI can immediately use its
      * `id` (d-tag) to add items.
@@ -1705,11 +1710,29 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async  -> BlossomUploadOutcome
 
     /**
+     * Upsert a raw highlight into a per-reference bucket. Rust owns
+     * replacement identity and newest-first ordering.
+     */
+    func upsertHighlightReferenceBucket(bucket: [HighlightRecord], highlight: HighlightRecord)  -> [HighlightRecord]
+
+    /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
      * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
      * the live relay pool so the change takes effect immediately.
      */
     func upsertRelay(cfg: RelayConfig) async  -> MutationOutcome
+
+    /**
+     * Upsert a live room artifact delta into a bounded screen collection.
+     * Rust owns replacement identity and newest-first ordering.
+     */
+    func upsertRoomArtifact(artifacts: [ArtifactRecord], artifact: ArtifactRecord)  -> [ArtifactRecord]
+
+    /**
+     * Upsert a live room highlight delta into a bounded screen collection.
+     * Rust owns replacement identity and newest-first ordering.
+     */
+    func upsertRoomHighlight(highlights: [HydratedHighlight], highlight: HydratedHighlight)  -> [HydratedHighlight]
 
 }
 open class HighlighterCore: HighlighterCoreProtocol, @unchecked Sendable {
@@ -1943,6 +1966,18 @@ open func confirmPendingJoin(groupId: String)  {try! rustCall() {
         FfiConverterString.lower(groupId),$0
     )
 }
+}
+
+    /**
+     * Count comments for an artifact using Rust-owned reference keys.
+     */
+open func countArtifactComments(artifact: ArtifactRecord, commentsByReference: [CommentReferenceBucket]) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_count_artifact_comments(self.uniffiClonePointer(),
+        FfiConverterTypeArtifactRecord_lower(artifact),
+        FfiConverterSequenceTypeCommentReferenceBucket.lower(commentsByReference),$0
+    )
+})
 }
 
     /**
@@ -5062,6 +5097,19 @@ open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, 
 }
 
     /**
+     * Upsert a raw highlight into a per-reference bucket. Rust owns
+     * replacement identity and newest-first ordering.
+     */
+open func upsertHighlightReferenceBucket(bucket: [HighlightRecord], highlight: HighlightRecord) -> [HighlightRecord]  {
+    return try!  FfiConverterSequenceTypeHighlightRecord.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_upsert_highlight_reference_bucket(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeHighlightRecord.lower(bucket),
+        FfiConverterTypeHighlightRecord_lower(highlight),$0
+    )
+})
+}
+
+    /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
      * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
      * the live relay pool so the change takes effect immediately.
@@ -5082,6 +5130,32 @@ open func upsertRelay(cfg: RelayConfig)async  -> MutationOutcome  {
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Upsert a live room artifact delta into a bounded screen collection.
+     * Rust owns replacement identity and newest-first ordering.
+     */
+open func upsertRoomArtifact(artifacts: [ArtifactRecord], artifact: ArtifactRecord) -> [ArtifactRecord]  {
+    return try!  FfiConverterSequenceTypeArtifactRecord.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_upsert_room_artifact(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeArtifactRecord.lower(artifacts),
+        FfiConverterTypeArtifactRecord_lower(artifact),$0
+    )
+})
+}
+
+    /**
+     * Upsert a live room highlight delta into a bounded screen collection.
+     * Rust owns replacement identity and newest-first ordering.
+     */
+open func upsertRoomHighlight(highlights: [HydratedHighlight], highlight: HydratedHighlight) -> [HydratedHighlight]  {
+    return try!  FfiConverterSequenceTypeHydratedHighlight.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_upsert_room_highlight(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeHydratedHighlight.lower(highlights),
+        FfiConverterTypeHydratedHighlight_lower(highlight),$0
+    )
+})
 }
 
 
@@ -18365,6 +18439,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_confirm_pending_join() != 50218) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_count_artifact_comments() != 14471) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set() != 614) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -18890,7 +18967,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 28046) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_highlight_reference_bucket() != 35855) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 53820) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_room_artifact() != 51542) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_room_highlight() != 21960) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_constructor_highlightercore_new() != 37739) {

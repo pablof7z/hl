@@ -62,6 +62,7 @@ use crate::reference_targets;
 use crate::relays::nostr_connect_relay;
 use crate::room_explorer_config;
 use crate::room_lanes;
+use crate::room_state;
 use crate::session::{current_user_from_pubkey, Session};
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
 use crate::web_metadata::{self, WebMetadata, WebMetadataStore};
@@ -1868,6 +1869,45 @@ impl HighlighterCore {
         root_tag_value: String,
     ) -> Vec<CommentThreadNode> {
         comments::build_thread(&records, &root_tag_value)
+    }
+
+    /// Upsert a live room artifact delta into a bounded screen collection.
+    /// Rust owns replacement identity and newest-first ordering.
+    pub fn upsert_room_artifact(
+        &self,
+        artifacts: Vec<ArtifactRecord>,
+        artifact: ArtifactRecord,
+    ) -> Vec<ArtifactRecord> {
+        room_state::upsert_room_artifact(&artifacts, &artifact)
+    }
+
+    /// Upsert a live room highlight delta into a bounded screen collection.
+    /// Rust owns replacement identity and newest-first ordering.
+    pub fn upsert_room_highlight(
+        &self,
+        highlights: Vec<HydratedHighlight>,
+        highlight: HydratedHighlight,
+    ) -> Vec<HydratedHighlight> {
+        room_state::upsert_room_highlight(&highlights, &highlight)
+    }
+
+    /// Upsert a raw highlight into a per-reference bucket. Rust owns
+    /// replacement identity and newest-first ordering.
+    pub fn upsert_highlight_reference_bucket(
+        &self,
+        bucket: Vec<HighlightRecord>,
+        highlight: HighlightRecord,
+    ) -> Vec<HighlightRecord> {
+        room_state::upsert_highlight_reference_bucket(&bucket, &highlight)
+    }
+
+    /// Count comments for an artifact using Rust-owned reference keys.
+    pub fn count_artifact_comments(
+        &self,
+        artifact: ArtifactRecord,
+        comments_by_reference: Vec<CommentReferenceBucket>,
+    ) -> u32 {
+        room_state::artifact_comment_count(&artifact, &comments_by_reference)
     }
 
     /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.

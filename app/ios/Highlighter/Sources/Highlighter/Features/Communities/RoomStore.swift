@@ -22,7 +22,6 @@ final class RoomStore {
     /// NIP-22 comments (kind:1111) per artifact, keyed by the UPPERCASE
     /// scope (`"A:30023:pk:d"` / `"I:isbn:…"` / `"E:<event-id>"`).
     private(set) var commentsByReference: [String: [CommentRecord]] = [:]
-    private(set) var commentKeysByArtifactId: [String: String] = [:]
     private(set) var isLoading: Bool = true
     private(set) var loadError: String?
 
@@ -76,33 +75,22 @@ final class RoomStore {
     // MARK: - Delta application (called by EventBridge)
 
     func apply(artifact: ArtifactRecord) {
-        if let i = artifacts.firstIndex(where: { $0.shareEventId == artifact.shareEventId }) {
-            artifacts[i] = artifact
-        } else {
-            let inserted = artifacts + [artifact]
-            artifacts = inserted.sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
-        }
+        guard let core else { return }
+        artifacts = core.upsertRoomArtifact(artifacts: artifacts, artifact: artifact)
         Task { await self.refreshReferenceQueries(for: artifact) }
     }
 
     func apply(highlight: HydratedHighlight) {
-        if let i = highlights.firstIndex(where: { $0.highlight.eventId == highlight.highlight.eventId }) {
-            highlights[i] = highlight
-        } else {
-            highlights.append(highlight)
-        }
+        guard let core else { return }
+        highlights = core.upsertRoomHighlight(highlights: highlights, highlight: highlight)
         // Merge into the reference-scoped bucket too so per-artifact lanes
         // reflect live arrivals without waiting for the next refresh.
-        if let target = core?.getHighlightReferenceTarget(highlight: highlight.highlight) {
+        if let target = core.getHighlightReferenceTarget(highlight: highlight.highlight) {
             let key = target.lookupKey
-            var bucket = highlightsByReference[key] ?? []
-            if let i = bucket.firstIndex(where: { $0.eventId == highlight.highlight.eventId }) {
-                bucket[i] = highlight.highlight
-            } else {
-                bucket.append(highlight.highlight)
-            }
-            bucket.sort { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
-            highlightsByReference[key] = bucket
+            highlightsByReference[key] = core.upsertHighlightReferenceBucket(
+                bucket: highlightsByReference[key] ?? [],
+                highlight: highlight.highlight
+            )
         }
     }
 
@@ -117,12 +105,6 @@ final class RoomStore {
             core.getArtifactReferenceTarget(artifact: $0)
         }
         guard !targets.isEmpty else { return }
-        commentKeysByArtifactId = Dictionary(
-            uniqueKeysWithValues: targets.compactMap { target in
-                guard !target.commentKey.isEmpty else { return nil }
-                return (target.artifactId, target.commentKey)
-            }
-        )
 
         struct FetchResult {
             let target: ArtifactReferenceTarget
@@ -164,11 +146,6 @@ final class RoomStore {
 
     private func refreshReferenceQueries(for artifact: ArtifactRecord) async {
         guard let core, let target = core.getArtifactReferenceTarget(artifact: artifact) else { return }
-        if !target.commentKey.isEmpty {
-            commentKeysByArtifactId[target.artifactId] = target.commentKey
-        } else {
-            commentKeysByArtifactId.removeValue(forKey: target.artifactId)
-        }
         let highlightOutcome = await core.getHighlightsForReference(
             tagName: target.lowercaseTag,
             tagValue: target.value
@@ -185,11 +162,15 @@ final class RoomStore {
     }
 
     func commentCount(for artifact: ArtifactRecord) -> Int {
-        guard let core,
-              let target = core.getArtifactReferenceTarget(artifact: artifact),
-              !target.commentKey.isEmpty else {
+        guard let core else {
             return 0
         }
-        return commentsByReference[target.commentKey]?.count ?? 0
+        let buckets = commentsByReference.map { key, values in
+            CommentReferenceBucket(commentKey: key, comments: values)
+        }
+        return Int(core.countArtifactComments(
+            artifact: artifact,
+            commentsByReference: buckets
+        ))
     }
 }

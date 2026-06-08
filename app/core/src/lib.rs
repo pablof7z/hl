@@ -43,6 +43,7 @@ pub mod relay_polish;
 pub mod relays;
 pub mod room_explorer_config;
 pub mod room_lanes;
+pub mod room_state;
 pub mod search;
 pub mod session;
 pub mod share_extension;
