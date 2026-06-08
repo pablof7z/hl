@@ -22,6 +22,7 @@ pub mod models;
 pub mod nip46;
 pub mod nostr_entities;
 pub mod nostr_runtime;
+pub mod onboarding;
 pub mod outbox;
 pub mod pictures;
 pub mod profile;

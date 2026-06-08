@@ -33,6 +33,7 @@ use crate::recent_searches;
 use crate::recommendations;
 use crate::nip46::{self, BunkerSigner};
 use crate::nostr_runtime::NostrRuntime;
+use crate::onboarding;
 use crate::profile;
 use crate::relays::NOSTR_CONNECT_RELAY;
 use crate::room_explorer_config;
@@ -61,6 +62,8 @@ pub struct HighlighterCore {
     room_explorer_config: Arc<room_explorer_config::RoomExplorerConfigStore>,
     /// Rust-owned What's New entries and seen marker.
     whats_new: Arc<whats_new::WhatsNewStore>,
+    /// Rust-owned durable onboarding completion flag.
+    onboarding: Arc<onboarding::OnboardingStore>,
 }
 
 struct Inner {
@@ -192,6 +195,14 @@ impl HighlighterCore {
 
     pub fn current_user(&self) -> Option<CurrentUser> {
         self.inner.read().session.current_user()
+    }
+
+    pub fn is_onboarding_complete(&self) -> bool {
+        self.onboarding.is_complete()
+    }
+
+    pub fn set_onboarding_complete(&self, complete: bool) -> Result<(), CoreError> {
+        self.onboarding.set_complete(complete)
     }
 
     pub async fn prepare_whats_new(&self) -> Result<Vec<whats_new::WhatsNewEntry>, CoreError> {
@@ -1926,6 +1937,7 @@ impl HighlighterCore {
             room_explorer_config::RoomExplorerConfigStore::new(runtime.data_dir()),
         );
         let whats_new = Arc::new(whats_new::WhatsNewStore::new(runtime.data_dir()));
+        let onboarding = Arc::new(onboarding::OnboardingStore::new(runtime.data_dir()));
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {
                 session: Session::new(),
@@ -1938,6 +1950,7 @@ impl HighlighterCore {
             recent_searches,
             room_explorer_config,
             whats_new,
+            onboarding,
         })
     }
 

@@ -23,6 +23,7 @@ final class HighlighterStore {
     }
     var connectionState: ConnectionState = .unknown
     var isBootstrapping: Bool = false
+    var isOnboardingComplete: Bool = false
     /// Transient toast shown when the Share Extension handoff publishes, a
     /// join request is sent, or a membership is confirmed. Cleared by the
     /// banner after a few seconds.
@@ -73,6 +74,7 @@ final class HighlighterStore {
         let core = HighlighterCore()
         self.core = core
         self.safeCore = SafeHighlighterCore(core: core)
+        self.isOnboardingComplete = core.isOnboardingComplete()
         // Surface the MiniPlayer (paused) with whatever episode the user was
         // last listening to, if any. Tapping play wires AVPlayer through the
         // normal `load(artifact:)` path which seeks to the saved position.
@@ -128,12 +130,18 @@ final class HighlighterStore {
         core.logout()
         eventBridge = nil
         AppSessionStore.shared.clear()
-        UserDefaults.standard.removeObject(forKey: "onboardingComplete")
+        try? core.setOnboardingComplete(complete: false)
+        isOnboardingComplete = false
         currentUser = nil
         currentUserProfile = nil
         joinedCommunities.removeAll()
         connectionState = .unknown
         SharedCommunitiesCache.clear()
+    }
+
+    func markOnboardingComplete() throws {
+        try core.setOnboardingComplete(complete: true)
+        isOnboardingComplete = true
     }
 
     // MARK: - Bookmarks

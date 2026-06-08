@@ -1061,6 +1061,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func isFollowing(targetPubkeyHex: String) async throws  -> Bool
     
+    func isOnboardingComplete()  -> Bool
+
     func loginNsec(nsec: String) throws  -> CurrentUser
     
     func logout() 
@@ -1202,6 +1204,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func setFollow(targetPubkeyHex: String, follow: Bool) async throws  -> String?
     
+    func setOnboardingComplete(complete: Bool) throws
+
     /**
      * Atomically update a single relay's role flags.
      */
@@ -2642,6 +2646,13 @@ open func isFollowing(targetPubkeyHex: String)async throws  -> Bool  {
         )
 }
     
+open func isOnboardingComplete() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_is_onboarding_complete(self.uniffiClonePointer(),$0
+    )
+})
+}
+
 open func loginNsec(nsec: String)throws  -> CurrentUser  {
     return try  FfiConverterTypeCurrentUser_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
     uniffi_highlighter_core_fn_method_highlightercore_login_nsec(self.uniffiClonePointer(),
@@ -3203,6 +3214,13 @@ open func setFollow(targetPubkeyHex: String, follow: Bool)async throws  -> Strin
         )
 }
     
+open func setOnboardingComplete(complete: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_highlighter_core_fn_method_highlightercore_set_onboarding_complete(self.uniffiClonePointer(),
+        FfiConverterBool.lower(complete),$0
+    )
+}
+}
+
     /**
      * Atomically update a single relay's role flags.
      */
@@ -10279,6 +10297,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_following() != 22885) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_is_onboarding_complete() != 27446) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_login_nsec() != 30089) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10367,6 +10388,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_follow() != 22034) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_onboarding_complete() != 56588) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_relay_roles() != 25561) {

@@ -8,13 +8,11 @@ struct RootSceneView: View {
     /// iOS often delivers two within ~250ms.
     @State private var lastShakeAt: Date = .distantPast
 
-    @AppStorage("onboardingComplete") private var isOnboardingComplete: Bool = false
-
     var body: some View {
         Group {
             if store.isLoggedIn {
                 MainTabView()
-            } else if isOnboardingComplete {
+            } else if store.isOnboardingComplete {
                 NavigationStack { LoginView() }
             } else {
                 NavigationStack { OnboardingView() }

@@ -32,6 +32,14 @@ actor SafeHighlighterCore {
         core.currentUser()
     }
 
+    func isOnboardingComplete() -> Bool {
+        core.isOnboardingComplete()
+    }
+
+    func setOnboardingComplete(_ complete: Bool) throws {
+        try core.setOnboardingComplete(complete: complete)
+    }
+
     func prepareWhatsNew() async throws -> [WhatsNewEntry] {
         try await core.prepareWhatsNew()
     }

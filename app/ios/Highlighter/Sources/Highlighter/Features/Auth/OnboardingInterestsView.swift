@@ -121,11 +121,16 @@ struct OnboardingInterestsView: View {
 
         Task {
             await store.completeLogin(user: account.user)
-            UserDefaults.standard.set(true, forKey: "onboardingComplete")
+            do {
+                try store.markOnboardingComplete()
+            } catch {
+                isWorking = false
+                return
+            }
 
             let pubkeys = InterestCatalog.pubkeys(for: chosenIds)
             for pubkey in pubkeys {
-                try? await store.safeCore.setFollow(targetPubkeyHex: pubkey, follow: true)
+                _ = try? await store.safeCore.setFollow(targetPubkeyHex: pubkey, follow: true)
             }
         }
     }
