@@ -404,6 +404,10 @@ actor SafeHighlighterCore {
         await core.getHighlightsForReference(tagName: tagName, tagValue: tagValue, limit: limit)
     }
 
+    func getBookHighlights(catalogId: String, limit: UInt32 = 64) async -> HighlightListOutcome {
+        await core.getBookHighlights(catalogId: catalogId, limit: limit)
+    }
+
     func getCommentsForReference(
         tagName: String,
         tagValue: String,

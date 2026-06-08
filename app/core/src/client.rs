@@ -1557,6 +1557,20 @@ impl HighlighterCore {
         ))
     }
 
+    /// Read book passages from a catalog id. Rust owns the NIP-73 ISBN
+    /// reference derivation used by the book detail screen.
+    pub async fn get_book_highlights(
+        &self,
+        catalog_id: String,
+        limit: u32,
+    ) -> HighlightListOutcome {
+        highlight_list_outcome(highlights::query_for_book_catalog(
+            self.runtime.ndb(),
+            catalog_id.trim(),
+            limit,
+        ))
+    }
+
     /// Read NIP-22 comments (kind:1111) rooted at the given uppercase
     /// scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
     /// books, etc. Newest first.

@@ -376,6 +376,29 @@ pub fn query_for_reference(
     Ok(records)
 }
 
+/// Book detail passages are anchored by the canonical NIP-73 ISBN `i` tag.
+/// Accept both raw ISBN catalog ids and already-prefixed `isbn:...` values.
+pub fn query_for_book_catalog(
+    ndb: &Ndb,
+    catalog_id: &str,
+    limit: u32,
+) -> Result<Vec<HighlightRecord>, CoreError> {
+    let Some(reference) = book_highlight_reference(catalog_id) else {
+        return Ok(Vec::new());
+    };
+    query_for_reference(ndb, 'i', &reference, limit)
+}
+
+fn book_highlight_reference(catalog_id: &str) -> Option<String> {
+    let trimmed = catalog_id.trim();
+    let isbn = trimmed.strip_prefix("isbn:").unwrap_or(trimmed).trim();
+    if isbn.is_empty() {
+        None
+    } else {
+        Some(format!("isbn:{isbn}"))
+    }
+}
+
 /// Read kind:9802 highlights for `group_id` from nostrdb, newest first.
 /// Scans by kind only and checks `#h` manually, consistent with the pattern
 /// used elsewhere to work around nostrdb tag index limitations.
@@ -1581,6 +1604,20 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].quote, "matching quote");
         assert_eq!(hits[0].artifact_address, target_address);
+    }
+
+    #[test]
+    fn book_highlight_reference_accepts_raw_or_prefixed_isbn() {
+        assert_eq!(
+            book_highlight_reference("9780735211292"),
+            Some("isbn:9780735211292".to_string())
+        );
+        assert_eq!(
+            book_highlight_reference(" isbn:9780735211292 "),
+            Some("isbn:9780735211292".to_string())
+        );
+        assert_eq!(book_highlight_reference("isbn:  "), None);
+        assert_eq!(book_highlight_reference("  "), None);
     }
 
     #[test]
