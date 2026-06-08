@@ -55,7 +55,8 @@ use crate::nostr_runtime::NostrRuntime;
 use crate::onboarding;
 use crate::podcast_position;
 use crate::podcast_transcript::{
-    self, PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipSelection,
+    self, PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipReference,
+    PodcastClipSelection, PodcastListeningProjection, PodcastListeningProjectionInput,
     TranscriptSegment,
 };
 use crate::profile;
@@ -1202,6 +1203,17 @@ impl HighlighterCore {
             clip_start_seconds,
             clip_end_seconds,
         )
+    }
+
+    pub fn get_podcast_listening_projection(
+        &self,
+        input: PodcastListeningProjectionInput,
+    ) -> PodcastListeningProjection {
+        podcast_transcript::listening_projection(input)
+    }
+
+    pub fn get_podcast_clip_reference(&self, artifact: ArtifactRecord) -> PodcastClipReference {
+        podcast_transcript::podcast_clip_reference(&artifact)
     }
 
     pub fn clear_podcast_clip_selection(&self) -> PodcastClipSelection {

@@ -1194,6 +1194,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getPodcastClipHighlightDraft(segments: [TranscriptSegment], selectedSegmentIds: [String], note: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String)  -> HighlightDraft
 
+    func getPodcastClipReference(artifact: ArtifactRecord)  -> PodcastClipReference
+
+    func getPodcastListeningProjection(input: PodcastListeningProjectionInput)  -> PodcastListeningProjection
+
     func getPodcastPosition()  -> PodcastPositionRecord?
 
     func getPodcastPositionSeconds(guid: String)  -> Double?
@@ -3270,6 +3274,22 @@ open func getPodcastClipHighlightDraft(segments: [TranscriptSegment], selectedSe
         FfiConverterOptionDouble.lower(clipStartSeconds),
         FfiConverterOptionDouble.lower(clipEndSeconds),
         FfiConverterString.lower(clipSpeaker),$0
+    )
+})
+}
+
+open func getPodcastClipReference(artifact: ArtifactRecord) -> PodcastClipReference  {
+    return try!  FfiConverterTypePodcastClipReference_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_clip_reference(self.uniffiClonePointer(),
+        FfiConverterTypeArtifactRecord_lower(artifact),$0
+    )
+})
+}
+
+open func getPodcastListeningProjection(input: PodcastListeningProjectionInput) -> PodcastListeningProjection  {
+    return try!  FfiConverterTypePodcastListeningProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_listening_projection(self.uniffiClonePointer(),
+        FfiConverterTypePodcastListeningProjectionInput_lower(input),$0
     )
 })
 }
@@ -13026,6 +13046,84 @@ public func FfiConverterTypePodcastClipComposerProjection_lower(_ value: Podcast
 }
 
 
+public struct PodcastClipReference {
+    public var tagName: String
+    public var tagValue: String
+    public var limit: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(tagName: String, tagValue: String, limit: UInt32) {
+        self.tagName = tagName
+        self.tagValue = tagValue
+        self.limit = limit
+    }
+}
+
+#if compiler(>=6)
+extension PodcastClipReference: Sendable {}
+#endif
+
+
+extension PodcastClipReference: Equatable, Hashable {
+    public static func ==(lhs: PodcastClipReference, rhs: PodcastClipReference) -> Bool {
+        if lhs.tagName != rhs.tagName {
+            return false
+        }
+        if lhs.tagValue != rhs.tagValue {
+            return false
+        }
+        if lhs.limit != rhs.limit {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(tagName)
+        hasher.combine(tagValue)
+        hasher.combine(limit)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastClipReference: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipReference {
+        return
+            try PodcastClipReference(
+                tagName: FfiConverterString.read(from: &buf),
+                tagValue: FfiConverterString.read(from: &buf),
+                limit: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastClipReference, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.tagName, into: &buf)
+        FfiConverterString.write(value.tagValue, into: &buf)
+        FfiConverterUInt32.write(value.limit, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipReference_lift(_ buf: RustBuffer) throws -> PodcastClipReference {
+    return try FfiConverterTypePodcastClipReference.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipReference_lower(_ value: PodcastClipReference) -> RustBuffer {
+    return FfiConverterTypePodcastClipReference.lower(value)
+}
+
+
 public struct PodcastClipSelection {
     public var clipStartSeconds: Double?
     public var clipEndSeconds: Double?
@@ -13109,6 +13207,266 @@ public func FfiConverterTypePodcastClipSelection_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypePodcastClipSelection_lower(_ value: PodcastClipSelection) -> RustBuffer {
     return FfiConverterTypePodcastClipSelection.lower(value)
+}
+
+
+public struct PodcastListeningProjection {
+    public var showTitle: String
+    public var episodeTitle: String
+    public var imageUrl: String
+    public var episodeMeta: String
+    public var hasChapters: Bool
+    public var clipCount: UInt64
+    public var rows: [PodcastTimelineRow]
+    public var activeRowId: String?
+    public var currentSpeakerOrTimestamp: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(showTitle: String, episodeTitle: String, imageUrl: String, episodeMeta: String, hasChapters: Bool, clipCount: UInt64, rows: [PodcastTimelineRow], activeRowId: String?, currentSpeakerOrTimestamp: String) {
+        self.showTitle = showTitle
+        self.episodeTitle = episodeTitle
+        self.imageUrl = imageUrl
+        self.episodeMeta = episodeMeta
+        self.hasChapters = hasChapters
+        self.clipCount = clipCount
+        self.rows = rows
+        self.activeRowId = activeRowId
+        self.currentSpeakerOrTimestamp = currentSpeakerOrTimestamp
+    }
+}
+
+#if compiler(>=6)
+extension PodcastListeningProjection: Sendable {}
+#endif
+
+
+extension PodcastListeningProjection: Equatable, Hashable {
+    public static func ==(lhs: PodcastListeningProjection, rhs: PodcastListeningProjection) -> Bool {
+        if lhs.showTitle != rhs.showTitle {
+            return false
+        }
+        if lhs.episodeTitle != rhs.episodeTitle {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        if lhs.episodeMeta != rhs.episodeMeta {
+            return false
+        }
+        if lhs.hasChapters != rhs.hasChapters {
+            return false
+        }
+        if lhs.clipCount != rhs.clipCount {
+            return false
+        }
+        if lhs.rows != rhs.rows {
+            return false
+        }
+        if lhs.activeRowId != rhs.activeRowId {
+            return false
+        }
+        if lhs.currentSpeakerOrTimestamp != rhs.currentSpeakerOrTimestamp {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(showTitle)
+        hasher.combine(episodeTitle)
+        hasher.combine(imageUrl)
+        hasher.combine(episodeMeta)
+        hasher.combine(hasChapters)
+        hasher.combine(clipCount)
+        hasher.combine(rows)
+        hasher.combine(activeRowId)
+        hasher.combine(currentSpeakerOrTimestamp)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastListeningProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastListeningProjection {
+        return
+            try PodcastListeningProjection(
+                showTitle: FfiConverterString.read(from: &buf),
+                episodeTitle: FfiConverterString.read(from: &buf),
+                imageUrl: FfiConverterString.read(from: &buf),
+                episodeMeta: FfiConverterString.read(from: &buf),
+                hasChapters: FfiConverterBool.read(from: &buf),
+                clipCount: FfiConverterUInt64.read(from: &buf),
+                rows: FfiConverterSequenceTypePodcastTimelineRow.read(from: &buf),
+                activeRowId: FfiConverterOptionString.read(from: &buf),
+                currentSpeakerOrTimestamp: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastListeningProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.showTitle, into: &buf)
+        FfiConverterString.write(value.episodeTitle, into: &buf)
+        FfiConverterString.write(value.imageUrl, into: &buf)
+        FfiConverterString.write(value.episodeMeta, into: &buf)
+        FfiConverterBool.write(value.hasChapters, into: &buf)
+        FfiConverterUInt64.write(value.clipCount, into: &buf)
+        FfiConverterSequenceTypePodcastTimelineRow.write(value.rows, into: &buf)
+        FfiConverterOptionString.write(value.activeRowId, into: &buf)
+        FfiConverterString.write(value.currentSpeakerOrTimestamp, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastListeningProjection_lift(_ buf: RustBuffer) throws -> PodcastListeningProjection {
+    return try FfiConverterTypePodcastListeningProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastListeningProjection_lower(_ value: PodcastListeningProjection) -> RustBuffer {
+    return FfiConverterTypePodcastListeningProjection.lower(value)
+}
+
+
+public struct PodcastListeningProjectionInput {
+    public var artifact: ArtifactRecord?
+    public var clips: [HighlightRecord]
+    public var transcriptSegments: [TranscriptSegment]
+    public var transcriptAvailable: Bool
+    public var showTranscript: Bool
+    public var showChapters: Bool
+    public var showClips: Bool
+    public var playerDurationSeconds: Double
+    public var currentTimeSeconds: Double
+    public var waveformTickWindowSeconds: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifact: ArtifactRecord?, clips: [HighlightRecord], transcriptSegments: [TranscriptSegment], transcriptAvailable: Bool, showTranscript: Bool, showChapters: Bool, showClips: Bool, playerDurationSeconds: Double, currentTimeSeconds: Double, waveformTickWindowSeconds: Double) {
+        self.artifact = artifact
+        self.clips = clips
+        self.transcriptSegments = transcriptSegments
+        self.transcriptAvailable = transcriptAvailable
+        self.showTranscript = showTranscript
+        self.showChapters = showChapters
+        self.showClips = showClips
+        self.playerDurationSeconds = playerDurationSeconds
+        self.currentTimeSeconds = currentTimeSeconds
+        self.waveformTickWindowSeconds = waveformTickWindowSeconds
+    }
+}
+
+#if compiler(>=6)
+extension PodcastListeningProjectionInput: Sendable {}
+#endif
+
+
+extension PodcastListeningProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: PodcastListeningProjectionInput, rhs: PodcastListeningProjectionInput) -> Bool {
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        if lhs.clips != rhs.clips {
+            return false
+        }
+        if lhs.transcriptSegments != rhs.transcriptSegments {
+            return false
+        }
+        if lhs.transcriptAvailable != rhs.transcriptAvailable {
+            return false
+        }
+        if lhs.showTranscript != rhs.showTranscript {
+            return false
+        }
+        if lhs.showChapters != rhs.showChapters {
+            return false
+        }
+        if lhs.showClips != rhs.showClips {
+            return false
+        }
+        if lhs.playerDurationSeconds != rhs.playerDurationSeconds {
+            return false
+        }
+        if lhs.currentTimeSeconds != rhs.currentTimeSeconds {
+            return false
+        }
+        if lhs.waveformTickWindowSeconds != rhs.waveformTickWindowSeconds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifact)
+        hasher.combine(clips)
+        hasher.combine(transcriptSegments)
+        hasher.combine(transcriptAvailable)
+        hasher.combine(showTranscript)
+        hasher.combine(showChapters)
+        hasher.combine(showClips)
+        hasher.combine(playerDurationSeconds)
+        hasher.combine(currentTimeSeconds)
+        hasher.combine(waveformTickWindowSeconds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastListeningProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastListeningProjectionInput {
+        return
+            try PodcastListeningProjectionInput(
+                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
+                clips: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
+                transcriptSegments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                transcriptAvailable: FfiConverterBool.read(from: &buf),
+                showTranscript: FfiConverterBool.read(from: &buf),
+                showChapters: FfiConverterBool.read(from: &buf),
+                showClips: FfiConverterBool.read(from: &buf),
+                playerDurationSeconds: FfiConverterDouble.read(from: &buf),
+                currentTimeSeconds: FfiConverterDouble.read(from: &buf),
+                waveformTickWindowSeconds: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastListeningProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterSequenceTypeHighlightRecord.write(value.clips, into: &buf)
+        FfiConverterSequenceTypeTranscriptSegment.write(value.transcriptSegments, into: &buf)
+        FfiConverterBool.write(value.transcriptAvailable, into: &buf)
+        FfiConverterBool.write(value.showTranscript, into: &buf)
+        FfiConverterBool.write(value.showChapters, into: &buf)
+        FfiConverterBool.write(value.showClips, into: &buf)
+        FfiConverterDouble.write(value.playerDurationSeconds, into: &buf)
+        FfiConverterDouble.write(value.currentTimeSeconds, into: &buf)
+        FfiConverterDouble.write(value.waveformTickWindowSeconds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastListeningProjectionInput_lift(_ buf: RustBuffer) throws -> PodcastListeningProjectionInput {
+    return try FfiConverterTypePodcastListeningProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastListeningProjectionInput_lower(_ value: PodcastListeningProjectionInput) -> RustBuffer {
+    return FfiConverterTypePodcastListeningProjectionInput.lower(value)
 }
 
 
@@ -13200,6 +13558,124 @@ public func FfiConverterTypePodcastPositionRecord_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypePodcastPositionRecord_lower(_ value: PodcastPositionRecord) -> RustBuffer {
     return FfiConverterTypePodcastPositionRecord.lower(value)
+}
+
+
+public struct PodcastTimelineRow {
+    public var id: String
+    public var t: Double
+    public var kind: PodcastTimelineRowKind
+    public var state: PodcastTimelineRowState
+    public var chapterTitle: String
+    public var clip: HighlightRecord?
+    public var transcriptSegment: TranscriptSegment?
+    public var waveformWindowSeconds: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, t: Double, kind: PodcastTimelineRowKind, state: PodcastTimelineRowState, chapterTitle: String, clip: HighlightRecord?, transcriptSegment: TranscriptSegment?, waveformWindowSeconds: Double) {
+        self.id = id
+        self.t = t
+        self.kind = kind
+        self.state = state
+        self.chapterTitle = chapterTitle
+        self.clip = clip
+        self.transcriptSegment = transcriptSegment
+        self.waveformWindowSeconds = waveformWindowSeconds
+    }
+}
+
+#if compiler(>=6)
+extension PodcastTimelineRow: Sendable {}
+#endif
+
+
+extension PodcastTimelineRow: Equatable, Hashable {
+    public static func ==(lhs: PodcastTimelineRow, rhs: PodcastTimelineRow) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.t != rhs.t {
+            return false
+        }
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.state != rhs.state {
+            return false
+        }
+        if lhs.chapterTitle != rhs.chapterTitle {
+            return false
+        }
+        if lhs.clip != rhs.clip {
+            return false
+        }
+        if lhs.transcriptSegment != rhs.transcriptSegment {
+            return false
+        }
+        if lhs.waveformWindowSeconds != rhs.waveformWindowSeconds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(t)
+        hasher.combine(kind)
+        hasher.combine(state)
+        hasher.combine(chapterTitle)
+        hasher.combine(clip)
+        hasher.combine(transcriptSegment)
+        hasher.combine(waveformWindowSeconds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastTimelineRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastTimelineRow {
+        return
+            try PodcastTimelineRow(
+                id: FfiConverterString.read(from: &buf),
+                t: FfiConverterDouble.read(from: &buf),
+                kind: FfiConverterTypePodcastTimelineRowKind.read(from: &buf),
+                state: FfiConverterTypePodcastTimelineRowState.read(from: &buf),
+                chapterTitle: FfiConverterString.read(from: &buf),
+                clip: FfiConverterOptionTypeHighlightRecord.read(from: &buf),
+                transcriptSegment: FfiConverterOptionTypeTranscriptSegment.read(from: &buf),
+                waveformWindowSeconds: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastTimelineRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterDouble.write(value.t, into: &buf)
+        FfiConverterTypePodcastTimelineRowKind.write(value.kind, into: &buf)
+        FfiConverterTypePodcastTimelineRowState.write(value.state, into: &buf)
+        FfiConverterString.write(value.chapterTitle, into: &buf)
+        FfiConverterOptionTypeHighlightRecord.write(value.clip, into: &buf)
+        FfiConverterOptionTypeTranscriptSegment.write(value.transcriptSegment, into: &buf)
+        FfiConverterDouble.write(value.waveformWindowSeconds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastTimelineRow_lift(_ buf: RustBuffer) throws -> PodcastTimelineRow {
+    return try FfiConverterTypePodcastTimelineRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastTimelineRow_lower(_ value: PodcastTimelineRow) -> RustBuffer {
+    return FfiConverterTypePodcastTimelineRow.lower(value)
 }
 
 
@@ -17109,6 +17585,167 @@ extension OcrPageSide: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum PodcastTimelineRowKind {
+
+    case chapter
+    case clip
+    case transcript
+    case waveformTick
+}
+
+
+#if compiler(>=6)
+extension PodcastTimelineRowKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastTimelineRowKind: FfiConverterRustBuffer {
+    typealias SwiftType = PodcastTimelineRowKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastTimelineRowKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .chapter
+
+        case 2: return .clip
+
+        case 3: return .transcript
+
+        case 4: return .waveformTick
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PodcastTimelineRowKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .chapter:
+            writeInt(&buf, Int32(1))
+
+
+        case .clip:
+            writeInt(&buf, Int32(2))
+
+
+        case .transcript:
+            writeInt(&buf, Int32(3))
+
+
+        case .waveformTick:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastTimelineRowKind_lift(_ buf: RustBuffer) throws -> PodcastTimelineRowKind {
+    return try FfiConverterTypePodcastTimelineRowKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastTimelineRowKind_lower(_ value: PodcastTimelineRowKind) -> RustBuffer {
+    return FfiConverterTypePodcastTimelineRowKind.lower(value)
+}
+
+
+extension PodcastTimelineRowKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum PodcastTimelineRowState {
+
+    case played
+    case active
+    case future
+}
+
+
+#if compiler(>=6)
+extension PodcastTimelineRowState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastTimelineRowState: FfiConverterRustBuffer {
+    typealias SwiftType = PodcastTimelineRowState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastTimelineRowState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .played
+
+        case 2: return .active
+
+        case 3: return .future
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PodcastTimelineRowState, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .played:
+            writeInt(&buf, Int32(1))
+
+
+        case .active:
+            writeInt(&buf, Int32(2))
+
+
+        case .future:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastTimelineRowState_lift(_ buf: RustBuffer) throws -> PodcastTimelineRowState {
+    return try FfiConverterTypePodcastTimelineRowState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastTimelineRowState_lower(_ value: PodcastTimelineRowState) -> RustBuffer {
+    return FfiConverterTypePodcastTimelineRowState.lower(value)
+}
+
+
+extension PodcastTimelineRowState: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ProfileUpdateAction {
 
     case refreshProfile
@@ -18375,6 +19012,30 @@ fileprivate struct FfiConverterOptionTypeReadingFeedItem: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeTranscriptSegment: FfiConverterRustBuffer {
+    typealias SwiftType = TranscriptSegment?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTranscriptSegment.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTranscriptSegment.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeWebMetadata: FfiConverterRustBuffer {
     typealias SwiftType = WebMetadata?
 
@@ -19023,6 +19684,31 @@ fileprivate struct FfiConverterSequenceTypeOnboardingInterest: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypePodcastTimelineRow: FfiConverterRustBuffer {
+    typealias SwiftType = [PodcastTimelineRow]
+
+    public static func write(_ value: [PodcastTimelineRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePodcastTimelineRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PodcastTimelineRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PodcastTimelineRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePodcastTimelineRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeProfileMetadata: FfiConverterRustBuffer {
     typealias SwiftType = [ProfileMetadata]
 
@@ -19612,6 +20298,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_highlight_draft() != 43495) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_reference() != 12637) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_listening_projection() != 20038) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_position() != 36439) {

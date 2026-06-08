@@ -144,6 +144,16 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func getPodcastListeningProjection(
+        input: PodcastListeningProjectionInput
+    ) -> PodcastListeningProjection {
+        core.getPodcastListeningProjection(input: input)
+    }
+
+    nonisolated func getPodcastClipReference(artifact: ArtifactRecord) -> PodcastClipReference {
+        core.getPodcastClipReference(artifact: artifact)
+    }
+
     nonisolated func clearPodcastClipSelection() -> PodcastClipSelection {
         core.clearPodcastClipSelection()
     }

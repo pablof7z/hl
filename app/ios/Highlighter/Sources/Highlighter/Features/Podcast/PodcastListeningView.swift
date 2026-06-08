@@ -1,38 +1,9 @@
 import Kingfisher
 import SwiftUI
 
-// MARK: - Row state
+typealias TimelineRowState = PodcastTimelineRowState
 
-enum TimelineRowState {
-    case played, active, future
-}
-
-// MARK: - Timeline row model
-
-enum TimelineRow: Identifiable {
-    case chapter(t: Double, title: String)
-    case clip(HighlightRecord)
-    case transcript(TranscriptSegment)
-    case waveformTick(t: Double)
-
-    var id: String {
-        switch self {
-        case .chapter(let t, _): return "chapter-\(t)"
-        case .clip(let h): return "clip-\(h.eventId)"
-        case .transcript(let s): return "transcript-\(s.id)"
-        case .waveformTick(let t): return "waveform-\(t)"
-        }
-    }
-
-    var t: Double {
-        switch self {
-        case .chapter(let t, _): return t
-        case .clip(let h): return h.clipStartSeconds ?? 0
-        case .transcript(let s): return s.start
-        case .waveformTick(let t): return t
-        }
-    }
-}
+extension PodcastTimelineRow: Identifiable {}
 
 private let waveformTickWindow: Double = 30
 
@@ -119,11 +90,12 @@ struct PodcastListeningView: View {
 
     @ViewBuilder
     private var content: some View {
+        let projection = listeningProjection
         ZStack(alignment: .bottomTrailing) {
             VStack(spacing: 0) {
-                episodeHeader
-                layerToggles
-                timeline
+                episodeHeader(projection: projection)
+                layerToggles(projection: projection)
+                timeline(projection: projection)
             }
 
             clipFab
@@ -141,35 +113,45 @@ struct PodcastListeningView: View {
         }
     }
 
+    private var listeningProjection: PodcastListeningProjection {
+        app.safeCore.getPodcastListeningProjection(
+            input: PodcastListeningProjectionInput(
+                artifact: player.currentArtifact,
+                clips: memberClips,
+                transcriptSegments: player.transcriptSegments,
+                transcriptAvailable: player.transcriptAvailability == .available,
+                showTranscript: showTranscript,
+                showChapters: showChapters,
+                showClips: showClips,
+                playerDurationSeconds: player.duration,
+                currentTimeSeconds: player.currentTime,
+                waveformTickWindowSeconds: waveformTickWindow
+            )
+        )
+    }
+
     // MARK: - Episode header
 
-    private var episodeHeader: some View {
+    private func episodeHeader(projection: PodcastListeningProjection) -> some View {
         HStack(alignment: .top, spacing: 14) {
-            episodeArtwork
+            episodeArtwork(imageUrl: projection.imageUrl)
                 .frame(width: 60, height: 60)
 
             VStack(alignment: .leading, spacing: 4) {
-                let artifact = player.currentArtifact
-                let showTitle = artifact.map {
-                    $0.preview.podcastShowTitle.isEmpty ? $0.preview.author : $0.preview.podcastShowTitle
-                } ?? ""
-
-                if !showTitle.isEmpty {
-                    Text(showTitle)
+                if !projection.showTitle.isEmpty {
+                    Text(projection.showTitle)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
-                Text(artifact?.preview.title.isEmpty == false
-                    ? (artifact?.preview.title ?? "Untitled episode")
-                    : "Untitled episode")
+                Text(projection.episodeTitle)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(episodeMeta)
+                Text(projection.episodeMeta)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -180,29 +162,8 @@ struct PodcastListeningView: View {
         .padding(.vertical, 12)
     }
 
-    private var episodeMeta: String {
-        var parts: [String] = []
-        if let artifact = player.currentArtifact,
-           let dur = artifact.preview.durationSeconds, dur > 0 {
-            let h = dur / 3600
-            let m = (dur % 3600) / 60
-            if h > 0 { parts.append("\(h)h \(m)m") }
-            else { parts.append("\(m)m") }
-        } else if player.duration > 0 {
-            let total = Int(player.duration)
-            let h = total / 3600
-            let m = (total % 3600) / 60
-            if h > 0 { parts.append("\(h)h \(m)m") }
-            else { parts.append("\(m)m") }
-        }
-        let clipCount = memberClips.count
-        if clipCount > 0 { parts.append("\(clipCount) clip\(clipCount == 1 ? "" : "s")") }
-        return parts.joined(separator: " · ")
-    }
-
     @ViewBuilder
-    private var episodeArtwork: some View {
-        let imageUrl = player.currentArtifact?.preview.image ?? ""
+    private func episodeArtwork(imageUrl: String) -> some View {
         let base = Group {
             if !imageUrl.isEmpty, let url = URL(string: imageUrl) {
                 KFImage(url)
@@ -234,12 +195,12 @@ struct PodcastListeningView: View {
 
     // MARK: - Layer toggles
 
-    private var layerToggles: some View {
+    private func layerToggles(projection: PodcastListeningProjection) -> some View {
         HStack(spacing: 10) {
             layerPill("Transcript", active: showTranscript, disabled: player.transcriptAvailability == .unavailable) {
                 showTranscript.toggle()
             }
-            layerPill("Chapters", active: showChapters, disabled: availableChapters.isEmpty) {
+            layerPill("Chapters", active: showChapters, disabled: !projection.hasChapters) {
                 showChapters.toggle()
             }
             layerPill("Clips", active: showClips, disabled: false) {
@@ -275,15 +236,15 @@ struct PodcastListeningView: View {
 
     // MARK: - Timeline rail
 
-    private var timeline: some View {
+    private func timeline(projection: PodcastListeningProjection) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(timelineRows) { row in
+                    ForEach(projection.rows) { row in
                         rowView(for: row)
                             .id(row.id)
                             .background(
-                                rowState(for: row) == .active
+                                row.state == .active
                                     ? Color(.separator).opacity(0.2)
                                     : Color.clear
                             )
@@ -296,7 +257,7 @@ struct PodcastListeningView: View {
                 DragGesture(minimumDistance: 10)
                     .onChanged { _ in lastManualScroll = Date() }
             )
-            .onChange(of: activeRowId) { _, newId in
+            .onChange(of: projection.activeRowId) { _, newId in
                 guard let id = newId else { return }
                 let gracePassed = Date().timeIntervalSince(lastManualScroll) > 1.5
                 if player.isPlaying && gracePassed {
@@ -307,95 +268,42 @@ struct PodcastListeningView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            audioPill
+            audioPill(projection: projection)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
         }
     }
 
     @ViewBuilder
-    private func rowView(for row: TimelineRow) -> some View {
-        let state = rowState(for: row)
-        switch row {
-        case .chapter(let t, let title):
-            ChapterRow(t: t, title: title, state: state, onSeek: { player.seek(to: $0) })
-        case .clip(let h):
-            MemberClipRow(highlight: h, state: state, onSeek: { player.seek(to: $0) })
-        case .transcript(let seg):
-            TranscriptRow(segment: seg, state: state, onSeek: {
-                player.seek(to: $0)
-                if !player.isPlaying { player.play() }
-            })
-        case .waveformTick(let t):
+    private func rowView(for row: PodcastTimelineRow) -> some View {
+        switch row.kind {
+        case .chapter:
+            ChapterRow(t: row.t, title: row.chapterTitle, state: row.state, onSeek: { player.seek(to: $0) })
+        case .clip:
+            if let highlight = row.clip {
+                MemberClipRow(highlight: highlight, state: row.state, onSeek: { player.seek(to: $0) })
+            }
+        case .transcript:
+            if let segment = row.transcriptSegment {
+                TranscriptRow(segment: segment, state: row.state, onSeek: {
+                    player.seek(to: $0)
+                    if !player.isPlaying { player.play() }
+                })
+            }
+        case .waveformTick:
             WaveformTickRow(
-                t: t,
-                state: state,
-                windowSeconds: waveformTickWindow,
-                peaks: player.waveformPeaks(from: t, to: t + waveformTickWindow),
+                t: row.t,
+                state: row.state,
+                windowSeconds: row.waveformWindowSeconds,
+                peaks: player.waveformPeaks(from: row.t, to: row.t + row.waveformWindowSeconds),
                 onSeek: { player.seek(to: $0) }
             )
         }
     }
 
-    private func rowState(for row: TimelineRow) -> TimelineRowState {
-        let t = row.t
-        if t > player.currentTime { return .future }
-        if row.id == activeRowId { return .active }
-        return .played
-    }
-
-    private var activeRowId: String? {
-        // Latest row whose t <= currentTime.
-        timelineRows
-            .filter { $0.t <= player.currentTime }
-            .last
-            .map { $0.id }
-    }
-
-    // MARK: - Row builder
-
-    private var availableChapters: [Chapter] {
-        player.currentArtifact?.preview.chapters ?? []
-    }
-
-    private var timelineRows: [TimelineRow] {
-        var rows: [TimelineRow] = []
-
-        if showClips {
-            for h in memberClips {
-                rows.append(.clip(h))
-            }
-        }
-
-        if showChapters {
-            for chapter in availableChapters {
-                rows.append(.chapter(t: chapter.startSeconds, title: chapter.title))
-            }
-        }
-
-        if showTranscript && player.transcriptAvailability == .available {
-            for seg in player.transcriptSegments {
-                rows.append(.transcript(seg))
-            }
-        } else {
-            let occupiedTimes = rows.map { $0.t }
-            let totalDuration = player.duration > 0 ? player.duration : 3600
-            var t: Double = 0
-            while t < totalDuration {
-                let hasNeighbor = occupiedTimes.contains { abs($0 - t) < 8 }
-                if !hasNeighbor {
-                    rows.append(.waveformTick(t: t))
-                }
-                t += waveformTickWindow
-            }
-        }
-
-        return rows.sorted { $0.t < $1.t }
-    }
-
     // MARK: - Audio pill
 
-    private var audioPill: some View {
+    private func audioPill(projection: PodcastListeningProjection) -> some View {
         HStack(spacing: 14) {
             Button {
                 player.toggle()
@@ -422,7 +330,7 @@ struct PodcastListeningView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
-                Text(currentSpeakerOrTimestamp)
+                Text(projection.currentSpeakerOrTimestamp)
                     .font(.caption.weight(.semibold).monospacedDigit())
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -454,18 +362,6 @@ struct PodcastListeningView: View {
         .padding(.horizontal, 16)
         .frame(height: 56)
         .glassEffect(.regular, in: .capsule)
-    }
-
-    private var currentSpeakerOrTimestamp: String {
-        if player.transcriptAvailability == .available {
-            let currentSeg = player.transcriptSegments
-                .filter { $0.start <= player.currentTime }
-                .last
-            if let seg = currentSeg, !seg.speaker.isEmpty {
-                return seg.speaker
-            }
-        }
-        return formatTimestamp(player.currentTime)
     }
 
     // MARK: - Clipping FAB
@@ -522,29 +418,14 @@ struct PodcastListeningView: View {
 
     private func loadClips() async {
         guard let artifact = player.currentArtifact else { return }
-        let guid = artifact.preview.podcastItemGuid
-        let tagValue = guid.isEmpty
-            ? artifact.shareEventId
-            : "podcast:item:guid:\(guid)"
+        let reference = app.safeCore.getPodcastClipReference(artifact: artifact)
         let outcome = await app.safeCore.getHighlightsForReference(
-            tagName: "i",
-            tagValue: tagValue,
-            limit: 128
+            tagName: reference.tagName,
+            tagValue: reference.tagValue,
+            limit: reference.limit
         )
         if outcome.error.isEmpty {
-            memberClips = outcome.values.sorted { ($0.clipStartSeconds ?? 0) < ($1.clipStartSeconds ?? 0) }
+            memberClips = outcome.values
         }
     }
-}
-
-// MARK: - Formatting helpers
-
-private func formatTimestamp(_ seconds: Double) -> String {
-    guard seconds.isFinite, seconds >= 0 else { return "0:00" }
-    let total = Int(seconds)
-    let h = total / 3600
-    let m = (total % 3600) / 60
-    let s = total % 60
-    if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
-    return String(format: "%d:%02d", m, s)
 }

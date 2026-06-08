@@ -14,7 +14,7 @@ use futures::StreamExt;
 use regex::Regex;
 
 use crate::errors::CoreError;
-use crate::models::{CommunitySummary, HighlightDraft};
+use crate::models::{ArtifactRecord, CommunitySummary, HighlightDraft, HighlightRecord};
 
 const MAX_TRANSCRIPT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ARTWORK_BYTES: usize = 10 * 1024 * 1024;
@@ -58,6 +58,67 @@ pub struct PodcastClipComposerInput {
     pub duration_seconds: f64,
     pub selected_group_id: Option<String>,
     pub joined_communities: Vec<CommunitySummary>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PodcastTimelineRowKind {
+    Chapter,
+    Clip,
+    Transcript,
+    WaveformTick,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PodcastTimelineRowState {
+    Played,
+    Active,
+    Future,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastTimelineRow {
+    pub id: String,
+    pub t: f64,
+    pub kind: PodcastTimelineRowKind,
+    pub state: PodcastTimelineRowState,
+    pub chapter_title: String,
+    pub clip: Option<HighlightRecord>,
+    pub transcript_segment: Option<TranscriptSegment>,
+    pub waveform_window_seconds: f64,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastListeningProjectionInput {
+    pub artifact: Option<ArtifactRecord>,
+    pub clips: Vec<HighlightRecord>,
+    pub transcript_segments: Vec<TranscriptSegment>,
+    pub transcript_available: bool,
+    pub show_transcript: bool,
+    pub show_chapters: bool,
+    pub show_clips: bool,
+    pub player_duration_seconds: f64,
+    pub current_time_seconds: f64,
+    pub waveform_tick_window_seconds: f64,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastListeningProjection {
+    pub show_title: String,
+    pub episode_title: String,
+    pub image_url: String,
+    pub episode_meta: String,
+    pub has_chapters: bool,
+    pub clip_count: u64,
+    pub rows: Vec<PodcastTimelineRow>,
+    pub active_row_id: Option<String>,
+    pub current_speaker_or_timestamp: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PodcastClipReference {
+    pub tag_name: String,
+    pub tag_value: String,
+    pub limit: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -268,6 +329,263 @@ pub fn clip_composer_highlight_draft(
             .map(|segment| segment.id.clone())
             .collect::<Vec<_>>(),
         image: None,
+    }
+}
+
+pub fn listening_projection(input: PodcastListeningProjectionInput) -> PodcastListeningProjection {
+    let clip_count = input.clips.len() as u64;
+    let show_title = input
+        .artifact
+        .as_ref()
+        .map(|artifact| {
+            if artifact.preview.podcast_show_title.is_empty() {
+                artifact.preview.author.clone()
+            } else {
+                artifact.preview.podcast_show_title.clone()
+            }
+        })
+        .unwrap_or_default();
+    let episode_title = input
+        .artifact
+        .as_ref()
+        .map(|artifact| {
+            if artifact.preview.title.is_empty() {
+                "Untitled episode".to_string()
+            } else {
+                artifact.preview.title.clone()
+            }
+        })
+        .unwrap_or_else(|| "Untitled episode".to_string());
+    let image_url = input
+        .artifact
+        .as_ref()
+        .map(|artifact| artifact.preview.image.clone())
+        .unwrap_or_default();
+    let has_chapters = input
+        .artifact
+        .as_ref()
+        .map(|artifact| !artifact.preview.chapters.is_empty())
+        .unwrap_or(false);
+    let episode_meta = episode_meta_label(
+        input
+            .artifact
+            .as_ref()
+            .and_then(|artifact| artifact.preview.duration_seconds),
+        input.player_duration_seconds,
+        clip_count,
+    );
+
+    let mut rows = listening_rows(&input);
+    let active_row_id = rows
+        .iter()
+        .rfind(|row| row.t <= input.current_time_seconds)
+        .map(|row| row.id.clone());
+    for row in &mut rows {
+        row.state = if row.t > input.current_time_seconds {
+            PodcastTimelineRowState::Future
+        } else if active_row_id.as_deref() == Some(row.id.as_str()) {
+            PodcastTimelineRowState::Active
+        } else {
+            PodcastTimelineRowState::Played
+        };
+    }
+
+    PodcastListeningProjection {
+        show_title,
+        episode_title,
+        image_url,
+        episode_meta,
+        has_chapters,
+        clip_count,
+        rows,
+        active_row_id,
+        current_speaker_or_timestamp: current_speaker_or_timestamp(
+            &input.transcript_segments,
+            input.transcript_available,
+            input.current_time_seconds,
+        ),
+    }
+}
+
+pub fn podcast_clip_reference(artifact: &ArtifactRecord) -> PodcastClipReference {
+    let guid = artifact.preview.podcast_item_guid.as_str();
+    PodcastClipReference {
+        tag_name: "i".into(),
+        tag_value: if guid.is_empty() {
+            artifact.share_event_id.clone()
+        } else {
+            format!("podcast:item:guid:{guid}")
+        },
+        limit: 128,
+    }
+}
+
+fn listening_rows(input: &PodcastListeningProjectionInput) -> Vec<PodcastTimelineRow> {
+    let mut rows = Vec::new();
+    let window_seconds = if input.waveform_tick_window_seconds.is_finite()
+        && input.waveform_tick_window_seconds > 0.0
+    {
+        input.waveform_tick_window_seconds
+    } else {
+        30.0
+    };
+
+    if input.show_clips {
+        let mut clips = input.clips.clone();
+        clips.sort_by(|a, b| {
+            clip_start(a)
+                .partial_cmp(&clip_start(b))
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| a.event_id.cmp(&b.event_id))
+        });
+        for clip in clips {
+            rows.push(PodcastTimelineRow {
+                id: format!("clip-{}", clip.event_id),
+                t: clip_start(&clip),
+                kind: PodcastTimelineRowKind::Clip,
+                state: PodcastTimelineRowState::Future,
+                chapter_title: String::new(),
+                clip: Some(clip),
+                transcript_segment: None,
+                waveform_window_seconds: window_seconds,
+            });
+        }
+    }
+
+    if input.show_chapters {
+        if let Some(artifact) = &input.artifact {
+            for chapter in &artifact.preview.chapters {
+                rows.push(PodcastTimelineRow {
+                    id: format!("chapter-{}", swift_double_id(chapter.start_seconds)),
+                    t: chapter.start_seconds,
+                    kind: PodcastTimelineRowKind::Chapter,
+                    state: PodcastTimelineRowState::Future,
+                    chapter_title: chapter.title.clone(),
+                    clip: None,
+                    transcript_segment: None,
+                    waveform_window_seconds: window_seconds,
+                });
+            }
+        }
+    }
+
+    if input.show_transcript && input.transcript_available {
+        for segment in &input.transcript_segments {
+            rows.push(PodcastTimelineRow {
+                id: format!("transcript-{}", segment.id),
+                t: segment.start,
+                kind: PodcastTimelineRowKind::Transcript,
+                state: PodcastTimelineRowState::Future,
+                chapter_title: String::new(),
+                clip: None,
+                transcript_segment: Some(segment.clone()),
+                waveform_window_seconds: window_seconds,
+            });
+        }
+    } else {
+        let occupied_times = rows.iter().map(|row| row.t).collect::<Vec<_>>();
+        let total_duration = if input.player_duration_seconds > 0.0 {
+            input.player_duration_seconds
+        } else {
+            3600.0
+        };
+        let mut t = 0.0;
+        while t < total_duration {
+            let has_neighbor = occupied_times
+                .iter()
+                .any(|occupied| (*occupied - t).abs() < 8.0);
+            if !has_neighbor {
+                rows.push(PodcastTimelineRow {
+                    id: format!("waveform-{}", swift_double_id(t)),
+                    t,
+                    kind: PodcastTimelineRowKind::WaveformTick,
+                    state: PodcastTimelineRowState::Future,
+                    chapter_title: String::new(),
+                    clip: None,
+                    transcript_segment: None,
+                    waveform_window_seconds: window_seconds,
+                });
+            }
+            t += window_seconds;
+        }
+    }
+
+    rows.sort_by(|a, b| a.t.partial_cmp(&b.t).unwrap_or(Ordering::Equal));
+    rows
+}
+
+fn clip_start(clip: &HighlightRecord) -> f64 {
+    clip.clip_start_seconds.unwrap_or(0.0)
+}
+
+fn episode_meta_label(
+    preview_duration_seconds: Option<i64>,
+    player_duration_seconds: f64,
+    clip_count: u64,
+) -> String {
+    let mut parts = Vec::new();
+    if let Some(duration) = preview_duration_seconds.filter(|duration| *duration > 0) {
+        parts.push(format_duration_minutes(duration));
+    } else if player_duration_seconds > 0.0 {
+        parts.push(format_duration_minutes(player_duration_seconds as i64));
+    }
+    if clip_count > 0 {
+        parts.push(format!(
+            "{} clip{}",
+            clip_count,
+            if clip_count == 1 { "" } else { "s" }
+        ));
+    }
+    parts.join(" · ")
+}
+
+fn format_duration_minutes(total_seconds: i64) -> String {
+    let h = total_seconds / 3600;
+    let m = (total_seconds % 3600) / 60;
+    if h > 0 {
+        format!("{h}h {m}m")
+    } else {
+        format!("{m}m")
+    }
+}
+
+fn current_speaker_or_timestamp(
+    segments: &[TranscriptSegment],
+    transcript_available: bool,
+    current_time_seconds: f64,
+) -> String {
+    if transcript_available {
+        if let Some(segment) = segments
+            .iter()
+            .rfind(|segment| segment.start <= current_time_seconds)
+            .filter(|segment| !segment.speaker.is_empty())
+        {
+            return segment.speaker.clone();
+        }
+    }
+    format_timestamp(current_time_seconds)
+}
+
+fn format_timestamp(seconds: f64) -> String {
+    if !seconds.is_finite() || seconds < 0.0 {
+        return "0:00".into();
+    }
+    let total = seconds as i64;
+    let h = total / 3600;
+    let m = (total % 3600) / 60;
+    let s = total % 60;
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
+}
+
+fn swift_double_id(value: f64) -> String {
+    if value.is_finite() && value.fract() == 0.0 {
+        format!("{value:.1}")
+    } else {
+        format!("{value}")
     }
 }
 
@@ -1007,6 +1325,163 @@ HOST: Segment text.
     }
 
     #[test]
+    fn listening_projection_builds_header_rows_and_active_state() {
+        let artifact = podcast_artifact(
+            "share-1",
+            "Episode title",
+            "Author fallback",
+            "Show title",
+            "guid-1",
+            Some(3700),
+            vec![
+                chapter(0.0, "Start"),
+                chapter(60.0, "Next"),
+                chapter(90.5, "Fractional"),
+            ],
+        );
+        let clips = vec![
+            highlight("clip-a", Some(45.0)),
+            highlight("clip-b", Some(15.0)),
+        ];
+        let segments = vec![
+            clip_segment("a", 5.0, 10.0, "Ada", "alpha"),
+            clip_segment("b", 50.0, 55.0, "Bob", "beta"),
+        ];
+
+        let projection = listening_projection(PodcastListeningProjectionInput {
+            artifact: Some(artifact),
+            clips,
+            transcript_segments: segments,
+            transcript_available: true,
+            show_transcript: true,
+            show_chapters: true,
+            show_clips: true,
+            player_duration_seconds: 120.0,
+            current_time_seconds: 55.0,
+            waveform_tick_window_seconds: 30.0,
+        });
+
+        assert_eq!(projection.show_title, "Show title");
+        assert_eq!(projection.episode_title, "Episode title");
+        assert_eq!(projection.image_url, "https://img.example/cover.jpg");
+        assert_eq!(projection.episode_meta, "1h 1m · 2 clips");
+        assert!(projection.has_chapters);
+        assert_eq!(projection.clip_count, 2);
+        assert_eq!(projection.current_speaker_or_timestamp, "Bob");
+        assert_eq!(projection.active_row_id.as_deref(), Some("transcript-b"));
+        assert_eq!(
+            projection
+                .rows
+                .iter()
+                .map(|row| row.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "chapter-0.0",
+                "transcript-a",
+                "clip-clip-b",
+                "clip-clip-a",
+                "transcript-b",
+                "chapter-60.0",
+                "chapter-90.5"
+            ]
+        );
+        assert_eq!(projection.rows[0].state, PodcastTimelineRowState::Played);
+        assert_eq!(projection.rows[4].state, PodcastTimelineRowState::Active);
+        assert_eq!(projection.rows[5].state, PodcastTimelineRowState::Future);
+        assert_eq!(projection.rows[6].id, "chapter-90.5");
+    }
+
+    #[test]
+    fn listening_projection_uses_waveform_ticks_away_from_occupied_rows() {
+        let artifact = podcast_artifact(
+            "share-1",
+            "",
+            "Author fallback",
+            "",
+            "",
+            None,
+            vec![chapter(30.0, "Chapter")],
+        );
+        let clips = vec![highlight("clip-a", Some(60.0))];
+
+        let projection = listening_projection(PodcastListeningProjectionInput {
+            artifact: Some(artifact),
+            clips,
+            transcript_segments: vec![clip_segment("a", 0.0, 10.0, "Ada", "alpha")],
+            transcript_available: true,
+            show_transcript: false,
+            show_chapters: true,
+            show_clips: true,
+            player_duration_seconds: 100.0,
+            current_time_seconds: 12.0,
+            waveform_tick_window_seconds: 30.0,
+        });
+
+        assert_eq!(projection.show_title, "Author fallback");
+        assert_eq!(projection.episode_title, "Untitled episode");
+        assert_eq!(projection.episode_meta, "1m · 1 clip");
+        assert_eq!(projection.current_speaker_or_timestamp, "Ada");
+        assert_eq!(
+            projection
+                .rows
+                .iter()
+                .map(|row| (row.kind, row.id.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                (PodcastTimelineRowKind::WaveformTick, "waveform-0.0"),
+                (PodcastTimelineRowKind::Chapter, "chapter-30.0"),
+                (PodcastTimelineRowKind::Clip, "clip-clip-a"),
+                (PodcastTimelineRowKind::WaveformTick, "waveform-90.0")
+            ]
+        );
+        assert_eq!(projection.active_row_id.as_deref(), Some("waveform-0.0"));
+    }
+
+    #[test]
+    fn listening_projection_formats_timestamp_when_no_current_speaker() {
+        let projection = listening_projection(PodcastListeningProjectionInput {
+            artifact: None,
+            clips: Vec::new(),
+            transcript_segments: vec![clip_segment("a", 5.0, 10.0, "", "alpha")],
+            transcript_available: true,
+            show_transcript: true,
+            show_chapters: true,
+            show_clips: true,
+            player_duration_seconds: 65.0,
+            current_time_seconds: 62.0,
+            waveform_tick_window_seconds: 30.0,
+        });
+
+        assert_eq!(projection.show_title, "");
+        assert_eq!(projection.episode_title, "Untitled episode");
+        assert_eq!(projection.episode_meta, "1m");
+        assert_eq!(projection.current_speaker_or_timestamp, "1:02");
+    }
+
+    #[test]
+    fn podcast_clip_reference_uses_episode_guid_or_share_event() {
+        let with_guid = podcast_artifact("share-1", "Episode", "", "", "guid-1", None, Vec::new());
+        assert_eq!(
+            podcast_clip_reference(&with_guid),
+            PodcastClipReference {
+                tag_name: "i".into(),
+                tag_value: "podcast:item:guid:guid-1".into(),
+                limit: 128,
+            }
+        );
+
+        let fallback = podcast_artifact("share-2", "Episode", "", "", "", None, Vec::new());
+        assert_eq!(
+            podcast_clip_reference(&fallback),
+            PodcastClipReference {
+                tag_name: "i".into(),
+                tag_value: "share-2".into(),
+                limit: 128,
+            }
+        );
+    }
+
+    #[test]
     fn unknown_or_invalid_transcripts_are_empty() {
         assert!(parse_transcript_bytes(b"not a transcript", None, None).is_empty());
         assert!(parse_transcript_bytes(&[0xff, 0xfe], Some("text/vtt"), None).is_empty());
@@ -1050,6 +1525,80 @@ HOST: Segment text.
             member_count: None,
             relay_url: "wss://relay.example".into(),
             metadata_event_id: String::new(),
+            created_at: Some(1),
+        }
+    }
+
+    fn chapter(start_seconds: f64, title: &str) -> crate::models::Chapter {
+        crate::models::Chapter {
+            start_seconds,
+            title: title.into(),
+        }
+    }
+
+    fn podcast_artifact(
+        share_event_id: &str,
+        title: &str,
+        author: &str,
+        show_title: &str,
+        item_guid: &str,
+        duration_seconds: Option<i64>,
+        chapters: Vec<crate::models::Chapter>,
+    ) -> ArtifactRecord {
+        ArtifactRecord {
+            preview: crate::models::ArtifactPreview {
+                id: "preview-id".into(),
+                url: "https://podcast.example/episode".into(),
+                title: title.into(),
+                author: author.into(),
+                image: "https://img.example/cover.jpg".into(),
+                description: String::new(),
+                source: "podcast".into(),
+                domain: "podcast.example".into(),
+                catalog_id: String::new(),
+                catalog_kind: String::new(),
+                podcast_guid: String::new(),
+                podcast_item_guid: item_guid.into(),
+                podcast_show_title: show_title.into(),
+                audio_url: "https://podcast.example/audio.mp3".into(),
+                audio_preview_url: String::new(),
+                transcript_url: String::new(),
+                feed_url: String::new(),
+                published_at: String::new(),
+                duration_seconds,
+                reference_tag_name: "i".into(),
+                reference_tag_value: String::new(),
+                reference_kind: String::new(),
+                highlight_tag_name: "i".into(),
+                highlight_tag_value: String::new(),
+                highlight_reference_key: String::new(),
+                chapters,
+            },
+            group_id: String::new(),
+            share_event_id: share_event_id.into(),
+            pubkey: "pubkey".into(),
+            created_at: Some(1),
+            note: String::new(),
+        }
+    }
+
+    fn highlight(event_id: &str, clip_start_seconds: Option<f64>) -> HighlightRecord {
+        HighlightRecord {
+            event_id: event_id.into(),
+            pubkey: "pubkey".into(),
+            quote: "quote".into(),
+            context: String::new(),
+            note: String::new(),
+            artifact_address: String::new(),
+            event_reference: String::new(),
+            external_reference: String::new(),
+            source_url: String::new(),
+            source_reference_key: String::new(),
+            clip_start_seconds,
+            clip_end_seconds: clip_start_seconds.map(|start| start + 10.0),
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: Vec::new(),
+            image_url: String::new(),
             created_at: Some(1),
         }
     }
