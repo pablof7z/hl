@@ -19,21 +19,22 @@ struct ClipComposerSheet: View {
 
     // MARK: - Computed
 
-    private var duration: Double { endSeconds - startSeconds }
-
-    private var matchingSegments: [TranscriptSegment] {
-        guard player.transcriptAvailability == .available else { return [] }
-        return player.transcriptSegments.filter { seg in
-            seg.start < endSeconds && seg.end > startSeconds
-        }
+    private var composerProjection: PodcastClipComposerProjection {
+        app.safeCore.getPodcastClipComposerProjection(
+            segments: player.transcriptSegments,
+            transcriptAvailable: player.transcriptAvailability == .available,
+            clipStartSeconds: startSeconds,
+            clipEndSeconds: endSeconds,
+            durationSeconds: player.duration,
+            selectedGroupId: selectedGroupId,
+            joinedCommunities: app.joinedCommunities
+        )
     }
+
+    private var duration: Double { composerProjection.durationSeconds }
 
     private var extractedFragment: String {
-        matchingSegments.map(\.text).joined(separator: " ")
-    }
-
-    private var inferredSpeaker: String {
-        matchingSegments.first(where: { !$0.speaker.isEmpty })?.speaker ?? ""
+        composerProjection.excerpt
     }
 
     private var durationLabel: String {
@@ -46,22 +47,15 @@ struct ClipComposerSheet: View {
 
     private var subtitleLabel: String {
         let dl = durationLabel
-        return matchingSegments.isEmpty ? "\(dl) · time-only clip" : "\(dl) · with transcript"
+        return composerProjection.hasTranscript ? "\(dl) · with transcript" : "\(dl) · time-only clip"
     }
 
     private var canPublish: Bool {
-        startSeconds >= 0
-            && endSeconds <= player.duration
-            && startSeconds + 5 <= endSeconds
-            && !isPublishing
+        composerProjection.canPublish && !isPublishing
     }
 
     private var communityName: String {
-        guard let id = selectedGroupId else { return "" }
-        if let community = app.joinedCommunities.first(where: { $0.id == id }) {
-            return community.name.isEmpty ? id : community.name
-        }
-        return id
+        composerProjection.communityName
     }
 
     // MARK: - Body
@@ -314,15 +308,12 @@ struct ClipComposerSheet: View {
         isPublishing = true
         publishError = nil
 
-        let draft = HighlightDraft(
-            quote: extractedFragment,
+        let draft = app.safeCore.getPodcastClipComposerDraft(
+            segments: player.transcriptSegments,
+            transcriptAvailable: player.transcriptAvailability == .available,
             context: note,
-            note: "",
             clipStartSeconds: startSeconds,
-            clipEndSeconds: endSeconds,
-            clipSpeaker: inferredSpeaker,
-            clipTranscriptSegmentIds: matchingSegments.map(\.id),
-            image: nil
+            clipEndSeconds: endSeconds
         )
 
         Task {

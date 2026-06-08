@@ -54,7 +54,10 @@ use crate::nip46::{self, BunkerSigner};
 use crate::nostr_runtime::NostrRuntime;
 use crate::onboarding;
 use crate::podcast_position;
-use crate::podcast_transcript::{self, PodcastClipSelection, TranscriptSegment};
+use crate::podcast_transcript::{
+    self, PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipSelection,
+    TranscriptSegment,
+};
 use crate::profile;
 use crate::reads;
 use crate::recent_searches;
@@ -1174,6 +1177,30 @@ impl HighlighterCore {
             clip_start_seconds,
             clip_end_seconds,
             clip_speaker,
+        )
+    }
+
+    pub fn get_podcast_clip_composer_projection(
+        &self,
+        input: PodcastClipComposerInput,
+    ) -> PodcastClipComposerProjection {
+        podcast_transcript::clip_composer_projection(input)
+    }
+
+    pub fn get_podcast_clip_composer_draft(
+        &self,
+        segments: Vec<TranscriptSegment>,
+        transcript_available: bool,
+        context: String,
+        clip_start_seconds: f64,
+        clip_end_seconds: f64,
+    ) -> HighlightDraft {
+        podcast_transcript::clip_composer_highlight_draft(
+            &segments,
+            transcript_available,
+            context,
+            clip_start_seconds,
+            clip_end_seconds,
         )
     }
 

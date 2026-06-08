@@ -1183,6 +1183,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getOnboardingInterests()  -> [OnboardingInterest]
 
+    func getPodcastClipComposerDraft(segments: [TranscriptSegment], transcriptAvailable: Bool, context: String, clipStartSeconds: Double, clipEndSeconds: Double)  -> HighlightDraft
+
+    func getPodcastClipComposerProjection(input: PodcastClipComposerInput)  -> PodcastClipComposerProjection
+
     /**
      * Build a podcast clip highlight draft from transcript selection inputs.
      * Rust owns selected segment matching, chronological quote assembly, and
@@ -3226,6 +3230,26 @@ open func getOnboardingInterestSelection(selectedIds: [String]) -> OnboardingInt
 open func getOnboardingInterests() -> [OnboardingInterest]  {
     return try!  FfiConverterSequenceTypeOnboardingInterest.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_onboarding_interests(self.uniffiClonePointer(),$0
+    )
+})
+}
+
+open func getPodcastClipComposerDraft(segments: [TranscriptSegment], transcriptAvailable: Bool, context: String, clipStartSeconds: Double, clipEndSeconds: Double) -> HighlightDraft  {
+    return try!  FfiConverterTypeHighlightDraft_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_clip_composer_draft(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeTranscriptSegment.lower(segments),
+        FfiConverterBool.lower(transcriptAvailable),
+        FfiConverterString.lower(context),
+        FfiConverterDouble.lower(clipStartSeconds),
+        FfiConverterDouble.lower(clipEndSeconds),$0
+    )
+})
+}
+
+open func getPodcastClipComposerProjection(input: PodcastClipComposerInput) -> PodcastClipComposerProjection  {
+    return try!  FfiConverterTypePodcastClipComposerProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_clip_composer_projection(self.uniffiClonePointer(),
+        FfiConverterTypePodcastClipComposerInput_lower(input),$0
     )
 })
 }
@@ -12763,6 +12787,234 @@ public func FfiConverterTypePictureRecord_lower(_ value: PictureRecord) -> RustB
 }
 
 
+public struct PodcastClipComposerInput {
+    public var segments: [TranscriptSegment]
+    public var transcriptAvailable: Bool
+    public var clipStartSeconds: Double
+    public var clipEndSeconds: Double
+    public var durationSeconds: Double
+    public var selectedGroupId: String?
+    public var joinedCommunities: [CommunitySummary]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(segments: [TranscriptSegment], transcriptAvailable: Bool, clipStartSeconds: Double, clipEndSeconds: Double, durationSeconds: Double, selectedGroupId: String?, joinedCommunities: [CommunitySummary]) {
+        self.segments = segments
+        self.transcriptAvailable = transcriptAvailable
+        self.clipStartSeconds = clipStartSeconds
+        self.clipEndSeconds = clipEndSeconds
+        self.durationSeconds = durationSeconds
+        self.selectedGroupId = selectedGroupId
+        self.joinedCommunities = joinedCommunities
+    }
+}
+
+#if compiler(>=6)
+extension PodcastClipComposerInput: Sendable {}
+#endif
+
+
+extension PodcastClipComposerInput: Equatable, Hashable {
+    public static func ==(lhs: PodcastClipComposerInput, rhs: PodcastClipComposerInput) -> Bool {
+        if lhs.segments != rhs.segments {
+            return false
+        }
+        if lhs.transcriptAvailable != rhs.transcriptAvailable {
+            return false
+        }
+        if lhs.clipStartSeconds != rhs.clipStartSeconds {
+            return false
+        }
+        if lhs.clipEndSeconds != rhs.clipEndSeconds {
+            return false
+        }
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return false
+        }
+        if lhs.selectedGroupId != rhs.selectedGroupId {
+            return false
+        }
+        if lhs.joinedCommunities != rhs.joinedCommunities {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(segments)
+        hasher.combine(transcriptAvailable)
+        hasher.combine(clipStartSeconds)
+        hasher.combine(clipEndSeconds)
+        hasher.combine(durationSeconds)
+        hasher.combine(selectedGroupId)
+        hasher.combine(joinedCommunities)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastClipComposerInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipComposerInput {
+        return
+            try PodcastClipComposerInput(
+                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                transcriptAvailable: FfiConverterBool.read(from: &buf),
+                clipStartSeconds: FfiConverterDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterDouble.read(from: &buf),
+                durationSeconds: FfiConverterDouble.read(from: &buf),
+                selectedGroupId: FfiConverterOptionString.read(from: &buf),
+                joinedCommunities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastClipComposerInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeTranscriptSegment.write(value.segments, into: &buf)
+        FfiConverterBool.write(value.transcriptAvailable, into: &buf)
+        FfiConverterDouble.write(value.clipStartSeconds, into: &buf)
+        FfiConverterDouble.write(value.clipEndSeconds, into: &buf)
+        FfiConverterDouble.write(value.durationSeconds, into: &buf)
+        FfiConverterOptionString.write(value.selectedGroupId, into: &buf)
+        FfiConverterSequenceTypeCommunitySummary.write(value.joinedCommunities, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipComposerInput_lift(_ buf: RustBuffer) throws -> PodcastClipComposerInput {
+    return try FfiConverterTypePodcastClipComposerInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipComposerInput_lower(_ value: PodcastClipComposerInput) -> RustBuffer {
+    return FfiConverterTypePodcastClipComposerInput.lower(value)
+}
+
+
+public struct PodcastClipComposerProjection {
+    public var matchingSegments: [TranscriptSegment]
+    public var excerpt: String
+    public var speaker: String
+    public var durationSeconds: Double
+    public var hasTranscript: Bool
+    public var canPublish: Bool
+    public var communityName: String
+    public var selectedSegmentIds: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(matchingSegments: [TranscriptSegment], excerpt: String, speaker: String, durationSeconds: Double, hasTranscript: Bool, canPublish: Bool, communityName: String, selectedSegmentIds: [String]) {
+        self.matchingSegments = matchingSegments
+        self.excerpt = excerpt
+        self.speaker = speaker
+        self.durationSeconds = durationSeconds
+        self.hasTranscript = hasTranscript
+        self.canPublish = canPublish
+        self.communityName = communityName
+        self.selectedSegmentIds = selectedSegmentIds
+    }
+}
+
+#if compiler(>=6)
+extension PodcastClipComposerProjection: Sendable {}
+#endif
+
+
+extension PodcastClipComposerProjection: Equatable, Hashable {
+    public static func ==(lhs: PodcastClipComposerProjection, rhs: PodcastClipComposerProjection) -> Bool {
+        if lhs.matchingSegments != rhs.matchingSegments {
+            return false
+        }
+        if lhs.excerpt != rhs.excerpt {
+            return false
+        }
+        if lhs.speaker != rhs.speaker {
+            return false
+        }
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return false
+        }
+        if lhs.hasTranscript != rhs.hasTranscript {
+            return false
+        }
+        if lhs.canPublish != rhs.canPublish {
+            return false
+        }
+        if lhs.communityName != rhs.communityName {
+            return false
+        }
+        if lhs.selectedSegmentIds != rhs.selectedSegmentIds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(matchingSegments)
+        hasher.combine(excerpt)
+        hasher.combine(speaker)
+        hasher.combine(durationSeconds)
+        hasher.combine(hasTranscript)
+        hasher.combine(canPublish)
+        hasher.combine(communityName)
+        hasher.combine(selectedSegmentIds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastClipComposerProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipComposerProjection {
+        return
+            try PodcastClipComposerProjection(
+                matchingSegments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                excerpt: FfiConverterString.read(from: &buf),
+                speaker: FfiConverterString.read(from: &buf),
+                durationSeconds: FfiConverterDouble.read(from: &buf),
+                hasTranscript: FfiConverterBool.read(from: &buf),
+                canPublish: FfiConverterBool.read(from: &buf),
+                communityName: FfiConverterString.read(from: &buf),
+                selectedSegmentIds: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastClipComposerProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeTranscriptSegment.write(value.matchingSegments, into: &buf)
+        FfiConverterString.write(value.excerpt, into: &buf)
+        FfiConverterString.write(value.speaker, into: &buf)
+        FfiConverterDouble.write(value.durationSeconds, into: &buf)
+        FfiConverterBool.write(value.hasTranscript, into: &buf)
+        FfiConverterBool.write(value.canPublish, into: &buf)
+        FfiConverterString.write(value.communityName, into: &buf)
+        FfiConverterSequenceString.write(value.selectedSegmentIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipComposerProjection_lift(_ buf: RustBuffer) throws -> PodcastClipComposerProjection {
+    return try FfiConverterTypePodcastClipComposerProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipComposerProjection_lower(_ value: PodcastClipComposerProjection) -> RustBuffer {
+    return FfiConverterTypePodcastClipComposerProjection.lower(value)
+}
+
+
 public struct PodcastClipSelection {
     public var clipStartSeconds: Double?
     public var clipEndSeconds: Double?
@@ -19214,6 +19466,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_onboarding_interests() != 50053) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_composer_draft() != 47494) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_composer_projection() != 10657) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_highlight_draft() != 43495) {

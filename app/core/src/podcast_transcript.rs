@@ -14,7 +14,7 @@ use futures::StreamExt;
 use regex::Regex;
 
 use crate::errors::CoreError;
-use crate::models::HighlightDraft;
+use crate::models::{CommunitySummary, HighlightDraft};
 
 const MAX_TRANSCRIPT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ARTWORK_BYTES: usize = 10 * 1024 * 1024;
@@ -35,6 +35,29 @@ pub struct PodcastClipSelection {
     pub clip_end_seconds: Option<f64>,
     pub speaker: String,
     pub selected_segment_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastClipComposerProjection {
+    pub matching_segments: Vec<TranscriptSegment>,
+    pub excerpt: String,
+    pub speaker: String,
+    pub duration_seconds: f64,
+    pub has_transcript: bool,
+    pub can_publish: bool,
+    pub community_name: String,
+    pub selected_segment_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastClipComposerInput {
+    pub segments: Vec<TranscriptSegment>,
+    pub transcript_available: bool,
+    pub clip_start_seconds: f64,
+    pub clip_end_seconds: f64,
+    pub duration_seconds: f64,
+    pub selected_group_id: Option<String>,
+    pub joined_communities: Vec<CommunitySummary>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -164,6 +187,119 @@ pub fn clip_highlight_draft(
             .collect::<Vec<_>>(),
         image: None,
     }
+}
+
+pub fn clip_composer_projection(input: PodcastClipComposerInput) -> PodcastClipComposerProjection {
+    let matching_segments = matching_clip_segments(
+        &input.segments,
+        input.transcript_available,
+        input.clip_start_seconds,
+        input.clip_end_seconds,
+    );
+    let excerpt = matching_segments
+        .iter()
+        .map(|segment| segment.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let speaker = matching_segments
+        .iter()
+        .find(|segment| !segment.speaker.is_empty())
+        .map(|segment| segment.speaker.clone())
+        .unwrap_or_default();
+    let selected_segment_ids = matching_segments
+        .iter()
+        .map(|segment| segment.id.clone())
+        .collect::<Vec<_>>();
+
+    PodcastClipComposerProjection {
+        matching_segments,
+        excerpt,
+        speaker,
+        duration_seconds: input.clip_end_seconds - input.clip_start_seconds,
+        has_transcript: !selected_segment_ids.is_empty(),
+        can_publish: input.clip_start_seconds.is_finite()
+            && input.clip_end_seconds.is_finite()
+            && input.duration_seconds.is_finite()
+            && input.clip_start_seconds >= 0.0
+            && input.clip_end_seconds <= input.duration_seconds
+            && input.clip_start_seconds + 5.0 <= input.clip_end_seconds,
+        community_name: input
+            .selected_group_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(|id| community_name_for_id(id, &input.joined_communities))
+            .unwrap_or_default(),
+        selected_segment_ids,
+    }
+}
+
+pub fn clip_composer_highlight_draft(
+    segments: &[TranscriptSegment],
+    transcript_available: bool,
+    context: String,
+    clip_start_seconds: f64,
+    clip_end_seconds: f64,
+) -> HighlightDraft {
+    let matching_segments = matching_clip_segments(
+        segments,
+        transcript_available,
+        clip_start_seconds,
+        clip_end_seconds,
+    );
+
+    HighlightDraft {
+        quote: matching_segments
+            .iter()
+            .map(|segment| segment.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+        context,
+        note: String::new(),
+        clip_start_seconds: Some(clip_start_seconds),
+        clip_end_seconds: Some(clip_end_seconds),
+        clip_speaker: matching_segments
+            .iter()
+            .find(|segment| !segment.speaker.is_empty())
+            .map(|segment| segment.speaker.clone())
+            .unwrap_or_default(),
+        clip_transcript_segment_ids: matching_segments
+            .iter()
+            .map(|segment| segment.id.clone())
+            .collect::<Vec<_>>(),
+        image: None,
+    }
+}
+
+fn matching_clip_segments(
+    segments: &[TranscriptSegment],
+    transcript_available: bool,
+    clip_start_seconds: f64,
+    clip_end_seconds: f64,
+) -> Vec<TranscriptSegment> {
+    if !transcript_available {
+        return Vec::new();
+    }
+
+    segments
+        .iter()
+        .filter(|segment| segment.start < clip_end_seconds && segment.end > clip_start_seconds)
+        .cloned()
+        .collect()
+}
+
+fn community_name_for_id(id: &str, joined_communities: &[CommunitySummary]) -> String {
+    joined_communities
+        .iter()
+        .find(|community| community.id == id)
+        .map(|community| {
+            if community.name.is_empty() {
+                id.to_string()
+            } else {
+                community.name.clone()
+            }
+        })
+        .unwrap_or_else(|| id.to_string())
 }
 
 pub fn clear_clip_selection() -> PodcastClipSelection {
@@ -777,6 +913,100 @@ HOST: Segment text.
     }
 
     #[test]
+    fn clip_composer_projection_matches_segments_and_room_label() {
+        let segments = vec![
+            clip_segment("before", 0.0, 4.0, "", "before"),
+            clip_segment("a", 4.0, 12.0, "", "alpha"),
+            clip_segment("b", 11.0, 20.0, "Ada", "beta"),
+            clip_segment("after", 20.0, 25.0, "Grace", "after"),
+        ];
+
+        let projection = clip_composer_projection(composer_input(
+            segments,
+            true,
+            10.0,
+            18.0,
+            60.0,
+            Some("room"),
+            vec![community("room", "Room name")],
+        ));
+
+        assert_eq!(projection.duration_seconds, 8.0);
+        assert_eq!(projection.excerpt, "alpha beta");
+        assert_eq!(projection.speaker, "Ada");
+        assert!(projection.has_transcript);
+        assert!(projection.can_publish);
+        assert_eq!(projection.community_name, "Room name");
+        assert_eq!(
+            projection.selected_segment_ids,
+            vec!["a".to_string(), "b".to_string()]
+        );
+        assert_eq!(
+            projection
+                .matching_segments
+                .iter()
+                .map(|segment| segment.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a", "b"]
+        );
+    }
+
+    #[test]
+    fn clip_composer_projection_preserves_time_only_and_group_fallbacks() {
+        let segments = vec![clip_segment("a", 4.0, 12.0, "Ada", "alpha")];
+
+        let projection = clip_composer_projection(composer_input(
+            segments.clone(),
+            false,
+            10.0,
+            14.0,
+            60.0,
+            Some("missing-room"),
+            vec![community("other", "")],
+        ));
+
+        assert_eq!(projection.excerpt, "");
+        assert_eq!(projection.speaker, "");
+        assert!(!projection.has_transcript);
+        assert!(!projection.can_publish);
+        assert_eq!(projection.community_name, "missing-room");
+        assert!(projection.selected_segment_ids.is_empty());
+
+        let personal = clip_composer_projection(composer_input(
+            segments,
+            true,
+            0.0,
+            6.0,
+            60.0,
+            None,
+            Vec::new(),
+        ));
+        assert_eq!(personal.community_name, "");
+    }
+
+    #[test]
+    fn clip_composer_draft_preserves_sheet_context_mapping() {
+        let segments = vec![
+            clip_segment("a", 4.0, 12.0, "", "alpha"),
+            clip_segment("b", 11.0, 20.0, "Ada", "beta"),
+        ];
+
+        let draft = clip_composer_highlight_draft(&segments, true, "room note".into(), 10.0, 18.0);
+
+        assert_eq!(draft.quote, "alpha beta");
+        assert_eq!(draft.context, "room note");
+        assert_eq!(draft.note, "");
+        assert_eq!(draft.clip_start_seconds, Some(10.0));
+        assert_eq!(draft.clip_end_seconds, Some(18.0));
+        assert_eq!(draft.clip_speaker, "Ada");
+        assert_eq!(
+            draft.clip_transcript_segment_ids,
+            vec!["a".to_string(), "b".to_string()]
+        );
+        assert!(draft.image.is_none());
+    }
+
+    #[test]
     fn unknown_or_invalid_transcripts_are_empty() {
         assert!(parse_transcript_bytes(b"not a transcript", None, None).is_empty());
         assert!(parse_transcript_bytes(&[0xff, 0xfe], Some("text/vtt"), None).is_empty());
@@ -789,6 +1019,58 @@ HOST: Segment text.
             end: start + 1.0,
             speaker: String::new(),
             text: text.into(),
+        }
+    }
+
+    fn clip_segment(
+        id: &str,
+        start: f64,
+        end: f64,
+        speaker: &str,
+        text: &str,
+    ) -> TranscriptSegment {
+        TranscriptSegment {
+            id: id.into(),
+            start,
+            end,
+            speaker: speaker.into(),
+            text: text.into(),
+        }
+    }
+
+    fn community(id: &str, name: &str) -> CommunitySummary {
+        CommunitySummary {
+            id: id.into(),
+            name: name.into(),
+            about: String::new(),
+            picture: String::new(),
+            access: "open".into(),
+            visibility: "public".into(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: "wss://relay.example".into(),
+            metadata_event_id: String::new(),
+            created_at: Some(1),
+        }
+    }
+
+    fn composer_input(
+        segments: Vec<TranscriptSegment>,
+        transcript_available: bool,
+        clip_start_seconds: f64,
+        clip_end_seconds: f64,
+        duration_seconds: f64,
+        selected_group_id: Option<&str>,
+        joined_communities: Vec<CommunitySummary>,
+    ) -> PodcastClipComposerInput {
+        PodcastClipComposerInput {
+            segments,
+            transcript_available,
+            clip_start_seconds,
+            clip_end_seconds,
+            duration_seconds,
+            selected_group_id: selected_group_id.map(str::to_string),
+            joined_communities,
         }
     }
 }

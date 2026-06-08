@@ -106,6 +106,44 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func getPodcastClipComposerProjection(
+        segments: [TranscriptSegment],
+        transcriptAvailable: Bool,
+        clipStartSeconds: Double,
+        clipEndSeconds: Double,
+        durationSeconds: Double,
+        selectedGroupId: String?,
+        joinedCommunities: [CommunitySummary]
+    ) -> PodcastClipComposerProjection {
+        core.getPodcastClipComposerProjection(
+            input: PodcastClipComposerInput(
+                segments: segments,
+                transcriptAvailable: transcriptAvailable,
+                clipStartSeconds: clipStartSeconds,
+                clipEndSeconds: clipEndSeconds,
+                durationSeconds: durationSeconds,
+                selectedGroupId: selectedGroupId,
+                joinedCommunities: joinedCommunities
+            )
+        )
+    }
+
+    nonisolated func getPodcastClipComposerDraft(
+        segments: [TranscriptSegment],
+        transcriptAvailable: Bool,
+        context: String,
+        clipStartSeconds: Double,
+        clipEndSeconds: Double
+    ) -> HighlightDraft {
+        core.getPodcastClipComposerDraft(
+            segments: segments,
+            transcriptAvailable: transcriptAvailable,
+            context: context,
+            clipStartSeconds: clipStartSeconds,
+            clipEndSeconds: clipEndSeconds
+        )
+    }
+
     nonisolated func clearPodcastClipSelection() -> PodcastClipSelection {
         core.clearPodcastClipSelection()
     }
