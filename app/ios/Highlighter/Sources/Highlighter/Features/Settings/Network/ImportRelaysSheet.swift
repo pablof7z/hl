@@ -118,16 +118,16 @@ struct ImportRelaysSheet: View {
         selected = []
         isFetching = true
         defer { isFetching = false }
-        do {
-            let rows = try await appStore.safeCore
-                .importRelaysFromNpub(npubText.trimmingCharacters(in: .whitespaces))
-            fetched = rows
-            selected = Set(rows.map { $0.url })
-            if rows.isEmpty {
+        let outcome = await appStore.safeCore
+            .importRelaysFromNpub(npubText.trimmingCharacters(in: .whitespaces))
+        if outcome.error.isEmpty {
+            fetched = outcome.values
+            selected = Set(outcome.values.map { $0.url })
+            if outcome.values.isEmpty {
                 errorText = "No kind:10002 found for this user — they may not have published a relay list yet."
             }
-        } catch {
-            errorText = String(describing: error)
+        } else {
+            errorText = outcome.error
         }
     }
 

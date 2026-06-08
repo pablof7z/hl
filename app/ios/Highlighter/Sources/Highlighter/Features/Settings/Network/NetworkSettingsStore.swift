@@ -93,10 +93,9 @@ final class NetworkSettingsStore {
 
     /// Kick the pool to attempt a reconnect on every disconnected relay.
     func reconnectAll() async {
-        do {
-            try await core.reconnectAll()
-        } catch {
-            lastError = "Couldn't reconnect — \(error)"
+        let outcome = await core.reconnectAll()
+        if !outcome.error.isEmpty {
+            lastError = "Couldn't reconnect — \(outcome.error)"
         }
     }
 
@@ -119,13 +118,13 @@ final class NetworkSettingsStore {
 
     func load() async {
         wifiOnlyEnabled = await core.isWifiOnlyEnabled()
-        do {
-            let rows = try await core.getRelays()
-            relays = rows
+        let outcome = await core.getRelays()
+        if outcome.error.isEmpty {
+            relays = outcome.values
             await refreshDiagnostics()
             lastError = nil
-        } catch {
-            lastError = String(describing: error)
+        } else {
+            lastError = outcome.error
         }
         isLoading = false
         // Fire-and-forget NIP-11 probes for every relay we don't already
@@ -138,7 +137,8 @@ final class NetworkSettingsStore {
             let url = row.url
             Task { [weak self] in
                 defer { Task { @MainActor [weak self] in self?.inFlightNip11.remove(url) } }
-                guard let doc = try? await core.probeRelayNip11(url) else { return }
+                let outcome = await core.probeRelayNip11(url)
+                guard outcome.error.isEmpty, let doc = outcome.value else { return }
                 await MainActor.run { self?.nip11ByUrl[url] = doc }
             }
         }
@@ -159,7 +159,8 @@ final class NetworkSettingsStore {
     // MARK: - Cache
 
     func refreshCacheStats() async {
-        if let stats = try? await core.getCacheStats() {
+        let outcome = await core.getCacheStats()
+        if outcome.error.isEmpty, let stats = outcome.value {
             cacheStats = stats
         }
     }
@@ -185,9 +186,9 @@ final class NetworkSettingsStore {
             Task { @MainActor in
                 guard self.wifiOnlyEnabled else { return }
                 if isWifi {
-                    try? await self.core.reconnectAll()
+                    _ = await self.core.reconnectAll()
                 } else {
-                    try? await self.core.disconnectAll()
+                    _ = await self.core.disconnectAll()
                 }
             }
         }
@@ -198,31 +199,31 @@ final class NetworkSettingsStore {
     // MARK: - Writes
 
     func upsert(_ cfg: RelayConfig) async {
-        do {
-            try await core.upsertRelay(cfg)
+        let outcome = await core.upsertRelay(cfg)
+        if outcome.error.isEmpty {
             await load()
-        } catch {
-            lastError = "Couldn't add relay — \(error)"
+        } else {
+            lastError = "Couldn't add relay — \(outcome.error)"
         }
     }
 
     func remove(_ url: String) async {
-        do {
-            try await core.removeRelay(url)
+        let outcome = await core.removeRelay(url)
+        if outcome.error.isEmpty {
             await load()
-        } catch {
-            lastError = "Couldn't remove relay — \(error)"
+        } else {
+            lastError = "Couldn't remove relay — \(outcome.error)"
         }
     }
 
     func setRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async {
-        do {
-            try await core.setRelayRoles(
-                url: url, read: read, write: write, rooms: rooms, indexer: indexer
-            )
+        let outcome = await core.setRelayRoles(
+            url: url, read: read, write: write, rooms: rooms, indexer: indexer
+        )
+        if outcome.error.isEmpty {
             await load()
-        } catch {
-            lastError = "Couldn't update roles — \(error)"
+        } else {
+            lastError = "Couldn't update roles — \(outcome.error)"
         }
     }
 
@@ -270,12 +271,9 @@ final class NetworkSettingsStore {
     // MARK: - Private
 
     private func refreshDiagnostics() async {
-        do {
-            let rows = try await core.getRelayDiagnostics()
-            await applyDiagnostics(rows)
-        } catch {
-            // Diagnostics failures are non-fatal — the config rows are still
-            // accurate; we just can't show live state this tick.
+        let outcome = await core.getRelayDiagnostics()
+        if outcome.error.isEmpty {
+            await applyDiagnostics(outcome.values)
         }
     }
 }

@@ -66,14 +66,15 @@ struct MediaSettingsView: View {
     }
 
     private func load() async {
-        servers = (try? await store.safeCore.getBlossomServers()) ?? []
+        let outcome = await store.safeCore.getBlossomServers()
+        servers = outcome.error.isEmpty ? outcome.values : []
         isLoading = false
     }
 
     private func save() async {
         guard !servers.isEmpty else { return }
         isSaving = true
-        _ = try? await store.safeCore.setBlossomServers(servers)
+        _ = await store.safeCore.setBlossomServers(servers)
         isSaving = false
     }
 }

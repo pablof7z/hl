@@ -31,8 +31,8 @@ struct RootSceneView: View {
                 // nostrconnect:// flow misses Primal's response when the user
                 // comes back from the signer app.
                 Task {
-                    try? await store.safeCore.disconnectAll()
-                    try? await store.safeCore.reconnectAll()
+                    _ = await store.safeCore.disconnectAll()
+                    _ = await store.safeCore.reconnectAll()
                 }
             }
         }

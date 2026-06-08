@@ -27,7 +27,7 @@ use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome,
     ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload,
     BlossomUploadOutcome, BookmarkSetListOutcome, BookmarkSetOutcome,
-    BookmarkSetRecord, BoolOutcome, ChatMessageListOutcome, ChatMessageOutcome,
+    BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome,
     ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord, CommunityListOutcome, CommunitySummary,
     CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
     DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
@@ -35,8 +35,9 @@ use crate::models::{
     HighlightListOutcome, HighlightOutcome, HighlightRecord, HydratedHighlight,
     HydratedHighlightListOutcome, MutationOutcome, Nip05AvailabilityOutcome, NostrConnectOptions,
     NostrEntityEventOutcome, NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord,
-    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
-    ReactionListOutcome, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome, RoomRecommendation,
+    Nip11DocumentOutcome, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
+    ReactionListOutcome, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
+    RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
     RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
     TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
     WhatsNewEntriesOutcome,
@@ -440,6 +441,66 @@ fn community_list_outcome(
         },
         Err(error) => CommunityListOutcome {
             values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn relay_config_list_outcome(
+    result: Result<Vec<crate::relays::RelayConfig>, CoreError>,
+) -> RelayConfigListOutcome {
+    match result {
+        Ok(values) => RelayConfigListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => RelayConfigListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn relay_diagnostic_list_outcome(
+    result: Result<Vec<crate::models::RelayDiagnostic>, CoreError>,
+) -> RelayDiagnosticListOutcome {
+    match result {
+        Ok(values) => RelayDiagnosticListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => RelayDiagnosticListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn nip11_document_outcome(
+    result: Result<crate::models::Nip11Document, CoreError>,
+) -> Nip11DocumentOutcome {
+    match result {
+        Ok(value) => Nip11DocumentOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => Nip11DocumentOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn cache_stats_outcome(
+    result: Result<crate::models::CacheStats, CoreError>,
+) -> CacheStatsOutcome {
+    match result {
+        Ok(value) => CacheStatsOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => CacheStatsOutcome {
+            value: None,
             error: error.to_string(),
         },
     }
@@ -2711,33 +2772,43 @@ impl HighlighterCore {
 
     /// Return the user's ordered Blossom server list from nostrdb. Empty if no
     /// kind:10063 has been cached yet (relay hasn't delivered it).
-    pub async fn get_blossom_servers(&self) -> Result<Vec<String>, CoreError> {
-        let user = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .ok_or(CoreError::NotAuthenticated)?;
-        blossom::query_blossom_servers(self.runtime.ndb(), &user.pubkey)
+    pub async fn get_blossom_servers(&self) -> StringListOutcome {
+        string_list_outcome((|| {
+            let user = self
+                .inner
+                .read()
+                .session
+                .current_user()
+                .ok_or(CoreError::NotAuthenticated)?;
+            blossom::query_blossom_servers(self.runtime.ndb(), &user.pubkey)
+        })())
     }
 
     /// Replace the user's Blossom server list with `servers` (must be
     /// non-empty). Order is preserved — first server is the upload default.
-    pub async fn set_blossom_servers(&self, servers: Vec<String>) -> Result<String, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        blossom::publish_blossom_servers(&self.runtime, servers).await
+    pub async fn set_blossom_servers(&self, servers: Vec<String>) -> StringOutcome {
+        let result: Result<String, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            blossom::publish_blossom_servers(&self.runtime, servers).await
+        }
+        .await;
+        string_outcome(result)
     }
 
     /// Publish the default Blossom server list only if the user has no cached
     /// kind:10063. Called once after login; no-op when the list already exists.
-    pub async fn init_default_blossom_servers(&self) -> Result<(), CoreError> {
-        let user = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .ok_or(CoreError::NotAuthenticated)?;
-        blossom::init_default_blossom_servers(&self.runtime, &user.pubkey).await
+    pub async fn init_default_blossom_servers(&self) -> MutationOutcome {
+        let result: Result<(), CoreError> = async {
+            let user = self
+                .inner
+                .read()
+                .session
+                .current_user()
+                .ok_or(CoreError::NotAuthenticated)?;
+            blossom::init_default_blossom_servers(&self.runtime, &user.pubkey).await
+        }
+        .await;
+        mutation_outcome(result)
     }
 
     // -- Capture flow (BUD-01 upload + kind:20 picture publish) --
@@ -2794,14 +2865,16 @@ impl HighlighterCore {
     /// Return the user's effective relay list, merging NIP-65 (read/write)
     /// with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
     /// when neither has been cached yet (first login).
-    pub async fn get_relays(&self) -> Result<Vec<crate::relays::RelayConfig>, CoreError> {
-        let user = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .ok_or(CoreError::NotAuthenticated)?;
-        crate::relays::query_relays(self.runtime.ndb(), &user.pubkey)
+    pub async fn get_relays(&self) -> RelayConfigListOutcome {
+        relay_config_list_outcome((|| {
+            let user = self
+                .inner
+                .read()
+                .session
+                .current_user()
+                .ok_or(CoreError::NotAuthenticated)?;
+            crate::relays::query_relays(self.runtime.ndb(), &user.pubkey)
+        })())
     }
 
     /// Insert-or-update a single relay. Replaces the row with matching URL or
@@ -2810,29 +2883,37 @@ impl HighlighterCore {
     pub async fn upsert_relay(
         &self,
         cfg: crate::relays::RelayConfig,
-    ) -> Result<(), CoreError> {
-        let user = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .ok_or(CoreError::NotAuthenticated)?;
-        crate::relays::upsert_relay(&self.runtime, &user.pubkey, cfg).await?;
-        self.runtime.spawn_apply_user_relay_config(user.pubkey);
-        Ok(())
+    ) -> MutationOutcome {
+        let result: Result<(), CoreError> = async {
+            let user = self
+                .inner
+                .read()
+                .session
+                .current_user()
+                .ok_or(CoreError::NotAuthenticated)?;
+            crate::relays::upsert_relay(&self.runtime, &user.pubkey, cfg).await?;
+            self.runtime.spawn_apply_user_relay_config(user.pubkey);
+            Ok(())
+        }
+        .await;
+        mutation_outcome(result)
     }
 
     /// Remove a relay by URL.
-    pub async fn remove_relay(&self, url: String) -> Result<(), CoreError> {
-        let user = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .ok_or(CoreError::NotAuthenticated)?;
-        crate::relays::remove_relay(&self.runtime, &user.pubkey, url).await?;
-        self.runtime.spawn_apply_user_relay_config(user.pubkey);
-        Ok(())
+    pub async fn remove_relay(&self, url: String) -> MutationOutcome {
+        let result: Result<(), CoreError> = async {
+            let user = self
+                .inner
+                .read()
+                .session
+                .current_user()
+                .ok_or(CoreError::NotAuthenticated)?;
+            crate::relays::remove_relay(&self.runtime, &user.pubkey, url).await?;
+            self.runtime.spawn_apply_user_relay_config(user.pubkey);
+            Ok(())
+        }
+        .await;
+        mutation_outcome(result)
     }
 
     /// Atomically update a single relay's role flags.
@@ -2843,25 +2924,29 @@ impl HighlighterCore {
         write: bool,
         rooms: bool,
         indexer: bool,
-    ) -> Result<(), CoreError> {
-        let user = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .ok_or(CoreError::NotAuthenticated)?;
-        crate::relays::set_relay_roles(
-            &self.runtime,
-            &user.pubkey,
-            url,
-            read,
-            write,
-            rooms,
-            indexer,
-        )
-        .await?;
-        self.runtime.spawn_apply_user_relay_config(user.pubkey);
-        Ok(())
+    ) -> MutationOutcome {
+        let result: Result<(), CoreError> = async {
+            let user = self
+                .inner
+                .read()
+                .session
+                .current_user()
+                .ok_or(CoreError::NotAuthenticated)?;
+            crate::relays::set_relay_roles(
+                &self.runtime,
+                &user.pubkey,
+                url,
+                read,
+                write,
+                rooms,
+                indexer,
+            )
+            .await?;
+            self.runtime.spawn_apply_user_relay_config(user.pubkey);
+            Ok(())
+        }
+        .await;
+        mutation_outcome(result)
     }
 
     // -- Relay telemetry --
@@ -2869,8 +2954,8 @@ impl HighlighterCore {
     /// Snapshot of the live per-relay diagnostics map. One row per URL
     /// currently in the client's pool. Refreshed by the background
     /// diagnostics poller at least once per second.
-    pub async fn get_relay_diagnostics(&self) -> Result<Vec<crate::models::RelayDiagnostic>, CoreError> {
-        Ok(self.runtime.relay_diagnostics_snapshot())
+    pub async fn get_relay_diagnostics(&self) -> RelayDiagnosticListOutcome {
+        relay_diagnostic_list_outcome(Ok(self.runtime.relay_diagnostics_snapshot()))
     }
 
     pub fn auto_connected_relay_config(&self, url: String) -> crate::relays::RelayConfig {
@@ -2889,17 +2974,17 @@ impl HighlighterCore {
     /// relay. `Client::connect` is idempotent — already-connected relays
     /// are unaffected; disconnected / terminated / banned relays get a
     /// fresh WebSocket attempt.
-    pub async fn reconnect_all(&self) -> Result<(), CoreError> {
+    pub async fn reconnect_all(&self) -> MutationOutcome {
         self.runtime.client().connect().await;
-        Ok(())
+        mutation_outcome(Ok(()))
     }
 
     /// Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
     /// when the device drops off Wi-Fi — the Swift side re-enables by
     /// calling `reconnect_all` once the path monitor reports Wi-Fi back.
-    pub async fn disconnect_all(&self) -> Result<(), CoreError> {
+    pub async fn disconnect_all(&self) -> MutationOutcome {
         self.runtime.client().disconnect().await;
-        Ok(())
+        mutation_outcome(Ok(()))
     }
 
     /// Fetch the target relay's NIP-11 information document via an HTTPS
@@ -2908,8 +2993,8 @@ impl HighlighterCore {
     pub async fn probe_relay_nip11(
         &self,
         url: String,
-    ) -> Result<crate::models::Nip11Document, CoreError> {
-        crate::relay_polish::probe_nip11(&url).await
+    ) -> Nip11DocumentOutcome {
+        nip11_document_outcome(crate::relay_polish::probe_nip11(&url).await)
     }
 
     /// Fetch another user's kind:10002 via the indexer pool and return the
@@ -2919,14 +3004,20 @@ impl HighlighterCore {
     pub async fn import_relays_from_npub(
         &self,
         npub: String,
-    ) -> Result<Vec<crate::relays::RelayConfig>, CoreError> {
-        crate::relay_polish::import_from_npub(&self.runtime, &npub).await
+    ) -> RelayConfigListOutcome {
+        relay_config_list_outcome(crate::relay_polish::import_from_npub(
+            &self.runtime,
+            &npub,
+        ).await)
     }
 
     /// Size + event-count snapshot of the local nostrdb cache. Order-of-
     /// magnitude figures used by the Network Settings "Local cache" card.
-    pub async fn get_cache_stats(&self) -> Result<crate::models::CacheStats, CoreError> {
-        crate::relay_polish::cache_stats(self.runtime.ndb(), self.runtime.data_dir())
+    pub async fn get_cache_stats(&self) -> CacheStatsOutcome {
+        cache_stats_outcome(crate::relay_polish::cache_stats(
+            self.runtime.ndb(),
+            self.runtime.data_dir(),
+        ))
     }
 }
 

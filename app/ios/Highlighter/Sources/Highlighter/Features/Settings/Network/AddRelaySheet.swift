@@ -179,12 +179,12 @@ struct AddRelaySheet: View {
             guard !Task.isCancelled else { return }
             probeInFlight = true
             defer { probeInFlight = false }
-            do {
-                let doc = try await core.probeRelayNip11(url)
-                guard !Task.isCancelled else { return }
+            let outcome = await core.probeRelayNip11(url)
+            guard !Task.isCancelled else { return }
+            if outcome.error.isEmpty, let doc = outcome.value {
                 probeResult = doc
                 probeError = nil
-            } catch {
+            } else {
                 guard !Task.isCancelled else { return }
                 probeResult = nil
                 probeError = "Couldn't reach the relay — you can still add it."

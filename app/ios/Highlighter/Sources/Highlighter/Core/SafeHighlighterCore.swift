@@ -645,16 +645,16 @@ actor SafeHighlighterCore {
 
     // MARK: - Blossom (BUD-03, kind:10063)
 
-    func getBlossomServers() async throws -> [String] {
-        try await core.getBlossomServers()
+    func getBlossomServers() async -> StringListOutcome {
+        await core.getBlossomServers()
     }
 
-    func setBlossomServers(_ servers: [String]) async throws -> String {
-        try await core.setBlossomServers(servers: servers)
+    func setBlossomServers(_ servers: [String]) async -> StringOutcome {
+        await core.setBlossomServers(servers: servers)
     }
 
-    func initDefaultBlossomServers() async throws {
-        try await core.initDefaultBlossomServers()
+    func initDefaultBlossomServers() async -> MutationOutcome {
+        await core.initDefaultBlossomServers()
     }
 
     // MARK: - Capture (Blossom upload + kind:20 picture)
@@ -681,16 +681,16 @@ actor SafeHighlighterCore {
 
     // MARK: - Relay config (NIP-65 read/write + NIP-78 rooms/indexer)
 
-    func getRelays() async throws -> [RelayConfig] {
-        try await core.getRelays()
+    func getRelays() async -> RelayConfigListOutcome {
+        await core.getRelays()
     }
 
-    func upsertRelay(_ cfg: RelayConfig) async throws {
-        try await core.upsertRelay(cfg: cfg)
+    func upsertRelay(_ cfg: RelayConfig) async -> MutationOutcome {
+        await core.upsertRelay(cfg: cfg)
     }
 
-    func removeRelay(_ url: String) async throws {
-        try await core.removeRelay(url: url)
+    func removeRelay(_ url: String) async -> MutationOutcome {
+        await core.removeRelay(url: url)
     }
 
     func setRelayRoles(
@@ -699,8 +699,8 @@ actor SafeHighlighterCore {
         write: Bool,
         rooms: Bool,
         indexer: Bool
-    ) async throws {
-        try await core.setRelayRoles(
+    ) async -> MutationOutcome {
+        await core.setRelayRoles(
             url: url,
             read: read,
             write: write,
@@ -711,8 +711,8 @@ actor SafeHighlighterCore {
 
     // MARK: - Relay telemetry (PR 4)
 
-    func getRelayDiagnostics() async throws -> [RelayDiagnostic] {
-        try await core.getRelayDiagnostics()
+    func getRelayDiagnostics() async -> RelayDiagnosticListOutcome {
+        await core.getRelayDiagnostics()
     }
 
     func autoConnectedRelayConfig(url: String) -> RelayConfig {
@@ -723,24 +723,24 @@ actor SafeHighlighterCore {
         await core.subscribeRelayStatus()
     }
 
-    func reconnectAll() async throws {
-        try await core.reconnectAll()
+    func reconnectAll() async -> MutationOutcome {
+        await core.reconnectAll()
     }
 
-    func disconnectAll() async throws {
-        try await core.disconnectAll()
+    func disconnectAll() async -> MutationOutcome {
+        await core.disconnectAll()
     }
 
-    func probeRelayNip11(_ url: String) async throws -> Nip11Document {
-        try await core.probeRelayNip11(url: url)
+    func probeRelayNip11(_ url: String) async -> Nip11DocumentOutcome {
+        await core.probeRelayNip11(url: url)
     }
 
-    func importRelaysFromNpub(_ npub: String) async throws -> [RelayConfig] {
-        try await core.importRelaysFromNpub(npub: npub)
+    func importRelaysFromNpub(_ npub: String) async -> RelayConfigListOutcome {
+        await core.importRelaysFromNpub(npub: npub)
     }
 
-    func getCacheStats() async throws -> CacheStats {
-        try await core.getCacheStats()
+    func getCacheStats() async -> CacheStatsOutcome {
+        await core.getCacheStats()
     }
 
     private func publicRoomCandidateLimit(_ limit: UInt32) -> UInt32 {

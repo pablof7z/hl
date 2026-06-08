@@ -333,7 +333,7 @@ final class HighlighterStore {
 
         // Publish the default Blossom server list if the user has never set one.
         // No-op when a kind:10063 is already cached. Fire-and-forget.
-        try? await safeCore.initDefaultBlossomServers()
+        _ = await safeCore.initDefaultBlossomServers()
 
         // Install the joined-communities pump so future 39000/39001/39002
         // events apply to the app-scope store as CommunityUpserted /

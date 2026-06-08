@@ -173,6 +173,30 @@ pub struct CommunityListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct RelayConfigListOutcome {
+    pub values: Vec<crate::relays::RelayConfig>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RelayDiagnosticListOutcome {
+    pub values: Vec<RelayDiagnostic>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct Nip11DocumentOutcome {
+    pub value: Option<Nip11Document>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CacheStatsOutcome {
+    pub value: Option<CacheStats>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct RoomRecommendationListOutcome {
     pub values: Vec<RoomRecommendation>,
     pub error: String,
