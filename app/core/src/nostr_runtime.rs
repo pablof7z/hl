@@ -33,8 +33,8 @@ use crate::models::{RelayDiagnostic, RelayStatus as AppRelayStatus};
 /// `group` tag with the group id and relay.
 const KIND_SIMPLE_GROUPS_LIST: u16 = 10009;
 use crate::relays::{
-    query_relays, seed_defaults, RelayConfig, HIGHLIGHTER_RELAY, NEGENTROPY_SYNC_RELAYS,
-    PURPLE_PAGES_RELAY,
+    highlighter_relay, negentropy_sync_relays, purple_pages_relay, query_relays, seed_defaults,
+    RelayConfig,
 };
 
 /// Shared pointer to the app's event-callback slot. `HighlighterCore` owns
@@ -421,8 +421,8 @@ impl NostrRuntime {
                 seed_defaults()
             });
             apply_relay_config(&client, &rows).await;
-            pin_relay_for_read(&client, PURPLE_PAGES_RELAY).await;
-            pin_relay_for_read(&client, HIGHLIGHTER_RELAY).await;
+            pin_relay_for_read(&client, purple_pages_relay()).await;
+            pin_relay_for_read(&client, highlighter_relay()).await;
             client.connect().await;
             *cache.write() = rows.clone();
             tracing::info!(
@@ -436,7 +436,7 @@ impl NostrRuntime {
 
     /// Negentropy-sync the social trio (kind:0 metadata, kind:3 contacts,
     /// kind:10002 relay lists) for `authors` against the relays in
-    /// `NEGENTROPY_SYNC_RELAYS`. Cheap cold-start backfill — on a
+    /// `negentropy_sync_relays()`. Cheap cold-start backfill — on a
     /// re-login the relay sends only the events we're missing, vs. REQ
     /// which has to resend the full set (and is bound by the relay's
     /// `max_limit`, capping us at 500 events per query against most
@@ -452,11 +452,11 @@ impl NostrRuntime {
         if authors.is_empty() {
             return;
         }
-        for relay in NEGENTROPY_SYNC_RELAYS {
+        for relay in negentropy_sync_relays() {
             let client = self.client.clone();
             let count = authors.len();
             let authors = authors.clone();
-            let relay = (*relay).to_string();
+            let relay = relay.clone();
             self.rt().spawn(async move {
                 pin_relay_for_read(&client, &relay).await;
 
@@ -612,8 +612,8 @@ impl NostrRuntime {
         let cache = self.current_relays.clone();
         self.rt().spawn(async move {
             apply_relay_config(&client, &rows).await;
-            pin_relay_for_read(&client, PURPLE_PAGES_RELAY).await;
-            pin_relay_for_read(&client, HIGHLIGHTER_RELAY).await;
+            pin_relay_for_read(&client, purple_pages_relay()).await;
+            pin_relay_for_read(&client, highlighter_relay()).await;
             client.connect().await;
             *cache.write() = rows;
         });
@@ -622,7 +622,7 @@ impl NostrRuntime {
     /// Convenience: load the user's persisted `RelayConfig` from nostrdb and
     /// reconcile the pool. Called after login succeeds. Falls back to
     /// `seed_defaults()` if no kind:10002 / kind:30078 is cached yet.
-    /// `PURPLE_PAGES_RELAY` is pinned afterwards regardless — it's the
+    /// `purple_pages_relay()` is pinned afterwards regardless — it's the
     /// canonical indexer and not a user-managed entry.
     pub fn spawn_apply_user_relay_config(&self, user_hex: String) {
         let client = self.client.clone();
@@ -637,8 +637,8 @@ impl NostrRuntime {
                 }
             };
             apply_relay_config(&client, &rows).await;
-            pin_relay_for_read(&client, PURPLE_PAGES_RELAY).await;
-            pin_relay_for_read(&client, HIGHLIGHTER_RELAY).await;
+            pin_relay_for_read(&client, purple_pages_relay()).await;
+            pin_relay_for_read(&client, highlighter_relay()).await;
             client.connect().await;
             *cache.write() = rows;
         });
@@ -652,7 +652,7 @@ impl NostrRuntime {
 
     /// URLs of relays the user has marked for NIP-29 group traffic. Used by
     /// URLs of relays the user has marked for NIP-29 group traffic.
-    /// `HIGHLIGHTER_RELAY` is always included — it's the canonical groups
+    /// `highlighter_relay()` is always included — it's the canonical groups
     /// host. Falls back to it alone when no rooms relay is configured, and
     /// adds it to any user-configured set that doesn't already contain it.
     pub fn rooms_urls(&self) -> Vec<String> {
@@ -663,21 +663,23 @@ impl NostrRuntime {
             .filter(|r| r.rooms)
             .map(|r| r.url.clone())
             .collect();
-        if !urls.iter().any(|u| u == HIGHLIGHTER_RELAY) {
-            urls.push(HIGHLIGHTER_RELAY.to_string());
+        let rooms_relay = highlighter_relay();
+        if !urls.iter().any(|u| u == rooms_relay) {
+            urls.push(rooms_relay.to_string());
         }
         urls
     }
 
     /// URLs of relays serving as the outbox-model bootstrap pool for
     /// resolving `kind:0` / `kind:3` / `kind:1xxxx` for arbitrary pubkeys.
-    /// `PURPLE_PAGES_RELAY` is always included regardless of user config —
+    /// `purple_pages_relay()` is always included regardless of user config —
     /// it's app-internal infrastructure, not a user setting. Anything the
     /// user has flagged `indexer` in NIP-78 is added on top, deduped.
     pub fn indexer_urls(&self) -> Vec<String> {
-        let mut urls: Vec<String> = vec![PURPLE_PAGES_RELAY.to_string()];
+        let indexer_relay = purple_pages_relay();
+        let mut urls: Vec<String> = vec![indexer_relay.to_string()];
         for row in self.current_relays.read().iter() {
-            if row.indexer && row.url != PURPLE_PAGES_RELAY {
+            if row.indexer && row.url != indexer_relay {
                 urls.push(row.url.clone());
             }
         }
@@ -805,7 +807,7 @@ fn map_relay_status(inner: nostr_sdk::RelayStatus) -> AppRelayStatus {
 /// Centralizes the "route by role, or default pool with a warning" pattern
 /// used by every per-role spawn on `NostrRuntime`.
 /// Mirror a "social trio" event (kind:0 metadata, kind:3 contacts,
-/// kind:10002 NIP-65 relay list) to `PURPLE_PAGES_RELAY` after the
+/// kind:10002 NIP-65 relay list) to `purple_pages_relay()` after the
 /// caller's normal `send_event` broadcast. Purple is the canonical
 /// mirror for these kinds — every other Nostr client expects to find
 /// them there — but we keep it READ-only in the pool so kind:9802 /
@@ -815,7 +817,7 @@ fn map_relay_status(inner: nostr_sdk::RelayStatus) -> AppRelayStatus {
 /// Failures are logged, not surfaced. The caller has already published
 /// to the user's actual write relays; the mirror is best-effort.
 pub async fn mirror_social_trio_to_purple(client: &Client, event: &Event) {
-    if let Err(e) = client.send_event_to([PURPLE_PAGES_RELAY], event).await {
+    if let Err(e) = client.send_event_to([purple_pages_relay()], event).await {
         tracing::warn!(
             kind = event.kind.as_u16(),
             error = %e,
@@ -1211,7 +1213,7 @@ mod tests {
             rt.rooms_urls(),
             vec![
                 "wss://hl.example".to_string(),
-                HIGHLIGHTER_RELAY.to_string(),
+                highlighter_relay().to_string(),
             ]
         );
     }

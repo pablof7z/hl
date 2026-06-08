@@ -41,7 +41,7 @@ use crate::nip46::{self, BunkerSigner};
 use crate::nostr_runtime::NostrRuntime;
 use crate::onboarding;
 use crate::profile;
-use crate::relays::NOSTR_CONNECT_RELAY;
+use crate::relays::nostr_connect_relay;
 use crate::room_explorer_config;
 use crate::session::{current_user_from_pubkey, Session};
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
@@ -290,9 +290,10 @@ impl HighlighterCore {
         let local_keys = Keys::generate();
         let secret = nip46::random_secret();
 
+        let pairing_relay = nostr_connect_relay();
         let uri = nip46::build_nostr_connect_uri(
             local_keys.public_key(),
-            NOSTR_CONNECT_RELAY,
+            pairing_relay,
             &options.name,
             &options.url,
             &options.image,
@@ -305,8 +306,8 @@ impl HighlighterCore {
         // no-op if the relay is already known — but we can't rely on the
         // initial pool reconcile having completed yet.
         let client = self.runtime.client().clone();
-        if let Err(e) = client.add_relay(NOSTR_CONNECT_RELAY).await {
-            tracing::warn!(relay = %NOSTR_CONNECT_RELAY, error = %e, "add_relay");
+        if let Err(e) = client.add_relay(pairing_relay).await {
+            tracing::warn!(relay = %pairing_relay, error = %e, "add_relay");
         }
         client.connect().await;
 
@@ -1731,22 +1732,19 @@ impl HighlighterCore {
         crate::nostr_entities::decode_nostr_entity(&input)
     }
 
-    /// Mint a NIP-19 `nevent` bech32 reference for an event id with
-    /// optional author / kind / relay hints. Used to build shareable
-    /// highlight URLs (e.g. the `https://highlighter.com/highlight/<nevent>`
-    /// social-card flow). Bad relay URLs are silently dropped.
-    pub fn encode_event_to_nevent(
+    /// Mint a NIP-19 `nevent` for a kind:9802 highlight share link. The
+    /// canonical relay hint is Rust policy; native shells provide only the
+    /// event id and author hint they are already rendering.
+    pub fn encode_highlight_share_nevent(
         &self,
         event_id_hex: String,
-        author_pubkey_hex: Option<String>,
-        relay_hints: Vec<String>,
-        kind: Option<u32>,
+        author_pubkey_hex: String,
     ) -> Result<String, CoreError> {
         crate::nostr_entities::encode_event_to_nevent(
             event_id_hex,
-            author_pubkey_hex,
-            relay_hints,
-            kind,
+            Some(author_pubkey_hex),
+            vec![crate::relays::highlighter_relay().to_string()],
+            Some(9802),
         )
     }
 
@@ -1941,6 +1939,10 @@ impl HighlighterCore {
     /// diagnostics poller at least once per second.
     pub async fn get_relay_diagnostics(&self) -> Result<Vec<crate::models::RelayDiagnostic>, CoreError> {
         Ok(self.runtime.relay_diagnostics_snapshot())
+    }
+
+    pub fn auto_connected_relay_config(&self, url: String) -> crate::relays::RelayConfig {
+        crate::relays::auto_connected_display_config(url)
     }
 
     /// Handle the Swift side uses to match `RelayStatusChanged` deltas on the

@@ -11,7 +11,7 @@ use crate::models::{
     ArtifactRecord, BlossomUpload, HighlightDraft, HighlightRecord, HydratedHighlight,
 };
 use crate::nostr_runtime::NostrRuntime;
-use crate::relays::HIGHLIGHTER_RELAY;
+use crate::relays::highlighter_relay;
 
 /// NIP-84 highlight event.
 const KIND_HIGHLIGHT: u16 = 9802;
@@ -68,7 +68,7 @@ pub async fn publish_and_share(
             highlight_event.id,
             &author_pubkey_hex,
             target_group_id,
-            HIGHLIGHTER_RELAY,
+            highlighter_relay(),
         )?;
         let repost_event = client
             .sign_event_builder(repost_builder)
@@ -107,7 +107,7 @@ pub async fn share_to_community(
         .map_err(|e| CoreError::InvalidInput(format!("invalid author pubkey: {e}")))?;
 
     let relay_hint = if highlight_relay_url.trim().is_empty() {
-        HIGHLIGHTER_RELAY
+        highlighter_relay()
     } else {
         highlight_relay_url
     };

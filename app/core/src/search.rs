@@ -24,7 +24,7 @@ use crate::errors::CoreError;
 use crate::groups::KIND_GROUP_METADATA;
 use crate::models::{ArticleRecord, CommunitySummary, HighlightRecord, ProfileMetadata};
 use crate::profile;
-use crate::relays::HIGHLIGHTER_RELAY;
+use crate::relays::highlighter_relay;
 
 /// NIP-51 kind for the user's curated list of search relays.
 pub const KIND_SEARCH_RELAYS: u16 = 10007;
@@ -302,7 +302,7 @@ pub fn query_search_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<String>, Cor
         }
     };
 
-    push(HIGHLIGHTER_RELAY.to_string(), &mut out, &mut seen);
+    push(highlighter_relay().to_string(), &mut out, &mut seen);
 
     if user_hex.is_empty() {
         return Ok(out);
@@ -566,7 +566,7 @@ mod tests {
         let event = EventBuilder::new(Kind::Custom(KIND_SEARCH_RELAYS), "")
             .tags([
                 Tag::parse(vec!["relay".to_string(), "wss://relay.nostr.band".to_string()]).unwrap(),
-                Tag::parse(vec!["relay".to_string(), HIGHLIGHTER_RELAY.to_string()]).unwrap(),
+                Tag::parse(vec!["relay".to_string(), highlighter_relay().to_string()]).unwrap(),
             ])
             .sign_with_keys(&user)
             .unwrap();
@@ -574,10 +574,10 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         let relays = query_search_relays(&ndb, &user.public_key().to_hex()).unwrap();
-        assert_eq!(relays.first().map(String::as_str), Some(HIGHLIGHTER_RELAY));
+        assert_eq!(relays.first().map(String::as_str), Some(highlighter_relay()));
         assert!(relays.iter().any(|r| r == "wss://relay.nostr.band"));
         // No duplicates for the default relay even though the user also listed it.
-        let hl_count = relays.iter().filter(|r| *r == HIGHLIGHTER_RELAY).count();
+        let hl_count = relays.iter().filter(|r| r.as_str() == highlighter_relay()).count();
         assert_eq!(hl_count, 1);
     }
 }

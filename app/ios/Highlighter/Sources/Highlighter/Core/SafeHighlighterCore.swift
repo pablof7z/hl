@@ -314,20 +314,15 @@ actor SafeHighlighterCore {
         try core.decodeNostrEntity(input: input)
     }
 
-    /// Mint a NIP-19 `nevent` for an event id with optional author / kind / relay
-    /// hints. Used to build shareable highlight URLs (e.g. for the
-    /// `https://highlighter.com/highlight/<nevent>` social-card flow).
-    func encodeNevent(
+    /// Mint a NIP-19 `nevent` for a highlight share URL. Relay hints are
+    /// Rust-owned policy, not native view input.
+    func encodeHighlightShareNevent(
         eventIdHex: String,
-        authorPubkeyHex: String?,
-        relayHints: [String],
-        kind: UInt32?
+        authorPubkeyHex: String
     ) throws -> String {
-        try core.encodeEventToNevent(
+        try core.encodeHighlightShareNevent(
             eventIdHex: eventIdHex,
-            authorPubkeyHex: authorPubkeyHex,
-            relayHints: relayHints,
-            kind: kind
+            authorPubkeyHex: authorPubkeyHex
         )
     }
 
@@ -693,6 +688,10 @@ actor SafeHighlighterCore {
 
     func getRelayDiagnostics() async throws -> [RelayDiagnostic] {
         try await core.getRelayDiagnostics()
+    }
+
+    func autoConnectedRelayConfig(url: String) -> RelayConfig {
+        core.autoConnectedRelayConfig(url: url)
     }
 
     func subscribeRelayStatus() async throws -> UInt64 {

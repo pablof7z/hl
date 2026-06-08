@@ -14,15 +14,10 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use crate::errors::CoreError;
 use crate::models::{FeedbackEventRecord, FeedbackThreadRecord};
 use crate::nostr_runtime::NostrRuntime;
+use crate::relays::feedback_relay;
 
 pub const HIGHLIGHTER_PROJECT_COORDINATE: &str =
     "31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter";
-
-/// Single relay used for the shake-to-share feedback surface. Feedback events
-/// are scoped to this relay only — they do NOT fan out to the user's general
-/// relay set. Both publishes and subscriptions for kind:1/513 with the
-/// project `a` tag are pinned here.
-pub const FEEDBACK_RELAY: &str = "wss://relay.tenex.chat";
 
 pub const KIND_FEEDBACK_NOTE: u16 = 1;
 pub const KIND_FEEDBACK_THREAD_META: u16 = 513;
@@ -239,7 +234,7 @@ pub fn query_first_agent_pubkey(
 /// cached yet — the note still ships, the agent will just discover it via
 /// the `a`-tag subscription). When `parent_event_id` is `Some`, an
 /// `["e", root, "", "root"]` marker is added so the reply attaches to an
-/// existing thread. Published only to [`FEEDBACK_RELAY`].
+/// existing thread. Published only to the feedback relay.
 pub async fn publish_note(
     runtime: &NostrRuntime,
     coordinate: &str,
@@ -289,8 +284,9 @@ pub async fn publish_note(
         .map_err(|e| CoreError::Signer(format!("sign feedback note: {e}")))?;
 
     ensure_feedback_relay(client).await;
+    let relay = feedback_relay();
     client
-        .send_event_to([FEEDBACK_RELAY], &event)
+        .send_event_to([relay], &event)
         .await
         .map_err(|e| CoreError::Relay(format!("publish feedback note: {e}")))?;
 
@@ -300,16 +296,17 @@ pub async fn publish_note(
     Ok(event_record(&event, &root_id))
 }
 
-/// Idempotently add + connect [`FEEDBACK_RELAY`] to the runtime's relay pool
+/// Idempotently add + connect the feedback relay to the runtime's relay pool
 /// before any feedback publish/subscribe runs. Errors are logged but never
 /// propagated — `add_relay` returns `Ok(false)` if the relay is already
 /// known, and `connect_relay` is fine to call again on a connected relay.
 pub async fn ensure_feedback_relay(client: &Client) {
-    if let Err(e) = client.add_relay(FEEDBACK_RELAY).await {
-        tracing::warn!(relay = %FEEDBACK_RELAY, error = %e, "feedback relay add_relay");
+    let relay = feedback_relay();
+    if let Err(e) = client.add_relay(relay).await {
+        tracing::warn!(relay = %relay, error = %e, "feedback relay add_relay");
     }
-    if let Err(e) = client.connect_relay(FEEDBACK_RELAY).await {
-        tracing::warn!(relay = %FEEDBACK_RELAY, error = %e, "feedback relay connect");
+    if let Err(e) = client.connect_relay(relay).await {
+        tracing::warn!(relay = %relay, error = %e, "feedback relay connect");
     }
 }
 
@@ -743,8 +740,9 @@ mod tests {
 
         let ndb_database = nostr_ndb::NdbDatabase::from(ndb.clone());
         let client = Client::builder().database(ndb_database).build();
-        client.add_relay(FEEDBACK_RELAY).await.expect("add relay");
-        client.connect_relay(FEEDBACK_RELAY).await.expect("connect");
+        let relay = feedback_relay();
+        client.add_relay(relay).await.expect("add relay");
+        client.connect_relay(relay).await.expect("connect");
 
         let root_hex = "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949";
         let id = SubscriptionId::generate();
@@ -752,7 +750,7 @@ mod tests {
             .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
             .custom_tag(SingleLetterTag::lowercase(Alphabet::E), root_hex);
         client
-            .subscribe_with_id_to([FEEDBACK_RELAY], id, filter, None)
+            .subscribe_with_id_to([relay], id, filter, None)
             .await
             .expect("subscribe");
 

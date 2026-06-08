@@ -751,6 +751,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func addRoomMember(groupId: String, pubkeyHex: String) async throws  -> String
     
+    func autoConnectedRelayConfig(url: String)  -> RelayConfig
+
     /**
      * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
      * Extension flow — the main app drains the share queue, normalizes each
@@ -812,12 +814,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func downloadPodcastArtwork(url: String) async throws  -> Data
 
     /**
-     * Mint a NIP-19 `nevent` bech32 reference for an event id with
-     * optional author / kind / relay hints. Used to build shareable
-     * highlight URLs (e.g. the `https://highlighter.com/highlight/<nevent>`
-     * social-card flow). Bad relay URLs are silently dropped.
+     * Mint a NIP-19 `nevent` for a kind:9802 highlight share link. The
+     * canonical relay hint is Rust policy; native shells provide only the
+     * event id and author hint they are already rendering.
      */
-    func encodeEventToNevent(eventIdHex: String, authorPubkeyHex: String?, relayHints: [String], kind: UInt32?) throws  -> String
+    func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String) throws  -> String
     
     func generateAccount() throws  -> GeneratedAccount
     
@@ -1552,6 +1553,14 @@ open func addRoomMember(groupId: String, pubkeyHex: String)async throws  -> Stri
         )
 }
     
+open func autoConnectedRelayConfig(url: String) -> RelayConfig  {
+    return try!  FfiConverterTypeRelayConfig_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_auto_connected_relay_config(self.uniffiClonePointer(),
+        FfiConverterString.lower(url),$0
+    )
+})
+}
+
     /**
      * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
      * Extension flow — the main app drains the share queue, normalizes each
@@ -1750,18 +1759,15 @@ open func downloadPodcastArtwork(url: String)async throws  -> Data  {
 }
 
     /**
-     * Mint a NIP-19 `nevent` bech32 reference for an event id with
-     * optional author / kind / relay hints. Used to build shareable
-     * highlight URLs (e.g. the `https://highlighter.com/highlight/<nevent>`
-     * social-card flow). Bad relay URLs are silently dropped.
+     * Mint a NIP-19 `nevent` for a kind:9802 highlight share link. The
+     * canonical relay hint is Rust policy; native shells provide only the
+     * event id and author hint they are already rendering.
      */
-open func encodeEventToNevent(eventIdHex: String, authorPubkeyHex: String?, relayHints: [String], kind: UInt32?)throws  -> String  {
+open func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
-    uniffi_highlighter_core_fn_method_highlightercore_encode_event_to_nevent(self.uniffiClonePointer(),
+    uniffi_highlighter_core_fn_method_highlightercore_encode_highlight_share_nevent(self.uniffiClonePointer(),
         FfiConverterString.lower(eventIdHex),
-        FfiConverterOptionString.lower(authorPubkeyHex),
-        FfiConverterSequenceString.lower(relayHints),
-        FfiConverterOptionUInt32.lower(kind),$0
+        FfiConverterString.lower(authorPubkeyHex),$0
     )
 })
 }
@@ -10755,6 +10761,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_add_room_member() != 5956) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_auto_connected_relay_config() != 62438) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 53328) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10788,7 +10797,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_download_podcast_artwork() != 45675) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_encode_event_to_nevent() != 36762) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_encode_highlight_share_nevent() != 14836) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 54846) {

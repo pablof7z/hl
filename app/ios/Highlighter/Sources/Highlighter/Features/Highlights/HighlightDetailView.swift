@@ -323,11 +323,9 @@ struct HighlightDetailView: View {
     /// link unfurls into a social card built around the quote.
     private func refreshShareURL() async {
         guard
-            let nevent = try? await app.safeCore.encodeNevent(
+            let nevent = try? await app.safeCore.encodeHighlightShareNevent(
                 eventIdHex: highlight.eventId,
-                authorPubkeyHex: highlight.pubkey,
-                relayHints: ["wss://relay.highlighter.com"],
-                kind: 9802
+                authorPubkeyHex: highlight.pubkey
             )
         else {
             shareURL = nil

@@ -14,7 +14,7 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use crate::errors::CoreError;
 use crate::models::CommunitySummary;
 use crate::nostr_runtime::NostrRuntime;
-use crate::relays::HIGHLIGHTER_RELAY;
+use crate::relays::highlighter_relay;
 
 pub const KIND_GROUP_METADATA: u16 = 39000;
 pub const KIND_GROUP_ADMINS: u16 = 39001;
@@ -499,7 +499,7 @@ fn build_summary(
         visibility: visibility.to_string(),
         admin_pubkeys,
         member_count,
-        relay_url: HIGHLIGHTER_RELAY.to_string(),
+        relay_url: highlighter_relay().to_string(),
         metadata_event_id: metadata_event.map(|e| e.id.to_hex()).unwrap_or_default(),
         created_at: metadata_event.map(|e| e.created_at.as_secs()),
     })

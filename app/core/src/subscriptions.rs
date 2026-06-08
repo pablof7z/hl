@@ -26,13 +26,12 @@ use crate::events::{DataChangeType, Delta, EventCallback};
 use crate::groups::{
     build_community_summary, KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA,
 };
-use crate::feedback::{
-    ensure_feedback_relay, FEEDBACK_RELAY, KIND_FEEDBACK_NOTE, KIND_FEEDBACK_THREAD_META,
-};
+use crate::feedback::{ensure_feedback_relay, KIND_FEEDBACK_NOTE, KIND_FEEDBACK_THREAD_META};
 use crate::models::{ArtifactRecord, HighlightRecord, HydratedHighlight};
 use crate::nostr_runtime::{pin_relay_for_read, NostrRuntime};
 use crate::outbox;
 use crate::reads::INTERACTION_KINDS;
+use crate::relays::feedback_relay;
 
 const KIND_METADATA: u16 = 0;
 const KIND_CONTACTS: u16 = 3;
@@ -598,7 +597,7 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             ids
         }
         SubscriptionKind::FeedbackThreads { coordinate, current_user_pubkey } => {
-            // Both subs target only FEEDBACK_RELAY so the kind:1/513 traffic
+            // Both subs target only the feedback relay so kind:1/513 traffic
             // for the project never fans out across the user's relay set.
             let client = runtime.client().clone();
             let mut ids: Vec<SubscriptionId> = Vec::new();
@@ -614,8 +613,9 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
                     .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
                     .author(pk)
                     .custom_tag(SingleLetterTag::lowercase(Alphabet::A), coord_owned);
+                let relay = feedback_relay();
                 if let Err(e) = client_a
-                    .subscribe_with_id_to([FEEDBACK_RELAY], roots_id_clone, filter, None)
+                    .subscribe_with_id_to([relay], roots_id_clone, filter, None)
                     .await
                 {
                     tracing::warn!(error = %e, "failed to subscribe to feedback roots feed");
@@ -632,8 +632,9 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
                 let filter = Filter::new()
                     .kinds([Kind::Custom(KIND_FEEDBACK_THREAD_META)])
                     .custom_tag(SingleLetterTag::lowercase(Alphabet::A), coord_owned);
+                let relay = feedback_relay();
                 if let Err(e) = client_b
-                    .subscribe_with_id_to([FEEDBACK_RELAY], meta_id_clone, filter, None)
+                    .subscribe_with_id_to([relay], meta_id_clone, filter, None)
                     .await
                 {
                     tracing::warn!(error = %e, "failed to subscribe to feedback meta feed");
@@ -653,8 +654,9 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
                 let filter = Filter::new()
                     .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
                     .custom_tag(SingleLetterTag::lowercase(Alphabet::E), root_hex);
+                let relay = feedback_relay();
                 if let Err(e) = client
-                    .subscribe_with_id_to([FEEDBACK_RELAY], id_clone, filter, None)
+                    .subscribe_with_id_to([relay], id_clone, filter, None)
                     .await
                 {
                     tracing::warn!(error = %e, "failed to subscribe to feedback thread feed");

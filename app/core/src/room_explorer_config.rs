@@ -13,7 +13,6 @@ use tokio::sync::Mutex;
 use crate::errors::CoreError;
 
 const CACHE_FILE_NAME: &str = "room-explorer-config-v1.json";
-const CURATOR_RELAY_URL: &str = "wss://relay.highlighter.com";
 const DEFAULT_CURATOR_PUBKEY_HEX: &str =
     "7e1eabe25256545cfe0c534a99bfa5c6cd224e04b614182a9993feff54196c95";
 
@@ -75,7 +74,7 @@ struct RoomExplorerConfig {
 }
 
 async fn fetch_curator_pubkey() -> Result<String, CoreError> {
-    let doc = crate::relay_polish::probe_nip11(CURATOR_RELAY_URL).await?;
+    let doc = crate::relay_polish::probe_nip11(crate::relays::room_explorer_curator_relay()).await?;
     let pubkey = doc
         .pubkey
         .ok_or_else(|| CoreError::Network("curator relay NIP-11 omitted pubkey".into()))?;

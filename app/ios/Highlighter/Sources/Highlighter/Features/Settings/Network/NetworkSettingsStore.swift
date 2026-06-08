@@ -15,6 +15,7 @@ import Observation
 final class NetworkSettingsStore {
     var relays: [RelayConfig] = []
     var diagnostics: [String: RelayDiagnostic] = [:]
+    var autoConnectedConfigs: [String: RelayConfig] = [:]
     var nip11ByUrl: [String: Nip11Document] = [:]
     var cacheStats: CacheStats?
     var isLoading: Bool = true
@@ -41,6 +42,10 @@ final class NetworkSettingsStore {
         nip11ByUrl[url]
     }
 
+    func autoConnectedConfig(for url: String) -> RelayConfig? {
+        autoConnectedConfigs[url]
+    }
+
     /// URLs of relays in the live pool that the user *didn't* configure —
     /// added by the outbox planner, NIP-77 sync, or the hardcoded purple
     /// indexer pin. We surface them in their own section so the
@@ -48,7 +53,7 @@ final class NetworkSettingsStore {
     /// to (configured + auto-pinned).
     var autoConnectedUrls: [String] {
         let configured = Set(relays.map { $0.url })
-        return diagnostics.keys
+        return autoConnectedConfigs.keys
             .filter { !configured.contains($0) }
             .sorted()
     }
@@ -252,6 +257,12 @@ final class NetworkSettingsStore {
                 connectedSinceTs: nil
             )
         }
+        if relays.allSatisfy({ $0.url != url }) && autoConnectedConfigs[url] == nil {
+            let core = self.core
+            Task { @MainActor [weak self] in
+                self?.autoConnectedConfigs[url] = await core.autoConnectedRelayConfig(url: url)
+            }
+        }
     }
 
     // MARK: - Private
@@ -259,7 +270,14 @@ final class NetworkSettingsStore {
     private func refreshDiagnostics() async {
         do {
             let rows = try await core.getRelayDiagnostics()
+            let configured = Set(relays.map { $0.url })
+            let autoUrls = rows.map(\.url).filter { !configured.contains($0) }.sorted()
+            var configs: [String: RelayConfig] = [:]
+            for url in autoUrls {
+                configs[url] = await core.autoConnectedRelayConfig(url: url)
+            }
             diagnostics = Dictionary(uniqueKeysWithValues: rows.map { ($0.url, $0) })
+            autoConnectedConfigs = configs
         } catch {
             // Diagnostics failures are non-fatal — the config rows are still
             // accurate; we just can't show live state this tick.

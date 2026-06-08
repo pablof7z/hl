@@ -117,7 +117,7 @@ struct RawMetadata {
 /// cached.
 ///
 /// After the standard `send_event` broadcast, mirrors to
-/// `PURPLE_PAGES_RELAY` so the canonical social-trio store always has
+/// `purple_pages_relay()` so the canonical social-trio store always has
 /// the latest revision (other Nostr clients look there for kind:0).
 /// Returns the parsed `ProfileMetadata` so the caller's UI can swap to
 /// the new state without waiting for the relay echo.

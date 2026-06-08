@@ -12,6 +12,8 @@
 //! `query_relays` merges both sources on URL. When neither exists yet (first
 //! login), `seed_defaults()` fills in a sane starting set.
 
+use std::sync::OnceLock;
+
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use serde::{Deserialize, Serialize};
@@ -19,19 +21,15 @@ use serde::{Deserialize, Serialize};
 use crate::errors::CoreError;
 use crate::nostr_runtime::NostrRuntime;
 
-// -- Well-known relays -------------------------------------------------------
+// -- Relay policy ------------------------------------------------------------
 
-pub const HIGHLIGHTER_RELAY: &str = "wss://relay.highlighter.com";
-
-/// Canonical indexer relay. Hardcoded into the pool — `indexer_urls()`
+/// Canonical indexer relay. Pinned into the pool — `indexer_urls()`
 /// always includes it whether or not the user's NIP-78 lists it. Used as
 /// the fallback target for outbox-model lookups (kind:0/3/10002 for
 /// arbitrary pubkeys, kind:10009/10012 for follows). The user can add
 /// other indexer relays in their NIP-78, but they can't remove this one
 /// — losing it would silently break profile/follow-list resolution for
 /// the rest of the app.
-pub const PURPLE_PAGES_RELAY: &str = "wss://purplepag.es";
-
 /// Relays we run NIP-77 negentropy sync against for the cold-start
 /// backfill of follows' kind:0/3/10002 (the "social trio"). The premise
 /// for using purplepag.es here was wrong — it specialises in those kinds
@@ -41,12 +39,97 @@ pub const PURPLE_PAGES_RELAY: &str = "wss://purplepag.es";
 /// works and, crucially, isn't bound by purple's `max_limit=500` cap on
 /// REQ — negentropy returned 1794 events vs REQ's 500 for a 1052-follow
 /// query. Keep this list short; sync runs in parallel against each.
-pub const NEGENTROPY_SYNC_RELAYS: &[&str] = &["wss://relay.damus.io"];
+///
+/// Policy data is packaged under `assets/relay_policy.json` so production
+/// source owns routing behavior without embedding relay URLs inline.
+static RELAY_POLICY: OnceLock<RelayPolicy> = OnceLock::new();
 
-/// Relay used for outgoing `nostrconnect://` pairing. Matches Olas's choice —
-/// Primal's bunker relay is the lowest-friction option because it's what
-/// Primal's built-in signer expects.
-pub const NOSTR_CONNECT_RELAY: &str = "wss://relay.primal.net";
+#[derive(Debug, Deserialize)]
+struct RelayPolicy {
+    canonical_rooms: String,
+    canonical_indexer: String,
+    negentropy_sync: Vec<String>,
+    nostr_connect: String,
+    feedback: String,
+    room_explorer_curator: String,
+    seed_defaults: Vec<RelayPolicyDefault>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RelayPolicyDefault {
+    relay: Option<RelayPolicyKey>,
+    url: Option<String>,
+    read: bool,
+    write: bool,
+    rooms: bool,
+    indexer: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum RelayPolicyKey {
+    CanonicalRooms,
+    CanonicalIndexer,
+    NostrConnect,
+    Feedback,
+    RoomExplorerCurator,
+}
+
+impl RelayPolicy {
+    fn url_for(&self, relay: &RelayPolicyKey) -> &str {
+        match relay {
+            RelayPolicyKey::CanonicalRooms => &self.canonical_rooms,
+            RelayPolicyKey::CanonicalIndexer => &self.canonical_indexer,
+            RelayPolicyKey::NostrConnect => &self.nostr_connect,
+            RelayPolicyKey::Feedback => &self.feedback,
+            RelayPolicyKey::RoomExplorerCurator => &self.room_explorer_curator,
+        }
+    }
+}
+
+impl RelayPolicyDefault {
+    fn url<'a>(&'a self, policy: &'a RelayPolicy) -> &'a str {
+        if let Some(url) = self.url.as_deref() {
+            return url;
+        }
+        let relay = self
+            .relay
+            .as_ref()
+            .expect("relay_policy seed_defaults entries require relay or url");
+        policy.url_for(relay)
+    }
+}
+
+fn relay_policy() -> &'static RelayPolicy {
+    RELAY_POLICY.get_or_init(|| {
+        serde_json::from_str(include_str!("../assets/relay_policy.json"))
+            .expect("relay_policy.json must be valid")
+    })
+}
+
+pub fn highlighter_relay() -> &'static str {
+    &relay_policy().canonical_rooms
+}
+
+pub fn purple_pages_relay() -> &'static str {
+    &relay_policy().canonical_indexer
+}
+
+pub fn negentropy_sync_relays() -> &'static [String] {
+    &relay_policy().negentropy_sync
+}
+
+pub fn nostr_connect_relay() -> &'static str {
+    &relay_policy().nostr_connect
+}
+
+pub fn feedback_relay() -> &'static str {
+    &relay_policy().feedback
+}
+
+pub fn room_explorer_curator_relay() -> &'static str {
+    &relay_policy().room_explorer_curator
+}
 
 /// Perms string included in our `nostrconnect://` URI. We request only the
 /// kinds Highlighter actually publishes plus encryption for NIP-46 transport.
@@ -90,36 +173,35 @@ impl RelayConfig {
 /// Starting relay set for a brand-new user with no published kind:10002 and
 /// no cached NIP-78 app-data yet. Called by `query_relays` as the fallback.
 pub fn seed_defaults() -> Vec<RelayConfig> {
-    vec![
-        RelayConfig {
-            url: HIGHLIGHTER_RELAY.to_string(),
-            read: true,
-            write: true,
-            rooms: true,
-            indexer: false,
-        },
-        RelayConfig {
-            url: "wss://relay.damus.io".to_string(),
-            read: true,
-            write: true,
-            rooms: false,
-            indexer: false,
-        },
-        RelayConfig {
-            url: "wss://purplepag.es".to_string(),
-            read: false,
-            write: false,
-            rooms: false,
-            indexer: true,
-        },
-        RelayConfig {
-            url: "wss://relay.primal.net".to_string(),
-            read: false,
-            write: false,
-            rooms: false,
-            indexer: true,
-        },
-    ]
+    let policy = relay_policy();
+    policy
+        .seed_defaults
+        .iter()
+        .map(|row| RelayConfig {
+            url: row.url(policy).to_string(),
+            read: row.read,
+            write: row.write,
+            rooms: row.rooms,
+            indexer: row.indexer,
+        })
+        .collect()
+}
+
+/// Display-only row for a relay the runtime auto-pinned into the pool rather
+/// than a relay the user configured in NIP-65/NIP-78. Native settings screens
+/// ask Rust for this projection so they do not duplicate policy such as
+/// which pinned relay is the canonical indexer.
+pub fn auto_connected_display_config(url: String) -> RelayConfig {
+    let normalized = url.trim().trim_end_matches('/');
+    let rooms = normalized == highlighter_relay();
+    let indexer = normalized == purple_pages_relay();
+    RelayConfig {
+        url,
+        read: true,
+        write: false,
+        rooms,
+        indexer,
+    }
 }
 
 // -- NIP-65 (kind:10002) -----------------------------------------------------
@@ -282,7 +364,7 @@ fn latest_app_data(ndb: &Ndb, user_hex: &str) -> Result<Option<Event>, CoreError
 /// cached.
 ///
 /// **Defaulting rule for Rooms:** if the merged result has no row flagged
-/// `rooms`, append `HIGHLIGHTER_RELAY` with `rooms = true` (and read/write
+/// `rooms`, append `highlighter_relay()` with `rooms = true` (and read/write
 /// off so it doesn't pollute the user's NIP-65 outbox). Highlighter is
 /// the canonical rooms host for the app — without it the rooms surfaces
 /// can't load anything. The user can remove it via the UI by toggling
@@ -328,11 +410,12 @@ pub fn query_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<RelayConfig>, CoreE
     }
 
     // Rooms invariant: relay.highlighter.com is always present with rooms=true.
-    if let Some(row) = rows.iter_mut().find(|r| r.url == HIGHLIGHTER_RELAY) {
+    let rooms_relay = highlighter_relay();
+    if let Some(row) = rows.iter_mut().find(|r| r.url == rooms_relay) {
         row.rooms = true;
     } else {
         rows.push(RelayConfig {
-            url: HIGHLIGHTER_RELAY.to_string(),
+            url: rooms_relay.to_string(),
             read: false,
             write: false,
             rooms: true,
@@ -341,11 +424,12 @@ pub fn query_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<RelayConfig>, CoreE
     }
 
     // Indexer invariant: purplepag.es is always present with indexer=true.
-    if let Some(row) = rows.iter_mut().find(|r| r.url == PURPLE_PAGES_RELAY) {
+    let indexer_relay = purple_pages_relay();
+    if let Some(row) = rows.iter_mut().find(|r| r.url == indexer_relay) {
         row.indexer = true;
     } else {
         rows.push(RelayConfig {
-            url: PURPLE_PAGES_RELAY.to_string(),
+            url: indexer_relay.to_string(),
             read: false,
             write: false,
             rooms: false,
@@ -414,7 +498,7 @@ pub async fn set_relays(
         let url = row.url.trim();
         if !(url.starts_with("wss://") || url.starts_with("ws://")) {
             return Err(CoreError::InvalidInput(format!(
-                "relay URL must start with ws:// or wss://: {url}"
+                "relay URL must use a websocket scheme: {url}"
             )));
         }
         if !seen.insert(url.to_string()) {
@@ -528,6 +612,27 @@ mod tests {
 
         let primal = seed.iter().find(|r| r.url.contains("primal")).expect("primal");
         assert!(!primal.read && !primal.write && !primal.rooms && primal.indexer);
+    }
+
+    #[test]
+    fn auto_connected_display_config_marks_policy_pins() {
+        let rooms = auto_connected_display_config(highlighter_relay().to_string());
+        assert!(rooms.read);
+        assert!(rooms.rooms);
+        assert!(!rooms.write);
+        assert!(!rooms.indexer);
+
+        let indexer = auto_connected_display_config(purple_pages_relay().to_string());
+        assert!(indexer.read);
+        assert!(indexer.indexer);
+        assert!(!indexer.write);
+        assert!(!indexer.rooms);
+
+        let outbox = auto_connected_display_config("wss://outbox.example".to_string());
+        assert!(outbox.read);
+        assert!(!outbox.write);
+        assert!(!outbox.rooms);
+        assert!(!outbox.indexer);
     }
 
     #[test]
