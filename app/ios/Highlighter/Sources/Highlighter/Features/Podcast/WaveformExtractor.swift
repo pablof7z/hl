@@ -36,24 +36,21 @@ enum WaveformExtractor {
         let durationGuard = durationSeconds.isFinite && durationSeconds > 0 ? durationSeconds : 0
         let buckets = max(60, Int(durationGuard.rounded()))
 
-        do {
-            let peaks = try await extractPeaks(from: url, bucketCount: buckets)
-            WaveformCache.write(peaks, for: url)
-            return peaks
-        } catch {
-            logger.error("waveform extraction failed: \(error.localizedDescription, privacy: .public)")
+        guard let peaks = await extractPeaks(from: url, bucketCount: buckets) else {
+            logger.error("waveform extraction failed")
             return nil
         }
+        WaveformCache.write(peaks, for: url)
+        return peaks
     }
 
-    private static func extractPeaks(from url: URL, bucketCount: Int) async throws -> [Float] {
+    private static func extractPeaks(from url: URL, bucketCount: Int) async -> [Float]? {
         let asset = AVURLAsset(url: url)
 
-        guard let track = try await asset.loadTracks(withMediaType: .audio).first else {
-            throw ExtractError.noAudioTrack
-        }
+        guard let tracks = try? await asset.loadTracks(withMediaType: .audio),
+              let track = tracks.first else { return nil }
 
-        let reader = try AVAssetReader(asset: asset)
+        guard let reader = try? AVAssetReader(asset: asset) else { return nil }
         let outputSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVLinearPCMBitDepthKey: 16,
@@ -64,30 +61,32 @@ enum WaveformExtractor {
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: outputSettings)
         output.alwaysCopiesSampleData = false
         guard reader.canAdd(output) else {
-            throw ExtractError.cantAddOutput
+            return nil
         }
         reader.add(output)
 
-        let duration = try await asset.load(.duration).seconds
+        guard let duration = try? await asset.load(.duration).seconds else { return nil }
         guard duration.isFinite, duration > 0 else {
-            throw ExtractError.invalidDuration
+            return nil
         }
 
-        let formatDescriptions = try await track.load(.formatDescriptions)
+        guard let formatDescriptions = try? await track.load(.formatDescriptions) else {
+            return nil
+        }
         guard let cmFormat = formatDescriptions.first,
               let asbdPtr = CMAudioFormatDescriptionGetStreamBasicDescription(cmFormat) else {
-            throw ExtractError.noFormatDescription
+            return nil
         }
         let sampleRate = asbdPtr.pointee.mSampleRate
         let channelCount = max(Int(asbdPtr.pointee.mChannelsPerFrame), 1)
         guard sampleRate > 0 else {
-            throw ExtractError.invalidSampleRate
+            return nil
         }
         let totalSamples = Int(duration * sampleRate)
         let samplesPerBucket = max(totalSamples / bucketCount, 1)
 
         guard reader.startReading() else {
-            throw ExtractError.readerStartFailed(reader.error)
+            return nil
         }
 
         var peaks: [Float] = []
@@ -97,7 +96,7 @@ enum WaveformExtractor {
         var maxObserved: Int16 = 1
 
         while reader.status == .reading {
-            try Task.checkCancellation()
+            if Task.isCancelled { return nil }
             guard let sampleBuffer = output.copyNextSampleBuffer(),
                   let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
                 break
@@ -139,7 +138,7 @@ enum WaveformExtractor {
         }
 
         if reader.status == .failed {
-            throw ExtractError.readerFailed(reader.error)
+            return nil
         }
 
         let denominator = Float(maxObserved)
@@ -160,16 +159,6 @@ enum WaveformExtractor {
         _ = semaphore.wait(timeout: .now() + .milliseconds(250))
         monitor.cancel()
         return result.withLock { $0 }
-    }
-
-    enum ExtractError: Error {
-        case noAudioTrack
-        case cantAddOutput
-        case invalidDuration
-        case noFormatDescription
-        case invalidSampleRate
-        case readerStartFailed(Error?)
-        case readerFailed(Error?)
     }
 }
 

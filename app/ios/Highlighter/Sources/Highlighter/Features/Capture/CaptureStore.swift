@@ -100,66 +100,58 @@ final class CaptureStore {
         prefillRecentBook()
 
         Task {
-            do {
-                let initial = try ImageProcessing.stripMetadataAndEncode(image)
-
-                // Run OCR first so we can decide whether the capture is a
-                // two-page book spread that should be auto-cropped down to
-                // the dominant page before we upload. The sequential cost
-                // (~1-2s) buys us a single canonical image: the user sees
-                // just the page they meant to capture, OCR doesn't carry
-                // text from the other side, and we don't waste an upload.
-                let initialLines = await recognize(processed: initial)
-
-                let processed: ImageProcessing.Result
-                let lines: [OCRLine]
-                if let detection = PageSegmentation.detectActivePage(lines: initialLines),
-                   let cropped = try? ImageProcessing.cropToPage(initial, pageRect: detection.pageRect) {
-                    processed = cropped
-                    lines = PageSegmentation.cropLines(initialLines, to: detection.pageRect)
-                    if let croppedThumb = UIImage(data: cropped.data) {
-                        self.thumbnail = croppedThumb
-                    }
-                } else {
-                    processed = initial
-                    lines = initialLines
-                }
-
-                self.processedJPEG = processed
-                self.preparedUploadJPEG = processed
-                self.ocrLines = lines
-                let markdown = OCRStructureReconstructor.toMarkdown(lines)
-                self.ocrMarkdown = markdown
-
-                // The imeta alt is a one-line summary; flatten the markdown
-                // for it (paragraph breaks → spaces).
-                let altText = flattenForAlt(markdown)
-                let uploadOutcome = await upload(processed: processed, alt: altText)
-                if uploadOutcome.error.isEmpty, let uploaded = uploadOutcome.value {
-                    self.upload = BlossomUpload(
-                        url: uploaded.url,
-                        sha256Hex: uploaded.sha256Hex,
-                        mime: uploaded.mime,
-                        sizeBytes: uploaded.sizeBytes,
-                        width: uploaded.width,
-                        height: uploaded.height,
-                        alt: altText
-                    )
-                } else {
-                    self.uploadError = uploadOutcome.error
-                }
+            guard let initial = ImageProcessing.stripMetadataAndEncode(image) else {
+                self.uploadError = ImageProcessing.failureMessage
                 self.phase = .reviewing
-            } catch {
-                // OCR alone never fails here (it returns []); this catches
-                // upload errors. If upload already succeeded via the task
-                // group, leave it alone and slide into reviewing so the user
-                // can still edit text; otherwise surface the error.
-                if self.upload == nil {
-                    self.uploadError = (error as? LocalizedError)?.errorDescription
-                        ?? error.localizedDescription
-                }
-                self.phase = .reviewing
+                return
             }
+
+            // Run OCR first so we can decide whether the capture is a
+            // two-page book spread that should be auto-cropped down to
+            // the dominant page before we upload. The sequential cost
+            // (~1-2s) buys us a single canonical image: the user sees
+            // just the page they meant to capture, OCR doesn't carry
+            // text from the other side, and we don't waste an upload.
+            let initialLines = await recognize(processed: initial)
+
+            let processed: ImageProcessing.Result
+            let lines: [OCRLine]
+            if let detection = PageSegmentation.detectActivePage(lines: initialLines),
+               let cropped = ImageProcessing.cropToPage(initial, pageRect: detection.pageRect) {
+                processed = cropped
+                lines = PageSegmentation.cropLines(initialLines, to: detection.pageRect)
+                if let croppedThumb = UIImage(data: cropped.data) {
+                    self.thumbnail = croppedThumb
+                }
+            } else {
+                processed = initial
+                lines = initialLines
+            }
+
+            self.processedJPEG = processed
+            self.preparedUploadJPEG = processed
+            self.ocrLines = lines
+            let markdown = OCRStructureReconstructor.toMarkdown(lines)
+            self.ocrMarkdown = markdown
+
+            // The imeta alt is a one-line summary; flatten the markdown
+            // for it (paragraph breaks → spaces).
+            let altText = flattenForAlt(markdown)
+            let uploadOutcome = await upload(processed: processed, alt: altText)
+            if uploadOutcome.error.isEmpty, let uploaded = uploadOutcome.value {
+                self.upload = BlossomUpload(
+                    url: uploaded.url,
+                    sha256Hex: uploaded.sha256Hex,
+                    mime: uploaded.mime,
+                    sizeBytes: uploaded.sizeBytes,
+                    width: uploaded.width,
+                    height: uploaded.height,
+                    alt: altText
+                )
+            } else {
+                self.uploadError = uploadOutcome.error
+            }
+            self.phase = .reviewing
         }
     }
 
@@ -401,7 +393,7 @@ final class CaptureStore {
               ) else {
             return []
         }
-        return (try? await OCRService.recognizeLines(in: cgImage)) ?? []
+        return await OCRService.recognizeLines(in: cgImage)
     }
 
     private func upload(
@@ -420,23 +412,21 @@ final class CaptureStore {
     private func prepareHighlightedCrop(reupload: Bool) {
         guard !selectedHighlightBoxes.isEmpty, let processed = processedJPEG else { return }
 
-        do {
-            let highlighted = try ImageProcessing.cropAndAnnotateHighlight(
-                processed,
-                highlightBoxes: selectedHighlightBoxes,
-                cropBox: highlightCropBox,
-                marginFraction: CGFloat(highlightCropMarginFraction)
-            )
-            preparedUploadJPEG = highlighted
+        guard let highlighted = ImageProcessing.cropAndAnnotateHighlight(
+            processed,
+            highlightBoxes: selectedHighlightBoxes,
+            cropBox: highlightCropBox,
+            marginFraction: CGFloat(highlightCropMarginFraction)
+        ) else {
             upload = nil
-            uploadError = nil
-            if reupload {
-                startUpload(processed: highlighted)
-            }
-        } catch {
-            upload = nil
-            uploadError = (error as? LocalizedError)?.errorDescription
-                ?? error.localizedDescription
+            uploadError = ImageProcessing.failureMessage
+            return
+        }
+        preparedUploadJPEG = highlighted
+        upload = nil
+        uploadError = nil
+        if reupload {
+            startUpload(processed: highlighted)
         }
     }
 

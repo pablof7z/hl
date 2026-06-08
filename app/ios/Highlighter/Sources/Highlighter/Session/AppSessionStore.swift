@@ -31,11 +31,11 @@ final class AppSessionStore {
     }
 
     func persistNsec(_ nsec: String) {
-        try? KeychainService.saveNsec(nsec)
+        _ = KeychainService.saveNsec(nsec)
     }
 
     func persistBunkerURI(_ uri: String) {
-        try? KeychainService.saveBunkerURI(uri)
+        _ = KeychainService.saveBunkerURI(uri)
     }
 
     func clear() {

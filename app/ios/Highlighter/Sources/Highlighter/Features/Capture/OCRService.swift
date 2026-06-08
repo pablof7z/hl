@@ -9,11 +9,11 @@ enum OCRService {
     ///
     /// Uses `.accurate` recognition with language correction — handles most
     /// photographed paperback pages well. Cloud fallback is out of scope.
-    static func recognizeLines(in cgImage: CGImage) async throws -> [OCRLine] {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[OCRLine], Swift.Error>) in
+    static func recognizeLines(in cgImage: CGImage) async -> [OCRLine] {
+        await withCheckedContinuation { (continuation: CheckedContinuation<[OCRLine], Never>) in
             let request = VNRecognizeTextRequest { request, error in
                 if let error {
-                    continuation.resume(throwing: error)
+                    continuation.resume(returning: [])
                     return
                 }
                 guard let observations = request.results as? [VNRecognizedTextObservation] else {
@@ -44,7 +44,7 @@ enum OCRService {
             do {
                 try handler.perform([request])
             } catch {
-                continuation.resume(throwing: error)
+                continuation.resume(returning: [])
             }
         }
     }
