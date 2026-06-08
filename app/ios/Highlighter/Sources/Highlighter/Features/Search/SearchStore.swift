@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Drives `SearchView`. Owns the debounced query pipeline, the four result
+/// Drives `SearchView`. Owns the query pipeline, the four result
 /// buckets (highlights / articles / communities / people), and the live
 /// NIP-50 subscription whose deltas re-run the local article match so
 /// relay-delivered events fade into the Articles section as they arrive.
@@ -15,7 +15,7 @@ import Observation
 final class SearchStore {
     // MARK: - Inputs
 
-    /// Raw text from the search field. Writes schedule a debounced query.
+    /// Raw text from the search field. Writes schedule a query.
     var query: String = "" {
         didSet { scheduleSearch(for: query) }
     }
@@ -30,9 +30,9 @@ final class SearchStore {
     /// True while a local scan is running for the current query — flickers to
     /// avoid a blank frame on a fresh query.
     private(set) var isLocalLoading: Bool = false
-    /// True while at least one NIP-50 relay subscription is still settling for
-    /// the current query (first reply hasn't arrived OR just arrived within
-    /// the last second). Drives a quiet "searching the web" affordance.
+    /// True while the current NIP-50 relay subscription is being opened.
+    /// Relay-delivered events continue to fade into Articles after this flips
+    /// off via `SearchArticlesUpdated` deltas.
     private(set) var isRelayLoading: Bool = false
 
     /// The resolved set of relays the NIP-50 query is hitting. Rendered as a
@@ -52,12 +52,11 @@ final class SearchStore {
     private var searchToken: UInt64 = 0
     /// Most-recent applied query (the one whose results populate the buckets).
     private var appliedQuery: String = ""
-    private var debounceTask: Task<Void, Never>?
+    private var searchTask: Task<Void, Never>?
     private var activeSearchHandle: UInt64?
     /// Query the current NIP-50 subscription was opened with. If the user
     /// edits the query, we tear down + re-open.
     private var activeRelayQuery: String = ""
-    private var relayLoadingResetTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -75,10 +74,8 @@ final class SearchStore {
     }
 
     func stop() {
-        debounceTask?.cancel()
-        debounceTask = nil
-        relayLoadingResetTask?.cancel()
-        relayLoadingResetTask = nil
+        searchTask?.cancel()
+        searchTask = nil
         if let handle = activeSearchHandle {
             Task { [safeCore, eventBridge] in
                 await safeCore.unsubscribe(handle)
@@ -93,15 +90,18 @@ final class SearchStore {
     /// Re-applies a search explicitly (e.g. tapping a recent search chip).
     func submit(_ query: String) {
         self.query = query
-        // Fire immediately, skipping the debounce.
-        debounceTask?.cancel()
+        // Fire immediately, replacing any in-flight query.
+        searchTask?.cancel()
         let token = bumpToken()
-        Task { await runSearch(for: query, token: token) }
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runSearch(for: query, token: token)
+        }
     }
 
     func clear() {
-        debounceTask?.cancel()
-        debounceTask = nil
+        searchTask?.cancel()
+        searchTask = nil
         query = ""
         appliedQuery = ""
         highlights = []
@@ -114,7 +114,7 @@ final class SearchStore {
     }
 
     private func scheduleSearch(for q: String) {
-        debounceTask?.cancel()
+        searchTask?.cancel()
         let trimmed = q.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             appliedQuery = ""
@@ -129,9 +129,7 @@ final class SearchStore {
         }
         isLocalLoading = true
         let token = bumpToken()
-        debounceTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 220_000_000) // 220ms
-            if Task.isCancelled { return }
+        searchTask = Task { [weak self] in
             guard let self else { return }
             await self.runSearch(for: trimmed, token: token)
         }
@@ -178,19 +176,9 @@ final class SearchStore {
             }
             activeSearchHandle = handle
             eventBridge?.registerSearch(self, handle: handle)
+            isRelayLoading = false
         } catch {
             isRelayLoading = false
-        }
-
-        // Relay results may trickle in over a few seconds. The spinner stops
-        // on the first delta (`applyRelaySearchUpdate`) or, barring that,
-        // after a safety timeout so the UI doesn't hang on a quiet relay.
-        relayLoadingResetTask?.cancel()
-        relayLoadingResetTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 5_500_000_000) // 5.5s
-            if Task.isCancelled { return }
-            guard let self else { return }
-            self.isRelayLoading = false
         }
     }
 
@@ -205,8 +193,7 @@ final class SearchStore {
             activeSearchHandle = nil
         }
         activeRelayQuery = ""
-        relayLoadingResetTask?.cancel()
-        relayLoadingResetTask = nil
+        isRelayLoading = false
     }
 
     /// EventBridge callback: the relay search delivered new matching events
@@ -216,8 +203,6 @@ final class SearchStore {
     func applyRelaySearchUpdate(query incomingQuery: String) {
         guard incomingQuery == appliedQuery, !appliedQuery.isEmpty else { return }
         isRelayLoading = false
-        relayLoadingResetTask?.cancel()
-        relayLoadingResetTask = nil
         let q = appliedQuery
         let token = searchToken
         Task { [weak self] in
@@ -228,4 +213,3 @@ final class SearchStore {
         }
     }
 }
-
