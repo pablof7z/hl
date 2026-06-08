@@ -585,15 +585,16 @@ struct HighlightFeedCardView: View {
         let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !addr.isEmpty else { return }
 
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return }
-        let pubkey = String(parts[1])
-        let dTag = String(parts[2])
-        guard !pubkey.isEmpty, !dTag.isEmpty else { return }
-
-        let outcome = await app.safeCore.getArticle(pubkeyHex: pubkey, dTag: dTag)
+        let outcome = await app.safeCore.getArticleByAddress(address: addr)
         sourceArticle = outcome.error.isEmpty ? outcome.value : nil
-        await app.requestProfile(pubkeyHex: pubkey)
+        if let pubkey = sourceArticle?.pubkey, !pubkey.isEmpty {
+            await app.requestProfile(pubkeyHex: pubkey)
+            return
+        }
+        let authorOutcome = await app.safeCore.getArticleAddressAuthor(address: addr)
+        if authorOutcome.error.isEmpty, let pubkey = authorOutcome.value, !pubkey.isEmpty {
+            await app.requestProfile(pubkeyHex: pubkey)
+        }
     }
 }
 

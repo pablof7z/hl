@@ -405,6 +405,14 @@ actor SafeHighlighterCore {
         await core.getArticle(pubkeyHex: pubkeyHex, dTag: dTag)
     }
 
+    func getArticleByAddress(address: String) async -> ArticleOutcome {
+        await core.getArticleByAddress(address: address)
+    }
+
+    func getArticleAddressAuthor(address: String) async -> OptionalStringOutcome {
+        await core.getArticleAddressAuthor(address: address)
+    }
+
     func getHighlightsForArticle(address: String, limit: UInt32 = 128) async -> HighlightListOutcome {
         await core.getHighlightsForArticle(address: address, limit: limit)
     }

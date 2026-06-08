@@ -842,6 +842,18 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getArticle(pubkeyHex: String, dTag: String) async  -> ArticleOutcome
 
+    /**
+     * Return the author pubkey from a valid NIP-23 article address
+     * (`30023:<pubkey>:<d>`).
+     */
+    func getArticleAddressAuthor(address: String) async  -> OptionalStringOutcome
+
+    /**
+     * Read a single NIP-23 article by its full NIP-33 address
+     * (`30023:<pubkey>:<d>`) from nostrdb.
+     */
+    func getArticleByAddress(address: String) async  -> ArticleOutcome
+
     func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
 
     func getArtifacts(groupId: String, limit: UInt32) async  -> ArtifactListOutcome
@@ -1874,6 +1886,50 @@ open func getArticle(pubkeyHex: String, dTag: String)async  -> ArticleOutcome  {
                 uniffi_highlighter_core_fn_method_highlightercore_get_article(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(pubkeyHex),FfiConverterString.lower(dTag)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeArticleOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Return the author pubkey from a valid NIP-23 article address
+     * (`30023:<pubkey>:<d>`).
+     */
+open func getArticleAddressAuthor(address: String)async  -> OptionalStringOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_article_address_author(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(address)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeOptionalStringOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Read a single NIP-23 article by its full NIP-33 address
+     * (`30023:<pubkey>:<d>`) from nostrdb.
+     */
+open func getArticleByAddress(address: String)async  -> ArticleOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_article_by_address(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(address)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -15151,6 +15207,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article() != 62635) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_address_author() != 41220) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_by_address() != 8240) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_route() != 10925) {

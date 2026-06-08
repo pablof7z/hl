@@ -1535,6 +1535,21 @@ impl HighlighterCore {
         ))
     }
 
+    /// Read a single NIP-23 article by its full NIP-33 address
+    /// (`30023:<pubkey>:<d>`) from nostrdb.
+    pub async fn get_article_by_address(&self, address: String) -> ArticleOutcome {
+        optional_article_outcome(articles::query_article_by_address(
+            self.runtime.ndb(),
+            address.trim(),
+        ))
+    }
+
+    /// Return the author pubkey from a valid NIP-23 article address
+    /// (`30023:<pubkey>:<d>`).
+    pub async fn get_article_address_author(&self, address: String) -> OptionalStringOutcome {
+        optional_string_outcome(Ok(articles::article_author_from_address(address.trim())))
+    }
+
     /// Read all highlights referencing the given NIP-23 article address
     /// (`30023:<pubkey>:<d>`) from nostrdb, newest first.
     pub async fn get_highlights_for_article(

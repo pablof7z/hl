@@ -57,6 +57,24 @@ pub fn query_article(
     Ok(build_articles(&events, 1).into_iter().next())
 }
 
+/// Read a single NIP-23 article by its full NIP-33 address
+/// (`30023:<pubkey>:<d>`). Malformed or non-article addresses resolve
+/// to `None`; cache/storage errors still surface.
+pub fn query_article_by_address(
+    ndb: &Ndb,
+    address: &str,
+) -> Result<Option<ArticleRecord>, CoreError> {
+    let Some((pubkey_hex, d_tag)) = article_address_parts(address) else {
+        return Ok(None);
+    };
+    query_article(ndb, &pubkey_hex, &d_tag)
+}
+
+/// Return the author pubkey from a valid NIP-23 article address.
+pub fn article_author_from_address(address: &str) -> Option<String> {
+    article_address_parts(address).map(|(pubkey_hex, _)| pubkey_hex)
+}
+
 /// Resolve the article addresses stored on a bookmark/curation set into cached
 /// NIP-23 records, newest first. Malformed or non-article addresses are
 /// ignored; cache and storage errors still surface to the caller.
@@ -339,9 +357,14 @@ mod tests {
             article_address_parts(&valid),
             Some((keys.public_key().to_hex(), "essay".to_string()))
         );
+        assert_eq!(
+            article_author_from_address(&valid),
+            Some(keys.public_key().to_hex())
+        );
         assert!(article_address_parts("30023:missing-d").is_none());
         assert!(article_address_parts("30023::essay").is_none());
         assert!(article_address_parts("1:abcdef:note").is_none());
+        assert!(article_author_from_address("1:abcdef:note").is_none());
     }
 
     #[test]
