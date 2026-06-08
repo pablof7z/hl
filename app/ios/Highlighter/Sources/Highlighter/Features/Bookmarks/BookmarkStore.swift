@@ -76,45 +76,8 @@ final class BookmarkStore {
         myCurationSets = curations.error.isEmpty ? curations.values : []
         myWebBookmarks = webs.error.isEmpty ? webs.values : []
 
-        // Drop curations from Explore that would render as "Empty Collection"
-        // — either zero items at all, or every articleAddress fails to resolve
-        // against the local NostrDB cache and there are no note refs to
-        // fall back on. Mine keeps empty sets so authors can edit drafts.
         let following = await followingOutcome
-        let raw = following.error.isEmpty ? following.values : []
-        followingCurationSets = await Self.dropEmpty(raw, core: core)
-    }
-
-    /// Returns the subset of `sets` whose detail view would actually render
-    /// at least one item. Article address parsing and local cache resolution
-    /// stay in Rust; Swift only keeps or drops the projected set rows.
-    private static func dropEmpty(
-        _ sets: [BookmarkSetRecord],
-        core: SafeHighlighterCore
-    ) async -> [BookmarkSetRecord] {
-        await withTaskGroup(of: (Int, Bool).self) { group in
-            for (idx, set) in sets.enumerated() {
-                group.addTask {
-                    (idx, await hasResolvableItem(set, core: core))
-                }
-            }
-            var keep = Set<Int>()
-            for await (idx, ok) in group where ok {
-                keep.insert(idx)
-            }
-            return sets.enumerated()
-                .compactMap { keep.contains($0.offset) ? $0.element : nil }
-        }
-    }
-
-    private static func hasResolvableItem(
-        _ set: BookmarkSetRecord,
-        core: SafeHighlighterCore
-    ) async -> Bool {
-        if !set.noteIds.isEmpty { return true }
-        if set.articleAddresses.isEmpty { return false }
-        let outcome = await core.getBookmarkSetArticles(record: set)
-        return outcome.error.isEmpty && !outcome.values.isEmpty
+        followingCurationSets = following.error.isEmpty ? following.values : []
     }
 
     func loadArticles(addresses: Set<String>) async {

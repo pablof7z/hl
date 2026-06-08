@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
+use crate::articles;
 use crate::artifacts::first_tag_value;
 use crate::clock::Clock;
 use crate::errors::CoreError;
@@ -179,6 +180,42 @@ pub fn curation_menu_items_for_address(
             id: set.id.clone(),
             title: curation_set_display_title(&set),
             is_member: !address.is_empty() && set.article_addresses.iter().any(|a| a == address),
+        })
+        .collect()
+}
+
+/// Keep only curation sets that can render a visible Explore row.
+///
+/// Note-backed sets are visible even when no article is cached. Address-only
+/// sets need at least one locally resolvable NIP-23 article; malformed,
+/// uncached, or storage-failed address sets are hidden, matching the previous
+/// iOS Explore behavior without making Swift fan out per set.
+pub fn explorable_curation_sets(ndb: &Ndb, sets: Vec<BookmarkSetRecord>) -> Vec<BookmarkSetRecord> {
+    filter_explorable_curation_sets(sets, |set| {
+        match articles::query_articles_for_addresses(ndb, &set.article_addresses) {
+            Ok(articles) => !articles.is_empty(),
+            Err(error) => {
+                tracing::warn!(
+                    set_id = %set.id,
+                    error = %error,
+                    "failed to resolve curation set articles"
+                );
+                false
+            }
+        }
+    })
+}
+
+fn filter_explorable_curation_sets<F>(
+    sets: Vec<BookmarkSetRecord>,
+    mut resolves_article: F,
+) -> Vec<BookmarkSetRecord>
+where
+    F: FnMut(&BookmarkSetRecord) -> bool,
+{
+    sets.into_iter()
+        .filter(|set| {
+            !set.note_ids.is_empty() || (!set.article_addresses.is_empty() && resolves_article(set))
         })
         .collect()
 }
@@ -501,12 +538,21 @@ fn parse_web_bookmark_event(event: Event) -> WebBookmarkRecord {
 #[cfg(test)]
 mod tests {
     use super::{
-        curation_menu_items_for_address, next_curation_address_membership,
-        CurationMembershipChange, KIND_CURATION_SETS,
+        curation_menu_items_for_address, filter_explorable_curation_sets,
+        next_curation_address_membership, CurationMembershipChange, KIND_CURATION_SETS,
     };
     use crate::models::BookmarkSetRecord;
 
     fn set(id: &str, title: &str, article_addresses: Vec<&str>) -> BookmarkSetRecord {
+        set_with_notes(id, title, article_addresses, Vec::new())
+    }
+
+    fn set_with_notes(
+        id: &str,
+        title: &str,
+        article_addresses: Vec<&str>,
+        note_ids: Vec<&str>,
+    ) -> BookmarkSetRecord {
         BookmarkSetRecord {
             id: id.to_string(),
             pubkey: "author".to_string(),
@@ -515,7 +561,7 @@ mod tests {
             description: String::new(),
             image: String::new(),
             article_addresses: article_addresses.into_iter().map(str::to_string).collect(),
-            note_ids: Vec::new(),
+            note_ids: note_ids.into_iter().map(str::to_string).collect(),
             created_at: Some(1),
         }
     }
@@ -582,5 +628,20 @@ mod tests {
         assert_eq!(items[1].title, "Untitled");
         assert_eq!(items[2].title, "Named");
         assert!(items.iter().all(|item| !item.is_member));
+    }
+
+    #[test]
+    fn explorable_curation_sets_keep_only_visible_explore_rows() {
+        let sets = vec![
+            set("empty", "Empty", Vec::new()),
+            set("unresolved", "Unresolved", vec!["30023:author:missing"]),
+            set_with_notes("notes", "Notes", Vec::new(), vec!["note-id"]),
+            set("article", "Article", vec!["30023:author:cached"]),
+        ];
+
+        let rows = filter_explorable_curation_sets(sets, |set| set.id == "article");
+        let ids = rows.into_iter().map(|set| set.id).collect::<Vec<_>>();
+
+        assert_eq!(ids, vec!["notes", "article"]);
     }
 }

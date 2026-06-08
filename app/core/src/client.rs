@@ -2521,7 +2521,11 @@ impl HighlighterCore {
                 .map(|u| u.pubkey)
                 .unwrap_or_default();
             let follows = crate::follows::query_follows(self.runtime.ndb(), &user_hex)?;
-            crate::lists::query_following_curation_sets(self.runtime.ndb(), &follows)
+            let sets = crate::lists::query_following_curation_sets(self.runtime.ndb(), &follows)?;
+            Ok(crate::lists::explorable_curation_sets(
+                self.runtime.ndb(),
+                sets,
+            ))
         })())
     }
 
