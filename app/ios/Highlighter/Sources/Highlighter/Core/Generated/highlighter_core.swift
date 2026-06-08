@@ -1284,6 +1284,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func nostrEntityInlineRender(entity: NostrEntityRef)  -> NostrEntityInlineRender
 
+    func ocrAltText(markdown: String)  -> String
+
     func pairBunker(uri: String) async  -> CurrentUserOutcome
 
     func prepareWhatsNew() async  -> WhatsNewEntriesOutcome
@@ -3569,6 +3571,14 @@ open func nostrEntityInlineRender(entity: NostrEntityRef) -> NostrEntityInlineRe
     return try!  FfiConverterTypeNostrEntityInlineRender_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_nostr_entity_inline_render(self.uniffiClonePointer(),
         FfiConverterTypeNostrEntityRef_lower(entity),$0
+    )
+})
+}
+
+open func ocrAltText(markdown: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_ocr_alt_text(self.uniffiClonePointer(),
+        FfiConverterString.lower(markdown),$0
     )
 })
 }
@@ -17905,6 +17915,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_nostr_entity_inline_render() != 20611) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_ocr_alt_text() != 9116) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 14588) {

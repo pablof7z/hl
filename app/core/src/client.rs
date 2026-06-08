@@ -2520,6 +2520,10 @@ impl HighlighterCore {
         crate::ocr::join_quote(&words)
     }
 
+    pub fn ocr_alt_text(&self, markdown: String) -> String {
+        crate::ocr::alt_text_from_markdown(&markdown)
+    }
+
     /// Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
     /// Extension flow — the main app drains the share queue, normalizes each
     /// URL through this, then calls `publish_artifact` to post the kind:11.

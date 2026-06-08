@@ -136,7 +136,7 @@ final class CaptureStore {
 
             // The imeta alt is a one-line summary; flatten the markdown
             // for it (paragraph breaks → spaces).
-            let altText = flattenForAlt(markdown)
+            let altText = safeCore.ocrAltText(from: markdown)
             let uploadOutcome = await upload(processed: processed, alt: altText)
             if uploadOutcome.error.isEmpty, let uploaded = uploadOutcome.value {
                 self.upload = BlossomUpload(
@@ -245,7 +245,7 @@ final class CaptureStore {
             sizeBytes: upload.sizeBytes,
             width: upload.width,
             height: upload.height,
-            alt: flattenForAlt(ocrMarkdown)
+            alt: safeCore.ocrAltText(from: ocrMarkdown)
         )
 
         phase = .publishing
@@ -438,7 +438,7 @@ final class CaptureStore {
         uploadError = nil
 
         Task {
-            let altText = flattenForAlt(ocrMarkdown)
+            let altText = safeCore.ocrAltText(from: ocrMarkdown)
             let outcome = await upload(processed: processed, alt: altText)
             guard generation == self.uploadGeneration else { return }
             guard outcome.error.isEmpty, let uploaded = outcome.value else {
@@ -455,13 +455,6 @@ final class CaptureStore {
                 alt: altText
             )
         }
-    }
-
-    private func flattenForAlt(_ markdown: String) -> String {
-        markdown
-            .replacingOccurrences(of: "\n\n", with: " ")
-            .replacingOccurrences(of: "\n", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func defaultHighlightCropBox(processed: ImageProcessing.Result) -> CGRect? {

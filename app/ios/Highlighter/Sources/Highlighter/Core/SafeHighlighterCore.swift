@@ -312,6 +312,10 @@ actor SafeHighlighterCore {
         core.joinOcrQuote(words: words)
     }
 
+    nonisolated func ocrAltText(from markdown: String) -> String {
+        core.ocrAltText(markdown: markdown)
+    }
+
     nonisolated func buildEditedBookPreview(
         isbn: String,
         basePreview: ArtifactPreview?,

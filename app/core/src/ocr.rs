@@ -511,6 +511,15 @@ pub fn join_quote(words: &[OcrWord]) -> String {
         .replace(" ?", "?")
 }
 
+/// Flatten OCR markdown into the one-line alt text attached to uploaded images.
+pub fn alt_text_from_markdown(markdown: &str) -> String {
+    markdown
+        .replace("\n\n", " ")
+        .replace('\n', " ")
+        .trim()
+        .to_string()
+}
+
 fn unit_rect() -> OcrRect {
     OcrRect {
         x: 0.0,
@@ -1247,5 +1256,13 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(join_quote(&words), "Hello, world! Really?");
+    }
+
+    #[test]
+    fn alt_text_from_markdown_flattens_paragraphs_and_trims() {
+        assert_eq!(
+            alt_text_from_markdown("  First paragraph.\n\nSecond line\nthird line.  "),
+            "First paragraph. Second line third line."
+        );
     }
 }
