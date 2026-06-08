@@ -147,16 +147,16 @@ actor SafeHighlighterCore {
 
     // MARK: - Bookmarks (NIP-51 kind:10003)
 
-    func getBookmarkedArticleAddresses() async throws -> [String] {
-        try await core.getBookmarkedArticleAddresses()
+    func getBookmarkedArticleAddresses() async -> StringListOutcome {
+        await core.getBookmarkedArticleAddresses()
     }
 
-    func isArticleBookmarked(address: String) async throws -> Bool {
-        try await core.isArticleBookmarked(address: address)
+    func isArticleBookmarked(address: String) async -> BoolOutcome {
+        await core.isArticleBookmarked(address: address)
     }
 
-    func toggleArticleBookmark(address: String) async throws -> Bool {
-        try await core.toggleArticleBookmark(address: address)
+    func toggleArticleBookmark(address: String) async -> BoolOutcome {
+        await core.toggleArticleBookmark(address: address)
     }
 
     func subscribeBookmarks() async throws -> UInt64 {

@@ -23,6 +23,12 @@ pub struct MutationOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct BoolOutcome {
+    pub value: bool,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct StringListOutcome {
     pub values: Vec<String>,
     pub error: String,

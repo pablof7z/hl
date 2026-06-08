@@ -167,18 +167,19 @@ final class HighlighterStore {
             bookmarkedArticleAddresses.insert(trimmed)
         }
         // Authoritative toggle + publish.
-        do {
-            _ = try await safeCore.toggleArticleBookmark(address: trimmed)
-            // No explicit refresh — the pump will deliver `BookmarksUpdated`.
-        } catch {
+        let outcome = await safeCore.toggleArticleBookmark(address: trimmed)
+        if !outcome.error.isEmpty {
             // Revert on failure.
             await refreshBookmarks()
         }
+        // No explicit refresh on success — the pump will deliver
+        // `BookmarksUpdated`.
     }
 
     func refreshBookmarks() async {
-        if let addrs = try? await safeCore.getBookmarkedArticleAddresses() {
-            bookmarkedArticleAddresses = Set(addrs)
+        let outcome = await safeCore.getBookmarkedArticleAddresses()
+        if outcome.error.isEmpty {
+            bookmarkedArticleAddresses = Set(outcome.values)
         }
     }
 

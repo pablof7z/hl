@@ -25,7 +25,7 @@ use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactPreview, ArtifactRecord, BlossomUpload,
-    ChatMessageRecord, CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord,
+    BoolOutcome, ChatMessageRecord, CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord,
     FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft, HighlightRecord,
     HydratedHighlight, MutationOutcome, NostrConnectOptions, PictureDraft, PictureRecord,
     PodcastPositionRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
@@ -91,6 +91,19 @@ fn mutation_outcome(result: Result<(), CoreError>) -> MutationOutcome {
         },
         Err(error) => MutationOutcome {
             applied: false,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn bool_outcome(result: Result<bool, CoreError>) -> BoolOutcome {
+    match result {
+        Ok(value) => BoolOutcome {
+            value,
+            error: String::new(),
+        },
+        Err(error) => BoolOutcome {
+            value: false,
             error: error.to_string(),
         },
     }
@@ -1100,7 +1113,7 @@ impl HighlighterCore {
 
     /// Return the set of article addresses the user has bookmarked in their
     /// newest kind:10003 list (empty when not logged in or no list cached).
-    pub async fn get_bookmarked_article_addresses(&self) -> Result<Vec<String>, CoreError> {
+    pub async fn get_bookmarked_article_addresses(&self) -> StringListOutcome {
         let user_hex = self
             .inner
             .read()
@@ -1108,13 +1121,15 @@ impl HighlighterCore {
             .current_user()
             .map(|u| u.pubkey)
             .unwrap_or_default();
-        let list = crate::bookmarks::query_bookmarks(self.runtime.ndb(), &user_hex)?;
-        Ok(list.addresses)
+        string_list_outcome(
+            crate::bookmarks::query_bookmarks(self.runtime.ndb(), &user_hex)
+                .map(|list| list.addresses),
+        )
     }
 
     /// Read-only predicate: is `address` currently bookmarked for the logged-in
     /// user? Always `false` when no user is logged in.
-    pub async fn is_article_bookmarked(&self, address: String) -> Result<bool, CoreError> {
+    pub async fn is_article_bookmarked(&self, address: String) -> BoolOutcome {
         let user_hex = self
             .inner
             .read()
@@ -1123,23 +1138,24 @@ impl HighlighterCore {
             .map(|u| u.pubkey)
             .unwrap_or_default();
         if user_hex.is_empty() {
-            return Ok(false);
+            return bool_outcome(Ok(false));
         }
-        crate::bookmarks::is_bookmarked(self.runtime.ndb(), &user_hex, &address)
+        bool_outcome(crate::bookmarks::is_bookmarked(
+            self.runtime.ndb(),
+            &user_hex,
+            &address,
+        ))
     }
 
     /// Toggle `address` in the user's kind:10003 list. Returns the new
     /// membership state — `true` if the address is now bookmarked, `false`
     /// if it was removed.
-    pub async fn toggle_article_bookmark(&self, address: String) -> Result<bool, CoreError> {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .ok_or(CoreError::NotInitialized)?;
-        crate::bookmarks::toggle_bookmark(&self.runtime, &user_hex, &address).await
+    pub async fn toggle_article_bookmark(&self, address: String) -> BoolOutcome {
+        let user_hex = match self.inner.read().session.current_user().map(|u| u.pubkey) {
+            Some(user_hex) => user_hex,
+            None => return bool_outcome(Err(CoreError::NotInitialized)),
+        };
+        bool_outcome(crate::bookmarks::toggle_bookmark(&self.runtime, &user_hex, &address).await)
     }
 
     /// Read-only predicate: is `event_id_hex` currently bookmarked for

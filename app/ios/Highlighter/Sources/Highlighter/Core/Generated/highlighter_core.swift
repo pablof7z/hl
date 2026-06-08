@@ -849,7 +849,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Return the set of article addresses the user has bookmarked in their
      * newest kind:10003 list (empty when not logged in or no list cached).
      */
-    func getBookmarkedArticleAddresses() async throws  -> [String]
+    func getBookmarkedArticleAddresses() async  -> StringListOutcome
 
     /**
      * Size + event-count snapshot of the local nostrdb cache. Order-of-
@@ -1058,7 +1058,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Read-only predicate: is `address` currently bookmarked for the logged-in
      * user? Always `false` when no user is logged in.
      */
-    func isArticleBookmarked(address: String) async throws  -> Bool
+    func isArticleBookmarked(address: String) async  -> BoolOutcome
 
     /**
      * Read-only predicate: is `event_id_hex` currently bookmarked for
@@ -1425,7 +1425,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * membership state — `true` if the address is now bookmarked, `false`
      * if it was removed.
      */
-    func toggleArticleBookmark(address: String) async throws  -> Bool
+    func toggleArticleBookmark(address: String) async  -> BoolOutcome
 
     /**
      * Toggle `event_id_hex` in the user's kind:10003 list (for comments
@@ -1873,9 +1873,9 @@ open func getBlossomServers()async throws  -> [String]  {
      * Return the set of article addresses the user has bookmarked in their
      * newest kind:10003 list (empty when not logged in or no list cached).
      */
-open func getBookmarkedArticleAddresses()async throws  -> [String]  {
+open func getBookmarkedArticleAddresses()async  -> StringListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_bookmarked_article_addresses(
                     self.uniffiClonePointer()
@@ -1885,8 +1885,9 @@ open func getBookmarkedArticleAddresses()async throws  -> [String]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeStringListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2665,20 +2666,21 @@ open func initDefaultBlossomServers()async throws   {
      * Read-only predicate: is `address` currently bookmarked for the logged-in
      * user? Always `false` when no user is logged in.
      */
-open func isArticleBookmarked(address: String)async throws  -> Bool  {
+open func isArticleBookmarked(address: String)async  -> BoolOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_is_article_bookmarked(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(address)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBoolOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3975,20 +3977,21 @@ open func suggestNip05Username(displayName: String) -> String  {
      * membership state — `true` if the address is now bookmarked, `false`
      * if it was removed.
      */
-open func toggleArticleBookmark(address: String)async throws  -> Bool  {
+open func toggleArticleBookmark(address: String)async  -> BoolOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_toggle_article_bookmark(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(address)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBoolOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -5132,6 +5135,76 @@ public func FfiConverterTypeBookmarkSetRecord_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeBookmarkSetRecord_lower(_ value: BookmarkSetRecord) -> RustBuffer {
     return FfiConverterTypeBookmarkSetRecord.lower(value)
+}
+
+
+public struct BoolOutcome {
+    public var value: Bool
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: Bool, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension BoolOutcome: Sendable {}
+#endif
+
+
+extension BoolOutcome: Equatable, Hashable {
+    public static func ==(lhs: BoolOutcome, rhs: BoolOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBoolOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BoolOutcome {
+        return
+            try BoolOutcome(
+                value: FfiConverterBool.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BoolOutcome, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBoolOutcome_lift(_ buf: RustBuffer) throws -> BoolOutcome {
+    return try FfiConverterTypeBoolOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBoolOutcome_lower(_ value: BoolOutcome) -> RustBuffer {
+    return FfiConverterTypeBoolOutcome.lower(value)
 }
 
 
@@ -11082,7 +11155,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_servers() != 32428) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmarked_article_addresses() != 53917) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmarked_article_addresses() != 46854) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 48741) {
@@ -11202,7 +11275,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 35163) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_is_article_bookmarked() != 11256) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_is_article_bookmarked() != 17349) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_event_bookmarked() != 30643) {
@@ -11412,7 +11485,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_suggest_nip05_username() != 36133) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark() != 6523) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark() != 27334) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark() != 63170) {
