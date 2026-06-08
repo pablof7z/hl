@@ -11,6 +11,7 @@
 | `product-spec-v1.2.md` | Previous spec version. Historical reference only — superseded by v2.0. | Superseded |
 | `technical-architecture.md` | System architecture, NIP mapping, data models, relay design, client design. | Current |
 | `plans/2026-06-08-nmp-rmp-mobile-rebuild.md` | NMP/RMP native mobile rebuild plan for iOS and Android. | Current |
+| `plans/2026-06-08-ios-ui-preservation-inventory.md` | iOS UI preservation and Rust projection checklist for the NMP/RMP rebuild. | Current |
 | `market-research-2026.md` | Market research, competitor analysis, user pain points, positioning, quotable UGC. | Current |
 | `community-page-proposals-v1.4.md` | Community/shelf page wireframes (latest version). | Current |
 | `community-page-proposals.md` | Community page wireframes (v1). Superseded by v1.4. | Superseded |
