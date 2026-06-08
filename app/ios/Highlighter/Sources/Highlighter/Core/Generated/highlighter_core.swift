@@ -758,7 +758,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Extension flow — the main app drains the share queue, normalizes each
      * URL through this, then calls `publish_artifact` to post the kind:11.
      */
-    func buildPreviewFromUrl(url: String) async throws  -> ArtifactPreview
+    func buildPreviewFromUrl(url: String) async  -> ArtifactPreviewOutcome
 
     func checkNip05Availability(name: String) async throws  -> Nip05Availability
 
@@ -1038,7 +1038,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * HTTP request. Returns `CoreError::NotFound` when the page 404s,
      * `CoreError::Network` on transport failure.
      */
-    func getWebMetadata(url: String) async throws  -> WebMetadata
+    func getWebMetadata(url: String) async  -> WebMetadataOutcome
 
     /**
      * Fetch another user's kind:10002 via the indexer pool and return the
@@ -1084,7 +1084,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func logout()
 
-    func lookupIsbn(isbn: String) async throws  -> ArtifactPreview
+    func lookupIsbn(isbn: String) async  -> ArtifactPreviewOutcome
 
     func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async  -> MutationOutcome
 
@@ -1566,9 +1566,9 @@ open func autoConnectedRelayConfig(url: String) -> RelayConfig  {
      * Extension flow — the main app drains the share queue, normalizes each
      * URL through this, then calls `publish_artifact` to post the kind:11.
      */
-open func buildPreviewFromUrl(url: String)async throws  -> ArtifactPreview  {
+open func buildPreviewFromUrl(url: String)async  -> ArtifactPreviewOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_build_preview_from_url(
                     self.uniffiClonePointer(),
@@ -1578,8 +1578,9 @@ open func buildPreviewFromUrl(url: String)async throws  -> ArtifactPreview  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactPreview_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeArtifactPreviewOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2612,9 +2613,9 @@ open func getUserProfile(pubkeyHex: String)async throws  -> ProfileMetadata?  {
      * HTTP request. Returns `CoreError::NotFound` when the page 404s,
      * `CoreError::Network` on transport failure.
      */
-open func getWebMetadata(url: String)async throws  -> WebMetadata  {
+open func getWebMetadata(url: String)async  -> WebMetadataOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_web_metadata(
                     self.uniffiClonePointer(),
@@ -2624,8 +2625,9 @@ open func getWebMetadata(url: String)async throws  -> WebMetadata  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeWebMetadata_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeWebMetadataOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2792,9 +2794,9 @@ open func logout()  {try! rustCall() {
 }
 }
 
-open func lookupIsbn(isbn: String)async throws  -> ArtifactPreview  {
+open func lookupIsbn(isbn: String)async  -> ArtifactPreviewOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_lookup_isbn(
                     self.uniffiClonePointer(),
@@ -2804,8 +2806,9 @@ open func lookupIsbn(isbn: String)async throws  -> ArtifactPreview  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactPreview_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeArtifactPreviewOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -5001,6 +5004,76 @@ public func FfiConverterTypeArtifactPreview_lift(_ buf: RustBuffer) throws -> Ar
 #endif
 public func FfiConverterTypeArtifactPreview_lower(_ value: ArtifactPreview) -> RustBuffer {
     return FfiConverterTypeArtifactPreview.lower(value)
+}
+
+
+public struct ArtifactPreviewOutcome {
+    public var value: ArtifactPreview?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: ArtifactPreview?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ArtifactPreviewOutcome: Sendable {}
+#endif
+
+
+extension ArtifactPreviewOutcome: Equatable, Hashable {
+    public static func ==(lhs: ArtifactPreviewOutcome, rhs: ArtifactPreviewOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArtifactPreviewOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactPreviewOutcome {
+        return
+            try ArtifactPreviewOutcome(
+                value: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArtifactPreviewOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArtifactPreview.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactPreviewOutcome_lift(_ buf: RustBuffer) throws -> ArtifactPreviewOutcome {
+    return try FfiConverterTypeArtifactPreviewOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactPreviewOutcome_lower(_ value: ArtifactPreviewOutcome) -> RustBuffer {
+    return FfiConverterTypeArtifactPreviewOutcome.lower(value)
 }
 
 
@@ -10700,6 +10773,76 @@ public func FfiConverterTypeWebMetadata_lower(_ value: WebMetadata) -> RustBuffe
 }
 
 
+public struct WebMetadataOutcome {
+    public var value: WebMetadata?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: WebMetadata?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension WebMetadataOutcome: Sendable {}
+#endif
+
+
+extension WebMetadataOutcome: Equatable, Hashable {
+    public static func ==(lhs: WebMetadataOutcome, rhs: WebMetadataOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWebMetadataOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebMetadataOutcome {
+        return
+            try WebMetadataOutcome(
+                value: FfiConverterOptionTypeWebMetadata.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WebMetadataOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeWebMetadata.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebMetadataOutcome_lift(_ buf: RustBuffer) throws -> WebMetadataOutcome {
+    return try FfiConverterTypeWebMetadataOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebMetadataOutcome_lower(_ value: WebMetadataOutcome) -> RustBuffer {
+    return FfiConverterTypeWebMetadataOutcome.lower(value)
+}
+
+
 public struct WhatsNewEntriesOutcome {
     public var entries: [WhatsNewEntry]
     public var error: String
@@ -12452,6 +12595,30 @@ fileprivate struct FfiConverterOptionTypeReactionRecord: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeWebMetadata: FfiConverterRustBuffer {
+    typealias SwiftType = WebMetadata?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeWebMetadata.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeWebMetadata.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
     typealias SwiftType = [UInt32]
 
@@ -13119,7 +13286,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_auto_connected_relay_config() != 62438) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 53328) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 40366) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 2201) {
@@ -13284,7 +13451,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 29632) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 24724) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 12216) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_import_relays_from_npub() != 20364) {
@@ -13320,7 +13487,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_logout() != 15288) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_lookup_isbn() != 58236) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_lookup_isbn() != 34204) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_mark_whats_new_seen() != 22420) {

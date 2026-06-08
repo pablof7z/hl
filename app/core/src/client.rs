@@ -25,8 +25,8 @@ use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
     ArticleListOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome,
-    ArtifactOutcome, ArtifactPreview, ArtifactRecord, BlossomUpload, BlossomUploadOutcome,
-    BookmarkSetListOutcome, BookmarkSetOutcome,
+    ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload,
+    BlossomUploadOutcome, BookmarkSetListOutcome, BookmarkSetOutcome,
     BookmarkSetRecord, BoolOutcome, ChatMessageOutcome, ChatMessageRecord, CommentOutcome,
     CommentRecord, CommunityListOutcome, CommunitySummary, CurrentUser, CurrentUserOutcome,
     DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventOutcome, FeedbackEventRecord,
@@ -36,7 +36,7 @@ use crate::models::{
     NostrConnectOptions, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
     ProfileListOutcome, ProfileMetadata, ReactionListOutcome, ReactionOutcome, ReadingFeedItem,
     RoomRecommendation, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
     WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
@@ -281,6 +281,19 @@ fn artifact_outcome(result: Result<ArtifactRecord, CoreError>) -> ArtifactOutcom
     }
 }
 
+fn artifact_preview_outcome(result: Result<ArtifactPreview, CoreError>) -> ArtifactPreviewOutcome {
+    match result {
+        Ok(value) => ArtifactPreviewOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => ArtifactPreviewOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
 fn artifact_list_outcome(result: Result<Vec<ArtifactRecord>, CoreError>) -> ArtifactListOutcome {
     match result {
         Ok(values) => ArtifactListOutcome {
@@ -289,6 +302,19 @@ fn artifact_list_outcome(result: Result<Vec<ArtifactRecord>, CoreError>) -> Arti
         },
         Err(error) => ArtifactListOutcome {
             values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn web_metadata_outcome(result: Result<WebMetadata, CoreError>) -> WebMetadataOutcome {
+    match result {
+        Ok(value) => WebMetadataOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => WebMetadataOutcome {
+            value: None,
             error: error.to_string(),
         },
     }
@@ -1789,18 +1815,15 @@ impl HighlighterCore {
         })())
     }
 
-    pub async fn lookup_isbn(&self, isbn: String) -> Result<ArtifactPreview, CoreError> {
-        self.isbn_previews.lookup(&isbn).await
+    pub async fn lookup_isbn(&self, isbn: String) -> ArtifactPreviewOutcome {
+        artifact_preview_outcome(self.isbn_previews.lookup(&isbn).await)
     }
 
     /// Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
     /// Extension flow — the main app drains the share queue, normalizes each
     /// URL through this, then calls `publish_artifact` to post the kind:11.
-    pub async fn build_preview_from_url(
-        &self,
-        url: String,
-    ) -> Result<ArtifactPreview, CoreError> {
-        crate::artifacts::build_preview(&url)
+    pub async fn build_preview_from_url(&self, url: String) -> ArtifactPreviewOutcome {
+        artifact_preview_outcome(crate::artifacts::build_preview(&url))
     }
 
     /// Fetch OpenGraph + favicon metadata for a web URL. Backed by a
@@ -1808,8 +1831,8 @@ impl HighlighterCore {
     /// in-flight coalescing — concurrent calls for the same URL share one
     /// HTTP request. Returns `CoreError::NotFound` when the page 404s,
     /// `CoreError::Network` on transport failure.
-    pub async fn get_web_metadata(&self, url: String) -> Result<WebMetadata, CoreError> {
-        web_metadata::get_or_fetch(self.web_metadata.clone(), &url).await
+    pub async fn get_web_metadata(&self, url: String) -> WebMetadataOutcome {
+        web_metadata_outcome(web_metadata::get_or_fetch(self.web_metadata.clone(), &url).await)
     }
 
     pub async fn get_discussions(

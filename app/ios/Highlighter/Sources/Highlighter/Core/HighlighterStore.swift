@@ -225,9 +225,9 @@ final class HighlighterStore {
         }
         let task = Task { [weak self] in
             guard let self else { return }
-            let metadata = try? await self.safeCore.getWebMetadata(url: trimmed)
+            let outcome = await self.safeCore.getWebMetadata(url: trimmed)
             await MainActor.run {
-                if let metadata {
+                if outcome.error.isEmpty, let metadata = outcome.value {
                     self.webMetadataCache[trimmed] = metadata
                 }
                 self.webMetadataInflight.removeValue(forKey: trimmed)
@@ -250,9 +250,9 @@ final class HighlighterStore {
         }
         let task = Task { [weak self] in
             guard let self else { return }
-            let preview = try? await self.safeCore.lookupIsbn(key)
+            let outcome = await self.safeCore.lookupIsbn(key)
             await MainActor.run {
-                if let preview {
+                if outcome.error.isEmpty, let preview = outcome.value {
                     self.isbnPreviewCache[key] = preview
                 }
                 self.isbnInflight.removeValue(forKey: key)

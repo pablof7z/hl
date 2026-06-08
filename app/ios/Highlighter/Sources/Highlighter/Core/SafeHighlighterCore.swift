@@ -234,16 +234,16 @@ actor SafeHighlighterCore {
         await core.subscribeWebBookmarks()
     }
 
-    func lookupIsbn(_ isbn: String) async throws -> ArtifactPreview {
-        try await core.lookupIsbn(isbn: isbn)
+    func lookupIsbn(_ isbn: String) async -> ArtifactPreviewOutcome {
+        await core.lookupIsbn(isbn: isbn)
     }
 
-    func buildPreviewFromUrl(_ url: String) async throws -> ArtifactPreview {
-        try await core.buildPreviewFromUrl(url: url)
+    func buildPreviewFromUrl(_ url: String) async -> ArtifactPreviewOutcome {
+        await core.buildPreviewFromUrl(url: url)
     }
 
-    func getWebMetadata(url: String) async throws -> WebMetadata {
-        try await core.getWebMetadata(url: url)
+    func getWebMetadata(url: String) async -> WebMetadataOutcome {
+        await core.getWebMetadata(url: url)
     }
 
     func getDiscussions(groupId: String, limit: UInt32 = 64) async throws -> [DiscussionRecord] {

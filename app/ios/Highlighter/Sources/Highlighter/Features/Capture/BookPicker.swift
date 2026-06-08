@@ -412,16 +412,14 @@ struct BookPicker: View {
         resolvedPreview = nil
         resolveError = nil
         Task {
-            do {
-                let preview = try await appStore.safeCore.lookupIsbn(isbn)
-                // Only commit the preview if we're still on the same ISBN
-                // (user could have cancelled mid-flight).
-                if resolvingISBN == isbn {
+            let outcome = await appStore.safeCore.lookupIsbn(isbn)
+            // Only commit the preview if we're still on the same ISBN
+            // (user could have cancelled mid-flight).
+            if resolvingISBN == isbn {
+                if outcome.error.isEmpty, let preview = outcome.value {
                     resolvedPreview = preview
-                }
-            } catch {
-                if resolvingISBN == isbn {
-                    resolveError = error.localizedDescription
+                } else {
+                    resolveError = outcome.error.isEmpty ? "Unable to resolve ISBN" : outcome.error
                 }
             }
         }

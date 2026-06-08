@@ -94,20 +94,21 @@ struct WebReaderView: View {
     private func prepareShare() async {
         sharePreparing = true
         defer { sharePreparing = false }
-        do {
-            let preview = try await app.safeCore.buildPreviewFromUrl(target.url.absoluteString)
+        let outcome = await app.safeCore.buildPreviewFromUrl(target.url.absoluteString)
+        guard outcome.error.isEmpty, let preview = outcome.value else {
             await MainActor.run {
-                shareTarget = ShareToCommunityTarget(
-                    kind: .artifactShare(preview: preview),
-                    displayTitle: preview.title.isEmpty ? (target.url.host ?? target.url.absoluteString) : preview.title,
-                    displaySubtitle: preview.description,
-                    imageURL: preview.image.isEmpty ? nil : URL(string: preview.image)
-                )
+                let message = outcome.error.isEmpty ? "Unknown error" : outcome.error
+                shareError = "Couldn't build a preview: \(message)"
             }
-        } catch {
-            await MainActor.run {
-                shareError = "Couldn't build a preview: \(error.localizedDescription)"
-            }
+            return
+        }
+        await MainActor.run {
+            shareTarget = ShareToCommunityTarget(
+                kind: .artifactShare(preview: preview),
+                displayTitle: preview.title.isEmpty ? (target.url.host ?? target.url.absoluteString) : preview.title,
+                displaySubtitle: preview.description,
+                imageURL: preview.image.isEmpty ? nil : URL(string: preview.image)
+            )
         }
     }
 }

@@ -89,8 +89,20 @@ pub struct WebBookmarkListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct WebMetadataOutcome {
+    pub value: Option<crate::web_metadata::WebMetadata>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct ArtifactOutcome {
     pub value: Option<ArtifactRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArtifactPreviewOutcome {
+    pub value: Option<ArtifactPreview>,
     pub error: String,
 }
 

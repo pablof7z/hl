@@ -52,8 +52,8 @@ pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
     ArticleListOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget,
-    ArtifactListOutcome, ArtifactOutcome, ArtifactPreview, ArtifactRecord, BlossomUpload,
-    BlossomUploadOutcome, BookmarkSetListOutcome,
+    ArtifactListOutcome, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord,
+    BlossomUpload, BlossomUploadOutcome, BookmarkSetListOutcome,
     BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, ChatMessageOutcome, ChatMessageRecord,
     CommentOutcome, CommentRecord, CommunityListOutcome, CommunitySummary, CurrentUser,
     CurrentUserOutcome, DataOutcome, DiscussionAttachment, DiscussionOutcome, DiscussionRecord,
@@ -65,7 +65,7 @@ pub use models::{
     PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ReactionListOutcome,
     ReactionOutcome, ReadingFeedItem, RoomRecommendation, RoomRecommendationReason,
     StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkListOutcome, WebBookmarkRecord, WhatsNewEntriesOutcome,
+    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
 pub use podcast_transcript::TranscriptSegment;
