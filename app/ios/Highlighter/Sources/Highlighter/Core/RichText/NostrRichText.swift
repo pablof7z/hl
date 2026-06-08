@@ -207,10 +207,10 @@ struct NostrRichText: View {
             switch ref {
             case .profile:
                 continue
-            case .event(let id, _, _, _):
-                if seen.insert("e:\(id)").inserted { out.append(ref) }
-            case .address(let kind, let pk, let d, _):
-                if seen.insert("a:\(kind):\(pk):\(d)").inserted { out.append(ref) }
+            case .event, .address:
+                if seen.insert(core.nostrEntityIdentityKey(entity: ref)).inserted {
+                    out.append(ref)
+                }
             }
         }
         return out
@@ -263,29 +263,6 @@ struct NostrRichText: View {
     private enum Block {
         case paragraph([Run])
         case eventRef(NostrEntityRef)
-    }
-}
-
-// Shorthand to peek at the variant without binding.
-private extension NostrEntityRef {
-    var identityKey: String {
-        switch self {
-        case .profile(let pk, _): return "p:\(pk)"
-        case .event(let id, _, _, _): return "e:\(id)"
-        case .address(let kind, let pk, let d, _): return "a:\(kind):\(pk):\(d)"
-        }
-    }
-
-    var isProfile: Bool {
-        if case .profile = self { return true }
-        return false
-    }
-}
-
-private extension Optional where Wrapped == NostrEntityRef {
-    var asProfile: (pubkeyHex: String, relays: [String])? {
-        guard case .profile(let pubkey, let relays) = self else { return nil }
-        return (pubkey, relays)
     }
 }
 
@@ -363,7 +340,7 @@ struct NostrEntityCard: View {
                 placeholder
             }
         }
-        .task(id: entity.identityKey) { await start() }
+        .task(id: appStore.safeCore.nostrEntityIdentityKey(entity: entity)) { await start() }
         .onDisappear { stop() }
     }
 

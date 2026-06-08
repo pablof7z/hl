@@ -352,6 +352,10 @@ actor SafeHighlighterCore {
         core.nostrEntityInlineRender(entity: entity)
     }
 
+    nonisolated func nostrEntityIdentityKey(entity: NostrEntityRef) -> String {
+        core.nostrEntityIdentityKey(entity: entity)
+    }
+
     /// Mint a NIP-19 `nevent` for a highlight share URL. Relay hints are
     /// Rust-owned policy, not native view input.
     func encodeHighlightShareNevent(

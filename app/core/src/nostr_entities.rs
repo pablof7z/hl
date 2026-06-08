@@ -195,6 +195,19 @@ pub fn inline_render(entity: &NostrEntityRef) -> NostrEntityInlineRender {
     }
 }
 
+pub fn identity_key(entity: &NostrEntityRef) -> String {
+    match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => format!("p:{pubkey_hex}"),
+        NostrEntityRef::Event { event_id_hex, .. } => format!("e:{event_id_hex}"),
+        NostrEntityRef::Address {
+            kind,
+            pubkey_hex,
+            d_tag,
+            ..
+        } => format!("a:{kind}:{pubkey_hex}:{d_tag}"),
+    }
+}
+
 fn first_chars(value: &str, count: usize) -> String {
     value.chars().take(count).collect()
 }
@@ -579,6 +592,35 @@ mod tests {
             NostrEntityInlineRender::Reference {
                 chip_label: "article".into(),
             }
+        );
+    }
+
+    #[test]
+    fn identity_keys_match_entity_identity() {
+        assert_eq!(
+            identity_key(&NostrEntityRef::Profile {
+                pubkey_hex: "abcdef0123456789".into(),
+                relays: Vec::new(),
+            }),
+            "p:abcdef0123456789"
+        );
+        assert_eq!(
+            identity_key(&NostrEntityRef::Event {
+                event_id_hex: "1234567890abcdef".into(),
+                relays: Vec::new(),
+                author_hint_hex: None,
+                kind_hint: None,
+            }),
+            "e:1234567890abcdef"
+        );
+        assert_eq!(
+            identity_key(&NostrEntityRef::Address {
+                kind: 30023,
+                pubkey_hex: "abcdef".into(),
+                d_tag: "article-slug".into(),
+                relays: Vec::new(),
+            }),
+            "a:30023:abcdef:article-slug"
         );
     }
 
