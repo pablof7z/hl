@@ -1454,7 +1454,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * metadata so the caller's UI can swap to the new state without
      * waiting for the relay echo.
      */
-    func updateProfile(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String) async  -> ProfileOutcome
+    func updateProfile(draft: ProfileUpdateDraft) async  -> ProfileOutcome
 
     /**
      * Upload a photo to the default Blossom server (`blossom.primal.net`)
@@ -4167,13 +4167,13 @@ open func unsubscribe(handle: UInt64)  {try! rustCall() {
      * metadata so the caller's UI can swap to the new state without
      * waiting for the relay echo.
      */
-open func updateProfile(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String)async  -> ProfileOutcome  {
+open func updateProfile(draft: ProfileUpdateDraft)async  -> ProfileOutcome  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_update_profile(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(name),FfiConverterString.lower(displayName),FfiConverterString.lower(about),FfiConverterString.lower(picture),FfiConverterString.lower(banner),FfiConverterString.lower(nip05),FfiConverterString.lower(website),FfiConverterString.lower(lud16)
+                    FfiConverterTypeProfileUpdateDraft_lower(draft)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -10364,6 +10364,128 @@ public func FfiConverterTypeProfileOutcome_lower(_ value: ProfileOutcome) -> Rus
 }
 
 
+/**
+ * Draft profile metadata written by the platform shell. Rust owns the
+ * trimming, clear-vs-set behavior, event merge, signing, and relay publish.
+ */
+public struct ProfileUpdateDraft {
+    public var name: String
+    public var displayName: String
+    public var about: String
+    public var picture: String
+    public var banner: String
+    public var nip05: String
+    public var website: String
+    public var lud16: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String) {
+        self.name = name
+        self.displayName = displayName
+        self.about = about
+        self.picture = picture
+        self.banner = banner
+        self.nip05 = nip05
+        self.website = website
+        self.lud16 = lud16
+    }
+}
+
+#if compiler(>=6)
+extension ProfileUpdateDraft: Sendable {}
+#endif
+
+
+extension ProfileUpdateDraft: Equatable, Hashable {
+    public static func ==(lhs: ProfileUpdateDraft, rhs: ProfileUpdateDraft) -> Bool {
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.picture != rhs.picture {
+            return false
+        }
+        if lhs.banner != rhs.banner {
+            return false
+        }
+        if lhs.nip05 != rhs.nip05 {
+            return false
+        }
+        if lhs.website != rhs.website {
+            return false
+        }
+        if lhs.lud16 != rhs.lud16 {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(displayName)
+        hasher.combine(about)
+        hasher.combine(picture)
+        hasher.combine(banner)
+        hasher.combine(nip05)
+        hasher.combine(website)
+        hasher.combine(lud16)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileUpdateDraft: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateDraft {
+        return
+            try ProfileUpdateDraft(
+                name: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                picture: FfiConverterString.read(from: &buf),
+                banner: FfiConverterString.read(from: &buf),
+                nip05: FfiConverterString.read(from: &buf),
+                website: FfiConverterString.read(from: &buf),
+                lud16: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileUpdateDraft, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.about, into: &buf)
+        FfiConverterString.write(value.picture, into: &buf)
+        FfiConverterString.write(value.banner, into: &buf)
+        FfiConverterString.write(value.nip05, into: &buf)
+        FfiConverterString.write(value.website, into: &buf)
+        FfiConverterString.write(value.lud16, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateDraft_lift(_ buf: RustBuffer) throws -> ProfileUpdateDraft {
+    return try FfiConverterTypeProfileUpdateDraft.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateDraft_lower(_ value: ProfileUpdateDraft) -> RustBuffer {
+    return FfiConverterTypeProfileUpdateDraft.lower(value)
+}
+
+
 public struct ReactionListOutcome {
     public var values: [ReactionRecord]
     public var error: String
@@ -15031,7 +15153,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_unsubscribe() != 55013) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_update_profile() != 50594) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_update_profile() != 24760) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 28046) {

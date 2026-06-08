@@ -185,11 +185,12 @@ fn build_event(
 ) -> Result<EventBuilder, CoreError> {
     let slug = slug_from_title(title, clock);
 
-    let mut tags: Vec<Tag> = Vec::new();
-    tags.push(parse_tag(&["h", group_id])?);
-    tags.push(parse_tag(&["d", &slug])?);
-    tags.push(parse_tag(&["t", DISCUSSION_MARKER_TAG])?);
-    tags.push(parse_tag(&["title", title])?);
+    let mut tags: Vec<Tag> = vec![
+        parse_tag(&["h", group_id])?,
+        parse_tag(&["d", &slug])?,
+        parse_tag(&["t", DISCUSSION_MARKER_TAG])?,
+        parse_tag(&["title", title])?,
+    ];
 
     if let Some(preview) = attachment {
         match preview.reference_tag_name.as_str() {

@@ -10,6 +10,10 @@ use crate::models::{
 };
 use crate::nostr_entities::NostrEntityEvent;
 
+// UniFFI serializes these deltas as bounded FFI records. Keeping the enum
+// payloads inline preserves the generated Swift shape and avoids moving Rust
+// event ownership into native shell code.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum DataChangeType {
     CommunityUpserted {

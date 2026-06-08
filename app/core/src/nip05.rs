@@ -52,11 +52,9 @@ pub fn suggest_username(display_name: &str) -> String {
         if ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' || ch == '_' {
             out.push(ch);
             previous_was_separator = false;
-        } else if ch.is_whitespace() {
-            if !out.is_empty() && !previous_was_separator {
-                out.push('_');
-                previous_was_separator = true;
-            }
+        } else if ch.is_whitespace() && !out.is_empty() && !previous_was_separator {
+            out.push('_');
+            previous_was_separator = true;
         }
     }
 

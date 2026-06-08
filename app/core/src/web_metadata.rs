@@ -32,7 +32,7 @@ use crate::errors::CoreError;
 const USER_AGENT: &str = "Highlighter/0.1 (+https://highlighter.com)";
 /// Hard ceiling on response body size. Avoids parsing absurd pages that
 /// somehow report `text/html` for a 50 MiB binary blob.
-const MAX_BODY_BYTES: usize = 1 * 1024 * 1024;
+const MAX_BODY_BYTES: usize = 1024 * 1024;
 /// Per-request timeout. iOS shows the fallback header instantly; the OG
 /// data slots in once the fetch lands. Five seconds is generous.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(5);
@@ -493,7 +493,7 @@ fn largest_size_dimension(value: &str) -> Option<u32> {
         if token.eq_ignore_ascii_case("any") {
             return Some(u32::MAX);
         }
-        let mut parts = token.split(|c: char| c == 'x' || c == 'X');
+        let mut parts = token.split(['x', 'X']);
         let w = parts.next()?.parse::<u32>().ok()?;
         let h = parts
             .next()

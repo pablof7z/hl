@@ -347,7 +347,7 @@ actor SafeHighlighterCore {
         website: String,
         lud16: String
     ) async -> ProfileOutcome {
-        await core.updateProfile(
+        let draft = ProfileUpdateDraft(
             name: name,
             displayName: displayName,
             about: about,
@@ -357,6 +357,7 @@ actor SafeHighlighterCore {
             website: website,
             lud16: lud16
         )
+        return await core.updateProfile(draft: draft)
     }
 
     nonisolated func normalizeNip05Username(_ input: String) -> String {

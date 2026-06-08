@@ -36,11 +36,11 @@ use crate::models::{
     HydratedHighlightListOutcome, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
     NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OptionalStringOutcome,
     PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome,
-    ProfileMetadata, ProfileOutcome, ReactionListOutcome, ReactionOutcome, ReadingFeedItem,
-    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
-    RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
+    ProfileMetadata, ProfileOutcome, ProfileUpdateDraft, ReactionListOutcome, ReactionOutcome,
+    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
+    RoomRecommendation, RoomRecommendationListOutcome, StringListOutcome, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -1241,7 +1241,7 @@ impl HighlighterCore {
                 .iter()
                 .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
                 .collect();
-            if !follows_pks.iter().any(|pk| *pk == user_pubkey) {
+            if !follows_pks.contains(&user_pubkey) {
                 follows_pks.push(user_pubkey);
             }
             self.refresh_follows_nip65_subscription(&follows_pks);
@@ -1446,31 +1446,10 @@ impl HighlighterCore {
     /// Empty strings clear the corresponding field. Returns the parsed
     /// metadata so the caller's UI can swap to the new state without
     /// waiting for the relay echo.
-    pub async fn update_profile(
-        &self,
-        name: String,
-        display_name: String,
-        about: String,
-        picture: String,
-        banner: String,
-        nip05: String,
-        website: String,
-        lud16: String,
-    ) -> ProfileOutcome {
+    pub async fn update_profile(&self, draft: ProfileUpdateDraft) -> ProfileOutcome {
         let result: Result<ProfileMetadata, CoreError> = async {
             let _ = self.require_user_pubkey()?;
-            profile::publish_profile(
-                &self.runtime,
-                &name,
-                &display_name,
-                &about,
-                &picture,
-                &banner,
-                &nip05,
-                &website,
-                &lud16,
-            )
-            .await
+            profile::publish_profile(&self.runtime, &draft).await
         }
         .await;
         profile_outcome(result)

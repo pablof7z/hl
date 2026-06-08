@@ -979,7 +979,7 @@ void uniffi_highlighter_core_fn_method_highlightercore_unsubscribe(void*_Nonnull
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_METHOD_HIGHLIGHTERCORE_UPDATE_PROFILE
 #define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_METHOD_HIGHLIGHTERCORE_UPDATE_PROFILE
-uint64_t uniffi_highlighter_core_fn_method_highlightercore_update_profile(void*_Nonnull ptr, RustBuffer name, RustBuffer display_name, RustBuffer about, RustBuffer picture, RustBuffer banner, RustBuffer nip05, RustBuffer website, RustBuffer lud16
+uint64_t uniffi_highlighter_core_fn_method_highlightercore_update_profile(void*_Nonnull ptr, RustBuffer draft
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_METHOD_HIGHLIGHTERCORE_UPLOAD_PHOTO

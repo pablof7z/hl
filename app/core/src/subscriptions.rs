@@ -1430,7 +1430,7 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
         }
         SubscriptionKind::FollowingReads { follows, .. } => {
             // Follows are small (≤ a few thousand); linear scan is fine.
-            let is_follow = follows.iter().any(|pk| *pk == event.pubkey);
+            let is_follow = follows.contains(&event.pubkey);
             if !is_follow {
                 return None;
             }
@@ -1457,7 +1457,7 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             if event.kind.as_u16() != KIND_HIGHLIGHT {
                 return None;
             }
-            let is_follow = follows.iter().any(|pk| *pk == event.pubkey);
+            let is_follow = follows.contains(&event.pubkey);
             let in_joined_group = first_tag_value(event, "h")
                 .map(|h| group_ids.iter().any(|g| g == h))
                 .unwrap_or(false);
@@ -1887,51 +1887,59 @@ mod tests {
         process(core.runtime().ndb(), &members);
         process(core.runtime().ndb(), &meta);
 
-        // Drain until we see a community-shaped delta (skip SignerConnected).
+        // Drain until the initial joined-room metadata has definitely crossed
+        // the callback boundary (skip SignerConnected).
         let deadline = std::time::Instant::now() + Duration::from_secs(3);
-        let mut drained = false;
+        let mut saw_alpha = false;
         while std::time::Instant::now() < deadline {
             let Ok(delta) = rx.recv_timeout(Duration::from_millis(200)) else {
                 continue;
             };
-            if matches!(
-                delta.change,
-                DataChangeType::CommunityUpserted { .. } | DataChangeType::MembershipChanged { .. }
-            ) {
-                drained = true;
-                break;
+            if let DataChangeType::CommunityUpserted { community } = delta.change {
+                if community.id == "alpha" && community.name == "Alpha" {
+                    saw_alpha = true;
+                    break;
+                }
             }
         }
-        assert!(
-            drained,
-            "expected at least one community delivery before unsubscribe"
-        );
+        assert!(saw_alpha, "expected alpha delivery before unsubscribe");
+
+        // Drain duplicate initial Alpha deliveries so the next assertion only
+        // covers post-unsubscribe batches.
+        let quiet_deadline = std::time::Instant::now() + Duration::from_millis(500);
+        loop {
+            match rx.recv_timeout(Duration::from_millis(50)) {
+                Ok(_) => continue,
+                Err(_) if std::time::Instant::now() < quiet_deadline => continue,
+                Err(_) => break,
+            }
+        }
 
         core.unsubscribe(handle);
 
-        // Drain any stragglers so the window starts clean.
-        while rx.try_recv().is_ok() {}
-
-        // After unsubscribe, a new matching event must not deliver.
+        // After unsubscribe, a new matching event for the already hydrated
+        // room must not deliver.
         let meta2 = sign(
             &other,
             39000,
             vec![
-                Tag::identifier("bravo"),
+                Tag::identifier("alpha"),
                 Tag::parse(vec!["name".to_string(), "Bravo".to_string()]).unwrap(),
             ],
             "",
         );
         process(core.runtime().ndb(), &meta2);
 
-        // Nothing community-shaped should arrive within the window.
+        // No post-unsubscribe Alpha update should arrive within the window.
         let deadline = std::time::Instant::now() + Duration::from_millis(500);
         while std::time::Instant::now() < deadline {
             let Ok(delta) = rx.recv_timeout(Duration::from_millis(100)) else {
                 continue;
             };
-            if matches!(delta.change, DataChangeType::CommunityUpserted { .. }) {
-                panic!("no community delivery expected after unsubscribe");
+            if let DataChangeType::CommunityUpserted { community } = delta.change {
+                if community.id == "alpha" && community.name == "Bravo" {
+                    panic!("no community delivery expected after unsubscribe");
+                }
             }
         }
     }

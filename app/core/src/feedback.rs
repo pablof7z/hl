@@ -695,7 +695,7 @@ mod tests {
     #[test]
     fn trim_preview_collapses_whitespace_and_truncates() {
         assert_eq!(trim_preview("hello   world"), "hello world");
-        let long: String = std::iter::repeat('x').take(200).collect();
+        let long = "x".repeat(200);
         let out = trim_preview(&long);
         assert_eq!(out.chars().count(), 140);
         assert!(out.ends_with('…'));

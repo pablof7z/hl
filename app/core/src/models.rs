@@ -629,6 +629,20 @@ pub struct ProfileMetadata {
     pub created_at: Option<u64>,
 }
 
+/// Draft profile metadata written by the platform shell. Rust owns the
+/// trimming, clear-vs-set behavior, event merge, signing, and relay publish.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileUpdateDraft {
+    pub name: String,
+    pub display_name: String,
+    pub about: String,
+    pub picture: String,
+    pub banner: String,
+    pub nip05: String,
+    pub website: String,
+    pub lud16: String,
+}
+
 /// NIP-23 long-form article (kind:30023). Dedupe happens by `d` tag with the
 /// newest `created_at` winning, matching how the web app renders.
 #[derive(Debug, Clone, uniffi::Record)]

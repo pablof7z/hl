@@ -631,7 +631,7 @@ pub fn normalize_artifact_url(value: &str) -> Option<String> {
         .query_pairs()
         .filter(|(k, _)| {
             let lower = k.to_ascii_lowercase();
-            !lower.starts_with("utm_") && !TRACKING_PARAMS.iter().any(|t| *t == lower.as_str())
+            !lower.starts_with("utm_") && !TRACKING_PARAMS.contains(&lower.as_str())
         })
         .map(|(k, v)| (k.into_owned(), v.into_owned()))
         .collect();
@@ -705,7 +705,7 @@ fn domain_label(url: &str) -> String {
 fn fallback_title(url: &str) -> String {
     if let Ok(parsed) = url::Url::parse(url) {
         let path = parsed.path().trim_end_matches('/');
-        if let Some(last) = path.split('/').filter(|s| !s.is_empty()).last() {
+        if let Some(last) = path.split('/').rfind(|s| !s.is_empty()) {
             return title_case(&last.replace(['-', '_'], " "));
         }
         return parsed
@@ -807,11 +807,12 @@ fn build_share_event(
     preview: &ArtifactPreview,
     note: Option<&str>,
 ) -> Result<EventBuilder, CoreError> {
-    let mut tags: Vec<Tag> = Vec::new();
-    tags.push(parse_tag(&["h", group_id])?);
-    tags.push(parse_tag(&["d", &preview.id])?);
-    tags.push(parse_tag(&["title", &preview.title])?);
-    tags.push(parse_tag(&["source", &preview.source])?);
+    let mut tags: Vec<Tag> = vec![
+        parse_tag(&["h", group_id])?,
+        parse_tag(&["d", &preview.id])?,
+        parse_tag(&["title", &preview.title])?,
+        parse_tag(&["source", &preview.source])?,
+    ];
 
     match preview.reference_tag_name.as_str() {
         "i" => {
@@ -1173,65 +1174,78 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
 
+    struct SearchableShare<'a> {
+        group_id: &'a str,
+        d: &'a str,
+        title: &'a str,
+        author: &'a str,
+        url: &'a str,
+        source: &'a str,
+        catalog_id: &'a str,
+        note: &'a str,
+        created_at: u64,
+    }
+
+    impl<'a> SearchableShare<'a> {
+        fn new(group_id: &'a str, d: &'a str, title: &'a str) -> Self {
+            Self {
+                group_id,
+                d,
+                title,
+                author: "",
+                url: "",
+                source: "article",
+                catalog_id: "",
+                note: "",
+                created_at: 1_000,
+            }
+        }
+    }
+
     fn make_share(keys: &Keys, group_id: &str, d: &str, title: &str) -> Event {
+        let url = format!("https://example.com/{d}");
         make_searchable_share(
             keys,
-            group_id,
-            d,
-            title,
-            "",
-            &format!("https://example.com/{d}"),
-            "article",
-            "",
-            "",
-            1_000,
+            SearchableShare {
+                url: &url,
+                ..SearchableShare::new(group_id, d, title)
+            },
         )
     }
 
-    fn make_searchable_share(
-        keys: &Keys,
-        group_id: &str,
-        d: &str,
-        title: &str,
-        author: &str,
-        url: &str,
-        source: &str,
-        catalog_id: &str,
-        note: &str,
-        created_at: u64,
-    ) -> Event {
+    fn make_searchable_share(keys: &Keys, share: SearchableShare<'_>) -> Event {
         let mut tags = vec![
-            Tag::parse(vec!["h".to_string(), group_id.to_string()]).unwrap(),
-            Tag::identifier(d),
-            Tag::parse(vec!["title".to_string(), title.to_string()]).unwrap(),
-            Tag::parse(vec!["source".to_string(), source.to_string()]).unwrap(),
+            Tag::parse(vec!["h".to_string(), share.group_id.to_string()]).unwrap(),
+            Tag::identifier(share.d),
+            Tag::parse(vec!["title".to_string(), share.title.to_string()]).unwrap(),
+            Tag::parse(vec!["source".to_string(), share.source.to_string()]).unwrap(),
         ];
-        if !author.is_empty() {
-            tags.push(Tag::parse(vec!["author".to_string(), author.to_string()]).unwrap());
+        if !share.author.is_empty() {
+            tags.push(Tag::parse(vec!["author".to_string(), share.author.to_string()]).unwrap());
         }
-        if !catalog_id.is_empty() {
-            if !url.is_empty() {
+        if !share.catalog_id.is_empty() {
+            if !share.url.is_empty() {
                 tags.push(
                     Tag::parse(vec![
                         "i".to_string(),
-                        catalog_id.to_string(),
-                        url.to_string(),
+                        share.catalog_id.to_string(),
+                        share.url.to_string(),
                     ])
                     .unwrap(),
                 );
             } else {
-                tags.push(Tag::parse(vec!["i".to_string(), catalog_id.to_string()]).unwrap());
+                tags.push(Tag::parse(vec!["i".to_string(), share.catalog_id.to_string()]).unwrap());
             }
-            let kind = catalog_id.split(':').next().unwrap_or("web");
+            let kind = share.catalog_id.split(':').next().unwrap_or("web");
             tags.push(Tag::parse(vec!["k".to_string(), kind.to_string()]).unwrap());
         }
-        if !url.is_empty() {
-            tags.push(Tag::parse(vec!["r".to_string(), url.to_string()]).unwrap());
+        if !share.url.is_empty() {
+            tags.push(Tag::parse(vec!["r".to_string(), share.url.to_string()]).unwrap());
         }
 
-        EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), note)
+        EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), share.note)
             .tags(tags)
-            .custom_created_at(Timestamp::from(created_at))
+            .custom_created_at(Timestamp::from(share.created_at))
             .sign_with_keys(keys)
             .expect("sign")
     }
@@ -1310,15 +1324,13 @@ mod tests {
         let keys = Keys::generate();
         let event = make_searchable_share(
             &keys,
-            "books",
-            "book-1",
-            "The Rust Book",
-            "Steve Klabnik",
-            "https://openlibrary.org/isbn/9781593278281",
-            "book",
-            "isbn:9781593278281",
-            "",
-            1_000,
+            SearchableShare {
+                author: "Steve Klabnik",
+                url: "https://openlibrary.org/isbn/9781593278281",
+                source: "book",
+                catalog_id: "isbn:9781593278281",
+                ..SearchableShare::new("books", "book-1", "The Rust Book")
+            },
         );
 
         let record = artifact_record_from_event(&event, "books").expect("record");
@@ -1372,27 +1384,25 @@ mod tests {
         let keys = Keys::generate();
         let rust_book = make_searchable_share(
             &keys,
-            "books",
-            "rust-book",
-            "The Rust Programming Language",
-            "Steve Klabnik",
-            "https://openlibrary.org/isbn/9781593278281",
-            "book",
-            "isbn:9781593278281",
-            "Systems programming study group",
-            2_000,
+            SearchableShare {
+                author: "Steve Klabnik",
+                url: "https://openlibrary.org/isbn/9781593278281",
+                source: "book",
+                catalog_id: "isbn:9781593278281",
+                note: "Systems programming study group",
+                created_at: 2_000,
+                ..SearchableShare::new("books", "rust-book", "The Rust Programming Language")
+            },
         );
         let management = make_searchable_share(
             &keys,
-            "books",
-            "high-output",
-            "High Output Management",
-            "Andrew Grove",
-            "https://openlibrary.org/isbn/9780679762881",
-            "book",
-            "isbn:9780679762881",
-            "",
-            1_000,
+            SearchableShare {
+                author: "Andrew Grove",
+                url: "https://openlibrary.org/isbn/9780679762881",
+                source: "book",
+                catalog_id: "isbn:9780679762881",
+                ..SearchableShare::new("books", "high-output", "High Output Management")
+            },
         );
         ingest(&ndb, &rust_book);
         ingest(&ndb, &management);
@@ -1433,19 +1443,21 @@ mod tests {
             .expect("sign");
         ingest(&ndb, &discussion);
         for i in 0..3 {
+            let d = format!("rust-{i}");
+            let title = format!("Rust Volume {i}");
+            let url = format!("https://example.com/rust-{i}");
+            let catalog_id = format!("isbn:978000000000{i}");
             ingest(
                 &ndb,
                 &make_searchable_share(
                     &keys,
-                    "books",
-                    &format!("rust-{i}"),
-                    &format!("Rust Volume {i}"),
-                    "",
-                    &format!("https://example.com/rust-{i}"),
-                    "book",
-                    &format!("isbn:978000000000{i}"),
-                    "",
-                    1_000 + i,
+                    SearchableShare {
+                        url: &url,
+                        source: "book",
+                        catalog_id: &catalog_id,
+                        created_at: 1_000 + i,
+                        ..SearchableShare::new("books", &d, &title)
+                    },
                 ),
             );
         }
@@ -1464,27 +1476,24 @@ mod tests {
         let keys = Keys::generate();
         let older = make_searchable_share(
             &keys,
-            "alpha",
-            "clean-older",
-            "Clean Architecture",
-            "Robert Martin",
-            "https://openlibrary.org/isbn/9780134494166",
-            "book",
-            "isbn:9780134494166",
-            "",
-            1_000,
+            SearchableShare {
+                author: "Robert Martin",
+                url: "https://openlibrary.org/isbn/9780134494166",
+                source: "book",
+                catalog_id: "isbn:9780134494166",
+                ..SearchableShare::new("alpha", "clean-older", "Clean Architecture")
+            },
         );
         let newer = make_searchable_share(
             &keys,
-            "bravo",
-            "clean-newer",
-            "Clean Architecture",
-            "Robert C. Martin",
-            "https://openlibrary.org/isbn/9780134494166",
-            "book",
-            "isbn:9780134494166",
-            "",
-            2_000,
+            SearchableShare {
+                author: "Robert C. Martin",
+                url: "https://openlibrary.org/isbn/9780134494166",
+                source: "book",
+                catalog_id: "isbn:9780134494166",
+                created_at: 2_000,
+                ..SearchableShare::new("bravo", "clean-newer", "Clean Architecture")
+            },
         );
         ingest(&ndb, &older);
         ingest(&ndb, &newer);

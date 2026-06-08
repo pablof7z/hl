@@ -506,7 +506,7 @@ pub fn query_following_highlights(
         .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
         .collect();
     if let Ok(me) = PublicKey::from_hex(user_pubkey_hex) {
-        if !follows_pks.iter().any(|pk| *pk == me) {
+        if !follows_pks.contains(&me) {
             follows_pks.push(me);
         }
     }
@@ -736,7 +736,7 @@ fn build_highlight_event(
     // if the primary reference is already an `i` tag with the same value
     // (would be a duplicate).
     let catalog_id = artifact.preview.catalog_id.trim();
-    if !catalog_id.is_empty() && !(ref_name == "i" && ref_value == catalog_id) {
+    if !(catalog_id.is_empty() || ref_name == "i" && ref_value == catalog_id) {
         tags.push(
             Tag::parse(vec!["i".to_string(), catalog_id.to_string()])
                 .map_err(|e| CoreError::Other(format!("build catalog tag: {e}")))?,
@@ -1025,43 +1025,44 @@ mod tests {
         event.tags.iter().map(|t| t.as_slice().to_vec()).collect()
     }
 
-    fn share_event(
-        keys: &Keys,
-        group_id: &str,
-        d_tag: &str,
-        title: &str,
-        source: &str,
-        reference_value: &str,
-        reference_kind: &str,
-        url: &str,
+    struct ShareEventSpec<'a> {
+        group_id: &'a str,
+        d_tag: &'a str,
+        title: &'a str,
+        source: &'a str,
+        reference_value: &'a str,
+        reference_kind: &'a str,
+        url: &'a str,
         created_at: u64,
-    ) -> Event {
+    }
+
+    fn share_event(keys: &Keys, spec: ShareEventSpec<'_>) -> Event {
         let mut tags = vec![
-            Tag::parse(vec!["h".to_string(), group_id.to_string()]).unwrap(),
-            Tag::identifier(d_tag),
-            Tag::parse(vec!["title".to_string(), title.to_string()]).unwrap(),
-            Tag::parse(vec!["source".to_string(), source.to_string()]).unwrap(),
+            Tag::parse(vec!["h".to_string(), spec.group_id.to_string()]).unwrap(),
+            Tag::identifier(spec.d_tag),
+            Tag::parse(vec!["title".to_string(), spec.title.to_string()]).unwrap(),
+            Tag::parse(vec!["source".to_string(), spec.source.to_string()]).unwrap(),
         ];
-        if !reference_value.is_empty() {
+        if !spec.reference_value.is_empty() {
             tags.push(
                 Tag::parse(vec![
                     "i".to_string(),
-                    reference_value.to_string(),
-                    url.to_string(),
+                    spec.reference_value.to_string(),
+                    spec.url.to_string(),
                 ])
                 .unwrap(),
             );
         }
-        if !reference_kind.is_empty() {
-            tags.push(Tag::parse(vec!["k".to_string(), reference_kind.to_string()]).unwrap());
+        if !spec.reference_kind.is_empty() {
+            tags.push(Tag::parse(vec!["k".to_string(), spec.reference_kind.to_string()]).unwrap());
         }
-        if !url.is_empty() {
-            tags.push(Tag::parse(vec!["r".to_string(), url.to_string()]).unwrap());
+        if !spec.url.is_empty() {
+            tags.push(Tag::parse(vec!["r".to_string(), spec.url.to_string()]).unwrap());
         }
 
         EventBuilder::new(Kind::Custom(11), "")
             .tags(tags)
-            .custom_created_at(Timestamp::from(created_at))
+            .custom_created_at(Timestamp::from(spec.created_at))
             .sign_with_keys(keys)
             .expect("sign")
     }
@@ -1146,14 +1147,16 @@ mod tests {
         let keys = Keys::generate();
         let share = share_event(
             &keys,
-            "books",
-            "book-1",
-            "The Rust Programming Language",
-            "book",
-            "isbn:9781593278281",
-            "isbn",
-            "https://openlibrary.org/isbn/9781593278281",
-            2_000,
+            ShareEventSpec {
+                group_id: "books",
+                d_tag: "book-1",
+                title: "The Rust Programming Language",
+                source: "book",
+                reference_value: "isbn:9781593278281",
+                reference_kind: "isbn",
+                url: "https://openlibrary.org/isbn/9781593278281",
+                created_at: 2_000,
+            },
         );
         ingest(&ndb, &share);
         wait_for_ndb();
@@ -1177,14 +1180,16 @@ mod tests {
         let keys = Keys::generate();
         let share = share_event(
             &keys,
-            "articles",
-            "web-1",
-            "A Useful Essay",
-            "article",
-            "https://example.com/essay",
-            "web",
-            "https://example.com/essay",
-            2_000,
+            ShareEventSpec {
+                group_id: "articles",
+                d_tag: "web-1",
+                title: "A Useful Essay",
+                source: "article",
+                reference_value: "https://example.com/essay",
+                reference_kind: "web",
+                url: "https://example.com/essay",
+                created_at: 2_000,
+            },
         );
         ingest(&ndb, &share);
         wait_for_ndb();
