@@ -862,6 +862,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func extractNostrEventRefs(content: String)  -> [NostrEntityRef]
 
+    /**
+     * Resolve an ISBN against the bounded recent-book projection already
+     * rendered by the native picker. Rust owns the canonical ISBN reference
+     * matching; native shells only decide how to present the selected record.
+     */
+    func findExistingBookForIsbn(isbn: String, recents: [ArtifactRecord])  -> ArtifactRecord?
+
     func generateAccount()  -> GeneratedAccountOutcome
 
     /**
@@ -2073,6 +2080,20 @@ open func extractNostrEventRefs(content: String) -> [NostrEntityRef]  {
     return try!  FfiConverterSequenceTypeNostrEntityRef.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_extract_nostr_event_refs(self.uniffiClonePointer(),
         FfiConverterString.lower(content),$0
+    )
+})
+}
+
+    /**
+     * Resolve an ISBN against the bounded recent-book projection already
+     * rendered by the native picker. Rust owns the canonical ISBN reference
+     * matching; native shells only decide how to present the selected record.
+     */
+open func findExistingBookForIsbn(isbn: String, recents: [ArtifactRecord]) -> ArtifactRecord?  {
+    return try!  FfiConverterOptionTypeArtifactRecord.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_find_existing_book_for_isbn(self.uniffiClonePointer(),
+        FfiConverterString.lower(isbn),
+        FfiConverterSequenceTypeArtifactRecord.lower(recents),$0
     )
 })
 }
@@ -17651,6 +17672,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_extract_nostr_event_refs() != 37795) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_find_existing_book_for_isbn() != 23084) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 356) {

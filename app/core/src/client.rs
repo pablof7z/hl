@@ -2449,6 +2449,17 @@ impl HighlighterCore {
         isbn_lookup::normalize_isbn(&raw).ok()
     }
 
+    /// Resolve an ISBN against the bounded recent-book projection already
+    /// rendered by the native picker. Rust owns the canonical ISBN reference
+    /// matching; native shells only decide how to present the selected record.
+    pub fn find_existing_book_for_isbn(
+        &self,
+        isbn: String,
+        recents: Vec<ArtifactRecord>,
+    ) -> Option<ArtifactRecord> {
+        isbn_lookup::existing_record_for_isbn(&isbn, &recents)
+    }
+
     /// Build the edited ISBN book preview after scan/manual entry. Rust owns
     /// ISBN normalization and the NIP-73 reference fields; native supplies
     /// only the user's edited title/author and optional lookup metadata.

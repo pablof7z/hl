@@ -397,11 +397,7 @@ struct BookPicker: View {
     }
 
     private func beginResolve(_ isbn: String) {
-        // Dedup: if this ISBN already matches a book in the user's recents,
-        // pick it directly and skip the catalog lookup + auto-publish. The
-        // scan-for-already-known path is a discovery moment, not a form.
-        let catalogId = "isbn:\(isbn)"
-        if let existing = recents.first(where: { $0.preview.catalogId == catalogId }) {
+        if let existing = appStore.safeCore.findExistingBookForIsbn(isbn, recents: recents) {
             selection = .existing(existing)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()

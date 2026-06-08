@@ -16,7 +16,7 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 
 use crate::errors::CoreError;
-use crate::models::ArtifactPreview;
+use crate::models::{ArtifactPreview, ArtifactRecord};
 
 const OPEN_LIBRARY_TIMEOUT: Duration = Duration::from_secs(5);
 const CACHE_FILE_NAME: &str = "isbn-preview-cache-v1.json";
@@ -151,6 +151,14 @@ pub fn edited_book_preview(
     Ok(preview)
 }
 
+pub fn existing_record_for_isbn(isbn: &str, records: &[ArtifactRecord]) -> Option<ArtifactRecord> {
+    let isbn13 = normalize_isbn_reference_input(isbn)?;
+    records
+        .iter()
+        .find(|record| preview_matches_isbn(&record.preview, &isbn13))
+        .cloned()
+}
+
 async fn lookup_isbn_normalized(isbn13: &str) -> Result<ArtifactPreview, CoreError> {
     // Build the preview on a successful fetch; fall back to the minimal one
     // on any failure (404, timeout, bad JSON, etc.).
@@ -280,6 +288,38 @@ fn compute_isbn13_check_digit(prefix12: &str) -> char {
     }
     let check = (10 - (sum % 10)) % 10;
     char::from_digit(check, 10).unwrap_or('0')
+}
+
+fn normalize_isbn_reference_input(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let value = strip_ascii_prefix_ci(trimmed, "isbn:").unwrap_or(trimmed);
+    normalize_isbn(value).ok()
+}
+
+fn preview_matches_isbn(preview: &ArtifactPreview, isbn13: &str) -> bool {
+    isbn_reference_matches(&preview.catalog_id, isbn13)
+        || isbn_reference_matches(&preview.reference_tag_value, isbn13)
+        || isbn_reference_matches(&preview.highlight_tag_value, isbn13)
+        || highlight_reference_key_matches(&preview.highlight_reference_key, isbn13)
+}
+
+fn isbn_reference_matches(value: &str, isbn13: &str) -> bool {
+    normalize_isbn_reference_input(value).as_deref() == Some(isbn13)
+}
+
+fn highlight_reference_key_matches(value: &str, isbn13: &str) -> bool {
+    strip_ascii_prefix_ci(value.trim(), "i:")
+        .is_some_and(|reference| isbn_reference_matches(reference, isbn13))
+}
+
+fn strip_ascii_prefix_ci<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
+    value
+        .get(..prefix.len())
+        .filter(|head| head.eq_ignore_ascii_case(prefix))
+        .map(|_| &value[prefix.len()..])
 }
 
 async fn fetch_open_library(isbn13: &str) -> Result<ArtifactPreview, String> {
@@ -597,6 +637,45 @@ mod tests {
         assert!(edited.image.is_empty());
     }
 
+    #[test]
+    fn existing_record_for_isbn_matches_canonical_catalog_id() {
+        let records = vec![
+            record_with_preview(partial_preview("9781593278281")),
+            record_with_preview(partial_preview("9780735211292")),
+        ];
+
+        let found = existing_record_for_isbn("0735211299", &records).unwrap();
+
+        assert_eq!(found.preview.catalog_id, "isbn:9780735211292");
+    }
+
+    #[test]
+    fn existing_record_for_isbn_matches_reference_key_when_catalog_id_is_missing() {
+        let mut preview = partial_preview("9780735211292");
+        preview.catalog_id.clear();
+        preview.reference_tag_value.clear();
+        preview.highlight_tag_value.clear();
+
+        let found = existing_record_for_isbn(
+            "isbn:9780735211292",
+            &[record_with_preview(preview.clone())],
+        )
+        .unwrap();
+
+        assert_eq!(
+            found.preview.highlight_reference_key,
+            "i:isbn:9780735211292"
+        );
+    }
+
+    #[test]
+    fn existing_record_for_isbn_ignores_invalid_input_and_misses() {
+        let records = vec![record_with_preview(partial_preview("9781593278281"))];
+
+        assert!(existing_record_for_isbn("not an isbn", &records).is_none());
+        assert!(existing_record_for_isbn("9780735211292", &records).is_none());
+    }
+
     #[tokio::test]
     async fn cache_hit_returns_preview_without_network() {
         let dir = tempfile::tempdir().unwrap();
@@ -673,6 +752,17 @@ mod tests {
                 Err(CoreError::InvalidInput(_)) => {}
                 other => panic!("expected InvalidInput for {bad:?}, got {other:?}"),
             }
+        }
+    }
+
+    fn record_with_preview(preview: ArtifactPreview) -> ArtifactRecord {
+        ArtifactRecord {
+            preview,
+            group_id: "books".into(),
+            share_event_id: "event".into(),
+            pubkey: "pubkey".into(),
+            created_at: Some(1),
+            note: String::new(),
         }
     }
 }

@@ -274,6 +274,13 @@ actor SafeHighlighterCore {
         core.normalizeIsbnInput(raw: raw)
     }
 
+    nonisolated func findExistingBookForIsbn(
+        _ isbn: String,
+        recents: [ArtifactRecord]
+    ) -> ArtifactRecord? {
+        core.findExistingBookForIsbn(isbn: isbn, recents: recents)
+    }
+
     nonisolated func reconstructOcrMarkdown(_ lines: [OCRLine]) -> String {
         core.reconstructOcrMarkdown(lines: lines)
     }
