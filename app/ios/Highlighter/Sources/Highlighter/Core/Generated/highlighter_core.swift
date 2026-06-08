@@ -868,6 +868,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func decodeNpub(input: String)  -> StringOutcome
 
+    func defaultAddRelayConfig()  -> RelayConfig
+
     func defaultHighlightCropBox(highlightBoxes: [OcrRect], imageWidth: Double, imageHeight: Double, marginFraction: Double)  -> OcrRect?
 
     func detectOcrActivePage(lines: [OcrLine])  -> OcrPageDetection?
@@ -1397,6 +1399,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `Accept: application/nostr+json`. Fails fast on timeout.
      */
     func probeRelayNip11(url: String) async  -> Nip11DocumentOutcome
+
+    func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
 
     func projectRelaySettings(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic])  -> RelaySettingsProjection
 
@@ -2203,6 +2207,13 @@ open func decodeNpub(input: String) -> StringOutcome  {
     return try!  FfiConverterTypeStringOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_decode_npub(self.uniffiClonePointer(),
         FfiConverterString.lower(input),$0
+    )
+})
+}
+
+open func defaultAddRelayConfig() -> RelayConfig  {
+    return try!  FfiConverterTypeRelayConfig_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_default_add_relay_config(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -4062,6 +4073,14 @@ open func probeRelayNip11(url: String)async  -> Nip11DocumentOutcome  {
         )
 }
 
+open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelaySheetProjection  {
+    return try!  FfiConverterTypeAddRelaySheetProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_add_relay_sheet(self.uniffiClonePointer(),
+        FfiConverterTypeAddRelaySheetProjectionInput_lower(input),$0
+    )
+})
+}
+
 open func projectRelaySettings(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic]) -> RelaySettingsProjection  {
     return try!  FfiConverterTypeRelaySettingsProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_relay_settings(self.uniffiClonePointer(),
@@ -5574,6 +5593,250 @@ public func FfiConverterTypeHighlighterCore_lower(_ value: HighlighterCore) -> U
 }
 
 
+
+
+public struct AddRelaySheetProjection {
+    public var normalizedUrl: String
+    public var clipboardUrl: String?
+    public var isValid: Bool
+    public var isUnencrypted: Bool
+    public var canAdd: Bool
+    public var addConfig: RelayConfig
+    public var probeStatus: AddRelayProbeStatus
+    public var probeText: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(normalizedUrl: String, clipboardUrl: String?, isValid: Bool, isUnencrypted: Bool, canAdd: Bool, addConfig: RelayConfig, probeStatus: AddRelayProbeStatus, probeText: String) {
+        self.normalizedUrl = normalizedUrl
+        self.clipboardUrl = clipboardUrl
+        self.isValid = isValid
+        self.isUnencrypted = isUnencrypted
+        self.canAdd = canAdd
+        self.addConfig = addConfig
+        self.probeStatus = probeStatus
+        self.probeText = probeText
+    }
+}
+
+#if compiler(>=6)
+extension AddRelaySheetProjection: Sendable {}
+#endif
+
+
+extension AddRelaySheetProjection: Equatable, Hashable {
+    public static func ==(lhs: AddRelaySheetProjection, rhs: AddRelaySheetProjection) -> Bool {
+        if lhs.normalizedUrl != rhs.normalizedUrl {
+            return false
+        }
+        if lhs.clipboardUrl != rhs.clipboardUrl {
+            return false
+        }
+        if lhs.isValid != rhs.isValid {
+            return false
+        }
+        if lhs.isUnencrypted != rhs.isUnencrypted {
+            return false
+        }
+        if lhs.canAdd != rhs.canAdd {
+            return false
+        }
+        if lhs.addConfig != rhs.addConfig {
+            return false
+        }
+        if lhs.probeStatus != rhs.probeStatus {
+            return false
+        }
+        if lhs.probeText != rhs.probeText {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(normalizedUrl)
+        hasher.combine(clipboardUrl)
+        hasher.combine(isValid)
+        hasher.combine(isUnencrypted)
+        hasher.combine(canAdd)
+        hasher.combine(addConfig)
+        hasher.combine(probeStatus)
+        hasher.combine(probeText)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAddRelaySheetProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddRelaySheetProjection {
+        return
+            try AddRelaySheetProjection(
+                normalizedUrl: FfiConverterString.read(from: &buf),
+                clipboardUrl: FfiConverterOptionString.read(from: &buf),
+                isValid: FfiConverterBool.read(from: &buf),
+                isUnencrypted: FfiConverterBool.read(from: &buf),
+                canAdd: FfiConverterBool.read(from: &buf),
+                addConfig: FfiConverterTypeRelayConfig.read(from: &buf),
+                probeStatus: FfiConverterTypeAddRelayProbeStatus.read(from: &buf),
+                probeText: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AddRelaySheetProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.normalizedUrl, into: &buf)
+        FfiConverterOptionString.write(value.clipboardUrl, into: &buf)
+        FfiConverterBool.write(value.isValid, into: &buf)
+        FfiConverterBool.write(value.isUnencrypted, into: &buf)
+        FfiConverterBool.write(value.canAdd, into: &buf)
+        FfiConverterTypeRelayConfig.write(value.addConfig, into: &buf)
+        FfiConverterTypeAddRelayProbeStatus.write(value.probeStatus, into: &buf)
+        FfiConverterString.write(value.probeText, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddRelaySheetProjection_lift(_ buf: RustBuffer) throws -> AddRelaySheetProjection {
+    return try FfiConverterTypeAddRelaySheetProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddRelaySheetProjection_lower(_ value: AddRelaySheetProjection) -> RustBuffer {
+    return FfiConverterTypeAddRelaySheetProjection.lower(value)
+}
+
+
+public struct AddRelaySheetProjectionInput {
+    public var urlText: String
+    public var clipboardText: String?
+    public var read: Bool
+    public var write: Bool
+    public var rooms: Bool
+    public var indexer: Bool
+    public var probeInFlight: Bool
+    public var probeResult: Nip11Document?
+    public var probeFailed: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(urlText: String, clipboardText: String?, read: Bool, write: Bool, rooms: Bool, indexer: Bool, probeInFlight: Bool, probeResult: Nip11Document?, probeFailed: Bool) {
+        self.urlText = urlText
+        self.clipboardText = clipboardText
+        self.read = read
+        self.write = write
+        self.rooms = rooms
+        self.indexer = indexer
+        self.probeInFlight = probeInFlight
+        self.probeResult = probeResult
+        self.probeFailed = probeFailed
+    }
+}
+
+#if compiler(>=6)
+extension AddRelaySheetProjectionInput: Sendable {}
+#endif
+
+
+extension AddRelaySheetProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: AddRelaySheetProjectionInput, rhs: AddRelaySheetProjectionInput) -> Bool {
+        if lhs.urlText != rhs.urlText {
+            return false
+        }
+        if lhs.clipboardText != rhs.clipboardText {
+            return false
+        }
+        if lhs.read != rhs.read {
+            return false
+        }
+        if lhs.write != rhs.write {
+            return false
+        }
+        if lhs.rooms != rhs.rooms {
+            return false
+        }
+        if lhs.indexer != rhs.indexer {
+            return false
+        }
+        if lhs.probeInFlight != rhs.probeInFlight {
+            return false
+        }
+        if lhs.probeResult != rhs.probeResult {
+            return false
+        }
+        if lhs.probeFailed != rhs.probeFailed {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(urlText)
+        hasher.combine(clipboardText)
+        hasher.combine(read)
+        hasher.combine(write)
+        hasher.combine(rooms)
+        hasher.combine(indexer)
+        hasher.combine(probeInFlight)
+        hasher.combine(probeResult)
+        hasher.combine(probeFailed)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAddRelaySheetProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddRelaySheetProjectionInput {
+        return
+            try AddRelaySheetProjectionInput(
+                urlText: FfiConverterString.read(from: &buf),
+                clipboardText: FfiConverterOptionString.read(from: &buf),
+                read: FfiConverterBool.read(from: &buf),
+                write: FfiConverterBool.read(from: &buf),
+                rooms: FfiConverterBool.read(from: &buf),
+                indexer: FfiConverterBool.read(from: &buf),
+                probeInFlight: FfiConverterBool.read(from: &buf),
+                probeResult: FfiConverterOptionTypeNip11Document.read(from: &buf),
+                probeFailed: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AddRelaySheetProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.urlText, into: &buf)
+        FfiConverterOptionString.write(value.clipboardText, into: &buf)
+        FfiConverterBool.write(value.read, into: &buf)
+        FfiConverterBool.write(value.write, into: &buf)
+        FfiConverterBool.write(value.rooms, into: &buf)
+        FfiConverterBool.write(value.indexer, into: &buf)
+        FfiConverterBool.write(value.probeInFlight, into: &buf)
+        FfiConverterOptionTypeNip11Document.write(value.probeResult, into: &buf)
+        FfiConverterBool.write(value.probeFailed, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddRelaySheetProjectionInput_lift(_ buf: RustBuffer) throws -> AddRelaySheetProjectionInput {
+    return try FfiConverterTypeAddRelaySheetProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddRelaySheetProjectionInput_lower(_ value: AddRelaySheetProjectionInput) -> RustBuffer {
+    return FfiConverterTypeAddRelaySheetProjectionInput.lower(value)
+}
 
 
 public struct ArticleListOutcome {
@@ -17155,6 +17418,90 @@ public func FfiConverterTypeWhatsNewEntry_lower(_ value: WhatsNewEntry) -> RustB
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum AddRelayProbeStatus {
+
+    case idle
+    case checking
+    case reachable
+    case unreachable
+}
+
+
+#if compiler(>=6)
+extension AddRelayProbeStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAddRelayProbeStatus: FfiConverterRustBuffer {
+    typealias SwiftType = AddRelayProbeStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddRelayProbeStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .idle
+
+        case 2: return .checking
+
+        case 3: return .reachable
+
+        case 4: return .unreachable
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AddRelayProbeStatus, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .idle:
+            writeInt(&buf, Int32(1))
+
+
+        case .checking:
+            writeInt(&buf, Int32(2))
+
+
+        case .reachable:
+            writeInt(&buf, Int32(3))
+
+
+        case .unreachable:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddRelayProbeStatus_lift(_ buf: RustBuffer) throws -> AddRelayProbeStatus {
+    return try FfiConverterTypeAddRelayProbeStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAddRelayProbeStatus_lower(_ value: AddRelayProbeStatus) -> RustBuffer {
+    return FfiConverterTypeAddRelayProbeStatus.lower(value)
+}
+
+
+extension AddRelayProbeStatus: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ArticleUpdateAction {
 
     case refreshArticle
@@ -21282,6 +21629,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_decode_npub() != 65494) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_default_add_relay_config() != 9863) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_default_highlight_crop_box() != 34951) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21631,6 +21981,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_probe_relay_nip11() != 13896) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_add_relay_sheet() != 14886) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_settings() != 62661) {

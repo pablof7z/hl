@@ -20,7 +20,7 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use serde::{Deserialize, Serialize};
 
 use crate::errors::CoreError;
-use crate::models::{RelayDiagnostic, RelayStatus};
+use crate::models::{Nip11Document, RelayDiagnostic, RelayStatus};
 use crate::nostr_runtime::NostrRuntime;
 
 // -- Relay policy ------------------------------------------------------------
@@ -163,6 +163,39 @@ pub struct RelaySettingsProjection {
     pub any_connected_for_header: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum AddRelayProbeStatus {
+    Idle,
+    Checking,
+    Reachable,
+    Unreachable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AddRelaySheetProjection {
+    pub normalized_url: String,
+    pub clipboard_url: Option<String>,
+    pub is_valid: bool,
+    pub is_unencrypted: bool,
+    pub can_add: bool,
+    pub add_config: RelayConfig,
+    pub probe_status: AddRelayProbeStatus,
+    pub probe_text: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct AddRelaySheetProjectionInput {
+    pub url_text: String,
+    pub clipboard_text: Option<String>,
+    pub read: bool,
+    pub write: bool,
+    pub rooms: bool,
+    pub indexer: bool,
+    pub probe_in_flight: bool,
+    pub probe_result: Option<Nip11Document>,
+    pub probe_failed: bool,
+}
+
 impl RelayConfig {
     pub fn new(url: impl Into<String>) -> Self {
         Self {
@@ -183,6 +216,10 @@ impl RelayConfig {
             indexer: false,
         }
     }
+}
+
+pub fn default_add_relay_config() -> RelayConfig {
+    RelayConfig::read_write("")
 }
 
 /// Starting relay set for a brand-new user with no published kind:10002 and
@@ -259,6 +296,91 @@ pub fn settings_projection(
         all_connected_for_header: connected_count == configured_relays.len() as u64
             && !configured_relays.is_empty(),
         any_connected_for_header: connected_count > 0,
+    }
+}
+
+pub fn add_relay_sheet_projection(input: AddRelaySheetProjectionInput) -> AddRelaySheetProjection {
+    let normalized_url = normalize_relay_url_input(&input.url_text);
+    let clipboard_url = input
+        .clipboard_text
+        .map(|text| normalize_relay_url_input(&text))
+        .filter(|text| relay_url_is_valid(text) && text != &normalized_url);
+    let is_valid = relay_url_is_valid(&normalized_url);
+    let is_unencrypted = relay_url_is_unencrypted(&normalized_url);
+    let (probe_status, probe_text) = add_relay_probe_status(
+        input.probe_in_flight,
+        input.probe_result.as_ref(),
+        input.probe_failed,
+    );
+
+    AddRelaySheetProjection {
+        add_config: RelayConfig {
+            url: normalized_url.clone(),
+            read: input.read,
+            write: input.write,
+            rooms: input.rooms,
+            indexer: input.indexer,
+        },
+        normalized_url,
+        clipboard_url,
+        is_valid,
+        is_unencrypted,
+        can_add: is_valid,
+        probe_status,
+        probe_text,
+    }
+}
+
+fn normalize_relay_url_input(input: &str) -> String {
+    input.trim().to_string()
+}
+
+fn relay_url_is_valid(url: &str) -> bool {
+    url.starts_with("wss://") || url.starts_with("ws://")
+}
+
+fn relay_url_is_unencrypted(url: &str) -> bool {
+    url.starts_with("ws://")
+}
+
+fn add_relay_probe_status(
+    probe_in_flight: bool,
+    probe_result: Option<&Nip11Document>,
+    probe_failed: bool,
+) -> (AddRelayProbeStatus, String) {
+    if probe_in_flight {
+        return (AddRelayProbeStatus::Checking, "Checking relay…".into());
+    }
+    if let Some(doc) = probe_result {
+        return (AddRelayProbeStatus::Reachable, nip11_summary(doc));
+    }
+    if probe_failed {
+        return (
+            AddRelayProbeStatus::Unreachable,
+            "Couldn't reach the relay — you can still add it.".into(),
+        );
+    }
+    (AddRelayProbeStatus::Idle, String::new())
+}
+
+fn nip11_summary(doc: &Nip11Document) -> String {
+    let software_label = doc.software.as_ref().map(|name| {
+        if let Some(version) = doc.version.as_ref() {
+            format!("{name} {version}")
+        } else {
+            name.clone()
+        }
+    });
+    let nip_count =
+        (!doc.supported_nips.is_empty()).then(|| format!("{} NIPs", doc.supported_nips.len()));
+    let parts = [doc.name.clone(), software_label, nip_count]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    if parts.is_empty() {
+        "Reachable (no NIP-11 metadata)".into()
+    } else {
+        parts.join(" • ")
     }
 }
 
@@ -562,7 +684,7 @@ pub async fn set_relays(runtime: &NostrRuntime, rows: Vec<RelayConfig>) -> Resul
     let mut seen = std::collections::HashSet::new();
     for row in &rows {
         let url = row.url.trim();
-        if !(url.starts_with("wss://") || url.starts_with("ws://")) {
+        if !relay_url_is_valid(url) {
             return Err(CoreError::InvalidInput(format!(
                 "relay URL must use a websocket scheme: {url}"
             )));
@@ -660,6 +782,20 @@ mod tests {
                 indexer: true,
             },
         ]
+    }
+
+    fn add_relay_input(url_text: &str) -> AddRelaySheetProjectionInput {
+        AddRelaySheetProjectionInput {
+            url_text: url_text.into(),
+            clipboard_text: None,
+            read: true,
+            write: true,
+            rooms: false,
+            indexer: false,
+            probe_in_flight: false,
+            probe_result: None,
+            probe_failed: false,
+        }
     }
 
     #[test]
@@ -781,6 +917,97 @@ mod tests {
         let empty = settings_projection(&[], &[]);
         assert_eq!(empty.aggregate_state_label, "No relays");
         assert_eq!(empty.total_visible_relays, 0);
+    }
+
+    #[test]
+    fn add_relay_projection_validates_url_and_builds_add_config() {
+        let mut input = add_relay_input("  ws://relay.example.com  ");
+        input.clipboard_text = Some(" wss://paste.example.com ".into());
+        input.write = false;
+        input.rooms = true;
+        let projection = add_relay_sheet_projection(input);
+
+        assert_eq!(projection.normalized_url, "ws://relay.example.com");
+        assert_eq!(
+            projection.clipboard_url.as_deref(),
+            Some("wss://paste.example.com")
+        );
+        assert!(projection.is_valid);
+        assert!(projection.is_unencrypted);
+        assert!(projection.can_add);
+        assert_eq!(
+            projection.add_config,
+            RelayConfig {
+                url: "ws://relay.example.com".into(),
+                read: true,
+                write: false,
+                rooms: true,
+                indexer: false,
+            }
+        );
+    }
+
+    #[test]
+    fn add_relay_projection_rejects_invalid_and_duplicate_clipboard_urls() {
+        let mut invalid_input = add_relay_input("https://relay.example.com");
+        invalid_input.clipboard_text = Some("https://paste.example.com".into());
+        let invalid = add_relay_sheet_projection(invalid_input);
+        assert!(!invalid.is_valid);
+        assert!(!invalid.can_add);
+        assert!(invalid.clipboard_url.is_none());
+
+        let mut duplicate_input = add_relay_input("wss://relay.example.com");
+        duplicate_input.clipboard_text = Some(" wss://relay.example.com ".into());
+        let duplicate = add_relay_sheet_projection(duplicate_input);
+        assert!(duplicate.clipboard_url.is_none());
+    }
+
+    #[test]
+    fn add_relay_projection_projects_probe_status_and_summary() {
+        let mut checking_input = add_relay_input("wss://relay.example.com");
+        checking_input.probe_in_flight = true;
+        let checking = add_relay_sheet_projection(checking_input);
+        assert_eq!(checking.probe_status, AddRelayProbeStatus::Checking);
+        assert_eq!(checking.probe_text, "Checking relay…");
+
+        let mut reachable_input = add_relay_input("wss://relay.example.com");
+        reachable_input.probe_result = Some(Nip11Document {
+            url: "wss://relay.example.com".into(),
+            name: Some("Example Relay".into()),
+            description: None,
+            pubkey: None,
+            contact: None,
+            software: Some("strfry".into()),
+            version: Some("1.0".into()),
+            supported_nips: vec![1, 11, 65],
+            icon: None,
+        });
+        let reachable = add_relay_sheet_projection(reachable_input);
+        assert_eq!(reachable.probe_status, AddRelayProbeStatus::Reachable);
+        assert_eq!(reachable.probe_text, "Example Relay • strfry 1.0 • 3 NIPs");
+
+        let mut unreachable_input = add_relay_input("wss://relay.example.com");
+        unreachable_input.probe_failed = true;
+        let unreachable = add_relay_sheet_projection(unreachable_input);
+        assert_eq!(unreachable.probe_status, AddRelayProbeStatus::Unreachable);
+        assert_eq!(
+            unreachable.probe_text,
+            "Couldn't reach the relay — you can still add it."
+        );
+    }
+
+    #[test]
+    fn default_add_relay_config_matches_new_sheet_defaults() {
+        assert_eq!(
+            default_add_relay_config(),
+            RelayConfig {
+                url: String::new(),
+                read: true,
+                write: true,
+                rooms: false,
+                indexer: false,
+            }
+        );
     }
 
     #[test]

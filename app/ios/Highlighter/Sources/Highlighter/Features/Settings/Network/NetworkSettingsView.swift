@@ -48,7 +48,7 @@ struct NetworkSettingsView: View {
         }
         .sheet(isPresented: $showAddSheet) {
             if let store {
-                AddRelaySheet { cfg in
+                AddRelaySheet(initialDraft: appStore.safeCore.defaultAddRelayConfig()) { cfg in
                     Task { await store.upsert(cfg) }
                 }
             }

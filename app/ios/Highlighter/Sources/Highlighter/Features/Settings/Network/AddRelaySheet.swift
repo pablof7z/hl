@@ -9,31 +9,46 @@ struct AddRelaySheet: View {
 
     let onAdd: (RelayConfig) -> Void
 
-    @State private var urlText = ""
-    @State private var read = true
-    @State private var write = true
-    @State private var rooms = false
-    @State private var indexer = false
+    @State private var urlText: String
+    @State private var read: Bool
+    @State private var write: Bool
+    @State private var rooms: Bool
+    @State private var indexer: Bool
 
     /// NIP-11 probe status. Populated after the URL field loses focus (or
     /// after a 600ms debounce) so the user sees what relay they're about
     /// to add without the probe firing on every keystroke.
     @State private var probeResult: Nip11Document?
-    @State private var probeError: String?
+    @State private var probeFailed = false
     @State private var probeInFlight = false
     @State private var probeTask: Task<Void, Never>?
 
-    /// Whether the URL looks like a wss:// or ws:// URL.
-    private var isValid: Bool {
-        let trimmed = urlText.trimmingCharacters(in: .whitespaces)
-        return trimmed.hasPrefix("wss://") || trimmed.hasPrefix("ws://")
+    init(initialDraft: RelayConfig, onAdd: @escaping (RelayConfig) -> Void) {
+        self.onAdd = onAdd
+        _urlText = State(initialValue: initialDraft.url)
+        _read = State(initialValue: initialDraft.read)
+        _write = State(initialValue: initialDraft.write)
+        _rooms = State(initialValue: initialDraft.rooms)
+        _indexer = State(initialValue: initialDraft.indexer)
     }
 
-    private var isUnencrypted: Bool {
-        urlText.trimmingCharacters(in: .whitespaces).hasPrefix("ws://")
+    private var projection: AddRelaySheetProjection {
+        appStore.safeCore.projectAddRelaySheet(input: AddRelaySheetProjectionInput(
+            urlText: urlText,
+            clipboardText: UIPasteboard.general.string,
+            read: read,
+            write: write,
+            rooms: rooms,
+            indexer: indexer,
+            probeInFlight: probeInFlight,
+            probeResult: probeResult,
+            probeFailed: probeFailed
+        ))
     }
 
     var body: some View {
+        let currentProjection = projection
+
         NavigationStack {
             Form {
                 Section {
@@ -42,12 +57,12 @@ struct AddRelaySheet: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .onChange(of: urlText) { _, _ in scheduleProbe() }
-                    if isUnencrypted {
+                    if currentProjection.isUnencrypted {
                         Label("Unencrypted connection — use wss:// when possible.", systemImage: "exclamationmark.triangle")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
-                    if let paste = clipboardURL, paste != urlText {
+                    if let paste = currentProjection.clipboardUrl {
                         Button {
                             urlText = paste
                             scheduleProbe()
@@ -87,32 +102,13 @@ struct AddRelaySheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Add") {
-                        let trimmed = urlText.trimmingCharacters(in: .whitespaces)
-                        onAdd(
-                            RelayConfig(
-                                url: trimmed,
-                                read: read,
-                                write: write,
-                                rooms: rooms,
-                                indexer: indexer
-                            )
-                        )
+                        onAdd(currentProjection.addConfig)
                         dismiss()
                     }
-                    .disabled(!isValid)
+                    .disabled(!currentProjection.canAdd)
                 }
             }
         }
-    }
-
-    /// Returns the clipboard string if and only if it looks like a wss URL.
-    /// Avoids noisy paste prompts for arbitrary text.
-    private var clipboardURL: String? {
-        guard let s = UIPasteboard.general.string?.trimmingCharacters(in: .whitespaces) else {
-            return nil
-        }
-        guard s.hasPrefix("wss://") || s.hasPrefix("ws://") else { return nil }
-        return s
     }
 
     // MARK: - NIP-11 probe
@@ -124,56 +120,46 @@ struct AddRelaySheet: View {
     /// time.
     @ViewBuilder
     private var probeStatus: some View {
-        if probeInFlight {
+        let currentProjection = projection
+
+        switch currentProjection.probeStatus {
+        case .checking:
             HStack(spacing: 6) {
                 ProgressView().scaleEffect(0.7)
-                Text("Checking relay…")
+                Text(currentProjection.probeText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        } else if let doc = probeResult {
+        case .reachable:
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.seal.fill")
                     .foregroundStyle(.green)
-                Text(nip11Summary(doc))
+                Text(currentProjection.probeText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-        } else if let err = probeError {
+        case .unreachable:
             HStack(spacing: 6) {
                 Image(systemName: "questionmark.circle")
                     .foregroundStyle(.secondary)
-                Text(err)
+                Text(currentProjection.probeText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        case .idle:
+            EmptyView()
         }
-    }
-
-    private func nip11Summary(_ doc: Nip11Document) -> String {
-        let softwareLabel: String? = doc.software.map { name in
-            if let version = doc.version {
-                return "\(name) \(version)"
-            }
-            return name
-        }
-        let parts: [String?] = [
-            doc.name,
-            softwareLabel,
-            doc.supportedNips.isEmpty ? nil : "\(doc.supportedNips.count) NIPs",
-        ]
-        let joined = parts.compactMap { $0 }.joined(separator: " • ")
-        return joined.isEmpty ? "Reachable (no NIP-11 metadata)" : joined
     }
 
     /// Cancels an in-flight probe if the URL changes before it resolves.
     private func scheduleProbe() {
         probeTask?.cancel()
         probeResult = nil
-        probeError = nil
-        guard isValid else { return }
-        let url = urlText.trimmingCharacters(in: .whitespaces)
+        probeFailed = false
+        let currentProjection = projection
+        guard currentProjection.isValid else { return }
+        let url = currentProjection.normalizedUrl
         let core = appStore.safeCore
         probeTask = Task { [url] in
             guard !Task.isCancelled else { return }
@@ -183,11 +169,11 @@ struct AddRelaySheet: View {
             guard !Task.isCancelled else { return }
             if outcome.error.isEmpty, let doc = outcome.value {
                 probeResult = doc
-                probeError = nil
+                probeFailed = false
             } else {
                 guard !Task.isCancelled else { return }
                 probeResult = nil
-                probeError = "Couldn't reach the relay — you can still add it."
+                probeFailed = true
             }
         }
     }

@@ -89,6 +89,10 @@ pub use podcast_transcript::{
     PodcastTimelineRow, PodcastTimelineRowKind, PodcastTimelineRowState, TranscriptSegment,
 };
 pub use reactions::ReactionRecord;
+pub use relays::{
+    AddRelayProbeStatus, AddRelaySheetProjection, AddRelaySheetProjectionInput, RelayConfig,
+    RelaySettingsProjection,
+};
 pub use room_invites::{
     RoomInviteAddDecision, RoomInviteCandidate, RoomInviteCandidateSource, RoomInviteChip,
     RoomInviteInputFormat, RoomInviteProjection, RoomInviteProjectionInput,
