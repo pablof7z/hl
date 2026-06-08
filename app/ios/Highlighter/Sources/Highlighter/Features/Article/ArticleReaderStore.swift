@@ -50,8 +50,8 @@ struct ArticleReaderTarget: Hashable, Sendable {
 
 /// View-scoped store for the article reader. Lifetime matches the
 /// `ArticleReaderView` that owns it — created in `.task`, torn down in
-/// `.onDisappear`. Subscribes via `subscribe_article` so live kind:30023
-/// supersessions and new kind:9802 highlights trigger re-queries.
+/// `.onDisappear`. Subscribes via `subscribe_article` so live article and
+/// highlight deltas trigger Rust-classified re-queries.
 ///
 /// Architecture: **nostrdb is the source of truth.** The store never holds
 /// data that isn't already in (or en-route to) ndb.
@@ -125,10 +125,10 @@ final class ArticleReaderStore {
     }
 
     /// Called by `EventBridge` when an `ArticleUpdated` delta arrives.
-    /// Re-queries only the slice affected by the event kind.
+    /// Re-queries only the slice Rust says is affected by the event kind.
     func applyUpdate(kind: UInt32) async {
-        switch kind {
-        case 30023:
+        switch safeCore.getArticleUpdateAction(kind: kind) {
+        case .refreshArticle:
             let outcome = await safeCore.getArticle(
                 pubkeyHex: target.pubkey,
                 dTag: target.dTag
@@ -136,12 +136,12 @@ final class ArticleReaderStore {
             if outcome.error.isEmpty, let article = outcome.value {
                 self.article = article
             }
-        case 9802:
+        case .refreshHighlights:
             let outcome = await safeCore.getHighlightsForArticle(address: target.address)
             if outcome.error.isEmpty {
                 self.highlights = outcome.values
             }
-        default:
+        case .ignore:
             break
         }
     }

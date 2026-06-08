@@ -898,6 +898,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getArticleReaderRouteForArticle(pubkeyHex: String, dTag: String)  -> ArticleReaderRouteOutcome
 
     /**
+     * Classify a subscription event kind into the exact article reader slice
+     * that native shells should refresh.
+     */
+    func getArticleUpdateAction(kind: UInt32)  -> ArticleUpdateAction
+
+    /**
      * Project an artifact preview into a NIP-22 root scope using the
      * preview's Rust-owned protocol reference fields.
      */
@@ -1088,6 +1094,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getPodcastPosition()  -> PodcastPositionRecord?
 
     func getPodcastPositionSeconds(guid: String)  -> Double?
+
+    /**
+     * Classify a subscription event kind into the exact profile slice that
+     * native shells should refresh.
+     */
+    func getProfileUpdateAction(kind: UInt32)  -> ProfileUpdateAction
 
     /**
      * First `p` tag of the project's kind:31933 event by addressable
@@ -2110,6 +2122,18 @@ open func getArticleReaderRouteForArticle(pubkeyHex: String, dTag: String) -> Ar
 }
 
     /**
+     * Classify a subscription event kind into the exact article reader slice
+     * that native shells should refresh.
+     */
+open func getArticleUpdateAction(kind: UInt32) -> ArticleUpdateAction  {
+    return try!  FfiConverterTypeArticleUpdateAction_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_article_update_action(self.uniffiClonePointer(),
+        FfiConverterUInt32.lower(kind),$0
+    )
+})
+}
+
+    /**
      * Project an artifact preview into a NIP-22 root scope using the
      * preview's Rust-owned protocol reference fields.
      */
@@ -2804,6 +2828,18 @@ open func getPodcastPositionSeconds(guid: String) -> Double?  {
     return try!  FfiConverterOptionDouble.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_podcast_position_seconds(self.uniffiClonePointer(),
         FfiConverterString.lower(guid),$0
+    )
+})
+}
+
+    /**
+     * Classify a subscription event kind into the exact profile slice that
+     * native shells should refresh.
+     */
+open func getProfileUpdateAction(kind: UInt32) -> ProfileUpdateAction  {
+    return try!  FfiConverterTypeProfileUpdateAction_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_profile_update_action(self.uniffiClonePointer(),
+        FfiConverterUInt32.lower(kind),$0
     )
 })
 }
@@ -13451,6 +13487,83 @@ public func FfiConverterTypeWhatsNewEntry_lower(_ value: WhatsNewEntry) -> RustB
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ArticleUpdateAction {
+
+    case refreshArticle
+    case refreshHighlights
+    case ignore
+}
+
+
+#if compiler(>=6)
+extension ArticleUpdateAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleUpdateAction: FfiConverterRustBuffer {
+    typealias SwiftType = ArticleUpdateAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleUpdateAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .refreshArticle
+
+        case 2: return .refreshHighlights
+
+        case 3: return .ignore
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ArticleUpdateAction, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .refreshArticle:
+            writeInt(&buf, Int32(1))
+
+
+        case .refreshHighlights:
+            writeInt(&buf, Int32(2))
+
+
+        case .ignore:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleUpdateAction_lift(_ buf: RustBuffer) throws -> ArticleUpdateAction {
+    return try FfiConverterTypeArticleUpdateAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleUpdateAction_lower(_ value: ArticleUpdateAction) -> RustBuffer {
+    return FfiConverterTypeArticleUpdateAction.lower(value)
+}
+
+
+extension ArticleUpdateAction: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Native-shell destination for an artifact detail tap. Rust owns the
  * NIP/source/reference interpretation; platform shells only render the
@@ -13721,17 +13834,15 @@ public enum DataChangeType {
     )
     /**
      * Something that affects the profile view for `pubkey` arrived. `kind`
-     * is the event kind (0 metadata, 3 contacts, 30023 article, 9802
-     * highlight, 39001/39002 membership) so the Swift store can re-query
-     * just the affected slice.
+     * is the event kind; Rust's `profile_update_action` defines the
+     * reload slice so native shells don't duplicate protocol policy.
      */
     case userProfileUpdated(pubkey: String, kind: UInt32
     )
     /**
      * Something that affects the article reader for `address`
-     * (`30023:<pubkey>:<d>`) arrived. `kind` is `30023` when the article
-     * body/metadata itself changed (replaceable supersession) or `9802`
-     * when a new highlight was published against it.
+     * (`30023:<pubkey>:<d>`) arrived. `kind` is the event kind; Rust's
+     * `article_update_action` defines which reader slice to refresh.
      */
     case articleUpdated(address: String, kind: UInt32
     )
@@ -14284,6 +14395,104 @@ public func FfiConverterTypeNostrEntityRef_lower(_ value: NostrEntityRef) -> Rus
 
 
 extension NostrEntityRef: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ProfileUpdateAction {
+
+    case refreshProfile
+    case refreshFollowState
+    case refreshArticles
+    case refreshHighlights
+    case refreshCommunities
+    case ignore
+}
+
+
+#if compiler(>=6)
+extension ProfileUpdateAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileUpdateAction: FfiConverterRustBuffer {
+    typealias SwiftType = ProfileUpdateAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .refreshProfile
+
+        case 2: return .refreshFollowState
+
+        case 3: return .refreshArticles
+
+        case 4: return .refreshHighlights
+
+        case 5: return .refreshCommunities
+
+        case 6: return .ignore
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ProfileUpdateAction, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .refreshProfile:
+            writeInt(&buf, Int32(1))
+
+
+        case .refreshFollowState:
+            writeInt(&buf, Int32(2))
+
+
+        case .refreshArticles:
+            writeInt(&buf, Int32(3))
+
+
+        case .refreshHighlights:
+            writeInt(&buf, Int32(4))
+
+
+        case .refreshCommunities:
+            writeInt(&buf, Int32(5))
+
+
+        case .ignore:
+            writeInt(&buf, Int32(6))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateAction_lift(_ buf: RustBuffer) throws -> ProfileUpdateAction {
+    return try FfiConverterTypeProfileUpdateAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateAction_lower(_ value: ProfileUpdateAction) -> RustBuffer {
+    return FfiConverterTypeProfileUpdateAction.lower(value)
+}
+
+
+extension ProfileUpdateAction: Equatable, Hashable {}
 
 
 
@@ -16132,6 +16341,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_route_for_article() != 30297) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_update_action() != 29382) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_comment_scope() != 41998) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -16241,6 +16453,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_position_seconds() != 16855) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_profile_update_action() != 16735) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_project_first_agent_pubkey() != 2324) {

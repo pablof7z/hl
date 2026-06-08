@@ -475,6 +475,14 @@ actor SafeHighlighterCore {
         await core.getBookHighlights(catalogId: catalogId, limit: limit)
     }
 
+    nonisolated func getArticleUpdateAction(kind: UInt32) -> ArticleUpdateAction {
+        core.getArticleUpdateAction(kind: kind)
+    }
+
+    nonisolated func getProfileUpdateAction(kind: UInt32) -> ProfileUpdateAction {
+        core.getProfileUpdateAction(kind: kind)
+    }
+
     nonisolated func getArticleCommentScope(address: String) -> CommentScopeOutcome {
         core.getArticleCommentScope(address: address)
     }

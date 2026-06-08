@@ -312,8 +312,12 @@ final class EventBridge: EventCallback, @unchecked Sendable {
 
     @MainActor
     private func dispatchProfileSnapshot(_ change: DataChangeType, pubkey: String) {
-        guard case .userProfileUpdated(_, 0) = change else { return }
-        if let appStore { Task { await appStore.applyProfileSnapshotUpdate(pubkeyHex: pubkey) } }
+        guard case .userProfileUpdated(_, let kind) = change,
+              let appStore,
+              appStore.safeCore.getProfileUpdateAction(kind: kind) == .refreshProfile else {
+            return
+        }
+        Task { await appStore.applyProfileSnapshotUpdate(pubkeyHex: pubkey) }
     }
 
     @MainActor

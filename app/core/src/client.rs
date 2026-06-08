@@ -25,10 +25,10 @@ use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
-    ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome, ArtifactPreview,
-    ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute,
-    BookRouteOutcome, BookmarkSetListOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome,
-    CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord,
+    ArticleRecord, ArticleUpdateAction, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome,
+    ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome,
+    BookRoute, BookRouteOutcome, BookmarkSetListOutcome, BookmarkSetOutcome, BookmarkSetRecord,
+    BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord,
     CommentListOutcome, CommentOutcome, CommentRecord, CommentScope, CommentScopeOutcome,
     CommunityListOutcome, CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome,
     CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
@@ -38,11 +38,12 @@ use crate::models::{
     HydratedHighlight, HydratedHighlightListOutcome, MutationOutcome, Nip05AvailabilityOutcome,
     Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
     OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
-    ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft, ReactionListOutcome,
-    ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
-    RelayDiagnosticListOutcome, RoomRecommendation, RoomRecommendationListOutcome,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft,
+    ReactionListOutcome, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
+    RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
+    RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
+    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
+    WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -1724,6 +1725,18 @@ impl HighlighterCore {
             catalog_id.trim(),
             limit,
         ))
+    }
+
+    /// Classify a subscription event kind into the exact article reader slice
+    /// that native shells should refresh.
+    pub fn get_article_update_action(&self, kind: u32) -> ArticleUpdateAction {
+        crate::events::article_update_action(kind)
+    }
+
+    /// Classify a subscription event kind into the exact profile slice that
+    /// native shells should refresh.
+    pub fn get_profile_update_action(&self, kind: u32) -> ProfileUpdateAction {
+        crate::events::profile_update_action(kind)
     }
 
     /// Project a NIP-23 article address into the NIP-22 root scope used by

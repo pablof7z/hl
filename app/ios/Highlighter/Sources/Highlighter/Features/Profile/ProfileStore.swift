@@ -3,8 +3,8 @@ import Observation
 
 /// View-scoped store for a single profile page. Lifetime matches the
 /// `ProfileView` that owns it — created in `onAppear`, torn down in
-/// `onDisappear`. Subscribes via `subscribe_user_profile` so live deltas
-/// (kind:0 / 3 / 30023 / 9802 / 39001 / 39002) trigger re-queries.
+/// `onDisappear`. Subscribes via `subscribe_user_profile` so live profile
+/// deltas trigger Rust-classified re-queries.
 @MainActor
 @Observable
 final class ProfileStore {
@@ -102,15 +102,15 @@ final class ProfileStore {
     }
 
     /// Called by `EventBridge` when a `UserProfileUpdated` delta arrives.
-    /// Re-queries only the slice affected by the event kind.
+    /// Re-queries only the slice Rust says is affected by the event kind.
     func applyUpdate(kind: UInt32) async {
-        switch kind {
-        case 0:
+        switch safeCore.getProfileUpdateAction(kind: kind) {
+        case .refreshProfile:
             let outcome = await safeCore.getUserProfile(pubkeyHex: pubkey)
             if outcome.error.isEmpty, let p = outcome.value {
                 self.profile = p
             }
-        case 3:
+        case .refreshFollowState:
             // A contact list changed. If it's ours, refresh isFollowing.
             if let viewer = viewerPubkey,
                viewer.lowercased() != pubkey.lowercased() {
@@ -119,22 +119,22 @@ final class ProfileStore {
                     self.isFollowing = outcome.value
                 }
             }
-        case 30023:
+        case .refreshArticles:
             let outcome = await safeCore.getUserArticles(pubkeyHex: pubkey)
             if outcome.error.isEmpty {
                 self.articles = outcome.values
             }
-        case 9802:
+        case .refreshHighlights:
             let outcome = await safeCore.getUserHighlights(pubkeyHex: pubkey)
             if outcome.error.isEmpty {
                 self.highlights = outcome.values
             }
-        case 39001, 39002:
+        case .refreshCommunities:
             let outcome = await safeCore.getUserCommunities(pubkeyHex: pubkey)
             if outcome.error.isEmpty {
                 self.communities = outcome.values
             }
-        default:
+        case .ignore:
             break
         }
     }

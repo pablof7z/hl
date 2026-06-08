@@ -5,10 +5,37 @@
 //! that installed the subscription.
 
 use crate::models::{
-    ArtifactRecord, ChatMessageRecord, CommunitySummary, CurrentUser, DiscussionRecord,
-    FeedbackEventRecord, HighlightRecord, HydratedHighlight, RelayDiagnostic, RelayStatus,
+    ArticleUpdateAction, ArtifactRecord, ChatMessageRecord, CommunitySummary, CurrentUser,
+    DiscussionRecord, FeedbackEventRecord, HighlightRecord, HydratedHighlight, ProfileUpdateAction,
+    RelayDiagnostic, RelayStatus,
 };
 use crate::nostr_entities::NostrEntityEvent;
+
+const KIND_METADATA: u32 = 0;
+const KIND_CONTACTS: u32 = 3;
+const KIND_HIGHLIGHT: u32 = 9802;
+const KIND_LONG_FORM: u32 = 30023;
+const KIND_GROUP_ADMINS: u32 = 39001;
+const KIND_GROUP_MEMBERS: u32 = 39002;
+
+pub fn article_update_action(kind: u32) -> ArticleUpdateAction {
+    match kind {
+        KIND_LONG_FORM => ArticleUpdateAction::RefreshArticle,
+        KIND_HIGHLIGHT => ArticleUpdateAction::RefreshHighlights,
+        _ => ArticleUpdateAction::Ignore,
+    }
+}
+
+pub fn profile_update_action(kind: u32) -> ProfileUpdateAction {
+    match kind {
+        KIND_METADATA => ProfileUpdateAction::RefreshProfile,
+        KIND_CONTACTS => ProfileUpdateAction::RefreshFollowState,
+        KIND_LONG_FORM => ProfileUpdateAction::RefreshArticles,
+        KIND_HIGHLIGHT => ProfileUpdateAction::RefreshHighlights,
+        KIND_GROUP_ADMINS | KIND_GROUP_MEMBERS => ProfileUpdateAction::RefreshCommunities,
+        _ => ProfileUpdateAction::Ignore,
+    }
+}
 
 // UniFFI serializes these deltas as bounded FFI records. Keeping the enum
 // payloads inline preserves the generated Swift shape and avoids moving Rust
@@ -55,17 +82,15 @@ pub enum DataChangeType {
         highlight: HighlightRecord,
     },
     /// Something that affects the profile view for `pubkey` arrived. `kind`
-    /// is the event kind (0 metadata, 3 contacts, 30023 article, 9802
-    /// highlight, 39001/39002 membership) so the Swift store can re-query
-    /// just the affected slice.
+    /// is the event kind; Rust's `profile_update_action` defines the
+    /// reload slice so native shells don't duplicate protocol policy.
     UserProfileUpdated {
         pubkey: String,
         kind: u32,
     },
     /// Something that affects the article reader for `address`
-    /// (`30023:<pubkey>:<d>`) arrived. `kind` is `30023` when the article
-    /// body/metadata itself changed (replaceable supersession) or `9802`
-    /// when a new highlight was published against it.
+    /// (`30023:<pubkey>:<d>`) arrived. `kind` is the event kind; Rust's
+    /// `article_update_action` defines which reader slice to refresh.
     ArticleUpdated {
         address: String,
         kind: u32,
@@ -154,4 +179,51 @@ pub struct Delta {
 #[uniffi::export(with_foreign)]
 pub trait EventCallback: Send + Sync {
     fn on_data_changed(&self, delta: Delta);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn article_update_action_maps_reader_slices() {
+        assert_eq!(
+            article_update_action(KIND_LONG_FORM),
+            ArticleUpdateAction::RefreshArticle
+        );
+        assert_eq!(
+            article_update_action(KIND_HIGHLIGHT),
+            ArticleUpdateAction::RefreshHighlights
+        );
+        assert_eq!(article_update_action(1), ArticleUpdateAction::Ignore);
+    }
+
+    #[test]
+    fn profile_update_action_maps_profile_slices() {
+        assert_eq!(
+            profile_update_action(KIND_METADATA),
+            ProfileUpdateAction::RefreshProfile
+        );
+        assert_eq!(
+            profile_update_action(KIND_CONTACTS),
+            ProfileUpdateAction::RefreshFollowState
+        );
+        assert_eq!(
+            profile_update_action(KIND_LONG_FORM),
+            ProfileUpdateAction::RefreshArticles
+        );
+        assert_eq!(
+            profile_update_action(KIND_HIGHLIGHT),
+            ProfileUpdateAction::RefreshHighlights
+        );
+        assert_eq!(
+            profile_update_action(KIND_GROUP_ADMINS),
+            ProfileUpdateAction::RefreshCommunities
+        );
+        assert_eq!(
+            profile_update_action(KIND_GROUP_MEMBERS),
+            ProfileUpdateAction::RefreshCommunities
+        );
+        assert_eq!(profile_update_action(1), ProfileUpdateAction::Ignore);
+    }
 }

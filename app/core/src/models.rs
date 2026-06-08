@@ -40,6 +40,23 @@ pub struct BoolOutcome {
     pub error: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ArticleUpdateAction {
+    RefreshArticle,
+    RefreshHighlights,
+    Ignore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ProfileUpdateAction {
+    RefreshProfile,
+    RefreshFollowState,
+    RefreshArticles,
+    RefreshHighlights,
+    RefreshCommunities,
+    Ignore,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct BookRoute {
     pub catalog_id: String,
