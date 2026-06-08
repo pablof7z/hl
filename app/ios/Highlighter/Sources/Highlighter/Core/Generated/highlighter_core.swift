@@ -973,21 +973,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getCurationMenuItems(address: String) async  -> CurationMenuItemListOutcome
 
+    /**
+     * Project a kind:11 discussion event id into the NIP-22 root scope used
+     * by comment reads/writes.
+     */
+    func getDiscussionCommentScope(eventIdHex: String)  -> CommentScopeOutcome
+
     func getDiscussions(groupId: String, limit: UInt32) async  -> DiscussionListOutcome
-
-    /**
-     * Project a concrete event id into the NIP-22 root scope used by comment
-     * reads/writes. The native shell provides only the event identity and
-     * known kind; Rust owns tag selection.
-     */
-    func getEventCommentScope(eventIdHex: String, kind: UInt16)  -> CommentScopeOutcome
-
-    /**
-     * Project an external content identifier into the NIP-22 root scope used
-     * by comment reads/writes. Existing Highlighter data uses raw URLs as
-     * well as NIP-73 identifiers; Rust preserves the identifier value.
-     */
-    func getExternalCommentScope(identifier: String, kind: UInt16)  -> CommentScopeOutcome
 
     /**
      * Curator's latest kind:10012 list, resolved into `CommunitySummary`
@@ -1040,6 +1032,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * artifact address. Rust owns the precedence and canonical catalog id.
      */
     func getHighlightBookRoute(externalReference: String, artifactAddress: String)  -> BookRouteOutcome
+
+    /**
+     * Project a NIP-84 highlight event id into the NIP-22 root scope used by
+     * comment reads/writes.
+     */
+    func getHighlightCommentScope(eventIdHex: String)  -> CommentScopeOutcome
 
     /**
      * Classify a highlight source for native icon/label rendering. Rust owns
@@ -1173,6 +1171,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getUserHighlights(pubkeyHex: String, limit: UInt32) async  -> HighlightListOutcome
 
     func getUserProfile(pubkeyHex: String) async  -> ProfileOutcome
+
+    /**
+     * Project a web URL into the external NIP-22 root scope used by comment
+     * reads/writes.
+     */
+    func getWebCommentScope(url: String)  -> CommentScopeOutcome
 
     /**
      * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
@@ -2383,6 +2387,18 @@ open func getCurationMenuItems(address: String)async  -> CurationMenuItemListOut
         )
 }
 
+    /**
+     * Project a kind:11 discussion event id into the NIP-22 root scope used
+     * by comment reads/writes.
+     */
+open func getDiscussionCommentScope(eventIdHex: String) -> CommentScopeOutcome  {
+    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_discussion_comment_scope(self.uniffiClonePointer(),
+        FfiConverterString.lower(eventIdHex),$0
+    )
+})
+}
+
 open func getDiscussions(groupId: String, limit: UInt32)async  -> DiscussionListOutcome  {
     return
         try!  await uniffiRustCallAsync(
@@ -2399,34 +2415,6 @@ open func getDiscussions(groupId: String, limit: UInt32)async  -> DiscussionList
             errorHandler: nil
 
         )
-}
-
-    /**
-     * Project a concrete event id into the NIP-22 root scope used by comment
-     * reads/writes. The native shell provides only the event identity and
-     * known kind; Rust owns tag selection.
-     */
-open func getEventCommentScope(eventIdHex: String, kind: UInt16) -> CommentScopeOutcome  {
-    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_event_comment_scope(self.uniffiClonePointer(),
-        FfiConverterString.lower(eventIdHex),
-        FfiConverterUInt16.lower(kind),$0
-    )
-})
-}
-
-    /**
-     * Project an external content identifier into the NIP-22 root scope used
-     * by comment reads/writes. Existing Highlighter data uses raw URLs as
-     * well as NIP-73 identifiers; Rust preserves the identifier value.
-     */
-open func getExternalCommentScope(identifier: String, kind: UInt16) -> CommentScopeOutcome  {
-    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_external_comment_scope(self.uniffiClonePointer(),
-        FfiConverterString.lower(identifier),
-        FfiConverterUInt16.lower(kind),$0
-    )
-})
 }
 
     /**
@@ -2596,6 +2584,18 @@ open func getHighlightBookRoute(externalReference: String, artifactAddress: Stri
     uniffi_highlighter_core_fn_method_highlightercore_get_highlight_book_route(self.uniffiClonePointer(),
         FfiConverterString.lower(externalReference),
         FfiConverterString.lower(artifactAddress),$0
+    )
+})
+}
+
+    /**
+     * Project a NIP-84 highlight event id into the NIP-22 root scope used by
+     * comment reads/writes.
+     */
+open func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome  {
+    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_highlight_comment_scope(self.uniffiClonePointer(),
+        FfiConverterString.lower(eventIdHex),$0
     )
 })
 }
@@ -3147,6 +3147,18 @@ open func getUserProfile(pubkeyHex: String)async  -> ProfileOutcome  {
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Project a web URL into the external NIP-22 root scope used by comment
+     * reads/writes.
+     */
+open func getWebCommentScope(url: String) -> CommentScopeOutcome  {
+    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_web_comment_scope(self.uniffiClonePointer(),
+        FfiConverterString.lower(url),$0
+    )
+})
 }
 
     /**
@@ -16640,13 +16652,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_curation_menu_items() != 34499) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussion_comment_scope() != 65057) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 7889) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_event_comment_scope() != 44632) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_external_comment_scope() != 56502) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_featured_rooms() != 33699) {
@@ -16671,6 +16680,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_book_route() != 28768) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_comment_scope() != 65340) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_source_kind() != 42257) {
@@ -16758,6 +16770,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 11410) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_comment_scope() != 47386) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 12216) {

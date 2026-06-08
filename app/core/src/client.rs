@@ -1745,18 +1745,22 @@ impl HighlighterCore {
         comment_scope_outcome(comments::article_scope(&address))
     }
 
-    /// Project a concrete event id into the NIP-22 root scope used by comment
-    /// reads/writes. The native shell provides only the event identity and
-    /// known kind; Rust owns tag selection.
-    pub fn get_event_comment_scope(&self, event_id_hex: String, kind: u16) -> CommentScopeOutcome {
-        comment_scope_outcome(comments::event_scope(&event_id_hex, kind))
+    /// Project a NIP-84 highlight event id into the NIP-22 root scope used by
+    /// comment reads/writes.
+    pub fn get_highlight_comment_scope(&self, event_id_hex: String) -> CommentScopeOutcome {
+        comment_scope_outcome(comments::highlight_scope(&event_id_hex))
     }
 
-    /// Project an external content identifier into the NIP-22 root scope used
-    /// by comment reads/writes. Existing Highlighter data uses raw URLs as
-    /// well as NIP-73 identifiers; Rust preserves the identifier value.
-    pub fn get_external_comment_scope(&self, identifier: String, kind: u16) -> CommentScopeOutcome {
-        comment_scope_outcome(comments::external_scope(&identifier, kind))
+    /// Project a kind:11 discussion event id into the NIP-22 root scope used
+    /// by comment reads/writes.
+    pub fn get_discussion_comment_scope(&self, event_id_hex: String) -> CommentScopeOutcome {
+        comment_scope_outcome(comments::discussion_scope(&event_id_hex))
+    }
+
+    /// Project a web URL into the external NIP-22 root scope used by comment
+    /// reads/writes.
+    pub fn get_web_comment_scope(&self, url: String) -> CommentScopeOutcome {
+        comment_scope_outcome(comments::web_scope(&url))
     }
 
     /// Project an artifact preview into a NIP-22 root scope using the

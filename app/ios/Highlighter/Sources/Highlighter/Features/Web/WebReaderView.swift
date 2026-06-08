@@ -118,7 +118,7 @@ private struct WebCommentsScopeModifier: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        let outcome = app.safeCore.getExternalCommentScope(identifier: url.absoluteString, kind: 0)
+        let outcome = app.safeCore.getWebCommentScope(url: url.absoluteString)
         if outcome.error.isEmpty, let scope = outcome.value {
             content.commentsAttachment(scope: scope)
         } else {

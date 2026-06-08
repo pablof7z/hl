@@ -12,7 +12,10 @@ use crate::nostr_runtime::NostrRuntime;
 
 /// kind:1111 — NIP-22 comment.
 pub const KIND_NIP22_COMMENT: u16 = 1111;
+const KIND_DISCUSSION_THREAD: u16 = 11;
+const KIND_HIGHLIGHT: u16 = 9802;
 const KIND_NIP23_ARTICLE: u16 = 30023;
+const KIND_WEB_EXTERNAL: u16 = 0;
 
 /// Project a NIP-23 address into the NIP-22 root scope used for comment
 /// reads/writes. The shell passes addresses; Rust owns the tag/kind mapping.
@@ -41,6 +44,14 @@ pub fn event_scope(event_id_hex: &str, kind: u16) -> Result<CommentScope, CoreEr
     Ok(scope('E', value, kind))
 }
 
+pub fn highlight_scope(event_id_hex: &str) -> Result<CommentScope, CoreError> {
+    event_scope(event_id_hex, KIND_HIGHLIGHT)
+}
+
+pub fn discussion_scope(event_id_hex: &str) -> Result<CommentScope, CoreError> {
+    event_scope(event_id_hex, KIND_DISCUSSION_THREAD)
+}
+
 /// Project an external identifier into a NIP-22 external root scope. The
 /// identifier is preserved exactly after trimming because existing data uses
 /// both NIP-73 ids (`isbn:…`, `podcast:item:guid:…`) and raw URLs.
@@ -52,6 +63,10 @@ pub fn external_scope(identifier: &str, kind: u16) -> Result<CommentScope, CoreE
         ));
     }
     Ok(scope('I', value, kind))
+}
+
+pub fn web_scope(url: &str) -> Result<CommentScope, CoreError> {
+    external_scope(url, KIND_WEB_EXTERNAL)
 }
 
 /// Project an artifact preview's protocol reference fields into the NIP-22
@@ -371,8 +386,32 @@ mod tests {
     }
 
     #[test]
+    fn highlight_scope_uses_highlight_event_kind() {
+        let scope = highlight_scope("abc123").expect("scope");
+        assert_eq!(scope.root_tag_name, "E");
+        assert_eq!(scope.root_tag_value, "abc123");
+        assert_eq!(scope.root_kind, 9802);
+    }
+
+    #[test]
+    fn discussion_scope_uses_discussion_event_kind() {
+        let scope = discussion_scope("abc123").expect("scope");
+        assert_eq!(scope.root_tag_name, "E");
+        assert_eq!(scope.root_tag_value, "abc123");
+        assert_eq!(scope.root_kind, 11);
+    }
+
+    #[test]
     fn external_scope_preserves_raw_identifier() {
         let scope = external_scope(" https://example.com/post ", 0).expect("scope");
+        assert_eq!(scope.root_tag_name, "I");
+        assert_eq!(scope.root_tag_value, "https://example.com/post");
+        assert_eq!(scope.root_kind, 0);
+    }
+
+    #[test]
+    fn web_scope_preserves_url_with_external_kind_zero() {
+        let scope = web_scope(" https://example.com/post ").expect("scope");
         assert_eq!(scope.root_tag_name, "I");
         assert_eq!(scope.root_tag_value, "https://example.com/post");
         assert_eq!(scope.root_kind, 0);

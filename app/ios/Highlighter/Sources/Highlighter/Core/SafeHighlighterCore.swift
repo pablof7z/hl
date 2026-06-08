@@ -495,12 +495,16 @@ actor SafeHighlighterCore {
         core.getArtifactCommentScope(preview: preview)
     }
 
-    nonisolated func getEventCommentScope(eventIdHex: String, kind: UInt16) -> CommentScopeOutcome {
-        core.getEventCommentScope(eventIdHex: eventIdHex, kind: kind)
+    nonisolated func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome {
+        core.getHighlightCommentScope(eventIdHex: eventIdHex)
     }
 
-    nonisolated func getExternalCommentScope(identifier: String, kind: UInt16) -> CommentScopeOutcome {
-        core.getExternalCommentScope(identifier: identifier, kind: kind)
+    nonisolated func getDiscussionCommentScope(eventIdHex: String) -> CommentScopeOutcome {
+        core.getDiscussionCommentScope(eventIdHex: eventIdHex)
+    }
+
+    nonisolated func getWebCommentScope(url: String) -> CommentScopeOutcome {
+        core.getWebCommentScope(url: url)
     }
 
     func getCommentsForScope(scope: CommentScope, limit: UInt32 = 128) async -> CommentListOutcome {

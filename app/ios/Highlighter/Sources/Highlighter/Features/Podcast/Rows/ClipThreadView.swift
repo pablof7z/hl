@@ -84,7 +84,7 @@ struct ClipThreadView: View {
         sendError = nil
         let id = clipEventId
         Task {
-            let scopeOutcome = app.safeCore.getEventCommentScope(eventIdHex: id, kind: 9802)
+            let scopeOutcome = app.safeCore.getHighlightCommentScope(eventIdHex: id)
             guard scopeOutcome.error.isEmpty, let scope = scopeOutcome.value else {
                 sendError = scopeOutcome.error
                 isSending = false

@@ -8,7 +8,7 @@ struct DiscussionDetailView: View {
     @State private var focusedNode: CommentNode? = nil
 
     private var commentScope: CommentScope? {
-        app.safeCore.getEventCommentScope(eventIdHex: discussion.eventId, kind: 11).value
+        app.safeCore.getDiscussionCommentScope(eventIdHex: discussion.eventId).value
     }
 
     var body: some View {
