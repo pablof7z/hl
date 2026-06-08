@@ -263,14 +263,19 @@ private struct ReaderScroll: View {
             ImageZoomView(url: item.url, onDismiss: { imageToOpen = nil })
         }
         .task(id: "\(article.eventId)-\(highlights.count)-\(app.profileSnapshots.count)") {
+            let safeCore = app.safeCore
             let profileSnapshot = Dictionary(
-                uniqueKeysWithValues: app.profileSnapshots.compactMap { (pk, meta) -> (String, String)? in
-                    let name = meta.displayName.isEmpty ? meta.name : meta.displayName
-                    guard !name.isEmpty else { return nil }
-                    return (pk, name)
+                uniqueKeysWithValues: app.profileSnapshots.map { (pk, meta) -> (String, String) in
+                    let display = safeCore.projectProfileDisplay(
+                        input: ProfileDisplayProjectionInput(
+                            pubkey: pk,
+                            profile: meta,
+                            fallback: .pubkey8
+                        )
+                    )
+                    return (pk, display.displayName)
                 }
             )
-            let safeCore = app.safeCore
             rendered = await Task.detached(priority: .userInitiated) {
                 MarkdownRenderer.render(
                     content: article.content,
