@@ -11,6 +11,7 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::artifacts::first_tag_value;
+use crate::clock::Clock;
 use crate::errors::CoreError;
 use crate::models::{BookmarkSetRecord, WebBookmarkRecord};
 use crate::nostr_runtime::NostrRuntime;
@@ -35,8 +36,7 @@ pub fn query_user_sets(
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
     let pk_bytes: [u8; 32] = author.to_bytes();
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let filter = NdbFilter::new()
         .kinds([kind as u64])
         .authors([&pk_bytes])
@@ -47,9 +47,13 @@ pub fn query_user_sets(
 
     let mut by_d: HashMap<String, Event> = HashMap::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         let d = first_tag_value(&event, "d").unwrap_or("").to_string();
         let entry = by_d.entry(d).or_insert_with(|| event.clone());
         if event.created_at > entry.created_at {
@@ -84,8 +88,7 @@ pub fn query_following_curation_sets(
     let pk_bytes: Vec<[u8; 32]> = pks.iter().map(|pk| pk.to_bytes()).collect();
     let pk_refs: Vec<&[u8; 32]> = pk_bytes.iter().collect();
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let filter = NdbFilter::new()
         .kinds([KIND_CURATION_SETS as u64])
         .authors(pk_refs.iter().copied())
@@ -96,9 +99,13 @@ pub fn query_following_curation_sets(
 
     let mut by_key: HashMap<(String, String), Event> = HashMap::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         let d = first_tag_value(&event, "d").unwrap_or("").to_string();
         let pk = event.pubkey.to_hex();
         let key = (pk, d);
@@ -129,8 +136,7 @@ pub fn query_user_web_bookmarks(
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
     let pk_bytes: [u8; 32] = author.to_bytes();
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let filter = NdbFilter::new()
         .kinds([KIND_WEB_BOOKMARK as u64])
         .authors([&pk_bytes])
@@ -141,9 +147,13 @@ pub fn query_user_web_bookmarks(
 
     let mut by_d: HashMap<String, Event> = HashMap::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         let d = first_tag_value(&event, "d").unwrap_or("").to_string();
         let entry = by_d.entry(d).or_insert_with(|| event.clone());
         if event.created_at > entry.created_at {
@@ -151,10 +161,8 @@ pub fn query_user_web_bookmarks(
         }
     }
 
-    let mut records: Vec<WebBookmarkRecord> = by_d
-        .into_values()
-        .map(parse_web_bookmark_event)
-        .collect();
+    let mut records: Vec<WebBookmarkRecord> =
+        by_d.into_values().map(parse_web_bookmark_event).collect();
     records.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(records)
 }
@@ -170,19 +178,19 @@ pub async fn create_curation_set(
     runtime: &NostrRuntime,
     user_hex: &str,
     title: &str,
+    clock: &dyn Clock,
 ) -> Result<BookmarkSetRecord, CoreError> {
     let title = title.trim();
     if title.is_empty() {
-        return Err(CoreError::InvalidInput("collection title must not be empty".into()));
+        return Err(CoreError::InvalidInput(
+            "collection title must not be empty".into(),
+        ));
     }
 
     // Stable identifier — UNIX nanoseconds, unique-per-user since each
     // author generates their own. NIP-33 only requires uniqueness within
     // the (author, d-tag) keyspace, not globally.
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+    let nanos = clock.now_unix_nanos();
     let d_tag = format!("c-{nanos:x}");
 
     let tags = vec![
@@ -235,7 +243,9 @@ pub async fn set_address_in_curation_set(
     let d_tag = d_tag.trim();
     let address = address.trim();
     if d_tag.is_empty() {
-        return Err(CoreError::InvalidInput("curation d-tag must not be empty".into()));
+        return Err(CoreError::InvalidInput(
+            "curation d-tag must not be empty".into(),
+        ));
     }
     if address.is_empty() {
         return Err(CoreError::InvalidInput("address must not be empty".into()));
@@ -284,7 +294,8 @@ pub async fn set_address_in_curation_set(
         );
     }
 
-    let builder = EventBuilder::new(Kind::Custom(KIND_CURATION_SETS), event.content.clone()).tags(tags);
+    let builder =
+        EventBuilder::new(Kind::Custom(KIND_CURATION_SETS), event.content.clone()).tags(tags);
     let client = runtime.client();
     let new_event = client
         .sign_event_builder(builder)
@@ -311,8 +322,7 @@ fn newest_set_event(
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
     let pk_bytes: [u8; 32] = author.to_bytes();
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let filter = NdbFilter::new()
         .kinds([kind as u64])
         .authors([&pk_bytes])
@@ -324,9 +334,13 @@ fn newest_set_event(
 
     let mut newest: Option<Event> = None;
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         newest = Some(match newest {
             Some(prev) if prev.created_at >= event.created_at => prev,
             _ => event,
@@ -363,7 +377,9 @@ fn parse_set_event(event: Event, kind: u16) -> BookmarkSetRecord {
         pubkey: event.pubkey.to_hex(),
         kind: kind as u32,
         title: first_tag_value(&event, "title").unwrap_or("").to_string(),
-        description: first_tag_value(&event, "description").unwrap_or("").to_string(),
+        description: first_tag_value(&event, "description")
+            .unwrap_or("")
+            .to_string(),
         image: first_tag_value(&event, "image").unwrap_or("").to_string(),
         article_addresses,
         note_ids,
@@ -392,8 +408,7 @@ fn parse_web_bookmark_event(event: Event) -> WebBookmarkRecord {
         })
         .collect();
 
-    let published_at = first_tag_value(&event, "published_at")
-        .and_then(|v| v.parse::<u64>().ok());
+    let published_at = first_tag_value(&event, "published_at").and_then(|v| v.parse::<u64>().ok());
 
     WebBookmarkRecord {
         url,

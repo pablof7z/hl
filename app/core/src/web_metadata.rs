@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use parking_lot::Mutex;
 use scraper::{Html, Selector};
@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 use url::Url;
 
+use crate::clock::{Clock, SystemClock};
 use crate::errors::CoreError;
 
 /// Project-default user agent. Matches the rest of the iOS surface so
@@ -82,6 +83,7 @@ impl WebMetadata {
 /// request.
 pub struct WebMetadataStore {
     path: PathBuf,
+    clock: Arc<dyn Clock>,
     /// Cached entry by canonical URL. `last_attempt` is the wall-clock
     /// timestamp of the most recent fetch (success or failure) — used for
     /// TTL checks separately from the metadata's own `fetched_at`.
@@ -105,6 +107,10 @@ impl WebMetadataStore {
     /// Open a store rooted at `data_dir`. Loads the JSON file if it
     /// already exists; missing or unreadable file is treated as empty.
     pub fn open(data_dir: &std::path::Path) -> Self {
+        Self::open_with_clock(data_dir, Arc::new(SystemClock))
+    }
+
+    pub(crate) fn open_with_clock(data_dir: &std::path::Path, clock: Arc<dyn Clock>) -> Self {
         let path = data_dir.join("web_metadata.json");
         let state = match std::fs::read(&path) {
             Ok(bytes) => serde_json::from_slice::<CacheState>(&bytes).unwrap_or_default(),
@@ -112,6 +118,7 @@ impl WebMetadataStore {
         };
         Self {
             path,
+            clock,
             state: Mutex::new(state),
             inflight: Mutex::new(HashMap::new()),
         }
@@ -120,10 +127,14 @@ impl WebMetadataStore {
     /// Read a fresh cached entry. Returns `None` if absent or stale per the
     /// applicable TTL (positive or negative).
     pub fn get(&self, url: &str) -> Option<WebMetadata> {
-        let now = unix_now();
+        let now = self.clock.now_unix_seconds();
         let guard = self.state.lock();
         let entry = guard.entries.get(url)?;
-        let ttl = if entry.metadata.is_negative() { NEGATIVE_TTL } else { HIT_TTL };
+        let ttl = if entry.metadata.is_negative() {
+            NEGATIVE_TTL
+        } else {
+            HIT_TTL
+        };
         if now.saturating_sub(entry.last_attempt) > ttl.as_secs() {
             None
         } else {
@@ -138,7 +149,7 @@ impl WebMetadataStore {
         let url = metadata.url.clone();
         let entry = CacheEntry {
             metadata,
-            last_attempt: unix_now(),
+            last_attempt: self.clock.now_unix_seconds(),
         };
         let snapshot = {
             let mut guard = self.state.lock();
@@ -223,7 +234,7 @@ pub async fn get_or_fetch(
 
     match store.acquire(&canonical) {
         InflightSlot::Lead(lead) => {
-            let result = fetch_and_parse(&canonical).await;
+            let result = fetch_and_parse(&canonical, store.clock.now_unix_seconds()).await;
             match &result {
                 Ok(metadata) => store.put(metadata.clone()),
                 Err(_) => store.put(WebMetadata::empty(canonical.clone())),
@@ -241,7 +252,7 @@ pub async fn get_or_fetch(
     }
 }
 
-async fn fetch_and_parse(url: &str) -> Result<WebMetadata, CoreError> {
+async fn fetch_and_parse(url: &str, fetched_at: u64) -> Result<WebMetadata, CoreError> {
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(FETCH_TIMEOUT)
@@ -296,13 +307,19 @@ async fn fetch_and_parse(url: &str) -> Result<WebMetadata, CoreError> {
     }
 
     let html = String::from_utf8_lossy(&buffer);
-    let final_url = Url::parse(url).map_err(|e| CoreError::InvalidInput(format!("parse url: {e}")))?;
-    Ok(parse_metadata(&html, &final_url))
+    let final_url =
+        Url::parse(url).map_err(|e| CoreError::InvalidInput(format!("parse url: {e}")))?;
+    Ok(parse_metadata_at(&html, &final_url, fetched_at))
 }
 
 /// Parse a metadata block out of an HTML string. Extracted so unit tests
 /// can drive the parser with fixture HTML and a synthetic base URL.
-pub(crate) fn parse_metadata(html: &str, base: &Url) -> WebMetadata {
+#[cfg(test)]
+fn parse_metadata(html: &str, base: &Url) -> WebMetadata {
+    parse_metadata_at(html, base, 0)
+}
+
+fn parse_metadata_at(html: &str, base: &Url, fetched_at: u64) -> WebMetadata {
     let doc = Html::parse_document(html);
 
     // `<base href>` overrides the document URL for relative resolution.
@@ -384,7 +401,7 @@ pub(crate) fn parse_metadata(html: &str, base: &Url) -> WebMetadata {
         site_name,
         author,
         favicon,
-        fetched_at: unix_now(),
+        fetched_at,
     }
 }
 
@@ -443,19 +460,20 @@ fn pick_favicon(doc: &Html, base: &Url) -> String {
             .and_then(largest_size_dimension)
             .unwrap_or(0);
 
-        if rel.split_ascii_whitespace().any(|tok| {
-            tok == "apple-touch-icon" || tok == "apple-touch-icon-precomposed"
-        }) {
+        if rel
+            .split_ascii_whitespace()
+            .any(|tok| tok == "apple-touch-icon" || tok == "apple-touch-icon-precomposed")
+        {
             apple_candidates.push((sizes_score, absolute));
-        } else if rel.split_ascii_whitespace().any(|tok| tok == "icon" || tok == "shortcut") {
+        } else if rel
+            .split_ascii_whitespace()
+            .any(|tok| tok == "icon" || tok == "shortcut")
+        {
             icon_candidates.push(absolute);
         }
     }
 
-    if let Some((_, url)) = apple_candidates
-        .into_iter()
-        .max_by_key(|(score, _)| *score)
-    {
+    if let Some((_, url)) = apple_candidates.into_iter().max_by_key(|(score, _)| *score) {
         return url;
     }
     if let Some(url) = icon_candidates.into_iter().next() {
@@ -477,23 +495,42 @@ fn largest_size_dimension(value: &str) -> Option<u32> {
         }
         let mut parts = token.split(|c: char| c == 'x' || c == 'X');
         let w = parts.next()?.parse::<u32>().ok()?;
-        let h = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(w);
+        let h = parts
+            .next()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(w);
         let dim = w.max(h);
         best = Some(best.map(|b| b.max(dim)).unwrap_or(dim));
     }
     best
 }
 
-fn unix_now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug)]
+    struct FixedClock {
+        now: Mutex<u64>,
+    }
+
+    impl FixedClock {
+        fn new(now: u64) -> Self {
+            Self {
+                now: Mutex::new(now),
+            }
+        }
+
+        fn set(&self, now: u64) {
+            *self.now.lock() = now;
+        }
+    }
+
+    impl Clock for FixedClock {
+        fn now_unix_seconds(&self) -> u64 {
+            *self.now.lock()
+        }
+    }
 
     fn base_url() -> Url {
         Url::parse("https://example.com/article/post").unwrap()
@@ -619,10 +656,11 @@ mod tests {
     #[test]
     fn cache_round_trip() {
         let tmp = tempfile::tempdir().expect("tmp");
-        let store = WebMetadataStore::open(tmp.path());
+        let clock = Arc::new(FixedClock::new(1_000));
+        let store = WebMetadataStore::open_with_clock(tmp.path(), clock.clone());
         let mut metadata = WebMetadata::empty("https://example.com/post".into());
         metadata.title = "Post".into();
-        metadata.fetched_at = unix_now();
+        metadata.fetched_at = 1_000;
         store.put(metadata.clone());
 
         let read = store.get("https://example.com/post").expect("hit");
@@ -630,9 +668,23 @@ mod tests {
 
         // Reopen — should survive the round-trip through disk.
         drop(store);
-        let store2 = WebMetadataStore::open(tmp.path());
+        let store2 = WebMetadataStore::open_with_clock(tmp.path(), clock);
         let read2 = store2.get("https://example.com/post").expect("hit2");
         assert_eq!(read2.title, "Post");
+    }
+
+    #[test]
+    fn stale_entries_expire_by_injected_clock() {
+        let tmp = tempfile::tempdir().expect("tmp");
+        let clock = Arc::new(FixedClock::new(1_000));
+        let store = WebMetadataStore::open_with_clock(tmp.path(), clock.clone());
+        let mut metadata = WebMetadata::empty("https://example.com/post".into());
+        metadata.title = "Post".into();
+        metadata.fetched_at = 1_000;
+        store.put(metadata);
+
+        clock.set(1_000 + HIT_TTL.as_secs() + 1);
+        assert!(store.get("https://example.com/post").is_none());
     }
 
     #[test]

@@ -19,6 +19,7 @@ use nostr_sdk::prelude::*;
 use parking_lot::Mutex;
 use tokio::sync::OnceCell;
 
+use crate::clock::{Clock, SystemClock};
 use crate::errors::CoreError;
 
 /// How long we wait for a NIP-46 request / response turnaround.
@@ -40,6 +41,7 @@ pub struct BunkerSigner {
     user_pubkey: Arc<OnceCell<PublicKey>>,
     /// Optional secret from the original URI for the initial `connect`.
     secret: Arc<Mutex<Option<String>>>,
+    clock: Arc<dyn Clock>,
 }
 
 impl BunkerSigner {
@@ -47,14 +49,20 @@ impl BunkerSigner {
     /// the relay connection, sends `connect` + `get_public_key`, and returns a
     /// fully paired signer plus the resolved user pubkey.
     pub async fn pair(client: Client, uri_str: &str) -> Result<(Self, PublicKey), CoreError> {
+        Self::pair_with_clock(client, uri_str, Arc::new(SystemClock)).await
+    }
+
+    pub(crate) async fn pair_with_clock(
+        client: Client,
+        uri_str: &str,
+        clock: Arc<dyn Clock>,
+    ) -> Result<(Self, PublicKey), CoreError> {
         let uri = NostrConnectURI::parse(uri_str)
             .map_err(|e| CoreError::InvalidInput(format!("invalid NIP-46 URI: {e}")))?;
 
         let relays: Vec<RelayUrl> = uri.relays().to_vec();
         if relays.is_empty() {
-            return Err(CoreError::InvalidInput(
-                "NIP-46 URI missing relay".into(),
-            ));
+            return Err(CoreError::InvalidInput("NIP-46 URI missing relay".into()));
         }
 
         // `bunker://` URIs embed the remote signer pubkey directly. For
@@ -63,9 +71,7 @@ impl BunkerSigner {
         // not `pair`. Pasting a client URI and expecting pair to work is a
         // user error.
         let remote_signer_pubkey = *uri.remote_signer_public_key().ok_or_else(|| {
-            CoreError::InvalidInput(
-                "expected bunker:// URI with remote signer pubkey".into(),
-            )
+            CoreError::InvalidInput("expected bunker:// URI with remote signer pubkey".into())
         })?;
 
         let local_keys = Keys::generate();
@@ -83,6 +89,7 @@ impl BunkerSigner {
             remote_signer_pubkey,
             user_pubkey: Arc::new(OnceCell::new()),
             secret: Arc::new(Mutex::new(uri.secret().map(|s| s.to_string()))),
+            clock,
         };
 
         // Subscribe for responses scoped to our local pubkey. The sub stays
@@ -110,6 +117,16 @@ impl BunkerSigner {
         local_keys: Keys,
         expected_secret: Option<String>,
     ) -> Result<(Self, PublicKey), CoreError> {
+        Self::await_inbound_with_clock(client, local_keys, expected_secret, Arc::new(SystemClock))
+            .await
+    }
+
+    pub(crate) async fn await_inbound_with_clock(
+        client: Client,
+        local_keys: Keys,
+        expected_secret: Option<String>,
+        clock: Arc<dyn Clock>,
+    ) -> Result<(Self, PublicKey), CoreError> {
         let mut notifications = client.notifications();
 
         // `.since(now)` instead of `.limit(0)` so the relay replays anything
@@ -120,7 +137,7 @@ impl BunkerSigner {
         let filter = Filter::new()
             .kind(Kind::NostrConnect)
             .pubkey(local_keys.public_key())
-            .since(Timestamp::now());
+            .since(clock.now_nostr_timestamp());
 
         let sub_id = SubscriptionId::generate();
         client
@@ -128,82 +145,79 @@ impl BunkerSigner {
             .await
             .map_err(|e| CoreError::Relay(format!("subscribe nostrconnect: {e}")))?;
 
-        let deadline = tokio::time::Instant::now() + INBOUND_TIMEOUT;
+        tokio::time::timeout(INBOUND_TIMEOUT, async {
+            loop {
+                let notif = notifications
+                    .recv()
+                    .await
+                    .map_err(|e| CoreError::Signer(format!("notification channel: {e}")))?;
 
-        loop {
-            let remaining = deadline
-                .checked_duration_since(tokio::time::Instant::now())
-                .ok_or_else(|| CoreError::Signer("inbound NIP-46 pairing timed out".into()))?;
+                let RelayPoolNotification::Event { event, .. } = notif else {
+                    continue;
+                };
+                if event.kind != Kind::NostrConnect {
+                    continue;
+                }
 
-            let notif = tokio::time::timeout(remaining, notifications.recv())
-                .await
-                .map_err(|_| CoreError::Signer("inbound NIP-46 pairing timed out".into()))?
-                .map_err(|e| CoreError::Signer(format!("notification channel: {e}")))?;
+                let decrypted = match nip44::decrypt(
+                    local_keys.secret_key(),
+                    &event.pubkey,
+                    event.content.as_str(),
+                ) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let Ok(msg) = NostrConnectMessage::from_json(&decrypted) else {
+                    continue;
+                };
 
-            let RelayPoolNotification::Event { event, .. } = notif else {
-                continue;
-            };
-            if event.kind != Kind::NostrConnect {
-                continue;
+                // Per NIP-46 nostrconnect:// flow, the signer replies with a
+                // Response whose `result` echoes the secret we put in the URI
+                // (or "ack"). We do NOT receive a `connect` Request here — that's
+                // the bunker:// flow where the *client* initiates. Confirmed
+                // against Olas/NDKSwift `NDKBunkerSigner.handleResponse` and
+                // Primal's on-the-wire behavior (kind:24133 with
+                // `{"id":..,"result":"<secret>"}`).
+                let NostrConnectMessage::Response { result, error, .. } = msg else {
+                    continue;
+                };
+
+                if let Some(err) = error {
+                    return Err(CoreError::Signer(format!("signer rejected pairing: {err}")));
+                }
+
+                let result_str = result.unwrap_or_default();
+                let secret_matches = match &expected_secret {
+                    Some(expected) => result_str == *expected || result_str == "ack",
+                    None => true,
+                };
+                if !secret_matches {
+                    return Err(CoreError::Signer(format!(
+                        "remote signer presented wrong secret: result={result_str}"
+                    )));
+                }
+
+                // The signer's response IS the ack — no return event to send.
+                // The signer pubkey is the event author. Resolve user pubkey via
+                // get_public_key on the same subscription (kept open below).
+                let signer = Self {
+                    client: client.clone(),
+                    local_keys: local_keys.clone(),
+                    remote_signer_pubkey: event.pubkey,
+                    user_pubkey: Arc::new(OnceCell::new()),
+                    secret: Arc::new(Mutex::new(None)),
+                    clock: clock.clone(),
+                };
+                let user = signer.rpc_get_public_key().await?;
+                let _ = signer.user_pubkey.set(user);
+
+                // Keep the subscription open — it's the same sub all future
+                // sign_event responses will arrive on.
+                return Ok((signer, user));
             }
-
-            let decrypted = match nip44::decrypt(
-                local_keys.secret_key(),
-                &event.pubkey,
-                event.content.as_str(),
-            ) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let Ok(msg) = NostrConnectMessage::from_json(&decrypted) else {
-                continue;
-            };
-
-            // Per NIP-46 nostrconnect:// flow, the signer replies with a
-            // Response whose `result` echoes the secret we put in the URI
-            // (or "ack"). We do NOT receive a `connect` Request here — that's
-            // the bunker:// flow where the *client* initiates. Confirmed
-            // against Olas/NDKSwift `NDKBunkerSigner.handleResponse` and
-            // Primal's on-the-wire behavior (kind:24133 with
-            // `{"id":..,"result":"<secret>"}`).
-            let NostrConnectMessage::Response { result, error, .. } = msg else {
-                continue;
-            };
-
-            if let Some(err) = error {
-                return Err(CoreError::Signer(format!(
-                    "signer rejected pairing: {err}"
-                )));
-            }
-
-            let result_str = result.unwrap_or_default();
-            let secret_matches = match &expected_secret {
-                Some(expected) => result_str == *expected || result_str == "ack",
-                None => true,
-            };
-            if !secret_matches {
-                return Err(CoreError::Signer(format!(
-                    "remote signer presented wrong secret: result={result_str}"
-                )));
-            }
-
-            // The signer's response IS the ack — no return event to send.
-            // The signer pubkey is the event author. Resolve user pubkey via
-            // get_public_key on the same subscription (kept open below).
-            let signer = Self {
-                client: client.clone(),
-                local_keys: local_keys.clone(),
-                remote_signer_pubkey: event.pubkey,
-                user_pubkey: Arc::new(OnceCell::new()),
-                secret: Arc::new(Mutex::new(None)),
-            };
-            let user = signer.rpc_get_public_key().await?;
-            let _ = signer.user_pubkey.set(user);
-
-            // Keep the subscription open — it's the same sub all future
-            // sign_event responses will arrive on.
-            return Ok((signer, user));
-        }
+        })
+        .await
+        .map_err(|_| CoreError::Signer("inbound NIP-46 pairing timed out".into()))?
     }
 
     /// Cached user pubkey resolved at pair-time.
@@ -218,7 +232,7 @@ impl BunkerSigner {
         let filter = Filter::new()
             .kind(Kind::NostrConnect)
             .pubkey(self.local_keys.public_key())
-            .since(Timestamp::now());
+            .since(self.clock.now_nostr_timestamp());
         let sub_id = SubscriptionId::generate();
         self.client
             .subscribe_with_id(sub_id, filter, None)
@@ -244,22 +258,15 @@ impl BunkerSigner {
             .map_err(|e| CoreError::Signer(format!("get_public_key failed: {e}")))
     }
 
-    async fn send_request(
-        &self,
-        req: NostrConnectRequest,
-    ) -> Result<ResponseResult, CoreError> {
+    async fn send_request(&self, req: NostrConnectRequest) -> Result<ResponseResult, CoreError> {
         let msg = NostrConnectMessage::request(&req);
         let req_id = msg.id().to_string();
         let method = req.method();
 
-        let event = EventBuilder::nostr_connect(
-            &self.local_keys,
-            self.remote_signer_pubkey,
-            msg,
-        )
-        .map_err(|e| CoreError::Signer(format!("build nip46 event: {e}")))?
-        .sign_with_keys(&self.local_keys)
-        .map_err(|e| CoreError::Signer(format!("sign nip46 event: {e}")))?;
+        let event = EventBuilder::nostr_connect(&self.local_keys, self.remote_signer_pubkey, msg)
+            .map_err(|e| CoreError::Signer(format!("build nip46 event: {e}")))?
+            .sign_with_keys(&self.local_keys)
+            .map_err(|e| CoreError::Signer(format!("sign nip46 event: {e}")))?;
 
         let mut notifications = self.client.notifications();
 
@@ -268,58 +275,58 @@ impl BunkerSigner {
             .await
             .map_err(|e| CoreError::Relay(format!("send nip46 request: {e}")))?;
 
-        let deadline = tokio::time::Instant::now() + REQUEST_TIMEOUT;
-        loop {
-            let remaining = deadline
-                .checked_duration_since(tokio::time::Instant::now())
-                .ok_or_else(|| CoreError::Signer("nip46 request timed out".into()))?;
-            let notif = tokio::time::timeout(remaining, notifications.recv())
-                .await
-                .map_err(|_| CoreError::Signer("nip46 request timed out".into()))?
-                .map_err(|e| CoreError::Signer(format!("notification: {e}")))?;
+        tokio::time::timeout(REQUEST_TIMEOUT, async {
+            loop {
+                let notif = notifications
+                    .recv()
+                    .await
+                    .map_err(|e| CoreError::Signer(format!("notification: {e}")))?;
 
-            let RelayPoolNotification::Event { event, .. } = notif else {
-                continue;
-            };
-            if event.kind != Kind::NostrConnect || event.pubkey != self.remote_signer_pubkey {
-                continue;
-            }
-
-            let Ok(plaintext) = nip44::decrypt(
-                self.local_keys.secret_key(),
-                &event.pubkey,
-                event.content.as_str(),
-            ) else {
-                continue;
-            };
-            let Ok(msg) = NostrConnectMessage::from_json(&plaintext) else {
-                continue;
-            };
-
-            if msg.id() != req_id || !msg.is_response() {
-                continue;
-            }
-
-            let response = msg
-                .to_response(method)
-                .map_err(|e| CoreError::Signer(format!("parse nip46 response: {e}")))?;
-            if let Some(err) = response.error {
-                if response.result.as_ref().is_some_and(|r| r.is_auth_url()) {
-                    // `auth_url` flows aren't plumbed through — signer wants
-                    // the user to open a browser to approve. For our iOS
-                    // usage (Primal in-app approval) this shouldn't happen;
-                    // surface it as a clear error so the user knows to
-                    // approve in the signer app.
-                    return Err(CoreError::Signer(format!(
-                        "remote signer requires approval at {err}"
-                    )));
+                let RelayPoolNotification::Event { event, .. } = notif else {
+                    continue;
+                };
+                if event.kind != Kind::NostrConnect || event.pubkey != self.remote_signer_pubkey {
+                    continue;
                 }
-                return Err(CoreError::Signer(err));
+
+                let Ok(plaintext) = nip44::decrypt(
+                    self.local_keys.secret_key(),
+                    &event.pubkey,
+                    event.content.as_str(),
+                ) else {
+                    continue;
+                };
+                let Ok(msg) = NostrConnectMessage::from_json(&plaintext) else {
+                    continue;
+                };
+
+                if msg.id() != req_id || !msg.is_response() {
+                    continue;
+                }
+
+                let response = msg
+                    .to_response(method)
+                    .map_err(|e| CoreError::Signer(format!("parse nip46 response: {e}")))?;
+                if let Some(err) = response.error {
+                    if response.result.as_ref().is_some_and(|r| r.is_auth_url()) {
+                        // `auth_url` flows aren't plumbed through — signer wants
+                        // the user to open a browser to approve. For our iOS
+                        // usage (Primal in-app approval) this shouldn't happen;
+                        // surface it as a clear error so the user knows to
+                        // approve in the signer app.
+                        return Err(CoreError::Signer(format!(
+                            "remote signer requires approval at {err}"
+                        )));
+                    }
+                    return Err(CoreError::Signer(err));
+                }
+                return response
+                    .result
+                    .ok_or_else(|| CoreError::Signer("empty nip46 response".into()));
             }
-            return response
-                .result
-                .ok_or_else(|| CoreError::Signer("empty nip46 response".into()));
-        }
+        })
+        .await
+        .map_err(|_| CoreError::Signer("nip46 request timed out".into()))?
     }
 
     async fn sign_unsigned(&self, unsigned: UnsignedEvent) -> Result<Event, CoreError> {
@@ -330,11 +337,7 @@ impl BunkerSigner {
             .map_err(|e| CoreError::Signer(format!("sign_event: {e}")))
     }
 
-    async fn nip04_encrypt(
-        &self,
-        peer: PublicKey,
-        text: String,
-    ) -> Result<String, CoreError> {
+    async fn nip04_encrypt(&self, peer: PublicKey, text: String) -> Result<String, CoreError> {
         let res = self
             .send_request(NostrConnectRequest::Nip04Encrypt {
                 public_key: peer,
@@ -360,11 +363,7 @@ impl BunkerSigner {
             .map_err(|e| CoreError::Signer(format!("nip04_decrypt: {e}")))
     }
 
-    async fn nip44_encrypt_req(
-        &self,
-        peer: PublicKey,
-        text: String,
-    ) -> Result<String, CoreError> {
+    async fn nip44_encrypt_req(&self, peer: PublicKey, text: String) -> Result<String, CoreError> {
         let res = self
             .send_request(NostrConnectRequest::Nip44Encrypt {
                 public_key: peer,

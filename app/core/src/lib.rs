@@ -7,6 +7,7 @@ pub mod blossom;
 pub mod bookmarks;
 pub mod lists;
 pub mod chat;
+pub mod clock;
 pub mod client;
 pub mod comments;
 pub mod curation;

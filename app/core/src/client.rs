@@ -12,6 +12,7 @@ use parking_lot::RwLock;
 
 use crate::articles;
 use crate::blossom;
+use crate::clock::{Clock, SystemClock};
 use crate::curation;
 use crate::discovery;
 use crate::errors::CoreError;
@@ -71,6 +72,8 @@ pub struct HighlighterCore {
     network_preferences: Arc<network_preferences::NetworkPreferencesStore>,
     /// Rust-owned durable podcast playback position.
     podcast_position: Arc<podcast_position::PodcastPositionStore>,
+    /// Kernel-owned clock shared by feature modules that need timestamps.
+    clock: Arc<dyn Clock>,
 }
 
 struct Inner {
@@ -295,11 +298,17 @@ impl HighlighterCore {
         let inner = self.inner.clone();
         let runtime = self.runtime.clone();
         let callback_slot = self.callback_slot.clone();
+        let clock = self.clock.clone();
         self.runtime
             .runtime_handle()
             .spawn(async move {
-                let result =
-                    BunkerSigner::await_inbound(client.clone(), local_keys, Some(secret)).await;
+                let result = BunkerSigner::await_inbound_with_clock(
+                    client.clone(),
+                    local_keys,
+                    Some(secret),
+                    clock,
+                )
+                .await;
                 match result {
                     Ok((signer, user_pubkey)) => {
                         let user = match current_user_from_pubkey(&user_pubkey) {
@@ -350,7 +359,8 @@ impl HighlighterCore {
         }
 
         let client = self.runtime.client().clone();
-        let (signer, user_pubkey) = BunkerSigner::pair(client, &normalized).await?;
+        let (signer, user_pubkey) =
+            BunkerSigner::pair_with_clock(client, &normalized, self.clock.clone()).await?;
         let user = current_user_from_pubkey(&user_pubkey)?;
 
         let signer = Arc::new(signer);
@@ -1118,9 +1128,20 @@ impl HighlighterCore {
         &self,
         title: String,
     ) -> Result<crate::models::BookmarkSetRecord, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).ok_or(CoreError::NotAuthenticated)?;
-        crate::lists::create_curation_set(&self.runtime, &user_hex, title.trim()).await
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .ok_or(CoreError::NotAuthenticated)?;
+        crate::lists::create_curation_set(
+            &self.runtime,
+            &user_hex,
+            title.trim(),
+            self.clock.as_ref(),
+        )
+        .await
     }
 
     /// Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
@@ -1958,6 +1979,11 @@ impl HighlighterCore {
     }
 
     fn assemble(runtime: Arc<NostrRuntime>) -> Arc<Self> {
+        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+        Self::assemble_with_clock(runtime, clock)
+    }
+
+    fn assemble_with_clock(runtime: Arc<NostrRuntime>, clock: Arc<dyn Clock>) -> Arc<Self> {
         let callback_slot: Arc<RwLock<Option<Arc<dyn EventCallback>>>> =
             Arc::new(RwLock::new(None));
         let subscriptions = Arc::new(SubscriptionRegistry::new(callback_slot.clone()));
@@ -1966,7 +1992,10 @@ impl HighlighterCore {
         // map regardless, and fires deltas once Swift installs a callback
         // via `set_event_callback`.
         runtime.spawn_diagnostics_poller(callback_slot.clone());
-        let web_metadata = Arc::new(WebMetadataStore::open(runtime.data_dir()));
+        let web_metadata = Arc::new(WebMetadataStore::open_with_clock(
+            runtime.data_dir(),
+            clock.clone(),
+        ));
         let isbn_previews = Arc::new(isbn_lookup::IsbnPreviewCache::new(runtime.data_dir()));
         let recent_searches =
             Arc::new(recent_searches::RecentSearchesStore::new(runtime.data_dir()));
@@ -1996,6 +2025,7 @@ impl HighlighterCore {
             onboarding,
             network_preferences,
             podcast_position,
+            clock,
         })
     }
 
