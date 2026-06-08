@@ -1286,6 +1286,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func initDefaultBlossomServers() async  -> MutationOutcome
 
     /**
+     * Project an optimistically published comment into the current bounded
+     * thread state. Rust owns comment duplicate suppression and tree rebuild.
+     */
+    func insertCommentAndBuildThread(records: [CommentRecord], comment: CommentRecord, rootTagValue: String)  -> CommentThreadProjection
+
+    /**
      * Project an optimistically published highlight into the current visible
      * article highlight list. Rust owns duplicate suppression and ordering.
      */
@@ -3578,6 +3584,20 @@ open func initDefaultBlossomServers()async  -> MutationOutcome  {
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Project an optimistically published comment into the current bounded
+     * thread state. Rust owns comment duplicate suppression and tree rebuild.
+     */
+open func insertCommentAndBuildThread(records: [CommentRecord], comment: CommentRecord, rootTagValue: String) -> CommentThreadProjection  {
+    return try!  FfiConverterTypeCommentThreadProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_insert_comment_and_build_thread(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeCommentRecord.lower(records),
+        FfiConverterTypeCommentRecord_lower(comment),
+        FfiConverterString.lower(rootTagValue),$0
+    )
+})
 }
 
     /**
@@ -8423,6 +8443,80 @@ public func FfiConverterTypeCommentThreadNode_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeCommentThreadNode_lower(_ value: CommentThreadNode) -> RustBuffer {
     return FfiConverterTypeCommentThreadNode.lower(value)
+}
+
+
+/**
+ * Bounded view projection for a comment surface. Rust owns flat-record
+ * duplicate suppression plus the nested NIP-22 thread rebuild.
+ */
+public struct CommentThreadProjection {
+    public var records: [CommentRecord]
+    public var tree: [CommentThreadNode]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(records: [CommentRecord], tree: [CommentThreadNode]) {
+        self.records = records
+        self.tree = tree
+    }
+}
+
+#if compiler(>=6)
+extension CommentThreadProjection: Sendable {}
+#endif
+
+
+extension CommentThreadProjection: Equatable, Hashable {
+    public static func ==(lhs: CommentThreadProjection, rhs: CommentThreadProjection) -> Bool {
+        if lhs.records != rhs.records {
+            return false
+        }
+        if lhs.tree != rhs.tree {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(records)
+        hasher.combine(tree)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentThreadProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadProjection {
+        return
+            try CommentThreadProjection(
+                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf),
+                tree: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentThreadProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommentRecord.write(value.records, into: &buf)
+        FfiConverterSequenceTypeCommentThreadNode.write(value.tree, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadProjection_lift(_ buf: RustBuffer) throws -> CommentThreadProjection {
+    return try FfiConverterTypeCommentThreadProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadProjection_lower(_ value: CommentThreadProjection) -> RustBuffer {
+    return FfiConverterTypeCommentThreadProjection.lower(value)
 }
 
 
@@ -19001,6 +19095,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 36336) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_insert_comment_and_build_thread() != 9948) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_insert_unique_highlight_front() != 61304) {

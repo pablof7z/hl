@@ -594,6 +594,14 @@ pub struct CommentThreadNode {
     pub children: Vec<CommentThreadNode>,
 }
 
+/// Bounded view projection for a comment surface. Rust owns flat-record
+/// duplicate suppression plus the nested NIP-22 thread rebuild.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentThreadProjection {
+    pub records: Vec<CommentRecord>,
+    pub tree: Vec<CommentThreadNode>,
+}
+
 /// Rust-owned NIP-22 root scope projection. Native shells keep this record
 /// opaque and pass it back for comment reads/writes.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]

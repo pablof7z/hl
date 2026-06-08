@@ -136,14 +136,13 @@ final class CommentsStore {
         )
         guard outcome.error.isEmpty, let record = outcome.value else { return outcome }
 
-        // Optimistic insert
-        if !records.contains(where: { $0.eventId == record.eventId }) {
-            records.append(record)
-            tree = core.buildCommentThread(
-                records: records,
-                rootTagValue: scope.rootTagValue
-            )
-        }
+        let projection = core.insertCommentAndBuildThread(
+            records: records,
+            comment: record,
+            rootTagValue: scope.rootTagValue
+        )
+        records = projection.records
+        tree = projection.tree
         setDraft("", forParent: parentEventId)
         return outcome
     }

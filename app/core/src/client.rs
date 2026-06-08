@@ -31,21 +31,22 @@ use crate::models::{
     BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome,
     ChatMessageOutcome, ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord,
     CommentReferenceBucket, CommentScope, CommentScopeOutcome, CommentThreadNode,
-    CommunityListOutcome, CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome,
-    CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
-    FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft,
-    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightReferenceBucket,
-    HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem, HydratedHighlight,
-    HydratedHighlightListOutcome, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
-    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
-    OnboardingInterest, OnboardingInterestSelection, OptionalStringOutcome, PictureDraft,
-    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
-    ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
-    RelayDiagnosticListOutcome, RoomLane, RoomRecommendation, RoomRecommendationListOutcome,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    CommentThreadProjection, CommunityListOutcome, CommunitySummary, CurationMenuItem,
+    CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
+    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
+    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
+    GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
+    HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind,
+    HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction,
+    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
+    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestSelection, OptionalStringOutcome, PictureDraft, PictureOutcome,
+    PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
+    ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome,
+    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
+    RoomLane, RoomRecommendation, RoomRecommendationListOutcome, StringListOutcome, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -1890,6 +1891,17 @@ impl HighlighterCore {
         root_tag_value: String,
     ) -> Vec<CommentThreadNode> {
         comments::build_thread(&records, &root_tag_value)
+    }
+
+    /// Project an optimistically published comment into the current bounded
+    /// thread state. Rust owns comment duplicate suppression and tree rebuild.
+    pub fn insert_comment_and_build_thread(
+        &self,
+        records: Vec<CommentRecord>,
+        comment: CommentRecord,
+        root_tag_value: String,
+    ) -> CommentThreadProjection {
+        comments::insert_comment_and_build_thread(&records, &comment, root_tag_value.trim())
     }
 
     /// Upsert a live room artifact delta into a bounded screen collection.

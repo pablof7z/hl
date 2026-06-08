@@ -9,7 +9,9 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::{ArtifactPreview, CommentRecord, CommentScope, CommentThreadNode};
+use crate::models::{
+    ArtifactPreview, CommentRecord, CommentScope, CommentThreadNode, CommentThreadProjection,
+};
 use crate::nostr_runtime::NostrRuntime;
 
 /// kind:1111 — NIP-22 comment.
@@ -221,6 +223,27 @@ pub fn build_thread(records: &[CommentRecord], root_tag_value: &str) -> Vec<Comm
         .into_iter()
         .map(|record| build_node(record, &by_parent, &mut path))
         .collect()
+}
+
+/// Append `comment` to the bounded visible record set if it is not already
+/// present, then rebuild the thread tree from the resulting records.
+pub fn insert_comment_and_build_thread(
+    records: &[CommentRecord],
+    comment: &CommentRecord,
+    root_tag_value: &str,
+) -> CommentThreadProjection {
+    let mut next_records = records.to_vec();
+    if !next_records
+        .iter()
+        .any(|record| record.event_id == comment.event_id)
+    {
+        next_records.push(comment.clone());
+    }
+    let tree = build_thread(&next_records, root_tag_value);
+    CommentThreadProjection {
+        records: next_records,
+        tree,
+    }
 }
 
 fn build_node(
@@ -559,6 +582,41 @@ mod tests {
 
         assert_eq!(tree.len(), 1);
         assert!(tree[0].children.is_empty());
+    }
+
+    #[test]
+    fn insert_comment_and_build_thread_appends_unique_record_and_rebuilds_tree() {
+        let root = "root";
+        let existing = vec![comment("top", root, Some(1))];
+        let reply = comment("reply", "top", Some(2));
+
+        let projection = insert_comment_and_build_thread(&existing, &reply, root);
+
+        assert_eq!(
+            projection
+                .records
+                .iter()
+                .map(|record| record.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["top", "reply"]
+        );
+        assert_eq!(projection.tree.len(), 1);
+        assert_eq!(projection.tree[0].record.event_id, "top");
+        assert_eq!(projection.tree[0].children[0].record.event_id, "reply");
+    }
+
+    #[test]
+    fn insert_comment_and_build_thread_preserves_records_for_duplicate_event_id() {
+        let root = "root";
+        let existing = vec![comment("top", root, Some(1))];
+        let duplicate = comment("top", root, Some(2));
+
+        let projection = insert_comment_and_build_thread(&existing, &duplicate, root);
+
+        assert_eq!(projection.records.len(), 1);
+        assert_eq!(projection.records[0].created_at, Some(1));
+        assert_eq!(projection.tree.len(), 1);
+        assert_eq!(projection.tree[0].record.event_id, "top");
     }
 
     fn comment(event_id: &str, parent_tag_value: &str, created_at: Option<u64>) -> CommentRecord {

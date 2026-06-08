@@ -650,6 +650,18 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func insertCommentAndBuildThread(
+        records: [CommentRecord],
+        comment: CommentRecord,
+        rootTagValue: String
+    ) -> CommentThreadProjection {
+        core.insertCommentAndBuildThread(
+            records: records,
+            comment: comment,
+            rootTagValue: rootTagValue
+        )
+    }
+
     nonisolated func upsertRoomArtifact(
         artifacts: [ArtifactRecord],
         artifact: ArtifactRecord
