@@ -123,9 +123,6 @@ struct ImportRelaysSheet: View {
         if outcome.error.isEmpty {
             fetched = outcome.values
             selected = Set(outcome.values.map { $0.url })
-            if outcome.values.isEmpty {
-                errorText = "No kind:10002 found for this user — they may not have published a relay list yet."
-            }
         } else {
             errorText = outcome.error
         }

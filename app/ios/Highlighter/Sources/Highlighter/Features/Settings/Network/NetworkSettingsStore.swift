@@ -217,7 +217,7 @@ final class NetworkSettingsStore {
     }
 
     func joinedRoomNames(hostedOnRelay url: String) async -> [String] {
-        let outcome = await core.getJoinedRoomNamesForRelay(relayUrl: url)
+        let outcome = await core.joinedRoomNames(hostedOnRelay: url)
         if outcome.error.isEmpty {
             return outcome.values
         }

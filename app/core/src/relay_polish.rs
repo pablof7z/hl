@@ -133,34 +133,48 @@ pub async fn import_from_npub(
         .await
         .map_err(|e| CoreError::Relay(format!("fetch kind:10002 for import: {e}")))?;
 
-    let mut rows: Vec<RelayConfig> = Vec::new();
-    // Events is sorted newest first — first one wins per replaceable rules.
-    if let Some(event) = events.first() {
-        for tag in event.tags.iter() {
+    let Some(event) = events.first() else {
+        return Err(CoreError::Other(
+            "No kind:10002 found for this user — they may not have published a relay list yet."
+                .into(),
+        ));
+    };
+    let rows = relay_rows_from_kind10002(event);
+    if rows.is_empty() {
+        return Err(CoreError::Other(
+            "This user's kind:10002 did not contain any relay URLs.".into(),
+        ));
+    }
+    Ok(rows)
+}
+
+fn relay_rows_from_kind10002(event: &Event) -> Vec<RelayConfig> {
+    event
+        .tags
+        .iter()
+        .filter_map(|tag| {
             let slice = tag.as_slice();
             if slice.first().map(String::as_str) != Some("r") {
-                continue;
+                return None;
             }
-            let Some(url) = slice.get(1) else { continue };
-            let url = url.trim().to_string();
+            let url = slice.get(1)?.trim().to_string();
             if url.is_empty() {
-                continue;
+                return None;
             }
             let (read, write) = match slice.get(2).map(String::as_str) {
                 Some("read") => (true, false),
                 Some("write") => (false, true),
                 _ => (true, true),
             };
-            rows.push(RelayConfig {
+            Some(RelayConfig {
                 url,
                 read,
                 write,
                 rooms: false,
                 indexer: false,
-            });
-        }
-    }
-    Ok(rows)
+            })
+        })
+        .collect()
 }
 
 /// Best-effort disk + event-count snapshot. `disk_bytes` sums file sizes in
@@ -221,5 +235,32 @@ mod tests {
             Some("http://relay.example".to_string())
         );
         assert_eq!(http_url_for_nip11("https://relay.example"), None);
+    }
+
+    #[test]
+    fn relay_rows_from_kind10002_skips_empty_urls() {
+        let keys = Keys::generate();
+        let event = EventBuilder::new(Kind::Custom(KIND_RELAY_LIST), "")
+            .tags(vec![
+                Tag::parse(["r", "  "]).expect("empty relay tag"),
+                Tag::parse(["r", " wss://read.example ", "read"]).expect("read relay tag"),
+                Tag::parse(["r", "wss://write.example", "write"]).expect("write relay tag"),
+                Tag::parse(["r", "wss://both.example"]).expect("both relay tag"),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign relay list");
+
+        let rows = relay_rows_from_kind10002(&event);
+
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].url, "wss://read.example");
+        assert!(rows[0].read);
+        assert!(!rows[0].write);
+        assert_eq!(rows[1].url, "wss://write.example");
+        assert!(!rows[1].read);
+        assert!(rows[1].write);
+        assert_eq!(rows[2].url, "wss://both.example");
+        assert!(rows[2].read);
+        assert!(rows[2].write);
     }
 }

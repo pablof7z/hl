@@ -1351,7 +1351,7 @@ impl HighlighterCore {
         })())
     }
 
-    pub async fn get_joined_room_names_for_relay(&self, relay_url: String) -> StringListOutcome {
+    pub async fn get_joined_room_names_for_relay(&self, url: String) -> StringListOutcome {
         string_list_outcome((|| {
             let Some(user) = self.inner.read().session.current_user() else {
                 return Err(CoreError::NotAuthenticated);
@@ -1359,7 +1359,7 @@ impl HighlighterCore {
             groups::query_joined_room_names_for_relay_from_ndb(
                 self.runtime.ndb(),
                 &user.pubkey,
-                &relay_url,
+                &url,
             )
         })())
     }

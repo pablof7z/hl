@@ -90,8 +90,8 @@ actor SafeHighlighterCore {
         await core.getJoinedCommunities()
     }
 
-    func getJoinedRoomNamesForRelay(relayUrl: String) async -> StringListOutcome {
-        await core.getJoinedRoomNamesForRelay(relayUrl: relayUrl)
+    func joinedRoomNames(hostedOnRelay url: String) async -> StringListOutcome {
+        await core.getJoinedRoomNamesForRelay(url: url)
     }
 
     func getArtifacts(groupId: String, limit: UInt32 = 32) async -> ArtifactListOutcome {
