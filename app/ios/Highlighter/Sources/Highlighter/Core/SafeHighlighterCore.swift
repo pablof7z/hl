@@ -385,6 +385,26 @@ actor SafeHighlighterCore {
         await core.getProjectFirstAgentPubkey(coordinate: coordinate)
     }
 
+    nonisolated func optimisticallyInsertFeedbackRootThread(
+        threads: [FeedbackThreadRecord],
+        rootEvent: FeedbackEventRecord
+    ) -> [FeedbackThreadRecord] {
+        core.optimisticallyInsertFeedbackRootThread(
+            threads: threads,
+            rootEvent: rootEvent
+        )
+    }
+
+    nonisolated func upsertFeedbackThreadEvent(
+        events: [FeedbackEventRecord],
+        event: FeedbackEventRecord
+    ) -> [FeedbackEventRecord] {
+        core.upsertFeedbackThreadEvent(
+            events: events,
+            event: event
+        )
+    }
+
     func publishFeedbackNote(
         coordinate: String,
         agentPubkey: String?,

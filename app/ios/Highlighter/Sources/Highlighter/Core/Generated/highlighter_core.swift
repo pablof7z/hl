@@ -1325,6 +1325,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func ocrAltText(markdown: String)  -> String
 
+    /**
+     * Optimistically insert a newly-published feedback root into the thread
+     * list. Rust owns root validation, preview text, dedupe, and ordering.
+     */
+    func optimisticallyInsertFeedbackRootThread(threads: [FeedbackThreadRecord], rootEvent: FeedbackEventRecord)  -> [FeedbackThreadRecord]
+
     func pairBunker(uri: String) async  -> CurrentUserOutcome
 
     func prepareWhatsNew() async  -> WhatsNewEntriesOutcome
@@ -1714,6 +1720,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * replacement identity and oldest-first ordering.
      */
     func upsertChatMessage(messages: [ChatMessageRecord], message: ChatMessageRecord)  -> [ChatMessageRecord]
+
+    /**
+     * Upsert a streamed feedback thread event into the open thread list.
+     * Rust owns replacement identity and oldest-first ordering.
+     */
+    func upsertFeedbackThreadEvent(events: [FeedbackEventRecord], event: FeedbackEventRecord)  -> [FeedbackEventRecord]
 
     /**
      * Upsert a raw highlight into a per-reference bucket. Rust owns
@@ -3733,6 +3745,19 @@ open func ocrAltText(markdown: String) -> String  {
 })
 }
 
+    /**
+     * Optimistically insert a newly-published feedback root into the thread
+     * list. Rust owns root validation, preview text, dedupe, and ordering.
+     */
+open func optimisticallyInsertFeedbackRootThread(threads: [FeedbackThreadRecord], rootEvent: FeedbackEventRecord) -> [FeedbackThreadRecord]  {
+    return try!  FfiConverterSequenceTypeFeedbackThreadRecord.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_optimistically_insert_feedback_root_thread(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeFeedbackThreadRecord.lower(threads),
+        FfiConverterTypeFeedbackEventRecord_lower(rootEvent),$0
+    )
+})
+}
+
 open func pairBunker(uri: String)async  -> CurrentUserOutcome  {
     return
         try!  await uniffiRustCallAsync(
@@ -5117,6 +5142,19 @@ open func upsertChatMessage(messages: [ChatMessageRecord], message: ChatMessageR
     uniffi_highlighter_core_fn_method_highlightercore_upsert_chat_message(self.uniffiClonePointer(),
         FfiConverterSequenceTypeChatMessageRecord.lower(messages),
         FfiConverterTypeChatMessageRecord_lower(message),$0
+    )
+})
+}
+
+    /**
+     * Upsert a streamed feedback thread event into the open thread list.
+     * Rust owns replacement identity and oldest-first ordering.
+     */
+open func upsertFeedbackThreadEvent(events: [FeedbackEventRecord], event: FeedbackEventRecord) -> [FeedbackEventRecord]  {
+    return try!  FfiConverterSequenceTypeFeedbackEventRecord.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_upsert_feedback_thread_event(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeFeedbackEventRecord.lower(events),
+        FfiConverterTypeFeedbackEventRecord_lower(event),$0
     )
 })
 }
@@ -18795,6 +18833,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_ocr_alt_text() != 9116) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_optimistically_insert_feedback_root_thread() != 22099) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 14588) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19006,6 +19047,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_chat_message() != 4502) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_feedback_thread_event() != 41212) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_highlight_reference_bucket() != 35855) {

@@ -308,6 +308,60 @@ pub async fn ensure_feedback_relay(client: &Client) {
     }
 }
 
+/// Insert a freshly-published root event into a thread list before the relay
+/// echo is indexed. Rust owns the root-only guard, preview policy, dedupe, and
+/// newest-activity ordering.
+pub fn optimistically_insert_root_thread(
+    threads: &[FeedbackThreadRecord],
+    root_event: &FeedbackEventRecord,
+) -> Vec<FeedbackThreadRecord> {
+    let mut out = threads.to_vec();
+    if root_event.root_event_id != root_event.event_id {
+        out.sort_by(|a, b| b.last_activity_at.cmp(&a.last_activity_at));
+        return out;
+    }
+    if !out
+        .iter()
+        .any(|thread| thread.root_event_id == root_event.event_id)
+    {
+        out.push(FeedbackThreadRecord {
+            root_event_id: root_event.event_id.clone(),
+            author_pubkey: root_event.author_pubkey.clone(),
+            created_at: root_event.created_at,
+            last_activity_at: root_event.created_at,
+            title: None,
+            summary: None,
+            status_label: None,
+            preview: trim_preview(&root_event.content),
+        });
+    }
+    out.sort_by(|a, b| b.last_activity_at.cmp(&a.last_activity_at));
+    out
+}
+
+/// Upsert a streamed feedback-thread event into a bounded view snapshot.
+/// Rust owns replacement identity and oldest-first chat ordering.
+pub fn upsert_thread_event(
+    events: &[FeedbackEventRecord],
+    event: &FeedbackEventRecord,
+) -> Vec<FeedbackEventRecord> {
+    let mut out = Vec::with_capacity(events.len() + 1);
+    let mut replaced = false;
+    for existing in events {
+        if existing.event_id == event.event_id {
+            out.push(event.clone());
+            replaced = true;
+        } else {
+            out.push(existing.clone());
+        }
+    }
+    if !replaced {
+        out.push(event.clone());
+    }
+    out.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    out
+}
+
 // --- helpers ---------------------------------------------------------------
 
 fn record_from_root(root: &Event, latest_meta: Option<&Event>) -> FeedbackThreadRecord {
@@ -701,6 +755,59 @@ mod tests {
         assert!(out.ends_with('…'));
     }
 
+    #[test]
+    fn optimistically_insert_root_thread_dedupes_previews_and_sorts() {
+        let older = feedback_thread("older", 10);
+        let root = feedback_event("new", "new", 30, "hello   world");
+
+        let out = optimistically_insert_root_thread(&[older], &root);
+
+        assert_eq!(
+            out.iter()
+                .map(|thread| thread.root_event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["new", "older"]
+        );
+        assert_eq!(out[0].preview, "hello world");
+
+        let duplicate = optimistically_insert_root_thread(&out, &root);
+        assert_eq!(
+            duplicate
+                .iter()
+                .filter(|thread| thread.root_event_id == "new")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn optimistically_insert_root_thread_ignores_replies() {
+        let older = feedback_thread("older", 10);
+        let reply = feedback_event("reply", "root", 30, "reply");
+
+        let out = optimistically_insert_root_thread(&[older], &reply);
+
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].root_event_id, "older");
+    }
+
+    #[test]
+    fn upsert_thread_event_replaces_and_orders_oldest_first() {
+        let older = feedback_event("older", "root", 10, "older");
+        let newer = feedback_event("newer", "root", 30, "newer");
+        let replacement = feedback_event("newer", "root", 5, "replacement");
+
+        let out = upsert_thread_event(&[older, newer], &replacement);
+
+        assert_eq!(
+            out.iter()
+                .map(|event| event.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["newer", "older"]
+        );
+        assert_eq!(out[0].content, "replacement");
+    }
+
     /// Reproduces the user-reported bug: replies arrive on relay.tenex.chat
     /// (verified via `nak req -k 1 -e <root> wss://relay.tenex.chat`) but
     /// don't render in the iOS chat. Process the EXACT events captured from
@@ -825,5 +932,33 @@ mod tests {
             "expected root + both replies, got {}",
             after.len()
         );
+    }
+
+    fn feedback_thread(root_event_id: &str, last_activity_at: u64) -> FeedbackThreadRecord {
+        FeedbackThreadRecord {
+            root_event_id: root_event_id.into(),
+            author_pubkey: "pubkey".into(),
+            created_at: last_activity_at,
+            last_activity_at,
+            title: None,
+            summary: None,
+            status_label: None,
+            preview: String::new(),
+        }
+    }
+
+    fn feedback_event(
+        event_id: &str,
+        root_event_id: &str,
+        created_at: u64,
+        content: &str,
+    ) -> FeedbackEventRecord {
+        FeedbackEventRecord {
+            event_id: event_id.into(),
+            root_event_id: root_event_id.into(),
+            author_pubkey: "pubkey".into(),
+            created_at,
+            content: content.into(),
+        }
     }
 }

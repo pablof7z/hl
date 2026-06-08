@@ -2722,6 +2722,26 @@ impl HighlighterCore {
         ))
     }
 
+    /// Optimistically insert a newly-published feedback root into the thread
+    /// list. Rust owns root validation, preview text, dedupe, and ordering.
+    pub fn optimistically_insert_feedback_root_thread(
+        &self,
+        threads: Vec<FeedbackThreadRecord>,
+        root_event: FeedbackEventRecord,
+    ) -> Vec<FeedbackThreadRecord> {
+        feedback::optimistically_insert_root_thread(&threads, &root_event)
+    }
+
+    /// Upsert a streamed feedback thread event into the open thread list.
+    /// Rust owns replacement identity and oldest-first ordering.
+    pub fn upsert_feedback_thread_event(
+        &self,
+        events: Vec<FeedbackEventRecord>,
+        event: FeedbackEventRecord,
+    ) -> Vec<FeedbackEventRecord> {
+        feedback::upsert_thread_event(&events, &event)
+    }
+
     // -- Writes --
 
     /// Wrap a local preview for highlight/picture publish paths before a

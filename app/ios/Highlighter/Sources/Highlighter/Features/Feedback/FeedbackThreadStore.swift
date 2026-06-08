@@ -60,11 +60,13 @@ final class FeedbackThreadStore {
     }
 
     func apply(event: FeedbackEventRecord) {
-        if let i = events.firstIndex(where: { $0.eventId == event.eventId }) {
-            events[i] = event
-        } else {
-            events = (events + [event]).sorted { $0.createdAt < $1.createdAt }
+        guard let core else {
+            preconditionFailure("FeedbackThreadStore.apply called before start")
         }
+        events = core.upsertFeedbackThreadEvent(
+            events: events,
+            event: event
+        )
     }
 
     /// Send a reply into the open thread. Resolves the agent pubkey lazily

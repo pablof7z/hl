@@ -67,20 +67,13 @@ final class FeedbackStore {
     /// Optimistically insert a freshly-published root note so the UI updates
     /// immediately, then let the subscription's eventual delta reconcile.
     func optimisticallyInsert(rootEvent: FeedbackEventRecord) {
-        if threads.contains(where: { $0.rootEventId == rootEvent.eventId }) {
-            return
+        guard let core else {
+            preconditionFailure("FeedbackStore.optimisticallyInsert called before start")
         }
-        let record = FeedbackThreadRecord(
-            rootEventId: rootEvent.eventId,
-            authorPubkey: rootEvent.authorPubkey,
-            createdAt: rootEvent.createdAt,
-            lastActivityAt: rootEvent.createdAt,
-            title: nil,
-            summary: nil,
-            statusLabel: nil,
-            preview: previewFromBody(rootEvent.content)
+        threads = core.optimisticallyInsertFeedbackRootThread(
+            threads: threads,
+            rootEvent: rootEvent
         )
-        threads = ([record] + threads).sorted { $0.lastActivityAt > $1.lastActivityAt }
     }
 
     /// Resolve and cache the project's first agent pubkey. Returns `nil` if
@@ -96,12 +89,6 @@ final class FeedbackStore {
             return agent
         }
         return nil
-    }
-
-    private func previewFromBody(_ body: String) -> String {
-        let collapsed = body.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        if collapsed.count <= 140 { return collapsed }
-        return String(collapsed.prefix(139)) + "…"
     }
 }
 
