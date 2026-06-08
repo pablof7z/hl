@@ -196,6 +196,29 @@ pub struct AddRelaySheetProjectionInput {
     pub probe_failed: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ImportRelayRow {
+    pub config: RelayConfig,
+    pub display_url: String,
+    pub role_label: String,
+    pub is_selected: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ImportRelaysProjection {
+    pub rows: Vec<ImportRelayRow>,
+    pub selected_count: u64,
+    pub found_title: String,
+    pub can_apply: bool,
+    pub selected_configs: Vec<RelayConfig>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ImportRelaysProjectionInput {
+    pub fetched: Vec<RelayConfig>,
+    pub selected_urls: Vec<String>,
+}
+
 impl RelayConfig {
     pub fn new(url: impl Into<String>) -> Self {
         Self {
@@ -328,6 +351,56 @@ pub fn add_relay_sheet_projection(input: AddRelaySheetProjectionInput) -> AddRel
         can_add: is_valid,
         probe_status,
         probe_text,
+    }
+}
+
+pub fn default_import_relay_selection(relays: Vec<RelayConfig>) -> Vec<String> {
+    relays.into_iter().map(|relay| relay.url).collect()
+}
+
+pub fn import_relays_projection(input: ImportRelaysProjectionInput) -> ImportRelaysProjection {
+    let selected_urls = input.selected_urls.into_iter().collect::<BTreeSet<_>>();
+    let mut selected_configs = Vec::new();
+    let rows = input
+        .fetched
+        .into_iter()
+        .map(|config| {
+            let is_selected = selected_urls.contains(&config.url);
+            if is_selected {
+                selected_configs.push(config.clone());
+            }
+            ImportRelayRow {
+                display_url: display_relay_url(&config.url),
+                role_label: relay_role_label(&config),
+                config,
+                is_selected,
+            }
+        })
+        .collect::<Vec<_>>();
+    let selected_count = selected_configs.len() as u64;
+    let found_count = rows.len();
+    ImportRelaysProjection {
+        rows,
+        selected_count,
+        found_title: format!(
+            "Found {found_count} relay{}",
+            if found_count == 1 { "" } else { "s" }
+        ),
+        can_apply: selected_count > 0,
+        selected_configs,
+    }
+}
+
+fn display_relay_url(raw: &str) -> String {
+    raw.strip_prefix("wss://").unwrap_or(raw).to_string()
+}
+
+fn relay_role_label(row: &RelayConfig) -> String {
+    match (row.read, row.write) {
+        (true, true) => "Read + Write".into(),
+        (true, false) => "Read".into(),
+        (false, true) => "Write".into(),
+        (false, false) => "No roles".into(),
     }
 }
 
@@ -1008,6 +1081,91 @@ mod tests {
                 indexer: false,
             }
         );
+    }
+
+    #[test]
+    fn default_import_relay_selection_selects_every_fetched_url() {
+        let rows = vec![
+            RelayConfig::read_write("wss://one.example"),
+            RelayConfig {
+                url: "wss://two.example".into(),
+                read: true,
+                write: false,
+                rooms: false,
+                indexer: false,
+            },
+        ];
+
+        assert_eq!(
+            default_import_relay_selection(rows),
+            vec!["wss://one.example", "wss://two.example"]
+        );
+    }
+
+    #[test]
+    fn import_relays_projection_formats_rows_and_selected_configs() {
+        let projection = import_relays_projection(ImportRelaysProjectionInput {
+            fetched: vec![
+                RelayConfig::read_write("wss://one.example"),
+                RelayConfig {
+                    url: "wss://two.example".into(),
+                    read: true,
+                    write: false,
+                    rooms: false,
+                    indexer: false,
+                },
+                RelayConfig {
+                    url: "ws://three.example".into(),
+                    read: false,
+                    write: true,
+                    rooms: false,
+                    indexer: false,
+                },
+                RelayConfig::new("wss://four.example"),
+            ],
+            selected_urls: vec!["wss://two.example".into(), "ws://three.example".into()],
+        });
+
+        assert_eq!(projection.found_title, "Found 4 relays");
+        assert_eq!(projection.selected_count, 2);
+        assert!(projection.can_apply);
+        assert_eq!(projection.rows[0].display_url, "one.example");
+        assert_eq!(projection.rows[0].role_label, "Read + Write");
+        assert!(!projection.rows[0].is_selected);
+        assert_eq!(projection.rows[1].role_label, "Read");
+        assert!(projection.rows[1].is_selected);
+        assert_eq!(projection.rows[2].display_url, "ws://three.example");
+        assert_eq!(projection.rows[2].role_label, "Write");
+        assert!(projection.rows[2].is_selected);
+        assert_eq!(projection.rows[3].role_label, "No roles");
+        assert_eq!(
+            projection
+                .selected_configs
+                .iter()
+                .map(|row| row.url.as_str())
+                .collect::<Vec<_>>(),
+            vec!["wss://two.example", "ws://three.example"]
+        );
+    }
+
+    #[test]
+    fn import_relays_projection_handles_empty_and_singular_titles() {
+        let empty = import_relays_projection(ImportRelaysProjectionInput {
+            fetched: Vec::new(),
+            selected_urls: vec!["wss://missing.example".into()],
+        });
+        assert_eq!(empty.found_title, "Found 0 relays");
+        assert_eq!(empty.selected_count, 0);
+        assert!(!empty.can_apply);
+        assert!(empty.selected_configs.is_empty());
+
+        let single = import_relays_projection(ImportRelaysProjectionInput {
+            fetched: vec![RelayConfig::read_write("wss://one.example")],
+            selected_urls: vec!["wss://one.example".into()],
+        });
+        assert_eq!(single.found_title, "Found 1 relay");
+        assert_eq!(single.selected_count, 1);
+        assert!(single.can_apply);
     }
 
     #[test]

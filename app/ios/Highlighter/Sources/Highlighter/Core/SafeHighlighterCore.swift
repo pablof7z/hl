@@ -1228,6 +1228,14 @@ actor SafeHighlighterCore {
         core.projectAddRelaySheet(input: input)
     }
 
+    nonisolated func defaultImportRelaySelection(relays: [RelayConfig]) -> [String] {
+        core.defaultImportRelaySelection(relays: relays)
+    }
+
+    nonisolated func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelaysProjection {
+        core.projectImportRelays(input: input)
+    }
+
     func subscribeRelayStatus() async -> SubscriptionOutcome {
         await core.subscribeRelayStatus()
     }

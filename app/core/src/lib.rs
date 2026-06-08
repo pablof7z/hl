@@ -90,8 +90,8 @@ pub use podcast_transcript::{
 };
 pub use reactions::ReactionRecord;
 pub use relays::{
-    AddRelayProbeStatus, AddRelaySheetProjection, AddRelaySheetProjectionInput, RelayConfig,
-    RelaySettingsProjection,
+    AddRelayProbeStatus, AddRelaySheetProjection, AddRelaySheetProjectionInput, ImportRelayRow,
+    ImportRelaysProjection, ImportRelaysProjectionInput, RelayConfig, RelaySettingsProjection,
 };
 pub use room_invites::{
     RoomInviteAddDecision, RoomInviteCandidate, RoomInviteCandidateSource, RoomInviteChip,

@@ -3698,6 +3698,20 @@ impl HighlighterCore {
         crate::relays::add_relay_sheet_projection(input)
     }
 
+    pub fn default_import_relay_selection(
+        &self,
+        relays: Vec<crate::relays::RelayConfig>,
+    ) -> Vec<String> {
+        crate::relays::default_import_relay_selection(relays)
+    }
+
+    pub fn project_import_relays(
+        &self,
+        input: crate::relays::ImportRelaysProjectionInput,
+    ) -> crate::relays::ImportRelaysProjection {
+        crate::relays::import_relays_projection(input)
+    }
+
     /// Handle the Swift side uses to match `RelayStatusChanged` deltas on the
     /// event bus. Relay status changes are app-scoped and ride
     /// `subscription_id == 0`, so this returns `0` unconditionally — the

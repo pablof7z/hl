@@ -17,12 +17,21 @@ struct ImportRelaysSheet: View {
     @State private var errorText: String?
     @State private var isApplying = false
 
+    private var projection: ImportRelaysProjection {
+        appStore.safeCore.projectImportRelays(input: ImportRelaysProjectionInput(
+            fetched: fetched,
+            selectedUrls: Array(selected)
+        ))
+    }
+
     var body: some View {
+        let currentProjection = projection
+
         NavigationStack {
             Form {
                 npubSection
-                if !fetched.isEmpty {
-                    foundSection
+                if !currentProjection.rows.isEmpty {
+                    foundSection(currentProjection)
                 }
                 if let err = errorText {
                     errorSection(err)
@@ -35,10 +44,10 @@ struct ImportRelaysSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Add \(selected.count)") {
+                    Button("Add \(currentProjection.selectedCount)") {
                         Task { await applySelected() }
                     }
-                    .disabled(selected.isEmpty || isApplying)
+                    .disabled(!currentProjection.canApply || isApplying)
                 }
             }
         }
@@ -72,21 +81,21 @@ struct ImportRelaysSheet: View {
         }
     }
 
-    private var foundSection: some View {
+    private func foundSection(_ projection: ImportRelaysProjection) -> some View {
         Section {
-            ForEach(fetched, id: \.url) { row in
+            ForEach(projection.rows, id: \.config.url) { row in
                 Button {
-                    toggle(row.url)
+                    toggle(row.config.url)
                 } label: {
                     HStack {
-                        Image(systemName: selected.contains(row.url) ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(selected.contains(row.url) ? Color.accentColor : .secondary)
+                        Image(systemName: row.isSelected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(row.isSelected ? Color.accentColor : .secondary)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(displayURL(row.url))
+                            Text(row.displayUrl)
                                 .font(.subheadline)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
-                            Text(roleLabel(row))
+                            Text(row.roleLabel)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -96,7 +105,7 @@ struct ImportRelaysSheet: View {
                 .buttonStyle(.plain)
             }
         } header: {
-            Text("Found \(fetched.count) relay\(fetched.count == 1 ? "" : "s")")
+            Text(projection.foundTitle)
         } footer: {
             Text("Selected relays will be added or updated in your list with their original Read/Write roles. Rooms and Indexer stay off — tap a relay later to turn them on.")
         }
@@ -122,7 +131,7 @@ struct ImportRelaysSheet: View {
             .importRelaysFromNpub(npubText.trimmingCharacters(in: .whitespaces))
         if outcome.error.isEmpty {
             fetched = outcome.values
-            selected = Set(outcome.values.map { $0.url })
+            selected = Set(appStore.safeCore.defaultImportRelaySelection(relays: outcome.values))
         } else {
             errorText = outcome.error
         }
@@ -131,7 +140,8 @@ struct ImportRelaysSheet: View {
     private func applySelected() async {
         isApplying = true
         defer { isApplying = false }
-        for row in fetched where selected.contains(row.url) {
+        let selectedConfigs = projection.selectedConfigs
+        for row in selectedConfigs {
             await store.upsert(row)
         }
         dismiss()
@@ -142,20 +152,6 @@ struct ImportRelaysSheet: View {
             selected.remove(url)
         } else {
             selected.insert(url)
-        }
-    }
-
-    private func displayURL(_ raw: String) -> String {
-        if raw.hasPrefix("wss://") { return String(raw.dropFirst(6)) }
-        return raw
-    }
-
-    private func roleLabel(_ row: RelayConfig) -> String {
-        switch (row.read, row.write) {
-        case (true, true): return "Read + Write"
-        case (true, false): return "Read"
-        case (false, true): return "Write"
-        default: return "No roles"
         }
     }
 }

@@ -872,6 +872,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func defaultHighlightCropBox(highlightBoxes: [OcrRect], imageWidth: Double, imageHeight: Double, marginFraction: Double)  -> OcrRect?
 
+    func defaultImportRelaySelection(relays: [RelayConfig])  -> [String]
+
     func detectOcrActivePage(lines: [OcrLine])  -> OcrPageDetection?
 
     /**
@@ -1401,6 +1403,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func probeRelayNip11(url: String) async  -> Nip11DocumentOutcome
 
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
+
+    func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
     func projectRelaySettings(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic])  -> RelaySettingsProjection
 
@@ -2225,6 +2229,14 @@ open func defaultHighlightCropBox(highlightBoxes: [OcrRect], imageWidth: Double,
         FfiConverterDouble.lower(imageWidth),
         FfiConverterDouble.lower(imageHeight),
         FfiConverterDouble.lower(marginFraction),$0
+    )
+})
+}
+
+open func defaultImportRelaySelection(relays: [RelayConfig]) -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_default_import_relay_selection(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeRelayConfig.lower(relays),$0
     )
 })
 }
@@ -4077,6 +4089,14 @@ open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelayS
     return try!  FfiConverterTypeAddRelaySheetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_add_relay_sheet(self.uniffiClonePointer(),
         FfiConverterTypeAddRelaySheetProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelaysProjection  {
+    return try!  FfiConverterTypeImportRelaysProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_import_relays(self.uniffiClonePointer(),
+        FfiConverterTypeImportRelaysProjectionInput_lower(input),$0
     )
 })
 }
@@ -11541,6 +11561,256 @@ public func FfiConverterTypeHydratedHighlightListOutcome_lift(_ buf: RustBuffer)
 #endif
 public func FfiConverterTypeHydratedHighlightListOutcome_lower(_ value: HydratedHighlightListOutcome) -> RustBuffer {
     return FfiConverterTypeHydratedHighlightListOutcome.lower(value)
+}
+
+
+public struct ImportRelayRow {
+    public var config: RelayConfig
+    public var displayUrl: String
+    public var roleLabel: String
+    public var isSelected: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(config: RelayConfig, displayUrl: String, roleLabel: String, isSelected: Bool) {
+        self.config = config
+        self.displayUrl = displayUrl
+        self.roleLabel = roleLabel
+        self.isSelected = isSelected
+    }
+}
+
+#if compiler(>=6)
+extension ImportRelayRow: Sendable {}
+#endif
+
+
+extension ImportRelayRow: Equatable, Hashable {
+    public static func ==(lhs: ImportRelayRow, rhs: ImportRelayRow) -> Bool {
+        if lhs.config != rhs.config {
+            return false
+        }
+        if lhs.displayUrl != rhs.displayUrl {
+            return false
+        }
+        if lhs.roleLabel != rhs.roleLabel {
+            return false
+        }
+        if lhs.isSelected != rhs.isSelected {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(config)
+        hasher.combine(displayUrl)
+        hasher.combine(roleLabel)
+        hasher.combine(isSelected)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRelayRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelayRow {
+        return
+            try ImportRelayRow(
+                config: FfiConverterTypeRelayConfig.read(from: &buf),
+                displayUrl: FfiConverterString.read(from: &buf),
+                roleLabel: FfiConverterString.read(from: &buf),
+                isSelected: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ImportRelayRow, into buf: inout [UInt8]) {
+        FfiConverterTypeRelayConfig.write(value.config, into: &buf)
+        FfiConverterString.write(value.displayUrl, into: &buf)
+        FfiConverterString.write(value.roleLabel, into: &buf)
+        FfiConverterBool.write(value.isSelected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelayRow_lift(_ buf: RustBuffer) throws -> ImportRelayRow {
+    return try FfiConverterTypeImportRelayRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelayRow_lower(_ value: ImportRelayRow) -> RustBuffer {
+    return FfiConverterTypeImportRelayRow.lower(value)
+}
+
+
+public struct ImportRelaysProjection {
+    public var rows: [ImportRelayRow]
+    public var selectedCount: UInt64
+    public var foundTitle: String
+    public var canApply: Bool
+    public var selectedConfigs: [RelayConfig]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(rows: [ImportRelayRow], selectedCount: UInt64, foundTitle: String, canApply: Bool, selectedConfigs: [RelayConfig]) {
+        self.rows = rows
+        self.selectedCount = selectedCount
+        self.foundTitle = foundTitle
+        self.canApply = canApply
+        self.selectedConfigs = selectedConfigs
+    }
+}
+
+#if compiler(>=6)
+extension ImportRelaysProjection: Sendable {}
+#endif
+
+
+extension ImportRelaysProjection: Equatable, Hashable {
+    public static func ==(lhs: ImportRelaysProjection, rhs: ImportRelaysProjection) -> Bool {
+        if lhs.rows != rhs.rows {
+            return false
+        }
+        if lhs.selectedCount != rhs.selectedCount {
+            return false
+        }
+        if lhs.foundTitle != rhs.foundTitle {
+            return false
+        }
+        if lhs.canApply != rhs.canApply {
+            return false
+        }
+        if lhs.selectedConfigs != rhs.selectedConfigs {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rows)
+        hasher.combine(selectedCount)
+        hasher.combine(foundTitle)
+        hasher.combine(canApply)
+        hasher.combine(selectedConfigs)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRelaysProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysProjection {
+        return
+            try ImportRelaysProjection(
+                rows: FfiConverterSequenceTypeImportRelayRow.read(from: &buf),
+                selectedCount: FfiConverterUInt64.read(from: &buf),
+                foundTitle: FfiConverterString.read(from: &buf),
+                canApply: FfiConverterBool.read(from: &buf),
+                selectedConfigs: FfiConverterSequenceTypeRelayConfig.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ImportRelaysProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeImportRelayRow.write(value.rows, into: &buf)
+        FfiConverterUInt64.write(value.selectedCount, into: &buf)
+        FfiConverterString.write(value.foundTitle, into: &buf)
+        FfiConverterBool.write(value.canApply, into: &buf)
+        FfiConverterSequenceTypeRelayConfig.write(value.selectedConfigs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysProjection_lift(_ buf: RustBuffer) throws -> ImportRelaysProjection {
+    return try FfiConverterTypeImportRelaysProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysProjection_lower(_ value: ImportRelaysProjection) -> RustBuffer {
+    return FfiConverterTypeImportRelaysProjection.lower(value)
+}
+
+
+public struct ImportRelaysProjectionInput {
+    public var fetched: [RelayConfig]
+    public var selectedUrls: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(fetched: [RelayConfig], selectedUrls: [String]) {
+        self.fetched = fetched
+        self.selectedUrls = selectedUrls
+    }
+}
+
+#if compiler(>=6)
+extension ImportRelaysProjectionInput: Sendable {}
+#endif
+
+
+extension ImportRelaysProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ImportRelaysProjectionInput, rhs: ImportRelaysProjectionInput) -> Bool {
+        if lhs.fetched != rhs.fetched {
+            return false
+        }
+        if lhs.selectedUrls != rhs.selectedUrls {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(fetched)
+        hasher.combine(selectedUrls)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRelaysProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysProjectionInput {
+        return
+            try ImportRelaysProjectionInput(
+                fetched: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                selectedUrls: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ImportRelaysProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRelayConfig.write(value.fetched, into: &buf)
+        FfiConverterSequenceString.write(value.selectedUrls, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysProjectionInput_lift(_ buf: RustBuffer) throws -> ImportRelaysProjectionInput {
+    return try FfiConverterTypeImportRelaysProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysProjectionInput_lower(_ value: ImportRelaysProjectionInput) -> RustBuffer {
+    return FfiConverterTypeImportRelaysProjectionInput.lower(value)
 }
 
 
@@ -21005,6 +21275,31 @@ fileprivate struct FfiConverterSequenceTypeHydratedHighlight: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeImportRelayRow: FfiConverterRustBuffer {
+    typealias SwiftType = [ImportRelayRow]
+
+    public static func write(_ value: [ImportRelayRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeImportRelayRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ImportRelayRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ImportRelayRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeImportRelayRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeOcrLine: FfiConverterRustBuffer {
     typealias SwiftType = [OcrLine]
 
@@ -21635,6 +21930,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_default_highlight_crop_box() != 34951) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_default_import_relay_selection() != 36291) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_detect_ocr_active_page() != 8731) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21984,6 +22282,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_add_relay_sheet() != 14886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_settings() != 62661) {
