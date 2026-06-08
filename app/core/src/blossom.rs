@@ -15,6 +15,7 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use sha2::{Digest, Sha256};
 
+use crate::clock::Clock;
 use crate::errors::CoreError;
 use crate::models::BlossomUpload;
 use crate::nostr_runtime::NostrRuntime;
@@ -37,8 +38,7 @@ fn latest_server_list(ndb: &Ndb, user_hex: &str) -> Result<Option<Event>, CoreEr
     let author = PublicKey::from_hex(user_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let pk_bytes: [u8; 32] = author.to_bytes();
     let filter = NdbFilter::new()
@@ -166,10 +166,7 @@ pub async fn sign_nip98_auth(
     method: &str,
     payload_hash: Option<&str>,
 ) -> Result<String, CoreError> {
-    let mut tags = vec![
-        parse_tag(&["u", url])?,
-        parse_tag(&["method", method])?,
-    ];
+    let mut tags = vec![parse_tag(&["u", url])?, parse_tag(&["method", method])?];
     if let Some(hash) = payload_hash {
         tags.push(parse_tag(&["payload", hash])?);
     }
@@ -221,19 +218,27 @@ async fn sign_bud01_upload_auth(
     runtime: &NostrRuntime,
     sha256_hex_value: &str,
     note: &str,
+    clock: &dyn Clock,
 ) -> Result<Event, CoreError> {
-    let expiration = Timestamp::now().as_secs() + AUTH_EXPIRATION_SECS;
-    let tags = vec![
-        parse_tag(&["t", "upload"])?,
-        parse_tag(&["x", sha256_hex_value])?,
-        parse_tag(&["expiration", &expiration.to_string()])?,
-    ];
+    let tags = bud01_upload_auth_tags(sha256_hex_value, clock.now_unix_seconds())?;
     let builder = EventBuilder::new(Kind::Custom(KIND_BLOSSOM_AUTH), note).tags(tags);
     runtime
         .client()
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign blossom upload auth: {e}")))
+}
+
+fn bud01_upload_auth_tags(
+    sha256_hex_value: &str,
+    now_unix_seconds: u64,
+) -> Result<Vec<Tag>, CoreError> {
+    let expiration = now_unix_seconds + AUTH_EXPIRATION_SECS;
+    Ok(vec![
+        parse_tag(&["t", "upload"])?,
+        parse_tag(&["x", sha256_hex_value])?,
+        parse_tag(&["expiration", &expiration.to_string()])?,
+    ])
 }
 
 /// PUT `bytes` to `<server>/upload` with a BUD-01 `Authorization: Nostr <b64>`
@@ -250,6 +255,7 @@ pub async fn upload_blob(
     width: u32,
     height: u32,
     alt: String,
+    clock: &dyn Clock,
 ) -> Result<BlossomUpload, CoreError> {
     if bytes.is_empty() {
         return Err(CoreError::InvalidInput("upload bytes are empty".into()));
@@ -261,7 +267,7 @@ pub async fn upload_blob(
 
     let size_bytes = bytes.len() as u64;
     let sha = sha256_hex(&bytes);
-    let auth = sign_bud01_upload_auth(runtime, &sha, "Upload book photo").await?;
+    let auth = sign_bud01_upload_auth(runtime, &sha, "Upload book photo", clock).await?;
     let auth_b64 = STANDARD.encode(auth.as_json().as_bytes());
     let endpoint = format!("{DEFAULT_SERVER}/upload");
 
@@ -354,8 +360,11 @@ mod tests {
         let keys = Keys::generate();
         let tags = vec![
             Tag::parse(vec!["t".to_string(), "blossom".to_string()]).unwrap(),
-            Tag::parse(vec!["server".to_string(), "https://blossom.primal.net".to_string()])
-                .unwrap(),
+            Tag::parse(vec![
+                "server".to_string(),
+                "https://blossom.primal.net".to_string(),
+            ])
+            .unwrap(),
         ];
         let event = EventBuilder::new(Kind::Custom(KIND_BLOSSOM_SERVERS), "")
             .tags(tags)
@@ -378,7 +387,9 @@ mod tests {
     fn sha256_hex_is_lowercase_64_chars() {
         let h = sha256_hex(b"hello");
         assert_eq!(h.len(), 64);
-        assert!(h.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(h
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
         // Known vector for "hello".
         assert_eq!(
             h,
@@ -392,12 +403,7 @@ mod tests {
         // sign locally so we can inspect the result without network IO.
         let keys = Keys::generate();
         let sha = sha256_hex(b"some bytes");
-        let expiration = Timestamp::now().as_secs() + AUTH_EXPIRATION_SECS;
-        let tags = vec![
-            Tag::parse(vec!["t".to_string(), "upload".to_string()]).unwrap(),
-            Tag::parse(vec!["x".to_string(), sha.clone()]).unwrap(),
-            Tag::parse(vec!["expiration".to_string(), expiration.to_string()]).unwrap(),
-        ];
+        let tags = bud01_upload_auth_tags(&sha, 1_000).expect("auth tags");
         let event = EventBuilder::new(Kind::Custom(KIND_BLOSSOM_AUTH), "Upload book photo")
             .tags(tags)
             .sign_with_keys(&keys)

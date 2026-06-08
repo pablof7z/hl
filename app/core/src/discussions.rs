@@ -9,6 +9,7 @@
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
+use crate::clock::Clock;
 use crate::errors::CoreError;
 use crate::models::{ArtifactPreview, DiscussionAttachment, DiscussionRecord};
 use crate::nostr_runtime::NostrRuntime;
@@ -28,8 +29,7 @@ pub fn query_for_group(
         return Err(CoreError::InvalidInput("group_id must not be empty".into()));
     }
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let filter = NdbFilter::new()
         .kinds([KIND_DISCUSSION as u64])
@@ -71,6 +71,7 @@ pub async fn publish(
     title: &str,
     body: &str,
     attachment: Option<ArtifactPreview>,
+    clock: &dyn Clock,
 ) -> Result<DiscussionRecord, CoreError> {
     if group_id.trim().is_empty() {
         return Err(CoreError::InvalidInput("group_id must not be empty".into()));
@@ -80,7 +81,7 @@ pub async fn publish(
         return Err(CoreError::InvalidInput("discussion title required".into()));
     }
 
-    let builder = build_event(group_id, title, body, attachment.as_ref())?;
+    let builder = build_event(group_id, title, body, attachment.as_ref(), clock)?;
     let client = runtime.client();
     let event = client
         .sign_event_builder(builder)
@@ -91,9 +92,8 @@ pub async fn publish(
         .await
         .map_err(|e| CoreError::Relay(format!("publish discussion: {e}")))?;
 
-    record_from_event(&event).ok_or_else(|| {
-        CoreError::Other("signed discussion event failed to parse back".into())
-    })
+    record_from_event(&event)
+        .ok_or_else(|| CoreError::Other("signed discussion event failed to parse back".into()))
 }
 
 pub fn is_discussion(event: &Event) -> bool {
@@ -109,7 +109,10 @@ pub(crate) fn record_from_event(event: &Event) -> Option<DiscussionRecord> {
     if !is_discussion(event) {
         return None;
     }
-    let title = first_tag_value(event, "title").unwrap_or("").trim().to_string();
+    let title = first_tag_value(event, "title")
+        .unwrap_or("")
+        .trim()
+        .to_string();
     let group_id = first_tag_value(event, "h")?.to_string();
     let slug = first_tag_value(event, "d")
         .map(str::to_string)
@@ -137,10 +140,18 @@ pub(crate) fn record_from_event(event: &Event) -> Option<DiscussionRecord> {
 }
 
 fn read_attachment(event: &Event) -> Option<DiscussionAttachment> {
-    let a = first_tag_value(event, "a").map(str::to_string).unwrap_or_default();
-    let e = first_tag_value(event, "e").map(str::to_string).unwrap_or_default();
-    let i = first_tag_value(event, "i").map(str::to_string).unwrap_or_default();
-    let r = first_tag_value(event, "r").map(str::to_string).unwrap_or_default();
+    let a = first_tag_value(event, "a")
+        .map(str::to_string)
+        .unwrap_or_default();
+    let e = first_tag_value(event, "e")
+        .map(str::to_string)
+        .unwrap_or_default();
+    let i = first_tag_value(event, "i")
+        .map(str::to_string)
+        .unwrap_or_default();
+    let r = first_tag_value(event, "r")
+        .map(str::to_string)
+        .unwrap_or_default();
     if a.is_empty() && e.is_empty() && i.is_empty() && r.is_empty() {
         return None;
     }
@@ -170,8 +181,9 @@ fn build_event(
     title: &str,
     body: &str,
     attachment: Option<&ArtifactPreview>,
+    clock: &dyn Clock,
 ) -> Result<EventBuilder, CoreError> {
-    let slug = slug_from_title(title);
+    let slug = slug_from_title(title, clock);
 
     let mut tags: Vec<Tag> = Vec::new();
     tags.push(parse_tag(&["h", group_id])?);
@@ -183,7 +195,11 @@ fn build_event(
         match preview.reference_tag_name.as_str() {
             "i" => {
                 if !preview.url.is_empty() {
-                    tags.push(parse_tag(&["i", &preview.reference_tag_value, &preview.url])?);
+                    tags.push(parse_tag(&[
+                        "i",
+                        &preview.reference_tag_value,
+                        &preview.url,
+                    ])?);
                 } else {
                     tags.push(parse_tag(&["i", &preview.reference_tag_value])?);
                 }
@@ -216,7 +232,7 @@ fn build_event(
     Ok(EventBuilder::new(Kind::Custom(KIND_DISCUSSION), body.trim()).tags(tags))
 }
 
-fn slug_from_title(title: &str) -> String {
+fn slug_from_title(title: &str, clock: &dyn Clock) -> String {
     let mut out = String::with_capacity(title.len());
     let mut last_dash = false;
     for ch in title.trim().chars() {
@@ -232,8 +248,9 @@ fn slug_from_title(title: &str) -> String {
         out.pop();
     }
     if out.is_empty() {
-        // Never emit an empty `d` tag — fall back to timestamp-ish ms.
-        format!("d{}", nostr_sdk::Timestamp::now().as_secs())
+        // Never emit an empty `d` tag. Non-ASCII titles can land here, so the
+        // kernel clock owns the deterministic fallback identifier.
+        format!("d{}", clock.now_unix_seconds())
     } else {
         out
     }
@@ -258,6 +275,15 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
 mod tests {
     use super::*;
 
+    #[derive(Debug)]
+    struct FixedClock(u64);
+
+    impl Clock for FixedClock {
+        fn now_unix_seconds(&self) -> u64 {
+            self.0
+        }
+    }
+
     fn sign(keys: &Keys, tags: Vec<Tag>, content: &str) -> Event {
         EventBuilder::new(Kind::Custom(KIND_DISCUSSION), content)
             .tags(tags)
@@ -276,11 +302,7 @@ mod tests {
             ],
             "hi",
         );
-        let without = sign(
-            &keys,
-            vec![parse_tag(&["h", "room-a"]).unwrap()],
-            "hi",
-        );
+        let without = sign(&keys, vec![parse_tag(&["h", "room-a"]).unwrap()], "hi");
         assert!(is_discussion(&with_marker));
         assert!(!is_discussion(&without));
     }
@@ -332,15 +354,26 @@ mod tests {
     }
 
     #[test]
+    fn slug_fallback_uses_injected_clock() {
+        let clock = FixedClock(42);
+        assert_eq!(slug_from_title("!!!", &clock), "d42");
+    }
+
+    #[test]
     fn slug_from_title_is_sane() {
-        assert_eq!(slug_from_title("Hello World!"), "hello-world");
-        assert_eq!(slug_from_title("  Many   spaces "), "many-spaces");
-        assert_eq!(slug_from_title("emoji 🎧 in title"), "emoji-in-title");
+        let clock = FixedClock(42);
+        assert_eq!(slug_from_title("Hello World!", &clock), "hello-world");
+        assert_eq!(slug_from_title("  Many   spaces ", &clock), "many-spaces");
+        assert_eq!(
+            slug_from_title("emoji 🎧 in title", &clock),
+            "emoji-in-title"
+        );
     }
 
     #[test]
     fn build_event_emits_required_tags() {
-        let builder = build_event("room-a", "Title", "body", None).expect("build");
+        let clock = FixedClock(42);
+        let builder = build_event("room-a", "Title", "body", None, &clock).expect("build");
         let keys = Keys::generate();
         let e = builder.sign_with_keys(&keys).expect("sign");
         let has = |name: &str, val: &str| {

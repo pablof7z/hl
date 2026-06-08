@@ -1303,7 +1303,15 @@ impl HighlighterCore {
         attachment: Option<ArtifactPreview>,
     ) -> Result<DiscussionRecord, CoreError> {
         let _ = self.require_user_pubkey()?;
-        crate::discussions::publish(&self.runtime, &group_id, &title, &body, attachment).await
+        crate::discussions::publish(
+            &self.runtime,
+            &group_id,
+            &title,
+            &body,
+            attachment,
+            self.clock.as_ref(),
+        )
+        .await
     }
 
     /// Publish a NIP-29 kind:9 chat message into `group_id`. When
@@ -1806,7 +1814,16 @@ impl HighlighterCore {
         alt: String,
     ) -> Result<BlossomUpload, CoreError> {
         let _ = self.require_user_pubkey()?;
-        blossom::upload_blob(&self.runtime, bytes, mime, width, height, alt).await
+        blossom::upload_blob(
+            &self.runtime,
+            bytes,
+            mime,
+            width,
+            height,
+            alt,
+            self.clock.as_ref(),
+        )
+        .await
     }
 
     /// Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
