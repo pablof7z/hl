@@ -370,11 +370,7 @@ private struct TabContent: View {
         } else {
             LazyVStack(spacing: 0) {
                 ForEach(Array(store.articles.enumerated()), id: \.element.eventId) { index, article in
-                    NavigationLink(value: ArticleReaderTarget(
-                        pubkey: article.pubkey,
-                        dTag: article.identifier,
-                        seed: article
-                    )) {
+                    NavigationLink(value: ArticleReaderTarget(article: article, seed: article)) {
                         ArticleCardView(article: article)
                     }
                     .buttonStyle(.plain)

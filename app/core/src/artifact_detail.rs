@@ -2,6 +2,7 @@
 //! but Rust owns the source/reference interpretation so iOS and Android open
 //! the same target for the same kind:11 artifact share.
 
+use crate::articles::article_address;
 use crate::artifacts::normalize_artifact_url;
 use crate::models::{ArtifactDetailRoute, ArtifactDetailTarget, ArtifactPreview, ArtifactRecord};
 
@@ -24,6 +25,7 @@ fn article_route(preview: &ArtifactPreview) -> Option<ArtifactDetailRoute> {
     let (pubkey, d_tag) = parse_nip23_address(raw)?;
     Some(ArtifactDetailRoute {
         target: ArtifactDetailTarget::Article,
+        article_address: article_address(&pubkey, &d_tag),
         article_pubkey: pubkey,
         article_d_tag: d_tag,
         book_catalog_id: String::new(),
@@ -50,6 +52,7 @@ fn book_route(preview: &ArtifactPreview) -> Option<ArtifactDetailRoute> {
     }
     Some(ArtifactDetailRoute {
         target: ArtifactDetailTarget::Book,
+        article_address: String::new(),
         article_pubkey: String::new(),
         article_d_tag: String::new(),
         book_catalog_id: catalog_id,
@@ -61,6 +64,7 @@ fn web_route(preview: &ArtifactPreview) -> Option<ArtifactDetailRoute> {
     let url = url_for_preview(preview)?;
     Some(ArtifactDetailRoute {
         target: ArtifactDetailTarget::Web,
+        article_address: String::new(),
         article_pubkey: String::new(),
         article_d_tag: String::new(),
         book_catalog_id: String::new(),
@@ -75,6 +79,7 @@ fn unavailable_route() -> ArtifactDetailRoute {
 fn route(target: ArtifactDetailTarget) -> ArtifactDetailRoute {
     ArtifactDetailRoute {
         target,
+        article_address: String::new(),
         article_pubkey: String::new(),
         article_d_tag: String::new(),
         book_catalog_id: String::new(),
@@ -167,6 +172,7 @@ mod tests {
         preview.reference_tag_value = "30023:abcdef:my-article".into();
         let route = route_for_artifact(&record(preview));
         assert_eq!(route.target, ArtifactDetailTarget::Article);
+        assert_eq!(route.article_address, "30023:abcdef:my-article");
         assert_eq!(route.article_pubkey, "abcdef");
         assert_eq!(route.article_d_tag, "my-article");
     }

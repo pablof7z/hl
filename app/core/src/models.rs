@@ -167,6 +167,12 @@ pub struct ArticleOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleReaderRouteOutcome {
+    pub value: Option<ArticleReaderRoute>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct ArticleListOutcome {
     pub values: Vec<ArticleRecord>,
     pub error: String,
@@ -405,6 +411,7 @@ pub enum ArtifactDetailTarget {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ArtifactDetailRoute {
     pub target: ArtifactDetailTarget,
+    pub article_address: String,
     pub article_pubkey: String,
     pub article_d_tag: String,
     pub book_catalog_id: String,
@@ -654,6 +661,8 @@ pub struct ProfileUpdateDraft {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ArticleRecord {
     pub event_id: String,
+    /// Canonical NIP-33 article address (`30023:<pubkey>:<d>`).
+    pub address: String,
     pub pubkey: String,
     /// `d` tag — stable identifier. Combined with pubkey forms the addressable id.
     pub identifier: String,
@@ -666,6 +675,16 @@ pub struct ArticleRecord {
     /// `published_at` tag (seconds since epoch) if present; otherwise falls back to `created_at`.
     pub published_at: Option<u64>,
     pub created_at: Option<u64>,
+}
+
+/// Native reader destination for a NIP-23 article. Rust owns the address
+/// interpretation and canonical address construction; native shells map this
+/// projection into platform navigation payloads.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleReaderRoute {
+    pub address: String,
+    pub pubkey: String,
+    pub d_tag: String,
 }
 
 /// One entry in the Following Reads feed — a NIP-23 article surfaced via

@@ -339,22 +339,19 @@ struct HighlightDetailView: View {
     /// bookmarkable today (the existing curation-set machinery is
     /// addressable-only).
     private var articleAddressForBookmark: String? {
-        let addr = highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        return addr
+        articleReaderRoute?.address
     }
 
     private var articleReaderTarget: ArticleReaderTarget? {
+        articleReaderRoute.map { ArticleReaderTarget(route: $0) }
+    }
+
+    private var articleReaderRoute: ArticleReaderRoute? {
         let addr = highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !addr.isEmpty else { return nil }
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        let pubkey = String(parts[1])
-        let dTag = String(parts[2])
-        guard !pubkey.isEmpty, !dTag.isEmpty else { return nil }
-        return ArticleReaderTarget(pubkey: pubkey, dTag: dTag, seed: nil)
+        let outcome = app.core.getArticleReaderRoute(address: addr)
+        guard outcome.error.isEmpty else { return nil }
+        return outcome.value
     }
 
     private var bookReaderTarget: BookTarget? {

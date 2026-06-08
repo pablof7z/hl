@@ -77,7 +77,7 @@ struct SetDetailView: View {
                 curatorHeader
                 Divider()
                 ForEach(articles, id: \.eventId) { article in
-                    NavigationLink(value: ArticleReaderTarget(pubkey: article.pubkey, dTag: article.identifier, seed: article)) {
+                    NavigationLink(value: ArticleReaderTarget(article: article, seed: article)) {
                         BookmarkedArticleRow(article: article)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)

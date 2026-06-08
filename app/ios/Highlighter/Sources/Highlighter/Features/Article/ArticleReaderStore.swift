@@ -5,22 +5,46 @@ import Observation
 /// `ArticleReaderView`; the store derives everything from `pubkey` + `dTag`
 /// and falls back to the seed for the first paint while ndb catches up.
 struct ArticleReaderTarget: Hashable, Sendable {
+    let address: String
     let pubkey: String
     let dTag: String
     /// Optional seed used for the first paint (article cards already hold an
     /// `ArticleRecord`; reusing it avoids a blank flash while ndb answers).
     let seed: ArticleRecord?
 
-    /// Canonical NIP-33 `a`-tag value.
-    var address: String { "30023:\(pubkey):\(dTag)" }
+    init(route: ArticleReaderRoute, seed: ArticleRecord? = nil) {
+        self.address = route.address
+        self.pubkey = route.pubkey
+        self.dTag = route.dTag
+        self.seed = seed
+    }
+
+    init?(artifactRoute route: ArtifactDetailRoute, seed: ArticleRecord? = nil) {
+        guard route.target == .article,
+              !route.articleAddress.isEmpty,
+              !route.articlePubkey.isEmpty,
+              !route.articleDTag.isEmpty else {
+            return nil
+        }
+        self.address = route.articleAddress
+        self.pubkey = route.articlePubkey
+        self.dTag = route.articleDTag
+        self.seed = seed
+    }
+
+    init(article: ArticleRecord, seed: ArticleRecord? = nil) {
+        self.address = article.address
+        self.pubkey = article.pubkey
+        self.dTag = article.identifier
+        self.seed = seed
+    }
 
     static func == (lhs: ArticleReaderTarget, rhs: ArticleReaderTarget) -> Bool {
-        lhs.pubkey == rhs.pubkey && lhs.dTag == rhs.dTag
+        lhs.address == rhs.address
     }
 
     func hash(into hasher: inout Hasher) {
-        hasher.combine(pubkey)
-        hasher.combine(dTag)
+        hasher.combine(address)
     }
 }
 

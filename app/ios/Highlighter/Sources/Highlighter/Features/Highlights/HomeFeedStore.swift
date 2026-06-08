@@ -40,7 +40,7 @@ final class HomeFeedStore {
                 // Sourceless lone highlight — fall back to event id.
                 return "h:evt:\(h.highlight.eventId)"
             case .read(let r):
-                return "r:30023:\(r.article.pubkey):\(r.article.identifier)"
+                return "r:\(r.article.address)"
             }
         }
     }
@@ -141,8 +141,7 @@ final class HomeFeedStore {
         }
 
         for r in reads.items {
-            let addr = "30023:\(r.article.pubkey):\(r.article.identifier)"
-            if highlightedAddresses.contains(addr) { continue }
+            if highlightedAddresses.contains(r.article.address) { continue }
             merged.append(.read(r))
         }
 

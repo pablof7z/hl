@@ -26,7 +26,7 @@ private struct ArticleRowActionsModifier: ViewModifier {
     @State private var shareTarget: ShareToCommunityTarget?
 
     private var address: String {
-        "30023:\(article.pubkey):\(article.identifier)"
+        article.address
     }
 
     private var isBookmarked: Bool {

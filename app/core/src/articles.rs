@@ -7,7 +7,7 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::ArticleRecord;
+use crate::models::{ArticleReaderRoute, ArticleRecord};
 
 pub const KIND_LONG_FORM: u16 = 30023;
 
@@ -73,6 +73,28 @@ pub fn query_article_by_address(
 /// Return the author pubkey from a valid NIP-23 article address.
 pub fn article_author_from_address(address: &str) -> Option<String> {
     article_address_parts(address).map(|(pubkey_hex, _)| pubkey_hex)
+}
+
+/// Build a native reader route from a full NIP-23 article address. Malformed
+/// or non-article addresses do not produce a route.
+pub fn article_reader_route_from_address(address: &str) -> Option<ArticleReaderRoute> {
+    let (pubkey_hex, d_tag) = article_address_parts(address)?;
+    article_reader_route(&pubkey_hex, &d_tag)
+}
+
+/// Build a native reader route from an article author + `d` tag. Rust owns the
+/// canonical NIP-33 address construction so native shells never synthesize it.
+pub fn article_reader_route(pubkey_hex: &str, d_tag: &str) -> Option<ArticleReaderRoute> {
+    let pubkey = pubkey_hex.trim();
+    let d_tag = d_tag.trim();
+    if pubkey.is_empty() || d_tag.is_empty() {
+        return None;
+    }
+    Some(ArticleReaderRoute {
+        address: article_address(pubkey, d_tag),
+        pubkey: pubkey.to_string(),
+        d_tag: d_tag.to_string(),
+    })
 }
 
 /// Resolve the article addresses stored on a bookmark/curation set into cached
@@ -207,6 +229,7 @@ fn record_from_event(event: &Event) -> ArticleRecord {
 
     ArticleRecord {
         event_id: event.id.to_hex(),
+        address: article_address(&event.pubkey.to_hex(), &identifier),
         pubkey: event.pubkey.to_hex(),
         identifier,
         title,
@@ -217,6 +240,10 @@ fn record_from_event(event: &Event) -> ArticleRecord {
         published_at,
         created_at: Some(event.created_at.as_secs()),
     }
+}
+
+pub fn article_address(pubkey_hex: &str, d_tag: &str) -> String {
+    format!("{KIND_LONG_FORM}:{}:{}", pubkey_hex.trim(), d_tag.trim())
 }
 
 fn article_address_parts(address: &str) -> Option<(String, String)> {
@@ -361,10 +388,19 @@ mod tests {
             article_author_from_address(&valid),
             Some(keys.public_key().to_hex())
         );
+        assert_eq!(
+            article_reader_route_from_address(&valid),
+            Some(ArticleReaderRoute {
+                address: valid.clone(),
+                pubkey: keys.public_key().to_hex(),
+                d_tag: "essay".to_string()
+            })
+        );
         assert!(article_address_parts("30023:missing-d").is_none());
         assert!(article_address_parts("30023::essay").is_none());
         assert!(article_address_parts("1:abcdef:note").is_none());
         assert!(article_author_from_address("1:abcdef:note").is_none());
+        assert!(article_reader_route_from_address("1:abcdef:note").is_none());
     }
 
     #[test]
@@ -372,6 +408,7 @@ mod tests {
         let mut articles = vec![
             ArticleRecord {
                 event_id: "old".into(),
+                address: article_address("pk", "old"),
                 pubkey: "pk".into(),
                 identifier: "old".into(),
                 title: "Old".into(),
@@ -384,6 +421,7 @@ mod tests {
             },
             ArticleRecord {
                 event_id: "new".into(),
+                address: article_address("pk", "new"),
                 pubkey: "pk".into(),
                 identifier: "new".into(),
                 title: "New".into(),
@@ -396,6 +434,7 @@ mod tests {
             },
             ArticleRecord {
                 event_id: "middle".into(),
+                address: article_address("pk", "middle"),
                 pubkey: "pk".into(),
                 identifier: "middle".into(),
                 title: "Middle".into(),

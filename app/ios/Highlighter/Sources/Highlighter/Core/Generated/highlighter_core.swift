@@ -854,6 +854,18 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getArticleByAddress(address: String) async  -> ArticleOutcome
 
+    /**
+     * Resolve a full NIP-23 article address into the native reader route.
+     * Invalid or non-article addresses produce an empty value without error.
+     */
+    func getArticleReaderRoute(address: String)  -> ArticleReaderRouteOutcome
+
+    /**
+     * Resolve author + `d` tag into the native reader route. Rust owns the
+     * canonical `30023:<pubkey>:<d>` address construction.
+     */
+    func getArticleReaderRouteForArticle(pubkeyHex: String, dTag: String)  -> ArticleReaderRouteOutcome
+
     func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
 
     func getArtifacts(groupId: String, limit: UInt32) async  -> ArtifactListOutcome
@@ -1939,6 +1951,31 @@ open func getArticleByAddress(address: String)async  -> ArticleOutcome  {
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Resolve a full NIP-23 article address into the native reader route.
+     * Invalid or non-article addresses produce an empty value without error.
+     */
+open func getArticleReaderRoute(address: String) -> ArticleReaderRouteOutcome  {
+    return try!  FfiConverterTypeArticleReaderRouteOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_article_reader_route(self.uniffiClonePointer(),
+        FfiConverterString.lower(address),$0
+    )
+})
+}
+
+    /**
+     * Resolve author + `d` tag into the native reader route. Rust owns the
+     * canonical `30023:<pubkey>:<d>` address construction.
+     */
+open func getArticleReaderRouteForArticle(pubkeyHex: String, dTag: String) -> ArticleReaderRouteOutcome  {
+    return try!  FfiConverterTypeArticleReaderRouteOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_article_reader_route_for_article(self.uniffiClonePointer(),
+        FfiConverterString.lower(pubkeyHex),
+        FfiConverterString.lower(dTag),$0
+    )
+})
 }
 
 open func getArtifactDetailRoute(artifact: ArtifactRecord) -> ArtifactDetailRoute  {
@@ -4648,11 +4685,168 @@ public func FfiConverterTypeArticleOutcome_lower(_ value: ArticleOutcome) -> Rus
 
 
 /**
+ * Native reader destination for a NIP-23 article. Rust owns the address
+ * interpretation and canonical address construction; native shells map this
+ * projection into platform navigation payloads.
+ */
+public struct ArticleReaderRoute {
+    public var address: String
+    public var pubkey: String
+    public var dTag: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(address: String, pubkey: String, dTag: String) {
+        self.address = address
+        self.pubkey = pubkey
+        self.dTag = dTag
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderRoute: Sendable {}
+#endif
+
+
+extension ArticleReaderRoute: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderRoute, rhs: ArticleReaderRoute) -> Bool {
+        if lhs.address != rhs.address {
+            return false
+        }
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.dTag != rhs.dTag {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(address)
+        hasher.combine(pubkey)
+        hasher.combine(dTag)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderRoute: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderRoute {
+        return
+            try ArticleReaderRoute(
+                address: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                dTag: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderRoute, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterString.write(value.dTag, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderRoute_lift(_ buf: RustBuffer) throws -> ArticleReaderRoute {
+    return try FfiConverterTypeArticleReaderRoute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderRoute_lower(_ value: ArticleReaderRoute) -> RustBuffer {
+    return FfiConverterTypeArticleReaderRoute.lower(value)
+}
+
+
+public struct ArticleReaderRouteOutcome {
+    public var value: ArticleReaderRoute?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: ArticleReaderRoute?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderRouteOutcome: Sendable {}
+#endif
+
+
+extension ArticleReaderRouteOutcome: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderRouteOutcome, rhs: ArticleReaderRouteOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderRouteOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderRouteOutcome {
+        return
+            try ArticleReaderRouteOutcome(
+                value: FfiConverterOptionTypeArticleReaderRoute.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderRouteOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArticleReaderRoute.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderRouteOutcome_lift(_ buf: RustBuffer) throws -> ArticleReaderRouteOutcome {
+    return try FfiConverterTypeArticleReaderRouteOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderRouteOutcome_lower(_ value: ArticleReaderRouteOutcome) -> RustBuffer {
+    return FfiConverterTypeArticleReaderRouteOutcome.lower(value)
+}
+
+
+/**
  * NIP-23 long-form article (kind:30023). Dedupe happens by `d` tag with the
  * newest `created_at` winning, matching how the web app renders.
  */
 public struct ArticleRecord {
     public var eventId: String
+    /**
+     * Canonical NIP-33 article address (`30023:<pubkey>:<d>`).
+     */
+    public var address: String
     public var pubkey: String
     /**
      * `d` tag — stable identifier. Combined with pubkey forms the addressable id.
@@ -4674,7 +4868,10 @@ public struct ArticleRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventId: String, pubkey: String,
+    public init(eventId: String,
+        /**
+         * Canonical NIP-33 article address (`30023:<pubkey>:<d>`).
+         */address: String, pubkey: String,
         /**
          * `d` tag — stable identifier. Combined with pubkey forms the addressable id.
          */identifier: String, title: String, summary: String, image: String,
@@ -4685,6 +4882,7 @@ public struct ArticleRecord {
          * `published_at` tag (seconds since epoch) if present; otherwise falls back to `created_at`.
          */publishedAt: UInt64?, createdAt: UInt64?) {
         self.eventId = eventId
+        self.address = address
         self.pubkey = pubkey
         self.identifier = identifier
         self.title = title
@@ -4705,6 +4903,9 @@ extension ArticleRecord: Sendable {}
 extension ArticleRecord: Equatable, Hashable {
     public static func ==(lhs: ArticleRecord, rhs: ArticleRecord) -> Bool {
         if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.address != rhs.address {
             return false
         }
         if lhs.pubkey != rhs.pubkey {
@@ -4739,6 +4940,7 @@ extension ArticleRecord: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(eventId)
+        hasher.combine(address)
         hasher.combine(pubkey)
         hasher.combine(identifier)
         hasher.combine(title)
@@ -4761,6 +4963,7 @@ public struct FfiConverterTypeArticleRecord: FfiConverterRustBuffer {
         return
             try ArticleRecord(
                 eventId: FfiConverterString.read(from: &buf),
+                address: FfiConverterString.read(from: &buf),
                 pubkey: FfiConverterString.read(from: &buf),
                 identifier: FfiConverterString.read(from: &buf),
                 title: FfiConverterString.read(from: &buf),
@@ -4775,6 +4978,7 @@ public struct FfiConverterTypeArticleRecord: FfiConverterRustBuffer {
 
     public static func write(_ value: ArticleRecord, into buf: inout [UInt8]) {
         FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.address, into: &buf)
         FfiConverterString.write(value.pubkey, into: &buf)
         FfiConverterString.write(value.identifier, into: &buf)
         FfiConverterString.write(value.title, into: &buf)
@@ -4809,6 +5013,7 @@ public func FfiConverterTypeArticleRecord_lower(_ value: ArticleRecord) -> RustB
  */
 public struct ArtifactDetailRoute {
     public var target: ArtifactDetailTarget
+    public var articleAddress: String
     public var articlePubkey: String
     public var articleDTag: String
     public var bookCatalogId: String
@@ -4816,8 +5021,9 @@ public struct ArtifactDetailRoute {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(target: ArtifactDetailTarget, articlePubkey: String, articleDTag: String, bookCatalogId: String, url: String) {
+    public init(target: ArtifactDetailTarget, articleAddress: String, articlePubkey: String, articleDTag: String, bookCatalogId: String, url: String) {
         self.target = target
+        self.articleAddress = articleAddress
         self.articlePubkey = articlePubkey
         self.articleDTag = articleDTag
         self.bookCatalogId = bookCatalogId
@@ -4833,6 +5039,9 @@ extension ArtifactDetailRoute: Sendable {}
 extension ArtifactDetailRoute: Equatable, Hashable {
     public static func ==(lhs: ArtifactDetailRoute, rhs: ArtifactDetailRoute) -> Bool {
         if lhs.target != rhs.target {
+            return false
+        }
+        if lhs.articleAddress != rhs.articleAddress {
             return false
         }
         if lhs.articlePubkey != rhs.articlePubkey {
@@ -4852,6 +5061,7 @@ extension ArtifactDetailRoute: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(target)
+        hasher.combine(articleAddress)
         hasher.combine(articlePubkey)
         hasher.combine(articleDTag)
         hasher.combine(bookCatalogId)
@@ -4869,6 +5079,7 @@ public struct FfiConverterTypeArtifactDetailRoute: FfiConverterRustBuffer {
         return
             try ArtifactDetailRoute(
                 target: FfiConverterTypeArtifactDetailTarget.read(from: &buf),
+                articleAddress: FfiConverterString.read(from: &buf),
                 articlePubkey: FfiConverterString.read(from: &buf),
                 articleDTag: FfiConverterString.read(from: &buf),
                 bookCatalogId: FfiConverterString.read(from: &buf),
@@ -4878,6 +5089,7 @@ public struct FfiConverterTypeArtifactDetailRoute: FfiConverterRustBuffer {
 
     public static func write(_ value: ArtifactDetailRoute, into buf: inout [UInt8]) {
         FfiConverterTypeArtifactDetailTarget.write(value.target, into: &buf)
+        FfiConverterString.write(value.articleAddress, into: &buf)
         FfiConverterString.write(value.articlePubkey, into: &buf)
         FfiConverterString.write(value.articleDTag, into: &buf)
         FfiConverterString.write(value.bookCatalogId, into: &buf)
@@ -13917,6 +14129,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeArticleReaderRoute: FfiConverterRustBuffer {
+    typealias SwiftType = ArticleReaderRoute?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeArticleReaderRoute.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeArticleReaderRoute.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeArticleRecord: FfiConverterRustBuffer {
     typealias SwiftType = ArticleRecord?
 
@@ -15213,6 +15449,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_by_address() != 8240) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_route() != 34058) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_route_for_article() != 30297) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_route() != 10925) {

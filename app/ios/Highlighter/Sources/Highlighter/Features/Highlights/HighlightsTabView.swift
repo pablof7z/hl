@@ -163,11 +163,7 @@ struct HighlightsTabView: View {
     // MARK: - Article (read-only surfacing) row
 
     private func readRow(_ item: ReadingFeedItem) -> some View {
-        NavigationLink(value: ArticleReaderTarget(
-            pubkey: item.article.pubkey,
-            dTag: item.article.identifier,
-            seed: item.article
-        )) {
+        NavigationLink(value: ArticleReaderTarget(article: item.article, seed: item.article)) {
             ReadingFeedCardView(item: item)
         }
         .buttonStyle(.plain)
@@ -187,12 +183,12 @@ struct HighlightsTabView: View {
             return .artifact(existing)
         }
         let addr = item.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        let dTag = String(parts[2])
+        guard !addr.isEmpty,
+              let route = app.core.getArticleReaderRoute(address: addr).value else {
+            return nil
+        }
         let preview = ArtifactPreview(
-            id: dTag,
+            id: route.dTag,
             url: "",
             title: "",
             author: "",
@@ -212,11 +208,11 @@ struct HighlightsTabView: View {
             publishedAt: "",
             durationSeconds: nil,
             referenceTagName: "a",
-            referenceTagValue: addr,
+            referenceTagValue: route.address,
             referenceKind: "30023",
             highlightTagName: "a",
-            highlightTagValue: addr,
-            highlightReferenceKey: "a:\(addr)",
+            highlightTagValue: route.address,
+            highlightReferenceKey: "a:\(route.address)",
             chapters: []
         )
         return ShareToCommunityTarget(

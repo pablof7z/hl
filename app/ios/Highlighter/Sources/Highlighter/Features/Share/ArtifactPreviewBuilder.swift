@@ -9,7 +9,6 @@ enum ArtifactPreviewBuilder {
     /// + reference tag point at the article's `a`-address
     /// (`30023:<pubkey>:<d>`) so downstream consumers resolve it correctly.
     static func from(article: ArticleRecord) -> ArtifactPreview {
-        let address = "30023:\(article.pubkey):\(article.identifier)"
         return ArtifactPreview(
             id: article.identifier,
             url: "",
@@ -31,11 +30,11 @@ enum ArtifactPreviewBuilder {
             publishedAt: article.publishedAt.map { String($0) } ?? "",
             durationSeconds: nil,
             referenceTagName: "a",
-            referenceTagValue: address,
+            referenceTagValue: article.address,
             referenceKind: "30023",
             highlightTagName: "a",
-            highlightTagValue: address,
-            highlightReferenceKey: "a:\(address)",
+            highlightTagValue: article.address,
+            highlightReferenceKey: "a:\(article.address)",
             chapters: []
         )
     }

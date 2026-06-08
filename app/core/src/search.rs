@@ -441,6 +441,7 @@ fn article_record_from_event(event: &Event) -> Option<ArticleRecord> {
 
     Some(ArticleRecord {
         event_id: event.id.to_hex(),
+        address: crate::articles::article_address(&event.pubkey.to_hex(), &identifier),
         pubkey: event.pubkey.to_hex(),
         identifier,
         title,

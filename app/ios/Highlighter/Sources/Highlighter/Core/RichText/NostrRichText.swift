@@ -430,59 +430,18 @@ private struct ArticleEntityCard: View {
         let image = tagValue(tags, "image")
         let summary = tagValue(tags, "summary")
         let dTag = tagValue(tags, "d")
-        let target = ArticleReaderTarget(
-            pubkey: event.pubkeyHex,
-            dTag: dTag,
-            seed: nil
-        )
-        return NavigationLink(value: target) {
-            HStack(alignment: .top, spacing: 12) {
-                if let url = URL(string: image), !image.isEmpty {
-                    KFImage(url)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 88, height: 88)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.highlighterTintPale)
-                        .frame(width: 88, height: 88)
+        let target = appStore.core
+            .getArticleReaderRouteForArticle(pubkeyHex: event.pubkeyHex, dTag: dTag)
+            .value
+            .map { ArticleReaderTarget(route: $0) }
+        return Group {
+            if let target {
+                NavigationLink(value: target) {
+                    cardContent(title: title, image: image, summary: summary)
                 }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title.isEmpty ? "Untitled" : title)
-                        .font(.system(.headline, design: .default))
-                        .foregroundStyle(Color.highlighterInkStrong)
-                        .lineLimit(2)
-                    if !summary.isEmpty {
-                        Text(summary)
-                            .font(.caption)
-                            .foregroundStyle(Color.highlighterInkMuted)
-                            .lineLimit(2)
-                    }
-                    let authorName = profile?.displayName ?? profile?.name ?? String(event.pubkeyHex.prefix(8))
-                    HStack(spacing: 6) {
-                        AuthorAvatar(
-                            pubkey: event.pubkeyHex,
-                            pictureURL: profile?.picture ?? "",
-                            displayInitial: authorName.prefix(1).description.uppercased(),
-                            size: 16,
-                            ringWidth: 0
-                        )
-                        Text(authorName.uppercased())
-                            .font(.caption2.weight(.bold))
-                            .tracking(0.6)
-                            .foregroundStyle(Color.highlighterInkMuted)
-                            .lineLimit(1)
-                    }
-                    .padding(.top, 2)
-                }
-                Spacer(minLength: 0)
+            } else {
+                cardContent(title: title, image: image, summary: summary)
             }
-            .padding(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.highlighterRule, lineWidth: 1)
-            )
         }
         .buttonStyle(.plain)
         .task {
@@ -492,6 +451,56 @@ private struct ArticleEntityCard: View {
                 profile = appStore.profileSnapshots[event.pubkeyHex]
             }
         }
+    }
+
+    private func cardContent(title: String, image: String, summary: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            if let url = URL(string: image), !image.isEmpty {
+                KFImage(url)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 88, height: 88)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.highlighterTintPale)
+                    .frame(width: 88, height: 88)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title.isEmpty ? "Untitled" : title)
+                    .font(.system(.headline, design: .default))
+                    .foregroundStyle(Color.highlighterInkStrong)
+                    .lineLimit(2)
+                if !summary.isEmpty {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundStyle(Color.highlighterInkMuted)
+                        .lineLimit(2)
+                }
+                let authorName = profile?.displayName ?? profile?.name ?? String(event.pubkeyHex.prefix(8))
+                HStack(spacing: 6) {
+                    AuthorAvatar(
+                        pubkey: event.pubkeyHex,
+                        pictureURL: profile?.picture ?? "",
+                        displayInitial: authorName.prefix(1).description.uppercased(),
+                        size: 16,
+                        ringWidth: 0
+                    )
+                    Text(authorName.uppercased())
+                        .font(.caption2.weight(.bold))
+                        .tracking(0.6)
+                        .foregroundStyle(Color.highlighterInkMuted)
+                        .lineLimit(1)
+                }
+                .padding(.top, 2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.highlighterRule, lineWidth: 1)
+        )
     }
 }
 

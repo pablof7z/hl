@@ -420,7 +420,7 @@ struct SearchView: View {
 
     @ViewBuilder
     private func articleRow(_ a: ArticleRecord) -> some View {
-        NavigationLink(value: ArticleReaderTarget(pubkey: a.pubkey, dTag: a.identifier, seed: nil)) {
+        NavigationLink(value: ArticleReaderTarget(article: a)) {
             ArticleCardView(article: a)
         }
         .buttonStyle(.plain)
@@ -459,9 +459,9 @@ struct SearchView: View {
     private func articleReaderTarget(for h: HighlightRecord) -> ArticleReaderTarget? {
         let addr = h.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !addr.isEmpty else { return nil }
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        return ArticleReaderTarget(pubkey: String(parts[1]), dTag: String(parts[2]), seed: nil)
+        let outcome = app.core.getArticleReaderRoute(address: addr)
+        guard outcome.error.isEmpty, let route = outcome.value else { return nil }
+        return ArticleReaderTarget(route: route)
     }
 
     private func suggestedQueries() -> [String] {

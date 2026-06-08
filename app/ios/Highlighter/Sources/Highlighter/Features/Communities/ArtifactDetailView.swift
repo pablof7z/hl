@@ -20,13 +20,11 @@ struct ArtifactDetailView: View {
             case .podcast:
                 PodcastListeningView(presentation: .pushed, artifact: artifact)
             case .article:
-                ArticleReaderView(
-                    target: ArticleReaderTarget(
-                        pubkey: route.articlePubkey,
-                        dTag: route.articleDTag,
-                        seed: nil
-                    )
-                )
+                if let target = ArticleReaderTarget(artifactRoute: route) {
+                    ArticleReaderView(target: target)
+                } else {
+                    missingReferenceView
+                }
             case .book:
                 BookView(catalogId: route.bookCatalogId)
                     .environment(app)

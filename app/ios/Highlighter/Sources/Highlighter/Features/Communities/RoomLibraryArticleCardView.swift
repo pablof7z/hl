@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// Medium-style card for an article artifact in a room's library. Mirrors
-/// the reads-tab treatment by parsing the artifact's NIP-23 `a`-tag
-/// (`30023:<pubkey>:<d>`) so the real article author drives the attribution
-/// avatar/profile lookup rather than the sharer.
+/// the reads-tab treatment by using the Rust artifact route so the real
+/// article author drives the attribution avatar/profile lookup rather than
+/// the sharer.
 struct RoomLibraryArticleCardView: View {
     @Environment(HighlighterStore.self) private var app
 
@@ -44,21 +44,10 @@ struct RoomLibraryArticleCardView: View {
         return URL(string: artifact.preview.image)
     }
 
-    /// Parse `30023:<pubkey>:<d>` out of the artifact's highlight or
-    /// primary reference tag.
     private var articleAuthorPubkey: String? {
-        let raw: String
-        if artifact.preview.highlightTagName == "a", !artifact.preview.highlightTagValue.isEmpty {
-            raw = artifact.preview.highlightTagValue
-        } else if artifact.preview.referenceTagName == "a", !artifact.preview.referenceTagValue.isEmpty {
-            raw = artifact.preview.referenceTagValue
-        } else {
-            return nil
-        }
-        let parts = raw.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        let pubkey = String(parts[1])
-        return pubkey.isEmpty ? nil : pubkey
+        let route = app.core.getArtifactDetailRoute(artifact: artifact)
+        guard route.target == .article, !route.articlePubkey.isEmpty else { return nil }
+        return route.articlePubkey
     }
 
     private var authorDisplayName: String {

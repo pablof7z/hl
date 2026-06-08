@@ -45,9 +45,8 @@ struct ArticleReaderView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             if let article = store?.article {
-                let address = "30023:\(article.pubkey):\(article.identifier)"
                 ToolbarItem(placement: .topBarTrailing) {
-                    BookmarkMenuButton(articleAddress: address)
+                    BookmarkMenuButton(articleAddress: article.address)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
