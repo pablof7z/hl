@@ -829,6 +829,17 @@ pub struct ReadingFeedItem {
     pub latest_activity_at: u64,
 }
 
+/// One row in the home feed. Rust owns highlight grouping, read suppression,
+/// stable identity, and merged chronological ordering; native shells render
+/// either the non-empty `highlights` module or the `read` article.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HomeFeedItem {
+    pub stable_id: String,
+    pub sort_key: u64,
+    pub highlights: Vec<HydratedHighlight>,
+    pub read: Option<ReadingFeedItem>,
+}
+
 /// One thread in the in-app feedback surface — a kind:1 root note that
 /// `a`-tags the project coordinate, optionally enriched with the latest
 /// kind:513 metadata (title/summary/status-label) emitted by the project's

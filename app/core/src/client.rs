@@ -36,16 +36,16 @@ use crate::models::{
     DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
     FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft,
     HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightReferenceBucket,
-    HighlightReferenceTarget, HighlightSourceKind, HydratedHighlight, HydratedHighlightListOutcome,
-    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
-    NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
-    OnboardingInterestSelection, OptionalStringOutcome, PictureDraft, PictureOutcome,
-    PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
-    ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome,
-    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
-    RoomLane, RoomRecommendation, RoomRecommendationListOutcome, StringListOutcome, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
-    WebMetadataOutcome, WhatsNewEntriesOutcome,
+    HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem, HydratedHighlight,
+    HydratedHighlightListOutcome, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
+    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
+    OnboardingInterest, OnboardingInterestSelection, OptionalStringOutcome, PictureDraft,
+    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
+    ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
+    RelayDiagnosticListOutcome, RoomLane, RoomRecommendation, RoomRecommendationListOutcome,
+    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -1579,6 +1579,17 @@ impl HighlighterCore {
             )
         })();
         hydrated_highlight_list_outcome(result)
+    }
+
+    /// Compose following highlights and following reads into the home feed.
+    /// Rust owns grouping, stable identity, duplicate suppression, and merged
+    /// ordering; native shells render the returned rows.
+    pub fn build_home_feed_items(
+        &self,
+        highlights: Vec<HydratedHighlight>,
+        reads: Vec<ReadingFeedItem>,
+    ) -> Vec<HomeFeedItem> {
+        crate::home_feed::build_items(&highlights, &reads)
     }
 
     // -- Profile reads (per-pubkey, no auth required) --

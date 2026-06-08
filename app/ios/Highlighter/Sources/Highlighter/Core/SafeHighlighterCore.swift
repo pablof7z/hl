@@ -834,6 +834,16 @@ actor SafeHighlighterCore {
         await core.getFollowingHighlights(limit: limit)
     }
 
+    nonisolated func buildHomeFeedItems(
+        highlights: [HydratedHighlight],
+        reads: [ReadingFeedItem]
+    ) -> [HomeFeedItem] {
+        core.buildHomeFeedItems(
+            highlights: highlights,
+            reads: reads
+        )
+    }
+
     // MARK: - Subscriptions
 
     func subscribeFollowingReads() async -> SubscriptionOutcome {

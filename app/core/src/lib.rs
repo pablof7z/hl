@@ -18,6 +18,7 @@ pub mod feedback;
 pub mod follows;
 pub mod groups;
 pub mod highlights;
+pub mod home_feed;
 pub mod isbn_lookup;
 pub mod lists;
 pub mod models;
@@ -67,9 +68,9 @@ pub use models::{
     FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome,
     FeedbackThreadRecord, GeneratedAccount, GeneratedAccountOutcome, HighlightDraft,
     HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightReferenceBucket,
-    HighlightReferenceTarget, HighlightSourceKind, HydratedHighlight, HydratedHighlightListOutcome,
-    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
-    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem, HydratedHighlight,
+    HydratedHighlightListOutcome, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
+    Nip11DocumentOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
     OnboardingInterestSelection, OptionalStringOutcome, PictureDraft, PictureOutcome,
     PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
     ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem,

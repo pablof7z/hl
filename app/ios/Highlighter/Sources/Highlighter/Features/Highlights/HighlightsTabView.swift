@@ -119,11 +119,10 @@ struct HighlightsTabView: View {
 
     @ViewBuilder
     private func row(for item: HomeFeedStore.Item) -> some View {
-        switch item {
-        case .highlights(let hs):
-            highlightRow(hs)
-        case .read(let r):
-            readRow(r)
+        if !item.highlights.isEmpty {
+            highlightRow(item.highlights)
+        } else if let read = item.read {
+            readRow(read)
         }
     }
 

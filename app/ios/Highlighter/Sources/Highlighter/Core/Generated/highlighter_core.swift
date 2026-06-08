@@ -784,6 +784,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, title: String, author: String)  -> ArtifactPreviewOutcome
 
     /**
+     * Compose following highlights and following reads into the home feed.
+     * Rust owns grouping, stable identity, duplicate suppression, and merged
+     * ordering; native shells render the returned rows.
+     */
+    func buildHomeFeedItems(highlights: [HydratedHighlight], reads: [ReadingFeedItem])  -> [HomeFeedItem]
+
+    /**
      * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
      * Extension flow — the main app drains the share queue, normalizes each
      * URL through this, then calls `publish_artifact` to post the kind:11.
@@ -1875,6 +1882,20 @@ open func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, ti
         FfiConverterOptionTypeArtifactPreview.lower(basePreview),
         FfiConverterString.lower(title),
         FfiConverterString.lower(author),$0
+    )
+})
+}
+
+    /**
+     * Compose following highlights and following reads into the home feed.
+     * Rust owns grouping, stable identity, duplicate suppression, and merged
+     * ordering; native shells render the returned rows.
+     */
+open func buildHomeFeedItems(highlights: [HydratedHighlight], reads: [ReadingFeedItem]) -> [HomeFeedItem]  {
+    return try!  FfiConverterSequenceTypeHomeFeedItem.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_build_home_feed_items(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeHydratedHighlight.lower(highlights),
+        FfiConverterSequenceTypeReadingFeedItem.lower(reads),$0
     )
 })
 }
@@ -10660,6 +10681,97 @@ public func FfiConverterTypeHighlightReferenceTarget_lower(_ value: HighlightRef
 
 
 /**
+ * One row in the home feed. Rust owns highlight grouping, read suppression,
+ * stable identity, and merged chronological ordering; native shells render
+ * either the non-empty `highlights` module or the `read` article.
+ */
+public struct HomeFeedItem {
+    public var stableId: String
+    public var sortKey: UInt64
+    public var highlights: [HydratedHighlight]
+    public var read: ReadingFeedItem?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(stableId: String, sortKey: UInt64, highlights: [HydratedHighlight], read: ReadingFeedItem?) {
+        self.stableId = stableId
+        self.sortKey = sortKey
+        self.highlights = highlights
+        self.read = read
+    }
+}
+
+#if compiler(>=6)
+extension HomeFeedItem: Sendable {}
+#endif
+
+
+extension HomeFeedItem: Equatable, Hashable {
+    public static func ==(lhs: HomeFeedItem, rhs: HomeFeedItem) -> Bool {
+        if lhs.stableId != rhs.stableId {
+            return false
+        }
+        if lhs.sortKey != rhs.sortKey {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.read != rhs.read {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(stableId)
+        hasher.combine(sortKey)
+        hasher.combine(highlights)
+        hasher.combine(read)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHomeFeedItem: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeFeedItem {
+        return
+            try HomeFeedItem(
+                stableId: FfiConverterString.read(from: &buf),
+                sortKey: FfiConverterUInt64.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
+                read: FfiConverterOptionTypeReadingFeedItem.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HomeFeedItem, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.stableId, into: &buf)
+        FfiConverterUInt64.write(value.sortKey, into: &buf)
+        FfiConverterSequenceTypeHydratedHighlight.write(value.highlights, into: &buf)
+        FfiConverterOptionTypeReadingFeedItem.write(value.read, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeFeedItem_lift(_ buf: RustBuffer) throws -> HomeFeedItem {
+    return try FfiConverterTypeHomeFeedItem.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeFeedItem_lower(_ value: HomeFeedItem) -> RustBuffer {
+    return FfiConverterTypeHomeFeedItem.lower(value)
+}
+
+
+/**
  * Highlight + its associated artifact (for feed rendering).
  */
 public struct HydratedHighlight {
@@ -17523,6 +17635,30 @@ fileprivate struct FfiConverterOptionTypeReactionSummary: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeReadingFeedItem: FfiConverterRustBuffer {
+    typealias SwiftType = ReadingFeedItem?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeReadingFeedItem.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeReadingFeedItem.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeWebMetadata: FfiConverterRustBuffer {
     typealias SwiftType = WebMetadata?
 
@@ -18021,6 +18157,31 @@ fileprivate struct FfiConverterSequenceTypeHighlightReferenceBucket: FfiConverte
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeHomeFeedItem: FfiConverterRustBuffer {
+    typealias SwiftType = [HomeFeedItem]
+
+    public static func write(_ value: [HomeFeedItem], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHomeFeedItem.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HomeFeedItem] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HomeFeedItem]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHomeFeedItem.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeHydratedHighlight: FfiConverterRustBuffer {
     typealias SwiftType = [HydratedHighlight]
 
@@ -18492,6 +18653,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_edited_book_preview() != 19782) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_build_home_feed_items() != 58786) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 40366) {
