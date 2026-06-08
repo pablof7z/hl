@@ -1413,6 +1413,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectFeedbackComposer(input: FeedbackComposerProjectionInput)  -> FeedbackComposerProjection
 
+    /**
+     * Feedback thread row/detail presentation projection. Rust owns title,
+     * preview, summary, and status fallback rules; native shells keep
+     * localized relative-time formatting and rendering.
+     */
+    func projectFeedbackThreadPresentation(thread: FeedbackThreadRecord)  -> FeedbackThreadPresentationProjection
+
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
     func projectRelayDetail(input: RelayDetailProjectionInput)  -> RelayDetailProjection
@@ -4125,6 +4132,19 @@ open func projectFeedbackComposer(input: FeedbackComposerProjectionInput) -> Fee
     return try!  FfiConverterTypeFeedbackComposerProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_feedback_composer(self.uniffiClonePointer(),
         FfiConverterTypeFeedbackComposerProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Feedback thread row/detail presentation projection. Rust owns title,
+     * preview, summary, and status fallback rules; native shells keep
+     * localized relative-time formatting and rendering.
+     */
+open func projectFeedbackThreadPresentation(thread: FeedbackThreadRecord) -> FeedbackThreadPresentationProjection  {
+    return try!  FfiConverterTypeFeedbackThreadPresentationProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_feedback_thread_presentation(self.uniffiClonePointer(),
+        FfiConverterTypeFeedbackThreadRecord_lower(thread),$0
     )
 })
 }
@@ -10895,6 +10915,100 @@ public func FfiConverterTypeFeedbackThreadListOutcome_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeFeedbackThreadListOutcome_lower(_ value: FeedbackThreadListOutcome) -> RustBuffer {
     return FfiConverterTypeFeedbackThreadListOutcome.lower(value)
+}
+
+
+public struct FeedbackThreadPresentationProjection {
+    public var navigationTitle: String
+    public var rowTitle: String
+    public var rowSecondaryText: String?
+    public var detailSummary: String?
+    public var statusLabel: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(navigationTitle: String, rowTitle: String, rowSecondaryText: String?, detailSummary: String?, statusLabel: String?) {
+        self.navigationTitle = navigationTitle
+        self.rowTitle = rowTitle
+        self.rowSecondaryText = rowSecondaryText
+        self.detailSummary = detailSummary
+        self.statusLabel = statusLabel
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackThreadPresentationProjection: Sendable {}
+#endif
+
+
+extension FeedbackThreadPresentationProjection: Equatable, Hashable {
+    public static func ==(lhs: FeedbackThreadPresentationProjection, rhs: FeedbackThreadPresentationProjection) -> Bool {
+        if lhs.navigationTitle != rhs.navigationTitle {
+            return false
+        }
+        if lhs.rowTitle != rhs.rowTitle {
+            return false
+        }
+        if lhs.rowSecondaryText != rhs.rowSecondaryText {
+            return false
+        }
+        if lhs.detailSummary != rhs.detailSummary {
+            return false
+        }
+        if lhs.statusLabel != rhs.statusLabel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(navigationTitle)
+        hasher.combine(rowTitle)
+        hasher.combine(rowSecondaryText)
+        hasher.combine(detailSummary)
+        hasher.combine(statusLabel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackThreadPresentationProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackThreadPresentationProjection {
+        return
+            try FeedbackThreadPresentationProjection(
+                navigationTitle: FfiConverterString.read(from: &buf),
+                rowTitle: FfiConverterString.read(from: &buf),
+                rowSecondaryText: FfiConverterOptionString.read(from: &buf),
+                detailSummary: FfiConverterOptionString.read(from: &buf),
+                statusLabel: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackThreadPresentationProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.navigationTitle, into: &buf)
+        FfiConverterString.write(value.rowTitle, into: &buf)
+        FfiConverterOptionString.write(value.rowSecondaryText, into: &buf)
+        FfiConverterOptionString.write(value.detailSummary, into: &buf)
+        FfiConverterOptionString.write(value.statusLabel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackThreadPresentationProjection_lift(_ buf: RustBuffer) throws -> FeedbackThreadPresentationProjection {
+    return try FfiConverterTypeFeedbackThreadPresentationProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackThreadPresentationProjection_lower(_ value: FeedbackThreadPresentationProjection) -> RustBuffer {
+    return FfiConverterTypeFeedbackThreadPresentationProjection.lower(value)
 }
 
 
@@ -23569,6 +23683,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_composer() != 43880) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_thread_presentation() != 19722) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {

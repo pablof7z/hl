@@ -2883,6 +2883,16 @@ impl HighlighterCore {
         feedback::feedback_composer_projection(input)
     }
 
+    /// Feedback thread row/detail presentation projection. Rust owns title,
+    /// preview, summary, and status fallback rules; native shells keep
+    /// localized relative-time formatting and rendering.
+    pub fn project_feedback_thread_presentation(
+        &self,
+        thread: FeedbackThreadRecord,
+    ) -> feedback::FeedbackThreadPresentationProjection {
+        feedback::feedback_thread_presentation(thread)
+    }
+
     /// Optimistically insert a newly-published feedback root into the thread
     /// list. Rust owns root validation, preview text, dedupe, and ordering.
     pub fn optimistically_insert_feedback_root_thread(

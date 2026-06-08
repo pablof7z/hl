@@ -56,7 +56,10 @@ pub mod whats_new;
 pub use client::HighlighterCore;
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
-pub use feedback::{FeedbackComposerProjection, FeedbackComposerProjectionInput};
+pub use feedback::{
+    FeedbackComposerProjection, FeedbackComposerProjectionInput,
+    FeedbackThreadPresentationProjection,
+};
 pub use groups::{
     CreateRoomProjection, CreateRoomProjectionInput, CreateRoomVisibilityOption, RoomAccess,
     RoomVisibility,

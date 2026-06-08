@@ -35,6 +35,15 @@ pub struct FeedbackComposerProjection {
     pub can_send: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackThreadPresentationProjection {
+    pub navigation_title: String,
+    pub row_title: String,
+    pub row_secondary_text: Option<String>,
+    pub detail_summary: Option<String>,
+    pub status_label: Option<String>,
+}
+
 pub fn feedback_composer_projection(
     input: FeedbackComposerProjectionInput,
 ) -> FeedbackComposerProjection {
@@ -42,6 +51,33 @@ pub fn feedback_composer_projection(
     FeedbackComposerProjection {
         can_send: !submit_body.is_empty() && !input.is_publishing,
         submit_body,
+    }
+}
+
+pub fn feedback_thread_presentation(
+    thread: FeedbackThreadRecord,
+) -> FeedbackThreadPresentationProjection {
+    let row_title = thread
+        .title
+        .clone()
+        .unwrap_or_else(|| thread.preview.clone());
+    let navigation_title = thread.title.clone().unwrap_or_else(|| "Feedback".into());
+    let row_secondary_text = renderable_text(thread.summary.clone()).or_else(|| {
+        if thread.title.is_some() && !thread.preview.is_empty() {
+            Some(thread.preview.clone())
+        } else {
+            None
+        }
+    });
+    let detail_summary = renderable_text(thread.summary);
+    let status_label = renderable_text(thread.status_label);
+
+    FeedbackThreadPresentationProjection {
+        navigation_title,
+        row_title,
+        row_secondary_text,
+        detail_summary,
+        status_label,
     }
 }
 
@@ -448,6 +484,10 @@ fn trim_preview(content: &str) -> String {
     }
 }
 
+fn renderable_text(value: Option<String>) -> Option<String> {
+    value.filter(|text| !text.is_empty())
+}
+
 fn has_root_e_marker(event: &Event) -> bool {
     event.tags.iter().any(|tag| {
         let s = tag.as_slice();
@@ -803,6 +843,60 @@ mod tests {
         assert!(!blank.can_send);
         assert_eq!(publishing.submit_body, "ready");
         assert!(!publishing.can_send);
+    }
+
+    #[test]
+    fn feedback_thread_presentation_uses_title_summary_status_and_detail_title() {
+        let projection = feedback_thread_presentation(FeedbackThreadRecord {
+            root_event_id: "root".into(),
+            author_pubkey: "pubkey".into(),
+            created_at: 1,
+            last_activity_at: 2,
+            title: Some("Title".into()),
+            summary: Some("Summary".into()),
+            status_label: Some("waiting".into()),
+            preview: "Preview".into(),
+        });
+
+        assert_eq!(projection.navigation_title, "Title");
+        assert_eq!(projection.row_title, "Title");
+        assert_eq!(projection.row_secondary_text.as_deref(), Some("Summary"));
+        assert_eq!(projection.detail_summary.as_deref(), Some("Summary"));
+        assert_eq!(projection.status_label.as_deref(), Some("waiting"));
+    }
+
+    #[test]
+    fn feedback_thread_presentation_preserves_preview_fallbacks() {
+        let no_title = feedback_thread_presentation(FeedbackThreadRecord {
+            root_event_id: "root".into(),
+            author_pubkey: "pubkey".into(),
+            created_at: 1,
+            last_activity_at: 2,
+            title: None,
+            summary: None,
+            status_label: Some(String::new()),
+            preview: "Preview".into(),
+        });
+        let titled_without_summary = feedback_thread_presentation(FeedbackThreadRecord {
+            root_event_id: "root".into(),
+            author_pubkey: "pubkey".into(),
+            created_at: 1,
+            last_activity_at: 2,
+            title: Some("Title".into()),
+            summary: Some(String::new()),
+            status_label: None,
+            preview: "Preview".into(),
+        });
+
+        assert_eq!(no_title.navigation_title, "Feedback");
+        assert_eq!(no_title.row_title, "Preview");
+        assert_eq!(no_title.row_secondary_text, None);
+        assert_eq!(no_title.detail_summary, None);
+        assert_eq!(no_title.status_label, None);
+        assert_eq!(
+            titled_without_summary.row_secondary_text.as_deref(),
+            Some("Preview")
+        );
     }
 
     #[test]

@@ -18,7 +18,7 @@ struct FeedbackThreadDetailView: View {
             Divider()
             composer
         }
-        .navigationTitle(thread.title ?? "Feedback")
+        .navigationTitle(threadPresentation.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await detailStore.start(
@@ -37,7 +37,7 @@ struct FeedbackThreadDetailView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
-                    if let summary = thread.summary, !summary.isEmpty {
+                    if let summary = threadPresentation.detailSummary {
                         Text(summary)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -112,6 +112,10 @@ struct FeedbackThreadDetailView: View {
                 isPublishing: detailStore.isPublishing
             )
         )
+    }
+
+    private var threadPresentation: FeedbackThreadPresentationProjection {
+        app.safeCore.projectFeedbackThreadPresentation(thread: thread)
     }
 
     private func send() async {
