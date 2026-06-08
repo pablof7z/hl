@@ -1371,11 +1371,13 @@ impl HighlighterCore {
         ))
     }
 
-    pub async fn get_my_highlights(&self, limit: u32) -> Result<Vec<HighlightRecord>, CoreError> {
-        let Some(user) = self.inner.read().session.current_user() else {
-            return Err(CoreError::NotAuthenticated);
-        };
-        highlights::query_highlights_by_author(self.runtime.ndb(), &user.pubkey, limit)
+    pub async fn get_my_highlights(&self, limit: u32) -> HighlightListOutcome {
+        highlight_list_outcome((|| {
+            let Some(user) = self.inner.read().session.current_user() else {
+                return Err(CoreError::NotAuthenticated);
+            };
+            highlights::query_highlights_by_author(self.runtime.ndb(), &user.pubkey, limit)
+        })())
     }
 
     /// Following Reads feed — articles surfaced through the user's follow
@@ -1776,10 +1778,6 @@ impl HighlighterCore {
     /// always includes `wss://relay.highlighter.com`, plus every `relay` tag
     /// from the newest cached kind:10007 (NIP-51 search relay list).
     pub async fn get_search_relays(&self) -> StringListOutcome {
-        string_list_outcome(self.search_relays().await)
-    }
-
-    async fn search_relays(&self) -> Result<Vec<String>, CoreError> {
         let user_hex = self
             .inner
             .read()
@@ -1787,7 +1785,10 @@ impl HighlighterCore {
             .current_user()
             .map(|u| u.pubkey)
             .unwrap_or_default();
-        crate::search::query_search_relays(self.runtime.ndb(), &user_hex)
+        string_list_outcome(crate::search::query_search_relays(
+            self.runtime.ndb(),
+            &user_hex,
+        ))
     }
 
     pub async fn get_recent_searches(&self) -> StringListOutcome {
@@ -1815,7 +1816,14 @@ impl HighlighterCore {
                     "search query must not be empty".into(),
                 ));
             }
-            let relays = self.search_relays().await?;
+            let user_hex = self
+                .inner
+                .read()
+                .session
+                .current_user()
+                .map(|u| u.pubkey)
+                .unwrap_or_default();
+            let relays = crate::search::query_search_relays(self.runtime.ndb(), &user_hex)?;
             if relays.is_empty() {
                 return Err(CoreError::InvalidInput("no search relays resolved".into()));
             }

@@ -947,7 +947,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getMyCurationSets() async  -> BookmarkSetListOutcome
 
-    func getMyHighlights(limit: UInt32) async throws  -> [HighlightRecord]
+    func getMyHighlights(limit: UInt32) async  -> HighlightListOutcome
 
     /**
      * Return all NIP-B0 kind:39701 web bookmarks authored by the current user.
@@ -1202,8 +1202,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func searchHighlights(query: String, limit: UInt32) async  -> HighlightListOutcome
 
     func searchProfiles(query: String, limit: UInt32) async  -> ProfileListOutcome
-
-    func searchRelays() async throws  -> [String]
 
     /**
      * Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
@@ -2271,9 +2269,9 @@ open func getMyCurationSets()async  -> BookmarkSetListOutcome  {
         )
 }
 
-open func getMyHighlights(limit: UInt32)async throws  -> [HighlightRecord]  {
+open func getMyHighlights(limit: UInt32)async  -> HighlightListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_my_highlights(
                     self.uniffiClonePointer(),
@@ -2283,8 +2281,9 @@ open func getMyHighlights(limit: UInt32)async throws  -> [HighlightRecord]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3358,23 +3357,6 @@ open func searchProfiles(query: String, limit: UInt32)async  -> ProfileListOutco
             liftFunc: FfiConverterTypeProfileListOutcome_lift,
             errorHandler: nil
 
-        )
-}
-
-open func searchRelays()async throws  -> [String]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_search_relays(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
         )
 }
 
@@ -14728,7 +14710,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_curation_sets() != 7638) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_highlights() != 10939) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_highlights() != 57472) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_web_bookmarks() != 39742) {
@@ -14900,9 +14882,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_profiles() != 13489) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_relays() != 6604) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_address_in_curation_set() != 8659) {
