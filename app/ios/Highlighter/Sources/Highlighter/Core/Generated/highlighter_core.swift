@@ -1443,6 +1443,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectProfileDisplayWithLabel(input: ProfileDisplayWithLabelProjectionInput)  -> ProfileDisplayProjection
 
     /**
+     * Compact profile handle projection for social proof surfaces. Rust owns
+     * handle precedence and pubkey fallback length; native shells render it.
+     */
+    func projectProfileHandle(input: ProfileDisplayProjectionInput)  -> ProfileDisplayProjection
+
+    /**
      * Profile header identity projection. Rust owns display fallbacks and
      * NIP-05 label normalization; native shells render the returned fields.
      */
@@ -4217,6 +4223,18 @@ open func projectProfileDisplayWithLabel(input: ProfileDisplayWithLabelProjectio
     return try!  FfiConverterTypeProfileDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_profile_display_with_label(self.uniffiClonePointer(),
         FfiConverterTypeProfileDisplayWithLabelProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Compact profile handle projection for social proof surfaces. Rust owns
+     * handle precedence and pubkey fallback length; native shells render it.
+     */
+open func projectProfileHandle(input: ProfileDisplayProjectionInput) -> ProfileDisplayProjection  {
+    return try!  FfiConverterTypeProfileDisplayProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_profile_handle(self.uniffiClonePointer(),
+        FfiConverterTypeProfileDisplayProjectionInput_lower(input),$0
     )
 })
 }
@@ -21212,6 +21230,7 @@ public enum ProfileDisplayFallback {
     case pubkey10
     case pubkey12
     case accountLabel
+    case pubkey6
 }
 
 
@@ -21237,6 +21256,8 @@ public struct FfiConverterTypeProfileDisplayFallback: FfiConverterRustBuffer {
 
         case 4: return .accountLabel
 
+        case 5: return .pubkey6
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -21259,6 +21280,10 @@ public struct FfiConverterTypeProfileDisplayFallback: FfiConverterRustBuffer {
 
         case .accountLabel:
             writeInt(&buf, Int32(4))
+
+
+        case .pubkey6:
+            writeInt(&buf, Int32(5))
 
         }
     }
@@ -24460,6 +24485,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_display_with_label() != 13355) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_handle() != 16948) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_identity() != 18652) {

@@ -135,6 +135,7 @@ pub enum ProfileDisplayFallback {
     Pubkey10,
     Pubkey12,
     AccountLabel,
+    Pubkey6,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -229,6 +230,28 @@ pub fn profile_display_with_label_projection(
     }
 }
 
+/// Profile handle projection for compact social proof. Rust owns handle
+/// precedence and preserves the existing pubkey-derived avatar fallback.
+pub fn profile_handle_projection(input: ProfileDisplayProjectionInput) -> ProfileDisplayProjection {
+    let display_name = match input.profile.as_ref() {
+        Some(profile) if !profile.name.is_empty() => profile.name.clone(),
+        Some(profile) if !profile.display_name.is_empty() => profile.display_name.clone(),
+        _ => profile_display_fallback_name(&input.pubkey, input.fallback),
+    };
+    let display_initial = profile_display_fallback_initial(&input.pubkey, input.fallback);
+    let picture_url = input
+        .profile
+        .as_ref()
+        .map(|profile| profile.picture.clone())
+        .unwrap_or_default();
+
+    ProfileDisplayProjection {
+        display_name,
+        display_initial,
+        picture_url,
+    }
+}
+
 /// Profile header identity projection. Rust owns profile display fallback and
 /// NIP-05 label normalization; native shells render and execute OS links.
 pub fn profile_identity_projection(
@@ -260,6 +283,7 @@ pub fn profile_identity_projection(
 
 fn profile_display_fallback_name(pubkey: &str, fallback: ProfileDisplayFallback) -> String {
     match fallback {
+        ProfileDisplayFallback::Pubkey6 => pubkey.chars().take(6).collect(),
         ProfileDisplayFallback::Pubkey8 => pubkey.chars().take(8).collect(),
         ProfileDisplayFallback::Pubkey10 => pubkey.chars().take(10).collect(),
         ProfileDisplayFallback::Pubkey12 => pubkey.chars().take(12).collect(),
@@ -269,7 +293,8 @@ fn profile_display_fallback_name(pubkey: &str, fallback: ProfileDisplayFallback)
 
 fn profile_display_fallback_initial(pubkey: &str, fallback: ProfileDisplayFallback) -> String {
     match fallback {
-        ProfileDisplayFallback::Pubkey8
+        ProfileDisplayFallback::Pubkey6
+        | ProfileDisplayFallback::Pubkey8
         | ProfileDisplayFallback::Pubkey10
         | ProfileDisplayFallback::Pubkey12 => pubkey.chars().take(1).collect(),
         ProfileDisplayFallback::AccountLabel => String::new(),
@@ -585,6 +610,53 @@ mod tests {
             ProfileDisplayProjection {
                 display_name: "Nostr Account".to_string(),
                 display_initial: String::new(),
+                picture_url: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn profile_handle_projection_prefers_name_before_display_name() {
+        let projection = profile_handle_projection(ProfileDisplayProjectionInput {
+            pubkey: "fbcdef123456".to_string(),
+            fallback: ProfileDisplayFallback::Pubkey6,
+            profile: Some(ProfileMetadata {
+                pubkey: "fbcdef123456".to_string(),
+                name: "alice".to_string(),
+                display_name: "Reader One".to_string(),
+                about: String::new(),
+                picture: "https://example.com/avatar.png".to_string(),
+                banner: String::new(),
+                nip05: String::new(),
+                website: String::new(),
+                lud16: String::new(),
+                created_at: None,
+            }),
+        });
+
+        assert_eq!(
+            projection,
+            ProfileDisplayProjection {
+                display_name: "alice".to_string(),
+                display_initial: "f".to_string(),
+                picture_url: "https://example.com/avatar.png".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn profile_handle_projection_supports_pubkey6_fallback() {
+        let projection = profile_handle_projection(ProfileDisplayProjectionInput {
+            pubkey: "abcdef123456".to_string(),
+            fallback: ProfileDisplayFallback::Pubkey6,
+            profile: None,
+        });
+
+        assert_eq!(
+            projection,
+            ProfileDisplayProjection {
+                display_name: "abcdef".to_string(),
+                display_initial: "a".to_string(),
                 picture_url: String::new(),
             }
         );

@@ -64,11 +64,17 @@ struct FriendsOnRoomCard: View {
     }
 
     private func handle(for pubkey: String) -> String {
-        if let profile = store.profileSnapshots[pubkey] {
-            if !profile.name.isEmpty { return profile.name }
-            if !profile.displayName.isEmpty { return profile.displayName }
-        }
-        return String(pubkey.prefix(6))
+        profileHandle(for: pubkey).displayName
+    }
+
+    private func profileHandle(for pubkey: String) -> ProfileDisplayProjection {
+        store.safeCore.projectProfileHandle(
+            input: ProfileDisplayProjectionInput(
+                pubkey: pubkey,
+                profile: store.profileSnapshots[pubkey],
+                fallback: .pubkey6
+            )
+        )
     }
 
     @ViewBuilder
@@ -99,10 +105,11 @@ struct FriendsOnRoomCard: View {
         let show = recommendation.reasonPubkeys.prefix(3)
         return HStack(spacing: -8) {
             ForEach(Array(show.enumerated()), id: \.offset) { item in
+                let projection = profileHandle(for: item.element)
                 AuthorAvatar(
                     pubkey: item.element,
-                    pictureURL: store.profileSnapshots[item.element]?.picture ?? "",
-                    displayInitial: String(item.element.prefix(1)),
+                    pictureURL: projection.pictureUrl,
+                    displayInitial: projection.displayInitial,
                     size: 26
                 )
                 .overlay(

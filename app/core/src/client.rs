@@ -1735,6 +1735,15 @@ impl HighlighterCore {
         profile::profile_display_with_label_projection(input)
     }
 
+    /// Compact profile handle projection for social proof surfaces. Rust owns
+    /// handle precedence and pubkey fallback length; native shells render it.
+    pub fn project_profile_handle(
+        &self,
+        input: profile::ProfileDisplayProjectionInput,
+    ) -> profile::ProfileDisplayProjection {
+        profile::profile_handle_projection(input)
+    }
+
     /// Profile header identity projection. Rust owns display fallbacks and
     /// NIP-05 label normalization; native shells render the returned fields.
     pub fn project_profile_identity(
