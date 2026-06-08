@@ -2974,6 +2974,20 @@ impl HighlighterCore {
         crate::nostr_entities::identity_key(&entity)
     }
 
+    pub fn tokenize_nostr_content(
+        &self,
+        content: String,
+    ) -> Vec<crate::nostr_entities::NostrContentRun> {
+        crate::nostr_entities::tokenize_nostr_content(&content)
+    }
+
+    pub fn extract_nostr_event_refs(
+        &self,
+        content: String,
+    ) -> Vec<crate::nostr_entities::NostrEntityRef> {
+        crate::nostr_entities::extract_event_refs(&content)
+    }
+
     /// Mint a NIP-19 `nevent` for a kind:9802 highlight share link. The
     /// canonical relay hint is Rust policy; native shells provide only the
     /// event id and author hint they are already rendering.

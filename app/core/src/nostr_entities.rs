@@ -12,9 +12,15 @@
 //!   nostrdb, return a [`NostrEntityEvent`] the UI can render
 //!   directly. Returns `None` when the cache is cold. Rust also carries the
 //!   semantic render kind so native shells do not duplicate event-kind policy.
+//! - [`tokenize_nostr_content`] — split display text into literal runs and
+//!   decoded NIP-21 entity references without native shells duplicating
+//!   Nostr URI parsing.
 //! - The subscription registry installs a view-scoped REQ on the indexer
 //!   pool + any relay hints carried by the entity, so a cold cache warms up
 //!   without blocking the first paint.
+
+use std::collections::HashSet;
+use std::ops::Range;
 
 use nostr_sdk::nips::nip19::{
     FromBech32, Nip19, Nip19Coordinate, Nip19Event, Nip19Profile, ToBech32,
@@ -30,7 +36,7 @@ const KIND_HIGHLIGHT: u32 = 9802;
 const KIND_LONG_FORM: u32 = 30023;
 
 /// Parsed reference to a Nostr entity encoded as a NIP-19 bech32.
-#[derive(Debug, Clone, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum NostrEntityRef {
     /// `npub1…` / `nprofile1…` — reference to a user's profile.
     Profile {
@@ -79,6 +85,12 @@ pub enum NostrEntityInlineRender {
     Reference {
         chip_label: String,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum NostrContentRun {
+    Text { value: String },
+    Entity { entity: NostrEntityRef },
 }
 
 /// Resolved event data for a [`NostrEntityRef`]. Returned by
@@ -206,6 +218,86 @@ pub fn identity_key(entity: &NostrEntityRef) -> String {
             ..
         } => format!("a:{kind}:{pubkey_hex}:{d_tag}"),
     }
+}
+
+pub fn tokenize_nostr_content(content: &str) -> Vec<NostrContentRun> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < content.len() {
+        if let Some((range, body)) = scan_nostr_uri(content, i) {
+            if range.start > i {
+                out.push(NostrContentRun::Text {
+                    value: content[i..range.start].to_string(),
+                });
+            }
+            match decode_nostr_entity(body) {
+                Ok(entity) => out.push(NostrContentRun::Entity { entity }),
+                Err(_) => out.push(NostrContentRun::Text {
+                    value: body.to_string(),
+                }),
+            }
+            i = range.end;
+        } else {
+            out.push(NostrContentRun::Text {
+                value: content[i..].to_string(),
+            });
+            break;
+        }
+    }
+    out
+}
+
+pub fn extract_event_refs(content: &str) -> Vec<NostrEntityRef> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for run in tokenize_nostr_content(content) {
+        let NostrContentRun::Entity { entity } = run else {
+            continue;
+        };
+        if matches!(entity, NostrEntityRef::Profile { .. }) {
+            continue;
+        }
+        if seen.insert(identity_key(&entity)) {
+            out.push(entity);
+        }
+    }
+    out
+}
+
+fn scan_nostr_uri(content: &str, start: usize) -> Option<(Range<usize>, &str)> {
+    let prefix_relative = content[start..].to_ascii_lowercase().find("nostr:")?;
+    let prefix_start = start + prefix_relative;
+    let body_start = prefix_start + "nostr:".len();
+    let mut end = body_start;
+    for (offset, ch) in content[body_start..].char_indices() {
+        if is_nostr_uri_body_char(ch) {
+            end = body_start + offset + ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+    if end == body_start {
+        return None;
+    }
+    let body = &content[body_start..end];
+    if is_known_nip19_body(body) {
+        Some((prefix_start..end, body))
+    } else {
+        None
+    }
+}
+
+fn is_nostr_uri_body_char(ch: char) -> bool {
+    ch.is_ascii_digit() || ch.is_ascii_lowercase()
+}
+
+fn is_known_nip19_body(body: &str) -> bool {
+    let lower = body.to_ascii_lowercase();
+    lower.starts_with("npub1")
+        || lower.starts_with("nprofile1")
+        || lower.starts_with("note1")
+        || lower.starts_with("nevent1")
+        || lower.starts_with("naddr1")
 }
 
 fn first_chars(value: &str, count: usize) -> String {
@@ -622,6 +714,64 @@ mod tests {
             }),
             "a:30023:abcdef:article-slug"
         );
+    }
+
+    #[test]
+    fn tokenize_nostr_content_splits_text_and_entities() {
+        let runs = tokenize_nostr_content(
+            "Read nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6!",
+        );
+        assert_eq!(
+            runs.first(),
+            Some(&NostrContentRun::Text {
+                value: "Read ".into(),
+            })
+        );
+        assert_eq!(
+            runs.get(2),
+            Some(&NostrContentRun::Text { value: "!".into() })
+        );
+        match runs.get(1) {
+            Some(NostrContentRun::Entity {
+                entity: NostrEntityRef::Profile { pubkey_hex, .. },
+            }) => assert_eq!(
+                pubkey_hex,
+                "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+            ),
+            other => panic!("wrong token: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tokenize_nostr_content_preserves_malformed_known_body_fallback() {
+        assert_eq!(
+            tokenize_nostr_content("x nostr:npub1notvalid y"),
+            vec![
+                NostrContentRun::Text { value: "x ".into() },
+                NostrContentRun::Text {
+                    value: "npub1notvalid".into()
+                },
+                NostrContentRun::Text { value: " y".into() },
+            ]
+        );
+    }
+
+    #[test]
+    fn extract_event_refs_excludes_profiles_and_dedupes_by_identity() {
+        let event_id_hex =
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string();
+        let nevent =
+            encode_event_to_nevent(event_id_hex.clone(), None, Vec::new(), None).expect("encode");
+        let refs = extract_event_refs(&format!(
+            "nostr:{nevent} nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6 nostr:{nevent}"
+        ));
+        assert_eq!(refs.len(), 1);
+        match &refs[0] {
+            NostrEntityRef::Event {
+                event_id_hex: id, ..
+            } => assert_eq!(id, &event_id_hex),
+            other => panic!("wrong ref: {other:?}"),
+        }
     }
 
     #[test]

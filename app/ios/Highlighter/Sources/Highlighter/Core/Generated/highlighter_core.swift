@@ -834,6 +834,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String)  -> StringOutcome
 
+    func extractNostrEventRefs(content: String)  -> [NostrEntityRef]
+
     func generateAccount()  -> GeneratedAccountOutcome
 
     /**
@@ -1585,6 +1587,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func toggleEventBookmark(eventIdHex: String) async  -> BoolOutcome
 
+    func tokenizeNostrContent(content: String)  -> [NostrContentRun]
+
     /**
      * Delete one of the user's own kind:7 reactions via NIP-09.
      */
@@ -1956,6 +1960,14 @@ open func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String
     uniffi_highlighter_core_fn_method_highlightercore_encode_highlight_share_nevent(self.uniffiClonePointer(),
         FfiConverterString.lower(eventIdHex),
         FfiConverterString.lower(authorPubkeyHex),$0
+    )
+})
+}
+
+open func extractNostrEventRefs(content: String) -> [NostrEntityRef]  {
+    return try!  FfiConverterSequenceTypeNostrEntityRef.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_extract_nostr_event_refs(self.uniffiClonePointer(),
+        FfiConverterString.lower(content),$0
     )
 })
 }
@@ -4663,6 +4675,14 @@ open func toggleEventBookmark(eventIdHex: String)async  -> BoolOutcome  {
             errorHandler: nil
 
         )
+}
+
+open func tokenizeNostrContent(content: String) -> [NostrContentRun]  {
+    return try!  FfiConverterSequenceTypeNostrContentRun.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_tokenize_nostr_content(self.uniffiClonePointer(),
+        FfiConverterString.lower(content),$0
+    )
+})
 }
 
     /**
@@ -14397,6 +14417,82 @@ extension HighlightSourceKind: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum NostrContentRun {
+
+    case text(value: String
+    )
+    case entity(entity: NostrEntityRef
+    )
+}
+
+
+#if compiler(>=6)
+extension NostrContentRun: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNostrContentRun: FfiConverterRustBuffer {
+    typealias SwiftType = NostrContentRun
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrContentRun {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .text(value: try FfiConverterString.read(from: &buf)
+        )
+
+        case 2: return .entity(entity: try FfiConverterTypeNostrEntityRef.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NostrContentRun, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .text(value):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(value, into: &buf)
+
+
+        case let .entity(entity):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeNostrEntityRef.write(entity, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrContentRun_lift(_ buf: RustBuffer) throws -> NostrContentRun {
+    return try FfiConverterTypeNostrContentRun.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrContentRun_lower(_ value: NostrContentRun) -> RustBuffer {
+    return FfiConverterTypeNostrContentRun.lower(value)
+}
+
+
+extension NostrContentRun: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum NostrEntityInlineRender {
 
     case profile(pubkeyHex: String, fallbackLabel: String
@@ -16474,6 +16570,56 @@ fileprivate struct FfiConverterSequenceTypeWhatsNewEntry: FfiConverterRustBuffer
         return seq
     }
 }
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeNostrContentRun: FfiConverterRustBuffer {
+    typealias SwiftType = [NostrContentRun]
+
+    public static func write(_ value: [NostrContentRun], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNostrContentRun.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NostrContentRun] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NostrContentRun]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNostrContentRun.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeNostrEntityRef: FfiConverterRustBuffer {
+    typealias SwiftType = [NostrEntityRef]
+
+    public static func write(_ value: [NostrEntityRef], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNostrEntityRef.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NostrEntityRef] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NostrEntityRef]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNostrEntityRef.read(from: &buf))
+        }
+        return seq
+    }
+}
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_MAYBE_READY: Int8 = 1
 
@@ -16585,6 +16731,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_encode_highlight_share_nevent() != 64061) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_extract_nostr_event_refs() != 37795) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 356) {
@@ -17017,6 +17166,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark() != 58235) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_tokenize_nostr_content() != 57009) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_unpublish_reaction() != 52811) {
