@@ -92,23 +92,34 @@ struct FeedbackThreadDetailView: View {
                     Image(systemName: "paperplane.fill")
                         .font(.title3)
                         .frame(width: 36, height: 36)
-                        .background(Color.accentColor.opacity(canSend ? 1 : 0.4), in: .circle)
+                        .background(
+                            Color.accentColor.opacity(composerProjection.canSend ? 1 : 0.4),
+                            in: .circle
+                        )
                         .foregroundStyle(.white)
                 }
-                .disabled(!canSend)
+                .disabled(!composerProjection.canSend)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
 
-    private var canSend: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !detailStore.isPublishing
+    private var composerProjection: FeedbackComposerProjection {
+        app.safeCore.projectFeedbackComposer(
+            input: FeedbackComposerProjectionInput(
+                body: draft,
+                isPublishing: detailStore.isPublishing
+            )
+        )
     }
 
     private func send() async {
+        let projection = composerProjection
+        guard projection.canSend else { return }
+
         sendError = nil
-        let outcome = await detailStore.sendReply(body: draft)
+        let outcome = await detailStore.sendReply(body: projection.submitBody)
         if outcome.error.isEmpty {
             draft = ""
             await listStore.refreshThreads()

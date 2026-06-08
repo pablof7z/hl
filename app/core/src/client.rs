@@ -2873,6 +2873,16 @@ impl HighlighterCore {
         ))
     }
 
+    /// Feedback composer projection shared by new-thread and reply surfaces.
+    /// Rust owns submit trimming and send eligibility so each platform shell
+    /// renders the same enabled/disabled state.
+    pub fn project_feedback_composer(
+        &self,
+        input: feedback::FeedbackComposerProjectionInput,
+    ) -> feedback::FeedbackComposerProjection {
+        feedback::feedback_composer_projection(input)
+    }
+
     /// Optimistically insert a newly-published feedback root into the thread
     /// list. Rust owns root validation, preview text, dedupe, and ordering.
     pub fn optimistically_insert_feedback_root_thread(

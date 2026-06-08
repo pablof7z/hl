@@ -23,6 +23,28 @@ pub const KIND_FEEDBACK_NOTE: u16 = 1;
 pub const KIND_FEEDBACK_THREAD_META: u16 = 513;
 pub const KIND_PROJECT_DEFINITION: u16 = 31933;
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackComposerProjectionInput {
+    pub body: String,
+    pub is_publishing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackComposerProjection {
+    pub submit_body: String,
+    pub can_send: bool,
+}
+
+pub fn feedback_composer_projection(
+    input: FeedbackComposerProjectionInput,
+) -> FeedbackComposerProjection {
+    let submit_body = input.body.trim().to_string();
+    FeedbackComposerProjection {
+        can_send: !submit_body.is_empty() && !input.is_publishing,
+        submit_body,
+    }
+}
+
 /// Threads authored by `current_user_pubkey` that `a`-tag `coordinate`. Each
 /// returned root is enriched with the latest matching kind:513 metadata
 /// (title/summary/status-label) when one exists. Sorted by `last_activity_at`
@@ -753,6 +775,34 @@ mod tests {
         let out = trim_preview(&long);
         assert_eq!(out.chars().count(), 140);
         assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn feedback_composer_projection_trims_submit_body_and_allows_send() {
+        let projection = feedback_composer_projection(FeedbackComposerProjectionInput {
+            body: "  hello feedback  \n".into(),
+            is_publishing: false,
+        });
+
+        assert_eq!(projection.submit_body, "hello feedback");
+        assert!(projection.can_send);
+    }
+
+    #[test]
+    fn feedback_composer_projection_blocks_blank_or_publishing_body() {
+        let blank = feedback_composer_projection(FeedbackComposerProjectionInput {
+            body: "  \n\t ".into(),
+            is_publishing: false,
+        });
+        let publishing = feedback_composer_projection(FeedbackComposerProjectionInput {
+            body: "ready".into(),
+            is_publishing: true,
+        });
+
+        assert_eq!(blank.submit_body, "");
+        assert!(!blank.can_send);
+        assert_eq!(publishing.submit_body, "ready");
+        assert!(!publishing.can_send);
     }
 
     #[test]

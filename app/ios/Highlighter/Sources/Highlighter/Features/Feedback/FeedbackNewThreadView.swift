@@ -17,8 +17,13 @@ struct FeedbackNewThreadView: View {
     @State private var isPublishing = false
     @State private var errorMessage: String?
 
-    private var canPublish: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isPublishing
+    private var composerProjection: FeedbackComposerProjection {
+        app.safeCore.projectFeedbackComposer(
+            input: FeedbackComposerProjectionInput(
+                body: draft,
+                isPublishing: isPublishing
+            )
+        )
     }
 
     var body: some View {
@@ -57,13 +62,16 @@ struct FeedbackNewThreadView: View {
                     Button(isPublishing ? "Sending…" : "Send") {
                         Task { await publish() }
                     }
-                    .disabled(!canPublish)
+                    .disabled(!composerProjection.canSend)
                 }
             }
         }
     }
 
     private func publish() async {
+        let projection = composerProjection
+        guard projection.canSend else { return }
+
         isPublishing = true
         errorMessage = nil
         defer { isPublishing = false }
@@ -73,7 +81,7 @@ struct FeedbackNewThreadView: View {
             coordinate: FeedbackProject.coordinate,
             agentPubkey: agent,
             parentEventId: nil,
-            body: draft
+            body: projection.submitBody
         )
         guard outcome.error.isEmpty, let record = outcome.value else {
             errorMessage = outcome.error.isEmpty ? "Failed to publish." : outcome.error

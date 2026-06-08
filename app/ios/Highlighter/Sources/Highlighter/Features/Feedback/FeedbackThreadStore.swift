@@ -77,10 +77,6 @@ final class FeedbackThreadStore {
         guard let core, let coordinate, let rootEventId else {
             return FeedbackEventOutcome(value: nil, error: FeedbackError.notReady.localizedDescription)
         }
-        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return FeedbackEventOutcome(value: nil, error: FeedbackError.notReady.localizedDescription)
-        }
         var agent = agentPubkey
         if agent == nil {
             let outcome = await core.getProjectFirstAgentPubkey(coordinate: coordinate)
@@ -95,7 +91,7 @@ final class FeedbackThreadStore {
             coordinate: coordinate,
             agentPubkey: agent,
             parentEventId: rootEventId,
-            body: trimmed
+            body: body
         )
         guard outcome.error.isEmpty, let record = outcome.value else { return outcome }
         apply(event: record)

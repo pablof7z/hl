@@ -511,6 +511,12 @@ actor SafeHighlighterCore {
         await core.getProjectFirstAgentPubkey(coordinate: coordinate)
     }
 
+    nonisolated func projectFeedbackComposer(
+        input: FeedbackComposerProjectionInput
+    ) -> FeedbackComposerProjection {
+        core.projectFeedbackComposer(input: input)
+    }
+
     nonisolated func optimisticallyInsertFeedbackRootThread(
         threads: [FeedbackThreadRecord],
         rootEvent: FeedbackEventRecord

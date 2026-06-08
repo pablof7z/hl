@@ -1406,6 +1406,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectCreateRoom(input: CreateRoomProjectionInput)  -> CreateRoomProjection
 
+    /**
+     * Feedback composer projection shared by new-thread and reply surfaces.
+     * Rust owns submit trimming and send eligibility so each platform shell
+     * renders the same enabled/disabled state.
+     */
+    func projectFeedbackComposer(input: FeedbackComposerProjectionInput)  -> FeedbackComposerProjection
+
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
     func projectRelayDetail(input: RelayDetailProjectionInput)  -> RelayDetailProjection
@@ -4105,6 +4112,19 @@ open func projectCreateRoom(input: CreateRoomProjectionInput) -> CreateRoomProje
     return try!  FfiConverterTypeCreateRoomProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_create_room(self.uniffiClonePointer(),
         FfiConverterTypeCreateRoomProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Feedback composer projection shared by new-thread and reply surfaces.
+     * Rust owns submit trimming and send eligibility so each platform shell
+     * renders the same enabled/disabled state.
+     */
+open func projectFeedbackComposer(input: FeedbackComposerProjectionInput) -> FeedbackComposerProjection  {
+    return try!  FfiConverterTypeFeedbackComposerProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_feedback_composer(self.uniffiClonePointer(),
+        FfiConverterTypeFeedbackComposerProjectionInput_lower(input),$0
     )
 })
 }
@@ -10421,6 +10441,146 @@ public func FfiConverterTypeDiscussionRecord_lift(_ buf: RustBuffer) throws -> D
 #endif
 public func FfiConverterTypeDiscussionRecord_lower(_ value: DiscussionRecord) -> RustBuffer {
     return FfiConverterTypeDiscussionRecord.lower(value)
+}
+
+
+public struct FeedbackComposerProjection {
+    public var submitBody: String
+    public var canSend: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(submitBody: String, canSend: Bool) {
+        self.submitBody = submitBody
+        self.canSend = canSend
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackComposerProjection: Sendable {}
+#endif
+
+
+extension FeedbackComposerProjection: Equatable, Hashable {
+    public static func ==(lhs: FeedbackComposerProjection, rhs: FeedbackComposerProjection) -> Bool {
+        if lhs.submitBody != rhs.submitBody {
+            return false
+        }
+        if lhs.canSend != rhs.canSend {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(submitBody)
+        hasher.combine(canSend)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackComposerProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackComposerProjection {
+        return
+            try FeedbackComposerProjection(
+                submitBody: FfiConverterString.read(from: &buf),
+                canSend: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackComposerProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.submitBody, into: &buf)
+        FfiConverterBool.write(value.canSend, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackComposerProjection_lift(_ buf: RustBuffer) throws -> FeedbackComposerProjection {
+    return try FfiConverterTypeFeedbackComposerProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackComposerProjection_lower(_ value: FeedbackComposerProjection) -> RustBuffer {
+    return FfiConverterTypeFeedbackComposerProjection.lower(value)
+}
+
+
+public struct FeedbackComposerProjectionInput {
+    public var body: String
+    public var isPublishing: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(body: String, isPublishing: Bool) {
+        self.body = body
+        self.isPublishing = isPublishing
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackComposerProjectionInput: Sendable {}
+#endif
+
+
+extension FeedbackComposerProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: FeedbackComposerProjectionInput, rhs: FeedbackComposerProjectionInput) -> Bool {
+        if lhs.body != rhs.body {
+            return false
+        }
+        if lhs.isPublishing != rhs.isPublishing {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(body)
+        hasher.combine(isPublishing)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackComposerProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackComposerProjectionInput {
+        return
+            try FeedbackComposerProjectionInput(
+                body: FfiConverterString.read(from: &buf),
+                isPublishing: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackComposerProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.body, into: &buf)
+        FfiConverterBool.write(value.isPublishing, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackComposerProjectionInput_lift(_ buf: RustBuffer) throws -> FeedbackComposerProjectionInput {
+    return try FfiConverterTypeFeedbackComposerProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackComposerProjectionInput_lower(_ value: FeedbackComposerProjectionInput) -> RustBuffer {
+    return FfiConverterTypeFeedbackComposerProjectionInput.lower(value)
 }
 
 
@@ -23406,6 +23566,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room() != 12904) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_composer() != 43880) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {
