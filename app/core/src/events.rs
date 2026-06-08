@@ -22,6 +22,11 @@ pub enum DataChangeType {
     MembershipChanged {
         group_id: String,
     },
+    /// Rust-owned app toast. Native shell renders and dismisses it; Rust owns
+    /// when the message exists and what it says.
+    AppToastRequested {
+        message: String,
+    },
     ArtifactUpserted {
         group_id: String,
         artifact: ArtifactRecord,

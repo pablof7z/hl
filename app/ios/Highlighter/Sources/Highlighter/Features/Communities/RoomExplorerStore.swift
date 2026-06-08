@@ -2,8 +2,8 @@ import Foundation
 import Observation
 
 /// View-scoped store for the rooms explorer. Owns the shelves that appear on
-/// the explorer home — featured, friends, authors, new — and orchestrates
-/// the join-request flow by delegating toast state to the app-scope store.
+/// the explorer home — featured, friends, authors, new — and dispatches
+/// join-request actions to the Rust core.
 ///
 /// Source of truth: nostrdb via `SafeHighlighterCore`. This store never
 /// caches raw events; it only holds `CommunitySummary` / `RoomRecommendation`
@@ -75,19 +75,12 @@ final class RoomExplorerStore {
         isFirstLoad = false
     }
 
-    /// Publish a NIP-29 kind:9021 join-request for the given room and set
-    /// the "Join requested" toast. The follow-up "You're in ✓" toast fires
-    /// automatically from `HighlighterStore.refreshJoinedCommunities` once
-    /// the relay admits the request and the `MembershipChanged` delta
-    /// lands. Fire-and-forget — errors are logged, not surfaced.
+    /// Publish a NIP-29 kind:9021 join-request for the given room. Rust owns
+    /// request and membership-confirmation toast state.
     func requestJoin(room: CommunitySummary) async {
         guard let appStore else { return }
-        appStore.noteJoinRequested(groupId: room.id, roomName: room.name)
-        let outcome = await appStore.safeCore.requestJoinRoom(groupId: room.id)
+        let outcome = await appStore.safeCore.requestJoinRoom(groupId: room.id, roomName: room.name)
         if !outcome.error.isEmpty {
-            // The toast already said "Join requested". Rather than contradict
-            // it, let the user see nothing change — logging is sufficient for
-            // debugging, and the relay-error path is rare.
             print("requestJoinRoom failed for \(room.id): \(outcome.error)")
         }
     }

@@ -24,16 +24,9 @@ final class HighlighterStore {
     var connectionState: ConnectionState = .unknown
     var isBootstrapping: Bool = false
     var isOnboardingComplete: Bool = false
-    /// Transient toast shown when the Share Extension handoff publishes, a
-    /// join request is sent, or a membership is confirmed. Cleared by the
-    /// banner after a few seconds.
+    /// Transient toast shown when Rust or a platform handoff requests an
+    /// app-scope banner. Cleared by the banner after a few seconds.
     var shareToast: String?
-    /// Group ids for which the user has published a NIP-29 kind:9021 join
-    /// request this session, mapped to the room name shown in the
-    /// confirmation toast. When the next `MembershipChanged` delta for one
-    /// of these arrives, the toast flips from "Join requested" to
-    /// "You're in ✓" and the id drops from the map.
-    @ObservationIgnored private var pendingJoins: [String: String] = [:]
     /// Render projection for requested profile pubkeys. Rust/nostrdb remain
     /// the source of truth; this app-scope snapshot only lets existing
     /// SwiftUI surfaces render names and avatars synchronously, then refresh
@@ -291,31 +284,8 @@ final class HighlighterStore {
     func refreshJoinedCommunities() async {
         let outcome = await safeCore.getJoinedCommunities()
         if outcome.error.isEmpty {
-            let updated = outcome.values
-            joinedCommunities = updated
-            // Any pending join whose group is now in the joined set →
-            // promote the toast from "Join requested" to "You're in ✓".
-            if !pendingJoins.isEmpty {
-                let joinedIds = Set(updated.map(\.id))
-                let confirmed = pendingJoins.filter { joinedIds.contains($0.key) }
-                for (groupId, roomName) in confirmed {
-                    pendingJoins.removeValue(forKey: groupId)
-                    shareToast = "You're in \(roomName) ✓"
-                }
-            }
+            joinedCommunities = outcome.values
         }
-    }
-
-    /// Mark a join request as in-flight. Pops the "Join requested" toast
-    /// immediately; the follow-up "You're in ✓" fires from
-    /// `refreshJoinedCommunities` once a matching `MembershipChanged`
-    /// delta lands.
-    func noteJoinRequested(groupId: String, roomName: String) {
-        let trimmedId = groupId.trimmingCharacters(in: .whitespaces)
-        guard !trimmedId.isEmpty else { return }
-        let cleanName = roomName.isEmpty ? "this room" : roomName
-        pendingJoins[trimmedId] = cleanName
-        shareToast = "Join requested"
     }
 
     private func loadAppScopeData() async {

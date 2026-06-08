@@ -468,8 +468,12 @@ actor SafeHighlighterCore {
         await core.getRoomsFromReadAuthors(limit: limit)
     }
 
-    func requestJoinRoom(groupId: String) async -> StringOutcome {
-        await core.requestJoinRoom(groupId: groupId)
+    func requestJoinRoom(groupId: String, roomName: String) async -> StringOutcome {
+        await core.requestJoinRoom(groupId: groupId, roomName: roomName)
+    }
+
+    func confirmPendingJoin(groupId: String) {
+        core.confirmPendingJoin(groupId: groupId)
     }
 
     func createRoom(

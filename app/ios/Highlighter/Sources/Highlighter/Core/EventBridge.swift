@@ -327,7 +327,18 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         case .relayStatusChanged(let url, let state):
             let store = registry.withLock { reg in reg.networkStore?.value }
             store?.applyStatus(url: url, state: state)
-        case .communityUpserted, .membershipChanged:
+        case .appToastRequested(let message):
+            appStore?.shareToast = message
+        case .membershipChanged(let groupId):
+            if let appStore {
+                Task {
+                    await appStore.safeCore.confirmPendingJoin(groupId: groupId)
+                    await appStore.refreshJoinedCommunities()
+                }
+            }
+            let explorer = registry.withLock { reg in reg.explorerStore?.value }
+            if let explorer { Task { await explorer.reloadFromCache() } }
+        case .communityUpserted:
             // Any group-related event arrived — re-query nostrdb for the
             // authoritative joined set. A single refresh path eliminates the
             // race where incremental upserts (CommunityUpserted) and

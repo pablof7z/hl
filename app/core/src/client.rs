@@ -5,7 +5,7 @@
 //! an `.await` point (the guard isn't `Send`). Long-running protocol work
 //! happens in `Session` / feature modules, which own their own async state.
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use nostr_sdk::prelude::*;
 use parking_lot::RwLock;
@@ -92,6 +92,7 @@ pub struct HighlighterCore {
 
 struct Inner {
     session: Session,
+    pending_joins: BTreeMap<String, String>,
 }
 
 fn mutation_outcome(result: Result<(), CoreError>) -> MutationOutcome {
@@ -158,6 +159,15 @@ fn nip05_availability_outcome(
             value: None,
             error: error.to_string(),
         },
+    }
+}
+
+fn join_room_display_name(room_name: &str) -> String {
+    let trimmed = room_name.trim();
+    if trimmed.is_empty() {
+        "this room".to_string()
+    } else {
+        trimmed.to_string()
     }
 }
 
@@ -899,8 +909,9 @@ impl HighlighterCore {
             if let Some(sub_id) = guard.session.take_user_relay_config_subscription() {
                 self.runtime.drop_subscription(sub_id);
             }
+            guard.pending_joins.clear();
+            guard.session.logout();
         }
-        self.inner.write().session.logout();
         self.runtime.unset_signer();
     }
 
@@ -1124,6 +1135,15 @@ impl HighlighterCore {
                 subscription_id: 0,
                 change: DataChangeType::SignerConnected { user },
             });
+        }
+    }
+
+    /// Consume a pending join when a matching NIP-29 membership delta arrives.
+    /// Swift routes the delta; Rust owns whether it was pending and what toast
+    /// should be shown.
+    pub fn confirm_pending_join(&self, group_id: String) {
+        if let Some(room_name) = self.remove_pending_join(&group_id) {
+            self.emit_app_toast(format!("You're in {room_name} ✓"));
         }
     }
 
@@ -2540,16 +2560,27 @@ impl HighlighterCore {
         ))
     }
 
-    /// Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
-    /// event id on success. The UI treats this as fire-and-forget: a
-    /// subsequent `MembershipChanged` delta for this group with the user's
-    /// pubkey is the signal that the relay admitted the request.
-    pub async fn request_join_room(&self, group_id: String) -> StringOutcome {
+    /// Publish a NIP-29 kind:9021 join-request for `group_id`. Rust owns the
+    /// pending-join state and emits app toast deltas for request sent,
+    /// request failure, and later membership confirmation.
+    pub async fn request_join_room(&self, group_id: String, room_name: String) -> StringOutcome {
+        let group_id = group_id.trim().to_string();
+        self.record_pending_join(&group_id, &room_name);
         let result: Result<String, CoreError> = async {
             let _ = self.require_user_pubkey()?;
-            groups::publish_join_request(&self.runtime, group_id.trim()).await
+            groups::publish_join_request(&self.runtime, &group_id).await
         }
         .await;
+        match &result {
+            Ok(_) if self.has_pending_join(&group_id) => {
+                self.emit_app_toast("Join requested".to_string());
+            }
+            Ok(_) => {}
+            Err(error) => {
+                self.remove_pending_join(&group_id);
+                self.emit_app_toast(error.to_string());
+            }
+        }
         string_outcome(result)
     }
 
@@ -2951,6 +2982,41 @@ impl HighlighterCore {
 }
 
 impl HighlighterCore {
+    fn emit_app_toast(&self, message: String) {
+        if message.trim().is_empty() {
+            return;
+        }
+        let cb = { self.callback_slot.read().clone() };
+        if let Some(cb) = cb {
+            cb.on_data_changed(Delta {
+                subscription_id: 0,
+                change: DataChangeType::AppToastRequested { message },
+            });
+        }
+    }
+
+    fn record_pending_join(&self, group_id: &str, room_name: &str) {
+        let group_id = group_id.trim();
+        if group_id.is_empty() {
+            return;
+        }
+        self.inner
+            .write()
+            .pending_joins
+            .insert(group_id.to_string(), join_room_display_name(room_name));
+    }
+
+    fn remove_pending_join(&self, group_id: &str) -> Option<String> {
+        self.inner.write().pending_joins.remove(group_id.trim())
+    }
+
+    fn has_pending_join(&self, group_id: &str) -> bool {
+        self.inner
+            .read()
+            .pending_joins
+            .contains_key(group_id.trim())
+    }
+
     /// Internal access for feature modules (artifacts, groups, highlights,
     /// recent_books) to the shared Client + Ndb. Not exposed to Swift.
     #[allow(dead_code)]
@@ -3006,6 +3072,7 @@ impl HighlighterCore {
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {
                 session: Session::new(),
+                pending_joins: BTreeMap::new(),
             })),
             runtime,
             callback_slot,
@@ -3086,4 +3153,48 @@ fn current_followed_pubkeys(ndb: &nostrdb::Ndb, user_pubkey: &PublicKey) -> Vec<
 pub(crate) fn normalize_bunker_uri(input: &str) -> String {
     let t = input.trim();
     t.strip_prefix("nostr:").unwrap_or(t).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc::{channel, Sender};
+    use std::time::Duration;
+
+    struct ChannelCallback {
+        tx: Sender<Delta>,
+    }
+
+    impl EventCallback for ChannelCallback {
+        fn on_data_changed(&self, delta: Delta) {
+            self.tx.send(delta).expect("send delta");
+        }
+    }
+
+    #[test]
+    fn confirm_pending_join_emits_rust_owned_toast_once() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let core = HighlighterCore::new_with_data_dir(tmp.path().join("ndb"));
+        let (tx, rx) = channel();
+        core.set_event_callback(Arc::new(ChannelCallback { tx }));
+
+        core.record_pending_join("alpha", " Alpha ");
+        core.confirm_pending_join("alpha".to_string());
+
+        let delta = rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("toast delta");
+        match delta.change {
+            DataChangeType::AppToastRequested { message } => {
+                assert_eq!(message, "You're in Alpha ✓");
+            }
+            other => panic!("expected toast, got {other:?}"),
+        }
+
+        core.confirm_pending_join("alpha".to_string());
+        assert!(
+            rx.recv_timeout(Duration::from_millis(100)).is_err(),
+            "pending join should be consumed once"
+        );
+    }
 }

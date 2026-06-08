@@ -765,6 +765,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func clearRecentSearches() async  -> StringListOutcome
 
     /**
+     * Consume a pending join when a matching NIP-29 membership delta arrives.
+     * Swift routes the delta; Rust owns whether it was pending and what toast
+     * should be shown.
+     */
+    func confirmPendingJoin(groupId: String)
+
+    /**
      * Create a new empty kind:30004 curation set with `title`. Returns
      * the freshly published record so the UI can immediately use its
      * `id` (d-tag) to add items.
@@ -1180,12 +1187,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func removeRelay(url: String) async  -> MutationOutcome
 
     /**
-     * Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
-     * event id on success. The UI treats this as fire-and-forget: a
-     * subsequent `MembershipChanged` delta for this group with the user's
-     * pubkey is the signal that the relay admitted the request.
+     * Publish a NIP-29 kind:9021 join-request for `group_id`. Rust owns the
+     * pending-join state and emits app toast deltas for request sent,
+     * request failure, and later membership confirmation.
      */
-    func requestJoinRoom(groupId: String) async  -> StringOutcome
+    func requestJoinRoom(groupId: String, roomName: String) async  -> StringOutcome
 
     /**
      * Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
@@ -1621,6 +1627,18 @@ open func clearRecentSearches()async  -> StringListOutcome  {
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Consume a pending join when a matching NIP-29 membership delta arrives.
+     * Swift routes the delta; Rust owns whether it was pending and what toast
+     * should be shown.
+     */
+open func confirmPendingJoin(groupId: String)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_confirm_pending_join(self.uniffiClonePointer(),
+        FfiConverterString.lower(groupId),$0
+    )
+}
 }
 
     /**
@@ -3243,18 +3261,17 @@ open func removeRelay(url: String)async  -> MutationOutcome  {
 }
 
     /**
-     * Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
-     * event id on success. The UI treats this as fire-and-forget: a
-     * subsequent `MembershipChanged` delta for this group with the user's
-     * pubkey is the signal that the relay admitted the request.
+     * Publish a NIP-29 kind:9021 join-request for `group_id`. Rust owns the
+     * pending-join state and emits app toast deltas for request sent,
+     * request failure, and later membership confirmation.
      */
-open func requestJoinRoom(groupId: String)async  -> StringOutcome  {
+open func requestJoinRoom(groupId: String, roomName: String)async  -> StringOutcome  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_request_join_room(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId)
+                    FfiConverterString.lower(groupId),FfiConverterString.lower(roomName)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -12607,6 +12624,12 @@ public enum DataChangeType {
     )
     case membershipChanged(groupId: String
     )
+    /**
+     * Rust-owned app toast. Native shell renders and dismisses it; Rust owns
+     * when the message exists and what it says.
+     */
+    case appToastRequested(message: String
+    )
     case artifactUpserted(groupId: String, artifact: ArtifactRecord
     )
     case discussionUpserted(groupId: String, discussion: DiscussionRecord
@@ -12755,63 +12778,66 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         case 2: return .membershipChanged(groupId: try FfiConverterString.read(from: &buf)
         )
 
-        case 3: return .artifactUpserted(groupId: try FfiConverterString.read(from: &buf), artifact: try FfiConverterTypeArtifactRecord.read(from: &buf)
+        case 3: return .appToastRequested(message: try FfiConverterString.read(from: &buf)
         )
 
-        case 4: return .discussionUpserted(groupId: try FfiConverterString.read(from: &buf), discussion: try FfiConverterTypeDiscussionRecord.read(from: &buf)
+        case 4: return .artifactUpserted(groupId: try FfiConverterString.read(from: &buf), artifact: try FfiConverterTypeArtifactRecord.read(from: &buf)
         )
 
-        case 5: return .chatMessageUpserted(groupId: try FfiConverterString.read(from: &buf), message: try FfiConverterTypeChatMessageRecord.read(from: &buf)
+        case 5: return .discussionUpserted(groupId: try FfiConverterString.read(from: &buf), discussion: try FfiConverterTypeDiscussionRecord.read(from: &buf)
         )
 
-        case 6: return .highlightUpserted(groupId: try FfiConverterString.read(from: &buf), highlight: try FfiConverterTypeHydratedHighlight.read(from: &buf)
+        case 6: return .chatMessageUpserted(groupId: try FfiConverterString.read(from: &buf), message: try FfiConverterTypeChatMessageRecord.read(from: &buf)
         )
 
-        case 7: return .highlightShared(groupId: try FfiConverterString.read(from: &buf), highlightId: try FfiConverterString.read(from: &buf), sharedByPubkey: try FfiConverterString.read(from: &buf)
+        case 7: return .highlightUpserted(groupId: try FfiConverterString.read(from: &buf), highlight: try FfiConverterTypeHydratedHighlight.read(from: &buf)
         )
 
-        case 8: return .myHighlightUpserted(highlight: try FfiConverterTypeHighlightRecord.read(from: &buf)
+        case 8: return .highlightShared(groupId: try FfiConverterString.read(from: &buf), highlightId: try FfiConverterString.read(from: &buf), sharedByPubkey: try FfiConverterString.read(from: &buf)
         )
 
-        case 9: return .userProfileUpdated(pubkey: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
+        case 9: return .myHighlightUpserted(highlight: try FfiConverterTypeHighlightRecord.read(from: &buf)
         )
 
-        case 10: return .articleUpdated(address: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
+        case 10: return .userProfileUpdated(pubkey: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
         )
 
-        case 11: return .followingReadsUpdated
-
-        case 12: return .followingHighlightsUpdated
-
-        case 13: return .feedbackThreadsUpdated
-
-        case 14: return .feedbackThreadEventUpserted(event: try FfiConverterTypeFeedbackEventRecord.read(from: &buf)
+        case 11: return .articleUpdated(address: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
         )
 
-        case 15: return .searchArticlesUpdated(query: try FfiConverterString.read(from: &buf)
+        case 12: return .followingReadsUpdated
+
+        case 13: return .followingHighlightsUpdated
+
+        case 14: return .feedbackThreadsUpdated
+
+        case 15: return .feedbackThreadEventUpserted(event: try FfiConverterTypeFeedbackEventRecord.read(from: &buf)
         )
 
-        case 16: return .bookmarksUpdated
-
-        case 17: return .bookmarkSetsUpdated
-
-        case 18: return .followingCurationSetsUpdated
-
-        case 19: return .webBookmarksUpdated
-
-        case 20: return .nostrEntityResolved(event: try FfiConverterTypeNostrEntityEvent.read(from: &buf)
+        case 16: return .searchArticlesUpdated(query: try FfiConverterString.read(from: &buf)
         )
 
-        case 21: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
+        case 17: return .bookmarksUpdated
+
+        case 18: return .bookmarkSetsUpdated
+
+        case 19: return .followingCurationSetsUpdated
+
+        case 20: return .webBookmarksUpdated
+
+        case 21: return .nostrEntityResolved(event: try FfiConverterTypeNostrEntityEvent.read(from: &buf)
         )
 
-        case 22: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
+        case 22: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
         )
 
-        case 23: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
+        case 23: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
         )
 
-        case 24: return .relayDiagnosticsUpdated(diagnostics: try FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf)
+        case 24: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
+        )
+
+        case 25: return .relayDiagnosticsUpdated(diagnostics: try FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -12832,115 +12858,120 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             FfiConverterString.write(groupId, into: &buf)
 
 
-        case let .artifactUpserted(groupId,artifact):
+        case let .appToastRequested(message):
             writeInt(&buf, Int32(3))
+            FfiConverterString.write(message, into: &buf)
+
+
+        case let .artifactUpserted(groupId,artifact):
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeArtifactRecord.write(artifact, into: &buf)
 
 
         case let .discussionUpserted(groupId,discussion):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeDiscussionRecord.write(discussion, into: &buf)
 
 
         case let .chatMessageUpserted(groupId,message):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeChatMessageRecord.write(message, into: &buf)
 
 
         case let .highlightUpserted(groupId,highlight):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeHydratedHighlight.write(highlight, into: &buf)
 
 
         case let .highlightShared(groupId,highlightId,sharedByPubkey):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterString.write(highlightId, into: &buf)
             FfiConverterString.write(sharedByPubkey, into: &buf)
 
 
         case let .myHighlightUpserted(highlight):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeHighlightRecord.write(highlight, into: &buf)
 
 
         case let .userProfileUpdated(pubkey,kind):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(pubkey, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
 
 
         case let .articleUpdated(address,kind):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterString.write(address, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
 
 
         case .followingReadsUpdated:
-            writeInt(&buf, Int32(11))
-
-
-        case .followingHighlightsUpdated:
             writeInt(&buf, Int32(12))
 
 
-        case .feedbackThreadsUpdated:
+        case .followingHighlightsUpdated:
             writeInt(&buf, Int32(13))
 
 
-        case let .feedbackThreadEventUpserted(event):
+        case .feedbackThreadsUpdated:
             writeInt(&buf, Int32(14))
+
+
+        case let .feedbackThreadEventUpserted(event):
+            writeInt(&buf, Int32(15))
             FfiConverterTypeFeedbackEventRecord.write(event, into: &buf)
 
 
         case let .searchArticlesUpdated(query):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(16))
             FfiConverterString.write(query, into: &buf)
 
 
         case .bookmarksUpdated:
-            writeInt(&buf, Int32(16))
-
-
-        case .bookmarkSetsUpdated:
             writeInt(&buf, Int32(17))
 
 
-        case .followingCurationSetsUpdated:
+        case .bookmarkSetsUpdated:
             writeInt(&buf, Int32(18))
 
 
-        case .webBookmarksUpdated:
+        case .followingCurationSetsUpdated:
             writeInt(&buf, Int32(19))
 
 
-        case let .nostrEntityResolved(event):
+        case .webBookmarksUpdated:
             writeInt(&buf, Int32(20))
+
+
+        case let .nostrEntityResolved(event):
+            writeInt(&buf, Int32(21))
             FfiConverterTypeNostrEntityEvent.write(event, into: &buf)
 
 
         case let .signerConnected(user):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(22))
             FfiConverterTypeCurrentUser.write(user, into: &buf)
 
 
         case let .bunkerSignRequest(requestId):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(23))
             FfiConverterString.write(requestId, into: &buf)
 
 
         case let .relayStatusChanged(url,state):
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(24))
             FfiConverterString.write(url, into: &buf)
             FfiConverterTypeRelayStatus.write(state, into: &buf)
 
 
         case let .relayDiagnosticsUpdated(diagnostics):
-            writeInt(&buf, Int32(24))
+            writeInt(&buf, Int32(25))
             FfiConverterSequenceTypeRelayDiagnostic.write(diagnostics, into: &buf)
 
         }
@@ -14763,6 +14794,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches() != 18871) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_confirm_pending_join() != 50218) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set() != 614) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15018,7 +15052,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 56840) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_request_join_room() != 805) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_request_join_room() != 5056) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 40698) {
