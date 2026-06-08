@@ -12,7 +12,7 @@ import Observation
 @Observable
 final class CommentsStore {
     private(set) var records: [CommentRecord] = []
-    private(set) var tree: [CommentNode] = []
+    private(set) var tree: [CommentThreadNode] = []
     private(set) var isLoading: Bool = true
     private(set) var loadError: String?
 
@@ -54,7 +54,7 @@ final class CommentsStore {
         )
         if outcome.error.isEmpty {
             records = outcome.values
-            tree = CommentTreeBuilder.build(
+            tree = core.buildCommentThread(
                 records: outcome.values,
                 rootTagValue: scope.rootTagValue
             )
@@ -139,7 +139,7 @@ final class CommentsStore {
         // Optimistic insert
         if !records.contains(where: { $0.eventId == record.eventId }) {
             records.append(record)
-            tree = CommentTreeBuilder.build(
+            tree = core.buildCommentThread(
                 records: records,
                 rootTagValue: scope.rootTagValue
             )

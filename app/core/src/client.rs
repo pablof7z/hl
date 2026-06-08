@@ -30,15 +30,15 @@ use crate::models::{
     BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetListOutcome,
     BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome,
     ChatMessageOutcome, ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord,
-    CommentReferenceBucket, CommentScope, CommentScopeOutcome, CommunityListOutcome,
-    CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome, CurrentUser,
-    CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
-    FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome,
-    FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome,
-    HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
-    HighlightSourceKind, HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction,
-    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
-    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    CommentReferenceBucket, CommentScope, CommentScopeOutcome, CommentThreadNode,
+    CommunityListOutcome, CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome,
+    CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
+    DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
+    FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft,
+    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightReferenceBucket,
+    HighlightReferenceTarget, HighlightSourceKind, HydratedHighlight, HydratedHighlightListOutcome,
+    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
+    NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
     OnboardingInterestSelection, OptionalStringOutcome, PictureDraft, PictureOutcome,
     PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
     ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome,
@@ -1857,6 +1857,17 @@ impl HighlighterCore {
             &highlights_by_reference,
             &comments_by_reference,
         )
+    }
+
+    /// Build the visible NIP-22 comment thread from a bounded screen record
+    /// set. Rust owns parent resolution, orphan promotion, and chronological
+    /// child ordering.
+    pub fn build_comment_thread(
+        &self,
+        records: Vec<CommentRecord>,
+        root_tag_value: String,
+    ) -> Vec<CommentThreadNode> {
+        comments::build_thread(&records, &root_tag_value)
     }
 
     /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.

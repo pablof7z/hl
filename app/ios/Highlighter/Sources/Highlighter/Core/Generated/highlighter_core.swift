@@ -770,6 +770,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func autoConnectedRelayConfig(url: String)  -> RelayConfig
 
     /**
+     * Build the visible NIP-22 comment thread from a bounded screen record
+     * set. Rust owns parent resolution, orphan promotion, and chronological
+     * child ordering.
+     */
+    func buildCommentThread(records: [CommentRecord], rootTagValue: String)  -> [CommentThreadNode]
+
+    /**
      * Build the edited ISBN book preview after scan/manual entry. Rust owns
      * ISBN normalization and the NIP-73 reference fields; native supplies
      * only the user's edited title/author and optional lookup metadata.
@@ -1791,6 +1798,20 @@ open func autoConnectedRelayConfig(url: String) -> RelayConfig  {
     return try!  FfiConverterTypeRelayConfig_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_auto_connected_relay_config(self.uniffiClonePointer(),
         FfiConverterString.lower(url),$0
+    )
+})
+}
+
+    /**
+     * Build the visible NIP-22 comment thread from a bounded screen record
+     * set. Rust owns parent resolution, orphan promotion, and chronological
+     * child ordering.
+     */
+open func buildCommentThread(records: [CommentRecord], rootTagValue: String) -> [CommentThreadNode]  {
+    return try!  FfiConverterSequenceTypeCommentThreadNode.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_build_comment_thread(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeCommentRecord.lower(records),
+        FfiConverterString.lower(rootTagValue),$0
     )
 })
 }
@@ -8100,6 +8121,80 @@ public func FfiConverterTypeCommentScopeOutcome_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeCommentScopeOutcome_lower(_ value: CommentScopeOutcome) -> RustBuffer {
     return FfiConverterTypeCommentScopeOutcome.lower(value)
+}
+
+
+/**
+ * One node in a Rust-owned NIP-22 comment thread projection. The core owns
+ * parent resolution, orphan promotion, and chronological child ordering.
+ */
+public struct CommentThreadNode {
+    public var record: CommentRecord
+    public var children: [CommentThreadNode]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(record: CommentRecord, children: [CommentThreadNode]) {
+        self.record = record
+        self.children = children
+    }
+}
+
+#if compiler(>=6)
+extension CommentThreadNode: Sendable {}
+#endif
+
+
+extension CommentThreadNode: Equatable, Hashable {
+    public static func ==(lhs: CommentThreadNode, rhs: CommentThreadNode) -> Bool {
+        if lhs.record != rhs.record {
+            return false
+        }
+        if lhs.children != rhs.children {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(record)
+        hasher.combine(children)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentThreadNode: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadNode {
+        return
+            try CommentThreadNode(
+                record: FfiConverterTypeCommentRecord.read(from: &buf),
+                children: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentThreadNode, into buf: inout [UInt8]) {
+        FfiConverterTypeCommentRecord.write(value.record, into: &buf)
+        FfiConverterSequenceTypeCommentThreadNode.write(value.children, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadNode_lift(_ buf: RustBuffer) throws -> CommentThreadNode {
+    return try FfiConverterTypeCommentThreadNode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadNode_lower(_ value: CommentThreadNode) -> RustBuffer {
+    return FfiConverterTypeCommentThreadNode.lower(value)
 }
 
 
@@ -17551,6 +17646,31 @@ fileprivate struct FfiConverterSequenceTypeCommentReferenceBucket: FfiConverterR
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCommentThreadNode: FfiConverterRustBuffer {
+    typealias SwiftType = [CommentThreadNode]
+
+    public static func write(_ value: [CommentThreadNode], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCommentThreadNode.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommentThreadNode] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CommentThreadNode]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCommentThreadNode.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCommunitySummary: FfiConverterRustBuffer {
     typealias SwiftType = [CommunitySummary]
 
@@ -18216,6 +18336,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_auto_connected_relay_config() != 62438) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_build_comment_thread() != 31980) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_edited_book_preview() != 19782) {

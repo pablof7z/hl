@@ -586,6 +586,14 @@ pub struct CommentRecord {
     pub created_at: Option<u64>,
 }
 
+/// One node in a Rust-owned NIP-22 comment thread projection. The core owns
+/// parent resolution, orphan promotion, and chronological child ordering.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentThreadNode {
+    pub record: CommentRecord,
+    pub children: Vec<CommentThreadNode>,
+}
+
 /// Rust-owned NIP-22 root scope projection. Native shells keep this record
 /// opaque and pass it back for comment reads/writes.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]

@@ -610,6 +610,16 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func buildCommentThread(
+        records: [CommentRecord],
+        rootTagValue: String
+    ) -> [CommentThreadNode] {
+        core.buildCommentThread(
+            records: records,
+            rootTagValue: rootTagValue
+        )
+    }
+
     nonisolated func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome {
         core.getHighlightCommentScope(eventIdHex: eventIdHex)
     }

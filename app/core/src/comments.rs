@@ -3,11 +3,13 @@
 //! on) and lowercase for the direct parent (the comment above it in the
 //! thread). Top-level comments set parent == root.
 
+use std::collections::{HashMap, HashSet};
+
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::{ArtifactPreview, CommentRecord, CommentScope};
+use crate::models::{ArtifactPreview, CommentRecord, CommentScope, CommentThreadNode};
 use crate::nostr_runtime::NostrRuntime;
 
 /// kind:1111 — NIP-22 comment.
@@ -179,6 +181,77 @@ pub fn query_for_scope(
         return Ok(Vec::new());
     };
     query_for_reference(ndb, ch, &scope.root_tag_value, limit)
+}
+
+/// Build a nested NIP-22 comment forest from a bounded screen record set.
+/// Children are oldest-first. Comments whose parent is missing from the
+/// bounded input are promoted to top level so fetched content stays visible.
+pub fn build_thread(records: &[CommentRecord], root_tag_value: &str) -> Vec<CommentThreadNode> {
+    if records.is_empty() {
+        return Vec::new();
+    }
+
+    let mut sorted = records.to_vec();
+    sorted.sort_by(|a, b| a.created_at.unwrap_or(0).cmp(&b.created_at.unwrap_or(0)));
+
+    let mut by_parent: HashMap<String, Vec<CommentRecord>> = HashMap::new();
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    for record in &sorted {
+        by_parent
+            .entry(record.parent_tag_value.clone())
+            .or_default()
+            .push(record.clone());
+        seen_ids.insert(record.event_id.clone());
+    }
+
+    let mut top_level = by_parent.get(root_tag_value).cloned().unwrap_or_default();
+    for record in &sorted {
+        let parent = record.parent_tag_value.as_str();
+        if parent == root_tag_value {
+            continue;
+        }
+        if seen_ids.contains(parent) {
+            continue;
+        }
+        top_level.push(record.clone());
+    }
+
+    let mut path = HashSet::new();
+    top_level
+        .into_iter()
+        .map(|record| build_node(record, &by_parent, &mut path))
+        .collect()
+}
+
+fn build_node(
+    record: CommentRecord,
+    by_parent: &HashMap<String, Vec<CommentRecord>>,
+    path: &mut HashSet<String>,
+) -> CommentThreadNode {
+    if !path.insert(record.event_id.clone()) {
+        return CommentThreadNode {
+            record,
+            children: Vec::new(),
+        };
+    }
+
+    let child_records: Vec<CommentRecord> = by_parent
+        .get(&record.event_id)
+        .map(|records| {
+            records
+                .iter()
+                .filter(|child| !path.contains(&child.event_id))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    let children = child_records
+        .into_iter()
+        .map(|child| build_node(child, by_parent, path))
+        .collect();
+    path.remove(&record.event_id);
+
+    CommentThreadNode { record, children }
 }
 
 fn record_from_event(event: &Event) -> Option<CommentRecord> {
@@ -443,5 +516,62 @@ mod tests {
         preview.reference_tag_name = "r".into();
         let err = scope_from_preview(&preview).unwrap_err().to_string();
         assert!(err.contains("unsupported comment reference tag"));
+    }
+
+    #[test]
+    fn build_thread_orders_children_and_promotes_orphans() {
+        let root = "root";
+        let newer_top = comment("newer-top", root, Some(30));
+        let older_top = comment("older-top", root, Some(10));
+        let newer_child = comment("newer-child", "older-top", Some(25));
+        let older_child = comment("older-child", "older-top", Some(20));
+        let orphan = comment("orphan", "missing-parent", Some(15));
+
+        let tree = build_thread(
+            &[newer_top, newer_child, older_child, orphan, older_top],
+            root,
+        );
+
+        assert_eq!(
+            tree.iter()
+                .map(|node| node.record.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["older-top", "newer-top", "orphan"]
+        );
+        assert_eq!(
+            tree[0]
+                .children
+                .iter()
+                .map(|node| node.record.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["older-child", "newer-child"]
+        );
+    }
+
+    #[test]
+    fn build_thread_ignores_recursive_child_edges() {
+        let root = "root";
+        let top = comment("top", root, Some(1));
+        let mut self_child = comment("self-child", "top", Some(2));
+        self_child.parent_tag_value = self_child.event_id.clone();
+
+        let tree = build_thread(&[top, self_child], root);
+
+        assert_eq!(tree.len(), 1);
+        assert!(tree[0].children.is_empty());
+    }
+
+    fn comment(event_id: &str, parent_tag_value: &str, created_at: Option<u64>) -> CommentRecord {
+        CommentRecord {
+            event_id: event_id.into(),
+            pubkey: "pubkey".into(),
+            body: String::new(),
+            root_tag_name: "E".into(),
+            root_tag_value: "root".into(),
+            parent_tag_name: "e".into(),
+            parent_tag_value: parent_tag_value.into(),
+            root_kind: "11".into(),
+            created_at,
+        }
     }
 }
