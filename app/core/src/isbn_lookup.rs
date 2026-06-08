@@ -201,40 +201,71 @@ async fn persist_cache(
     Ok(())
 }
 
-/// Strip dashes/whitespace, require either 10 or 13 digits, canonicalize to
-/// 13-digit. Anything else → `CoreError::InvalidInput`.
-fn normalize_isbn(raw: &str) -> Result<String, CoreError> {
+/// Strip dashes/whitespace, require either a valid Bookland ISBN-13 or a valid
+/// ISBN-10, and canonicalize to 13 digits.
+pub(crate) fn normalize_isbn(raw: &str) -> Result<String, CoreError> {
     let digits: String = raw
         .chars()
         .filter(|c| !c.is_whitespace() && *c != '-')
         .collect();
 
-    if digits.chars().all(|c| c.is_ascii_digit()) && digits.len() == 13 {
+    if is_valid_bookland_isbn13(&digits) {
         return Ok(digits);
     }
 
-    // ISBN-10 may end in 'X' (check digit). We accept it as a single trailing
-    // 'X' after 9 digits and then convert to ISBN-13.
-    if digits.len() == 10
-        && digits[..9].chars().all(|c| c.is_ascii_digit())
-        && digits
-            .chars()
-            .nth(9)
-            .map(|c| c.is_ascii_digit() || c == 'X' || c == 'x')
-            .unwrap_or(false)
-    {
+    if is_valid_isbn10(&digits) {
         return Ok(isbn10_to_13(&digits));
     }
 
     Err(CoreError::InvalidInput(format!(
-        "ISBN must be 10 or 13 digits, got {:?}",
+        "ISBN must be a valid Bookland ISBN-13 or ISBN-10, got {:?}",
         raw
     )))
 }
 
+fn is_valid_bookland_isbn13(digits: &str) -> bool {
+    digits.len() == 13
+        && digits.chars().all(|c| c.is_ascii_digit())
+        && (digits.starts_with("978") || digits.starts_with("979"))
+        && is_valid_isbn13_checksum(digits)
+}
+
+fn is_valid_isbn13_checksum(digits: &str) -> bool {
+    if digits.len() != 13 {
+        return false;
+    }
+
+    let mut sum = 0u32;
+    for (i, c) in digits.chars().enumerate() {
+        let Some(d) = c.to_digit(10) else {
+            return false;
+        };
+        sum += if i % 2 == 0 { d } else { d * 3 };
+    }
+    sum.is_multiple_of(10)
+}
+
+fn is_valid_isbn10(digits: &str) -> bool {
+    if digits.len() != 10 {
+        return false;
+    }
+
+    let mut sum = 0u32;
+    for (i, c) in digits.chars().enumerate() {
+        let value = match c {
+            'X' | 'x' if i == 9 => 10,
+            _ => match c.to_digit(10) {
+                Some(d) => d,
+                None => return false,
+            },
+        };
+        sum += value * (10 - i as u32);
+    }
+    sum.is_multiple_of(11)
+}
+
 /// Convert a 10-digit ISBN to 13-digit by prepending "978" and recomputing
-/// the final check digit per the standard rule. We don't validate the
-/// incoming check digit — Open Library will reject malformed inputs.
+/// the final check digit per the standard rule.
 fn isbn10_to_13(isbn10: &str) -> String {
     let prefix = format!("978{}", &isbn10[..9]);
     let check = compute_isbn13_check_digit(&prefix);
@@ -463,11 +494,15 @@ mod tests {
 
     #[test]
     fn normalize_isbn_converts_10_to_13() {
-        // ISBN-10 0-7352-1129-X (fictional check) → 978-0-7352-1129-? with
-        // recomputed check digit.
         let n = normalize_isbn("0735211299").unwrap();
         assert!(n.starts_with("9780735211"));
         assert_eq!(n.len(), 13);
+    }
+
+    #[test]
+    fn normalize_isbn_accepts_trailing_x_10_digit() {
+        let n = normalize_isbn("0-8044-2957-X").unwrap();
+        assert_eq!(n, "9780804429573");
     }
 
     #[test]
@@ -477,6 +512,13 @@ mod tests {
         assert!(normalize_isbn("123").is_err());
         assert!(normalize_isbn("12345678901234567890").is_err());
         assert!(normalize_isbn("abc-def-ghi-jk").is_err());
+    }
+
+    #[test]
+    fn normalize_isbn_rejects_non_bookland_and_bad_checksums() {
+        assert!(normalize_isbn("4006381333931").is_err());
+        assert!(normalize_isbn("9780735211290").is_err());
+        assert!(normalize_isbn("0735211298").is_err());
     }
 
     #[test]

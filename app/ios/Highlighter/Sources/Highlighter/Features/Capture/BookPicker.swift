@@ -309,7 +309,7 @@ struct BookPicker: View {
             Text("If you know the ISBN, scan the back cover or paste it into the search field.")
                 .font(.footnote)
                 .foregroundStyle(Color.highlighterInkMuted)
-            if let isbn = ISBNValidator.validate(query) {
+            if let isbn = appStore.safeCore.normalizeIsbnInput(query) {
                 Button {
                     beginResolve(isbn)
                 } label: {
@@ -391,7 +391,7 @@ struct BookPicker: View {
     // MARK: - Actions
 
     private func handleSubmit() {
-        if let isbn = ISBNValidator.validate(query) {
+        if let isbn = appStore.safeCore.normalizeIsbnInput(query) {
             beginResolve(isbn)
         }
     }

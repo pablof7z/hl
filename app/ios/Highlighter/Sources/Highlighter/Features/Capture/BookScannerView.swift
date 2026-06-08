@@ -17,6 +17,7 @@ struct BookScannerView: View {
     /// or with `nil` when the user dismisses without scanning.
     var onResult: (String?) -> Void
 
+    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
     @State private var model = BookScannerModel()
     @State private var showManualEntry = false
@@ -51,7 +52,7 @@ struct BookScannerView: View {
                 return
             }
             await model.start { payload in
-                guard let isbn = ISBNValidator.validate(payload) else {
+                guard let isbn = appStore.safeCore.normalizeIsbnInput(payload) else {
                     model.flashNotABook()
                     return
                 }

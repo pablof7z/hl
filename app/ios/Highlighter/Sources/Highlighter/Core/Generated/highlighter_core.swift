@@ -1245,6 +1245,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async  -> MutationOutcome
 
+    /**
+     * Normalize user-entered or scanned ISBN input. Native shells use this
+     * only to enable/route capture UI; Rust remains the source of truth for
+     * ISBN validity and canonical ISBN-13 conversion.
+     */
+    func normalizeIsbnInput(raw: String)  -> String?
+
     func normalizeNip05Username(input: String)  -> String
 
     func nostrEntityFallbackLabel(entity: NostrEntityRef)  -> String
@@ -3453,6 +3460,19 @@ open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async  -> MutationOutcom
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Normalize user-entered or scanned ISBN input. Native shells use this
+     * only to enable/route capture UI; Rust remains the source of truth for
+     * ISBN validity and canonical ISBN-13 conversion.
+     */
+open func normalizeIsbnInput(raw: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_normalize_isbn_input(self.uniffiClonePointer(),
+        FfiConverterString.lower(raw),$0
+    )
+})
 }
 
 open func normalizeNip05Username(input: String) -> String  {
@@ -17254,6 +17274,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_mark_whats_new_seen() != 22420) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_normalize_isbn_input() != 8882) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_normalize_nip05_username() != 21732) {

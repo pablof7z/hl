@@ -270,6 +270,10 @@ actor SafeHighlighterCore {
         await core.lookupIsbn(isbn: isbn)
     }
 
+    nonisolated func normalizeIsbnInput(_ raw: String) -> String? {
+        core.normalizeIsbnInput(raw: raw)
+    }
+
     nonisolated func buildEditedBookPreview(
         isbn: String,
         basePreview: ArtifactPreview?,

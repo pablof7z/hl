@@ -10,12 +10,13 @@ import SwiftUI
 struct ManualISBNEntryView: View {
     var onResult: (String?) -> Void
 
+    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
     @State private var raw: String = ""
     @FocusState private var focused: Bool
 
     private var normalizedISBN: String? {
-        ISBNValidator.validate(raw)
+        appStore.safeCore.normalizeIsbnInput(raw)
     }
 
     var body: some View {

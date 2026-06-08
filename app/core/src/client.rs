@@ -2442,6 +2442,13 @@ impl HighlighterCore {
         artifact_preview_outcome(self.isbn_previews.lookup(&isbn).await)
     }
 
+    /// Normalize user-entered or scanned ISBN input. Native shells use this
+    /// only to enable/route capture UI; Rust remains the source of truth for
+    /// ISBN validity and canonical ISBN-13 conversion.
+    pub fn normalize_isbn_input(&self, raw: String) -> Option<String> {
+        isbn_lookup::normalize_isbn(&raw).ok()
+    }
+
     /// Build the edited ISBN book preview after scan/manual entry. Rust owns
     /// ISBN normalization and the NIP-73 reference fields; native supplies
     /// only the user's edited title/author and optional lookup metadata.
