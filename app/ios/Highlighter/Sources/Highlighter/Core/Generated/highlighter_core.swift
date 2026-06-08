@@ -758,6 +758,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func buildPreviewFromUrl(url: String) async throws  -> ArtifactPreview
     
+    func clearRecentSearches() async throws  -> [String]
+
     /**
      * Create a new empty kind:30004 curation set with `title`. Returns
      * the freshly published record so the UI can immediately use its
@@ -972,6 +974,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getRecentBooks(limit: UInt32) async throws  -> [ArtifactRecord]
     
+    func getRecentSearches() async throws  -> [String]
+
     /**
      * Snapshot of the live per-relay diagnostics map. One row per URL
      * currently in the client's pool. Refreshed by the background
@@ -1135,6 +1139,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func reconnectAll() async throws 
     
+    func recordRecentSearch(query: String) async throws  -> [String]
+
     /**
      * Remove a relay by URL.
      */
@@ -1544,6 +1550,23 @@ open func buildPreviewFromUrl(url: String)async throws  -> ArtifactPreview  {
         )
 }
     
+open func clearRecentSearches()async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_clear_recent_searches(
+                    self.uniffiClonePointer()
+
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
     /**
      * Create a new empty kind:30004 curation set with `title`. Returns
      * the freshly published record so the UI can immediately use its
@@ -2269,6 +2292,23 @@ open func getRecentBooks(limit: UInt32)async throws  -> [ArtifactRecord]  {
         )
 }
     
+open func getRecentSearches()async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_recent_searches(
+                    self.uniffiClonePointer()
+
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
     /**
      * Snapshot of the live per-relay diagnostics map. One row per URL
      * currently in the client's pool. Refreshed by the background
@@ -2862,6 +2902,23 @@ open func reconnectAll()async throws   {
         )
 }
     
+open func recordRecentSearch(query: String)async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_record_recent_search(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(query)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
     /**
      * Remove a relay by URL.
      */
@@ -9878,6 +9935,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 53328) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches() != 38398) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set() != 35369) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -9989,6 +10049,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 33628) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_searches() != 450) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relay_diagnostics() != 57074) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10077,6 +10140,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 18338) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_record_recent_search() != 63261) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 27189) {

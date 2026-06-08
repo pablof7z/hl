@@ -29,6 +29,7 @@ pub mod profile;
 pub mod reactions;
 pub mod reads;
 pub mod recent_books;
+pub mod recent_searches;
 pub mod recommendations;
 pub mod relay_polish;
 pub mod relays;

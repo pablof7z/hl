@@ -77,6 +77,18 @@ actor SafeHighlighterCore {
         try await core.getSearchRelays()
     }
 
+    func getRecentSearches() async throws -> [String] {
+        try await core.getRecentSearches()
+    }
+
+    func recordRecentSearch(_ query: String) async throws -> [String] {
+        try await core.recordRecentSearch(query: query)
+    }
+
+    func clearRecentSearches() async throws -> [String] {
+        try await core.clearRecentSearches()
+    }
+
     func subscribeArticleSearch(query: String) async throws -> UInt64 {
         try await core.subscribeArticleSearch(query: query)
     }

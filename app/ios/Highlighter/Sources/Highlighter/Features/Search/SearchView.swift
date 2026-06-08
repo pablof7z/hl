@@ -20,7 +20,7 @@ struct SearchView: View {
 
     @State private var store: SearchStore?
     @FocusState private var focusedField: Bool
-    @State private var recentQueries: [String] = RecentSearches.all()
+    @State private var recentQueries: [String] = []
 
     var body: some View {
         NavigationStack {
@@ -73,6 +73,7 @@ struct SearchView: View {
                 store = s
                 await s.start()
             }
+            recentQueries = (try? await app.safeCore.getRecentSearches()) ?? []
         }
         .onDisappear {
             store?.stop()
@@ -117,8 +118,7 @@ struct SearchView: View {
                 SectionKicker(text: "Recent")
                 Spacer()
                 Button("Clear") {
-                    RecentSearches.clear()
-                    recentQueries = []
+                    clearRecentQueries()
                 }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.highlighterInkMuted)
@@ -431,8 +431,15 @@ struct SearchView: View {
     private func commitRecentQuery() {
         let q = (store?.query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
-        RecentSearches.record(q)
-        recentQueries = RecentSearches.all()
+        Task { @MainActor in
+            recentQueries = (try? await app.safeCore.recordRecentSearch(q)) ?? recentQueries
+        }
+    }
+
+    private func clearRecentQueries() {
+        Task { @MainActor in
+            recentQueries = (try? await app.safeCore.clearRecentSearches()) ?? []
+        }
     }
 
     private func allEmpty(store: SearchStore) -> Bool {
@@ -854,4 +861,3 @@ private struct FlowLayout: Layout {
         }
     }
 }
-

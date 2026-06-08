@@ -29,6 +29,7 @@ use crate::models::{
     PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
 };
 use crate::reads;
+use crate::recent_searches;
 use crate::recommendations;
 use crate::nip46::{self, BunkerSigner};
 use crate::nostr_runtime::NostrRuntime;
@@ -52,6 +53,8 @@ pub struct HighlighterCore {
     /// Rust-owned persistent ISBN preview cache. Native shells render these
     /// previews but do not mirror them in platform storage.
     isbn_previews: Arc<isbn_lookup::IsbnPreviewCache>,
+    /// Rust-owned recent search history shared by every native shell.
+    recent_searches: Arc<recent_searches::RecentSearchesStore>,
 }
 
 struct Inner {
@@ -887,6 +890,18 @@ impl HighlighterCore {
             .map(|u| u.pubkey)
             .unwrap_or_default();
         crate::search::query_search_relays(self.runtime.ndb(), &user_hex)
+    }
+
+    pub async fn get_recent_searches(&self) -> Result<Vec<String>, CoreError> {
+        self.recent_searches.all().await
+    }
+
+    pub async fn record_recent_search(&self, query: String) -> Result<Vec<String>, CoreError> {
+        self.recent_searches.record(&query).await
+    }
+
+    pub async fn clear_recent_searches(&self) -> Result<Vec<String>, CoreError> {
+        self.recent_searches.clear().await
     }
 
     /// Open a NIP-50 relay subscription for kind:30023 against the user's
@@ -1879,6 +1894,8 @@ impl HighlighterCore {
         runtime.spawn_diagnostics_poller(callback_slot.clone());
         let web_metadata = Arc::new(WebMetadataStore::open(runtime.data_dir()));
         let isbn_previews = Arc::new(isbn_lookup::IsbnPreviewCache::new(runtime.data_dir()));
+        let recent_searches =
+            Arc::new(recent_searches::RecentSearchesStore::new(runtime.data_dir()));
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {
                 session: Session::new(),
@@ -1888,6 +1905,7 @@ impl HighlighterCore {
             subscriptions,
             web_metadata,
             isbn_previews,
+            recent_searches,
         })
     }
 
