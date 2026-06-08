@@ -94,6 +94,29 @@ pub struct ArtifactRecord {
     pub note: String,
 }
 
+/// Native-shell destination for an artifact detail tap. Rust owns the
+/// NIP/source/reference interpretation; platform shells only render the
+/// matching native screen.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum ArtifactDetailTarget {
+    Podcast,
+    Article,
+    Book,
+    Web,
+    Unavailable,
+}
+
+/// Bounded artifact detail projection. Exactly one target-specific payload is
+/// populated according to `target`.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArtifactDetailRoute {
+    pub target: ArtifactDetailTarget,
+    pub article_pubkey: String,
+    pub article_d_tag: String,
+    pub book_catalog_id: String,
+    pub url: String,
+}
+
 /// Last podcast playback position persisted by the Rust core. Native shells
 /// own AV playback handles, but durable playback state and the cold-launch
 /// episode projection live here so every platform resumes the same episode.

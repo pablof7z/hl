@@ -830,6 +830,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getArticle(pubkeyHex: String, dTag: String) async throws  -> ArticleRecord?
     
+    func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
+
     func getArtifacts(groupId: String, limit: UInt32) async throws  -> [ArtifactRecord]
     
     /**
@@ -1780,6 +1782,14 @@ open func getArticle(pubkeyHex: String, dTag: String)async throws  -> ArticleRec
         )
 }
     
+open func getArtifactDetailRoute(artifact: ArtifactRecord) -> ArtifactDetailRoute  {
+    return try!  FfiConverterTypeArtifactDetailRoute_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_artifact_detail_route(self.uniffiClonePointer(),
+        FfiConverterTypeArtifactRecord_lower(artifact),$0
+    )
+})
+}
+
 open func getArtifacts(groupId: String, limit: UInt32)async throws  -> [ArtifactRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -4231,6 +4241,104 @@ public func FfiConverterTypeArticleRecord_lift(_ buf: RustBuffer) throws -> Arti
 #endif
 public func FfiConverterTypeArticleRecord_lower(_ value: ArticleRecord) -> RustBuffer {
     return FfiConverterTypeArticleRecord.lower(value)
+}
+
+
+/**
+ * Bounded artifact detail projection. Exactly one target-specific payload is
+ * populated according to `target`.
+ */
+public struct ArtifactDetailRoute {
+    public var target: ArtifactDetailTarget
+    public var articlePubkey: String
+    public var articleDTag: String
+    public var bookCatalogId: String
+    public var url: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(target: ArtifactDetailTarget, articlePubkey: String, articleDTag: String, bookCatalogId: String, url: String) {
+        self.target = target
+        self.articlePubkey = articlePubkey
+        self.articleDTag = articleDTag
+        self.bookCatalogId = bookCatalogId
+        self.url = url
+    }
+}
+
+#if compiler(>=6)
+extension ArtifactDetailRoute: Sendable {}
+#endif
+
+
+extension ArtifactDetailRoute: Equatable, Hashable {
+    public static func ==(lhs: ArtifactDetailRoute, rhs: ArtifactDetailRoute) -> Bool {
+        if lhs.target != rhs.target {
+            return false
+        }
+        if lhs.articlePubkey != rhs.articlePubkey {
+            return false
+        }
+        if lhs.articleDTag != rhs.articleDTag {
+            return false
+        }
+        if lhs.bookCatalogId != rhs.bookCatalogId {
+            return false
+        }
+        if lhs.url != rhs.url {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(target)
+        hasher.combine(articlePubkey)
+        hasher.combine(articleDTag)
+        hasher.combine(bookCatalogId)
+        hasher.combine(url)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArtifactDetailRoute: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactDetailRoute {
+        return
+            try ArtifactDetailRoute(
+                target: FfiConverterTypeArtifactDetailTarget.read(from: &buf),
+                articlePubkey: FfiConverterString.read(from: &buf),
+                articleDTag: FfiConverterString.read(from: &buf),
+                bookCatalogId: FfiConverterString.read(from: &buf),
+                url: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArtifactDetailRoute, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactDetailTarget.write(value.target, into: &buf)
+        FfiConverterString.write(value.articlePubkey, into: &buf)
+        FfiConverterString.write(value.articleDTag, into: &buf)
+        FfiConverterString.write(value.bookCatalogId, into: &buf)
+        FfiConverterString.write(value.url, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactDetailRoute_lift(_ buf: RustBuffer) throws -> ArtifactDetailRoute {
+    return try FfiConverterTypeArtifactDetailRoute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactDetailRoute_lower(_ value: ArtifactDetailRoute) -> RustBuffer {
+    return FfiConverterTypeArtifactDetailRoute.lower(value)
 }
 
 
@@ -8390,6 +8498,102 @@ public func FfiConverterTypeWhatsNewEntry_lower(_ value: WhatsNewEntry) -> RustB
     return FfiConverterTypeWhatsNewEntry.lower(value)
 }
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Native-shell destination for an artifact detail tap. Rust owns the
+ * NIP/source/reference interpretation; platform shells only render the
+ * matching native screen.
+ */
+
+public enum ArtifactDetailTarget {
+
+    case podcast
+    case article
+    case book
+    case web
+    case unavailable
+}
+
+
+#if compiler(>=6)
+extension ArtifactDetailTarget: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArtifactDetailTarget: FfiConverterRustBuffer {
+    typealias SwiftType = ArtifactDetailTarget
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactDetailTarget {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .podcast
+
+        case 2: return .article
+
+        case 3: return .book
+
+        case 4: return .web
+
+        case 5: return .unavailable
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ArtifactDetailTarget, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .podcast:
+            writeInt(&buf, Int32(1))
+
+
+        case .article:
+            writeInt(&buf, Int32(2))
+
+
+        case .book:
+            writeInt(&buf, Int32(3))
+
+
+        case .web:
+            writeInt(&buf, Int32(4))
+
+
+        case .unavailable:
+            writeInt(&buf, Int32(5))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactDetailTarget_lift(_ buf: RustBuffer) throws -> ArtifactDetailTarget {
+    return try FfiConverterTypeArtifactDetailTarget.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactDetailTarget_lower(_ value: ArtifactDetailTarget) -> RustBuffer {
+    return FfiConverterTypeArtifactDetailTarget.lower(value)
+}
+
+
+extension ArtifactDetailTarget: Equatable, Hashable {}
+
+
+
+
+
+
 
 public enum CoreError: Swift.Error {
 
@@ -10329,6 +10533,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article() != 17849) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_route() != 10925) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifacts() != 30870) {

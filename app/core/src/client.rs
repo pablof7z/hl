@@ -23,11 +23,11 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, ChatMessageRecord,
-    CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord, FeedbackEventRecord,
-    FeedbackThreadRecord, HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions,
-    PictureDraft, PictureRecord, PodcastPositionRecord, ProfileMetadata, ReadingFeedItem,
-    RoomRecommendation,
+    ArticleRecord, ArtifactDetailRoute, ArtifactPreview, ArtifactRecord, BlossomUpload,
+    ChatMessageRecord, CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord,
+    FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft, HighlightRecord,
+    HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord, PodcastPositionRecord,
+    ProfileMetadata, ReadingFeedItem, RoomRecommendation,
 };
 use crate::network_preferences;
 use crate::podcast_position;
@@ -236,6 +236,10 @@ impl HighlighterCore {
     ) -> Result<(), CoreError> {
         self.podcast_position
             .save(guid, position_seconds, artifact)
+    }
+
+    pub fn get_artifact_detail_route(&self, artifact: ArtifactRecord) -> ArtifactDetailRoute {
+        crate::artifact_detail::route_for_artifact(&artifact)
     }
 
     pub async fn prepare_whats_new(&self) -> Result<Vec<whats_new::WhatsNewEntry>, CoreError> {

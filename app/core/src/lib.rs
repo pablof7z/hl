@@ -1,6 +1,7 @@
 uniffi::setup_scaffolding!();
 
 pub mod articles;
+pub mod artifact_detail;
 pub mod artifacts;
 pub mod blossom;
 pub mod bookmarks;
@@ -46,12 +47,12 @@ pub use client::HighlighterCore;
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
-    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, BookmarkSetRecord,
-    ChatMessageRecord, CommentRecord, CommunitySummary, CurrentUser, DiscussionAttachment,
-    DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightDraft,
-    HighlightRecord, HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord,
-    PodcastPositionRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
-    RoomRecommendationReason, WebBookmarkRecord,
+    ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactPreview, ArtifactRecord,
+    BlossomUpload, BookmarkSetRecord, ChatMessageRecord, CommentRecord, CommunitySummary,
+    CurrentUser, DiscussionAttachment, DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord,
+    GeneratedAccount, HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions,
+    PictureDraft, PictureRecord, PodcastPositionRecord, ProfileMetadata, ReadingFeedItem,
+    RoomRecommendation, RoomRecommendationReason, WebBookmarkRecord,
 };
 pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;
