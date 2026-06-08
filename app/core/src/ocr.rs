@@ -7,6 +7,15 @@ pub struct OcrRect {
 }
 
 impl OcrRect {
+    fn is_usable(self) -> bool {
+        self.x.is_finite()
+            && self.y.is_finite()
+            && self.w.is_finite()
+            && self.h.is_finite()
+            && self.w > 0.0
+            && self.h > 0.0
+    }
+
     fn min_x(self) -> f64 {
         self.x
     }
@@ -30,6 +39,24 @@ impl OcrRect {
     fn mid_y(self) -> f64 {
         self.y + self.h / 2.0
     }
+
+    fn contains_point(self, x: f64, y: f64) -> bool {
+        x >= self.min_x() && x <= self.max_x() && y >= self.min_y() && y <= self.max_y()
+    }
+
+    fn intersection(self, other: OcrRect) -> Option<OcrRect> {
+        let min_x = self.min_x().max(other.min_x());
+        let min_y = self.min_y().max(other.min_y());
+        let max_x = self.max_x().min(other.max_x());
+        let max_y = self.max_y().min(other.max_y());
+        let rect = OcrRect {
+            x: min_x,
+            y: min_y,
+            w: max_x - min_x,
+            h: max_y - min_y,
+        };
+        rect.is_usable().then_some(rect)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -45,6 +72,18 @@ pub struct OcrLine {
     pub bbox: OcrRect,
     pub confidence: f32,
     pub words: Vec<OcrWord>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum OcrPageSide {
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct OcrPageDetection {
+    pub page_rect: OcrRect,
+    pub chosen_side: OcrPageSide,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,6 +172,206 @@ pub fn reconstruct_markdown(lines: &[OcrLine]) -> String {
     let stats = PageStats::new(&ordered);
     let trimmed = strip_running_headers_and_footers(&ordered, &stats);
     assemble_markdown(&trimmed, &stats)
+}
+
+/// Detect whether the OCR geometry looks like a two-page spread and return the
+/// dominant page's normalized crop rectangle.
+pub fn detect_active_page(lines: &[OcrLine]) -> Option<OcrPageDetection> {
+    let usable = lines
+        .iter()
+        .filter(|line| line.bbox.is_usable() && line.bbox.w > 0.02 && line.bbox.h > 0.005)
+        .collect::<Vec<_>>();
+    if usable.len() < 8 {
+        return None;
+    }
+
+    #[derive(Clone, Copy)]
+    struct Split {
+        left_max_x: f64,
+        right_min_x: f64,
+        gutter: f64,
+    }
+
+    let mut best_gap = 0.0;
+    let mut best_split = None;
+    for probe_step in 30..=70 {
+        let probe = probe_step as f64 / 100.0;
+        let left_lines = usable
+            .iter()
+            .copied()
+            .filter(|line| line.bbox.max_x() < probe)
+            .collect::<Vec<_>>();
+        let right_lines = usable
+            .iter()
+            .copied()
+            .filter(|line| line.bbox.min_x() > probe)
+            .collect::<Vec<_>>();
+
+        if left_lines.len() >= 4 && right_lines.len() >= 4 {
+            let left_max_x = left_lines
+                .iter()
+                .map(|line| line.bbox.max_x())
+                .fold(0.0, f64::max);
+            let right_min_x = right_lines
+                .iter()
+                .map(|line| line.bbox.min_x())
+                .fold(1.0, f64::min);
+            let gap = right_min_x - left_max_x;
+            if gap > best_gap {
+                best_gap = gap;
+                best_split = Some(Split {
+                    left_max_x,
+                    right_min_x,
+                    gutter: (left_max_x + right_min_x) / 2.0,
+                });
+            }
+        }
+    }
+
+    let split = best_split.filter(|_| best_gap >= 0.05)?;
+    let left_lines = usable
+        .iter()
+        .copied()
+        .filter(|line| line.bbox.mid_x() < split.gutter)
+        .collect::<Vec<_>>();
+    let right_lines = usable
+        .iter()
+        .copied()
+        .filter(|line| line.bbox.mid_x() > split.gutter)
+        .collect::<Vec<_>>();
+
+    let left_area = left_lines
+        .iter()
+        .map(|line| line.bbox.w * line.bbox.h)
+        .sum::<f64>();
+    let right_area = right_lines
+        .iter()
+        .map(|line| line.bbox.w * line.bbox.h)
+        .sum::<f64>();
+    let chosen_is_right = right_area >= left_area;
+    let chosen_lines = if chosen_is_right {
+        &right_lines
+    } else {
+        &left_lines
+    };
+    if chosen_lines.len() < 4 {
+        return None;
+    }
+
+    let chosen_min_x = chosen_lines
+        .iter()
+        .map(|line| line.bbox.min_x())
+        .fold(1.0, f64::min);
+    let chosen_max_x = chosen_lines
+        .iter()
+        .map(|line| line.bbox.max_x())
+        .fold(0.0, f64::max);
+    let chosen_min_y = chosen_lines
+        .iter()
+        .map(|line| line.bbox.min_y())
+        .fold(1.0, f64::min);
+    let chosen_max_y = chosen_lines
+        .iter()
+        .map(|line| line.bbox.max_y())
+        .fold(0.0, f64::max);
+
+    let outer_pad_x = 0.04;
+    let gutter_pad_x = 0.015;
+    let pad_y = 0.04;
+
+    let (crop_min_x, crop_max_x) = if chosen_is_right {
+        (
+            (chosen_min_x.min(split.right_min_x) - gutter_pad_x).max(0.0),
+            (chosen_max_x + outer_pad_x).min(1.0),
+        )
+    } else {
+        (
+            (chosen_min_x - outer_pad_x).max(0.0),
+            (chosen_max_x.max(split.left_max_x) + gutter_pad_x).min(1.0),
+        )
+    };
+    let crop_min_y = (chosen_min_y - pad_y).max(0.0);
+    let crop_max_y = (chosen_max_y + pad_y).min(1.0);
+
+    let page_rect = OcrRect {
+        x: crop_min_x,
+        y: crop_min_y,
+        w: crop_max_x - crop_min_x,
+        h: crop_max_y - crop_min_y,
+    };
+    if !(page_rect.w < 0.92 && page_rect.w > 0.20 && page_rect.h > 0.20) {
+        return None;
+    }
+
+    Some(OcrPageDetection {
+        page_rect,
+        chosen_side: if chosen_is_right {
+            OcrPageSide::Right
+        } else {
+            OcrPageSide::Left
+        },
+    })
+}
+
+/// Re-project OCR lines into a cropped page rectangle. Native performs the
+/// actual image crop; Rust keeps the OCR coordinate transformation consistent
+/// across platforms.
+pub fn crop_lines(lines: &[OcrLine], page_rect: OcrRect) -> Vec<OcrLine> {
+    let page_w = page_rect.w;
+    let page_h = page_rect.h;
+    if page_w <= 0.0 || page_h <= 0.0 {
+        return lines.to_vec();
+    }
+
+    let unit = OcrRect {
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+    };
+
+    lines
+        .iter()
+        .filter_map(|line| {
+            if !page_rect.contains_point(line.bbox.mid_x(), line.bbox.mid_y()) {
+                return None;
+            }
+
+            let bbox = OcrRect {
+                x: (line.bbox.min_x() - page_rect.min_x()) / page_w,
+                y: (line.bbox.min_y() - page_rect.min_y()) / page_h,
+                w: line.bbox.w / page_w,
+                h: line.bbox.h / page_h,
+            }
+            .intersection(unit)?;
+
+            let words = line
+                .words
+                .iter()
+                .filter_map(|word| {
+                    let bbox = OcrRect {
+                        x: (word.bbox.min_x() - page_rect.min_x()) / page_w,
+                        y: (word.bbox.min_y() - page_rect.min_y()) / page_h,
+                        w: word.bbox.w / page_w,
+                        h: word.bbox.h / page_h,
+                    }
+                    .intersection(unit)?;
+                    Some(OcrWord {
+                        text: word.text.clone(),
+                        bbox,
+                        confidence: word.confidence,
+                    })
+                })
+                .collect::<Vec<_>>();
+
+            Some(OcrLine {
+                text: line.text.clone(),
+                bbox,
+                confidence: line.confidence,
+                words,
+            })
+        })
+        .collect()
 }
 
 fn normalize(raw: &str) -> String {
@@ -506,6 +745,19 @@ mod tests {
         }
     }
 
+    fn line_with_word(text: &str, bbox: OcrRect, word_bbox: OcrRect) -> OcrLine {
+        OcrLine {
+            text: text.to_string(),
+            bbox,
+            confidence: 0.9,
+            words: vec![OcrWord {
+                text: text.to_string(),
+                bbox: word_bbox,
+                confidence: 0.8,
+            }],
+        }
+    }
+
     #[test]
     fn reconstruct_markdown_soft_wraps_body_lines() {
         let markdown = reconstruct_markdown(&[
@@ -602,5 +854,65 @@ mod tests {
             markdown,
             "left column first body line with enough words left column second body line with enough words right column first body line with enough words right column second body line with enough words\n"
         );
+    }
+
+    #[test]
+    fn detect_active_page_selects_dominant_side_of_spread() {
+        let lines = vec![
+            line("left one", 0.08, 0.75, 0.25, 0.03),
+            line("left two", 0.08, 0.70, 0.25, 0.03),
+            line("left three", 0.08, 0.65, 0.25, 0.03),
+            line("left four", 0.08, 0.60, 0.25, 0.03),
+            line("right one", 0.62, 0.75, 0.28, 0.03),
+            line("right two", 0.62, 0.70, 0.28, 0.03),
+            line("right three", 0.62, 0.65, 0.28, 0.03),
+            line("right four", 0.62, 0.60, 0.28, 0.03),
+        ];
+
+        let detection = detect_active_page(&lines).expect("spread should be detected");
+        assert_eq!(detection.chosen_side, OcrPageSide::Right);
+        assert!((detection.page_rect.x - 0.605).abs() < 0.0001);
+        assert!((detection.page_rect.w - 0.335).abs() < 0.0001);
+        assert!((detection.page_rect.y - 0.56).abs() < 0.0001);
+        assert!((detection.page_rect.h - 0.26).abs() < 0.0001);
+    }
+
+    #[test]
+    fn crop_lines_reprojects_lines_and_words_into_page_rect() {
+        let page_rect = OcrRect {
+            x: 0.5,
+            y: 0.2,
+            w: 0.4,
+            h: 0.5,
+        };
+        let lines = vec![
+            line_with_word(
+                "kept",
+                OcrRect {
+                    x: 0.6,
+                    y: 0.3,
+                    w: 0.2,
+                    h: 0.1,
+                },
+                OcrRect {
+                    x: 0.62,
+                    y: 0.32,
+                    w: 0.08,
+                    h: 0.04,
+                },
+            ),
+            line("dropped", 0.1, 0.3, 0.2, 0.1),
+        ];
+
+        let cropped = crop_lines(&lines, page_rect);
+        assert_eq!(cropped.len(), 1);
+        assert_eq!(cropped[0].text, "kept");
+        assert!((cropped[0].bbox.x - 0.25).abs() < 0.0001);
+        assert!((cropped[0].bbox.y - 0.2).abs() < 0.0001);
+        assert!((cropped[0].bbox.w - 0.5).abs() < 0.0001);
+        assert!((cropped[0].bbox.h - 0.2).abs() < 0.0001);
+        assert_eq!(cropped[0].words.len(), 1);
+        assert!((cropped[0].words[0].bbox.x - 0.3).abs() < 0.0001);
+        assert!((cropped[0].words[0].bbox.y - 0.24).abs() < 0.0001);
     }
 }

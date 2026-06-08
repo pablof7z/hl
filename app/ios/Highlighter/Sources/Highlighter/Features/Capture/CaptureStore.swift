@@ -116,10 +116,10 @@ final class CaptureStore {
 
             let processed: ImageProcessing.Result
             let lines: [OCRLine]
-            if let detection = PageSegmentation.detectActivePage(lines: initialLines),
-               let cropped = ImageProcessing.cropToPage(initial, pageRect: detection.pageRect) {
+            if let detection = safeCore.detectOcrActivePage(initialLines),
+               let cropped = ImageProcessing.cropToPage(initial, pageRect: detection.pageRect.cgRect) {
                 processed = cropped
-                lines = PageSegmentation.cropLines(initialLines, to: detection.pageRect)
+                lines = safeCore.cropOcrLines(initialLines, to: detection.pageRect)
                 if let croppedThumb = UIImage(data: cropped.data) {
                     self.thumbnail = croppedThumb
                 }

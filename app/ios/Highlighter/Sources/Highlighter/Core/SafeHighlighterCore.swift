@@ -278,6 +278,14 @@ actor SafeHighlighterCore {
         core.reconstructOcrMarkdown(lines: lines)
     }
 
+    nonisolated func detectOcrActivePage(_ lines: [OCRLine]) -> OcrPageDetection? {
+        core.detectOcrActivePage(lines: lines)
+    }
+
+    nonisolated func cropOcrLines(_ lines: [OCRLine], to pageRect: OcrRect) -> [OCRLine] {
+        core.cropOcrLines(lines: lines, pageRect: pageRect)
+    }
+
     nonisolated func buildEditedBookPreview(
         isbn: String,
         basePreview: ArtifactPreview?,

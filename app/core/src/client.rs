@@ -2471,6 +2471,21 @@ impl HighlighterCore {
         crate::ocr::reconstruct_markdown(&lines)
     }
 
+    pub fn detect_ocr_active_page(
+        &self,
+        lines: Vec<crate::ocr::OcrLine>,
+    ) -> Option<crate::ocr::OcrPageDetection> {
+        crate::ocr::detect_active_page(&lines)
+    }
+
+    pub fn crop_ocr_lines(
+        &self,
+        lines: Vec<crate::ocr::OcrLine>,
+        page_rect: crate::ocr::OcrRect,
+    ) -> Vec<crate::ocr::OcrLine> {
+        crate::ocr::crop_lines(&lines, page_rect)
+    }
+
     /// Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
     /// Extension flow — the main app drains the share queue, normalizes each
     /// URL through this, then calls `publish_artifact` to post the kind:11.

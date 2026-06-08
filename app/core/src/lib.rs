@@ -74,7 +74,7 @@ pub use models::{
     WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
-pub use ocr::{OcrLine, OcrRect, OcrWord};
+pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
 pub use podcast_transcript::TranscriptSegment;
 pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;

@@ -820,6 +820,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func createRoomInviteCodes(groupId: String, count: UInt32) async  -> StringListOutcome
 
+    func cropOcrLines(lines: [OcrLine], pageRect: OcrRect)  -> [OcrLine]
+
     func currentUser()  -> CurrentUser?
 
     /**
@@ -837,6 +839,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * reference. Used by the room-invite picker to resolve a pasted handle.
      */
     func decodeNpub(input: String)  -> StringOutcome
+
+    func detectOcrActivePage(lines: [OcrLine])  -> OcrPageDetection?
 
     /**
      * Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
@@ -1937,6 +1941,15 @@ open func createRoomInviteCodes(groupId: String, count: UInt32)async  -> StringL
         )
 }
 
+open func cropOcrLines(lines: [OcrLine], pageRect: OcrRect) -> [OcrLine]  {
+    return try!  FfiConverterSequenceTypeOcrLine.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_crop_ocr_lines(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeOcrLine.lower(lines),
+        FfiConverterTypeOcrRect_lower(pageRect),$0
+    )
+})
+}
+
 open func currentUser() -> CurrentUser?  {
     return try!  FfiConverterOptionTypeCurrentUser.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_current_user(self.uniffiClonePointer(),$0
@@ -1968,6 +1981,14 @@ open func decodeNpub(input: String) -> StringOutcome  {
     return try!  FfiConverterTypeStringOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_decode_npub(self.uniffiClonePointer(),
         FfiConverterString.lower(input),$0
+    )
+})
+}
+
+open func detectOcrActivePage(lines: [OcrLine]) -> OcrPageDetection?  {
+    return try!  FfiConverterOptionTypeOcrPageDetection.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_detect_ocr_active_page(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeOcrLine.lower(lines),$0
     )
 })
 }
@@ -10885,6 +10906,76 @@ public func FfiConverterTypeOcrLine_lower(_ value: OcrLine) -> RustBuffer {
 }
 
 
+public struct OcrPageDetection {
+    public var pageRect: OcrRect
+    public var chosenSide: OcrPageSide
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pageRect: OcrRect, chosenSide: OcrPageSide) {
+        self.pageRect = pageRect
+        self.chosenSide = chosenSide
+    }
+}
+
+#if compiler(>=6)
+extension OcrPageDetection: Sendable {}
+#endif
+
+
+extension OcrPageDetection: Equatable, Hashable {
+    public static func ==(lhs: OcrPageDetection, rhs: OcrPageDetection) -> Bool {
+        if lhs.pageRect != rhs.pageRect {
+            return false
+        }
+        if lhs.chosenSide != rhs.chosenSide {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pageRect)
+        hasher.combine(chosenSide)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOcrPageDetection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrPageDetection {
+        return
+            try OcrPageDetection(
+                pageRect: FfiConverterTypeOcrRect.read(from: &buf),
+                chosenSide: FfiConverterTypeOcrPageSide.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OcrPageDetection, into buf: inout [UInt8]) {
+        FfiConverterTypeOcrRect.write(value.pageRect, into: &buf)
+        FfiConverterTypeOcrPageSide.write(value.chosenSide, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrPageDetection_lift(_ buf: RustBuffer) throws -> OcrPageDetection {
+    return try FfiConverterTypeOcrPageDetection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrPageDetection_lower(_ value: OcrPageDetection) -> RustBuffer {
+    return FfiConverterTypeOcrPageDetection.lower(value)
+}
+
+
 public struct OcrRect {
     public var x: Double
     public var y: Double
@@ -15319,6 +15410,76 @@ extension NostrEntityRenderKind: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum OcrPageSide {
+
+    case left
+    case right
+}
+
+
+#if compiler(>=6)
+extension OcrPageSide: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOcrPageSide: FfiConverterRustBuffer {
+    typealias SwiftType = OcrPageSide
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrPageSide {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .left
+
+        case 2: return .right
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: OcrPageSide, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .left:
+            writeInt(&buf, Int32(1))
+
+
+        case .right:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrPageSide_lift(_ buf: RustBuffer) throws -> OcrPageSide {
+    return try FfiConverterTypeOcrPageSide.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrPageSide_lower(_ value: OcrPageSide) -> RustBuffer {
+    return FfiConverterTypeOcrPageSide.lower(value)
+}
+
+
+extension OcrPageSide: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ProfileUpdateAction {
 
     case refreshProfile
@@ -16345,6 +16506,30 @@ fileprivate struct FfiConverterOptionTypeNostrEntityEvent: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeOcrPageDetection: FfiConverterRustBuffer {
+    typealias SwiftType = OcrPageDetection?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeOcrPageDetection.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeOcrPageDetection.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypePictureRecord: FfiConverterRustBuffer {
     typealias SwiftType = PictureRecord?
 
@@ -17335,6 +17520,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_room_invite_codes() != 46771) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_crop_ocr_lines() != 63723) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_current_user() != 38772) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17342,6 +17530,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_decode_npub() != 65494) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_detect_ocr_active_page() != 8731) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 56544) {
