@@ -1,4 +1,3 @@
-import Kingfisher
 import SwiftUI
 
 @main
@@ -12,10 +11,6 @@ struct HighlighterApp: App {
     // avoids a SwiftUI render-race where a `fullScreenCover` (onboarding)
     // sitting on top causes the sheet's content closure to read stale entries.
     @State private var whatsNewPresentation: WhatsNewPresentation?
-
-    init() {
-        Self.configureImageCache()
-    }
 
     var body: some Scene {
         WindowGroup {
@@ -56,16 +51,4 @@ struct HighlighterApp: App {
 private struct WhatsNewPresentation: Identifiable {
     let id = UUID()
     let entries: [WhatsNewEntry]
-}
-
-extension HighlighterApp {
-    private static func configureImageCache() {
-        let cache = ImageCache.default
-        cache.memoryStorage.config.totalCostLimit = 150 * 1024 * 1024   // 150 MB
-        cache.memoryStorage.config.countLimit = 300
-        cache.diskStorage.config.sizeLimit = 750 * 1024 * 1024          // 750 MB
-        cache.diskStorage.config.expiration = .days(14)
-
-        KingfisherManager.shared.downloader.downloadTimeout = 20
-    }
 }
