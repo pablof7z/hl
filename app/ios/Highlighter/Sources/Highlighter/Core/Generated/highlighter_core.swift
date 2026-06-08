@@ -1361,15 +1361,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func subscribeJoinedCommunities() async throws  -> UInt64
     
     /**
-     * Install a one-shot REQ for the missing event behind an entity.
-     * Routes to relay hints first (when the bech32 carried any) plus
-     * the indexer pool. Events received are persisted to nostrdb via
-     * the `NdbDatabase` bridge; the caller polls
-     * `resolve_nostr_entity` again to pick them up. Fire-and-forget —
-     * no handle returned, no need to unsubscribe (the relay closes
-     * the REQ on EOSE).
+     * Install a view-scoped subscription for the missing event behind an
+     * entity. Routes to relay hints first (when the bech32 carried any) plus
+     * the indexer pool. Events received are persisted to nostrdb via the
+     * `NdbDatabase` bridge; the subscription pump emits
+     * `NostrEntityResolved` when the target lands.
      */
-    func subscribeNostrEntity(entity: NostrEntityRef) async throws 
+    func subscribeNostrEntity(entity: NostrEntityRef) async throws  -> UInt64
     
     /**
      * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
@@ -3761,15 +3759,13 @@ open func subscribeJoinedCommunities()async throws  -> UInt64  {
 }
     
     /**
-     * Install a one-shot REQ for the missing event behind an entity.
-     * Routes to relay hints first (when the bech32 carried any) plus
-     * the indexer pool. Events received are persisted to nostrdb via
-     * the `NdbDatabase` bridge; the caller polls
-     * `resolve_nostr_entity` again to pick them up. Fire-and-forget —
-     * no handle returned, no need to unsubscribe (the relay closes
-     * the REQ on EOSE).
+     * Install a view-scoped subscription for the missing event behind an
+     * entity. Routes to relay hints first (when the bech32 carried any) plus
+     * the indexer pool. Events received are persisted to nostrdb via the
+     * `NdbDatabase` bridge; the subscription pump emits
+     * `NostrEntityResolved` when the target lands.
      */
-open func subscribeNostrEntity(entity: NostrEntityRef)async throws   {
+open func subscribeNostrEntity(entity: NostrEntityRef)async throws  -> UInt64  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -3778,10 +3774,10 @@ open func subscribeNostrEntity(entity: NostrEntityRef)async throws   {
                     FfiConverterTypeNostrEntityRef_lower(entity)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
+            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
+            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
+            freeFunc: ffi_highlighter_core_rust_future_free_u64,
+            liftFunc: FfiConverterUInt64.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -9075,6 +9071,13 @@ public enum DataChangeType {
      */
     case webBookmarksUpdated
     /**
+     * A referenced NIP-19 entity resolved from nostrdb after its
+     * view-scoped subscription warmed the cache. Swift applies the payload
+     * directly to the card that installed the subscription.
+     */
+    case nostrEntityResolved(event: NostrEntityEvent
+    )
+    /**
      * NIP-46 signer connected — fires after a remote signer completes the
      * `nostrconnect://` or `bunker://` handshake.
      */
@@ -9161,13 +9164,16 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         
         case 19: return .webBookmarksUpdated
         
-        case 20: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
+        case 20: return .nostrEntityResolved(event: try FfiConverterTypeNostrEntityEvent.read(from: &buf)
         )
         
-        case 21: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
+        case 21: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
         )
         
-        case 22: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
+        case 22: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 23: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -9274,18 +9280,23 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             writeInt(&buf, Int32(19))
         
         
-        case let .signerConnected(user):
+        case let .nostrEntityResolved(event):
             writeInt(&buf, Int32(20))
+            FfiConverterTypeNostrEntityEvent.write(event, into: &buf)
+
+
+        case let .signerConnected(user):
+            writeInt(&buf, Int32(21))
             FfiConverterTypeCurrentUser.write(user, into: &buf)
             
         
         case let .bunkerSignRequest(requestId):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(22))
             FfiConverterString.write(requestId, into: &buf)
             
         
         case let .relayStatusChanged(url,state):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(23))
             FfiConverterString.write(url, into: &buf)
             FfiConverterTypeRelayStatus.write(state, into: &buf)
             
@@ -11118,7 +11129,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_joined_communities() != 33427) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_nostr_entity() != 50420) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_nostr_entity() != 54924) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_relay_status() != 5993) {

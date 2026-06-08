@@ -1,4 +1,5 @@
 import Kingfisher
+import Observation
 import SwiftUI
 
 /// Renders plain text that may contain `nostr:` URI mentions and event
@@ -263,6 +264,14 @@ struct NostrRichText: View {
 
 // Shorthand to peek at the variant without binding.
 private extension NostrEntityRef {
+    var identityKey: String {
+        switch self {
+        case .profile(let pk, _): return "p:\(pk)"
+        case .event(let id, _, _, _): return "e:\(id)"
+        case .address(let kind, let pk, let d, _): return "a:\(kind):\(pk):\(d)"
+        }
+    }
+
     var isProfile: Bool {
         if case .profile = self { return true }
         return false
@@ -278,36 +287,79 @@ private extension Optional where Wrapped == NostrEntityRef {
 
 // MARK: - Card
 
+@MainActor
+@Observable
+final class NostrEntityCardStore {
+    private(set) var resolved: NostrEntityEvent?
+
+    @ObservationIgnored let entity: NostrEntityRef
+    @ObservationIgnored let safeCore: SafeHighlighterCore
+    @ObservationIgnored weak var eventBridge: EventBridge?
+    @ObservationIgnored private var subscriptionHandle: UInt64?
+
+    init(
+        entity: NostrEntityRef,
+        safeCore: SafeHighlighterCore,
+        eventBridge: EventBridge?
+    ) {
+        self.entity = entity
+        self.safeCore = safeCore
+        self.eventBridge = eventBridge
+    }
+
+    func start() async {
+        if let snapshot = try? await safeCore.resolveNostrEntity(entity) {
+            resolved = snapshot
+            return
+        }
+
+        guard !Task.isCancelled else { return }
+
+        do {
+            let handle = try await safeCore.subscribeNostrEntity(entity)
+            guard !Task.isCancelled else {
+                await safeCore.unsubscribe(handle)
+                return
+            }
+            subscriptionHandle = handle
+            eventBridge?.registerNostrEntity(self, handle: handle)
+        } catch {
+            // Cache-only rendering remains valid; the placeholder stays visible.
+        }
+    }
+
+    func stop() {
+        if let handle = subscriptionHandle {
+            Task { [safeCore] in await safeCore.unsubscribe(handle) }
+            eventBridge?.unregister(handle: handle)
+        }
+        subscriptionHandle = nil
+    }
+
+    func apply(event: NostrEntityEvent) {
+        resolved = event
+    }
+}
+
 /// Block-level card for `nevent1…` / `naddr1…` references. Resolves
-/// against the local nostrdb first, fires a backfill REQ when cold,
-/// and re-resolves on the next render after the event lands. Per-kind
-/// rendering swap-in is handled inline.
+/// against the local nostrdb first, then subscribes through Rust when cold.
+/// Per-kind rendering swap-in is handled inline.
 struct NostrEntityCard: View {
     let entity: NostrEntityRef
 
     @Environment(HighlighterStore.self) private var appStore
-    @State private var resolved: NostrEntityEvent?
-    @State private var attempted = false
+    @State private var store: NostrEntityCardStore?
 
     var body: some View {
         Group {
-            if let resolved {
+            if let resolved = store?.resolved {
                 resolvedCard(resolved)
             } else {
                 placeholder
             }
         }
-        .task(id: cacheKey) {
-            await load()
-        }
-    }
-
-    private var cacheKey: String {
-        switch entity {
-        case .profile(let pk, _): return "p:\(pk)"
-        case .event(let id, _, _, _): return "e:\(id)"
-        case .address(let kind, let pk, let d, _): return "a:\(kind):\(pk):\(d)"
-        }
+        .task(id: entity.identityKey) { await start() }
+        .onDisappear { stop() }
     }
 
     @ViewBuilder
@@ -348,21 +400,20 @@ struct NostrEntityCard: View {
         }
     }
 
-    private func load() async {
-        if let cached = try? await appStore.safeCore.resolveNostrEntity(entity) {
-            await MainActor.run { resolved = cached }
-        }
-        if resolved == nil && !attempted {
-            attempted = true
-            try? await appStore.safeCore.subscribeNostrEntity(entity)
-            // Brief poll-back so a fast arrival populates without a view
-            // re-create. The subscription terminates on EOSE so this is
-            // bounded.
-            try? await Task.sleep(for: .milliseconds(800))
-            if let cached = try? await appStore.safeCore.resolveNostrEntity(entity) {
-                await MainActor.run { resolved = cached }
-            }
-        }
+    private func start() async {
+        store?.stop()
+        let next = NostrEntityCardStore(
+            entity: entity,
+            safeCore: appStore.safeCore,
+            eventBridge: appStore.eventBridge
+        )
+        store = next
+        await next.start()
+    }
+
+    private func stop() {
+        store?.stop()
+        store = nil
     }
 }
 

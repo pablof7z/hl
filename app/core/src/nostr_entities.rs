@@ -11,9 +11,8 @@
 //! - [`resolve_from_cache`] — if the referenced event is already in
 //!   nostrdb, return a [`NostrEntityEvent`] the UI can render
 //!   directly. Returns `None` when the cache is cold.
-//! - The subscription side (`spawn_entity_backfill` over in
-//!   `nostr_runtime`) installs a one-shot REQ on the indexer pool + any
-//!   relay hints carried by the entity, so a cold cache warms up
+//! - The subscription registry installs a view-scoped REQ on the indexer
+//!   pool + any relay hints carried by the entity, so a cold cache warms up
 //!   without blocking the first paint.
 
 use nostr_sdk::nips::nip19::{
@@ -203,6 +202,107 @@ pub fn resolve_from_cache(
             ..
         } => resolve_replaceable(ndb, *kind, pubkey_hex, Some(d_tag.as_str())),
     }
+}
+
+pub(crate) fn relay_targets(entity: &NostrEntityRef, fallback: Vec<String>) -> Vec<String> {
+    let mut targets: Vec<String> = match entity {
+        NostrEntityRef::Profile { relays, .. }
+        | NostrEntityRef::Event { relays, .. }
+        | NostrEntityRef::Address { relays, .. } => relays.clone(),
+    };
+    for url in fallback {
+        if !targets.iter().any(|existing| existing == &url) {
+            targets.push(url);
+        }
+    }
+    targets
+}
+
+pub(crate) fn relay_filter(entity: &NostrEntityRef) -> Result<Filter, CoreError> {
+    match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => {
+            let pk = PublicKey::from_hex(pubkey_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
+            Ok(Filter::new().kinds([Kind::Custom(0)]).author(pk).limit(1))
+        }
+        NostrEntityRef::Event { event_id_hex, .. } => {
+            let id = EventId::from_hex(event_id_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
+            Ok(Filter::new().id(id).limit(1))
+        }
+        NostrEntityRef::Address {
+            kind,
+            pubkey_hex,
+            d_tag,
+            ..
+        } => {
+            let pk = PublicKey::from_hex(pubkey_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
+            Ok(Filter::new()
+                .kinds([Kind::Custom(*kind as u16)])
+                .author(pk)
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag.clone())
+                .limit(1))
+        }
+    }
+}
+
+pub(crate) fn ndb_filters(entity: &NostrEntityRef) -> Result<Vec<NdbFilter>, CoreError> {
+    Ok(match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => {
+            let author = PublicKey::from_hex(pubkey_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
+            let pk_bytes: [u8; 32] = author.to_bytes();
+            vec![NdbFilter::new()
+                .kinds([0u64])
+                .authors([&pk_bytes])
+                .build()]
+        }
+        NostrEntityRef::Event { event_id_hex, .. } => {
+            let id = EventId::from_hex(event_id_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
+            let id_bytes: [u8; 32] = id.to_bytes();
+            vec![NdbFilter::new().ids([&id_bytes]).build()]
+        }
+        NostrEntityRef::Address {
+            kind,
+            pubkey_hex,
+            d_tag,
+            ..
+        } => {
+            let author = PublicKey::from_hex(pubkey_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
+            let pk_bytes: [u8; 32] = author.to_bytes();
+            vec![NdbFilter::new()
+                .kinds([*kind as u64])
+                .authors([&pk_bytes])
+                .tags([d_tag.as_str()], 'd')
+                .build()]
+        }
+    })
+}
+
+pub(crate) fn event_matches_ref(event: &Event, entity: &NostrEntityRef) -> bool {
+    match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => {
+            event.kind.as_u16() == 0 && event.pubkey.to_hex() == *pubkey_hex
+        }
+        NostrEntityRef::Event { event_id_hex, .. } => event.id.to_hex() == *event_id_hex,
+        NostrEntityRef::Address {
+            kind,
+            pubkey_hex,
+            d_tag,
+            ..
+        } => {
+            event.kind.as_u16() as u32 == *kind
+                && event.pubkey.to_hex() == *pubkey_hex
+                && event_d_tag(event).as_deref() == Some(d_tag.as_str())
+        }
+    }
+}
+
+pub(crate) fn entity_event_from_event(event: &Event) -> NostrEntityEvent {
+    to_entity_event(event)
 }
 
 fn resolve_by_event_id(ndb: &Ndb, id_hex: &str) -> Result<Option<NostrEntityEvent>, CoreError> {

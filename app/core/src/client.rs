@@ -1759,19 +1759,19 @@ impl HighlighterCore {
         crate::nostr_entities::resolve_from_cache(self.runtime.ndb(), &entity)
     }
 
-    /// Install a one-shot REQ for the missing event behind an entity.
-    /// Routes to relay hints first (when the bech32 carried any) plus
-    /// the indexer pool. Events received are persisted to nostrdb via
-    /// the `NdbDatabase` bridge; the caller polls
-    /// `resolve_nostr_entity` again to pick them up. Fire-and-forget —
-    /// no handle returned, no need to unsubscribe (the relay closes
-    /// the REQ on EOSE).
+    /// Install a view-scoped subscription for the missing event behind an
+    /// entity. Routes to relay hints first (when the bech32 carried any) plus
+    /// the indexer pool. Events received are persisted to nostrdb via the
+    /// `NdbDatabase` bridge; the subscription pump emits
+    /// `NostrEntityResolved` when the target lands.
     pub async fn subscribe_nostr_entity(
         &self,
         entity: crate::nostr_entities::NostrEntityRef,
-    ) -> Result<(), CoreError> {
+    ) -> Result<u64, CoreError> {
         let _ = self.require_user_pubkey()?;
-        self.runtime.spawn_nostr_entity_backfill(entity)
+        let _ = crate::nostr_entities::relay_filter(&entity)?;
+        self.subscriptions
+            .register(&self.runtime, SubscriptionKind::NostrEntity { entity })
     }
 
     /// Pubkeys (hex) the current user follows per their cached kind:3 contact

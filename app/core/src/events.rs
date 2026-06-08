@@ -9,6 +9,7 @@ use crate::models::{
     FeedbackEventRecord, HighlightRecord, HydratedHighlight,
 };
 use crate::models::RelayStatus;
+use crate::nostr_entities::NostrEntityEvent;
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum DataChangeType {
@@ -82,6 +83,10 @@ pub enum DataChangeType {
     /// A NIP-B0 kind:39701 web bookmark from the current user changed.
     /// View-scoped — the BookmarkStore re-queries on receipt.
     WebBookmarksUpdated,
+    /// A referenced NIP-19 entity resolved from nostrdb after its
+    /// view-scoped subscription warmed the cache. Swift applies the payload
+    /// directly to the card that installed the subscription.
+    NostrEntityResolved { event: NostrEntityEvent },
     /// NIP-46 signer connected — fires after a remote signer completes the
     /// `nostrconnect://` or `bunker://` handshake.
     SignerConnected { user: CurrentUser },

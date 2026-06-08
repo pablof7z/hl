@@ -139,6 +139,12 @@ pub(crate) enum SubscriptionKind {
     /// Current user's NIP-B0 kind:39701 web bookmarks. Fires
     /// `WebBookmarksUpdated` (view-scoped) when any web bookmark changes.
     WebBookmarks { user_pubkey: PublicKey },
+    /// View-scoped live resolution for a `nostr:` entity card. The ndb pump
+    /// emits `NostrEntityResolved` when the referenced profile/event/address
+    /// lands in the cache.
+    NostrEntity {
+        entity: crate::nostr_entities::NostrEntityRef,
+    },
 }
 
 impl SubscriptionRegistry {
@@ -768,6 +774,32 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             });
             vec![id]
         }
+        SubscriptionKind::NostrEntity { entity } => {
+            let relays = crate::nostr_entities::relay_targets(entity, runtime.indexer_urls());
+            if relays.is_empty() {
+                tracing::warn!("nostr-entity subscription: no relays available");
+                return vec![];
+            }
+            let Ok(filter) = crate::nostr_entities::relay_filter(entity) else {
+                tracing::warn!("nostr-entity subscription: invalid entity filter");
+                return vec![];
+            };
+            let id = SubscriptionId::generate();
+            let id_clone = id.clone();
+            let client = runtime.client().clone();
+            runtime.runtime_handle().spawn(async move {
+                for url in &relays {
+                    pin_relay_for_read(&client, url).await;
+                }
+                if let Err(e) = client
+                    .subscribe_with_id_to(relays, id_clone, filter, None)
+                    .await
+                {
+                    tracing::warn!(error = %e, "failed to subscribe to nostr entity");
+                }
+            });
+            vec![id]
+        }
     }
 }
 
@@ -922,6 +954,12 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
                 .kinds([crate::lists::KIND_WEB_BOOKMARK as u64])
                 .authors([&pk_bytes])
                 .build()]
+        }
+        SubscriptionKind::NostrEntity { entity } => {
+            crate::nostr_entities::ndb_filters(entity).unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "nostr-entity subscription: invalid ndb filter");
+                vec![NdbFilter::new().kinds([u64::MAX]).build()]
+            })
         }
     }
 }
@@ -1420,6 +1458,14 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
                 return None;
             }
             Some(DataChangeType::WebBookmarksUpdated)
+        }
+        SubscriptionKind::NostrEntity { entity } => {
+            if !crate::nostr_entities::event_matches_ref(event, entity) {
+                return None;
+            }
+            Some(DataChangeType::NostrEntityResolved {
+                event: crate::nostr_entities::entity_event_from_event(event),
+            })
         }
         SubscriptionKind::FeedbackThread { root_event_id } => {
             if event.kind.as_u16() != KIND_FEEDBACK_NOTE {

@@ -306,8 +306,8 @@ final class HighlighterStore {
     private func loadAppScopeData() async {
         // Immediate read from nostrdb via the Rust core. Non-blocking on
         // relays — the cache answers first, subscriptions catch up later.
-        if let cached = try? await safeCore.getJoinedCommunities() {
-            joinedCommunities = cached
+        if let snapshot = try? await safeCore.getJoinedCommunities() {
+            joinedCommunities = snapshot
         }
 
         // Fetch the user's own kind:0 so the top-bar avatar shows their real

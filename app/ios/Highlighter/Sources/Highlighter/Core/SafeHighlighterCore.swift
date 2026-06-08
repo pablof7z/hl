@@ -330,7 +330,7 @@ actor SafeHighlighterCore {
         try await core.resolveNostrEntity(entity: entity)
     }
 
-    func subscribeNostrEntity(_ entity: NostrEntityRef) async throws {
+    func subscribeNostrEntity(_ entity: NostrEntityRef) async throws -> UInt64 {
         try await core.subscribeNostrEntity(entity: entity)
     }
 
