@@ -50,7 +50,7 @@ struct ArticleReaderView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        shareTarget = .article(article)
+                        shareTarget = ShareToCommunityTarget.article(article, core: app.core)
                     } label: {
                         Image(systemName: "square.and.arrow.up")
                     }

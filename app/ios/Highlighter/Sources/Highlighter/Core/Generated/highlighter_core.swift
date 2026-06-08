@@ -849,6 +849,24 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getArticleAddressAuthor(address: String) async  -> OptionalStringOutcome
 
     /**
+     * Project a cached NIP-23 article into the artifact preview shape used by
+     * kind:11 sharing. Rust owns the `a`/`k`/highlight reference fields.
+     */
+    func getArticleArtifactPreview(article: ArticleRecord)  -> ArtifactPreviewOutcome
+
+    /**
+     * Project a NIP-23 article address into a minimal artifact preview for
+     * share flows that only have the address cached.
+     */
+    func getArticleArtifactPreviewForAddress(address: String)  -> ArtifactPreviewOutcome
+
+    /**
+     * Project a cached NIP-23 article into the artifact record shape expected
+     * by highlight publishing.
+     */
+    func getArticleArtifactRecord(article: ArticleRecord)  -> ArtifactOutcome
+
+    /**
      * Read a single NIP-23 article by its full NIP-33 address
      * (`30023:<pubkey>:<d>`) from nostrdb.
      */
@@ -1947,6 +1965,42 @@ open func getArticleAddressAuthor(address: String)async  -> OptionalStringOutcom
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Project a cached NIP-23 article into the artifact preview shape used by
+     * kind:11 sharing. Rust owns the `a`/`k`/highlight reference fields.
+     */
+open func getArticleArtifactPreview(article: ArticleRecord) -> ArtifactPreviewOutcome  {
+    return try!  FfiConverterTypeArtifactPreviewOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_article_artifact_preview(self.uniffiClonePointer(),
+        FfiConverterTypeArticleRecord_lower(article),$0
+    )
+})
+}
+
+    /**
+     * Project a NIP-23 article address into a minimal artifact preview for
+     * share flows that only have the address cached.
+     */
+open func getArticleArtifactPreviewForAddress(address: String) -> ArtifactPreviewOutcome  {
+    return try!  FfiConverterTypeArtifactPreviewOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_article_artifact_preview_for_address(self.uniffiClonePointer(),
+        FfiConverterString.lower(address),$0
+    )
+})
+}
+
+    /**
+     * Project a cached NIP-23 article into the artifact record shape expected
+     * by highlight publishing.
+     */
+open func getArticleArtifactRecord(article: ArticleRecord) -> ArtifactOutcome  {
+    return try!  FfiConverterTypeArtifactOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_article_artifact_record(self.uniffiClonePointer(),
+        FfiConverterTypeArticleRecord_lower(article),$0
+    )
+})
 }
 
     /**
@@ -15773,6 +15827,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_address_author() != 41220) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_artifact_preview() != 14568) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_artifact_preview_for_address() != 57769) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_artifact_record() != 57115) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_by_address() != 8240) {

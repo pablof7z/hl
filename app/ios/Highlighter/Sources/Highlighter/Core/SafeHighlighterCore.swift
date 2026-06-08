@@ -421,6 +421,18 @@ actor SafeHighlighterCore {
         core.getArticleReaderRouteForArticle(pubkeyHex: pubkeyHex, dTag: dTag)
     }
 
+    nonisolated func getArticleArtifactPreview(article: ArticleRecord) -> ArtifactPreviewOutcome {
+        core.getArticleArtifactPreview(article: article)
+    }
+
+    nonisolated func getArticleArtifactPreviewForAddress(address: String) -> ArtifactPreviewOutcome {
+        core.getArticleArtifactPreviewForAddress(address: address)
+    }
+
+    nonisolated func getArticleArtifactRecord(article: ArticleRecord) -> ArtifactOutcome {
+        core.getArticleArtifactRecord(article: article)
+    }
+
     nonisolated func getBookRoute(catalogId: String) -> BookRouteOutcome {
         core.getBookRoute(catalogId: catalogId)
     }

@@ -157,7 +157,13 @@ final class ArticleReaderStore {
         guard let article else {
             return HighlightOutcome(value: nil, error: "Article not yet loaded.")
         }
-        let artifact = articleAsArtifact(article)
+        let artifactOutcome = safeCore.getArticleArtifactRecord(article: article)
+        guard artifactOutcome.error.isEmpty, let artifact = artifactOutcome.value else {
+            return HighlightOutcome(
+                value: nil,
+                error: artifactOutcome.error.isEmpty ? "Article source is unavailable." : artifactOutcome.error
+            )
+        }
         let draft = HighlightDraft(
             quote: quote,
             context: context,
@@ -195,47 +201,5 @@ final class ArticleReaderStore {
         }
         subscriptionHandle = outcome.handle
         bridge.registerArticle(self, handle: outcome.handle)
-    }
-
-    /// Build the `ArtifactRecord` shape the Rust `publish_highlight` path
-    /// expects. For NIP-23 articles the `highlight_tag_name` is `"a"` and
-    /// the value is the article address.
-    private func articleAsArtifact(_ article: ArticleRecord) -> ArtifactRecord {
-        let preview = ArtifactPreview(
-            id: article.identifier,
-            url: "",
-            title: article.title,
-            author: "",
-            image: article.image,
-            description: article.summary,
-            source: "article",
-            domain: "",
-            catalogId: "",
-            catalogKind: "",
-            podcastGuid: "",
-            podcastItemGuid: "",
-            podcastShowTitle: "",
-            audioUrl: "",
-            audioPreviewUrl: "",
-            transcriptUrl: "",
-            feedUrl: "",
-            publishedAt: article.publishedAt.map { String($0) } ?? "",
-            durationSeconds: nil,
-            referenceTagName: "a",
-            referenceTagValue: target.address,
-            referenceKind: "30023",
-            highlightTagName: "a",
-            highlightTagValue: target.address,
-            highlightReferenceKey: "a:\(target.address)",
-            chapters: []
-        )
-        return ArtifactRecord(
-            preview: preview,
-            groupId: "",
-            shareEventId: "",
-            pubkey: article.pubkey,
-            createdAt: article.createdAt,
-            note: ""
-        )
     }
 }

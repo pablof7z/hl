@@ -1617,6 +1617,31 @@ impl HighlighterCore {
         )))
     }
 
+    /// Project a cached NIP-23 article into the artifact preview shape used by
+    /// kind:11 sharing. Rust owns the `a`/`k`/highlight reference fields.
+    pub fn get_article_artifact_preview(&self, article: ArticleRecord) -> ArtifactPreviewOutcome {
+        artifact_preview_outcome(Ok(articles::article_artifact_preview(&article)))
+    }
+
+    /// Project a NIP-23 article address into a minimal artifact preview for
+    /// share flows that only have the address cached.
+    pub fn get_article_artifact_preview_for_address(
+        &self,
+        address: String,
+    ) -> ArtifactPreviewOutcome {
+        artifact_preview_outcome(
+            articles::article_artifact_preview_from_address(address.trim()).ok_or_else(|| {
+                CoreError::InvalidInput("invalid NIP-23 article address".to_string())
+            }),
+        )
+    }
+
+    /// Project a cached NIP-23 article into the artifact record shape expected
+    /// by highlight publishing.
+    pub fn get_article_artifact_record(&self, article: ArticleRecord) -> ArtifactOutcome {
+        artifact_outcome(Ok(articles::article_artifact_record(&article)))
+    }
+
     /// Read all highlights referencing the given NIP-23 article address
     /// (`30023:<pubkey>:<d>`) from nostrdb, newest first.
     pub async fn get_highlights_for_article(

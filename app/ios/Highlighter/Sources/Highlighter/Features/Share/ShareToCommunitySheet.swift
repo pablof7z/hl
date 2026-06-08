@@ -24,8 +24,8 @@ struct ShareToCommunityTarget: Identifiable {
         case highlightRepost(eventId: String, authorPubkeyHex: String, relayHint: String)
     }
 
-    static func article(_ article: ArticleRecord) -> ShareToCommunityTarget {
-        let preview = ArtifactPreviewBuilder.from(article: article)
+    static func article(_ article: ArticleRecord, core: HighlighterCore) -> ShareToCommunityTarget? {
+        guard let preview = core.getArticleArtifactPreview(article: article).value else { return nil }
         return ShareToCommunityTarget(
             payload: .artifactShare(preview: preview),
             displayTitle: article.title.isEmpty ? "Untitled" : article.title,
@@ -35,7 +35,7 @@ struct ShareToCommunityTarget: Identifiable {
     }
 
     static func artifact(_ artifact: ArtifactRecord) -> ShareToCommunityTarget {
-        let preview = ArtifactPreviewBuilder.from(artifact: artifact)
+        let preview = artifact.preview
         return ShareToCommunityTarget(
             payload: .artifactShare(preview: preview),
             displayTitle: artifact.preview.title.isEmpty ? "Untitled" : artifact.preview.title,

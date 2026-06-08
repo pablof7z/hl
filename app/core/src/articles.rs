@@ -7,7 +7,7 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::{ArticleReaderRoute, ArticleRecord};
+use crate::models::{ArticleReaderRoute, ArticleRecord, ArtifactPreview, ArtifactRecord};
 
 pub const KIND_LONG_FORM: u16 = 30023;
 
@@ -95,6 +95,89 @@ pub fn article_reader_route(pubkey_hex: &str, d_tag: &str) -> Option<ArticleRead
         pubkey: pubkey.to_string(),
         d_tag: d_tag.to_string(),
     })
+}
+
+/// Project a NIP-23 article into the artifact preview shape used by kind:11
+/// shares and kind:9802 highlight references. Rust owns the protocol tag
+/// semantics so native shells do not synthesize `a`/`k`/reference fields.
+pub fn article_artifact_preview(article: &ArticleRecord) -> ArtifactPreview {
+    article_artifact_preview_parts(
+        &article.identifier,
+        &article.address,
+        &article.title,
+        &article.image,
+        &article.summary,
+        article.published_at,
+    )
+}
+
+/// Project an article address into a minimal article artifact preview. Used
+/// when a highlight has only the article address cached, not the full article
+/// metadata.
+pub fn article_artifact_preview_from_address(address: &str) -> Option<ArtifactPreview> {
+    let route = article_reader_route_from_address(address)?;
+    Some(article_artifact_preview_parts(
+        &route.d_tag,
+        &route.address,
+        "",
+        "",
+        "",
+        None,
+    ))
+}
+
+/// Project a NIP-23 article into the artifact record shape expected by
+/// highlight publishing. The shell supplies the user's selected quote/note;
+/// Rust owns the source artifact reference.
+pub fn article_artifact_record(article: &ArticleRecord) -> ArtifactRecord {
+    ArtifactRecord {
+        preview: article_artifact_preview(article),
+        group_id: String::new(),
+        share_event_id: String::new(),
+        pubkey: article.pubkey.clone(),
+        created_at: article.created_at,
+        note: String::new(),
+    }
+}
+
+fn article_artifact_preview_parts(
+    id: &str,
+    address: &str,
+    title: &str,
+    image: &str,
+    summary: &str,
+    published_at: Option<u64>,
+) -> ArtifactPreview {
+    ArtifactPreview {
+        id: id.to_string(),
+        url: String::new(),
+        title: title.to_string(),
+        author: String::new(),
+        image: image.to_string(),
+        description: summary.to_string(),
+        source: "article".to_string(),
+        domain: String::new(),
+        catalog_id: String::new(),
+        catalog_kind: String::new(),
+        podcast_guid: String::new(),
+        podcast_item_guid: String::new(),
+        podcast_show_title: String::new(),
+        audio_url: String::new(),
+        audio_preview_url: String::new(),
+        transcript_url: String::new(),
+        feed_url: String::new(),
+        published_at: published_at
+            .map(|seconds| seconds.to_string())
+            .unwrap_or_default(),
+        duration_seconds: None,
+        reference_tag_name: "a".to_string(),
+        reference_tag_value: address.to_string(),
+        reference_kind: KIND_LONG_FORM.to_string(),
+        highlight_tag_name: "a".to_string(),
+        highlight_tag_value: address.to_string(),
+        highlight_reference_key: format!("a:{address}"),
+        chapters: Vec::new(),
+    }
 }
 
 /// Resolve the article addresses stored on a bookmark/curation set into cached
@@ -401,6 +484,66 @@ mod tests {
         assert!(article_address_parts("1:abcdef:note").is_none());
         assert!(article_author_from_address("1:abcdef:note").is_none());
         assert!(article_reader_route_from_address("1:abcdef:note").is_none());
+    }
+
+    #[test]
+    fn article_artifact_preview_projects_protocol_reference_fields() {
+        let article = ArticleRecord {
+            event_id: "event-1".into(),
+            address: "30023:pk:essay".into(),
+            pubkey: "pk".into(),
+            identifier: "essay".into(),
+            title: "Essay".into(),
+            summary: "A short summary".into(),
+            image: "https://example.com/cover.jpg".into(),
+            content: "body".into(),
+            hashtags: vec!["nostr".into()],
+            published_at: Some(1_700),
+            created_at: Some(1_800),
+        };
+
+        let preview = article_artifact_preview(&article);
+        assert_eq!(preview.id, "essay");
+        assert_eq!(preview.title, "Essay");
+        assert_eq!(preview.description, "A short summary");
+        assert_eq!(preview.image, "https://example.com/cover.jpg");
+        assert_eq!(preview.source, "article");
+        assert_eq!(preview.published_at, "1700");
+        assert_eq!(preview.reference_tag_name, "a");
+        assert_eq!(preview.reference_tag_value, "30023:pk:essay");
+        assert_eq!(preview.reference_kind, "30023");
+        assert_eq!(preview.highlight_tag_name, "a");
+        assert_eq!(preview.highlight_tag_value, "30023:pk:essay");
+        assert_eq!(preview.highlight_reference_key, "a:30023:pk:essay");
+
+        let record = article_artifact_record(&article);
+        assert_eq!(
+            record.preview.highlight_reference_key,
+            preview.highlight_reference_key
+        );
+        assert_eq!(
+            record.preview.reference_tag_value,
+            preview.reference_tag_value
+        );
+        assert_eq!(record.pubkey, "pk");
+        assert_eq!(record.created_at, Some(1_800));
+        assert!(record.group_id.is_empty());
+        assert!(record.share_event_id.is_empty());
+    }
+
+    #[test]
+    fn article_artifact_preview_from_address_is_minimal_and_validated() {
+        let preview = article_artifact_preview_from_address("30023:pk:essay").expect("preview");
+        assert_eq!(preview.id, "essay");
+        assert_eq!(preview.source, "article");
+        assert_eq!(preview.reference_tag_name, "a");
+        assert_eq!(preview.reference_tag_value, "30023:pk:essay");
+        assert_eq!(preview.reference_kind, "30023");
+        assert_eq!(preview.highlight_tag_name, "a");
+        assert_eq!(preview.highlight_tag_value, "30023:pk:essay");
+        assert_eq!(preview.highlight_reference_key, "a:30023:pk:essay");
+        assert!(preview.title.is_empty());
+        assert!(article_artifact_preview_from_address("1:pk:note").is_none());
     }
 
     #[test]

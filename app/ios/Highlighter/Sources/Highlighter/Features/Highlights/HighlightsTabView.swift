@@ -169,7 +169,7 @@ struct HighlightsTabView: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button {
-                shareTarget = .article(item.article)
+                shareTarget = ShareToCommunityTarget.article(item.article, core: app.core)
             } label: {
                 Label("Share to community", systemImage: "square.and.arrow.up")
             }
@@ -184,37 +184,9 @@ struct HighlightsTabView: View {
         }
         let addr = item.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !addr.isEmpty,
-              let route = app.core.getArticleReaderRoute(address: addr).value else {
+              let preview = app.core.getArticleArtifactPreviewForAddress(address: addr).value else {
             return nil
         }
-        let preview = ArtifactPreview(
-            id: route.dTag,
-            url: "",
-            title: "",
-            author: "",
-            image: "",
-            description: "",
-            source: "article",
-            domain: "",
-            catalogId: "",
-            catalogKind: "",
-            podcastGuid: "",
-            podcastItemGuid: "",
-            podcastShowTitle: "",
-            audioUrl: "",
-            audioPreviewUrl: "",
-            transcriptUrl: "",
-            feedUrl: "",
-            publishedAt: "",
-            durationSeconds: nil,
-            referenceTagName: "a",
-            referenceTagValue: route.address,
-            referenceKind: "30023",
-            highlightTagName: "a",
-            highlightTagValue: route.address,
-            highlightReferenceKey: "a:\(route.address)",
-            chapters: []
-        )
         return ShareToCommunityTarget(
             payload: .artifactShare(preview: preview),
             displayTitle: "Article",
