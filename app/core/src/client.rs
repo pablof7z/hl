@@ -54,7 +54,7 @@ use crate::nip46::{self, BunkerSigner};
 use crate::nostr_runtime::NostrRuntime;
 use crate::onboarding;
 use crate::podcast_position;
-use crate::podcast_transcript::{self, TranscriptSegment};
+use crate::podcast_transcript::{self, PodcastClipSelection, TranscriptSegment};
 use crate::profile;
 use crate::reads;
 use crate::recent_searches;
@@ -1175,6 +1175,51 @@ impl HighlighterCore {
             clip_end_seconds,
             clip_speaker,
         )
+    }
+
+    pub fn clear_podcast_clip_selection(&self) -> PodcastClipSelection {
+        podcast_transcript::clear_clip_selection()
+    }
+
+    pub fn mark_podcast_clip_in(
+        &self,
+        selection: PodcastClipSelection,
+        current_time: f64,
+    ) -> PodcastClipSelection {
+        podcast_transcript::mark_clip_in(&selection, current_time)
+    }
+
+    pub fn mark_podcast_clip_out(
+        &self,
+        selection: PodcastClipSelection,
+        current_time: f64,
+    ) -> PodcastClipSelection {
+        podcast_transcript::mark_clip_out(&selection, current_time)
+    }
+
+    pub fn extend_podcast_clip_to_segment(
+        &self,
+        selection: PodcastClipSelection,
+        segment: TranscriptSegment,
+    ) -> PodcastClipSelection {
+        podcast_transcript::extend_clip_to_segment(&selection, &segment)
+    }
+
+    pub fn set_podcast_clip_start(
+        &self,
+        selection: PodcastClipSelection,
+        value: f64,
+    ) -> PodcastClipSelection {
+        podcast_transcript::set_clip_start(&selection, value)
+    }
+
+    pub fn set_podcast_clip_end(
+        &self,
+        selection: PodcastClipSelection,
+        value: f64,
+        duration_seconds: f64,
+    ) -> PodcastClipSelection {
+        podcast_transcript::set_clip_end(&selection, value, duration_seconds)
     }
 
     pub async fn download_podcast_artwork(&self, url: String) -> DataOutcome {

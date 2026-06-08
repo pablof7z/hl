@@ -81,7 +81,7 @@ pub use models::{
 };
 pub use nip05::Nip05Availability;
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
-pub use podcast_transcript::TranscriptSegment;
+pub use podcast_transcript::{PodcastClipSelection, TranscriptSegment};
 pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;
 pub use whats_new::WhatsNewEntry;

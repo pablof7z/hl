@@ -106,6 +106,62 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func clearPodcastClipSelection() -> PodcastClipSelection {
+        core.clearPodcastClipSelection()
+    }
+
+    nonisolated func markPodcastClipIn(
+        selection: PodcastClipSelection,
+        currentTime: Double
+    ) -> PodcastClipSelection {
+        core.markPodcastClipIn(
+            selection: selection,
+            currentTime: currentTime
+        )
+    }
+
+    nonisolated func markPodcastClipOut(
+        selection: PodcastClipSelection,
+        currentTime: Double
+    ) -> PodcastClipSelection {
+        core.markPodcastClipOut(
+            selection: selection,
+            currentTime: currentTime
+        )
+    }
+
+    nonisolated func extendPodcastClipToSegment(
+        selection: PodcastClipSelection,
+        segment: TranscriptSegment
+    ) -> PodcastClipSelection {
+        core.extendPodcastClipToSegment(
+            selection: selection,
+            segment: segment
+        )
+    }
+
+    nonisolated func setPodcastClipStart(
+        selection: PodcastClipSelection,
+        value: Double
+    ) -> PodcastClipSelection {
+        core.setPodcastClipStart(
+            selection: selection,
+            value: value
+        )
+    }
+
+    nonisolated func setPodcastClipEnd(
+        selection: PodcastClipSelection,
+        value: Double,
+        durationSeconds: Double
+    ) -> PodcastClipSelection {
+        core.setPodcastClipEnd(
+            selection: selection,
+            value: value,
+            durationSeconds: durationSeconds
+        )
+    }
+
     func downloadPodcastArtwork(url: String) async -> DataOutcome {
         await core.downloadPodcastArtwork(url: url)
     }

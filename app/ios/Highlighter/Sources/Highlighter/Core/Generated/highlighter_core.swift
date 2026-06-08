@@ -808,6 +808,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func classifyLoginInput(input: String)  -> LoginInputAction
 
+    func clearPodcastClipSelection()  -> PodcastClipSelection
+
     func clearRecentSearches() async  -> StringListOutcome
 
     func completeOnboardingInterests(selectedIds: [String]) async  -> MutationOutcome
@@ -891,6 +893,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * order. Rust owns explorer shelf duplicate suppression.
      */
     func excludeJoinedRooms(rooms: [CommunitySummary], joined: [CommunitySummary])  -> [CommunitySummary]
+
+    func extendPodcastClipToSegment(selection: PodcastClipSelection, segment: TranscriptSegment)  -> PodcastClipSelection
 
     func extractNostrEventRefs(content: String)  -> [NostrEntityRef]
 
@@ -1338,6 +1342,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func lookupIsbn(isbn: String) async  -> ArtifactPreviewOutcome
 
+    func markPodcastClipIn(selection: PodcastClipSelection, currentTime: Double)  -> PodcastClipSelection
+
+    func markPodcastClipOut(selection: PodcastClipSelection, currentTime: Double)  -> PodcastClipSelection
+
     func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async  -> MutationOutcome
 
     /**
@@ -1505,6 +1513,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func setFollow(targetPubkeyHex: String, follow: Bool) async  -> OptionalStringOutcome
 
     func setOnboardingComplete(complete: Bool)  -> MutationOutcome
+
+    func setPodcastClipEnd(selection: PodcastClipSelection, value: Double, durationSeconds: Double)  -> PodcastClipSelection
+
+    func setPodcastClipStart(selection: PodcastClipSelection, value: Double)  -> PodcastClipSelection
 
     /**
      * Atomically update a single relay's role flags.
@@ -1996,6 +2008,13 @@ open func classifyLoginInput(input: String) -> LoginInputAction  {
 })
 }
 
+open func clearPodcastClipSelection() -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_clear_podcast_clip_selection(self.uniffiClonePointer(),$0
+    )
+})
+}
+
 open func clearRecentSearches()async  -> StringListOutcome  {
     return
         try!  await uniffiRustCallAsync(
@@ -2253,6 +2272,15 @@ open func excludeJoinedRooms(rooms: [CommunitySummary], joined: [CommunitySummar
     uniffi_highlighter_core_fn_method_highlightercore_exclude_joined_rooms(self.uniffiClonePointer(),
         FfiConverterSequenceTypeCommunitySummary.lower(rooms),
         FfiConverterSequenceTypeCommunitySummary.lower(joined),$0
+    )
+})
+}
+
+open func extendPodcastClipToSegment(selection: PodcastClipSelection, segment: TranscriptSegment) -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_extend_podcast_clip_to_segment(self.uniffiClonePointer(),
+        FfiConverterTypePodcastClipSelection_lower(selection),
+        FfiConverterTypeTranscriptSegment_lower(segment),$0
     )
 })
 }
@@ -3784,6 +3812,24 @@ open func lookupIsbn(isbn: String)async  -> ArtifactPreviewOutcome  {
         )
 }
 
+open func markPodcastClipIn(selection: PodcastClipSelection, currentTime: Double) -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_mark_podcast_clip_in(self.uniffiClonePointer(),
+        FfiConverterTypePodcastClipSelection_lower(selection),
+        FfiConverterDouble.lower(currentTime),$0
+    )
+})
+}
+
+open func markPodcastClipOut(selection: PodcastClipSelection, currentTime: Double) -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_mark_podcast_clip_out(self.uniffiClonePointer(),
+        FfiConverterTypePodcastClipSelection_lower(selection),
+        FfiConverterDouble.lower(currentTime),$0
+    )
+})
+}
+
 open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async  -> MutationOutcome  {
     return
         try!  await uniffiRustCallAsync(
@@ -4468,6 +4514,25 @@ open func setOnboardingComplete(complete: Bool) -> MutationOutcome  {
     return try!  FfiConverterTypeMutationOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_set_onboarding_complete(self.uniffiClonePointer(),
         FfiConverterBool.lower(complete),$0
+    )
+})
+}
+
+open func setPodcastClipEnd(selection: PodcastClipSelection, value: Double, durationSeconds: Double) -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_set_podcast_clip_end(self.uniffiClonePointer(),
+        FfiConverterTypePodcastClipSelection_lower(selection),
+        FfiConverterDouble.lower(value),
+        FfiConverterDouble.lower(durationSeconds),$0
+    )
+})
+}
+
+open func setPodcastClipStart(selection: PodcastClipSelection, value: Double) -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_set_podcast_clip_start(self.uniffiClonePointer(),
+        FfiConverterTypePodcastClipSelection_lower(selection),
+        FfiConverterDouble.lower(value),$0
     )
 })
 }
@@ -12698,6 +12763,92 @@ public func FfiConverterTypePictureRecord_lower(_ value: PictureRecord) -> RustB
 }
 
 
+public struct PodcastClipSelection {
+    public var clipStartSeconds: Double?
+    public var clipEndSeconds: Double?
+    public var speaker: String
+    public var selectedSegmentIds: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(clipStartSeconds: Double?, clipEndSeconds: Double?, speaker: String, selectedSegmentIds: [String]) {
+        self.clipStartSeconds = clipStartSeconds
+        self.clipEndSeconds = clipEndSeconds
+        self.speaker = speaker
+        self.selectedSegmentIds = selectedSegmentIds
+    }
+}
+
+#if compiler(>=6)
+extension PodcastClipSelection: Sendable {}
+#endif
+
+
+extension PodcastClipSelection: Equatable, Hashable {
+    public static func ==(lhs: PodcastClipSelection, rhs: PodcastClipSelection) -> Bool {
+        if lhs.clipStartSeconds != rhs.clipStartSeconds {
+            return false
+        }
+        if lhs.clipEndSeconds != rhs.clipEndSeconds {
+            return false
+        }
+        if lhs.speaker != rhs.speaker {
+            return false
+        }
+        if lhs.selectedSegmentIds != rhs.selectedSegmentIds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(clipStartSeconds)
+        hasher.combine(clipEndSeconds)
+        hasher.combine(speaker)
+        hasher.combine(selectedSegmentIds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastClipSelection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipSelection {
+        return
+            try PodcastClipSelection(
+                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf),
+                speaker: FfiConverterString.read(from: &buf),
+                selectedSegmentIds: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastClipSelection, into buf: inout [UInt8]) {
+        FfiConverterOptionDouble.write(value.clipStartSeconds, into: &buf)
+        FfiConverterOptionDouble.write(value.clipEndSeconds, into: &buf)
+        FfiConverterString.write(value.speaker, into: &buf)
+        FfiConverterSequenceString.write(value.selectedSegmentIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipSelection_lift(_ buf: RustBuffer) throws -> PodcastClipSelection {
+    return try FfiConverterTypePodcastClipSelection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipSelection_lower(_ value: PodcastClipSelection) -> RustBuffer {
+    return FfiConverterTypePodcastClipSelection.lower(value)
+}
+
+
 /**
  * Last podcast playback position persisted by the Rust core. Native shells
  * own AV playback handles, but durable playback state and the cold-launch
@@ -18846,6 +18997,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_classify_login_input() != 60539) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_clear_podcast_clip_selection() != 42605) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches() != 18871) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -18895,6 +19049,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_exclude_joined_rooms() != 28890) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_extend_podcast_clip_to_segment() != 47481) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_extract_nostr_event_refs() != 37795) {
@@ -19164,6 +19321,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_lookup_isbn() != 34204) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_mark_podcast_clip_in() != 48745) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_mark_podcast_clip_out() != 19205) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_mark_whats_new_seen() != 22420) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19285,6 +19448,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_onboarding_complete() != 42515) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_podcast_clip_end() != 59200) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_podcast_clip_start() != 31323) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_relay_roles() != 6600) {

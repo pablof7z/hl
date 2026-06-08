@@ -29,6 +29,14 @@ pub struct TranscriptSegment {
     pub text: String,
 }
 
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct PodcastClipSelection {
+    pub clip_start_seconds: Option<f64>,
+    pub clip_end_seconds: Option<f64>,
+    pub speaker: String,
+    pub selected_segment_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Format {
     Vtt,
@@ -156,6 +164,91 @@ pub fn clip_highlight_draft(
             .collect::<Vec<_>>(),
         image: None,
     }
+}
+
+pub fn clear_clip_selection() -> PodcastClipSelection {
+    PodcastClipSelection {
+        clip_start_seconds: None,
+        clip_end_seconds: None,
+        speaker: String::new(),
+        selected_segment_ids: Vec::new(),
+    }
+}
+
+pub fn mark_clip_in(selection: &PodcastClipSelection, current_time: f64) -> PodcastClipSelection {
+    let mut next = selection.clone();
+    next.clip_start_seconds = Some(current_time);
+    if next
+        .clip_end_seconds
+        .map(|end| end < current_time)
+        .unwrap_or(false)
+    {
+        next.clip_end_seconds = None;
+    }
+    next
+}
+
+pub fn mark_clip_out(selection: &PodcastClipSelection, current_time: f64) -> PodcastClipSelection {
+    let mut next = selection.clone();
+    next.clip_end_seconds = Some(current_time);
+    if next
+        .clip_start_seconds
+        .map(|start| start > current_time)
+        .unwrap_or(false)
+    {
+        next.clip_start_seconds = None;
+    }
+    next
+}
+
+pub fn extend_clip_to_segment(
+    selection: &PodcastClipSelection,
+    segment: &TranscriptSegment,
+) -> PodcastClipSelection {
+    let mut next = selection.clone();
+    next.clip_start_seconds = Some(match next.clip_start_seconds {
+        Some(start) => start.min(segment.start),
+        None => segment.start,
+    });
+    next.clip_end_seconds = Some(match next.clip_end_seconds {
+        Some(end) => end.max(segment.end),
+        None => segment.end,
+    });
+    if !next.selected_segment_ids.iter().any(|id| id == &segment.id) {
+        next.selected_segment_ids.push(segment.id.clone());
+    }
+    if next.speaker.is_empty() && !segment.speaker.is_empty() {
+        next.speaker = segment.speaker.clone();
+    }
+    next
+}
+
+pub fn set_clip_start(selection: &PodcastClipSelection, value: f64) -> PodcastClipSelection {
+    let mut next = selection.clone();
+    let mut start = value.max(0.0);
+    if let Some(end) = next.clip_end_seconds {
+        start = start.min((end - 0.05).max(0.0));
+    }
+    next.clip_start_seconds = Some(start);
+    next
+}
+
+pub fn set_clip_end(
+    selection: &PodcastClipSelection,
+    value: f64,
+    duration_seconds: f64,
+) -> PodcastClipSelection {
+    let mut next = selection.clone();
+    let mut end = if duration_seconds > 0.0 {
+        value.min(duration_seconds)
+    } else {
+        value
+    };
+    if let Some(start) = next.clip_start_seconds {
+        end = end.max(start + 0.05);
+    }
+    next.clip_end_seconds = Some(end);
+    next
 }
 
 fn http_client() -> reqwest::Client {
@@ -605,6 +698,82 @@ HOST: Segment text.
 
         assert_eq!(draft.quote, "");
         assert!(draft.clip_transcript_segment_ids.is_empty());
+    }
+
+    #[test]
+    fn mark_clip_in_and_out_clear_reversed_bounds() {
+        let selection = PodcastClipSelection {
+            clip_start_seconds: Some(30.0),
+            clip_end_seconds: Some(10.0),
+            speaker: "Ada".into(),
+            selected_segment_ids: vec!["a".into()],
+        };
+
+        let marked_in = mark_clip_in(&selection, 20.0);
+        assert_eq!(marked_in.clip_start_seconds, Some(20.0));
+        assert_eq!(marked_in.clip_end_seconds, None);
+        assert_eq!(marked_in.speaker, "Ada");
+        assert_eq!(marked_in.selected_segment_ids, vec!["a".to_string()]);
+
+        let marked_out = mark_clip_out(&selection, 20.0);
+        assert_eq!(marked_out.clip_start_seconds, None);
+        assert_eq!(marked_out.clip_end_seconds, Some(20.0));
+    }
+
+    #[test]
+    fn extend_clip_to_segment_expands_bounds_dedupes_and_adopts_speaker() {
+        let selection = PodcastClipSelection {
+            clip_start_seconds: Some(10.0),
+            clip_end_seconds: Some(20.0),
+            speaker: String::new(),
+            selected_segment_ids: vec!["existing".into()],
+        };
+        let segment = TranscriptSegment {
+            id: "existing".into(),
+            start: 5.0,
+            end: 30.0,
+            speaker: "Ada".into(),
+            text: "hello".into(),
+        };
+
+        let out = extend_clip_to_segment(&selection, &segment);
+
+        assert_eq!(out.clip_start_seconds, Some(5.0));
+        assert_eq!(out.clip_end_seconds, Some(30.0));
+        assert_eq!(out.speaker, "Ada");
+        assert_eq!(out.selected_segment_ids, vec!["existing".to_string()]);
+    }
+
+    #[test]
+    fn set_clip_bounds_enforces_gap_and_duration() {
+        let selection = PodcastClipSelection {
+            clip_start_seconds: Some(10.0),
+            clip_end_seconds: Some(20.0),
+            speaker: String::new(),
+            selected_segment_ids: Vec::new(),
+        };
+
+        let start = set_clip_start(&selection, 30.0);
+        assert_eq!(start.clip_start_seconds, Some(19.95));
+
+        let end = set_clip_end(&selection, 30.0, 25.0);
+        assert_eq!(end.clip_end_seconds, Some(25.0));
+
+        let end_before_start = set_clip_end(&selection, 5.0, 25.0);
+        assert_eq!(end_before_start.clip_end_seconds, Some(10.05));
+    }
+
+    #[test]
+    fn clear_clip_selection_resets_everything() {
+        assert_eq!(
+            clear_clip_selection(),
+            PodcastClipSelection {
+                clip_start_seconds: None,
+                clip_end_seconds: None,
+                speaker: String::new(),
+                selected_segment_ids: Vec::new()
+            }
+        );
     }
 
     #[test]
