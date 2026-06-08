@@ -213,16 +213,19 @@ struct BookView: View {
         }
     }
 
+    @ViewBuilder
     private func highlighterByline(_ h: HighlightRecord) -> some View {
+        let highlighter = highlighterDisplay(h.pubkey)
+
         HStack(spacing: 6) {
             AuthorAvatar(
                 pubkey: h.pubkey,
-                pictureURL: app.profileSnapshots[h.pubkey]?.picture ?? "",
-                displayInitial: displayName(h.pubkey).prefix(1).description.uppercased(),
+                pictureURL: highlighter.pictureUrl,
+                displayInitial: highlighter.displayInitial,
                 size: 16,
                 ringWidth: 0
             )
-            Text(displayName(h.pubkey).uppercased())
+            Text(highlighter.displayName.uppercased())
                 .font(.caption2.weight(.bold))
                 .tracking(0.5)
                 .foregroundStyle(Color.highlighterInkMuted)
@@ -250,11 +253,14 @@ struct BookView: View {
 
     // MARK: - Helpers
 
-    private func displayName(_ pubkey: String) -> String {
-        let p = app.profileSnapshots[pubkey]
-        if let dn = p?.displayName, !dn.isEmpty { return dn }
-        if let n = p?.name, !n.isEmpty { return n }
-        return String(pubkey.prefix(8))
+    private func highlighterDisplay(_ pubkey: String) -> ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: pubkey,
+                profile: app.profileSnapshots[pubkey],
+                fallback: .pubkey8
+            )
+        )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {

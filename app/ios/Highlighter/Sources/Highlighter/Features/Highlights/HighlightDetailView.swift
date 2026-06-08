@@ -170,17 +170,20 @@ struct HighlightDetailView: View {
 
     // MARK: - Highlighter byline
 
+    @ViewBuilder
     private var bylineRow: some View {
+        let highlighter = highlighterDisplay
+
         NavigationLink(value: ProfileDestination.pubkey(highlight.pubkey)) {
             HStack(spacing: 10) {
                 AuthorAvatar(
                     pubkey: highlight.pubkey,
-                    pictureURL: app.profileSnapshots[highlight.pubkey]?.picture ?? "",
-                    displayInitial: initial(for: highlight.pubkey),
+                    pictureURL: highlighter.pictureUrl,
+                    displayInitial: highlighter.displayInitial,
                     size: 32
                 )
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(displayName(for: highlight.pubkey))
+                    Text(highlighter.displayName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
                         .lineLimit(1)
@@ -432,15 +435,14 @@ struct HighlightDetailView: View {
 
     // MARK: - Profile helpers
 
-    private func displayName(for pubkey: String) -> String {
-        let profile = app.profileSnapshots[pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(pubkey.prefix(10))
-    }
-
-    private func initial(for pubkey: String) -> String {
-        displayName(for: pubkey).first.map { String($0).uppercased() } ?? "?"
+    private var highlighterDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: highlight.pubkey,
+                profile: app.profileSnapshots[highlight.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {

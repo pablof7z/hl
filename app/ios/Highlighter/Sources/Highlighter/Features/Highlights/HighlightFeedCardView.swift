@@ -153,10 +153,12 @@ struct HighlightFeedCardView: View {
         HStack(spacing: 8) {
             HStack(spacing: -6) {
                 ForEach(uniqueHighlighters.prefix(3), id: \.highlight.pubkey) { h in
+                    let highlighter = profileDisplay(for: h.highlight.pubkey)
+
                     AuthorAvatar(
                         pubkey: h.highlight.pubkey,
-                        pictureURL: app.profileSnapshots[h.highlight.pubkey]?.picture ?? "",
-                        displayInitial: initial(for: h.highlight.pubkey),
+                        pictureURL: highlighter.pictureUrl,
+                        displayInitial: highlighter.displayInitial,
                         size: 20
                     )
                     .overlay(
@@ -189,7 +191,7 @@ struct HighlightFeedCardView: View {
     }
 
     private var highlightersLabel: AttributedString {
-        let names = uniqueHighlighters.map { displayName(for: $0.highlight.pubkey) }
+        let names = uniqueHighlighters.map { profileDisplay(for: $0.highlight.pubkey).displayName }
         var out = AttributedString("Highlighted by ")
         out.foregroundColor = Color.highlighterInkMuted
 
@@ -320,15 +322,18 @@ struct HighlightFeedCardView: View {
         }
     }
 
+    @ViewBuilder
     private func highlighterByline(for h: HydratedHighlight) -> some View {
+        let highlighter = profileDisplay(for: h.highlight.pubkey)
+
         HStack(spacing: 8) {
             AuthorAvatar(
                 pubkey: h.highlight.pubkey,
-                pictureURL: app.profileSnapshots[h.highlight.pubkey]?.picture ?? "",
-                displayInitial: initial(for: h.highlight.pubkey),
+                pictureURL: highlighter.pictureUrl,
+                displayInitial: highlighter.displayInitial,
                 size: 22
             )
-            Text(displayName(for: h.highlight.pubkey))
+            Text(highlighter.displayName)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineLimit(1)
@@ -387,8 +392,7 @@ struct HighlightFeedCardView: View {
     private var resourceAuthorOrDomain: String {
         switch artifactKind {
         case .article:
-            if let name = articleAuthorDisplayName, !name.isEmpty { return name }
-            return lead.artifact?.preview.author ?? ""
+            return articleAuthorDisplayName
         case .podcast:
             let show = lead.artifact?.preview.podcastShowTitle ?? ""
             if !show.isEmpty { return show }
@@ -477,14 +481,20 @@ struct HighlightFeedCardView: View {
 
     // MARK: - Derived: profile / article resolution
 
-    /// Profile-resolved display name for a NIP-23 article author.
-    /// Returns nil for non-article kinds or unresolved profiles.
-    private var articleAuthorDisplayName: String? {
-        guard let pubkey = articleAuthorPubkey else { return nil }
-        let profile = app.profileSnapshots[pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return nil
+    /// Profile-resolved display name for a NIP-23 article author. The resource
+    /// subtitle keeps the prior behavior of falling back to the artifact label,
+    /// not a pubkey, when the profile is unresolved.
+    private var articleAuthorDisplayName: String {
+        let pubkey = articleAuthorPubkey ?? ""
+        return app.safeCore.projectProfileDisplayWithLabel(
+            input: ProfileDisplayWithLabelProjectionInput(
+                pubkey: "",
+                profile: pubkey.isEmpty ? nil : app.profileSnapshots[pubkey],
+                labelFallback: lead.artifact?.preview.author ?? "",
+                pubkeyFallback: .pubkey10,
+                emptyFallback: ""
+            )
+        ).displayName
     }
 
     private var articleAuthorPubkey: String? {
@@ -526,15 +536,14 @@ struct HighlightFeedCardView: View {
 
     // MARK: - Derived: profile helpers
 
-    private func displayName(for pubkey: String) -> String {
-        let profile = app.profileSnapshots[pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(pubkey.prefix(10))
-    }
-
-    private func initial(for pubkey: String) -> String {
-        displayName(for: pubkey).first.map { String($0).uppercased() } ?? "?"
+    private func profileDisplay(for pubkey: String) -> ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: pubkey,
+                profile: app.profileSnapshots[pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
@@ -658,15 +667,18 @@ private struct HighlightQuoteCard: View {
         return URL(string: raw)
     }
 
+    @ViewBuilder
     private var byline: some View {
+        let highlighter = authorDisplay
+
         HStack(spacing: 7) {
             AuthorAvatar(
                 pubkey: highlight.highlight.pubkey,
-                pictureURL: app.profileSnapshots[highlight.highlight.pubkey]?.picture ?? "",
-                displayInitial: initial,
+                pictureURL: highlighter.pictureUrl,
+                displayInitial: highlighter.displayInitial,
                 size: 22
             )
-            Text(name)
+            Text(highlighter.displayName)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineLimit(1)
@@ -683,15 +695,14 @@ private struct HighlightQuoteCard: View {
         }
     }
 
-    private var name: String {
-        let profile = app.profileSnapshots[highlight.highlight.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(highlight.highlight.pubkey.prefix(10))
-    }
-
-    private var initial: String {
-        name.first.map { String($0).uppercased() } ?? "?"
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: highlight.highlight.pubkey,
+                profile: app.profileSnapshots[highlight.highlight.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var relative: String? {
