@@ -640,17 +640,15 @@ impl NostrRuntime {
     }
 
     /// Current per-relay diagnostics snapshot, one row per URL in the
-    /// client's pool. Freshly polled at least once per second.
+    /// client's pool. Maintained by the runtime diagnostics task.
     pub fn relay_diagnostics_snapshot(&self) -> Vec<RelayDiagnostic> {
         let map = self.relay_diagnostics.read();
         map.values().cloned().collect()
     }
 
-    /// Start the diagnostics poller. Fires every `DIAGNOSTICS_POLL_INTERVAL`
-    /// on the runtime's own tokio executor; on every tick it walks
-    /// `client.relays()`, rebuilds the diagnostics map, and emits
-    /// `RelayStatusChanged` deltas through the provided callback slot for
-    /// any URL whose `RelayStatus` changed since the last tick. Safe to
+    /// Start the diagnostics watcher. It samples nostr-sdk's relay pool on a
+    /// bounded interval, owns the canonical diagnostics map, and emits an
+    /// app-scope diagnostics projection only when that map changes. Safe to
     /// call more than once — each call spawns an independent loop, but
     /// `HighlighterCore::assemble` calls it exactly once.
     pub fn spawn_diagnostics_poller(&self, callback_slot: EventCallbackSlot) {
@@ -664,6 +662,7 @@ impl NostrRuntime {
                 let relays = client.relays().await;
                 let mut next: HashMap<String, RelayDiagnostic> = HashMap::with_capacity(relays.len());
                 let mut changed_urls: Vec<(String, AppRelayStatus)> = Vec::new();
+                let mut changed_rows: Vec<RelayDiagnostic> = Vec::new();
 
                 {
                     let previous = map.read();
@@ -698,13 +697,26 @@ impl NostrRuntime {
                             changed_urls.push((url.clone(), AppRelayStatus::Terminated));
                         }
                     }
+
+                    if *previous != next {
+                        changed_rows = next.values().cloned().collect();
+                        changed_rows.sort_by(|a, b| a.url.cmp(&b.url));
+                    }
                 }
 
                 *map.write() = next;
 
-                if !changed_urls.is_empty() {
+                if !changed_urls.is_empty() || !changed_rows.is_empty() {
                     let cb = callback_slot.read().clone();
                     if let Some(cb) = cb {
+                        if !changed_rows.is_empty() {
+                            cb.on_data_changed(Delta {
+                                subscription_id: 0,
+                                change: DataChangeType::RelayDiagnosticsUpdated {
+                                    diagnostics: changed_rows,
+                                },
+                            });
+                        }
                         for (url, state) in changed_urls {
                             cb.on_data_changed(Delta {
                                 subscription_id: 0,

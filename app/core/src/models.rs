@@ -446,9 +446,9 @@ pub enum RelayStatus {
 
 /// Live diagnostic snapshot for a single relay, polled from the nostr-sdk
 /// connection pool. Updated by `NostrRuntime`'s diagnostics poller every
-/// second; Swift reads via `get_relay_diagnostics` and listens for
-/// `RelayStatusChanged` deltas to know when to re-render.
-#[derive(Debug, Clone, uniffi::Record)]
+/// second; Swift reads via `get_relay_diagnostics` for first paint and
+/// listens for `RelayDiagnosticsUpdated` deltas to render changes.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RelayDiagnostic {
     pub url: String,
     pub state: RelayStatus,

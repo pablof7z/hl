@@ -23,7 +23,6 @@ final class NetworkSettingsStore {
     private(set) var wifiOnlyEnabled: Bool = false
 
     @ObservationIgnored private let core: SafeHighlighterCore
-    @ObservationIgnored private var pollTask: Task<Void, Never>?
     @ObservationIgnored private var pathMonitor: NWPathMonitor?
     @ObservationIgnored private var inFlightNip11: Set<String> = []
 
@@ -147,15 +146,6 @@ final class NetworkSettingsStore {
     }
 
     func startLiveUpdates() {
-        // Already running
-        guard pollTask == nil else { return }
-        pollTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
-                guard let self else { return }
-                await self.refreshDiagnostics()
-            }
-        }
         if wifiOnlyEnabled && pathMonitor == nil {
             startPathMonitor()
         }
@@ -163,8 +153,6 @@ final class NetworkSettingsStore {
     }
 
     func stopLiveUpdates() {
-        pollTask?.cancel()
-        pollTask = nil
         // Leave the path monitor running — Wi-Fi-only enforcement should
         // keep working after the user leaves the Network screen.
     }
@@ -265,19 +253,27 @@ final class NetworkSettingsStore {
         }
     }
 
+    /// Called by `EventBridge` on `RelayDiagnosticsUpdated`. Applies the
+    /// Rust-owned bounded diagnostics projection without a native polling
+    /// loop.
+    func applyDiagnostics(_ rows: [RelayDiagnostic]) async {
+        let configured = Set(relays.map { $0.url })
+        let autoUrls = rows.map(\.url).filter { !configured.contains($0) }.sorted()
+        let autoSet = Set(autoUrls)
+        var configs = autoConnectedConfigs.filter { url, _ in autoSet.contains(url) }
+        for url in autoUrls where configs[url] == nil {
+            configs[url] = await core.autoConnectedRelayConfig(url: url)
+        }
+        diagnostics = Dictionary(uniqueKeysWithValues: rows.map { ($0.url, $0) })
+        autoConnectedConfigs = configs
+    }
+
     // MARK: - Private
 
     private func refreshDiagnostics() async {
         do {
             let rows = try await core.getRelayDiagnostics()
-            let configured = Set(relays.map { $0.url })
-            let autoUrls = rows.map(\.url).filter { !configured.contains($0) }.sorted()
-            var configs: [String: RelayConfig] = [:]
-            for url in autoUrls {
-                configs[url] = await core.autoConnectedRelayConfig(url: url)
-            }
-            diagnostics = Dictionary(uniqueKeysWithValues: rows.map { ($0.url, $0) })
-            autoConnectedConfigs = configs
+            await applyDiagnostics(rows)
         } catch {
             // Diagnostics failures are non-fatal — the config rows are still
             // accurate; we just can't show live state this tick.

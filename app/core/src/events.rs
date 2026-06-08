@@ -6,9 +6,8 @@
 
 use crate::models::{
     ArtifactRecord, ChatMessageRecord, CommunitySummary, CurrentUser, DiscussionRecord,
-    FeedbackEventRecord, HighlightRecord, HydratedHighlight,
+    FeedbackEventRecord, HighlightRecord, HydratedHighlight, RelayDiagnostic, RelayStatus,
 };
-use crate::models::RelayStatus;
 use crate::nostr_entities::NostrEntityEvent;
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -98,6 +97,10 @@ pub enum DataChangeType {
     /// `get_relay_diagnostics` on receipt to refresh per-row status dots,
     /// latency, and traffic counters.
     RelayStatusChanged { url: String, state: RelayStatus },
+    /// Bounded app-scope relay diagnostics projection. Emitted by the Rust
+    /// diagnostics task when any relay row changes, including RTT / traffic
+    /// counters that do not necessarily alter connection state.
+    RelayDiagnosticsUpdated { diagnostics: Vec<RelayDiagnostic> },
 }
 
 /// Every delta delivered to Swift. The `subscription_id` routes the change

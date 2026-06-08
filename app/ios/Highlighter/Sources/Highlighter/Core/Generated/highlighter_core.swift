@@ -8081,8 +8081,8 @@ public func FfiConverterTypeRelayConfig_lower(_ value: RelayConfig) -> RustBuffe
 /**
  * Live diagnostic snapshot for a single relay, polled from the nostr-sdk
  * connection pool. Updated by `NostrRuntime`'s diagnostics poller every
- * second; Swift reads via `get_relay_diagnostics` and listens for
- * `RelayStatusChanged` deltas to know when to re-render.
+ * second; Swift reads via `get_relay_diagnostics` for first paint and
+ * listens for `RelayDiagnosticsUpdated` deltas to render changes.
  */
 public struct RelayDiagnostic {
     public var url: String
@@ -9097,6 +9097,13 @@ public enum DataChangeType {
      */
     case relayStatusChanged(url: String, state: RelayStatus
     )
+    /**
+     * Bounded app-scope relay diagnostics projection. Emitted by the Rust
+     * diagnostics task when any relay row changes, including RTT / traffic
+     * counters that do not necessarily alter connection state.
+     */
+    case relayDiagnosticsUpdated(diagnostics: [RelayDiagnostic]
+    )
 }
 
 
@@ -9176,6 +9183,9 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         case 23: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
         )
         
+        case 24: return .relayDiagnosticsUpdated(diagnostics: try FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -9300,6 +9310,11 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             FfiConverterString.write(url, into: &buf)
             FfiConverterTypeRelayStatus.write(state, into: &buf)
             
+
+        case let .relayDiagnosticsUpdated(diagnostics):
+            writeInt(&buf, Int32(24))
+            FfiConverterSequenceTypeRelayDiagnostic.write(diagnostics, into: &buf)
+
         }
     }
 }
