@@ -237,18 +237,28 @@ private struct SeeAllCommunityRow: View {
 }
 
 private struct SeeAllPersonRow: View {
+    @Environment(HighlighterStore.self) private var app
+
     let profile: ProfileMetadata
 
     var body: some View {
+        let display = app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: profile.pubkey,
+                profile: profile,
+                fallback: .pubkey8
+            )
+        )
+
         HStack(spacing: 14) {
             AuthorAvatar(
                 pubkey: profile.pubkey,
-                pictureURL: profile.picture,
-                displayInitial: String(profile.bestName.prefix(1)),
+                pictureURL: display.pictureUrl,
+                displayInitial: display.displayInitial,
                 size: 46
             )
             VStack(alignment: .leading, spacing: 2) {
-                Text(profile.bestName)
+                Text(display.displayName)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                 if !profile.nip05.isEmpty {
@@ -274,14 +284,6 @@ private struct SeeAllPersonRow: View {
 }
 
 // MARK: - Shared helpers
-
-private extension ProfileMetadata {
-    var bestName: String {
-        if !displayName.isEmpty { return displayName }
-        if !name.isEmpty { return name }
-        return String(pubkey.prefix(8))
-    }
-}
 
 /// Build an `AttributedString` highlighting every case-insensitive occurrence
 /// of `query` within `text`. Free function so every row view can reuse it.

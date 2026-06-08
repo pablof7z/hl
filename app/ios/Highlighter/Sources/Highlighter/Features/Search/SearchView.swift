@@ -726,15 +726,23 @@ private struct SearchProfileRow: View {
     let profile: ProfileMetadata
 
     var body: some View {
+        let display = app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: profile.pubkey,
+                profile: profile,
+                fallback: .pubkey8
+            )
+        )
+
         HStack(spacing: 14) {
             AuthorAvatar(
                 pubkey: profile.pubkey,
-                pictureURL: profile.picture,
-                displayInitial: String((profile.displayNameOrName).prefix(1)),
+                pictureURL: display.pictureUrl,
+                displayInitial: display.displayInitial,
                 size: 44
             )
             VStack(alignment: .leading, spacing: 2) {
-                Text(profile.displayNameOrName)
+                Text(display.displayName)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
@@ -757,14 +765,6 @@ private struct SearchProfileRow: View {
         }
         .padding(.vertical, 10)
         .contentShape(Rectangle())
-    }
-}
-
-private extension ProfileMetadata {
-    var displayNameOrName: String {
-        if !displayName.isEmpty { return displayName }
-        if !name.isEmpty { return name }
-        return String(pubkey.prefix(8))
     }
 }
 
