@@ -274,16 +274,16 @@ actor SafeHighlighterCore {
 
     // MARK: - Feedback (shake-to-share)
 
-    func getFeedbackThreads(coordinate: String) async throws -> [FeedbackThreadRecord] {
-        try await core.getFeedbackThreads(coordinate: coordinate)
+    func getFeedbackThreads(coordinate: String) async -> FeedbackThreadListOutcome {
+        await core.getFeedbackThreads(coordinate: coordinate)
     }
 
-    func getFeedbackThreadEvents(rootEventId: String) async throws -> [FeedbackEventRecord] {
-        try await core.getFeedbackThreadEvents(rootEventId: rootEventId)
+    func getFeedbackThreadEvents(rootEventId: String) async -> FeedbackEventListOutcome {
+        await core.getFeedbackThreadEvents(rootEventId: rootEventId)
     }
 
-    func getProjectFirstAgentPubkey(coordinate: String) async throws -> String? {
-        try await core.getProjectFirstAgentPubkey(coordinate: coordinate)
+    func getProjectFirstAgentPubkey(coordinate: String) async -> OptionalStringOutcome {
+        await core.getProjectFirstAgentPubkey(coordinate: coordinate)
     }
 
     func publishFeedbackNote(

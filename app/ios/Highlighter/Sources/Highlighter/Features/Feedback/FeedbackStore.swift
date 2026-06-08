@@ -29,10 +29,11 @@ final class FeedbackStore {
         isLoading = true
         loadError = nil
 
-        do {
-            threads = try await core.getFeedbackThreads(coordinate: coordinate)
-        } catch {
-            loadError = (error as? CoreError).map { "\($0)" } ?? "\(error)"
+        let threadsOutcome = await core.getFeedbackThreads(coordinate: coordinate)
+        if threadsOutcome.error.isEmpty {
+            threads = threadsOutcome.values
+        } else {
+            loadError = threadsOutcome.error
         }
         isLoading = false
 
@@ -57,8 +58,9 @@ final class FeedbackStore {
     /// kind:1 root or kind:513 metadata event lands.
     func refreshThreads() async {
         guard let core, let coordinate else { return }
-        if let updated = try? await core.getFeedbackThreads(coordinate: coordinate) {
-            threads = updated
+        let outcome = await core.getFeedbackThreads(coordinate: coordinate)
+        if outcome.error.isEmpty {
+            threads = outcome.values
         }
     }
 
@@ -88,7 +90,8 @@ final class FeedbackStore {
     func resolveAgentPubkey() async -> String? {
         if let cachedAgentPubkey { return cachedAgentPubkey }
         guard let core, let coordinate else { return nil }
-        if let agent = try? await core.getProjectFirstAgentPubkey(coordinate: coordinate) {
+        let outcome = await core.getProjectFirstAgentPubkey(coordinate: coordinate)
+        if outcome.error.isEmpty, let agent = outcome.value {
             cachedAgentPubkey = agent
             return agent
         }

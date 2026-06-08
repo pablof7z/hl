@@ -30,11 +30,12 @@ use crate::models::{
     BookmarkSetRecord, BoolOutcome, ChatMessageListOutcome, ChatMessageOutcome,
     ChatMessageRecord, CommentOutcome, CommentRecord, CommunityListOutcome, CommunitySummary,
     CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadRecord,
-    GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HydratedHighlight, HydratedHighlightListOutcome, MutationOutcome,
-    NostrConnectOptions, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
-    ProfileListOutcome, ProfileMetadata, ReactionListOutcome, ReactionOutcome, ReadingFeedItem,
+    DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
+    FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft,
+    HighlightListOutcome, HighlightOutcome, HighlightRecord, HydratedHighlight,
+    HydratedHighlightListOutcome, MutationOutcome, NostrConnectOptions, OptionalStringOutcome,
+    PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome,
+    ProfileMetadata, ReactionListOutcome, ReactionOutcome, ReadingFeedItem,
     RoomRecommendation, StringListOutcome, StringOutcome, SubscriptionOutcome,
     TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
     WhatsNewEntriesOutcome,
@@ -138,6 +139,19 @@ fn string_outcome(result: Result<String, CoreError>) -> StringOutcome {
         },
         Err(error) => StringOutcome {
             value: String::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn optional_string_outcome(result: Result<Option<String>, CoreError>) -> OptionalStringOutcome {
+    match result {
+        Ok(value) => OptionalStringOutcome {
+            value,
+            error: String::new(),
+        },
+        Err(error) => OptionalStringOutcome {
+            value: None,
             error: error.to_string(),
         },
     }
@@ -425,6 +439,36 @@ fn feedback_event_outcome(result: Result<FeedbackEventRecord, CoreError>) -> Fee
         },
         Err(error) => FeedbackEventOutcome {
             value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn feedback_event_list_outcome(
+    result: Result<Vec<FeedbackEventRecord>, CoreError>,
+) -> FeedbackEventListOutcome {
+    match result {
+        Ok(values) => FeedbackEventListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => FeedbackEventListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn feedback_thread_list_outcome(
+    result: Result<Vec<FeedbackThreadRecord>, CoreError>,
+) -> FeedbackThreadListOutcome {
+    match result {
+        Ok(values) => FeedbackThreadListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => FeedbackThreadListOutcome {
+            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -1899,20 +1943,26 @@ impl HighlighterCore {
     pub async fn get_feedback_threads(
         &self,
         coordinate: String,
-    ) -> Result<Vec<FeedbackThreadRecord>, CoreError> {
-        let user = match self.inner.read().session.current_user() {
-            Some(u) => u,
-            None => return Ok(Vec::new()),
-        };
-        feedback::query_threads(self.runtime.ndb(), &coordinate, &user.pubkey)
+    ) -> FeedbackThreadListOutcome {
+        let result: Result<Vec<FeedbackThreadRecord>, CoreError> = (|| {
+            let user = match self.inner.read().session.current_user() {
+                Some(u) => u,
+                None => return Ok(Vec::new()),
+            };
+            feedback::query_threads(self.runtime.ndb(), &coordinate, &user.pubkey)
+        })();
+        feedback_thread_list_outcome(result)
     }
 
     /// Every message in a feedback thread, ordered ascending by `created_at`.
     pub async fn get_feedback_thread_events(
         &self,
         root_event_id: String,
-    ) -> Result<Vec<FeedbackEventRecord>, CoreError> {
-        feedback::query_thread_events(self.runtime.ndb(), &root_event_id)
+    ) -> FeedbackEventListOutcome {
+        feedback_event_list_outcome(feedback::query_thread_events(
+            self.runtime.ndb(),
+            &root_event_id,
+        ))
     }
 
     /// First `p` tag of the project's kind:31933 event by addressable
@@ -1922,8 +1972,11 @@ impl HighlighterCore {
     pub async fn get_project_first_agent_pubkey(
         &self,
         coordinate: String,
-    ) -> Result<Option<String>, CoreError> {
-        feedback::query_first_agent_pubkey(self.runtime.ndb(), &coordinate)
+    ) -> OptionalStringOutcome {
+        optional_string_outcome(feedback::query_first_agent_pubkey(
+            self.runtime.ndb(),
+            &coordinate,
+        ))
     }
 
     // -- Writes --

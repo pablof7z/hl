@@ -53,6 +53,12 @@ pub struct StringOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct OptionalStringOutcome {
+    pub value: Option<String>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct DataOutcome {
     pub value: Vec<u8>,
     pub error: String,
@@ -163,6 +169,18 @@ pub struct DiscussionListOutcome {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct FeedbackEventOutcome {
     pub value: Option<FeedbackEventRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackEventListOutcome {
+    pub values: Vec<FeedbackEventRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackThreadListOutcome {
+    pub values: Vec<FeedbackThreadRecord>,
     pub error: String,
 }
 

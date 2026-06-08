@@ -34,10 +34,11 @@ final class FeedbackThreadStore {
         isLoading = true
         loadError = nil
 
-        do {
-            events = try await core.getFeedbackThreadEvents(rootEventId: rootEventId)
-        } catch {
-            loadError = (error as? CoreError).map { "\($0)" } ?? "\(error)"
+        let eventsOutcome = await core.getFeedbackThreadEvents(rootEventId: rootEventId)
+        if eventsOutcome.error.isEmpty {
+            events = eventsOutcome.values
+        } else {
+            loadError = eventsOutcome.error
         }
         isLoading = false
 
@@ -80,7 +81,8 @@ final class FeedbackThreadStore {
         }
         var agent = agentPubkey
         if agent == nil {
-            agent = try? await core.getProjectFirstAgentPubkey(coordinate: coordinate)
+            let outcome = await core.getProjectFirstAgentPubkey(coordinate: coordinate)
+            agent = outcome.error.isEmpty ? outcome.value : nil
             agentPubkey = agent
         }
 

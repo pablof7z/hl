@@ -793,8 +793,13 @@ mod tests {
         // Step 1 (cache miss expected on a fresh ndb).
         let initial = core
             .get_feedback_thread_events(root_hex.clone())
-            .await
-            .expect("initial query");
+            .await;
+        assert!(
+            initial.error.is_empty(),
+            "initial query: {}",
+            initial.error
+        );
+        let initial = initial.values;
         eprintln!("initial cache events: {}", initial.len());
 
         // Step 2: open the subscription — this is where ensure_feedback_relay
@@ -811,8 +816,9 @@ mod tests {
         // Step 3: re-query — by now the subscription should have populated ndb.
         let after = core
             .get_feedback_thread_events(root_hex.clone())
-            .await
-            .expect("after query");
+            .await;
+        assert!(after.error.is_empty(), "after query: {}", after.error);
+        let after = after.values;
         eprintln!("after subscription: {} events", after.len());
         for e in &after {
             eprintln!("  id={} content={:?}", e.event_id, e.content);
