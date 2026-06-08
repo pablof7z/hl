@@ -1064,7 +1064,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Read-only predicate: is `event_id_hex` currently bookmarked for
      * the logged-in user? Always `false` when no user is logged in.
      */
-    func isEventBookmarked(eventIdHex: String) async throws  -> Bool
+    func isEventBookmarked(eventIdHex: String) async  -> BoolOutcome
 
     /**
      * Returns true if the logged-in user's cached contact list currently
@@ -1432,7 +1432,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * and other event-id-addressed targets). Returns the new membership
      * state.
      */
-    func toggleEventBookmark(eventIdHex: String) async throws  -> Bool
+    func toggleEventBookmark(eventIdHex: String) async  -> BoolOutcome
 
     /**
      * Delete one of the user's own kind:7 reactions via NIP-09.
@@ -2688,20 +2688,21 @@ open func isArticleBookmarked(address: String)async  -> BoolOutcome  {
      * Read-only predicate: is `event_id_hex` currently bookmarked for
      * the logged-in user? Always `false` when no user is logged in.
      */
-open func isEventBookmarked(eventIdHex: String)async throws  -> Bool  {
+open func isEventBookmarked(eventIdHex: String)async  -> BoolOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_is_event_bookmarked(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(eventIdHex)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBoolOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -4000,20 +4001,21 @@ open func toggleArticleBookmark(address: String)async  -> BoolOutcome  {
      * and other event-id-addressed targets). Returns the new membership
      * state.
      */
-open func toggleEventBookmark(eventIdHex: String)async throws  -> Bool  {
+open func toggleEventBookmark(eventIdHex: String)async  -> BoolOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_toggle_event_bookmark(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(eventIdHex)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBoolOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -11278,7 +11280,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_article_bookmarked() != 17349) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_is_event_bookmarked() != 30643) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_is_event_bookmarked() != 16944) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_following() != 22885) {
@@ -11488,7 +11490,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark() != 27334) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark() != 63170) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark() != 58235) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_unpublish_reaction() != 4906) {

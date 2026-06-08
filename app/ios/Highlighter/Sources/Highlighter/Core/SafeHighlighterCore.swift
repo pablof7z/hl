@@ -179,12 +179,12 @@ actor SafeHighlighterCore {
 
     // MARK: - Event bookmarks (kind:10003 note bookmarks)
 
-    func isEventBookmarked(eventIdHex: String) async throws -> Bool {
-        try await core.isEventBookmarked(eventIdHex: eventIdHex)
+    func isEventBookmarked(eventIdHex: String) async -> BoolOutcome {
+        await core.isEventBookmarked(eventIdHex: eventIdHex)
     }
 
-    func toggleEventBookmark(eventIdHex: String) async throws -> Bool {
-        try await core.toggleEventBookmark(eventIdHex: eventIdHex)
+    func toggleEventBookmark(eventIdHex: String) async -> BoolOutcome {
+        await core.toggleEventBookmark(eventIdHex: eventIdHex)
     }
 
     // MARK: - Bookmark sets (kind:30003/30004) + NIP-B0 (kind:39701)

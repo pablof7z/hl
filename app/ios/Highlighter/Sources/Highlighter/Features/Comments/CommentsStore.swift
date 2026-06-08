@@ -79,7 +79,8 @@ final class CommentsStore {
                 let id = r.eventId
                 group.addTask {
                     let reactions = try? await captured.getReactionsForEvent(targetEventId: id, limit: 128)
-                    let bookmarked = try? await captured.isEventBookmarked(eventIdHex: id)
+                    let bookmarkOutcome = await captured.isEventBookmarked(eventIdHex: id)
+                    let bookmarked = bookmarkOutcome.error.isEmpty ? bookmarkOutcome.value : nil
                     return (id, reactions, bookmarked)
                 }
             }
@@ -216,10 +217,11 @@ final class CommentsStore {
         let id = comment.eventId
         let was = bookmarked.contains(id)
         if was { bookmarked.remove(id) } else { bookmarked.insert(id) }
-        do {
-            let now = try await core.toggleEventBookmark(eventIdHex: id)
+        let outcome = await core.toggleEventBookmark(eventIdHex: id)
+        if outcome.error.isEmpty {
+            let now = outcome.value
             if now { bookmarked.insert(id) } else { bookmarked.remove(id) }
-        } catch {
+        } else {
             // Roll back
             if was { bookmarked.insert(id) } else { bookmarked.remove(id) }
         }

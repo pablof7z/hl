@@ -1160,7 +1160,7 @@ impl HighlighterCore {
 
     /// Read-only predicate: is `event_id_hex` currently bookmarked for
     /// the logged-in user? Always `false` when no user is logged in.
-    pub async fn is_event_bookmarked(&self, event_id_hex: String) -> Result<bool, CoreError> {
+    pub async fn is_event_bookmarked(&self, event_id_hex: String) -> BoolOutcome {
         let user_hex = self
             .inner
             .read()
@@ -1169,23 +1169,26 @@ impl HighlighterCore {
             .map(|u| u.pubkey)
             .unwrap_or_default();
         if user_hex.is_empty() {
-            return Ok(false);
+            return bool_outcome(Ok(false));
         }
-        crate::bookmarks::is_event_bookmarked(self.runtime.ndb(), &user_hex, &event_id_hex)
+        bool_outcome(crate::bookmarks::is_event_bookmarked(
+            self.runtime.ndb(),
+            &user_hex,
+            &event_id_hex,
+        ))
     }
 
     /// Toggle `event_id_hex` in the user's kind:10003 list (for comments
     /// and other event-id-addressed targets). Returns the new membership
     /// state.
-    pub async fn toggle_event_bookmark(&self, event_id_hex: String) -> Result<bool, CoreError> {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .ok_or(CoreError::NotInitialized)?;
-        crate::bookmarks::toggle_event_bookmark(&self.runtime, &user_hex, &event_id_hex).await
+    pub async fn toggle_event_bookmark(&self, event_id_hex: String) -> BoolOutcome {
+        let user_hex = match self.inner.read().session.current_user().map(|u| u.pubkey) {
+            Some(user_hex) => user_hex,
+            None => return bool_outcome(Err(CoreError::NotInitialized)),
+        };
+        bool_outcome(
+            crate::bookmarks::toggle_event_bookmark(&self.runtime, &user_hex, &event_id_hex).await,
+        )
     }
 
     /// Open a live subscription on the current user's kind:10003 bookmark
