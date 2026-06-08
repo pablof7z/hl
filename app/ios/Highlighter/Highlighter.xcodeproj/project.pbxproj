@@ -142,7 +142,7 @@
 		E1DE5A510F8579130B9FDDB1 /* NetworkSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE61609ED1748D762B7AF2EF /* NetworkSettingsStore.swift */; };
 		E2B394240768E5BA1E5C0316 /* MemberClipRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45C5D176CF84968D1BAED116 /* MemberClipRow.swift */; };
 		E4502353112FC2965DA8F21D /* FeedbackThreadsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6791C90F5AD1EFD9ADFCD596 /* FeedbackThreadsView.swift */; };
-		E6E488B481F0C5D02346BC27 /* TranscriptParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34131A44B5DC53EFF1B1443D /* TranscriptParser.swift */; };
+		E6E488B481F0C5D02346BC27 /* TranscriptSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34131A44B5DC53EFF1B1443D /* TranscriptSegment.swift */; };
 		E76FED6E3011B2BF817FEE44 /* GlobalUserToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD0E4A37936AD80ECF52317 /* GlobalUserToolbar.swift */; };
 		E9F21B132B5A5D5BAC626B63 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B928BF8363A41669AC01A5F5 /* KeychainService.swift */; };
 		EC59C2F5EF3CDC6F8DFF8A4B /* BookmarkMenuButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C07C2E6A576151047C22769 /* BookmarkMenuButton.swift */; };
@@ -219,7 +219,7 @@
 		31652C306FCE498A71D871BD /* FeedbackProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackProject.swift; sourceTree = "<group>"; };
 		3332EE4B83004D917A911C0E /* BookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookView.swift; sourceTree = "<group>"; };
 		3381A7B5CBE6575396BAE187 /* CommunityPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityPicker.swift; sourceTree = "<group>"; };
-		34131A44B5DC53EFF1B1443D /* TranscriptParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptParser.swift; sourceTree = "<group>"; };
+		34131A44B5DC53EFF1B1443D /* TranscriptSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSegment.swift; sourceTree = "<group>"; };
 		3A84BCEDA7175CDCDF67D853 /* OnboardingCreateAccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCreateAccountView.swift; sourceTree = "<group>"; };
 		3A9A6101DB50ED95BCB7FB11 /* ImageZoomView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageZoomView.swift; sourceTree = "<group>"; };
 		3C07C2E6A576151047C22769 /* BookmarkMenuButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkMenuButton.swift; sourceTree = "<group>"; };
@@ -705,7 +705,7 @@
 				654DA26ECBFECF3667104114 /* MiniPlayerView.swift */,
 				A7F0195B501DEDB841E4B936 /* PodcastListeningView.swift */,
 				086CEFC46ADE095C2C280637 /* PodcastPlayerStore.swift */,
-				34131A44B5DC53EFF1B1443D /* TranscriptParser.swift */,
+				34131A44B5DC53EFF1B1443D /* TranscriptSegment.swift */,
 				E58E01CBB5EEEB2358437B36 /* TranscriptView.swift */,
 				12D88E9E3FB08CDC17F065B7 /* WaveformExtractor.swift */,
 			);
@@ -1054,7 +1054,7 @@
 				BC32CB6D2DA49BEDE61FDF22 /* ShareToCommunitySheet.swift in Sources */,
 				804CED93E680698536312609 /* SharedStore.swift in Sources */,
 				914772CBF74C5660AB56B9E0 /* ThreadView.swift in Sources */,
-				E6E488B481F0C5D02346BC27 /* TranscriptParser.swift in Sources */,
+				E6E488B481F0C5D02346BC27 /* TranscriptSegment.swift in Sources */,
 				8970727A6B674012F302AE3D /* TranscriptRow.swift in Sources */,
 				70FB8E39E995B6FBFF6633FE /* TranscriptView.swift in Sources */,
 				ADBF2D2A29F2DF2386B16481 /* WaveformExtractor.swift in Sources */,

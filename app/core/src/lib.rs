@@ -30,6 +30,7 @@ pub mod onboarding;
 pub mod outbox;
 pub mod pictures;
 pub mod podcast_position;
+pub mod podcast_transcript;
 pub mod profile;
 pub mod reactions;
 pub mod reads;
@@ -57,6 +58,7 @@ pub use models::{
     RoomRecommendation, RoomRecommendationReason, WebBookmarkRecord,
 };
 pub use nip05::Nip05Availability;
+pub use podcast_transcript::TranscriptSegment;
 pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;
 pub use whats_new::WhatsNewEntry;

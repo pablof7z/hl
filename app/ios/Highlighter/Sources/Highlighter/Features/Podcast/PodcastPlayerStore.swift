@@ -136,9 +136,9 @@ final class PodcastPlayerStore {
         beginPlaybackAfterRestoringPosition(for: artifact)
 
         let transcriptUrl = artifact.preview.transcriptUrl
-        if !transcriptUrl.isEmpty, let tUrl = URL(string: transcriptUrl) {
+        if !transcriptUrl.isEmpty {
             transcriptAvailability = .loading
-            transcriptTask = Task { await loadTranscript(from: tUrl) }
+            transcriptTask = Task { await loadTranscript(from: transcriptUrl) }
         }
 
         // Background: extract or load-from-cache the audio waveform. The
@@ -323,17 +323,10 @@ final class PodcastPlayerStore {
 
     // MARK: - Transcript
 
-    func loadTranscript(from url: URL) async {
+    func loadTranscript(from url: String) async {
         transcriptAvailability = .loading
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            let contentType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")
-            let ext = url.pathExtension.isEmpty ? nil : url.pathExtension
-            let parsed = TranscriptParser.parse(
-                data: data,
-                contentType: contentType,
-                fileExtension: ext
-            )
+            let parsed = try await core.loadPodcastTranscript(url: url)
             transcriptSegments = parsed
             transcriptAvailability = parsed.isEmpty ? .unavailable : .available
         } catch {
@@ -620,8 +613,8 @@ final class PodcastPlayerStore {
     /// Runs entirely off the main thread; hops back to update state.
     private func fetchAndApplyArtwork(from urlString: String) {
         guard !urlString.isEmpty, let url = URL(string: urlString) else { return }
-        Task(priority: .userInitiated) { [weak self] in
-            guard let data = try? Data(contentsOf: url),
+        Task(priority: .userInitiated) { [weak self, core] in
+            guard let data = try? await core.downloadPodcastArtwork(url: url.absoluteString),
                   let uiImage = UIImage(data: data) else { return }
             let artwork = MPMediaItemArtwork(boundsSize: uiImage.size) { _ in uiImage }
             await MainActor.run { [weak self] in

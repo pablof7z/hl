@@ -19,7 +19,7 @@ nostr = { version = "0.44", default-features = false, features = ["std", "nip46"
 nostr-ndb = "0.44.0"
 nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", branch = "master" }
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
 futures = "0.3"
 sha2 = "0.10"
 base64 = "0.22"
@@ -30,6 +30,7 @@ dirs = "5"
 uuid = { version = "1", features = ["v4"] }
 url = "2"
 scraper = "0.20"
+regex = "1"
 
 [patch.crates-io]
 nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", branch = "master" }

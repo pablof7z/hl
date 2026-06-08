@@ -68,6 +68,14 @@ actor SafeHighlighterCore {
         )
     }
 
+    func loadPodcastTranscript(url: String) async throws -> [TranscriptSegment] {
+        try await core.loadPodcastTranscript(url: url)
+    }
+
+    func downloadPodcastArtwork(url: String) async throws -> Data {
+        try await core.downloadPodcastArtwork(url: url)
+    }
+
     func prepareWhatsNew() async throws -> [WhatsNewEntry] {
         try await core.prepareWhatsNew()
     }

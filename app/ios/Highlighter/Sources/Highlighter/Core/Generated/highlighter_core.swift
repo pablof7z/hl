@@ -809,6 +809,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func disconnectAll() async throws 
     
+    func downloadPodcastArtwork(url: String) async throws  -> Data
+
     /**
      * Mint a NIP-19 `nevent` bech32 reference for an event id with
      * optional author / kind / relay hints. Used to build shareable
@@ -1074,6 +1076,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func isOnboardingComplete()  -> Bool
 
     func isWifiOnlyEnabled()  -> Bool
+
+    func loadPodcastTranscript(url: String) async throws  -> [TranscriptSegment]
 
     func loginNsec(nsec: String) throws  -> CurrentUser
     
@@ -1726,6 +1730,23 @@ open func disconnectAll()async throws   {
         )
 }
     
+open func downloadPodcastArtwork(url: String)async throws  -> Data  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_download_podcast_artwork(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(url)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterData.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
     /**
      * Mint a NIP-19 `nevent` bech32 reference for an event id with
      * optional author / kind / relay hints. Used to build shareable
@@ -2712,6 +2733,23 @@ open func isWifiOnlyEnabled() -> Bool  {
     uniffi_highlighter_core_fn_method_highlightercore_is_wifi_only_enabled(self.uniffiClonePointer(),$0
     )
 })
+}
+
+open func loadPodcastTranscript(url: String)async throws  -> [TranscriptSegment]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_load_podcast_transcript(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(url)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeTranscriptSegment.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
 }
 
 open func loginNsec(nsec: String)throws  -> CurrentUser  {
@@ -8259,6 +8297,100 @@ public func FfiConverterTypeRoomRecommendation_lower(_ value: RoomRecommendation
 }
 
 
+public struct TranscriptSegment {
+    public var id: String
+    public var start: Double
+    public var end: Double
+    public var speaker: String
+    public var text: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, start: Double, end: Double, speaker: String, text: String) {
+        self.id = id
+        self.start = start
+        self.end = end
+        self.speaker = speaker
+        self.text = text
+    }
+}
+
+#if compiler(>=6)
+extension TranscriptSegment: Sendable {}
+#endif
+
+
+extension TranscriptSegment: Equatable, Hashable {
+    public static func ==(lhs: TranscriptSegment, rhs: TranscriptSegment) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.start != rhs.start {
+            return false
+        }
+        if lhs.end != rhs.end {
+            return false
+        }
+        if lhs.speaker != rhs.speaker {
+            return false
+        }
+        if lhs.text != rhs.text {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(start)
+        hasher.combine(end)
+        hasher.combine(speaker)
+        hasher.combine(text)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTranscriptSegment: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TranscriptSegment {
+        return
+            try TranscriptSegment(
+                id: FfiConverterString.read(from: &buf),
+                start: FfiConverterDouble.read(from: &buf),
+                end: FfiConverterDouble.read(from: &buf),
+                speaker: FfiConverterString.read(from: &buf),
+                text: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TranscriptSegment, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterDouble.write(value.start, into: &buf)
+        FfiConverterDouble.write(value.end, into: &buf)
+        FfiConverterString.write(value.speaker, into: &buf)
+        FfiConverterString.write(value.text, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTranscriptSegment_lift(_ buf: RustBuffer) throws -> TranscriptSegment {
+    return try FfiConverterTypeTranscriptSegment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTranscriptSegment_lower(_ value: TranscriptSegment) -> RustBuffer {
+    return FfiConverterTypeTranscriptSegment.lower(value)
+}
+
+
 /**
  * One NIP-B0 web bookmark (kind:39701). The `d` tag is the URL without
  * scheme; we always prepend `https://` when surfacing it to Swift.
@@ -10474,6 +10606,31 @@ fileprivate struct FfiConverterSequenceTypeRoomRecommendation: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeTranscriptSegment: FfiConverterRustBuffer {
+    typealias SwiftType = [TranscriptSegment]
+
+    public static func write(_ value: [TranscriptSegment], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTranscriptSegment.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TranscriptSegment] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TranscriptSegment]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTranscriptSegment.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeWebBookmarkRecord: FfiConverterRustBuffer {
     typealias SwiftType = [WebBookmarkRecord]
 
@@ -10616,6 +10773,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 46894) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_download_podcast_artwork() != 45675) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_encode_event_to_nevent() != 36762) {
@@ -10775,6 +10935,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_wifi_only_enabled() != 51997) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_load_podcast_transcript() != 61313) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_login_nsec() != 30089) {

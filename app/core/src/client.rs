@@ -33,6 +33,7 @@ use crate::models::{
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
 use crate::podcast_position;
+use crate::podcast_transcript::{self, TranscriptSegment};
 use crate::reads;
 use crate::recent_searches;
 use crate::recommendations;
@@ -240,6 +241,17 @@ impl HighlighterCore {
     ) -> Result<(), CoreError> {
         self.podcast_position
             .save(guid, position_seconds, artifact)
+    }
+
+    pub async fn load_podcast_transcript(
+        &self,
+        url: String,
+    ) -> Result<Vec<TranscriptSegment>, CoreError> {
+        podcast_transcript::fetch_transcript(&url).await
+    }
+
+    pub async fn download_podcast_artwork(&self, url: String) -> Result<Vec<u8>, CoreError> {
+        podcast_transcript::download_artwork(&url).await
     }
 
     pub fn get_artifact_detail_route(&self, artifact: ArtifactRecord) -> ArtifactDetailRoute {
