@@ -20,6 +20,7 @@ struct CommentRow: View {
     let store: CommentsStore
 
     @Environment(HighlighterStore.self) private var app
+    @State private var showProfile = false
 
     var body: some View {
         Button(action: onTap) {
@@ -59,6 +60,9 @@ struct CommentRow: View {
         .buttonStyle(.plain)
         .contextMenu {
             actionMenu
+        }
+        .navigationDestination(isPresented: $showProfile) {
+            ProfileView(pubkey: node.record.pubkey)
         }
         .task(id: node.record.pubkey) {
             await app.requestProfile(pubkeyHex: node.record.pubkey)
@@ -144,6 +148,11 @@ struct CommentRow: View {
     private var actionMenu: some View {
         let isBookmarked = store.isBookmarked(node.record.eventId)
         Button {
+            showProfile = true
+        } label: {
+            Label("View profile", systemImage: "person.crop.circle")
+        }
+        Button {
             Task { await store.toggleLike(node.record) }
         } label: {
             Label(
@@ -164,7 +173,6 @@ struct CommentRow: View {
         } label: {
             Label("Copy text", systemImage: "doc.on.doc")
         }
-        // Profile / mute hooks stub — no plumbing for v1.
     }
 
     // MARK: - Helpers
