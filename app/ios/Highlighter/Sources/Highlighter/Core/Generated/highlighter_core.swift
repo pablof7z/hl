@@ -15340,12 +15340,14 @@ public func FfiConverterTypeProfileDisplayProjection_lower(_ value: ProfileDispl
 public struct ProfileDisplayProjectionInput {
     public var pubkey: String
     public var profile: ProfileMetadata?
+    public var fallback: ProfileDisplayFallback
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(pubkey: String, profile: ProfileMetadata?) {
+    public init(pubkey: String, profile: ProfileMetadata?, fallback: ProfileDisplayFallback) {
         self.pubkey = pubkey
         self.profile = profile
+        self.fallback = fallback
     }
 }
 
@@ -15362,12 +15364,16 @@ extension ProfileDisplayProjectionInput: Equatable, Hashable {
         if lhs.profile != rhs.profile {
             return false
         }
+        if lhs.fallback != rhs.fallback {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(pubkey)
         hasher.combine(profile)
+        hasher.combine(fallback)
     }
 }
 
@@ -15381,13 +15387,15 @@ public struct FfiConverterTypeProfileDisplayProjectionInput: FfiConverterRustBuf
         return
             try ProfileDisplayProjectionInput(
                 pubkey: FfiConverterString.read(from: &buf),
-                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                fallback: FfiConverterTypeProfileDisplayFallback.read(from: &buf)
         )
     }
 
     public static func write(_ value: ProfileDisplayProjectionInput, into buf: inout [UInt8]) {
         FfiConverterString.write(value.pubkey, into: &buf)
         FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+        FfiConverterTypeProfileDisplayFallback.write(value.fallback, into: &buf)
     }
 }
 
@@ -20887,6 +20895,83 @@ public func FfiConverterTypePodcastTimelineRowState_lower(_ value: PodcastTimeli
 
 
 extension PodcastTimelineRowState: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ProfileDisplayFallback {
+
+    case pubkey8
+    case pubkey12
+    case accountLabel
+}
+
+
+#if compiler(>=6)
+extension ProfileDisplayFallback: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileDisplayFallback: FfiConverterRustBuffer {
+    typealias SwiftType = ProfileDisplayFallback
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileDisplayFallback {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .pubkey8
+
+        case 2: return .pubkey12
+
+        case 3: return .accountLabel
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ProfileDisplayFallback, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .pubkey8:
+            writeInt(&buf, Int32(1))
+
+
+        case .pubkey12:
+            writeInt(&buf, Int32(2))
+
+
+        case .accountLabel:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileDisplayFallback_lift(_ buf: RustBuffer) throws -> ProfileDisplayFallback {
+    return try FfiConverterTypeProfileDisplayFallback.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileDisplayFallback_lower(_ value: ProfileDisplayFallback) -> RustBuffer {
+    return FfiConverterTypeProfileDisplayFallback.lower(value)
+}
+
+
+extension ProfileDisplayFallback: Equatable, Hashable {}
 
 
 

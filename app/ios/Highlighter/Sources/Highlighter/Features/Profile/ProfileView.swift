@@ -144,16 +144,18 @@ private struct IdentityBlock: View {
     let pubkey: String
 
     var body: some View {
+        let projection = profileDisplay
+
         VStack(spacing: 12) {
             AuthorAvatar(
                 pubkey: pubkey,
-                pictureURL: store.profile?.picture ?? "",
-                displayInitial: displayName.first.map { String($0) } ?? "",
+                pictureURL: projection.pictureUrl,
+                displayInitial: projection.displayInitial,
                 size: 88,
                 ringWidth: 4
             )
 
-            Text(displayName)
+            Text(projection.displayName)
                 .font(.system(.largeTitle, design: .default).weight(.semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .multilineTextAlignment(.center)
@@ -178,12 +180,14 @@ private struct IdentityBlock: View {
         }
     }
 
-    private var displayName: String {
-        let dn = store.profile?.displayName ?? ""
-        if !dn.isEmpty { return dn }
-        let n = store.profile?.name ?? ""
-        if !n.isEmpty { return n }
-        return String(pubkey.prefix(12))
+    private var profileDisplay: ProfileDisplayProjection {
+        store.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: pubkey,
+                profile: store.profile,
+                fallback: .pubkey12
+            )
+        )
     }
 
     private var bio: String {

@@ -47,14 +47,15 @@ struct SettingsView: View {
         if let user = store.currentUser {
             Section {
                 HStack(spacing: 16) {
+                    let projection = profileDisplay(for: user)
                     AuthorAvatar(
                         pubkey: user.pubkey,
-                        pictureURL: store.currentUserProfile?.picture ?? "",
-                        displayInitial: displayInitial,
+                        pictureURL: projection.pictureUrl,
+                        displayInitial: projection.displayInitial,
                         size: 68
                     )
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(profileDisplayName)
+                        Text(projection.displayName)
                             .font(.title3.weight(.semibold))
                         Text(shortenedNpub(user.npub))
                             .font(.footnote)
@@ -121,20 +122,14 @@ struct SettingsView: View {
 
     // MARK: - Helpers
 
-    private var profileDisplayName: String {
-        if let profile = store.currentUserProfile {
-            let name = profile.displayName.isEmpty ? profile.name : profile.displayName
-            if !name.isEmpty { return name }
-        }
-        return "Nostr Account"
-    }
-
-    private var displayInitial: String {
-        if let profile = store.currentUserProfile {
-            let name = profile.displayName.isEmpty ? profile.name : profile.displayName
-            return name
-        }
-        return ""
+    private func profileDisplay(for user: CurrentUser) -> ProfileDisplayProjection {
+        store.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: user.pubkey,
+                profile: store.currentUserProfile,
+                fallback: .accountLabel
+            )
+        )
     }
 
     private func shortenedNpub(_ npub: String) -> String {

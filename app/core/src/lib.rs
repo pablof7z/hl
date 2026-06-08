@@ -96,7 +96,9 @@ pub use podcast_transcript::{
     PodcastClipSelection, PodcastListeningProjection, PodcastListeningProjectionInput,
     PodcastTimelineRow, PodcastTimelineRowKind, PodcastTimelineRowState, TranscriptSegment,
 };
-pub use profile::{ProfileDisplayProjection, ProfileDisplayProjectionInput};
+pub use profile::{
+    ProfileDisplayFallback, ProfileDisplayProjection, ProfileDisplayProjectionInput,
+};
 pub use reactions::ReactionRecord;
 pub use relays::{
     AddRelayProbeStatus, AddRelaySheetProjection, AddRelaySheetProjectionInput, ImportRelayRow,

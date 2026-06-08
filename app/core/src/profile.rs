@@ -117,6 +117,14 @@ struct RawMetadata {
 pub struct ProfileDisplayProjectionInput {
     pub pubkey: String,
     pub profile: Option<ProfileMetadata>,
+    pub fallback: ProfileDisplayFallback,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ProfileDisplayFallback {
+    Pubkey8,
+    Pubkey12,
+    AccountLabel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -134,14 +142,14 @@ pub fn profile_display_projection(
     let display_name = match input.profile.as_ref() {
         Some(profile) if !profile.display_name.is_empty() => profile.display_name.clone(),
         Some(profile) if !profile.name.is_empty() => profile.name.clone(),
-        _ => input.pubkey.chars().take(8).collect(),
+        _ => profile_display_fallback_name(&input.pubkey, input.fallback),
     };
     let display_initial = match input.profile.as_ref() {
         Some(profile) if !profile.display_name.is_empty() => {
             profile.display_name.chars().take(1).collect()
         }
         Some(profile) if !profile.name.is_empty() => profile.name.chars().take(1).collect(),
-        _ => input.pubkey.chars().take(1).collect(),
+        _ => profile_display_fallback_initial(&input.pubkey, input.fallback),
     };
     let picture_url = input
         .profile
@@ -153,6 +161,23 @@ pub fn profile_display_projection(
         display_name,
         display_initial,
         picture_url,
+    }
+}
+
+fn profile_display_fallback_name(pubkey: &str, fallback: ProfileDisplayFallback) -> String {
+    match fallback {
+        ProfileDisplayFallback::Pubkey8 => pubkey.chars().take(8).collect(),
+        ProfileDisplayFallback::Pubkey12 => pubkey.chars().take(12).collect(),
+        ProfileDisplayFallback::AccountLabel => "Nostr Account".to_string(),
+    }
+}
+
+fn profile_display_fallback_initial(pubkey: &str, fallback: ProfileDisplayFallback) -> String {
+    match fallback {
+        ProfileDisplayFallback::Pubkey8 | ProfileDisplayFallback::Pubkey12 => {
+            pubkey.chars().take(1).collect()
+        }
+        ProfileDisplayFallback::AccountLabel => String::new(),
     }
 }
 
@@ -334,6 +359,7 @@ mod tests {
     fn profile_display_projection_prefers_display_name() {
         let projection = profile_display_projection(ProfileDisplayProjectionInput {
             pubkey: "abcdef123456".to_string(),
+            fallback: ProfileDisplayFallback::Pubkey8,
             profile: Some(ProfileMetadata {
                 pubkey: "abcdef123456".to_string(),
                 name: "alice".to_string(),
@@ -362,6 +388,7 @@ mod tests {
     fn profile_display_projection_falls_back_to_name() {
         let projection = profile_display_projection(ProfileDisplayProjectionInput {
             pubkey: "abcdef123456".to_string(),
+            fallback: ProfileDisplayFallback::Pubkey8,
             profile: Some(ProfileMetadata {
                 pubkey: "abcdef123456".to_string(),
                 name: "alice".to_string(),
@@ -390,6 +417,7 @@ mod tests {
     fn profile_display_projection_falls_back_to_pubkey() {
         let projection = profile_display_projection(ProfileDisplayProjectionInput {
             pubkey: "abcdef123456".to_string(),
+            fallback: ProfileDisplayFallback::Pubkey8,
             profile: None,
         });
 
@@ -398,6 +426,42 @@ mod tests {
             ProfileDisplayProjection {
                 display_name: "abcdef12".to_string(),
                 display_initial: "a".to_string(),
+                picture_url: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn profile_display_projection_supports_profile_page_pubkey_fallback() {
+        let projection = profile_display_projection(ProfileDisplayProjectionInput {
+            pubkey: "abcdef1234567890".to_string(),
+            fallback: ProfileDisplayFallback::Pubkey12,
+            profile: None,
+        });
+
+        assert_eq!(
+            projection,
+            ProfileDisplayProjection {
+                display_name: "abcdef123456".to_string(),
+                display_initial: "a".to_string(),
+                picture_url: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn profile_display_projection_supports_account_label_fallback() {
+        let projection = profile_display_projection(ProfileDisplayProjectionInput {
+            pubkey: "abcdef123456".to_string(),
+            fallback: ProfileDisplayFallback::AccountLabel,
+            profile: None,
+        });
+
+        assert_eq!(
+            projection,
+            ProfileDisplayProjection {
+                display_name: "Nostr Account".to_string(),
+                display_initial: String::new(),
                 picture_url: String::new(),
             }
         );
