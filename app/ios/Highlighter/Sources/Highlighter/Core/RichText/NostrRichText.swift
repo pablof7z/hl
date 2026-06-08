@@ -79,11 +79,18 @@ struct NostrRichText: View {
 
     private func mentionLabel(for pubkeyHex: String) -> String {
         let snapshot = appStore.profileSnapshots[pubkeyHex]
-        if let display = snapshot?.displayName, !display.isEmpty { return display }
-        if let name = snapshot?.name, !name.isEmpty { return name }
-        // Request a Rust-backed projection so the next render swaps in a real name.
-        Task { await appStore.requestProfile(pubkeyHex: pubkeyHex) }
-        return String(pubkeyHex.prefix(8))
+        let needsProfileRefresh = snapshot == nil
+            || (snapshot?.displayName.isEmpty == true && snapshot?.name.isEmpty == true)
+        if needsProfileRefresh {
+            Task { await appStore.requestProfile(pubkeyHex: pubkeyHex) }
+        }
+        return appStore.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: pubkeyHex,
+                profile: snapshot,
+                fallback: .pubkey8
+            )
+        ).displayName
     }
 
     // MARK: - Tokenisation + blocking
@@ -306,7 +313,8 @@ private struct ArticleEntityCard: View {
     }
 
     private func cardContent(title: String, image: String, summary: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        let author = authorDisplay
+        return HStack(alignment: .top, spacing: 12) {
             if let url = URL(string: image), !image.isEmpty {
                 KFImage(url)
                     .resizable()
@@ -329,16 +337,15 @@ private struct ArticleEntityCard: View {
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(2)
                 }
-                let authorName = profile?.displayName ?? profile?.name ?? String(event.pubkeyHex.prefix(8))
                 HStack(spacing: 6) {
                     AuthorAvatar(
                         pubkey: event.pubkeyHex,
-                        pictureURL: profile?.picture ?? "",
-                        displayInitial: authorName.prefix(1).description.uppercased(),
+                        pictureURL: author.pictureUrl,
+                        displayInitial: author.displayInitial.uppercased(),
                         size: 16,
                         ringWidth: 0
                     )
-                    Text(authorName.uppercased())
+                    Text(author.displayName.uppercased())
                         .font(.caption2.weight(.bold))
                         .tracking(0.6)
                         .foregroundStyle(Color.highlighterInkMuted)
@@ -354,6 +361,16 @@ private struct ArticleEntityCard: View {
                 .stroke(Color.highlighterRule, lineWidth: 1)
         )
     }
+
+    private var authorDisplay: ProfileDisplayProjection {
+        appStore.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: event.pubkeyHex,
+                profile: profile,
+                fallback: .pubkey8
+            )
+        )
+    }
 }
 
 /// Short note. Tweet-like card with author header + content.
@@ -363,16 +380,17 @@ private struct NoteEntityCard: View {
     @State private var profile: ProfileMetadata?
 
     var body: some View {
+        let author = authorDisplay
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 AuthorAvatar(
                     pubkey: event.pubkeyHex,
-                    pictureURL: profile?.picture ?? "",
-                    displayInitial: (profile?.displayName ?? profile?.name ?? event.pubkeyHex).prefix(1).description,
+                    pictureURL: author.pictureUrl,
+                    displayInitial: author.displayInitial,
                     size: 26,
                     ringWidth: 0
                 )
-                Text(profile?.displayName ?? profile?.name ?? String(event.pubkeyHex.prefix(8)))
+                Text(author.displayName)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                 Spacer(minLength: 0)
@@ -398,6 +416,16 @@ private struct NoteEntityCard: View {
             }
         }
     }
+
+    private var authorDisplay: ProfileDisplayProjection {
+        appStore.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: event.pubkeyHex,
+                profile: profile,
+                fallback: .pubkey8
+            )
+        )
+    }
 }
 
 /// Highlight. Pull-quote treatment.
@@ -407,6 +435,7 @@ private struct HighlightEntityCard: View {
     @State private var profile: ProfileMetadata?
 
     var body: some View {
+        let author = authorDisplay
         HStack(alignment: .top, spacing: 14) {
             Rectangle()
                 .fill(Color.highlighterAccent)
@@ -416,7 +445,7 @@ private struct HighlightEntityCard: View {
                 Text(event.content)
                     .font(.system(.body, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
-                Text("— \(profile?.displayName ?? profile?.name ?? String(event.pubkeyHex.prefix(8)))")
+                Text("— \(author.displayName)")
                     .font(.caption)
                     .foregroundStyle(Color.highlighterInkMuted)
             }
@@ -430,6 +459,16 @@ private struct HighlightEntityCard: View {
                 profile = appStore.profileSnapshots[event.pubkeyHex]
             }
         }
+    }
+
+    private var authorDisplay: ProfileDisplayProjection {
+        appStore.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: event.pubkeyHex,
+                profile: profile,
+                fallback: .pubkey8
+            )
+        )
     }
 }
 
@@ -451,17 +490,18 @@ private struct ProfileCalloutFromSnapshot: View {
     @State private var profile: ProfileMetadata?
 
     var body: some View {
+        let display = profileDisplay
         NavigationLink(value: ProfileDestination.pubkey(pubkey)) {
             HStack(spacing: 10) {
                 AuthorAvatar(
                     pubkey: pubkey,
-                    pictureURL: profile?.picture ?? "",
-                    displayInitial: (profile?.displayName ?? profile?.name ?? pubkey).prefix(1).description,
+                    pictureURL: display.pictureUrl,
+                    displayInitial: display.displayInitial,
                     size: 36,
                     ringWidth: 0
                 )
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(profile?.displayName ?? profile?.name ?? String(pubkey.prefix(8)))
+                    Text(display.displayName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
                     if let about = profile?.about, !about.isEmpty {
@@ -490,6 +530,16 @@ private struct ProfileCalloutFromSnapshot: View {
                 profile = appStore.profileSnapshots[pubkey]
             }
         }
+    }
+
+    private var profileDisplay: ProfileDisplayProjection {
+        appStore.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: pubkey,
+                profile: profile,
+                fallback: .pubkey8
+            )
+        )
     }
 }
 
