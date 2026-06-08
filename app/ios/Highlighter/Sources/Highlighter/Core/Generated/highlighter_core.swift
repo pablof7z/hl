@@ -853,6 +853,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getBlossomServers() async  -> StringListOutcome
 
     /**
+     * Resolve the cached article rows referenced by a bookmark/curation set.
+     * Rust owns NIP-33 address parsing and collection ordering.
+     */
+    func getBookmarkSetArticles(record: BookmarkSetRecord) async  -> ArticleListOutcome
+
+    /**
      * Return the set of article addresses the user has bookmarked in their
      * newest kind:10003 list (empty when not logged in or no list cached).
      */
@@ -1896,6 +1902,28 @@ open func getBlossomServers()async  -> StringListOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeStringListOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Resolve the cached article rows referenced by a bookmark/curation set.
+     * Rust owns NIP-33 address parsing and collection ordering.
+     */
+open func getBookmarkSetArticles(record: BookmarkSetRecord)async  -> ArticleListOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_bookmark_set_articles(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeBookmarkSetRecord_lower(record)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeArticleListOutcome_lift,
             errorHandler: nil
 
         )
@@ -14840,6 +14868,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_servers() != 25689) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmark_set_articles() != 58353) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmarked_article_addresses() != 46854) {

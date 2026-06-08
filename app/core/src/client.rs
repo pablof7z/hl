@@ -1972,6 +1972,15 @@ impl HighlighterCore {
         ))
     }
 
+    /// Resolve the cached article rows referenced by a bookmark/curation set.
+    /// Rust owns NIP-33 address parsing and collection ordering.
+    pub async fn get_bookmark_set_articles(&self, record: BookmarkSetRecord) -> ArticleListOutcome {
+        article_list_outcome(articles::query_articles_for_addresses(
+            self.runtime.ndb(),
+            &record.article_addresses,
+        ))
+    }
+
     /// Return all kind:30004 curation sets authored by the current user.
     pub async fn get_my_curation_sets(&self) -> BookmarkSetListOutcome {
         let user_hex = self

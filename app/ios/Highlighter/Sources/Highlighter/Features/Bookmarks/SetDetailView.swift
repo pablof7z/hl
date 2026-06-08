@@ -93,20 +93,7 @@ struct SetDetailView: View {
         isLoading = true
         defer { isLoading = false }
 
-        var loaded: [ArticleRecord] = []
-        for address in record.articleAddresses {
-            let parts = address.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-            guard parts.count == 3 else { continue }
-            let pubkey = String(parts[1])
-            let dTag = String(parts[2])
-            guard !pubkey.isEmpty, !dTag.isEmpty else { continue }
-            let outcome = await app.safeCore.getArticle(pubkeyHex: pubkey, dTag: dTag)
-            if outcome.error.isEmpty, let article = outcome.value {
-                loaded.append(article)
-            }
-        }
-        articles = loaded.sorted {
-            ($0.publishedAt ?? $0.createdAt ?? 0) > ($1.publishedAt ?? $1.createdAt ?? 0)
-        }
+        let outcome = await app.safeCore.getBookmarkSetArticles(record: record)
+        articles = outcome.error.isEmpty ? outcome.values : []
     }
 }

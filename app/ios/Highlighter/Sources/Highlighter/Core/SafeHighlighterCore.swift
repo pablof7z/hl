@@ -196,6 +196,10 @@ actor SafeHighlighterCore {
         await core.getMyBookmarkSets()
     }
 
+    func getBookmarkSetArticles(record: BookmarkSetRecord) async -> ArticleListOutcome {
+        await core.getBookmarkSetArticles(record: record)
+    }
+
     func getMyCurationSets() async -> BookmarkSetListOutcome {
         await core.getMyCurationSets()
     }

@@ -57,6 +57,29 @@ pub fn query_article(
     Ok(build_articles(&events, 1).into_iter().next())
 }
 
+/// Resolve the article addresses stored on a bookmark/curation set into cached
+/// NIP-23 records, newest first. Malformed or non-article addresses are
+/// ignored; cache and storage errors still surface to the caller.
+pub fn query_articles_for_addresses(
+    ndb: &Ndb,
+    addresses: &[String],
+) -> Result<Vec<ArticleRecord>, CoreError> {
+    let mut articles = Vec::new();
+    for address in addresses {
+        let Some((pubkey_hex, d_tag)) = article_address_parts(address) else {
+            continue;
+        };
+        match query_article(ndb, &pubkey_hex, &d_tag) {
+            Ok(Some(article)) => articles.push(article),
+            Ok(None) => {}
+            Err(CoreError::InvalidInput(_)) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    sort_articles_newest_first(&mut articles);
+    Ok(articles)
+}
+
 /// Read a pubkey's long-form articles from nostrdb, deduped by `d` tag
 /// (newest wins, matching NIP-33 parameterized replaceable semantics) and
 /// sorted desc by `published_at` (falling back to `created_at`).
@@ -178,6 +201,25 @@ fn record_from_event(event: &Event) -> ArticleRecord {
     }
 }
 
+fn article_address_parts(address: &str) -> Option<(String, String)> {
+    let mut parts = address.trim().splitn(3, ':');
+    let kind = parts.next()?;
+    let pubkey = parts.next()?.trim();
+    let d_tag = parts.next()?.trim();
+    if kind.parse::<u16>().ok() != Some(KIND_LONG_FORM) || pubkey.is_empty() || d_tag.is_empty() {
+        return None;
+    }
+    Some((pubkey.to_string(), d_tag.to_string()))
+}
+
+fn sort_articles_newest_first(articles: &mut [ArticleRecord]) {
+    articles.sort_by(|a, b| {
+        b.published_at
+            .unwrap_or(b.created_at.unwrap_or(0))
+            .cmp(&a.published_at.unwrap_or(a.created_at.unwrap_or(0)))
+    });
+}
+
 fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
     for tag in event.tags.iter() {
         let slice = tag.as_slice();
@@ -287,6 +329,68 @@ mod tests {
         );
         let out = build_articles(&[event], 10);
         assert_eq!(out[0].hashtags, vec!["nostr", "rust"]);
+    }
+
+    #[test]
+    fn article_address_parts_accepts_nip23_addresses_only() {
+        let keys = Keys::generate();
+        let valid = format!("30023:{}:essay", keys.public_key().to_hex());
+        assert_eq!(
+            article_address_parts(&valid),
+            Some((keys.public_key().to_hex(), "essay".to_string()))
+        );
+        assert!(article_address_parts("30023:missing-d").is_none());
+        assert!(article_address_parts("30023::essay").is_none());
+        assert!(article_address_parts("1:abcdef:note").is_none());
+    }
+
+    #[test]
+    fn sort_articles_newest_first_matches_collection_order() {
+        let mut articles = vec![
+            ArticleRecord {
+                event_id: "old".into(),
+                pubkey: "pk".into(),
+                identifier: "old".into(),
+                title: "Old".into(),
+                summary: String::new(),
+                image: String::new(),
+                content: String::new(),
+                hashtags: Vec::new(),
+                published_at: Some(1_000),
+                created_at: Some(9_000),
+            },
+            ArticleRecord {
+                event_id: "new".into(),
+                pubkey: "pk".into(),
+                identifier: "new".into(),
+                title: "New".into(),
+                summary: String::new(),
+                image: String::new(),
+                content: String::new(),
+                hashtags: Vec::new(),
+                published_at: None,
+                created_at: Some(2_000),
+            },
+            ArticleRecord {
+                event_id: "middle".into(),
+                pubkey: "pk".into(),
+                identifier: "middle".into(),
+                title: "Middle".into(),
+                summary: String::new(),
+                image: String::new(),
+                content: String::new(),
+                hashtags: Vec::new(),
+                published_at: Some(1_500),
+                created_at: Some(1_500),
+            },
+        ];
+
+        sort_articles_newest_first(&mut articles);
+        let order: Vec<_> = articles
+            .iter()
+            .map(|article| article.identifier.as_str())
+            .collect();
+        assert_eq!(order, vec!["new", "middle", "old"]);
     }
 
     #[test]
