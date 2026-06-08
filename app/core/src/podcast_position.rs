@@ -5,7 +5,8 @@
 //! iOS and Android resume from the same canonical artifact projection.
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::Arc;
+use std::time::UNIX_EPOCH;
 
 use parking_lot::Mutex;
 
@@ -17,13 +18,19 @@ const MAX_AGE_SECONDS: u64 = 7 * 24 * 60 * 60;
 
 pub struct PodcastPositionStore {
     path: PathBuf,
+    clock: Arc<dyn Clock>,
     record: Mutex<Option<Option<PodcastPositionRecord>>>,
 }
 
 impl PodcastPositionStore {
     pub fn new(data_dir: &Path) -> Self {
+        Self::new_with_clock(data_dir, Arc::new(SystemClock))
+    }
+
+    fn new_with_clock(data_dir: &Path, clock: Arc<dyn Clock>) -> Self {
         Self {
             path: data_dir.join(STATE_FILE_NAME),
+            clock,
             record: Mutex::new(None),
         }
     }
@@ -35,7 +42,7 @@ impl PodcastPositionStore {
         }
 
         let record = guard.as_ref().and_then(Clone::clone)?;
-        let Ok(now) = now_unix_seconds() else {
+        let Ok(now) = self.clock.now_unix_seconds() else {
             tracing::warn!("system clock is before unix epoch while reading podcast position");
             return Some(record);
         };
@@ -80,7 +87,7 @@ impl PodcastPositionStore {
         let record = PodcastPositionRecord {
             guid,
             position_seconds,
-            last_played_at_unix_seconds: now_unix_seconds()?,
+            last_played_at_unix_seconds: self.clock.now_unix_seconds()?,
             artifact,
         };
 
@@ -144,15 +151,24 @@ fn normalize_position(position_seconds: f64) -> Result<f64, CoreError> {
     Ok(position_seconds)
 }
 
-fn now_unix_seconds() -> Result<u64, CoreError> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .map_err(|e| CoreError::Other(format!("system clock before unix epoch: {e}")))
-}
-
 fn is_stale(record: &PodcastPositionRecord, now: u64) -> bool {
     now.saturating_sub(record.last_played_at_unix_seconds) >= MAX_AGE_SECONDS
+}
+
+trait Clock: Send + Sync {
+    fn now_unix_seconds(&self) -> Result<u64, CoreError>;
+}
+
+#[derive(Debug)]
+struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now_unix_seconds(&self) -> Result<u64, CoreError> {
+        UNIX_EPOCH
+            .elapsed()
+            .map(|duration| duration.as_secs())
+            .map_err(|e| CoreError::Other(format!("system clock before unix epoch: {e}")))
+    }
 }
 
 #[cfg(test)]
@@ -171,21 +187,22 @@ mod tests {
     #[test]
     fn saved_position_persists_with_artifact_snapshot() {
         let dir = tempfile::tempdir().unwrap();
-        PodcastPositionStore::new(dir.path())
+        store_at(dir.path(), 10_000)
             .save("episode-guid".into(), 42.5, sample_artifact())
             .unwrap();
 
-        let restored = PodcastPositionStore::new(dir.path());
+        let restored = store_at(dir.path(), 10_001);
         let record = restored.current().unwrap();
         assert_eq!(record.guid, "episode-guid");
         assert_eq!(record.position_seconds, 42.5);
+        assert_eq!(record.last_played_at_unix_seconds, 10_000);
         assert_eq!(record.artifact.preview.title, "Episode title");
     }
 
     #[test]
     fn position_lookup_requires_matching_guid() {
         let dir = tempfile::tempdir().unwrap();
-        let store = PodcastPositionStore::new(dir.path());
+        let store = store_at(dir.path(), 10_000);
         store
             .save("episode-guid".into(), 42.5, sample_artifact())
             .unwrap();
@@ -206,7 +223,7 @@ mod tests {
         };
         std::fs::write(&path, serde_json::to_vec(&record).unwrap()).unwrap();
 
-        let store = PodcastPositionStore::new(dir.path());
+        let store = store_at(dir.path(), MAX_AGE_SECONDS + 1);
 
         assert!(store.current().is_none());
         assert!(!path.exists());
@@ -215,7 +232,7 @@ mod tests {
     #[test]
     fn invalid_position_is_rejected() {
         let dir = tempfile::tempdir().unwrap();
-        let store = PodcastPositionStore::new(dir.path());
+        let store = store_at(dir.path(), 10_000);
 
         assert!(store
             .save("episode-guid".into(), f64::NAN, sample_artifact())
@@ -228,9 +245,23 @@ mod tests {
     #[test]
     fn empty_guid_is_rejected() {
         let dir = tempfile::tempdir().unwrap();
-        let store = PodcastPositionStore::new(dir.path());
+        let store = store_at(dir.path(), 10_000);
 
         assert!(store.save("  ".into(), 1.0, sample_artifact()).is_err());
+    }
+
+    fn store_at(path: &Path, now: u64) -> PodcastPositionStore {
+        PodcastPositionStore::new_with_clock(path, Arc::new(FixedClock { now }))
+    }
+
+    struct FixedClock {
+        now: u64,
+    }
+
+    impl Clock for FixedClock {
+        fn now_unix_seconds(&self) -> Result<u64, CoreError> {
+            Ok(self.now)
+        }
     }
 
     fn sample_artifact() -> ArtifactRecord {
