@@ -34,12 +34,12 @@ use crate::models::{
     DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
     FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
     GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HydratedHighlight, HydratedHighlightListOutcome, MutationOutcome,
-    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord,
-    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
-    ReactionListOutcome, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
-    RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
+    HighlightRecord, HighlightSourceKind, HydratedHighlight, HydratedHighlightListOutcome,
+    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
+    NostrEntityEventOutcome, NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft,
+    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateDraft, ReactionListOutcome, ReactionOutcome, ReadingFeedItem,
+    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
     RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
     TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
     WhatsNewEntriesOutcome,
@@ -1422,6 +1422,23 @@ impl HighlighterCore {
             &group_id,
             limit,
         ))
+    }
+
+    /// Classify a highlight source for native icon/label rendering. Rust owns
+    /// the source/reference interpretation; native shells only render the enum.
+    pub fn get_highlight_source_kind(
+        &self,
+        preview_source: String,
+        external_reference: String,
+        artifact_address: String,
+        source_url: String,
+    ) -> HighlightSourceKind {
+        highlights::source_kind(
+            &preview_source,
+            &external_reference,
+            &artifact_address,
+            &source_url,
+        )
     }
 
     pub async fn get_highlights(

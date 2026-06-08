@@ -6,9 +6,11 @@ use std::collections::{BTreeMap, HashSet};
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
+use crate::articles;
 use crate::errors::CoreError;
 use crate::models::{
-    ArtifactRecord, BlossomUpload, HighlightDraft, HighlightRecord, HydratedHighlight,
+    ArtifactRecord, BlossomUpload, HighlightDraft, HighlightRecord, HighlightSourceKind,
+    HydratedHighlight,
 };
 use crate::nostr_runtime::NostrRuntime;
 use crate::relays::highlighter_relay;
@@ -17,6 +19,45 @@ use crate::relays::highlighter_relay;
 const KIND_HIGHLIGHT: u16 = 9802;
 /// NIP-18 generic repost used to share a highlight into a NIP-29 community.
 const KIND_GENERIC_REPOST: u16 = 16;
+
+/// Classify the source behind a highlight for native rendering. Rust owns this
+/// source/reference interpretation so all platform shells show the same icon
+/// and label for the same highlight.
+pub fn source_kind(
+    preview_source: &str,
+    external_reference: &str,
+    artifact_address: &str,
+    source_url: &str,
+) -> HighlightSourceKind {
+    match preview_source.trim().to_ascii_lowercase().as_str() {
+        "article" => return HighlightSourceKind::Article,
+        "web" => return HighlightSourceKind::Web,
+        "podcast" => return HighlightSourceKind::Podcast,
+        "book" => return HighlightSourceKind::Book,
+        "video" => return HighlightSourceKind::Video,
+        "paper" => return HighlightSourceKind::Paper,
+        "" => {}
+        _ => return HighlightSourceKind::Unknown,
+    }
+
+    if is_isbn_reference(external_reference) {
+        return HighlightSourceKind::Book;
+    }
+    if articles::article_reader_route_from_address(artifact_address).is_some() {
+        return HighlightSourceKind::Article;
+    }
+    if is_isbn_reference(artifact_address) {
+        return HighlightSourceKind::Book;
+    }
+    if !source_url.trim().is_empty() {
+        return HighlightSourceKind::Web;
+    }
+    HighlightSourceKind::Unknown
+}
+
+fn is_isbn_reference(value: &str) -> bool {
+    value.trim().to_ascii_lowercase().starts_with("isbn:")
+}
 
 /// Port of `publishAndShareHighlight` (`highlights.ts:288-319`).
 /// 1. Publishes the canonical kind:9802 highlight on the user's write relays.
@@ -979,6 +1020,39 @@ fn format_clip_time(value: f64) -> String {
 mod tests {
     use super::*;
     use crate::models::{ArtifactPreview, ArtifactRecord, HighlightDraft};
+
+    #[test]
+    fn source_kind_uses_preview_source_first() {
+        assert_eq!(
+            source_kind("Podcast", "", "30023:author:essay", ""),
+            HighlightSourceKind::Podcast
+        );
+        assert_eq!(
+            source_kind("mystery", "isbn:9780593716717", "", "https://example.com"),
+            HighlightSourceKind::Unknown
+        );
+    }
+
+    #[test]
+    fn source_kind_classifies_reference_fallbacks() {
+        assert_eq!(
+            source_kind("", "isbn:9780593716717", "", ""),
+            HighlightSourceKind::Book
+        );
+        assert_eq!(
+            source_kind("", "", "30023:author:essay", ""),
+            HighlightSourceKind::Article
+        );
+        assert_eq!(
+            source_kind("", "", "isbn:9780593716717", ""),
+            HighlightSourceKind::Book
+        );
+        assert_eq!(
+            source_kind("", "", "", "https://example.com/read"),
+            HighlightSourceKind::Web
+        );
+        assert_eq!(source_kind("", "", "", ""), HighlightSourceKind::Unknown);
+    }
 
     fn preview_for_podcast(url: &str) -> ArtifactPreview {
         let item_catalog = format!("podcast:item:guid:{}", "ep-1");

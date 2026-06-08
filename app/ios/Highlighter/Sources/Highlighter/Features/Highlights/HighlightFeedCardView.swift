@@ -349,34 +349,15 @@ struct HighlightFeedCardView: View {
 
     // MARK: - Derived: artifact kind
 
-    /// Canonical artifact kind for header rendering. Falls back to
-    /// inspecting `artifactAddress` / `sourceUrl` when the highlight has
-    /// no resolved artifact.
-    private enum ArtifactKind {
-        case article, web, podcast, book, video, paper, unknown
-    }
-
-    private var artifactKind: ArtifactKind {
-        if let source = lead.artifact?.preview.source.lowercased(), !source.isEmpty {
-            switch source {
-            case "article": return .article
-            case "web":     return .web
-            case "podcast": return .podcast
-            case "book":    return .book
-            case "video":   return .video
-            case "paper":   return .paper
-            default:        return .unknown
-            }
-        }
-        let extRef = lead.highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
-        if extRef.hasPrefix("isbn:") { return .book }
-        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if addr.hasPrefix("30023:") { return .article }
-        if addr.hasPrefix("isbn:") { return .book }
-        if !lead.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .web
-        }
-        return .unknown
+    /// Canonical artifact kind for header rendering. Rust owns source and
+    /// reference interpretation; Swift only maps the enum to visual treatment.
+    private var artifactKind: HighlightSourceKind {
+        app.core.getHighlightSourceKind(
+            previewSource: lead.artifact?.preview.source ?? "",
+            externalReference: lead.highlight.externalReference,
+            artifactAddress: lead.highlight.artifactAddress,
+            sourceUrl: lead.highlight.sourceUrl
+        )
     }
 
     private var kindIconName: String {

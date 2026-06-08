@@ -250,6 +250,17 @@ pub struct HighlightListOutcome {
     pub error: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum HighlightSourceKind {
+    Article,
+    Web,
+    Podcast,
+    Book,
+    Video,
+    Paper,
+    Unknown,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct HydratedHighlightListOutcome {
     pub values: Vec<HydratedHighlight>,

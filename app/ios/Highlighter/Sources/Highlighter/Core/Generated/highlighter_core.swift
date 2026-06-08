@@ -974,6 +974,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getFollows() async  -> StringListOutcome
 
+    /**
+     * Classify a highlight source for native icon/label rendering. Rust owns
+     * the source/reference interpretation; native shells only render the enum.
+     */
+    func getHighlightSourceKind(previewSource: String, externalReference: String, artifactAddress: String, sourceUrl: String)  -> HighlightSourceKind
+
     func getHighlights(groupId: String, limit: UInt32) async  -> HydratedHighlightListOutcome
 
     /**
@@ -2378,6 +2384,21 @@ open func getFollows()async  -> StringListOutcome  {
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Classify a highlight source for native icon/label rendering. Rust owns
+     * the source/reference interpretation; native shells only render the enum.
+     */
+open func getHighlightSourceKind(previewSource: String, externalReference: String, artifactAddress: String, sourceUrl: String) -> HighlightSourceKind  {
+    return try!  FfiConverterTypeHighlightSourceKind_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_highlight_source_kind(self.uniffiClonePointer(),
+        FfiConverterString.lower(previewSource),
+        FfiConverterString.lower(externalReference),
+        FfiConverterString.lower(artifactAddress),
+        FfiConverterString.lower(sourceUrl),$0
+    )
+})
 }
 
 open func getHighlights(groupId: String, limit: UInt32)async  -> HydratedHighlightListOutcome  {
@@ -13566,6 +13587,111 @@ extension DataChangeType: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum HighlightSourceKind {
+
+    case article
+    case web
+    case podcast
+    case book
+    case video
+    case paper
+    case unknown
+}
+
+
+#if compiler(>=6)
+extension HighlightSourceKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightSourceKind: FfiConverterRustBuffer {
+    typealias SwiftType = HighlightSourceKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightSourceKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .article
+
+        case 2: return .web
+
+        case 3: return .podcast
+
+        case 4: return .book
+
+        case 5: return .video
+
+        case 6: return .paper
+
+        case 7: return .unknown
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HighlightSourceKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .article:
+            writeInt(&buf, Int32(1))
+
+
+        case .web:
+            writeInt(&buf, Int32(2))
+
+
+        case .podcast:
+            writeInt(&buf, Int32(3))
+
+
+        case .book:
+            writeInt(&buf, Int32(4))
+
+
+        case .video:
+            writeInt(&buf, Int32(5))
+
+
+        case .paper:
+            writeInt(&buf, Int32(6))
+
+
+        case .unknown:
+            writeInt(&buf, Int32(7))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightSourceKind_lift(_ buf: RustBuffer) throws -> HighlightSourceKind {
+    return try FfiConverterTypeHighlightSourceKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightSourceKind_lower(_ value: HighlightSourceKind) -> RustBuffer {
+    return FfiConverterTypeHighlightSourceKind.lower(value)
+}
+
+
+extension HighlightSourceKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Parsed reference to a Nostr entity encoded as a NIP-19 bech32.
  */
@@ -15512,6 +15638,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_follows() != 13105) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_source_kind() != 42257) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights() != 24276) {

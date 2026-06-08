@@ -414,31 +414,13 @@ struct HighlightDetailView: View {
         }
     }
 
-    private enum ArtifactKind {
-        case article, web, podcast, book, video, paper, unknown
-    }
-
-    private var artifactKind: ArtifactKind {
-        if let source = item.artifact?.preview.source.lowercased(), !source.isEmpty {
-            switch source {
-            case "article": return .article
-            case "web":     return .web
-            case "podcast": return .podcast
-            case "book":    return .book
-            case "video":   return .video
-            case "paper":   return .paper
-            default:        return .unknown
-            }
-        }
-        let extRef = highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
-        if extRef.hasPrefix("isbn:") { return .book }
-        let addr = highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if addr.hasPrefix("30023:") { return .article }
-        if addr.hasPrefix("isbn:") { return .book }
-        if !highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .web
-        }
-        return .unknown
+    private var artifactKind: HighlightSourceKind {
+        app.core.getHighlightSourceKind(
+            previewSource: item.artifact?.preview.source ?? "",
+            externalReference: highlight.externalReference,
+            artifactAddress: highlight.artifactAddress,
+            sourceUrl: highlight.sourceUrl
+        )
     }
 
     private var sourceURLHost: String? {
