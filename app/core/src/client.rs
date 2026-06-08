@@ -3335,29 +3335,33 @@ impl HighlighterCore {
     /// `CoreError::InvalidInput` if the input isn't a recognised pubkey
     /// reference. Used by the room-invite picker to resolve a pasted handle.
     pub fn decode_npub(&self, input: String) -> StringOutcome {
-        let result: Result<String, CoreError> = (|| {
-            let trimmed = input
-                .trim()
-                .strip_prefix("nostr:")
-                .unwrap_or(input.trim())
-                .trim();
-            if trimmed.is_empty() {
-                return Err(CoreError::InvalidInput("empty pubkey reference".into()));
-            }
-            if let Ok(pk) = PublicKey::from_bech32(trimmed) {
-                return Ok(pk.to_hex());
-            }
-            if let Ok(profile) = nostr_sdk::nips::nip19::Nip19Profile::from_bech32(trimmed) {
-                return Ok(profile.public_key.to_hex());
-            }
-            if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
-                return Ok(trimmed.to_ascii_lowercase());
-            }
-            Err(CoreError::InvalidInput(format!(
-                "unrecognised pubkey reference: {trimmed}"
-            )))
-        })();
+        let result =
+            crate::room_invites::decode_pubkey_reference(&input).map(|(pubkey_hex, _)| pubkey_hex);
         string_outcome(result)
+    }
+
+    pub fn get_room_invite_projection(
+        &self,
+        input: crate::room_invites::RoomInviteProjectionInput,
+    ) -> crate::room_invites::RoomInviteProjection {
+        crate::room_invites::project_invite(input)
+    }
+
+    pub fn get_room_invite_add_decision(
+        &self,
+        pubkey_hex: String,
+        selected_pubkeys: Vec<String>,
+        current_user_pubkey: String,
+    ) -> crate::room_invites::RoomInviteAddDecision {
+        crate::room_invites::add_decision(&pubkey_hex, &selected_pubkeys, &current_user_pubkey)
+    }
+
+    pub fn get_room_invite_send_result(
+        &self,
+        selected: Vec<crate::room_invites::RoomInviteCandidate>,
+        failed_pubkeys: Vec<String>,
+    ) -> crate::room_invites::RoomInviteSendResultProjection {
+        crate::room_invites::project_send_result(&selected, &failed_pubkeys)
     }
 
     /// Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,

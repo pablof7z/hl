@@ -2,6 +2,10 @@ import CoreImage.CIFilterBuiltins
 import Kingfisher
 import SwiftUI
 
+extension RoomInviteChip: Identifiable {
+    public var id: String { pubkeyHex }
+}
+
 /// Add-people screen used both right after creating a room (welcome mode)
 /// and from the room's overflow menu (manage mode).
 ///
@@ -28,7 +32,6 @@ struct RoomInviteView: View {
     @State private var query: String = ""
     @State private var follows: [String] = []
     @State private var followsLoaded = false
-    @State private var pasteResolution: ResolvedCandidate?
     @State private var selected: [Candidate] = []
     @State private var sending = false
     @State private var error: String?
@@ -83,9 +86,6 @@ struct RoomInviteView: View {
         .task {
             await loadFollows()
         }
-        .onChange(of: query) { _, newValue in
-            Task { await resolvePaste(input: newValue) }
-        }
         .alert("Couldn't add", isPresented: errorBinding, actions: {
             Button("OK") { error = nil }
         }, message: { if let error { Text(error) } })
@@ -126,9 +126,9 @@ struct RoomInviteView: View {
     @ViewBuilder
     private var chipsZone: some View {
         if !selected.isEmpty {
-            FlowChips(items: selected) { candidate in
-                Chip(candidate: candidate, profile: profile(for: candidate.pubkeyHex)) {
-                    remove(candidate)
+            FlowChips(items: inviteProjection.selectedChips) { chip in
+                Chip(chip: chip, profile: profile(for: chip.pubkeyHex)) {
+                    removePubkey(chip.pubkeyHex)
                 }
             }
         }
@@ -151,7 +151,6 @@ struct RoomInviteView: View {
             if !query.isEmpty {
                 Button {
                     query = ""
-                    pasteResolution = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(Color.highlighterInkMuted)
@@ -169,23 +168,24 @@ struct RoomInviteView: View {
 
     @ViewBuilder
     private var suggestionsList: some View {
-        if let resolved = pasteResolution {
+        let projection = inviteProjection
+        if let resolved = projection.resolvedCandidate {
             VStack(spacing: 0) {
                 personRow(
                     pubkeyHex: resolved.pubkeyHex,
                     profile: profile(for: resolved.pubkeyHex),
-                    secondary: resolved.format.label,
-                    isSelected: isSelected(resolved.pubkeyHex)
+                    displayName: resolved.displayName,
+                    secondary: resolved.label,
+                    isSelected: resolved.isSelected
                 ) {
-                    add(Candidate(pubkeyHex: resolved.pubkeyHex, source: resolved.format.candidateSource))
+                    add(Candidate(pubkeyHex: resolved.pubkeyHex, source: resolved.source))
                     query = ""
-                    pasteResolution = nil
                 }
             }
             .padding(.horizontal, 22)
         } else {
-            let visible = visibleFollows()
-            if visible.isEmpty && !query.isEmpty && followsLoaded {
+            let visible = projection.visibleFollows
+            if projection.showEmptyFollowMessage {
                 Text("No matching follow — paste an npub to invite anyone.")
                     .font(.subheadline)
                     .foregroundStyle(Color.highlighterInkMuted)
@@ -193,16 +193,17 @@ struct RoomInviteView: View {
                     .padding(.top, 8)
             } else {
                 LazyVStack(spacing: 0) {
-                    ForEach(visible, id: \.self) { pubkey in
+                    ForEach(visible, id: \.pubkeyHex) { row in
                         personRow(
-                            pubkeyHex: pubkey,
-                            profile: profile(for: pubkey),
-                            secondary: "Following",
-                            isSelected: isSelected(pubkey)
+                            pubkeyHex: row.pubkeyHex,
+                            profile: profile(for: row.pubkeyHex),
+                            displayName: row.displayName,
+                            secondary: row.secondaryLabel,
+                            isSelected: row.isSelected
                         ) {
-                            toggle(Candidate(pubkeyHex: pubkey, source: .follow))
+                            toggle(Candidate(pubkeyHex: row.pubkeyHex, source: row.source))
                         }
-                        if pubkey != visible.last {
+                        if row.pubkeyHex != visible.last?.pubkeyHex {
                             Divider().overlay(Color.highlighterRule)
                                 .padding(.leading, 70)
                         }
@@ -256,6 +257,7 @@ struct RoomInviteView: View {
     private func personRow(
         pubkeyHex: String,
         profile: ProfileMetadata?,
+        displayName: String,
         secondary: String,
         isSelected: Bool,
         onTap: @escaping () -> Void
@@ -265,7 +267,7 @@ struct RoomInviteView: View {
                 AvatarView(profile: profile, pubkeyHex: pubkeyHex, size: 44)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(displayName(profile: profile, fallback: pubkeyHex))
+                    Text(displayName)
                         .font(.body.weight(.medium))
                         .foregroundStyle(Color.highlighterInkStrong)
                         .lineLimit(1)
@@ -295,6 +297,19 @@ struct RoomInviteView: View {
         appStore.joinedCommunities.first(where: { $0.id == groupId })
     }
 
+    private var inviteProjection: RoomInviteProjection {
+        appStore.safeCore.getRoomInviteProjection(
+            input: RoomInviteProjectionInput(
+                query: query,
+                follows: follows,
+                profiles: Array(appStore.profileSnapshots.values),
+                selected: selected.map(\.coreCandidate),
+                followsLoaded: followsLoaded,
+                limit: 50
+            )
+        )
+    }
+
     private func profile(for pubkey: String) -> ProfileMetadata? {
         appStore.profileSnapshots[pubkey]
     }
@@ -312,10 +327,15 @@ struct RoomInviteView: View {
     }
 
     private func add(_ candidate: Candidate) {
-        guard !isSelected(candidate.pubkeyHex) else { return }
-        let me = appStore.currentUser?.pubkey ?? ""
-        if candidate.pubkeyHex.lowercased() == me.lowercased() {
-            error = "You're already in this room."
+        let decision = appStore.safeCore.getRoomInviteAddDecision(
+            pubkeyHex: candidate.pubkeyHex,
+            selectedPubkeys: selected.map(\.pubkeyHex),
+            currentUserPubkey: appStore.currentUser?.pubkey ?? ""
+        )
+        guard decision.shouldAdd else {
+            if !decision.errorMessage.isEmpty {
+                error = decision.errorMessage
+            }
             return
         }
         selected.append(candidate)
@@ -326,34 +346,18 @@ struct RoomInviteView: View {
         selected.removeAll(where: { $0.pubkeyHex == candidate.pubkeyHex })
     }
 
+    private func removePubkey(_ pubkeyHex: String) {
+        selected.removeAll(where: { $0.pubkeyHex == pubkeyHex })
+    }
+
     private func acceptPasteIfAny() {
-        guard let resolved = pasteResolution else { return }
-        add(Candidate(pubkeyHex: resolved.pubkeyHex, source: resolved.format.candidateSource))
+        guard let resolved = inviteProjection.resolvedCandidate else { return }
+        add(Candidate(pubkeyHex: resolved.pubkeyHex, source: resolved.source))
         query = ""
-        pasteResolution = nil
     }
 
     private var errorBinding: Binding<Bool> {
         Binding(get: { error != nil }, set: { if !$0 { error = nil } })
-    }
-
-    private func visibleFollows() -> [String] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return Array(follows.prefix(50)) }
-        let needle = trimmed.lowercased()
-        return follows.filter { pubkey in
-            let prof = profile(for: pubkey)
-            let name = (prof?.name ?? "").lowercased()
-            let nip05 = (prof?.nip05 ?? "").lowercased()
-            let displayName = (prof?.displayName ?? "").lowercased()
-            return name.contains(needle) || nip05.contains(needle) || displayName.contains(needle)
-        }.prefix(50).map { $0 }
-    }
-
-    private func displayName(profile: ProfileMetadata?, fallback hex: String) -> String {
-        if let displayName = profile?.displayName, !displayName.isEmpty { return displayName }
-        if let name = profile?.name, !name.isEmpty { return name }
-        return shortPubkey(hex)
     }
 
     // MARK: - Loading + actions
@@ -375,104 +379,65 @@ struct RoomInviteView: View {
         }
     }
 
-    private func resolvePaste(input: String) async {
-        let trimmed = input
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "nostr:", with: "")
-        guard looksLikeReference(trimmed) else {
-            await MainActor.run { pasteResolution = nil }
-            return
-        }
-        let outcome = appStore.safeCore.decodeNpub(trimmed)
-        if outcome.error.isEmpty {
-            let hex = outcome.value
-            let format: ResolvedCandidate.InputFormat
-            if trimmed.lowercased().hasPrefix("npub") { format = .npub }
-            else if trimmed.lowercased().hasPrefix("nprofile") { format = .nprofile }
-            else { format = .hex }
-            await appStore.requestProfile(pubkeyHex: hex)
-            await MainActor.run {
-                pasteResolution = ResolvedCandidate(pubkeyHex: hex, format: format)
-            }
-        } else {
-            await MainActor.run { pasteResolution = nil }
-        }
-    }
-
-    private func looksLikeReference(_ s: String) -> Bool {
-        let lower = s.lowercased()
-        if lower.hasPrefix("npub1") && lower.count >= 60 { return true }
-        if lower.hasPrefix("nprofile1") && lower.count >= 60 { return true }
-        if s.count == 64 && s.allSatisfy({ $0.isHexDigit }) { return true }
-        return false
-    }
-
     private func send() {
         guard !sending, !selected.isEmpty else { return }
         sending = true
         let toAdd = selected
         Task {
             defer { Task { @MainActor in sending = false } }
-            var failures: [String] = []
+            var failedPubkeys: [String] = []
             for candidate in toAdd {
                 let outcome = await appStore.safeCore.addRoomMember(
                     groupId: groupId,
                     pubkeyHex: candidate.pubkeyHex
                 )
                 if !outcome.error.isEmpty {
-                    failures.append(shortPubkey(candidate.pubkeyHex))
+                    failedPubkeys.append(candidate.pubkeyHex)
                 }
             }
             await MainActor.run {
-                if failures.isEmpty {
-                    let added = toAdd.count
+                let result = appStore.safeCore.getRoomInviteSendResult(
+                    selected: toAdd.map(\.coreCandidate),
+                    failedPubkeys: failedPubkeys
+                )
+                if result.allSucceeded {
                     selected.removeAll()
-                    sentToast = added == 1 ? "Added 1 person" : "Added \(added) people"
+                    sentToast = result.successToast
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     sentToastResetTimer.schedule(after: 2) {
                         sentToast = nil
                     }
-                } else if failures.count == toAdd.count {
-                    error = "Couldn't add anyone. Are you a moderator of this room?"
+                } else if result.allFailed {
+                    error = result.errorMessage
                 } else {
-                    selected.removeAll(where: { c in !failures.contains(shortPubkey(c.pubkeyHex)) })
-                    error = "Some failed: \(failures.joined(separator: ", "))"
+                    selected = result.remainingSelected.map(Candidate.init(core:))
+                    error = result.errorMessage
                 }
             }
         }
-    }
-
-    private func shortPubkey(_ hex: String) -> String {
-        guard hex.count > 12 else { return hex }
-        let prefix = hex.prefix(6)
-        let suffix = hex.suffix(4)
-        return "\(prefix)…\(suffix)"
     }
 }
 
 // MARK: - Models
 
 private struct Candidate: Identifiable, Equatable {
-    enum Source { case follow, paste, manual }
     let pubkeyHex: String
-    let source: Source
+    let source: RoomInviteCandidateSource
     var id: String { pubkeyHex }
-}
 
-private struct ResolvedCandidate {
-    enum InputFormat {
-        case npub, nprofile, hex
-        var label: String {
-            switch self {
-            case .npub: return "Pasted npub"
-            case .nprofile: return "Pasted nprofile"
-            case .hex: return "Pasted pubkey"
-            }
-        }
-        var candidateSource: Candidate.Source { .paste }
+    var coreCandidate: RoomInviteCandidate {
+        RoomInviteCandidate(pubkeyHex: pubkeyHex, source: source)
     }
-    let pubkeyHex: String
-    let format: InputFormat
+
+    init(pubkeyHex: String, source: RoomInviteCandidateSource) {
+        self.pubkeyHex = pubkeyHex
+        self.source = source
+    }
+
+    init(core: RoomInviteCandidate) {
+        pubkeyHex = core.pubkeyHex
+        source = core.source
+    }
 }
 
 // MARK: - Avatar
@@ -520,14 +485,14 @@ private struct AvatarView: View {
 // MARK: - Chip
 
 private struct Chip: View {
-    let candidate: Candidate
+    let chip: RoomInviteChip
     let profile: ProfileMetadata?
     let onRemove: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
-            AvatarView(profile: profile, pubkeyHex: candidate.pubkeyHex, size: 22)
-            Text(displayName)
+            AvatarView(profile: profile, pubkeyHex: chip.pubkeyHex, size: 22)
+            Text(chip.displayName)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineLimit(1)
@@ -547,11 +512,6 @@ private struct Chip: View {
         .overlay(
             Capsule().stroke(Color.highlighterRule, lineWidth: 1)
         )
-    }
-
-    private var displayName: String {
-        if let name = profile?.name, !name.isEmpty { return name }
-        return String(candidate.pubkeyHex.prefix(8))
     }
 }
 

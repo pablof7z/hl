@@ -1241,6 +1241,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getRoomExplorerCuratorPubkey() async  -> StringOutcome
 
+    func getRoomInviteAddDecision(pubkeyHex: String, selectedPubkeys: [String], currentUserPubkey: String)  -> RoomInviteAddDecision
+
+    func getRoomInviteProjection(input: RoomInviteProjectionInput)  -> RoomInviteProjection
+
+    func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String])  -> RoomInviteSendResultProjection
+
     /**
      * Rooms where authors of articles the user has highlighted post
      * artifacts. Empty when the user hasn't highlighted any articles yet.
@@ -3448,6 +3454,33 @@ open func getRoomExplorerCuratorPubkey()async  -> StringOutcome  {
             errorHandler: nil
 
         )
+}
+
+open func getRoomInviteAddDecision(pubkeyHex: String, selectedPubkeys: [String], currentUserPubkey: String) -> RoomInviteAddDecision  {
+    return try!  FfiConverterTypeRoomInviteAddDecision_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_add_decision(self.uniffiClonePointer(),
+        FfiConverterString.lower(pubkeyHex),
+        FfiConverterSequenceString.lower(selectedPubkeys),
+        FfiConverterString.lower(currentUserPubkey),$0
+    )
+})
+}
+
+open func getRoomInviteProjection(input: RoomInviteProjectionInput) -> RoomInviteProjection  {
+    return try!  FfiConverterTypeRoomInviteProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_projection(self.uniffiClonePointer(),
+        FfiConverterTypeRoomInviteProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String]) -> RoomInviteSendResultProjection  {
+    return try!  FfiConverterTypeRoomInviteSendResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_send_result(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeRoomInviteCandidate.lower(selected),
+        FfiConverterSequenceString.lower(failedPubkeys),$0
+    )
+})
 }
 
     /**
@@ -15082,6 +15115,710 @@ public func FfiConverterTypeRelaySettingsProjection_lower(_ value: RelaySettings
 }
 
 
+public struct RoomInviteAddDecision {
+    public var shouldAdd: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldAdd: Bool, errorMessage: String) {
+        self.shouldAdd = shouldAdd
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteAddDecision: Sendable {}
+#endif
+
+
+extension RoomInviteAddDecision: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteAddDecision, rhs: RoomInviteAddDecision) -> Bool {
+        if lhs.shouldAdd != rhs.shouldAdd {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldAdd)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteAddDecision: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteAddDecision {
+        return
+            try RoomInviteAddDecision(
+                shouldAdd: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteAddDecision, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldAdd, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteAddDecision_lift(_ buf: RustBuffer) throws -> RoomInviteAddDecision {
+    return try FfiConverterTypeRoomInviteAddDecision.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteAddDecision_lower(_ value: RoomInviteAddDecision) -> RustBuffer {
+    return FfiConverterTypeRoomInviteAddDecision.lower(value)
+}
+
+
+public struct RoomInviteCandidate {
+    public var pubkeyHex: String
+    public var source: RoomInviteCandidateSource
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkeyHex: String, source: RoomInviteCandidateSource) {
+        self.pubkeyHex = pubkeyHex
+        self.source = source
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteCandidate: Sendable {}
+#endif
+
+
+extension RoomInviteCandidate: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteCandidate, rhs: RoomInviteCandidate) -> Bool {
+        if lhs.pubkeyHex != rhs.pubkeyHex {
+            return false
+        }
+        if lhs.source != rhs.source {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkeyHex)
+        hasher.combine(source)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteCandidate: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteCandidate {
+        return
+            try RoomInviteCandidate(
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                source: FfiConverterTypeRoomInviteCandidateSource.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteCandidate, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkeyHex, into: &buf)
+        FfiConverterTypeRoomInviteCandidateSource.write(value.source, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteCandidate_lift(_ buf: RustBuffer) throws -> RoomInviteCandidate {
+    return try FfiConverterTypeRoomInviteCandidate.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteCandidate_lower(_ value: RoomInviteCandidate) -> RustBuffer {
+    return FfiConverterTypeRoomInviteCandidate.lower(value)
+}
+
+
+public struct RoomInviteChip {
+    public var pubkeyHex: String
+    public var source: RoomInviteCandidateSource
+    public var displayName: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkeyHex: String, source: RoomInviteCandidateSource, displayName: String) {
+        self.pubkeyHex = pubkeyHex
+        self.source = source
+        self.displayName = displayName
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteChip: Sendable {}
+#endif
+
+
+extension RoomInviteChip: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteChip, rhs: RoomInviteChip) -> Bool {
+        if lhs.pubkeyHex != rhs.pubkeyHex {
+            return false
+        }
+        if lhs.source != rhs.source {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkeyHex)
+        hasher.combine(source)
+        hasher.combine(displayName)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteChip: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteChip {
+        return
+            try RoomInviteChip(
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                source: FfiConverterTypeRoomInviteCandidateSource.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteChip, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkeyHex, into: &buf)
+        FfiConverterTypeRoomInviteCandidateSource.write(value.source, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteChip_lift(_ buf: RustBuffer) throws -> RoomInviteChip {
+    return try FfiConverterTypeRoomInviteChip.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteChip_lower(_ value: RoomInviteChip) -> RustBuffer {
+    return FfiConverterTypeRoomInviteChip.lower(value)
+}
+
+
+public struct RoomInviteProjection {
+    public var selectedChips: [RoomInviteChip]
+    public var visibleFollows: [RoomInviteSuggestion]
+    public var resolvedCandidate: RoomInviteResolvedCandidate?
+    public var showEmptyFollowMessage: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(selectedChips: [RoomInviteChip], visibleFollows: [RoomInviteSuggestion], resolvedCandidate: RoomInviteResolvedCandidate?, showEmptyFollowMessage: Bool) {
+        self.selectedChips = selectedChips
+        self.visibleFollows = visibleFollows
+        self.resolvedCandidate = resolvedCandidate
+        self.showEmptyFollowMessage = showEmptyFollowMessage
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteProjection: Sendable {}
+#endif
+
+
+extension RoomInviteProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteProjection, rhs: RoomInviteProjection) -> Bool {
+        if lhs.selectedChips != rhs.selectedChips {
+            return false
+        }
+        if lhs.visibleFollows != rhs.visibleFollows {
+            return false
+        }
+        if lhs.resolvedCandidate != rhs.resolvedCandidate {
+            return false
+        }
+        if lhs.showEmptyFollowMessage != rhs.showEmptyFollowMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(selectedChips)
+        hasher.combine(visibleFollows)
+        hasher.combine(resolvedCandidate)
+        hasher.combine(showEmptyFollowMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteProjection {
+        return
+            try RoomInviteProjection(
+                selectedChips: FfiConverterSequenceTypeRoomInviteChip.read(from: &buf),
+                visibleFollows: FfiConverterSequenceTypeRoomInviteSuggestion.read(from: &buf),
+                resolvedCandidate: FfiConverterOptionTypeRoomInviteResolvedCandidate.read(from: &buf),
+                showEmptyFollowMessage: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRoomInviteChip.write(value.selectedChips, into: &buf)
+        FfiConverterSequenceTypeRoomInviteSuggestion.write(value.visibleFollows, into: &buf)
+        FfiConverterOptionTypeRoomInviteResolvedCandidate.write(value.resolvedCandidate, into: &buf)
+        FfiConverterBool.write(value.showEmptyFollowMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteProjection_lift(_ buf: RustBuffer) throws -> RoomInviteProjection {
+    return try FfiConverterTypeRoomInviteProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteProjection_lower(_ value: RoomInviteProjection) -> RustBuffer {
+    return FfiConverterTypeRoomInviteProjection.lower(value)
+}
+
+
+public struct RoomInviteProjectionInput {
+    public var query: String
+    public var follows: [String]
+    public var profiles: [ProfileMetadata]
+    public var selected: [RoomInviteCandidate]
+    public var followsLoaded: Bool
+    public var limit: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(query: String, follows: [String], profiles: [ProfileMetadata], selected: [RoomInviteCandidate], followsLoaded: Bool, limit: UInt32) {
+        self.query = query
+        self.follows = follows
+        self.profiles = profiles
+        self.selected = selected
+        self.followsLoaded = followsLoaded
+        self.limit = limit
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteProjectionInput: Sendable {}
+#endif
+
+
+extension RoomInviteProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteProjectionInput, rhs: RoomInviteProjectionInput) -> Bool {
+        if lhs.query != rhs.query {
+            return false
+        }
+        if lhs.follows != rhs.follows {
+            return false
+        }
+        if lhs.profiles != rhs.profiles {
+            return false
+        }
+        if lhs.selected != rhs.selected {
+            return false
+        }
+        if lhs.followsLoaded != rhs.followsLoaded {
+            return false
+        }
+        if lhs.limit != rhs.limit {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(query)
+        hasher.combine(follows)
+        hasher.combine(profiles)
+        hasher.combine(selected)
+        hasher.combine(followsLoaded)
+        hasher.combine(limit)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteProjectionInput {
+        return
+            try RoomInviteProjectionInput(
+                query: FfiConverterString.read(from: &buf),
+                follows: FfiConverterSequenceString.read(from: &buf),
+                profiles: FfiConverterSequenceTypeProfileMetadata.read(from: &buf),
+                selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf),
+                followsLoaded: FfiConverterBool.read(from: &buf),
+                limit: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.query, into: &buf)
+        FfiConverterSequenceString.write(value.follows, into: &buf)
+        FfiConverterSequenceTypeProfileMetadata.write(value.profiles, into: &buf)
+        FfiConverterSequenceTypeRoomInviteCandidate.write(value.selected, into: &buf)
+        FfiConverterBool.write(value.followsLoaded, into: &buf)
+        FfiConverterUInt32.write(value.limit, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteProjectionInput_lift(_ buf: RustBuffer) throws -> RoomInviteProjectionInput {
+    return try FfiConverterTypeRoomInviteProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteProjectionInput_lower(_ value: RoomInviteProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomInviteProjectionInput.lower(value)
+}
+
+
+public struct RoomInviteResolvedCandidate {
+    public var pubkeyHex: String
+    public var format: RoomInviteInputFormat
+    public var label: String
+    public var source: RoomInviteCandidateSource
+    public var displayName: String
+    public var isSelected: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkeyHex: String, format: RoomInviteInputFormat, label: String, source: RoomInviteCandidateSource, displayName: String, isSelected: Bool) {
+        self.pubkeyHex = pubkeyHex
+        self.format = format
+        self.label = label
+        self.source = source
+        self.displayName = displayName
+        self.isSelected = isSelected
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteResolvedCandidate: Sendable {}
+#endif
+
+
+extension RoomInviteResolvedCandidate: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteResolvedCandidate, rhs: RoomInviteResolvedCandidate) -> Bool {
+        if lhs.pubkeyHex != rhs.pubkeyHex {
+            return false
+        }
+        if lhs.format != rhs.format {
+            return false
+        }
+        if lhs.label != rhs.label {
+            return false
+        }
+        if lhs.source != rhs.source {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.isSelected != rhs.isSelected {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkeyHex)
+        hasher.combine(format)
+        hasher.combine(label)
+        hasher.combine(source)
+        hasher.combine(displayName)
+        hasher.combine(isSelected)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteResolvedCandidate: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteResolvedCandidate {
+        return
+            try RoomInviteResolvedCandidate(
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                format: FfiConverterTypeRoomInviteInputFormat.read(from: &buf),
+                label: FfiConverterString.read(from: &buf),
+                source: FfiConverterTypeRoomInviteCandidateSource.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                isSelected: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteResolvedCandidate, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkeyHex, into: &buf)
+        FfiConverterTypeRoomInviteInputFormat.write(value.format, into: &buf)
+        FfiConverterString.write(value.label, into: &buf)
+        FfiConverterTypeRoomInviteCandidateSource.write(value.source, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterBool.write(value.isSelected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteResolvedCandidate_lift(_ buf: RustBuffer) throws -> RoomInviteResolvedCandidate {
+    return try FfiConverterTypeRoomInviteResolvedCandidate.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteResolvedCandidate_lower(_ value: RoomInviteResolvedCandidate) -> RustBuffer {
+    return FfiConverterTypeRoomInviteResolvedCandidate.lower(value)
+}
+
+
+public struct RoomInviteSendResultProjection {
+    public var allSucceeded: Bool
+    public var allFailed: Bool
+    public var addedCount: UInt64
+    public var successToast: String
+    public var errorMessage: String
+    public var remainingSelected: [RoomInviteCandidate]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(allSucceeded: Bool, allFailed: Bool, addedCount: UInt64, successToast: String, errorMessage: String, remainingSelected: [RoomInviteCandidate]) {
+        self.allSucceeded = allSucceeded
+        self.allFailed = allFailed
+        self.addedCount = addedCount
+        self.successToast = successToast
+        self.errorMessage = errorMessage
+        self.remainingSelected = remainingSelected
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteSendResultProjection: Sendable {}
+#endif
+
+
+extension RoomInviteSendResultProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteSendResultProjection, rhs: RoomInviteSendResultProjection) -> Bool {
+        if lhs.allSucceeded != rhs.allSucceeded {
+            return false
+        }
+        if lhs.allFailed != rhs.allFailed {
+            return false
+        }
+        if lhs.addedCount != rhs.addedCount {
+            return false
+        }
+        if lhs.successToast != rhs.successToast {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        if lhs.remainingSelected != rhs.remainingSelected {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(allSucceeded)
+        hasher.combine(allFailed)
+        hasher.combine(addedCount)
+        hasher.combine(successToast)
+        hasher.combine(errorMessage)
+        hasher.combine(remainingSelected)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteSendResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSendResultProjection {
+        return
+            try RoomInviteSendResultProjection(
+                allSucceeded: FfiConverterBool.read(from: &buf),
+                allFailed: FfiConverterBool.read(from: &buf),
+                addedCount: FfiConverterUInt64.read(from: &buf),
+                successToast: FfiConverterString.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf),
+                remainingSelected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteSendResultProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.allSucceeded, into: &buf)
+        FfiConverterBool.write(value.allFailed, into: &buf)
+        FfiConverterUInt64.write(value.addedCount, into: &buf)
+        FfiConverterString.write(value.successToast, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+        FfiConverterSequenceTypeRoomInviteCandidate.write(value.remainingSelected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSendResultProjection_lift(_ buf: RustBuffer) throws -> RoomInviteSendResultProjection {
+    return try FfiConverterTypeRoomInviteSendResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSendResultProjection_lower(_ value: RoomInviteSendResultProjection) -> RustBuffer {
+    return FfiConverterTypeRoomInviteSendResultProjection.lower(value)
+}
+
+
+public struct RoomInviteSuggestion {
+    public var pubkeyHex: String
+    public var source: RoomInviteCandidateSource
+    public var secondaryLabel: String
+    public var displayName: String
+    public var isSelected: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkeyHex: String, source: RoomInviteCandidateSource, secondaryLabel: String, displayName: String, isSelected: Bool) {
+        self.pubkeyHex = pubkeyHex
+        self.source = source
+        self.secondaryLabel = secondaryLabel
+        self.displayName = displayName
+        self.isSelected = isSelected
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteSuggestion: Sendable {}
+#endif
+
+
+extension RoomInviteSuggestion: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteSuggestion, rhs: RoomInviteSuggestion) -> Bool {
+        if lhs.pubkeyHex != rhs.pubkeyHex {
+            return false
+        }
+        if lhs.source != rhs.source {
+            return false
+        }
+        if lhs.secondaryLabel != rhs.secondaryLabel {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.isSelected != rhs.isSelected {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkeyHex)
+        hasher.combine(source)
+        hasher.combine(secondaryLabel)
+        hasher.combine(displayName)
+        hasher.combine(isSelected)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteSuggestion: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSuggestion {
+        return
+            try RoomInviteSuggestion(
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                source: FfiConverterTypeRoomInviteCandidateSource.read(from: &buf),
+                secondaryLabel: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                isSelected: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteSuggestion, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkeyHex, into: &buf)
+        FfiConverterTypeRoomInviteCandidateSource.write(value.source, into: &buf)
+        FfiConverterString.write(value.secondaryLabel, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterBool.write(value.isSelected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSuggestion_lift(_ buf: RustBuffer) throws -> RoomInviteSuggestion {
+    return try FfiConverterTypeRoomInviteSuggestion.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSuggestion_lower(_ value: RoomInviteSuggestion) -> RustBuffer {
+    return FfiConverterTypeRoomInviteSuggestion.lower(value)
+}
+
+
 /**
  * A visible lane on the community home surface. Rust owns artifact/highlight
  * matching, de-duplication, activity ordering, and dormant-lane filtering;
@@ -18016,6 +18753,153 @@ extension RoomAccess: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum RoomInviteCandidateSource {
+
+    case follow
+    case paste
+}
+
+
+#if compiler(>=6)
+extension RoomInviteCandidateSource: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteCandidateSource: FfiConverterRustBuffer {
+    typealias SwiftType = RoomInviteCandidateSource
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteCandidateSource {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .follow
+
+        case 2: return .paste
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RoomInviteCandidateSource, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .follow:
+            writeInt(&buf, Int32(1))
+
+
+        case .paste:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteCandidateSource_lift(_ buf: RustBuffer) throws -> RoomInviteCandidateSource {
+    return try FfiConverterTypeRoomInviteCandidateSource.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteCandidateSource_lower(_ value: RoomInviteCandidateSource) -> RustBuffer {
+    return FfiConverterTypeRoomInviteCandidateSource.lower(value)
+}
+
+
+extension RoomInviteCandidateSource: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum RoomInviteInputFormat {
+
+    case npub
+    case nprofile
+    case hex
+}
+
+
+#if compiler(>=6)
+extension RoomInviteInputFormat: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteInputFormat: FfiConverterRustBuffer {
+    typealias SwiftType = RoomInviteInputFormat
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteInputFormat {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .npub
+
+        case 2: return .nprofile
+
+        case 3: return .hex
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RoomInviteInputFormat, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .npub:
+            writeInt(&buf, Int32(1))
+
+
+        case .nprofile:
+            writeInt(&buf, Int32(2))
+
+
+        case .hex:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteInputFormat_lift(_ buf: RustBuffer) throws -> RoomInviteInputFormat {
+    return try FfiConverterTypeRoomInviteInputFormat.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteInputFormat_lower(_ value: RoomInviteInputFormat) -> RustBuffer {
+    return FfiConverterTypeRoomInviteInputFormat.lower(value)
+}
+
+
+extension RoomInviteInputFormat: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Why a room is being recommended on the explorer. Drives the subtitle under
  * a card ("Alice + 3 you follow are here" vs. "Posts by writers you read").
@@ -19012,6 +19896,30 @@ fileprivate struct FfiConverterOptionTypeReadingFeedItem: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeRoomInviteResolvedCandidate: FfiConverterRustBuffer {
+    typealias SwiftType = RoomInviteResolvedCandidate?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeRoomInviteResolvedCandidate.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeRoomInviteResolvedCandidate.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeTranscriptSegment: FfiConverterRustBuffer {
     typealias SwiftType = TranscriptSegment?
 
@@ -19809,6 +20717,81 @@ fileprivate struct FfiConverterSequenceTypeRelayDiagnostic: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRoomInviteCandidate: FfiConverterRustBuffer {
+    typealias SwiftType = [RoomInviteCandidate]
+
+    public static func write(_ value: [RoomInviteCandidate], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRoomInviteCandidate.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomInviteCandidate] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RoomInviteCandidate]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRoomInviteCandidate.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRoomInviteChip: FfiConverterRustBuffer {
+    typealias SwiftType = [RoomInviteChip]
+
+    public static func write(_ value: [RoomInviteChip], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRoomInviteChip.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomInviteChip] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RoomInviteChip]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRoomInviteChip.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRoomInviteSuggestion: FfiConverterRustBuffer {
+    typealias SwiftType = [RoomInviteSuggestion]
+
+    public static func write(_ value: [RoomInviteSuggestion], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRoomInviteSuggestion.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomInviteSuggestion] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RoomInviteSuggestion]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRoomInviteSuggestion.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRoomLane: FfiConverterRustBuffer {
     typealias SwiftType = [RoomLane]
 
@@ -20331,6 +21314,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_explorer_curator_pubkey() != 6750) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_add_decision() != 25995) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_projection() != 27402) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_send_result() != 64450) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_rooms_from_read_authors() != 16750) {

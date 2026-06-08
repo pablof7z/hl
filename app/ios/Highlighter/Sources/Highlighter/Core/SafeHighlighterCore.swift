@@ -978,6 +978,34 @@ actor SafeHighlighterCore {
         core.decodeNpub(input: input)
     }
 
+    nonisolated func getRoomInviteProjection(
+        input: RoomInviteProjectionInput
+    ) -> RoomInviteProjection {
+        core.getRoomInviteProjection(input: input)
+    }
+
+    nonisolated func getRoomInviteAddDecision(
+        pubkeyHex: String,
+        selectedPubkeys: [String],
+        currentUserPubkey: String
+    ) -> RoomInviteAddDecision {
+        core.getRoomInviteAddDecision(
+            pubkeyHex: pubkeyHex,
+            selectedPubkeys: selectedPubkeys,
+            currentUserPubkey: currentUserPubkey
+        )
+    }
+
+    nonisolated func getRoomInviteSendResult(
+        selected: [RoomInviteCandidate],
+        failedPubkeys: [String]
+    ) -> RoomInviteSendResultProjection {
+        core.getRoomInviteSendResult(
+            selected: selected,
+            failedPubkeys: failedPubkeys
+        )
+    }
+
     func isFollowing(targetPubkeyHex: String) async -> BoolOutcome {
         await core.isFollowing(targetPubkeyHex: targetPubkeyHex)
     }
