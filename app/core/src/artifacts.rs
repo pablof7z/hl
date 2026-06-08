@@ -1,6 +1,8 @@
 //! Artifact share (kind:11) building, publishing, and querying. Ports
 //! `web/src/lib/ndk/artifacts.ts`.
 
+use std::collections::BTreeMap;
+
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
@@ -10,6 +12,9 @@ use crate::nostr_runtime::NostrRuntime;
 
 /// kind:11 "Thread" is used both for artifact shares and for discussions.
 const KIND_ARTIFACT_SHARE: u16 = 11;
+const LOCAL_SCAN_MULTIPLIER: i32 = 8;
+const LOCAL_SCAN_FLOOR: i32 = 256;
+const LOCAL_SCAN_CEILING: i32 = 4096;
 
 const TRACKING_PARAMS: &[&str] = &[
     "fbclid",
@@ -283,13 +288,129 @@ pub fn query_for_group(
 
 /// Simple title/author substring search over cached artifacts.
 pub fn search_cached(
-    _query: &str,
-    _limit: u32,
+    ndb: &Ndb,
+    query: &str,
+    limit: u32,
 ) -> Result<Vec<ArtifactRecord>, CoreError> {
-    Ok(Vec::new())
+    let q = query.trim();
+    if q.is_empty() || limit == 0 {
+        return Ok(Vec::new());
+    }
+
+    let txn = Transaction::new(ndb)
+        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let filter = NdbFilter::new()
+        .kinds([KIND_ARTIFACT_SHARE as u64])
+        .build();
+    let results = ndb
+        .query(&txn, &[filter], scan_cap(limit))
+        .map_err(|e| CoreError::Cache(format!("query artifact search: {e}")))?;
+
+    let mut best_by_reference: BTreeMap<String, (u8, ArtifactRecord)> = BTreeMap::new();
+    for r in &results {
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(json) = note.json() else { continue };
+        let Ok(event) = Event::from_json(&json) else { continue };
+        let Some(group_id) = first_tag_value(&event, "h") else { continue };
+        if crate::discussions::is_discussion(&event) {
+            continue;
+        }
+        let Some(record) = artifact_record_from_event(&event, group_id) else { continue };
+        let Some(rank) = artifact_match_rank(&record, q) else { continue };
+        let key = artifact_identity(&record);
+        match best_by_reference.get(&key) {
+            Some((existing_rank, existing))
+                if *existing_rank < rank
+                    || (*existing_rank == rank
+                        && existing.created_at.unwrap_or(0) >= record.created_at.unwrap_or(0)) => {}
+            _ => {
+                best_by_reference.insert(key, (rank, record));
+            }
+        }
+    }
+
+    let mut records: Vec<(u8, ArtifactRecord)> = best_by_reference.into_values().collect();
+    records.sort_by(|(rank_a, a), (rank_b, b)| {
+        rank_a
+            .cmp(rank_b)
+            .then_with(|| b.created_at.unwrap_or(0).cmp(&a.created_at.unwrap_or(0)))
+    });
+    records.truncate(limit as usize);
+    Ok(records.into_iter().map(|(_, record)| record).collect())
 }
 
 // -- Event helpers -----------------------------------------------------------
+
+fn scan_cap(limit: u32) -> i32 {
+    let raw = (limit as i32).saturating_mul(LOCAL_SCAN_MULTIPLIER);
+    raw.clamp(LOCAL_SCAN_FLOOR, LOCAL_SCAN_CEILING)
+}
+
+fn contains_ci(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    haystack.to_lowercase().contains(&needle.to_lowercase())
+}
+
+fn starts_ci(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    haystack
+        .to_lowercase()
+        .starts_with(&needle.to_lowercase())
+}
+
+fn artifact_match_rank(record: &ArtifactRecord, query: &str) -> Option<u8> {
+    let preview = &record.preview;
+    if starts_ci(&preview.title, query) {
+        return Some(0);
+    }
+    if starts_ci(&preview.author, query) {
+        return Some(1);
+    }
+    if contains_ci(&preview.title, query) {
+        return Some(2);
+    }
+    if contains_ci(&preview.author, query) {
+        return Some(3);
+    }
+    if contains_ci(&record.note, query) || contains_ci(&preview.description, query) {
+        return Some(4);
+    }
+    if contains_ci(&preview.url, query)
+        || contains_ci(&preview.source, query)
+        || contains_ci(&preview.catalog_id, query)
+        || contains_ci(&preview.catalog_kind, query)
+        || contains_ci(&preview.reference_tag_value, query)
+        || contains_ci(&preview.reference_kind, query)
+    {
+        return Some(5);
+    }
+    None
+}
+
+fn artifact_identity(record: &ArtifactRecord) -> String {
+    let preview = &record.preview;
+    let name = preview.reference_tag_name.trim();
+    let value = preview.reference_tag_value.trim();
+    if !name.is_empty() && !value.is_empty() {
+        return format!("{name}:{value}");
+    }
+    let name = preview.highlight_tag_name.trim();
+    let value = preview.highlight_tag_value.trim();
+    if !name.is_empty() && !value.is_empty() {
+        return format!("{name}:{value}");
+    }
+    if !preview.url.trim().is_empty() {
+        return format!("r:{}", preview.url.trim());
+    }
+    if !preview.id.trim().is_empty() {
+        return format!("d:{}", preview.id.trim());
+    }
+    record.share_event_id.clone()
+}
 
 pub(crate) fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
     for tag in event.tags.iter() {
@@ -380,6 +501,11 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
                 .unwrap_or_default()
         });
 
+    let (highlight_tag_name, highlight_tag_value) =
+        highlight_reference_for_artifact(&ref_name, &ref_value, &k, &url);
+    let highlight_reference_key =
+        reference_key_for_tag(&highlight_tag_name, &highlight_tag_value);
+
     let preview = ArtifactPreview {
         id: d,
         url,
@@ -405,9 +531,9 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
         reference_tag_name: ref_name.clone(),
         reference_tag_value: ref_value,
         reference_kind: k,
-        highlight_tag_name: String::new(),
-        highlight_tag_value: String::new(),
-        highlight_reference_key: String::new(),
+        highlight_tag_name,
+        highlight_tag_value,
+        highlight_reference_key,
         chapters: read_chapters(event),
     };
 
@@ -419,6 +545,40 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
         created_at: Some(event.created_at.as_secs()),
         note: event.content.clone(),
     })
+}
+
+fn highlight_reference_for_artifact(
+    reference_tag_name: &str,
+    reference_tag_value: &str,
+    reference_kind: &str,
+    url: &str,
+) -> (String, String) {
+    let reference_tag_name = reference_tag_name.trim();
+    let reference_tag_value = reference_tag_value.trim();
+    match reference_tag_name {
+        "a" | "e" if !reference_tag_value.is_empty() => {
+            (reference_tag_name.to_string(), reference_tag_value.to_string())
+        }
+        "i" if is_external_content_reference(reference_tag_value, reference_kind) => {
+            (reference_tag_name.to_string(), reference_tag_value.to_string())
+        }
+        _ if !url.trim().is_empty() => ("r".to_string(), url.trim().to_string()),
+        "i" if !reference_tag_value.is_empty() => {
+            (reference_tag_name.to_string(), reference_tag_value.to_string())
+        }
+        _ => (String::new(), String::new()),
+    }
+}
+
+fn is_external_content_reference(value: &str, kind: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    let kind = kind.to_ascii_lowercase();
+    value.starts_with("isbn:")
+        || value.starts_with("podcast:")
+        || value.starts_with("spotify:")
+        || kind.starts_with("isbn")
+        || kind.starts_with("podcast")
+        || kind.starts_with("spotify")
 }
 
 // -- URL helpers -------------------------------------------------------------
@@ -966,14 +1126,64 @@ mod tests {
     }
 
     fn make_share(keys: &Keys, group_id: &str, d: &str, title: &str) -> Event {
-        EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), "")
-            .tags(vec![
-                Tag::parse(vec!["h".to_string(), group_id.to_string()]).unwrap(),
-                Tag::identifier(d),
-                Tag::parse(vec!["title".to_string(), title.to_string()]).unwrap(),
-                Tag::parse(vec!["source".to_string(), "article".to_string()]).unwrap(),
-                Tag::parse(vec!["r".to_string(), "https://example.com/post".to_string()]).unwrap(),
-            ])
+        make_searchable_share(
+            keys,
+            group_id,
+            d,
+            title,
+            "",
+            &format!("https://example.com/{d}"),
+            "article",
+            "",
+            "",
+            1_000,
+        )
+    }
+
+    fn make_searchable_share(
+        keys: &Keys,
+        group_id: &str,
+        d: &str,
+        title: &str,
+        author: &str,
+        url: &str,
+        source: &str,
+        catalog_id: &str,
+        note: &str,
+        created_at: u64,
+    ) -> Event {
+        let mut tags = vec![
+            Tag::parse(vec!["h".to_string(), group_id.to_string()]).unwrap(),
+            Tag::identifier(d),
+            Tag::parse(vec!["title".to_string(), title.to_string()]).unwrap(),
+            Tag::parse(vec!["source".to_string(), source.to_string()]).unwrap(),
+        ];
+        if !author.is_empty() {
+            tags.push(Tag::parse(vec!["author".to_string(), author.to_string()]).unwrap());
+        }
+        if !catalog_id.is_empty() {
+            if !url.is_empty() {
+                tags.push(
+                    Tag::parse(vec![
+                        "i".to_string(),
+                        catalog_id.to_string(),
+                        url.to_string(),
+                    ])
+                    .unwrap(),
+                );
+            } else {
+                tags.push(Tag::parse(vec!["i".to_string(), catalog_id.to_string()]).unwrap());
+            }
+            let kind = catalog_id.split(':').next().unwrap_or("web");
+            tags.push(Tag::parse(vec!["k".to_string(), kind.to_string()]).unwrap());
+        }
+        if !url.is_empty() {
+            tags.push(Tag::parse(vec!["r".to_string(), url.to_string()]).unwrap());
+        }
+
+        EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), note)
+            .tags(tags)
+            .custom_created_at(Timestamp::from(created_at))
             .sign_with_keys(keys)
             .expect("sign")
     }
@@ -1042,5 +1252,180 @@ mod tests {
         wait_for_ndb();
         let records = query_for_group(&ndb, "alpha", 3).expect("query");
         assert_eq!(records.len(), 3);
+    }
+
+    #[test]
+    fn artifact_record_sets_publishable_highlight_reference_for_isbn() {
+        let keys = Keys::generate();
+        let event = make_searchable_share(
+            &keys,
+            "books",
+            "book-1",
+            "The Rust Book",
+            "Steve Klabnik",
+            "https://openlibrary.org/isbn/9781593278281",
+            "book",
+            "isbn:9781593278281",
+            "",
+            1_000,
+        );
+
+        let record = artifact_record_from_event(&event, "books").expect("record");
+        assert_eq!(record.preview.reference_tag_name, "i");
+        assert_eq!(record.preview.reference_tag_value, "isbn:9781593278281");
+        assert_eq!(record.preview.highlight_tag_name, "i");
+        assert_eq!(record.preview.highlight_tag_value, "isbn:9781593278281");
+        assert_eq!(record.preview.highlight_reference_key, "i:isbn:9781593278281");
+    }
+
+    #[test]
+    fn artifact_record_uses_url_highlight_reference_for_web_share() {
+        let preview = build_preview("https://example.com/post").unwrap();
+        let keys = Keys::generate();
+        let event = build_share_event("room-a", &preview, None)
+            .unwrap()
+            .sign_with_keys(&keys)
+            .expect("sign");
+
+        let record = artifact_record_from_event(&event, "room-a").expect("record");
+        assert_eq!(record.preview.reference_tag_name, "i");
+        assert_eq!(record.preview.reference_tag_value, "https://example.com/post");
+        assert_eq!(record.preview.reference_kind, "web");
+        assert_eq!(record.preview.highlight_tag_name, "r");
+        assert_eq!(record.preview.highlight_tag_value, "https://example.com/post");
+        assert_eq!(record.preview.highlight_reference_key, "r:https://example.com/post");
+    }
+
+    #[test]
+    fn search_cached_noops_for_blank_or_zero_limit() {
+        let (ndb, _tmp) = isolated_ndb();
+        assert!(search_cached(&ndb, "   ", 20).unwrap().is_empty());
+        assert!(search_cached(&ndb, "rust", 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn search_cached_matches_title_author_note_and_reference() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        let rust_book = make_searchable_share(
+            &keys,
+            "books",
+            "rust-book",
+            "The Rust Programming Language",
+            "Steve Klabnik",
+            "https://openlibrary.org/isbn/9781593278281",
+            "book",
+            "isbn:9781593278281",
+            "Systems programming study group",
+            2_000,
+        );
+        let management = make_searchable_share(
+            &keys,
+            "books",
+            "high-output",
+            "High Output Management",
+            "Andrew Grove",
+            "https://openlibrary.org/isbn/9780679762881",
+            "book",
+            "isbn:9780679762881",
+            "",
+            1_000,
+        );
+        ingest(&ndb, &rust_book);
+        ingest(&ndb, &management);
+        wait_for_ndb();
+
+        let by_title = search_cached(&ndb, "RUST programming", 20).expect("title search");
+        assert_eq!(by_title.len(), 1);
+        assert_eq!(by_title[0].preview.title, "The Rust Programming Language");
+
+        let by_author = search_cached(&ndb, "grove", 20).expect("author search");
+        assert_eq!(by_author.len(), 1);
+        assert_eq!(by_author[0].preview.title, "High Output Management");
+
+        let by_note = search_cached(&ndb, "study group", 20).expect("note search");
+        assert_eq!(by_note.len(), 1);
+        assert_eq!(by_note[0].preview.title, "The Rust Programming Language");
+
+        let by_reference = search_cached(&ndb, "9780679762881", 20).expect("reference search");
+        assert_eq!(by_reference.len(), 1);
+        assert_eq!(by_reference[0].preview.highlight_reference_key, "i:isbn:9780679762881");
+    }
+
+    #[test]
+    fn search_cached_excludes_discussions_and_honors_limit() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        let discussion = EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), "rust thread")
+            .tags(vec![
+                Tag::parse(vec!["h".to_string(), "books".to_string()]).unwrap(),
+                Tag::identifier("discussion"),
+                Tag::parse(vec!["t".to_string(), "discussion".to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Rust Discussion".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign");
+        ingest(&ndb, &discussion);
+        for i in 0..3 {
+            ingest(
+                &ndb,
+                &make_searchable_share(
+                    &keys,
+                    "books",
+                    &format!("rust-{i}"),
+                    &format!("Rust Volume {i}"),
+                    "",
+                    &format!("https://example.com/rust-{i}"),
+                    "book",
+                    &format!("isbn:978000000000{i}"),
+                    "",
+                    1_000 + i,
+                ),
+            );
+        }
+        wait_for_ndb();
+
+        let hits = search_cached(&ndb, "rust", 2).expect("search");
+        assert_eq!(hits.len(), 2);
+        assert!(hits.iter().all(|hit| hit.preview.title != "Rust Discussion"));
+    }
+
+    #[test]
+    fn search_cached_dedupes_references_and_keeps_best_record() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        let older = make_searchable_share(
+            &keys,
+            "alpha",
+            "clean-older",
+            "Clean Architecture",
+            "Robert Martin",
+            "https://openlibrary.org/isbn/9780134494166",
+            "book",
+            "isbn:9780134494166",
+            "",
+            1_000,
+        );
+        let newer = make_searchable_share(
+            &keys,
+            "bravo",
+            "clean-newer",
+            "Clean Architecture",
+            "Robert C. Martin",
+            "https://openlibrary.org/isbn/9780134494166",
+            "book",
+            "isbn:9780134494166",
+            "",
+            2_000,
+        );
+        ingest(&ndb, &older);
+        ingest(&ndb, &newer);
+        wait_for_ndb();
+
+        let hits = search_cached(&ndb, "clean architecture", 20).expect("search");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].group_id, "bravo");
+        assert_eq!(hits[0].created_at, Some(2_000));
+        assert_eq!(hits[0].preview.author, "Robert C. Martin");
     }
 }

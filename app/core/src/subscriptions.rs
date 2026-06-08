@@ -29,9 +29,7 @@ use crate::groups::{
 use crate::feedback::{
     ensure_feedback_relay, FEEDBACK_RELAY, KIND_FEEDBACK_NOTE, KIND_FEEDBACK_THREAD_META,
 };
-use crate::models::{
-    ArtifactPreview, ArtifactRecord, HighlightRecord, HydratedHighlight,
-};
+use crate::models::{ArtifactRecord, HighlightRecord, HydratedHighlight};
 use crate::nostr_runtime::{pin_relay_for_read, NostrRuntime};
 use crate::outbox;
 use crate::reads::INTERACTION_KINDS;
@@ -1441,86 +1439,10 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
     }
 }
 
-/// kind:11 → ArtifactRecord for live subscription deltas. Mirrors the
-/// tag-reading shape of `artifact_record_from_event` so podcast shares
-/// arriving over a live sub render the same as cached ones.
+/// kind:11 → ArtifactRecord for live subscription deltas. Delegates to the
+/// cached artifact parser so every view sees the same projection.
 fn minimal_artifact_record(event: &Event, group_id: &str) -> Option<ArtifactRecord> {
-    let title = first_tag_value(event, "title").unwrap_or("").to_string();
-    let url = first_tag_value(event, "r").unwrap_or("").to_string();
-    let source = first_tag_value(event, "source").unwrap_or("").to_string();
-    let author = first_tag_value(event, "author").unwrap_or("").to_string();
-    let image = first_tag_value(event, "image").unwrap_or("").to_string();
-    let summary = first_tag_value(event, "summary").unwrap_or("").to_string();
-    let d = first_tag_value(event, "d").unwrap_or("").to_string();
-    let k = first_tag_value(event, "k").unwrap_or("").to_string();
-
-    // Reference tag: `i` (catalog) takes precedence over `a`/`e`.
-    let (ref_name, ref_value) = if let Some(i) = first_tag_value(event, "i") {
-        ("i".to_string(), i.to_string())
-    } else if let Some(a) = first_tag_value(event, "a") {
-        ("a".to_string(), a.to_string())
-    } else if let Some(e) = first_tag_value(event, "e") {
-        ("e".to_string(), e.to_string())
-    } else {
-        (String::new(), String::new())
-    };
-
-    let podcast_item_guid = first_tag_value(event, "podcast_item_guid")
-        .map(str::to_string)
-        .unwrap_or_else(|| {
-            ref_value
-                .strip_prefix("podcast:item:guid:")
-                .map(str::to_string)
-                .unwrap_or_default()
-        });
-    let podcast_guid = first_tag_value(event, "podcast_guid")
-        .map(str::to_string)
-        .unwrap_or_else(|| {
-            ref_value
-                .strip_prefix("podcast:guid:")
-                .map(str::to_string)
-                .unwrap_or_default()
-        });
-
-    let preview = ArtifactPreview {
-        id: d.clone(),
-        url,
-        title,
-        author,
-        image,
-        description: summary,
-        source,
-        domain: String::new(),
-        catalog_id: if ref_name == "i" { ref_value.clone() } else { String::new() },
-        catalog_kind: k.clone(),
-        podcast_guid,
-        podcast_item_guid,
-        podcast_show_title: first_tag_value(event, "podcast_show_title")
-            .unwrap_or("")
-            .to_string(),
-        audio_url: first_tag_value(event, "audio").unwrap_or("").to_string(),
-        audio_preview_url: first_tag_value(event, "audio_preview").unwrap_or("").to_string(),
-        transcript_url: first_tag_value(event, "transcript").unwrap_or("").to_string(),
-        feed_url: first_tag_value(event, "feed").unwrap_or("").to_string(),
-        published_at: first_tag_value(event, "published_at").unwrap_or("").to_string(),
-        duration_seconds: first_tag_value(event, "duration").and_then(|v| v.parse::<i64>().ok()),
-        reference_tag_name: ref_name.clone(),
-        reference_tag_value: ref_value.clone(),
-        reference_kind: k,
-        highlight_tag_name: String::new(),
-        highlight_tag_value: String::new(),
-        highlight_reference_key: String::new(),
-        chapters: crate::artifacts::read_chapters(event),
-    };
-
-    Some(ArtifactRecord {
-        preview,
-        group_id: group_id.to_string(),
-        share_event_id: event.id.to_hex(),
-        pubkey: event.pubkey.to_hex(),
-        created_at: Some(event.created_at.as_secs()),
-        note: event.content.clone(),
-    })
+    crate::artifacts::artifact_record_from_event(event, group_id)
 }
 
 /// Minimal kind:9802 → HighlightRecord.

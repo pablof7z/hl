@@ -10345,7 +10345,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_articles() != 31180) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_artifacts() != 48576) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_search_artifacts() != 51306) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_communities() != 5207) {

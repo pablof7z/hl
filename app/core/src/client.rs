@@ -855,10 +855,10 @@ impl HighlighterCore {
 
     pub async fn search_artifacts(
         &self,
-        _query: String,
-        _limit: u32,
+        query: String,
+        limit: u32,
     ) -> Result<Vec<ArtifactRecord>, CoreError> {
-        Err(CoreError::NotInitialized)
+        crate::artifacts::search_cached(self.runtime.ndb(), &query, limit)
     }
 
     // -- Search: across local nostrdb (all four surfaces) + NIP-50 relay ---
