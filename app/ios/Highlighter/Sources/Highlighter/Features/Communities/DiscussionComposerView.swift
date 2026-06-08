@@ -89,17 +89,17 @@ struct DiscussionComposerView: View {
             // empty. Once build_preview lands, wire it here.
         }
 
-        do {
-            let record = try await app.safeCore.publishDiscussion(
-                groupId: groupId,
-                title: title.trimmingCharacters(in: .whitespaces),
-                body: messageBody,
-                attachment: attachment
-            )
-            onPublished(record)
-            dismiss()
-        } catch {
-            errorMessage = (error as? CoreError).map { "\($0)" } ?? "Failed to publish."
+        let outcome = await app.safeCore.publishDiscussion(
+            groupId: groupId,
+            title: title.trimmingCharacters(in: .whitespaces),
+            body: messageBody,
+            attachment: attachment
+        )
+        guard outcome.error.isEmpty, let record = outcome.value else {
+            errorMessage = outcome.error.isEmpty ? "Failed to publish." : outcome.error
+            return
         }
+        onPublished(record)
+        dismiss()
     }
 }

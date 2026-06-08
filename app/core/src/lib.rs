@@ -51,14 +51,16 @@ pub use client::HighlighterCore;
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
-    ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactPreview, ArtifactRecord,
-    BlossomUpload, BookmarkSetListOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome,
-    ChatMessageRecord, CommentRecord, CommunitySummary, CurrentUser, DiscussionAttachment,
-    DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightDraft,
-    HighlightRecord, HydratedHighlight, MutationOutcome, NostrConnectOptions, PictureDraft,
-    PictureRecord, PodcastPositionRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
-    RoomRecommendationReason, StringListOutcome, SubscriptionOutcome, WebBookmarkListOutcome,
-    WebBookmarkRecord, WhatsNewEntriesOutcome,
+    ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactOutcome, ArtifactPreview,
+    ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookmarkSetListOutcome,
+    BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, ChatMessageOutcome, ChatMessageRecord,
+    CommentOutcome, CommentRecord, CommunitySummary, CurrentUser, DiscussionAttachment,
+    DiscussionOutcome, DiscussionRecord, FeedbackEventOutcome, FeedbackEventRecord,
+    FeedbackThreadRecord, GeneratedAccount, HighlightDraft, HighlightListOutcome,
+    HighlightOutcome, HighlightRecord, HydratedHighlight, MutationOutcome, NostrConnectOptions,
+    PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileMetadata,
+    ReadingFeedItem, RoomRecommendation, RoomRecommendationReason, StringListOutcome,
+    SubscriptionOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
 pub use podcast_transcript::TranscriptSegment;

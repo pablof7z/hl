@@ -200,30 +200,33 @@ struct ShareToCommunitySheet: View {
         publishingId = groupId
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         Task {
-            do {
-                switch target.kind {
-                case .artifactShare(let preview):
-                    _ = try await app.safeCore.publishArtifact(
-                        preview: preview,
-                        groupId: groupId,
-                        note: trimmedNote.isEmpty ? nil : trimmedNote
-                    )
-                case .highlightRepost(let eventId, let authorPubkey, let relayHint):
-                    try await app.safeCore.shareHighlightToRoom(
-                        highlightId: eventId,
-                        highlightAuthorPubkeyHex: authorPubkey,
-                        highlightRelayUrl: relayHint,
-                        targetGroupId: groupId
-                    )
+            let publishError: String?
+            switch target.kind {
+            case .artifactShare(let preview):
+                let outcome = await app.safeCore.publishArtifact(
+                    preview: preview,
+                    groupId: groupId,
+                    note: trimmedNote.isEmpty ? nil : trimmedNote
+                )
+                publishError = outcome.error.isEmpty ? nil : outcome.error
+            case .highlightRepost(let eventId, let authorPubkey, let relayHint):
+                let outcome = await app.safeCore.shareHighlightToRoom(
+                    highlightId: eventId,
+                    highlightAuthorPubkeyHex: authorPubkey,
+                    highlightRelayUrl: relayHint,
+                    targetGroupId: groupId
+                )
+                publishError = outcome.error.isEmpty ? nil : outcome.error
+            }
+            if let publishError {
+                await MainActor.run {
+                    publishingId = nil
+                    errorMessage = publishError
                 }
+            } else {
                 await MainActor.run {
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     dismiss()
-                }
-            } catch {
-                await MainActor.run {
-                    publishingId = nil
-                    errorMessage = error.localizedDescription
                 }
             }
         }

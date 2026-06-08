@@ -125,22 +125,23 @@ final class CommentsStore {
     /// kind:1111 comment. Optimistically inserts the new record and
     /// rebuilds the tree.
     @discardableResult
-    func publish(content: String, parentEventId: String?) async throws -> CommentRecord {
+    func publish(content: String, parentEventId: String?) async -> CommentOutcome {
         guard let core, let artifact else {
-            throw CoreError.NotInitialized(message: "store not started")
+            return CommentOutcome(value: nil, error: "store not started")
         }
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw CoreError.InvalidInput(message: "comment body must not be empty")
+            return CommentOutcome(value: nil, error: "comment body must not be empty")
         }
 
-        let record = try await core.publishComment(
+        let outcome = await core.publishComment(
             rootTagName: artifact.rootTagName,
             rootTagValue: artifact.rootTagValue,
             rootKind: artifact.rootKind,
             parentEventId: parentEventId,
             content: trimmed
         )
+        guard outcome.error.isEmpty, let record = outcome.value else { return outcome }
 
         // Optimistic insert
         if !records.contains(where: { $0.eventId == record.eventId }) {
@@ -151,7 +152,7 @@ final class CommentsStore {
             )
         }
         setDraft("", forParent: parentEventId)
-        return record
+        return outcome
     }
 
     // MARK: - Like (kind:7)

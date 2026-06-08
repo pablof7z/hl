@@ -284,7 +284,7 @@ final class PodcastPlayerStore {
         note: String,
         segments: [TranscriptSegment],
         core: SafeHighlighterCore
-    ) async throws -> HighlightRecord {
+    ) async -> HighlightOutcome {
         isPublishing = true
         publishError = nil
         defer { isPublishing = false }
@@ -305,20 +305,21 @@ final class PodcastPlayerStore {
             image: nil
         )
 
-        do {
-            let results = try await core.publishHighlightsAndShare(
-                artifact: artifact,
-                drafts: [draft],
-                targetGroupId: targetGroupId
-            )
-            guard let first = results.first else {
-                throw PodcastPlayerError.emptyResult
-            }
-            return first
-        } catch {
-            publishError = "\(error)"
-            throw error
+        let outcome = await core.publishHighlightsAndShare(
+            artifact: artifact,
+            drafts: [draft],
+            targetGroupId: targetGroupId
+        )
+        guard outcome.error.isEmpty else {
+            publishError = outcome.error
+            return HighlightOutcome(value: nil, error: outcome.error)
         }
+        guard let first = outcome.values.first else {
+            let error = PodcastPlayerError.emptyResult.errorDescription ?? "No highlight returned from publish."
+            publishError = error
+            return HighlightOutcome(value: nil, error: error)
+        }
+        return HighlightOutcome(value: first, error: "")
     }
 
     // MARK: - Transcript

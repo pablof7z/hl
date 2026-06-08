@@ -68,23 +68,20 @@ struct FeedbackNewThreadView: View {
         errorMessage = nil
         defer { isPublishing = false }
 
-        do {
-            let agent = await store.resolveAgentPubkey()
-            let record = try await app.safeCore.publishFeedbackNote(
-                coordinate: FeedbackProject.coordinate,
-                agentPubkey: agent,
-                parentEventId: nil,
-                body: draft
-            )
-            store.optimisticallyInsert(rootEvent: record)
-            await store.refreshThreads()
-            dismiss()
-            onSent(false)
-        } catch {
-            errorMessage =
-                (error as? LocalizedError)?.errorDescription
-                ?? (error as? CoreError).map { "\($0)" }
-                ?? "\(error)"
+        let agent = await store.resolveAgentPubkey()
+        let outcome = await app.safeCore.publishFeedbackNote(
+            coordinate: FeedbackProject.coordinate,
+            agentPubkey: agent,
+            parentEventId: nil,
+            body: draft
+        )
+        guard outcome.error.isEmpty, let record = outcome.value else {
+            errorMessage = outcome.error.isEmpty ? "Failed to publish." : outcome.error
+            return
         }
+        store.optimisticallyInsert(rootEvent: record)
+        await store.refreshThreads()
+        dismiss()
+        onSent(false)
     }
 }

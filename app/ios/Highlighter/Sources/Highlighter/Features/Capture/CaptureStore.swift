@@ -134,16 +134,20 @@ final class CaptureStore {
                 // The imeta alt is a one-line summary; flatten the markdown
                 // for it (paragraph breaks → spaces).
                 let altText = flattenForAlt(markdown)
-                let uploaded = try await upload(processed: processed, alt: altText)
-                self.upload = BlossomUpload(
-                    url: uploaded.url,
-                    sha256Hex: uploaded.sha256Hex,
-                    mime: uploaded.mime,
-                    sizeBytes: uploaded.sizeBytes,
-                    width: uploaded.width,
-                    height: uploaded.height,
-                    alt: altText
-                )
+                let uploadOutcome = await upload(processed: processed, alt: altText)
+                if uploadOutcome.error.isEmpty, let uploaded = uploadOutcome.value {
+                    self.upload = BlossomUpload(
+                        url: uploaded.url,
+                        sha256Hex: uploaded.sha256Hex,
+                        mime: uploaded.mime,
+                        sizeBytes: uploaded.sizeBytes,
+                        width: uploaded.width,
+                        height: uploaded.height,
+                        alt: altText
+                    )
+                } else {
+                    self.uploadError = uploadOutcome.error
+                }
                 self.phase = .reviewing
             } catch {
                 // OCR alone never fails here (it returns []); this catches
@@ -254,66 +258,83 @@ final class CaptureStore {
 
         phase = .publishing
         Task {
-            do {
-                if !quote.isEmpty, let selection {
-                    let artifact = try await resolveArtifact(selection, groupId: groupId)
-                    let draft = HighlightDraft(
-                        quote: quote,
-                        context: stashedContext,
-                        note: trimmedNote,
-                        clipStartSeconds: nil,
-                        clipEndSeconds: nil,
-                        clipSpeaker: "",
-                        clipTranscriptSegmentIds: [],
-                        image: imageWithAlt
-                    )
-                    if let groupId {
-                        let records = try await safeCore.publishHighlightsAndShare(
-                            artifact: artifact,
-                            drafts: [draft],
-                            targetGroupId: groupId
-                        )
-                        self.phase = .done(records.first?.eventId)
-                    } else {
-                        let record = try await safeCore.publishHighlight(draft: draft, artifact: artifact)
-                        self.phase = .done(record.eventId)
-                    }
-                } else {
-                    let artifactForPicture: ArtifactRecord?
-                    switch selection {
-                    case .existing(let record):
-                        artifactForPicture = record
-                    case .pending(let preview):
-                        if let groupId {
-                            artifactForPicture = try await safeCore.publishArtifact(
-                                preview: preview,
-                                groupId: groupId,
-                                note: nil
-                            )
-                        } else {
-                            artifactForPicture = ArtifactRecord(
-                                preview: preview,
-                                groupId: "",
-                                shareEventId: "",
-                                pubkey: "",
-                                createdAt: nil,
-                                note: ""
-                            )
-                        }
-                    case nil:
-                        artifactForPicture = nil
-                    }
-                    let draft = PictureDraft(
-                        image: imageWithAlt,
-                        note: trimmedNote,
-                        artifact: artifactForPicture,
+            if !quote.isEmpty, let selection {
+                let artifactOutcome = await resolveArtifact(selection, groupId: groupId)
+                guard artifactOutcome.error.isEmpty, let artifact = artifactOutcome.value else {
+                    self.phase = .error(artifactOutcome.error)
+                    return
+                }
+                let draft = HighlightDraft(
+                    quote: quote,
+                    context: stashedContext,
+                    note: trimmedNote,
+                    clipStartSeconds: nil,
+                    clipEndSeconds: nil,
+                    clipSpeaker: "",
+                    clipTranscriptSegmentIds: [],
+                    image: imageWithAlt
+                )
+                if let groupId {
+                    let outcome = await safeCore.publishHighlightsAndShare(
+                        artifact: artifact,
+                        drafts: [draft],
                         targetGroupId: groupId
                     )
-                    let record = try await safeCore.publishPicture(draft)
+                    guard outcome.error.isEmpty else {
+                        self.phase = .error(outcome.error)
+                        return
+                    }
+                    self.phase = .done(outcome.values.first?.eventId)
+                } else {
+                    let outcome = await safeCore.publishHighlight(draft: draft, artifact: artifact)
+                    guard outcome.error.isEmpty, let record = outcome.value else {
+                        self.phase = .error(outcome.error)
+                        return
+                    }
                     self.phase = .done(record.eventId)
                 }
-            } catch {
-                self.phase = .error(error.localizedDescription)
+            } else {
+                let artifactForPicture: ArtifactRecord?
+                switch selection {
+                case .existing(let record):
+                    artifactForPicture = record
+                case .pending(let preview):
+                    if let groupId {
+                        let outcome = await safeCore.publishArtifact(
+                            preview: preview,
+                            groupId: groupId,
+                            note: nil
+                        )
+                        guard outcome.error.isEmpty, let artifact = outcome.value else {
+                            self.phase = .error(outcome.error)
+                            return
+                        }
+                        artifactForPicture = artifact
+                    } else {
+                        artifactForPicture = ArtifactRecord(
+                            preview: preview,
+                            groupId: "",
+                            shareEventId: "",
+                            pubkey: "",
+                            createdAt: nil,
+                            note: ""
+                        )
+                    }
+                case nil:
+                    artifactForPicture = nil
+                }
+                let draft = PictureDraft(
+                    image: imageWithAlt,
+                    note: trimmedNote,
+                    artifact: artifactForPicture,
+                    targetGroupId: groupId
+                )
+                let outcome = await safeCore.publishPicture(draft)
+                guard outcome.error.isEmpty, let record = outcome.value else {
+                    self.phase = .error(outcome.error)
+                    return
+                }
+                self.phase = .done(record.eventId)
             }
         }
     }
@@ -322,26 +343,26 @@ final class CaptureStore {
     /// For `.existing`, returns as-is. For `.pending` with a group, publishes
     /// the kind:11 artifact share first; without a group, synthesises a record
     /// from the preview so the highlight event can carry the reference tags.
-    private func resolveArtifact(_ selection: BookSelection, groupId: String?) async throws -> ArtifactRecord {
+    private func resolveArtifact(_ selection: BookSelection, groupId: String?) async -> ArtifactOutcome {
         switch selection {
         case .existing(let record):
-            return record
+            return ArtifactOutcome(value: record, error: "")
         case .pending(let preview):
             if let groupId {
-                return try await safeCore.publishArtifact(
+                return await safeCore.publishArtifact(
                     preview: preview,
                     groupId: groupId,
                     note: nil
                 )
             } else {
-                return ArtifactRecord(
+                return ArtifactOutcome(value: ArtifactRecord(
                     preview: preview,
                     groupId: "",
                     shareEventId: "",
                     pubkey: "",
                     createdAt: nil,
                     note: ""
-                )
+                ), error: "")
             }
         }
     }
@@ -386,8 +407,8 @@ final class CaptureStore {
     private func upload(
         processed: ImageProcessing.Result,
         alt: String
-    ) async throws -> BlossomUpload {
-        try await safeCore.uploadPhoto(
+    ) async -> BlossomUploadOutcome {
+        await safeCore.uploadPhoto(
             bytes: processed.data,
             mime: processed.mime,
             width: UInt32(processed.width),
@@ -426,24 +447,22 @@ final class CaptureStore {
         uploadError = nil
 
         Task {
-            do {
-                let altText = flattenForAlt(ocrMarkdown)
-                let uploaded = try await upload(processed: processed, alt: altText)
-                guard generation == self.uploadGeneration else { return }
-                self.upload = BlossomUpload(
-                    url: uploaded.url,
-                    sha256Hex: uploaded.sha256Hex,
-                    mime: uploaded.mime,
-                    sizeBytes: uploaded.sizeBytes,
-                    width: uploaded.width,
-                    height: uploaded.height,
-                    alt: altText
-                )
-            } catch {
-                guard generation == self.uploadGeneration else { return }
-                self.uploadError = (error as? LocalizedError)?.errorDescription
-                    ?? error.localizedDescription
+            let altText = flattenForAlt(ocrMarkdown)
+            let outcome = await upload(processed: processed, alt: altText)
+            guard generation == self.uploadGeneration else { return }
+            guard outcome.error.isEmpty, let uploaded = outcome.value else {
+                self.uploadError = outcome.error
+                return
             }
+            self.upload = BlossomUpload(
+                url: uploaded.url,
+                sha256Hex: uploaded.sha256Hex,
+                mime: uploaded.mime,
+                sizeBytes: uploaded.sizeBytes,
+                width: uploaded.width,
+                height: uploaded.height,
+                alt: altText
+            )
         }
     }
 

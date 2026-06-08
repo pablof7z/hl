@@ -165,17 +165,17 @@ final class ChatStore {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         sendError = nil
-        do {
-            let record = try await core.publishChatMessage(
-                groupId: groupId,
-                content: trimmed,
-                replyToEventId: replyTo?.eventId
-            )
-            // Optimistic insert in case the relay echo is slow — apply is
-            // upsert by event id, so the eventual delta merges cleanly.
-            apply(message: record)
-        } catch {
-            sendError = "\(error)"
+        let outcome = await core.publishChatMessage(
+            groupId: groupId,
+            content: trimmed,
+            replyToEventId: replyTo?.eventId
+        )
+        guard outcome.error.isEmpty, let record = outcome.value else {
+            sendError = outcome.error
+            return
         }
+        // Optimistic insert in case the relay echo is slow — apply is
+        // upsert by event id, so the eventual delta merges cleanly.
+        apply(message: record)
     }
 }

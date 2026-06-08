@@ -98,15 +98,14 @@ struct CommentComposer: View {
         errorMessage = nil
         let text = draft.wrappedValue
         Task {
-            do {
-                _ = try await store.publish(content: text, parentEventId: parentEventId)
+            let outcome = await store.publish(content: text, parentEventId: parentEventId)
+            if outcome.error.isEmpty {
                 isPublishing = false
                 focused = false
-            } catch {
+            } else {
                 isPublishing = false
-                let msg = (error as? CoreError).map { "\($0)" } ?? error.localizedDescription
                 withAnimation(.easeOut(duration: 0.18)) {
-                    errorMessage = "Couldn't publish — \(msg)"
+                    errorMessage = "Couldn't publish — \(outcome.error)"
                 }
                 errorResetTimer.schedule(after: 2.4) {
                     withAnimation(.easeIn(duration: 0.18)) {

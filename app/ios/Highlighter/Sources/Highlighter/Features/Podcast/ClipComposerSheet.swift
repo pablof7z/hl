@@ -326,25 +326,25 @@ struct ClipComposerSheet: View {
         )
 
         Task {
-            do {
-                if let groupId = selectedGroupId, !groupId.isEmpty {
-                    _ = try await app.safeCore.publishHighlightsAndShare(
-                        artifact: artifact,
-                        drafts: [draft],
-                        targetGroupId: groupId
-                    )
+            let publishErrorMessage: String?
+            if let groupId = selectedGroupId, !groupId.isEmpty {
+                let outcome = await app.safeCore.publishHighlightsAndShare(
+                    artifact: artifact,
+                    drafts: [draft],
+                    targetGroupId: groupId
+                )
+                publishErrorMessage = outcome.error.isEmpty ? nil : outcome.error
+            } else {
+                let outcome = await app.safeCore.publishHighlight(draft: draft, artifact: artifact)
+                publishErrorMessage = outcome.error.isEmpty ? nil : outcome.error
+            }
+            await MainActor.run {
+                isPublishing = false
+                if let publishErrorMessage {
+                    publishError = publishErrorMessage
                 } else {
-                    _ = try await app.safeCore.publishHighlight(draft: draft, artifact: artifact)
-                }
-                await MainActor.run {
-                    isPublishing = false
                     app.shareToast = "Clip shared"
                     dismiss()
-                }
-            } catch {
-                await MainActor.run {
-                    isPublishing = false
-                    publishError = error.localizedDescription
                 }
             }
         }

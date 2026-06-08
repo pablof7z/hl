@@ -59,6 +59,60 @@ pub struct WebBookmarkListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct ArtifactOutcome {
+    pub value: Option<ArtifactRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BlossomUploadOutcome {
+    pub value: Option<BlossomUpload>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ChatMessageOutcome {
+    pub value: Option<ChatMessageRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentOutcome {
+    pub value: Option<CommentRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DiscussionOutcome {
+    pub value: Option<DiscussionRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackEventOutcome {
+    pub value: Option<FeedbackEventRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightListOutcome {
+    pub values: Vec<HighlightRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightOutcome {
+    pub value: Option<HighlightRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PictureOutcome {
+    pub value: Option<PictureRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct WhatsNewEntriesOutcome {
     pub entries: Vec<crate::whats_new::WhatsNewEntry>,
     pub error: String,

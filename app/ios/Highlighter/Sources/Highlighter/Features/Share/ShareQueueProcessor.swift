@@ -24,11 +24,15 @@ enum ShareQueueProcessor {
         for share in pending {
             do {
                 let preview = try await app.safeCore.buildPreviewFromUrl(share.url)
-                _ = try await app.safeCore.publishArtifact(
+                let outcome = await app.safeCore.publishArtifact(
                     preview: preview,
                     groupId: share.groupId,
                     note: share.note.isEmpty ? nil : share.note
                 )
+                guard outcome.error.isEmpty else {
+                    requeue.append(share)
+                    continue
+                }
                 successCount += 1
                 if let community = app.joinedCommunities.first(where: { $0.id == share.groupId }) {
                     lastSuccessCommunity = community.name

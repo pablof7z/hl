@@ -256,8 +256,8 @@ actor SafeHighlighterCore {
         groupId: String,
         content: String,
         replyToEventId: String? = nil
-    ) async throws -> ChatMessageRecord {
-        try await core.publishChatMessage(
+    ) async -> ChatMessageOutcome {
+        await core.publishChatMessage(
             groupId: groupId,
             content: content,
             replyToEventId: replyToEventId
@@ -287,8 +287,8 @@ actor SafeHighlighterCore {
         agentPubkey: String?,
         parentEventId: String?,
         body: String
-    ) async throws -> FeedbackEventRecord {
-        try await core.publishFeedbackNote(
+    ) async -> FeedbackEventOutcome {
+        await core.publishFeedbackNote(
             coordinate: coordinate,
             agentPubkey: agentPubkey,
             parentEventId: parentEventId,
@@ -410,8 +410,8 @@ actor SafeHighlighterCore {
         rootKind: UInt16,
         parentEventId: String? = nil,
         content: String
-    ) async throws -> CommentRecord {
-        try await core.publishComment(rootTagName: rootTagName, rootTagValue: rootTagValue, rootKind: rootKind, parentEventId: parentEventId, content: content)
+    ) async -> CommentOutcome {
+        await core.publishComment(rootTagName: rootTagName, rootTagValue: rootTagValue, rootKind: rootKind, parentEventId: parentEventId, content: content)
     }
 
     func getUserHighlights(pubkeyHex: String, limit: UInt32 = 64) async throws -> [HighlightRecord] {
@@ -564,8 +564,8 @@ actor SafeHighlighterCore {
         preview: ArtifactPreview,
         groupId: String,
         note: String?
-    ) async throws -> ArtifactRecord {
-        try await core.publishArtifact(preview: preview, groupId: groupId, note: note)
+    ) async -> ArtifactOutcome {
+        await core.publishArtifact(preview: preview, groupId: groupId, note: note)
     }
 
     func publishDiscussion(
@@ -573,8 +573,8 @@ actor SafeHighlighterCore {
         title: String,
         body: String,
         attachment: ArtifactPreview?
-    ) async throws -> DiscussionRecord {
-        try await core.publishDiscussion(
+    ) async -> DiscussionOutcome {
+        await core.publishDiscussion(
             groupId: groupId,
             title: title,
             body: body,
@@ -586,8 +586,8 @@ actor SafeHighlighterCore {
         artifact: ArtifactRecord,
         drafts: [HighlightDraft],
         targetGroupId: String
-    ) async throws -> [HighlightRecord] {
-        try await core.publishHighlightsAndShare(
+    ) async -> HighlightListOutcome {
+        await core.publishHighlightsAndShare(
             artifact: artifact,
             drafts: drafts,
             targetGroupId: targetGroupId
@@ -597,8 +597,8 @@ actor SafeHighlighterCore {
     func publishHighlight(
         draft: HighlightDraft,
         artifact: ArtifactRecord
-    ) async throws -> HighlightRecord {
-        try await core.publishHighlight(draft: draft, artifact: artifact)
+    ) async -> HighlightOutcome {
+        await core.publishHighlight(draft: draft, artifact: artifact)
     }
 
     /// Re-share an existing highlight into a room as a kind:16 repost.
@@ -609,8 +609,8 @@ actor SafeHighlighterCore {
         highlightAuthorPubkeyHex: String,
         highlightRelayUrl: String,
         targetGroupId: String
-    ) async throws {
-        try await core.shareHighlightToRoom(
+    ) async -> MutationOutcome {
+        await core.shareHighlightToRoom(
             highlightId: highlightId,
             highlightAuthorPubkeyHex: highlightAuthorPubkeyHex,
             highlightRelayUrl: highlightRelayUrl,
@@ -640,8 +640,8 @@ actor SafeHighlighterCore {
         width: UInt32,
         height: UInt32,
         alt: String
-    ) async throws -> BlossomUpload {
-        try await core.uploadPhoto(
+    ) async -> BlossomUploadOutcome {
+        await core.uploadPhoto(
             bytes: bytes,
             mime: mime,
             width: width,
@@ -650,8 +650,8 @@ actor SafeHighlighterCore {
         )
     }
 
-    func publishPicture(_ draft: PictureDraft) async throws -> PictureRecord {
-        try await core.publishPicture(draft: draft)
+    func publishPicture(_ draft: PictureDraft) async -> PictureOutcome {
+        await core.publishPicture(draft: draft)
     }
 
     // MARK: - Relay config (NIP-65 read/write + NIP-78 rooms/indexer)

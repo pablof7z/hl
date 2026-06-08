@@ -395,13 +395,17 @@ struct EditProfileSheet: View {
                 return
             }
             let prepared = await prepareForUpload(image: image)
-            let upload = try await appStore.safeCore.uploadPhoto(
+            let outcome = await appStore.safeCore.uploadPhoto(
                 bytes: prepared.data,
                 mime: "image/jpeg",
                 width: UInt32(prepared.width),
                 height: UInt32(prepared.height),
                 alt: ""
             )
+            guard outcome.error.isEmpty, let upload = outcome.value else {
+                error = "Upload failed: \(outcome.error)"
+                return
+            }
             commit(upload.url)
         } catch {
             self.error = "Upload failed: \(error.localizedDescription)"

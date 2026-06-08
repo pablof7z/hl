@@ -154,21 +154,21 @@ struct ArticleReaderView: View {
 
     private func publish(quote: String, context: String, note: String) async {
         guard let store else { return }
-        do {
-            _ = try await store.publishHighlight(
-                quote: quote,
-                note: note,
-                context: context
-            )
+        let outcome = await store.publishHighlight(
+            quote: quote,
+            note: note,
+            context: context
+        )
+        if outcome.error.isEmpty {
             withAnimation(.easeOut(duration: 0.2)) {
                 toast = note.isEmpty ? "Highlighted" : "Highlighted with note"
             }
             toastResetTimer.schedule(after: 1.8) {
                 withAnimation(.easeIn(duration: 0.2)) { toast = nil }
             }
-        } catch {
+        } else {
             withAnimation(.easeOut(duration: 0.2)) {
-                toast = "Couldn't save — \(error.localizedDescription)"
+                toast = "Couldn't save — \(outcome.error)"
             }
             toastResetTimer.schedule(after: 2.8) {
                 withAnimation(.easeIn(duration: 0.2)) { toast = nil }

@@ -108,12 +108,12 @@ struct FeedbackThreadDetailView: View {
 
     private func send() async {
         sendError = nil
-        do {
-            _ = try await detailStore.sendReply(body: draft)
+        let outcome = await detailStore.sendReply(body: draft)
+        if outcome.error.isEmpty {
             draft = ""
             await listStore.refreshThreads()
-        } catch {
-            sendError = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+        } else {
+            sendError = outcome.error
         }
     }
 

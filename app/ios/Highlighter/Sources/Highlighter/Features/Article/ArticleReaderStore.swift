@@ -123,16 +123,10 @@ final class ArticleReaderStore {
     /// Returns the record so the view can flash the new overlay without
     /// waiting for the subscription to echo back.
     ///
-    /// Errors bubble up so the caller can surface them in a toast — we avoid
-    /// swallowing them to keep ndb the single source of truth about what
-    /// has actually been persisted.
-    func publishHighlight(quote: String, note: String, context: String) async throws -> HighlightRecord {
+    /// Returns outcome state so the caller can surface publish failures in a toast.
+    func publishHighlight(quote: String, note: String, context: String) async -> HighlightOutcome {
         guard let article else {
-            throw NSError(
-                domain: "ArticleReaderStore",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Article not yet loaded."]
-            )
+            return HighlightOutcome(value: nil, error: "Article not yet loaded.")
         }
         let artifact = articleAsArtifact(article)
         let draft = HighlightDraft(
@@ -145,14 +139,15 @@ final class ArticleReaderStore {
             clipTranscriptSegmentIds: [],
             image: nil
         )
-        let record = try await safeCore.publishHighlight(draft: draft, artifact: artifact)
+        let outcome = await safeCore.publishHighlight(draft: draft, artifact: artifact)
+        guard outcome.error.isEmpty, let record = outcome.value else { return outcome }
         // Optimistically inject into the local list so the overlay appears
         // immediately; the subscription delta will reconcile shortly.
         if !highlights.contains(where: { $0.eventId == record.eventId }) {
             highlights.insert(record, at: 0)
         }
         lastPublishedHighlightId = record.eventId
-        return record
+        return outcome
     }
 
     // MARK: - Private

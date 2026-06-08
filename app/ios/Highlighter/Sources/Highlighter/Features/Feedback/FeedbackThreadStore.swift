@@ -70,13 +70,13 @@ final class FeedbackThreadStore {
     /// if not already cached; publishes without a `p` tag when the project
     /// event isn't available.
     @discardableResult
-    func sendReply(body: String) async throws -> FeedbackEventRecord {
+    func sendReply(body: String) async -> FeedbackEventOutcome {
         guard let core, let coordinate, let rootEventId else {
-            throw FeedbackError.notReady
+            return FeedbackEventOutcome(value: nil, error: FeedbackError.notReady.localizedDescription)
         }
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            throw FeedbackError.notReady
+            return FeedbackEventOutcome(value: nil, error: FeedbackError.notReady.localizedDescription)
         }
         var agent = agentPubkey
         if agent == nil {
@@ -87,13 +87,14 @@ final class FeedbackThreadStore {
         isPublishing = true
         defer { isPublishing = false }
 
-        let record = try await core.publishFeedbackNote(
+        let outcome = await core.publishFeedbackNote(
             coordinate: coordinate,
             agentPubkey: agent,
             parentEventId: rootEventId,
             body: trimmed
         )
+        guard outcome.error.isEmpty, let record = outcome.value else { return outcome }
         apply(event: record)
-        return record
+        return outcome
     }
 }

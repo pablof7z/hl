@@ -1101,14 +1101,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func probeRelayNip11(url: String) async throws  -> Nip11Document
 
-    func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async throws  -> ArtifactRecord
+    func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
 
     /**
      * Publish a NIP-29 kind:9 chat message into `group_id`. When
      * `reply_to_event_id` is set, the published event carries a marked
      * NIP-10 `["e", <id>, "", "reply"]` tag.
      */
-    func publishChatMessage(groupId: String, content: String, replyToEventId: String?) async throws  -> ChatMessageRecord
+    func publishChatMessage(groupId: String, content: String, replyToEventId: String?) async  -> ChatMessageOutcome
 
     /**
      * Publish a NIP-22 kind:1111 comment scoped to any artifact.
@@ -1121,9 +1121,9 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `parent_event_id` is `None` for top-level comments and `Some(id)`
      * for replies (the parent kind:1111 comment).
      */
-    func publishComment(rootTagName: String, rootTagValue: String, rootKind: UInt16, parentEventId: String?, content: String) async throws  -> CommentRecord
+    func publishComment(rootTagName: String, rootTagValue: String, rootKind: UInt16, parentEventId: String?, content: String) async  -> CommentOutcome
 
-    func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async throws  -> DiscussionRecord
+    func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async  -> DiscussionOutcome
 
     /**
      * Publish a feedback note (kind:1) for the shake-to-share surface. When
@@ -1132,16 +1132,16 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `None` when the project event isn't cached yet (the note still ships,
      * just without a `p` tag).
      */
-    func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEventId: String?, body: String) async throws  -> FeedbackEventRecord
+    func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEventId: String?, body: String) async  -> FeedbackEventOutcome
 
     /**
      * Publish a solo NIP-84 highlight without a NIP-29 repost. Used by the
      * article reader's text-selection flow: user highlights → event lands in
      * their vault; sharing into a community is a later explicit action.
      */
-    func publishHighlight(draft: HighlightDraft, artifact: ArtifactRecord) async throws  -> HighlightRecord
+    func publishHighlight(draft: HighlightDraft, artifact: ArtifactRecord) async  -> HighlightOutcome
 
-    func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [HighlightDraft], targetGroupId: String) async throws  -> [HighlightRecord]
+    func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [HighlightDraft], targetGroupId: String) async  -> HighlightListOutcome
 
     /**
      * Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
@@ -1149,7 +1149,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * a highlight quote — the photo still ships to the community with all
      * the imeta metadata.
      */
-    func publishPicture(draft: PictureDraft) async throws  -> PictureRecord
+    func publishPicture(draft: PictureDraft) async  -> PictureOutcome
 
     /**
      * Publish a kind:7 reaction targeting `event_id` authored by
@@ -1249,7 +1249,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
      * to the Highlighter relay as the e-tag relay hint.
      */
-    func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async throws
+    func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async  -> MutationOutcome
 
     /**
      * Install (if not already installed) the kind:10012 curated-list sub for
@@ -1462,7 +1462,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * descriptor for use in the publishing event's `imeta` tag.
      * `alt` is the recognized OCR text, or empty if none.
      */
-    func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async throws  -> BlossomUpload
+    func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async  -> BlossomUploadOutcome
 
     /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
@@ -2885,9 +2885,9 @@ open func probeRelayNip11(url: String)async throws  -> Nip11Document  {
         )
 }
 
-open func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?)async throws  -> ArtifactRecord  {
+open func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?)async  -> ArtifactOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_publish_artifact(
                     self.uniffiClonePointer(),
@@ -2897,8 +2897,9 @@ open func publishArtifact(preview: ArtifactPreview, groupId: String, note: Strin
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeArtifactOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2907,9 +2908,9 @@ open func publishArtifact(preview: ArtifactPreview, groupId: String, note: Strin
      * `reply_to_event_id` is set, the published event carries a marked
      * NIP-10 `["e", <id>, "", "reply"]` tag.
      */
-open func publishChatMessage(groupId: String, content: String, replyToEventId: String?)async throws  -> ChatMessageRecord  {
+open func publishChatMessage(groupId: String, content: String, replyToEventId: String?)async  -> ChatMessageOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_publish_chat_message(
                     self.uniffiClonePointer(),
@@ -2919,8 +2920,9 @@ open func publishChatMessage(groupId: String, content: String, replyToEventId: S
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeChatMessageRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeChatMessageOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2935,9 +2937,9 @@ open func publishChatMessage(groupId: String, content: String, replyToEventId: S
      * `parent_event_id` is `None` for top-level comments and `Some(id)`
      * for replies (the parent kind:1111 comment).
      */
-open func publishComment(rootTagName: String, rootTagValue: String, rootKind: UInt16, parentEventId: String?, content: String)async throws  -> CommentRecord  {
+open func publishComment(rootTagName: String, rootTagValue: String, rootKind: UInt16, parentEventId: String?, content: String)async  -> CommentOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_publish_comment(
                     self.uniffiClonePointer(),
@@ -2947,14 +2949,15 @@ open func publishComment(rootTagName: String, rootTagValue: String, rootKind: UI
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommentRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeCommentOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
-open func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?)async throws  -> DiscussionRecord  {
+open func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?)async  -> DiscussionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_publish_discussion(
                     self.uniffiClonePointer(),
@@ -2964,8 +2967,9 @@ open func publishDiscussion(groupId: String, title: String, body: String, attach
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeDiscussionRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeDiscussionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2976,9 +2980,9 @@ open func publishDiscussion(groupId: String, title: String, body: String, attach
      * `None` when the project event isn't cached yet (the note still ships,
      * just without a `p` tag).
      */
-open func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEventId: String?, body: String)async throws  -> FeedbackEventRecord  {
+open func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEventId: String?, body: String)async  -> FeedbackEventOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_publish_feedback_note(
                     self.uniffiClonePointer(),
@@ -2988,8 +2992,9 @@ open func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEv
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeFeedbackEventRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeFeedbackEventOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2998,9 +3003,9 @@ open func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEv
      * article reader's text-selection flow: user highlights → event lands in
      * their vault; sharing into a community is a later explicit action.
      */
-open func publishHighlight(draft: HighlightDraft, artifact: ArtifactRecord)async throws  -> HighlightRecord  {
+open func publishHighlight(draft: HighlightDraft, artifact: ArtifactRecord)async  -> HighlightOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_publish_highlight(
                     self.uniffiClonePointer(),
@@ -3010,14 +3015,15 @@ open func publishHighlight(draft: HighlightDraft, artifact: ArtifactRecord)async
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeHighlightOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
-open func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [HighlightDraft], targetGroupId: String)async throws  -> [HighlightRecord]  {
+open func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [HighlightDraft], targetGroupId: String)async  -> HighlightListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_publish_highlights_and_share(
                     self.uniffiClonePointer(),
@@ -3027,8 +3033,9 @@ open func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [Highlight
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3038,9 +3045,9 @@ open func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [Highlight
      * a highlight quote — the photo still ships to the community with all
      * the imeta metadata.
      */
-open func publishPicture(draft: PictureDraft)async throws  -> PictureRecord  {
+open func publishPicture(draft: PictureDraft)async  -> PictureOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_publish_picture(
                     self.uniffiClonePointer(),
@@ -3050,8 +3057,9 @@ open func publishPicture(draft: PictureDraft)async throws  -> PictureRecord  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePictureRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypePictureOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3441,20 +3449,21 @@ open func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary]) -> 
      * per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
      * to the Highlighter relay as the e-tag relay hint.
      */
-open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String)async throws   {
+open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String)async  -> MutationOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_share_highlight_to_room(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(highlightId),FfiConverterString.lower(highlightAuthorPubkeyHex),FfiConverterString.lower(highlightRelayUrl),FfiConverterString.lower(targetGroupId)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -4106,9 +4115,9 @@ open func updateProfile(name: String, displayName: String, about: String, pictur
      * descriptor for use in the publishing event's `imeta` tag.
      * `alt` is the recognized OCR text, or empty if none.
      */
-open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String)async throws  -> BlossomUpload  {
+open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String)async  -> BlossomUploadOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_upload_photo(
                     self.uniffiClonePointer(),
@@ -4118,8 +4127,9 @@ open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, 
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBlossomUpload_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeBlossomUploadOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -4452,6 +4462,76 @@ public func FfiConverterTypeArtifactDetailRoute_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeArtifactDetailRoute_lower(_ value: ArtifactDetailRoute) -> RustBuffer {
     return FfiConverterTypeArtifactDetailRoute.lower(value)
+}
+
+
+public struct ArtifactOutcome {
+    public var value: ArtifactRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: ArtifactRecord?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ArtifactOutcome: Sendable {}
+#endif
+
+
+extension ArtifactOutcome: Equatable, Hashable {
+    public static func ==(lhs: ArtifactOutcome, rhs: ArtifactOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArtifactOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactOutcome {
+        return
+            try ArtifactOutcome(
+                value: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArtifactOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArtifactRecord.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactOutcome_lift(_ buf: RustBuffer) throws -> ArtifactOutcome {
+    return try FfiConverterTypeArtifactOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactOutcome_lower(_ value: ArtifactOutcome) -> RustBuffer {
+    return FfiConverterTypeArtifactOutcome.lower(value)
 }
 
 
@@ -5010,6 +5090,76 @@ public func FfiConverterTypeBlossomUpload_lower(_ value: BlossomUpload) -> RustB
 }
 
 
+public struct BlossomUploadOutcome {
+    public var value: BlossomUpload?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: BlossomUpload?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension BlossomUploadOutcome: Sendable {}
+#endif
+
+
+extension BlossomUploadOutcome: Equatable, Hashable {
+    public static func ==(lhs: BlossomUploadOutcome, rhs: BlossomUploadOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlossomUploadOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomUploadOutcome {
+        return
+            try BlossomUploadOutcome(
+                value: FfiConverterOptionTypeBlossomUpload.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlossomUploadOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeBlossomUpload.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomUploadOutcome_lift(_ buf: RustBuffer) throws -> BlossomUploadOutcome {
+    return try FfiConverterTypeBlossomUploadOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomUploadOutcome_lower(_ value: BlossomUploadOutcome) -> RustBuffer {
+    return FfiConverterTypeBlossomUploadOutcome.lower(value)
+}
+
+
 public struct BookmarkSetListOutcome {
     public var values: [BookmarkSetRecord]
     public var error: String
@@ -5519,6 +5669,76 @@ public func FfiConverterTypeChapter_lower(_ value: Chapter) -> RustBuffer {
 }
 
 
+public struct ChatMessageOutcome {
+    public var value: ChatMessageRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: ChatMessageRecord?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ChatMessageOutcome: Sendable {}
+#endif
+
+
+extension ChatMessageOutcome: Equatable, Hashable {
+    public static func ==(lhs: ChatMessageOutcome, rhs: ChatMessageOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatMessageOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatMessageOutcome {
+        return
+            try ChatMessageOutcome(
+                value: FfiConverterOptionTypeChatMessageRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatMessageOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeChatMessageRecord.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageOutcome_lift(_ buf: RustBuffer) throws -> ChatMessageOutcome {
+    return try FfiConverterTypeChatMessageOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageOutcome_lower(_ value: ChatMessageOutcome) -> RustBuffer {
+    return FfiConverterTypeChatMessageOutcome.lower(value)
+}
+
+
 /**
  * A NIP-29 kind:9 chat message inside a group. Flat conversation event —
  * distinct from kind:11 threaded discussions.
@@ -5636,6 +5856,76 @@ public func FfiConverterTypeChatMessageRecord_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeChatMessageRecord_lower(_ value: ChatMessageRecord) -> RustBuffer {
     return FfiConverterTypeChatMessageRecord.lower(value)
+}
+
+
+public struct CommentOutcome {
+    public var value: CommentRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: CommentRecord?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CommentOutcome: Sendable {}
+#endif
+
+
+extension CommentOutcome: Equatable, Hashable {
+    public static func ==(lhs: CommentOutcome, rhs: CommentOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentOutcome {
+        return
+            try CommentOutcome(
+                value: FfiConverterOptionTypeCommentRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeCommentRecord.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentOutcome_lift(_ buf: RustBuffer) throws -> CommentOutcome {
+    return try FfiConverterTypeCommentOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentOutcome_lower(_ value: CommentOutcome) -> RustBuffer {
+    return FfiConverterTypeCommentOutcome.lower(value)
 }
 
 
@@ -6202,6 +6492,76 @@ public func FfiConverterTypeDiscussionAttachment_lower(_ value: DiscussionAttach
 }
 
 
+public struct DiscussionOutcome {
+    public var value: DiscussionRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: DiscussionRecord?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension DiscussionOutcome: Sendable {}
+#endif
+
+
+extension DiscussionOutcome: Equatable, Hashable {
+    public static func ==(lhs: DiscussionOutcome, rhs: DiscussionOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscussionOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionOutcome {
+        return
+            try DiscussionOutcome(
+                value: FfiConverterOptionTypeDiscussionRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscussionOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeDiscussionRecord.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionOutcome_lift(_ buf: RustBuffer) throws -> DiscussionOutcome {
+    return try FfiConverterTypeDiscussionOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionOutcome_lower(_ value: DiscussionOutcome) -> RustBuffer {
+    return FfiConverterTypeDiscussionOutcome.lower(value)
+}
+
+
 /**
  * Mirrors `RoomDiscussionRecord` in
  * `web/src/lib/features/discussions/roomDiscussion.ts` — a kind:11 thread
@@ -6346,6 +6706,76 @@ public func FfiConverterTypeDiscussionRecord_lift(_ buf: RustBuffer) throws -> D
 #endif
 public func FfiConverterTypeDiscussionRecord_lower(_ value: DiscussionRecord) -> RustBuffer {
     return FfiConverterTypeDiscussionRecord.lower(value)
+}
+
+
+public struct FeedbackEventOutcome {
+    public var value: FeedbackEventRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: FeedbackEventRecord?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackEventOutcome: Sendable {}
+#endif
+
+
+extension FeedbackEventOutcome: Equatable, Hashable {
+    public static func ==(lhs: FeedbackEventOutcome, rhs: FeedbackEventOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackEventOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackEventOutcome {
+        return
+            try FeedbackEventOutcome(
+                value: FfiConverterOptionTypeFeedbackEventRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackEventOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeFeedbackEventRecord.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackEventOutcome_lift(_ buf: RustBuffer) throws -> FeedbackEventOutcome {
+    return try FfiConverterTypeFeedbackEventOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackEventOutcome_lower(_ value: FeedbackEventOutcome) -> RustBuffer {
+    return FfiConverterTypeFeedbackEventOutcome.lower(value)
 }
 
 
@@ -6801,6 +7231,146 @@ public func FfiConverterTypeHighlightDraft_lift(_ buf: RustBuffer) throws -> Hig
 #endif
 public func FfiConverterTypeHighlightDraft_lower(_ value: HighlightDraft) -> RustBuffer {
     return FfiConverterTypeHighlightDraft.lower(value)
+}
+
+
+public struct HighlightListOutcome {
+    public var values: [HighlightRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [HighlightRecord], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension HighlightListOutcome: Sendable {}
+#endif
+
+
+extension HighlightListOutcome: Equatable, Hashable {
+    public static func ==(lhs: HighlightListOutcome, rhs: HighlightListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightListOutcome {
+        return
+            try HighlightListOutcome(
+                values: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeHighlightRecord.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightListOutcome_lift(_ buf: RustBuffer) throws -> HighlightListOutcome {
+    return try FfiConverterTypeHighlightListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightListOutcome_lower(_ value: HighlightListOutcome) -> RustBuffer {
+    return FfiConverterTypeHighlightListOutcome.lower(value)
+}
+
+
+public struct HighlightOutcome {
+    public var value: HighlightRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: HighlightRecord?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension HighlightOutcome: Sendable {}
+#endif
+
+
+extension HighlightOutcome: Equatable, Hashable {
+    public static func ==(lhs: HighlightOutcome, rhs: HighlightOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightOutcome {
+        return
+            try HighlightOutcome(
+                value: FfiConverterOptionTypeHighlightRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeHighlightRecord.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightOutcome_lift(_ buf: RustBuffer) throws -> HighlightOutcome {
+    return try FfiConverterTypeHighlightOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightOutcome_lower(_ value: HighlightOutcome) -> RustBuffer {
+    return FfiConverterTypeHighlightOutcome.lower(value)
 }
 
 
@@ -7737,6 +8307,76 @@ public func FfiConverterTypePictureDraft_lift(_ buf: RustBuffer) throws -> Pictu
 #endif
 public func FfiConverterTypePictureDraft_lower(_ value: PictureDraft) -> RustBuffer {
     return FfiConverterTypePictureDraft.lower(value)
+}
+
+
+public struct PictureOutcome {
+    public var value: PictureRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: PictureRecord?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension PictureOutcome: Sendable {}
+#endif
+
+
+extension PictureOutcome: Equatable, Hashable {
+    public static func ==(lhs: PictureOutcome, rhs: PictureOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePictureOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PictureOutcome {
+        return
+            try PictureOutcome(
+                value: FfiConverterOptionTypePictureRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PictureOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypePictureRecord.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePictureOutcome_lift(_ buf: RustBuffer) throws -> PictureOutcome {
+    return try FfiConverterTypePictureOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePictureOutcome_lower(_ value: PictureOutcome) -> RustBuffer {
+    return FfiConverterTypePictureOutcome.lower(value)
 }
 
 
@@ -10644,6 +11284,54 @@ fileprivate struct FfiConverterOptionTypeBookmarkSetRecord: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeChatMessageRecord: FfiConverterRustBuffer {
+    typealias SwiftType = ChatMessageRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeChatMessageRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeChatMessageRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeCommentRecord: FfiConverterRustBuffer {
+    typealias SwiftType = CommentRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCommentRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCommentRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeCurrentUser: FfiConverterRustBuffer {
     typealias SwiftType = CurrentUser?
 
@@ -10692,6 +11380,78 @@ fileprivate struct FfiConverterOptionTypeDiscussionAttachment: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeDiscussionRecord: FfiConverterRustBuffer {
+    typealias SwiftType = DiscussionRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeDiscussionRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeDiscussionRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeFeedbackEventRecord: FfiConverterRustBuffer {
+    typealias SwiftType = FeedbackEventRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFeedbackEventRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFeedbackEventRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeHighlightRecord: FfiConverterRustBuffer {
+    typealias SwiftType = HighlightRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeHighlightRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeHighlightRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeNostrEntityEvent: FfiConverterRustBuffer {
     typealias SwiftType = NostrEntityEvent?
 
@@ -10708,6 +11468,30 @@ fileprivate struct FfiConverterOptionTypeNostrEntityEvent: FfiConverterRustBuffe
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeNostrEntityEvent.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypePictureRecord: FfiConverterRustBuffer {
+    typealias SwiftType = PictureRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePictureRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePictureRecord.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -11650,28 +12434,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_probe_relay_nip11() != 47708) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 62633) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 1182) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message() != 34308) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message() != 4279) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment() != 22772) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment() != 34503) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 50982) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 58699) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_note() != 51524) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_note() != 47994) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_highlight() != 16312) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_highlight() != 52107) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_highlights_and_share() != 8629) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_highlights_and_share() != 20162) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_picture() != 8020) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_picture() != 49633) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_reaction() != 53660) {
@@ -11740,7 +12524,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_extension_communities_snapshot() != 38830) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 10741) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 49295) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_featured_rooms() != 4206) {
@@ -11830,7 +12614,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_update_profile() != 54507) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 51840) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 28046) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 60842) {

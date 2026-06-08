@@ -274,13 +274,17 @@ struct CreateRoomSheet: View {
                 return
             }
             let prepared = await prepareForUpload(image: image)
-            let upload = try await appStore.safeCore.uploadPhoto(
+            let outcome = await appStore.safeCore.uploadPhoto(
                 bytes: prepared.data,
                 mime: "image/jpeg",
                 width: UInt32(prepared.width),
                 height: UInt32(prepared.height),
                 alt: ""
             )
+            guard outcome.error.isEmpty, let upload = outcome.value else {
+                self.error = "Couldn't upload cover: \(outcome.error)"
+                return
+            }
             coverUpload = upload
         } catch {
             self.error = "Couldn't upload cover: \(error.localizedDescription)"

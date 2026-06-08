@@ -24,12 +24,14 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleRecord, ArtifactDetailRoute, ArtifactPreview, ArtifactRecord, BlossomUpload,
-    BookmarkSetListOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, ChatMessageRecord,
-    CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord, FeedbackEventRecord,
-    FeedbackThreadRecord, HighlightDraft, HighlightRecord, HydratedHighlight, MutationOutcome,
-    NostrConnectOptions, PictureDraft, PictureRecord, PodcastPositionRecord, ProfileMetadata,
-    ReadingFeedItem, RoomRecommendation, StringListOutcome, SubscriptionOutcome,
+    ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactRecord,
+    BlossomUpload, BlossomUploadOutcome, BookmarkSetListOutcome, BookmarkSetOutcome,
+    BookmarkSetRecord, BoolOutcome, ChatMessageOutcome, ChatMessageRecord, CommentOutcome,
+    CommentRecord, CommunitySummary, CurrentUser, DiscussionOutcome, DiscussionRecord,
+    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft,
+    HighlightListOutcome, HighlightOutcome, HighlightRecord, HydratedHighlight, MutationOutcome,
+    NostrConnectOptions, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
+    ProfileMetadata, ReadingFeedItem, RoomRecommendation, StringListOutcome, SubscriptionOutcome,
     WebBookmarkListOutcome, WebBookmarkRecord, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
@@ -174,6 +176,123 @@ fn web_bookmark_list_outcome(
         },
         Err(error) => WebBookmarkListOutcome {
             values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn artifact_outcome(result: Result<ArtifactRecord, CoreError>) -> ArtifactOutcome {
+    match result {
+        Ok(value) => ArtifactOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => ArtifactOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn blossom_upload_outcome(result: Result<BlossomUpload, CoreError>) -> BlossomUploadOutcome {
+    match result {
+        Ok(value) => BlossomUploadOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => BlossomUploadOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn chat_message_outcome(result: Result<ChatMessageRecord, CoreError>) -> ChatMessageOutcome {
+    match result {
+        Ok(value) => ChatMessageOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => ChatMessageOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn comment_outcome(result: Result<CommentRecord, CoreError>) -> CommentOutcome {
+    match result {
+        Ok(value) => CommentOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => CommentOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn discussion_outcome(result: Result<DiscussionRecord, CoreError>) -> DiscussionOutcome {
+    match result {
+        Ok(value) => DiscussionOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => DiscussionOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn feedback_event_outcome(result: Result<FeedbackEventRecord, CoreError>) -> FeedbackEventOutcome {
+    match result {
+        Ok(value) => FeedbackEventOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => FeedbackEventOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn highlight_list_outcome(result: Result<Vec<HighlightRecord>, CoreError>) -> HighlightListOutcome {
+    match result {
+        Ok(values) => HighlightListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => HighlightListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn highlight_outcome(result: Result<HighlightRecord, CoreError>) -> HighlightOutcome {
+    match result {
+        Ok(value) => HighlightOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => HighlightOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn picture_outcome(result: Result<PictureRecord, CoreError>) -> PictureOutcome {
+    match result {
+        Ok(value) => PictureOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => PictureOutcome {
+            value: None,
             error: error.to_string(),
         },
     }
@@ -969,24 +1088,28 @@ impl HighlighterCore {
         root_kind: u16,
         parent_event_id: Option<String>,
         content: String,
-    ) -> Result<CommentRecord, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        let Some(scope) = root_tag_name.trim().chars().next() else {
-            return Err(CoreError::InvalidInput("root tag must not be empty".into()));
-        };
-        let parent = parent_event_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
-        comments::publish_comment(
-            &self.runtime,
-            scope,
-            root_tag_value.trim(),
-            root_kind,
-            parent,
-            content.trim(),
-        )
-        .await
+    ) -> CommentOutcome {
+        let result: Result<CommentRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            let Some(scope) = root_tag_name.trim().chars().next() else {
+                return Err(CoreError::InvalidInput("root tag must not be empty".into()));
+            };
+            let parent = parent_event_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+            comments::publish_comment(
+                &self.runtime,
+                scope,
+                root_tag_value.trim(),
+                root_kind,
+                parent,
+                content.trim(),
+            )
+            .await
+        }
+        .await;
+        comment_outcome(result)
     }
 
     // -- Reactions (NIP-25 kind:7) ---------------------------------------
@@ -1515,9 +1638,13 @@ impl HighlighterCore {
         preview: ArtifactPreview,
         group_id: String,
         note: Option<String>,
-    ) -> Result<ArtifactRecord, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        crate::artifacts::publish(&self.runtime, preview, &group_id, note.as_deref()).await
+    ) -> ArtifactOutcome {
+        let result: Result<ArtifactRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            crate::artifacts::publish(&self.runtime, preview, &group_id, note.as_deref()).await
+        }
+        .await;
+        artifact_outcome(result)
     }
 
     pub async fn publish_discussion(
@@ -1526,17 +1653,21 @@ impl HighlighterCore {
         title: String,
         body: String,
         attachment: Option<ArtifactPreview>,
-    ) -> Result<DiscussionRecord, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        crate::discussions::publish(
-            &self.runtime,
-            &group_id,
-            &title,
-            &body,
-            attachment,
-            self.clock.as_ref(),
-        )
-        .await
+    ) -> DiscussionOutcome {
+        let result: Result<DiscussionRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            crate::discussions::publish(
+                &self.runtime,
+                &group_id,
+                &title,
+                &body,
+                attachment,
+                self.clock.as_ref(),
+            )
+            .await
+        }
+        .await;
+        discussion_outcome(result)
     }
 
     /// Publish a NIP-29 kind:9 chat message into `group_id`. When
@@ -1547,15 +1678,19 @@ impl HighlighterCore {
         group_id: String,
         content: String,
         reply_to_event_id: Option<String>,
-    ) -> Result<ChatMessageRecord, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        crate::chat::publish_chat_message(
-            &self.runtime,
-            &group_id,
-            &content,
-            reply_to_event_id.as_deref(),
-        )
-        .await
+    ) -> ChatMessageOutcome {
+        let result: Result<ChatMessageRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            crate::chat::publish_chat_message(
+                &self.runtime,
+                &group_id,
+                &content,
+                reply_to_event_id.as_deref(),
+            )
+            .await
+        }
+        .await;
+        chat_message_outcome(result)
     }
 
     /// Publish a feedback note (kind:1) for the shake-to-share surface. When
@@ -1569,16 +1704,20 @@ impl HighlighterCore {
         agent_pubkey: Option<String>,
         parent_event_id: Option<String>,
         body: String,
-    ) -> Result<FeedbackEventRecord, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        feedback::publish_note(
-            &self.runtime,
-            &coordinate,
-            agent_pubkey.as_deref(),
-            parent_event_id.as_deref(),
-            &body,
-        )
-        .await
+    ) -> FeedbackEventOutcome {
+        let result: Result<FeedbackEventRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            feedback::publish_note(
+                &self.runtime,
+                &coordinate,
+                agent_pubkey.as_deref(),
+                parent_event_id.as_deref(),
+                &body,
+            )
+            .await
+        }
+        .await;
+        feedback_event_outcome(result)
     }
 
     pub async fn publish_highlights_and_share(
@@ -1586,16 +1725,20 @@ impl HighlighterCore {
         artifact: ArtifactRecord,
         drafts: Vec<HighlightDraft>,
         target_group_id: String,
-    ) -> Result<Vec<HighlightRecord>, CoreError> {
-        // Guard: user must be logged in.
-        let _ = self.require_user_pubkey()?;
-        crate::highlights::publish_and_share(
-            &self.runtime,
-            artifact,
-            drafts,
-            &target_group_id,
-        )
-        .await
+    ) -> HighlightListOutcome {
+        let result: Result<Vec<HighlightRecord>, CoreError> = async {
+            // Guard: user must be logged in.
+            let _ = self.require_user_pubkey()?;
+            crate::highlights::publish_and_share(
+                &self.runtime,
+                artifact,
+                drafts,
+                &target_group_id,
+            )
+            .await
+        }
+        .await;
+        highlight_list_outcome(result)
     }
 
     /// Re-share an existing kind:9802 highlight into a NIP-29 room as a
@@ -1611,16 +1754,20 @@ impl HighlighterCore {
         highlight_author_pubkey_hex: String,
         highlight_relay_url: String,
         target_group_id: String,
-    ) -> Result<(), CoreError> {
-        let _ = self.require_user_pubkey()?;
-        crate::highlights::share_to_community(
-            &self.runtime,
-            highlight_id.trim(),
-            highlight_author_pubkey_hex.trim(),
-            highlight_relay_url.trim(),
-            target_group_id.trim(),
-        )
-        .await
+    ) -> MutationOutcome {
+        let result: Result<(), CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            crate::highlights::share_to_community(
+                &self.runtime,
+                highlight_id.trim(),
+                highlight_author_pubkey_hex.trim(),
+                highlight_relay_url.trim(),
+                target_group_id.trim(),
+            )
+            .await
+        }
+        .await;
+        mutation_outcome(result)
     }
 
     /// Publish a solo NIP-84 highlight without a NIP-29 repost. Used by the
@@ -1630,9 +1777,13 @@ impl HighlighterCore {
         &self,
         draft: HighlightDraft,
         artifact: ArtifactRecord,
-    ) -> Result<HighlightRecord, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        crate::highlights::publish(&self.runtime, draft, artifact).await
+    ) -> HighlightOutcome {
+        let result: Result<HighlightRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            crate::highlights::publish(&self.runtime, draft, artifact).await
+        }
+        .await;
+        highlight_outcome(result)
     }
 
     // -- Rooms explorer (discovery + curation + recommendations) --
@@ -2009,18 +2160,22 @@ impl HighlighterCore {
         width: u32,
         height: u32,
         alt: String,
-    ) -> Result<BlossomUpload, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        blossom::upload_blob(
-            &self.runtime,
-            bytes,
-            mime,
-            width,
-            height,
-            alt,
-            self.clock.as_ref(),
-        )
-        .await
+    ) -> BlossomUploadOutcome {
+        let result: Result<BlossomUpload, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            blossom::upload_blob(
+                &self.runtime,
+                bytes,
+                mime,
+                width,
+                height,
+                alt,
+                self.clock.as_ref(),
+            )
+            .await
+        }
+        .await;
+        blossom_upload_outcome(result)
     }
 
     /// Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
@@ -2030,9 +2185,13 @@ impl HighlighterCore {
     pub async fn publish_picture(
         &self,
         draft: PictureDraft,
-    ) -> Result<PictureRecord, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        crate::pictures::publish_picture(&self.runtime, draft).await
+    ) -> PictureOutcome {
+        let result: Result<PictureRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            crate::pictures::publish_picture(&self.runtime, draft).await
+        }
+        .await;
+        picture_outcome(result)
     }
 
     // -- Relay config (NIP-65 read/write + NIP-78 rooms/indexer) --

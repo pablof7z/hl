@@ -84,20 +84,21 @@ struct ClipThreadView: View {
         sendError = nil
         let id = clipEventId
         Task {
-            do {
-                let record = try await app.safeCore.publishComment(
-                    rootTagName: "e",
-                    rootTagValue: id,
-                    rootKind: 9802,
-                    content: text
-                )
-                var existing = app.podcastPlayer.comments[id] ?? []
-                existing.append(record)
-                app.podcastPlayer.comments[id] = existing
-                replyText = ""
-            } catch {
-                sendError = error.localizedDescription
+            let outcome = await app.safeCore.publishComment(
+                rootTagName: "e",
+                rootTagValue: id,
+                rootKind: 9802,
+                content: text
+            )
+            guard outcome.error.isEmpty, let record = outcome.value else {
+                sendError = outcome.error
+                isSending = false
+                return
             }
+            var existing = app.podcastPlayer.comments[id] ?? []
+            existing.append(record)
+            app.podcastPlayer.comments[id] = existing
+            replyText = ""
             isSending = false
         }
     }
