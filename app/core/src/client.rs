@@ -35,15 +35,15 @@ use crate::models::{
     DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
     FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft,
     HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind,
-    HydratedHighlight, HydratedHighlightListOutcome, MutationOutcome, Nip05AvailabilityOutcome,
-    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
-    OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
-    ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft,
-    ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome,
-    RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
-    RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
+    HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction, MutationOutcome,
+    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
+    NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord,
+    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
+    ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome,
+    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
+    RoomRecommendation, RoomRecommendationListOutcome, StringListOutcome, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -842,6 +842,97 @@ fn whats_new_entries_outcome(
     }
 }
 
+impl HighlighterCore {
+    async fn start_nostr_connect_with_options(
+        &self,
+        options: NostrConnectOptions,
+        callback: &str,
+    ) -> Result<String, CoreError> {
+        // Local ephemeral keypair. The remote signer uses this pubkey to
+        // address its messages to us over the relay; after pair completion
+        // the user's pubkey comes from the remote signer via GetPublicKey.
+        let local_keys = Keys::generate();
+        let secret = nip46::random_secret();
+
+        let pairing_relay = nostr_connect_relay();
+        let uri = nip46::build_nostr_connect_uri(
+            local_keys.public_key(),
+            pairing_relay,
+            &options.name,
+            &options.url,
+            &options.image,
+            &options.perms,
+            &secret,
+        )?;
+
+        // Ensure the NIP-46 relay is part of the pool before we start
+        // listening for the inbound `connect` request. `add_relay` is a
+        // no-op if the relay is already known, but we can't rely on the
+        // initial pool reconcile having completed yet.
+        let client = self.runtime.client().clone();
+        if let Err(e) = client.add_relay(pairing_relay).await {
+            tracing::warn!(relay = %pairing_relay, error = %e, "add_relay");
+        }
+        client.connect().await;
+
+        // Spawn a background task that waits for the remote signer to
+        // connect and then installs the resulting BunkerSigner. The task
+        // must own: the client, callback slot, Session slot, and local keys.
+        let inner = self.inner.clone();
+        let runtime = self.runtime.clone();
+        let callback_slot = self.callback_slot.clone();
+        let clock = self.clock.clone();
+        self.runtime.runtime_handle().spawn(async move {
+            let result = BunkerSigner::await_inbound_with_clock(
+                client.clone(),
+                local_keys,
+                Some(secret),
+                clock,
+            )
+            .await;
+            match result {
+                Ok((signer, user_pubkey)) => {
+                    let user = match current_user_from_pubkey(&user_pubkey) {
+                        Ok(u) => u,
+                        Err(e) => {
+                            tracing::warn!(error = %e, "npub encode after bunker pair");
+                            return;
+                        }
+                    };
+                    let signer = Arc::new(signer);
+                    // We're inside NostrRuntime's tokio runtime here
+                    // (spawned via `runtime_handle().spawn`). The sync
+                    // `runtime.set_signer` wrapper uses `block_on`, which
+                    // panics when called from that same runtime, so talk to
+                    // the client directly instead.
+                    client.set_signer((*signer).clone()).await;
+                    runtime.spawn_apply_user_relay_config(user_pubkey.to_hex());
+                    let sub_id = runtime.spawn_membership_subscription(user_pubkey);
+                    let contacts_id = runtime.spawn_contacts_subscription(user_pubkey);
+                    {
+                        let mut guard = inner.write();
+                        guard.session.set_bunker(signer, user.clone());
+                        guard.session.set_membership_subscription(sub_id);
+                        guard.session.set_contacts_subscription(contacts_id);
+                    }
+                    let cb = { callback_slot.read().clone() };
+                    if let Some(cb) = cb {
+                        cb.on_data_changed(Delta {
+                            subscription_id: 0,
+                            change: DataChangeType::SignerConnected { user },
+                        });
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "nostrconnect inbound pairing failed");
+                }
+            }
+        });
+
+        Ok(nip46::append_callback_to_uri(&uri, callback))
+    }
+}
+
 #[uniffi::export(async_runtime = "tokio")]
 impl HighlighterCore {
     #[uniffi::constructor]
@@ -852,6 +943,10 @@ impl HighlighterCore {
     }
 
     // -- Auth (sync) --
+
+    pub fn classify_login_input(&self, input: String) -> LoginInputAction {
+        crate::session::classify_login_input(&input)
+    }
 
     pub fn login_nsec(&self, nsec: String) -> CurrentUserOutcome {
         let result: Result<CurrentUser, CoreError> = (|| {
@@ -1042,95 +1137,10 @@ impl HighlighterCore {
     // Async auth flows delegate without holding the parking_lot guard across
     // await. The session module is responsible for thread-safe internal state.
 
-    pub async fn start_nostr_connect(&self, options: NostrConnectOptions) -> StringOutcome {
-        let result: Result<String, CoreError> = async {
-            // Local ephemeral keypair. The remote signer uses this pubkey to
-            // address its messages to us over the relay; after pair completion
-            // the user's pubkey comes from the remote signer via GetPublicKey.
-            let local_keys = Keys::generate();
-            let secret = nip46::random_secret();
-
-            let pairing_relay = nostr_connect_relay();
-            let uri = nip46::build_nostr_connect_uri(
-                local_keys.public_key(),
-                pairing_relay,
-                &options.name,
-                &options.url,
-                &options.image,
-                &options.perms,
-                &secret,
-            )?;
-
-            // Ensure the NIP-46 relay is part of the pool before we start
-            // listening for the inbound `connect` request. `add_relay` is a
-            // no-op if the relay is already known — but we can't rely on the
-            // initial pool reconcile having completed yet.
-            let client = self.runtime.client().clone();
-            if let Err(e) = client.add_relay(pairing_relay).await {
-                tracing::warn!(relay = %pairing_relay, error = %e, "add_relay");
-            }
-            client.connect().await;
-
-            // Spawn a background task that waits for the remote signer to
-            // connect and then installs the resulting BunkerSigner. The task
-            // must own: the client (for set_signer after pairing), the callback
-            // slot (to fire SignerConnected), the Session guard slot (to store
-            // the active signer), and the local keys.
-            let inner = self.inner.clone();
-            let runtime = self.runtime.clone();
-            let callback_slot = self.callback_slot.clone();
-            let clock = self.clock.clone();
-            self.runtime.runtime_handle().spawn(async move {
-                let result = BunkerSigner::await_inbound_with_clock(
-                    client.clone(),
-                    local_keys,
-                    Some(secret),
-                    clock,
-                )
-                .await;
-                match result {
-                    Ok((signer, user_pubkey)) => {
-                        let user = match current_user_from_pubkey(&user_pubkey) {
-                            Ok(u) => u,
-                            Err(e) => {
-                                tracing::warn!(error = %e, "npub encode after bunker pair");
-                                return;
-                            }
-                        };
-                        let signer = Arc::new(signer);
-                        // We're inside NostrRuntime's tokio runtime here
-                        // (spawned via `runtime_handle().spawn`). The sync
-                        // `runtime.set_signer` wrapper uses `block_on`, which
-                        // panics ("Cannot start a runtime from within a
-                        // runtime") when called from inside that same
-                        // runtime — talk to the client directly instead.
-                        client.set_signer((*signer).clone()).await;
-                        runtime.spawn_apply_user_relay_config(user_pubkey.to_hex());
-                        let sub_id = runtime.spawn_membership_subscription(user_pubkey);
-                        let contacts_id = runtime.spawn_contacts_subscription(user_pubkey);
-                        {
-                            let mut guard = inner.write();
-                            guard.session.set_bunker(signer, user.clone());
-                            guard.session.set_membership_subscription(sub_id);
-                            guard.session.set_contacts_subscription(contacts_id);
-                        }
-                        let cb = { callback_slot.read().clone() };
-                        if let Some(cb) = cb {
-                            cb.on_data_changed(Delta {
-                                subscription_id: 0,
-                                change: DataChangeType::SignerConnected { user },
-                            });
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "nostrconnect inbound pairing failed");
-                    }
-                }
-            });
-
-            Ok(uri)
-        }
-        .await;
+    pub async fn start_default_nostr_connect(&self, callback: String) -> StringOutcome {
+        let result = self
+            .start_nostr_connect_with_options(NostrConnectOptions::default(), &callback)
+            .await;
         string_outcome(result)
     }
 

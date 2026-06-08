@@ -123,7 +123,7 @@ struct LoginView: View {
                     .padding(.vertical, 10)
             }
             .buttonStyle(.glassProminent)
-            .disabled(isWorking || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(isWorking || isManualInputEmpty)
 
             NavigationLink {
                 OnboardingCreateAccountView()
@@ -139,33 +139,41 @@ struct LoginView: View {
 
     // MARK: - Actions
 
+    private var isManualInputEmpty: Bool {
+        if case .empty = store.safeCore.classifyLoginInput(inputText) {
+            return true
+        }
+        return false
+    }
+
     private func submitManualInput() async {
-        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalized = trimmed.hasPrefix("nostr:") ? String(trimmed.dropFirst(6)) : trimmed
-        guard !normalized.isEmpty else { return }
+        let action = store.safeCore.classifyLoginInput(inputText)
 
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
 
-        if normalized.hasPrefix("nsec1") {
-            let outcome = await store.safeCore.loginNsec(normalized)
+        switch action {
+        case .empty:
+            return
+        case .nsec(let nsec):
+            let outcome = await store.safeCore.loginNsec(nsec)
             if outcome.error.isEmpty, let user = outcome.value {
-                AppSessionStore.shared.persistNsec(normalized)
+                AppSessionStore.shared.persistNsec(nsec)
                 await store.completeLogin(user: user)
             } else {
                 errorMessage = outcome.error.isEmpty ? "Sign in failed." : outcome.error
             }
-        } else if normalized.hasPrefix("bunker://") || normalized.hasPrefix("nostrconnect://") {
-            let outcome = await store.safeCore.pairBunker(normalized)
+        case .bunker(let uri):
+            let outcome = await store.safeCore.pairBunker(uri)
             if outcome.error.isEmpty, let user = outcome.value {
-                AppSessionStore.shared.persistBunkerURI(normalized)
+                AppSessionStore.shared.persistBunkerURI(uri)
                 await store.completeLogin(user: user)
             } else {
                 errorMessage = outcome.error.isEmpty ? "Sign in failed." : outcome.error
             }
-        } else {
-            errorMessage = "Enter an nsec1… or bunker:// URI."
+        case .invalid(let message):
+            errorMessage = message
         }
     }
 
@@ -174,13 +182,7 @@ struct LoginView: View {
         errorMessage = nil
         defer { isWorking = false }
 
-        let options = NostrConnectOptions(
-            name: "Highlighter",
-            url: "https://highlighter.com",
-            image: "https://highlighter.com/icon.png",
-            perms: "sign_event:11,sign_event:1111,sign_event:9802,sign_event:16,nip04_encrypt,nip04_decrypt,nip44_encrypt,nip44_decrypt"
-        )
-        let outcome = await store.safeCore.startNostrConnect(options)
+        let outcome = await store.safeCore.startDefaultNostrConnect(callback: "highlighter://nip46")
         guard outcome.error.isEmpty else {
             errorMessage = outcome.error
             return
@@ -191,14 +193,7 @@ struct LoginView: View {
             return
         }
 
-        // Attach a return-to-foreground callback; actual pairing happens
-        // over the relay that the Rust core is already subscribed to.
-        let callback = "highlighter://nip46"
-        let encodedCallback = callback.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? callback
-        let separator = uri.contains("?") ? "&" : "?"
-        let urlWithCallback = "\(uri)\(separator)callback=\(encodedCallback)"
-
-        if let url = URL(string: urlWithCallback) {
+        if let url = URL(string: uri) {
             openURL(url)
         }
         // `EventBridge` receives `.signerConnected(user)` once the remote

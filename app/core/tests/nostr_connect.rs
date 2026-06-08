@@ -2,7 +2,7 @@
 //! input validation paths — neither test actually waits for a live remote
 //! signer to respond.
 
-use highlighter_core::{HighlighterCore, NostrConnectOptions};
+use highlighter_core::{HighlighterCore, LoginInputAction};
 use std::sync::Arc;
 use tempfile::TempDir;
 
@@ -13,20 +13,15 @@ fn isolated_core() -> (Arc<HighlighterCore>, TempDir) {
 }
 
 #[tokio::test]
-async fn start_nostr_connect_returns_valid_uri() {
+async fn start_default_nostr_connect_returns_valid_uri_with_callback() {
     let (core, _tmp) = isolated_core();
 
-    let options = NostrConnectOptions {
-        name: "Highlighter".into(),
-        url: "https://highlighter.com".into(),
-        image: "https://highlighter.com/icon.png".into(),
-        perms: "sign_event:11,sign_event:9802,nip44_encrypt".into(),
-    };
-
-    let outcome = core.start_nostr_connect(options).await;
+    let outcome = core
+        .start_default_nostr_connect("highlighter://nip46".into())
+        .await;
     assert!(
         outcome.error.is_empty(),
-        "start_nostr_connect: {}",
+        "start_default_nostr_connect: {}",
         outcome.error
     );
     let uri = outcome.value;
@@ -40,8 +35,7 @@ async fn start_nostr_connect_returns_valid_uri() {
         "missing primal relay in URI: {uri}"
     );
 
-    // Perms must round-trip. We passed a specific subset — check at least one
-    // entry made it through.
+    // App-owned permission policy must come from Rust defaults.
     assert!(
         uri.contains("perms=sign_event:11"),
         "missing sign_event:11 perm: {uri}"
@@ -55,6 +49,39 @@ async fn start_nostr_connect_returns_valid_uri() {
 
     // Secret param for the connect handshake.
     assert!(uri.contains("secret="), "missing secret param: {uri}");
+
+    // Platform callback is supplied by native, but Rust owns query assembly.
+    assert!(
+        uri.contains("callback=highlighter%3A%2F%2Fnip46"),
+        "missing encoded callback param: {uri}"
+    );
+}
+
+#[test]
+fn classify_login_input_matches_manual_login_policy() {
+    let (core, _tmp) = isolated_core();
+    assert_eq!(
+        core.classify_login_input(" nostr:nsec1example ".into()),
+        LoginInputAction::Nsec {
+            nsec: "nsec1example".into()
+        }
+    );
+    assert_eq!(
+        core.classify_login_input("nostrconnect://example".into()),
+        LoginInputAction::Bunker {
+            uri: "nostrconnect://example".into()
+        }
+    );
+    assert_eq!(
+        core.classify_login_input(" nostr: ".into()),
+        LoginInputAction::Empty
+    );
+    assert_eq!(
+        core.classify_login_input("npub1example".into()),
+        LoginInputAction::Invalid {
+            message: "Enter an nsec1… or bunker:// URI.".into()
+        }
+    );
 }
 
 #[tokio::test]

@@ -769,6 +769,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func checkNip05Availability(name: String) async  -> Nip05AvailabilityOutcome
 
+    func classifyLoginInput(input: String)  -> LoginInputAction
+
     func clearRecentSearches() async  -> StringListOutcome
 
     /**
@@ -1398,6 +1400,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func standaloneNostrEntity(content: String)  -> NostrEntityRef?
 
+    func startDefaultNostrConnect(callback: String) async  -> StringOutcome
+
     /**
      * Install (if not already installed) the kind:10012 curated-list sub for
      * `curator_pubkey_hex`. Once the list lands in ndb, this method also
@@ -1421,8 +1425,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Idempotent; both subs ride until logout.
      */
     func startFriendsRoomsDiscovery() async  -> MutationOutcome
-
-    func startNostrConnect(options: NostrConnectOptions) async  -> StringOutcome
 
     /**
      * Install (if not already installed) a long-lived relay sub for every
@@ -1776,6 +1778,14 @@ open func checkNip05Availability(name: String)async  -> Nip05AvailabilityOutcome
             errorHandler: nil
 
         )
+}
+
+open func classifyLoginInput(input: String) -> LoginInputAction  {
+    return try!  FfiConverterTypeLoginInputAction_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_classify_login_input(self.uniffiClonePointer(),
+        FfiConverterString.lower(input),$0
+    )
+})
 }
 
 open func clearRecentSearches()async  -> StringListOutcome  {
@@ -4076,6 +4086,24 @@ open func standaloneNostrEntity(content: String) -> NostrEntityRef?  {
 })
 }
 
+open func startDefaultNostrConnect(callback: String)async  -> StringOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_start_default_nostr_connect(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(callback)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeStringOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
     /**
      * Install (if not already installed) the kind:10012 curated-list sub for
      * `curator_pubkey_hex`. Once the list lands in ndb, this method also
@@ -4127,24 +4155,6 @@ open func startFriendsRoomsDiscovery()async  -> MutationOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeMutationOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-open func startNostrConnect(options: NostrConnectOptions)async  -> StringOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_start_nostr_connect(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeNostrConnectOptions_lower(options)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringOutcome_lift,
             errorHandler: nil
 
         )
@@ -10441,102 +10451,6 @@ public func FfiConverterTypeNip11DocumentOutcome_lower(_ value: Nip11DocumentOut
 
 
 /**
- * Options for initiating a `nostrconnect://` outgoing pairing.
- * Matches Olas's `NDKBunkerSigner.NostrConnectOptions`.
- */
-public struct NostrConnectOptions {
-    public var name: String
-    public var url: String
-    public var image: String
-    /**
-     * e.g. "sign_event:11,sign_event:9802,nip44_encrypt"
-     */
-    public var perms: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(name: String, url: String, image: String,
-        /**
-         * e.g. "sign_event:11,sign_event:9802,nip44_encrypt"
-         */perms: String) {
-        self.name = name
-        self.url = url
-        self.image = image
-        self.perms = perms
-    }
-}
-
-#if compiler(>=6)
-extension NostrConnectOptions: Sendable {}
-#endif
-
-
-extension NostrConnectOptions: Equatable, Hashable {
-    public static func ==(lhs: NostrConnectOptions, rhs: NostrConnectOptions) -> Bool {
-        if lhs.name != rhs.name {
-            return false
-        }
-        if lhs.url != rhs.url {
-            return false
-        }
-        if lhs.image != rhs.image {
-            return false
-        }
-        if lhs.perms != rhs.perms {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(name)
-        hasher.combine(url)
-        hasher.combine(image)
-        hasher.combine(perms)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNostrConnectOptions: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrConnectOptions {
-        return
-            try NostrConnectOptions(
-                name: FfiConverterString.read(from: &buf),
-                url: FfiConverterString.read(from: &buf),
-                image: FfiConverterString.read(from: &buf),
-                perms: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: NostrConnectOptions, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.name, into: &buf)
-        FfiConverterString.write(value.url, into: &buf)
-        FfiConverterString.write(value.image, into: &buf)
-        FfiConverterString.write(value.perms, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNostrConnectOptions_lift(_ buf: RustBuffer) throws -> NostrConnectOptions {
-    return try FfiConverterTypeNostrConnectOptions.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNostrConnectOptions_lower(_ value: NostrConnectOptions) -> RustBuffer {
-    return FfiConverterTypeNostrConnectOptions.lower(value)
-}
-
-
-/**
  * Resolved event data for a [`NostrEntityRef`]. Returned by
  * [`resolve_from_cache`] when the underlying event is already in nostrdb.
  */
@@ -14436,6 +14350,104 @@ extension HighlightSourceKind: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Rust-owned classification for pasted login material. Native shells render
+ * the result and execute storage/capability side effects; protocol shape and
+ * validation semantics stay here so iOS and Android cannot diverge.
+ */
+
+public enum LoginInputAction {
+
+    case empty
+    case nsec(nsec: String
+    )
+    case bunker(uri: String
+    )
+    case invalid(message: String
+    )
+}
+
+
+#if compiler(>=6)
+extension LoginInputAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLoginInputAction: FfiConverterRustBuffer {
+    typealias SwiftType = LoginInputAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoginInputAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .empty
+
+        case 2: return .nsec(nsec: try FfiConverterString.read(from: &buf)
+        )
+
+        case 3: return .bunker(uri: try FfiConverterString.read(from: &buf)
+        )
+
+        case 4: return .invalid(message: try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LoginInputAction, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .empty:
+            writeInt(&buf, Int32(1))
+
+
+        case let .nsec(nsec):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(nsec, into: &buf)
+
+
+        case let .bunker(uri):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(uri, into: &buf)
+
+
+        case let .invalid(message):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(message, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoginInputAction_lift(_ buf: RustBuffer) throws -> LoginInputAction {
+    return try FfiConverterTypeLoginInputAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLoginInputAction_lower(_ value: LoginInputAction) -> RustBuffer {
+    return FfiConverterTypeLoginInputAction.lower(value)
+}
+
+
+extension LoginInputAction: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum NostrContentRun {
 
@@ -16720,6 +16732,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 22195) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_classify_login_input() != 60539) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches() != 18871) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17110,13 +17125,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_standalone_nostr_entity() != 64485) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_start_default_nostr_connect() != 22248) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_featured_rooms() != 31596) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_friends_rooms_discovery() != 44697) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_start_nostr_connect() != 45790) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_discovery() != 41569) {

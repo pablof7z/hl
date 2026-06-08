@@ -790,15 +790,26 @@ pub struct FeedbackEventRecord {
     pub content: String,
 }
 
-/// Options for initiating a `nostrconnect://` outgoing pairing.
-/// Matches Olas's `NDKBunkerSigner.NostrConnectOptions`.
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct NostrConnectOptions {
-    pub name: String,
-    pub url: String,
-    pub image: String,
+/// Rust-owned classification for pasted login material. Native shells render
+/// the result and execute storage/capability side effects; protocol shape and
+/// validation semantics stay here so iOS and Android cannot diverge.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum LoginInputAction {
+    Empty,
+    Nsec { nsec: String },
+    Bunker { uri: String },
+    Invalid { message: String },
+}
+
+/// Options for initiating a `nostrconnect://` outgoing pairing. Internal to
+/// Rust so native shells cannot choose app metadata or permission policy.
+#[derive(Debug, Clone)]
+pub(crate) struct NostrConnectOptions {
+    pub(crate) name: String,
+    pub(crate) url: String,
+    pub(crate) image: String,
     /// e.g. "sign_event:11,sign_event:9802,nip44_encrypt"
-    pub perms: String,
+    pub(crate) perms: String,
 }
 
 impl Default for NostrConnectOptions {

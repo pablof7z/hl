@@ -16,8 +16,12 @@ actor SafeHighlighterCore {
         core.loginNsec(nsec: nsec)
     }
 
-    func startNostrConnect(_ options: NostrConnectOptions) async -> StringOutcome {
-        await core.startNostrConnect(options: options)
+    nonisolated func classifyLoginInput(_ input: String) -> LoginInputAction {
+        core.classifyLoginInput(input: input)
+    }
+
+    func startDefaultNostrConnect(callback: String) async -> StringOutcome {
+        await core.startDefaultNostrConnect(callback: callback)
     }
 
     func pairBunker(_ uri: String) async -> CurrentUserOutcome {

@@ -109,9 +109,9 @@ impl BunkerSigner {
     /// Listen on `relay` for an incoming remote-signer `connect` request aimed
     /// at `local_keys`'s pubkey. On receipt, ACK, then resolve the user pubkey.
     ///
-    /// Used by `start_nostr_connect`: we publish a `nostrconnect://` URI with
-    /// our local pubkey; a signer (e.g. Primal) sees it and reaches out over
-    /// the same relay.
+    /// Used by the app's default Nostr Connect flow: we publish a
+    /// `nostrconnect://` URI with our local pubkey; a signer (e.g. Primal)
+    /// sees it and reaches out over the same relay.
     pub async fn await_inbound(
         client: Client,
         local_keys: Keys,
@@ -505,6 +505,18 @@ pub fn build_nostr_connect_uri(
     ))
 }
 
+pub fn append_callback_to_uri(uri: &str, callback: &str) -> String {
+    if callback.is_empty() {
+        return uri.to_string();
+    }
+
+    let separator = if uri.contains('?') { '&' } else { '?' };
+    format!(
+        "{uri}{separator}callback={}",
+        percent_encode_alphanumeric(callback)
+    )
+}
+
 fn push_param(query: &mut String, key: &str, value: &str) {
     query.push('&');
     query.push_str(key);
@@ -522,6 +534,18 @@ fn percent_encode(input: &str) -> String {
             b'-' | b'_' | b'.' | b'~' | b',' | b':' | b'/'
         );
         if keep {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{:02X}", b));
+        }
+    }
+    out
+}
+
+fn percent_encode_alphanumeric(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for b in input.bytes() {
+        if b.is_ascii_alphanumeric() {
             out.push(b as char);
         } else {
             out.push_str(&format!("%{:02X}", b));
@@ -571,5 +595,16 @@ mod tests {
         let s = random_secret();
         assert_eq!(s.len(), 32);
         assert!(s.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn append_callback_preserves_ios_query_encoding() {
+        assert_eq!(
+            append_callback_to_uri(
+                "nostrconnect://abc?relay=wss://relay.primal.net",
+                "highlighter://nip46"
+            ),
+            "nostrconnect://abc?relay=wss://relay.primal.net&callback=highlighter%3A%2F%2Fnip46"
+        );
     }
 }

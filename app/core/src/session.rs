@@ -4,9 +4,9 @@
 //! - Swift does signer *detection* (`canOpenURL`) and UI for the Primal hero
 //!   button. Rust is never responsible for probing installed apps — that's an
 //!   iOS-only concern.
-//! - Swift calls `start_nostr_connect()` on this module to produce an outgoing
-//!   `nostrconnect://` URI and listen for the remote signer on the Primal
-//!   relay.
+//! - Swift calls `start_default_nostr_connect()` on this module to produce an
+//!   outgoing `nostrconnect://` URI and listen for the remote signer on the
+//!   Primal relay.
 //! - Swift calls `pair_bunker()` when the user pastes/scans a `bunker://` or
 //!   `nostrconnect://` URI produced by a remote signer.
 //! - Nsec persistence is Swift-side (iOS Keychain via `AppSessionStore`).
@@ -18,8 +18,30 @@ use std::sync::Arc;
 use nostr_sdk::prelude::*;
 
 use crate::errors::CoreError;
-use crate::models::CurrentUser;
+use crate::models::{CurrentUser, LoginInputAction};
 use crate::nip46::BunkerSigner;
+
+pub fn classify_login_input(input: &str) -> LoginInputAction {
+    let trimmed = input.trim();
+    let normalized = trimmed.strip_prefix("nostr:").unwrap_or(trimmed);
+    if normalized.is_empty() {
+        return LoginInputAction::Empty;
+    }
+
+    if normalized.starts_with("nsec1") {
+        LoginInputAction::Nsec {
+            nsec: normalized.to_string(),
+        }
+    } else if normalized.starts_with("bunker://") || normalized.starts_with("nostrconnect://") {
+        LoginInputAction::Bunker {
+            uri: normalized.to_string(),
+        }
+    } else {
+        LoginInputAction::Invalid {
+            message: "Enter an nsec1… or bunker:// URI.".into(),
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct Session {
@@ -227,4 +249,36 @@ pub(crate) fn current_user_from_pubkey(pk: &PublicKey) -> Result<CurrentUser, Co
         pubkey: pk.to_hex(),
         npub,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classify_login_input_strips_nostr_prefix_and_preserves_material() {
+        assert_eq!(
+            classify_login_input("  nostr:nsec1example  "),
+            LoginInputAction::Nsec {
+                nsec: "nsec1example".into()
+            }
+        );
+        assert_eq!(
+            classify_login_input("nostr:bunker://relay.example"),
+            LoginInputAction::Bunker {
+                uri: "bunker://relay.example".into()
+            }
+        );
+        assert_eq!(classify_login_input(" nostr: "), LoginInputAction::Empty);
+    }
+
+    #[test]
+    fn classify_login_input_rejects_unknown_material_with_login_message() {
+        assert_eq!(
+            classify_login_input("npub1example"),
+            LoginInputAction::Invalid {
+                message: "Enter an nsec1… or bunker:// URI.".into()
+            }
+        );
+    }
 }
