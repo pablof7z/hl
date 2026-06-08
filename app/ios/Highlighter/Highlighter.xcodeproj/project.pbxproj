@@ -58,7 +58,6 @@
 		51A3E4BDDD4F3782BEC87832 /* CommentsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 060832EB188FDDF929F87E2C /* CommentsStore.swift */; };
 		5418E6BFC39BF5AEAC9A178D /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE889FF9DFA914346F22EC8 /* ChatView.swift */; };
 		56B834DABF900FF450B35708 /* OnboardingInterestsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0E0F7B6D624B3D59FA35E8 /* OnboardingInterestsView.swift */; };
-		57F3D10F275E29C431715268 /* RoomExplorerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 170A34FE765496BD6B807C8B /* RoomExplorerConfig.swift */; };
 		58073ACB7A26114179CC9BA7 /* RootSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FC896DAED29C4AB192365D8 /* RootSceneView.swift */; };
 		5C2B4FEA522C29AD812877E0 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C82F06C284702862EF3760BD /* ShareViewController.swift */; };
 		5CB2ABF16C16667AEBB542EF /* PodcastListeningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F0195B501DEDB841E4B936 /* PodcastListeningView.swift */; };
@@ -209,7 +208,6 @@
 		156863C2F94E50DDFB1AD489 /* RoomLibraryBookCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomLibraryBookCardView.swift; sourceTree = "<group>"; };
 		16B6E25AF294054B28EC8008 /* HighlighterShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HighlighterShareExtension.entitlements; sourceTree = "<group>"; };
 		16DC7FE82E7DC89E10EF5B1B /* HighlightDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighlightDetailView.swift; sourceTree = "<group>"; };
-		170A34FE765496BD6B807C8B /* RoomExplorerConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomExplorerConfig.swift; sourceTree = "<group>"; };
 		1C1211D86297C652F10F740B /* FriendsOnRoomCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsOnRoomCard.swift; sourceTree = "<group>"; };
 		1D0A6C274C36DB719AD4EC33 /* ArtifactDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtifactDetailView.swift; sourceTree = "<group>"; };
 		1E16A359FC1C5B69DF399844 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
@@ -576,7 +574,6 @@
 				2AE3EF2251578795CB04FF8D /* BlossomUploadService.swift */,
 				93C2998FA6F33E28DFCFAE50 /* EventBridge.swift */,
 				C68126D4A3083806ED488835 /* HighlighterStore.swift */,
-				170A34FE765496BD6B807C8B /* RoomExplorerConfig.swift */,
 				FFB98694B90B62FBE7A589BF /* SafeHighlighterCore.swift */,
 				0B11E53320CF44FAE9BD3F4E /* ShakeDetector.swift */,
 				9B9185A7D9C0B0886630876F /* WhatsNew.swift */,
@@ -1047,7 +1044,6 @@
 				66B26B812476655C36CACB5E /* RelayRowView.swift in Sources */,
 				80A581EE7D992C85BFAC3C23 /* RoomBrowseAllView.swift in Sources */,
 				510E207897486D6E02551543 /* RoomCoverCard.swift in Sources */,
-				57F3D10F275E29C431715268 /* RoomExplorerConfig.swift in Sources */,
 				4B4F482B40A2591BF3251AF0 /* RoomExplorerStore.swift in Sources */,
 				1129973B6BA0DBA73E6438F1 /* RoomExplorerView.swift in Sources */,
 				C7120F362B42A71E448D08D4 /* RoomHomeView.swift in Sources */,

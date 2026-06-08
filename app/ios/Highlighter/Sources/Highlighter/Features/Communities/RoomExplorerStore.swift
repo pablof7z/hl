@@ -45,7 +45,7 @@ final class RoomExplorerStore {
         Task { try? await safeCore.startFriendsRoomsDiscovery() }
         Task { await ensureCurationSubscription(safeCore: safeCore) }
 
-        let curatorPubkey = RoomExplorerConfig.cachedCuratorPubkeyHex
+        let curatorPubkey = (try? await safeCore.getRoomExplorerCuratorPubkey()) ?? ""
 
         async let featuredTask: [CommunitySummary] =
             (try? await safeCore.getFeaturedRooms(curatorPubkeyHex: curatorPubkey)) ?? []
@@ -89,7 +89,7 @@ final class RoomExplorerStore {
     func reloadFromCache() async {
         guard let appStore else { return }
         let safeCore = appStore.safeCore
-        let curatorPubkey = RoomExplorerConfig.cachedCuratorPubkeyHex
+        let curatorPubkey = (try? await safeCore.getRoomExplorerCuratorPubkey()) ?? ""
 
         async let featuredTask = (try? await safeCore.getFeaturedRooms(curatorPubkeyHex: curatorPubkey)) ?? []
         async let newTask = (try? await safeCore.getNewRooms(limit: 24)) ?? []
@@ -107,19 +107,11 @@ final class RoomExplorerStore {
 
     private func ensureCurationSubscription(safeCore: SafeHighlighterCore) async {
         if !hasStartedCuration {
-            let cached = RoomExplorerConfig.cachedCuratorPubkeyHex
-            if cached.isEmpty {
-                // No cached pubkey yet — fetch NIP-11 once, cache it, then
-                // install the sub. On first app install this means the
-                // featured shelf may be empty for the first session; the
-                // very next appear picks up the curator and populates it.
-                if let fresh = await RoomExplorerConfig.fetchCuratorPubkey(), !fresh.isEmpty {
-                    try? await safeCore.startFeaturedRooms(curatorPubkeyHex: fresh)
-                    hasStartedCuration = true
-                }
-            } else {
-                try? await safeCore.startFeaturedRooms(curatorPubkeyHex: cached)
+            do {
+                try await safeCore.startRoomExplorerFeaturedRooms()
                 hasStartedCuration = true
+            } catch {
+                print("startRoomExplorerFeaturedRooms failed: \(error)")
             }
         }
     }

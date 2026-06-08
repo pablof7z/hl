@@ -990,6 +990,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getRelays() async throws  -> [RelayConfig]
     
+    func getRoomExplorerCuratorPubkey() async throws  -> String
+
     /**
      * Rooms where authors of articles the user has highlighted post
      * artifacts. Empty when the user hasn't highlighted any articles yet.
@@ -1261,6 +1263,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func startRoomDiscovery() async 
     
+    func startRoomExplorerFeaturedRooms() async throws
+
     /**
      * Article-reader view-scope subscription. Fires `ArticleUpdated` deltas
      * whenever the article's replaceable body supersedes OR a new kind:9802
@@ -2353,6 +2357,23 @@ open func getRelays()async throws  -> [RelayConfig]  {
         )
 }
     
+open func getRoomExplorerCuratorPubkey()async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_room_explorer_curator_pubkey(
+                    self.uniffiClonePointer()
+
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
     /**
      * Rooms where authors of articles the user has highlighted post
      * artifacts. Empty when the user hasn't highlighted any articles yet.
@@ -3330,6 +3351,23 @@ open func startRoomDiscovery()async   {
         )
 }
     
+open func startRoomExplorerFeaturedRooms()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_start_room_explorer_featured_rooms(
+                    self.uniffiClonePointer()
+
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
     /**
      * Article-reader view-scope subscription. Fires `ArticleUpdated` deltas
      * whenever the article's replaceable body supersedes OR a new kind:9802
@@ -10058,6 +10096,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relays() != 12364) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_explorer_curator_pubkey() != 64376) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_rooms_from_read_authors() != 47912) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10203,6 +10244,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_discovery() != 41569) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_explorer_featured_rooms() != 9712) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 35661) {

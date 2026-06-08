@@ -369,6 +369,14 @@ actor SafeHighlighterCore {
         try await core.startFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
     }
 
+    func getRoomExplorerCuratorPubkey() async throws -> String {
+        try await core.getRoomExplorerCuratorPubkey()
+    }
+
+    func startRoomExplorerFeaturedRooms() async throws {
+        try await core.startRoomExplorerFeaturedRooms()
+    }
+
     func getFeaturedRooms(curatorPubkeyHex: String) async throws -> [CommunitySummary] {
         try await core.getFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex).filter(\.isPublicOpenRoom)
     }

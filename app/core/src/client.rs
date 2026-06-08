@@ -35,6 +35,7 @@ use crate::nip46::{self, BunkerSigner};
 use crate::nostr_runtime::NostrRuntime;
 use crate::profile;
 use crate::relays::NOSTR_CONNECT_RELAY;
+use crate::room_explorer_config;
 use crate::session::{current_user_from_pubkey, Session};
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
 use crate::web_metadata::{self, WebMetadata, WebMetadataStore};
@@ -55,6 +56,8 @@ pub struct HighlighterCore {
     isbn_previews: Arc<isbn_lookup::IsbnPreviewCache>,
     /// Rust-owned recent search history shared by every native shell.
     recent_searches: Arc<recent_searches::RecentSearchesStore>,
+    /// Rust-owned rooms explorer curator config and NIP-11 refresh path.
+    room_explorer_config: Arc<room_explorer_config::RoomExplorerConfigStore>,
 }
 
 struct Inner {
@@ -1430,6 +1433,15 @@ impl HighlighterCore {
         Ok(())
     }
 
+    pub async fn get_room_explorer_curator_pubkey(&self) -> Result<String, CoreError> {
+        self.room_explorer_config.curator_pubkey().await
+    }
+
+    pub async fn start_room_explorer_featured_rooms(&self) -> Result<(), CoreError> {
+        let curator_pubkey = self.room_explorer_config.refresh_curator_pubkey().await?;
+        self.start_featured_rooms(curator_pubkey).await
+    }
+
     /// Curator's latest kind:10012 list, resolved into `CommunitySummary`
     /// items in curator-chosen order. Rooms without cached metadata are
     /// dropped; the next call after `start_featured_rooms` has backfilled
@@ -1896,6 +1908,9 @@ impl HighlighterCore {
         let isbn_previews = Arc::new(isbn_lookup::IsbnPreviewCache::new(runtime.data_dir()));
         let recent_searches =
             Arc::new(recent_searches::RecentSearchesStore::new(runtime.data_dir()));
+        let room_explorer_config = Arc::new(
+            room_explorer_config::RoomExplorerConfigStore::new(runtime.data_dir()),
+        );
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {
                 session: Session::new(),
@@ -1906,6 +1921,7 @@ impl HighlighterCore {
             web_metadata,
             isbn_previews,
             recent_searches,
+            room_explorer_config,
         })
     }
 

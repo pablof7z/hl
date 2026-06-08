@@ -33,6 +33,7 @@ pub mod recent_searches;
 pub mod recommendations;
 pub mod relay_polish;
 pub mod relays;
+pub mod room_explorer_config;
 pub mod search;
 pub mod session;
 pub mod subscriptions;
