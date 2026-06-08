@@ -12,6 +12,7 @@
 //! `query_relays` merges both sources on URL. When neither exists yet (first
 //! login), `seed_defaults()` fills in a sane starting set.
 
+use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use nostr_sdk::prelude::*;
@@ -19,6 +20,7 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use serde::{Deserialize, Serialize};
 
 use crate::errors::CoreError;
+use crate::models::{RelayDiagnostic, RelayStatus};
 use crate::nostr_runtime::NostrRuntime;
 
 // -- Relay policy ------------------------------------------------------------
@@ -148,6 +150,19 @@ pub struct RelayConfig {
     pub indexer: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RelaySettingsProjection {
+    pub auto_connected_urls: Vec<String>,
+    pub auto_connected_configs: Vec<RelayConfig>,
+    pub auto_connected_diagnostics: Vec<RelayDiagnostic>,
+    pub total_visible_relays: u64,
+    pub connected_count: u64,
+    pub aggregate_state_label: String,
+    pub has_outbox: bool,
+    pub all_connected_for_header: bool,
+    pub any_connected_for_header: bool,
+}
+
 impl RelayConfig {
     pub fn new(url: impl Into<String>) -> Self {
         Self {
@@ -202,6 +217,62 @@ pub fn auto_connected_display_config(url: String) -> RelayConfig {
         rooms,
         indexer,
     }
+}
+
+pub fn settings_projection(
+    configured_relays: &[RelayConfig],
+    diagnostics: &[RelayDiagnostic],
+) -> RelaySettingsProjection {
+    let configured_urls: BTreeSet<&str> = configured_relays
+        .iter()
+        .map(|relay| relay.url.as_str())
+        .collect();
+    let auto_url_set: BTreeSet<String> = diagnostics
+        .iter()
+        .filter(|row| !configured_urls.contains(row.url.as_str()))
+        .map(|row| row.url.clone())
+        .collect();
+    let auto_connected_urls: Vec<String> = auto_url_set.iter().cloned().collect();
+    let auto_connected_configs = auto_connected_urls
+        .iter()
+        .map(|url| auto_connected_display_config(url.clone()))
+        .collect::<Vec<_>>();
+    let auto_connected_diagnostics = auto_connected_urls
+        .iter()
+        .filter_map(|url| diagnostics.iter().find(|row| row.url == *url).cloned())
+        .collect::<Vec<_>>();
+
+    let total_visible_relays = configured_relays.len() as u64 + auto_connected_urls.len() as u64;
+    let connected_count = diagnostics
+        .iter()
+        .filter(|row| row.state == RelayStatus::Connected)
+        .count() as u64;
+
+    RelaySettingsProjection {
+        auto_connected_urls,
+        auto_connected_configs,
+        auto_connected_diagnostics,
+        total_visible_relays,
+        connected_count,
+        aggregate_state_label: aggregate_state_label(total_visible_relays, connected_count),
+        has_outbox: configured_relays.iter().any(|relay| relay.write),
+        all_connected_for_header: connected_count == configured_relays.len() as u64
+            && !configured_relays.is_empty(),
+        any_connected_for_header: connected_count > 0,
+    }
+}
+
+fn aggregate_state_label(total_visible_relays: u64, connected_count: u64) -> String {
+    if total_visible_relays == 0 {
+        return "No relays".into();
+    }
+    if connected_count == 0 {
+        return "Offline".into();
+    }
+    if connected_count == total_visible_relays {
+        return format!("Online — {connected_count} of {total_visible_relays}");
+    }
+    format!("{connected_count} of {total_visible_relays} online")
 }
 
 // -- NIP-65 (kind:10002) -----------------------------------------------------
@@ -643,6 +714,76 @@ mod tests {
     }
 
     #[test]
+    fn settings_projection_builds_auto_rows_and_header_state() {
+        let configured = vec![
+            RelayConfig {
+                url: "wss://a.example".into(),
+                read: true,
+                write: true,
+                rooms: false,
+                indexer: false,
+            },
+            RelayConfig {
+                url: "wss://b.example".into(),
+                read: true,
+                write: false,
+                rooms: false,
+                indexer: false,
+            },
+        ];
+        let diagnostics = vec![
+            diagnostic("wss://b.example", RelayStatus::Disconnected),
+            diagnostic("wss://c.example", RelayStatus::Connected),
+            diagnostic("wss://a.example", RelayStatus::Connected),
+        ];
+
+        let projection = settings_projection(&configured, &diagnostics);
+
+        assert_eq!(projection.auto_connected_urls, vec!["wss://c.example"]);
+        assert_eq!(projection.auto_connected_configs.len(), 1);
+        assert_eq!(projection.auto_connected_configs[0].url, "wss://c.example");
+        assert!(projection.auto_connected_configs[0].read);
+        assert!(!projection.auto_connected_configs[0].write);
+        assert_eq!(projection.auto_connected_diagnostics.len(), 1);
+        assert_eq!(
+            projection.auto_connected_diagnostics[0].url,
+            "wss://c.example"
+        );
+        assert_eq!(projection.total_visible_relays, 3);
+        assert_eq!(projection.connected_count, 2);
+        assert_eq!(projection.aggregate_state_label, "2 of 3 online");
+        assert!(projection.has_outbox);
+        assert!(projection.all_connected_for_header);
+        assert!(projection.any_connected_for_header);
+    }
+
+    #[test]
+    fn settings_projection_handles_offline_and_empty_states() {
+        let configured = vec![RelayConfig {
+            url: "wss://a.example".into(),
+            read: true,
+            write: false,
+            rooms: false,
+            indexer: false,
+        }];
+        let offline = settings_projection(
+            &configured,
+            &[diagnostic("wss://a.example", RelayStatus::Disconnected)],
+        );
+
+        assert_eq!(offline.total_visible_relays, 1);
+        assert_eq!(offline.connected_count, 0);
+        assert_eq!(offline.aggregate_state_label, "Offline");
+        assert!(!offline.has_outbox);
+        assert!(!offline.all_connected_for_header);
+        assert!(!offline.any_connected_for_header);
+
+        let empty = settings_projection(&[], &[]);
+        assert_eq!(empty.aggregate_state_label, "No relays");
+        assert_eq!(empty.total_visible_relays, 0);
+    }
+
+    #[test]
     fn nip65_tags_use_marker_for_asymmetric_rows_and_none_for_both() {
         let tags = nip65_tags(&sample_rows()).expect("build tags");
         let hl = tags
@@ -739,5 +880,16 @@ mod tests {
     fn app_data_content_empty_array_when_no_rooms_or_indexer_rows() {
         let rows = vec![RelayConfig::read_write("wss://a.example")];
         assert_eq!(app_data_content(&rows), "[]");
+    }
+
+    fn diagnostic(url: &str, state: RelayStatus) -> RelayDiagnostic {
+        RelayDiagnostic {
+            url: url.into(),
+            state,
+            rtt_ms: None,
+            bytes_sent: 0,
+            bytes_received: 0,
+            connected_since_ts: None,
+        }
     }
 }

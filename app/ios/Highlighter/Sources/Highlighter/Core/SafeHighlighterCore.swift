@@ -1168,6 +1168,16 @@ actor SafeHighlighterCore {
         core.autoConnectedRelayConfig(url: url)
     }
 
+    nonisolated func projectRelaySettings(
+        configuredRelays: [RelayConfig],
+        diagnostics: [RelayDiagnostic]
+    ) -> RelaySettingsProjection {
+        core.projectRelaySettings(
+            configuredRelays: configuredRelays,
+            diagnostics: diagnostics
+        )
+    }
+
     func subscribeRelayStatus() async -> SubscriptionOutcome {
         await core.subscribeRelayStatus()
     }

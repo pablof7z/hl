@@ -1386,6 +1386,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func probeRelayNip11(url: String) async  -> Nip11DocumentOutcome
 
+    func projectRelaySettings(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic])  -> RelaySettingsProjection
+
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
 
     /**
@@ -3995,6 +3997,15 @@ open func probeRelayNip11(url: String)async  -> Nip11DocumentOutcome  {
             errorHandler: nil
 
         )
+}
+
+open func projectRelaySettings(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic]) -> RelaySettingsProjection  {
+    return try!  FfiConverterTypeRelaySettingsProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_relay_settings(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeRelayConfig.lower(configuredRelays),
+        FfiConverterSequenceTypeRelayDiagnostic.lower(diagnostics),$0
+    )
+})
 }
 
 open func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?)async  -> ArtifactOutcome  {
@@ -14469,6 +14480,132 @@ public func FfiConverterTypeRelayDiagnosticListOutcome_lower(_ value: RelayDiagn
 }
 
 
+public struct RelaySettingsProjection {
+    public var autoConnectedUrls: [String]
+    public var autoConnectedConfigs: [RelayConfig]
+    public var autoConnectedDiagnostics: [RelayDiagnostic]
+    public var totalVisibleRelays: UInt64
+    public var connectedCount: UInt64
+    public var aggregateStateLabel: String
+    public var hasOutbox: Bool
+    public var allConnectedForHeader: Bool
+    public var anyConnectedForHeader: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(autoConnectedUrls: [String], autoConnectedConfigs: [RelayConfig], autoConnectedDiagnostics: [RelayDiagnostic], totalVisibleRelays: UInt64, connectedCount: UInt64, aggregateStateLabel: String, hasOutbox: Bool, allConnectedForHeader: Bool, anyConnectedForHeader: Bool) {
+        self.autoConnectedUrls = autoConnectedUrls
+        self.autoConnectedConfigs = autoConnectedConfigs
+        self.autoConnectedDiagnostics = autoConnectedDiagnostics
+        self.totalVisibleRelays = totalVisibleRelays
+        self.connectedCount = connectedCount
+        self.aggregateStateLabel = aggregateStateLabel
+        self.hasOutbox = hasOutbox
+        self.allConnectedForHeader = allConnectedForHeader
+        self.anyConnectedForHeader = anyConnectedForHeader
+    }
+}
+
+#if compiler(>=6)
+extension RelaySettingsProjection: Sendable {}
+#endif
+
+
+extension RelaySettingsProjection: Equatable, Hashable {
+    public static func ==(lhs: RelaySettingsProjection, rhs: RelaySettingsProjection) -> Bool {
+        if lhs.autoConnectedUrls != rhs.autoConnectedUrls {
+            return false
+        }
+        if lhs.autoConnectedConfigs != rhs.autoConnectedConfigs {
+            return false
+        }
+        if lhs.autoConnectedDiagnostics != rhs.autoConnectedDiagnostics {
+            return false
+        }
+        if lhs.totalVisibleRelays != rhs.totalVisibleRelays {
+            return false
+        }
+        if lhs.connectedCount != rhs.connectedCount {
+            return false
+        }
+        if lhs.aggregateStateLabel != rhs.aggregateStateLabel {
+            return false
+        }
+        if lhs.hasOutbox != rhs.hasOutbox {
+            return false
+        }
+        if lhs.allConnectedForHeader != rhs.allConnectedForHeader {
+            return false
+        }
+        if lhs.anyConnectedForHeader != rhs.anyConnectedForHeader {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(autoConnectedUrls)
+        hasher.combine(autoConnectedConfigs)
+        hasher.combine(autoConnectedDiagnostics)
+        hasher.combine(totalVisibleRelays)
+        hasher.combine(connectedCount)
+        hasher.combine(aggregateStateLabel)
+        hasher.combine(hasOutbox)
+        hasher.combine(allConnectedForHeader)
+        hasher.combine(anyConnectedForHeader)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelaySettingsProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelaySettingsProjection {
+        return
+            try RelaySettingsProjection(
+                autoConnectedUrls: FfiConverterSequenceString.read(from: &buf),
+                autoConnectedConfigs: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                autoConnectedDiagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
+                totalVisibleRelays: FfiConverterUInt64.read(from: &buf),
+                connectedCount: FfiConverterUInt64.read(from: &buf),
+                aggregateStateLabel: FfiConverterString.read(from: &buf),
+                hasOutbox: FfiConverterBool.read(from: &buf),
+                allConnectedForHeader: FfiConverterBool.read(from: &buf),
+                anyConnectedForHeader: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelaySettingsProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.autoConnectedUrls, into: &buf)
+        FfiConverterSequenceTypeRelayConfig.write(value.autoConnectedConfigs, into: &buf)
+        FfiConverterSequenceTypeRelayDiagnostic.write(value.autoConnectedDiagnostics, into: &buf)
+        FfiConverterUInt64.write(value.totalVisibleRelays, into: &buf)
+        FfiConverterUInt64.write(value.connectedCount, into: &buf)
+        FfiConverterString.write(value.aggregateStateLabel, into: &buf)
+        FfiConverterBool.write(value.hasOutbox, into: &buf)
+        FfiConverterBool.write(value.allConnectedForHeader, into: &buf)
+        FfiConverterBool.write(value.anyConnectedForHeader, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelaySettingsProjection_lift(_ buf: RustBuffer) throws -> RelaySettingsProjection {
+    return try FfiConverterTypeRelaySettingsProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelaySettingsProjection_lower(_ value: RelaySettingsProjection) -> RustBuffer {
+    return FfiConverterTypeRelaySettingsProjection.lower(value)
+}
+
+
 /**
  * A visible lane on the community home surface. Rust owns artifact/highlight
  * matching, de-duplication, activity ordering, and dormant-lane filtering;
@@ -19616,6 +19753,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_probe_relay_nip11() != 13896) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_settings() != 62661) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 1182) {

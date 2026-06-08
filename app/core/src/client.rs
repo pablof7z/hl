@@ -43,10 +43,10 @@ use crate::models::{
     OnboardingInterestSelection, OptionalStringOutcome, PictureDraft, PictureOutcome,
     PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
     ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome,
-    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
-    RoomLane, RoomRecommendation, RoomRecommendationListOutcome, StringListOutcome, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
-    WebMetadataOutcome, WhatsNewEntriesOutcome,
+    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnostic,
+    RelayDiagnosticListOutcome, RoomLane, RoomRecommendation, RoomRecommendationListOutcome,
+    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -3649,6 +3649,14 @@ impl HighlighterCore {
 
     pub fn auto_connected_relay_config(&self, url: String) -> crate::relays::RelayConfig {
         crate::relays::auto_connected_display_config(url)
+    }
+
+    pub fn project_relay_settings(
+        &self,
+        configured_relays: Vec<crate::relays::RelayConfig>,
+        diagnostics: Vec<RelayDiagnostic>,
+    ) -> crate::relays::RelaySettingsProjection {
+        crate::relays::settings_projection(&configured_relays, &diagnostics)
     }
 
     /// Handle the Swift side uses to match `RelayStatusChanged` deltas on the

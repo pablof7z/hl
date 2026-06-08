@@ -101,8 +101,8 @@ struct NetworkSettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     stateDot(
-                        allConnected: store.connectedCount == store.relays.count && !store.relays.isEmpty,
-                        anyConnected: store.connectedCount > 0
+                        allConnected: store.allConnectedForHeader,
+                        anyConnected: store.anyConnectedForHeader
                     )
                     Text(store.aggregateStateLabel)
                         .font(.headline)

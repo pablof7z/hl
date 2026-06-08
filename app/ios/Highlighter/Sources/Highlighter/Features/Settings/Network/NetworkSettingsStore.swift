@@ -16,6 +16,13 @@ final class NetworkSettingsStore {
     var relays: [RelayConfig] = []
     var diagnostics: [String: RelayDiagnostic] = [:]
     var autoConnectedConfigs: [String: RelayConfig] = [:]
+    var autoConnectedUrls: [String] = []
+    var totalVisibleRelays: Int = 0
+    var connectedCount: Int = 0
+    var aggregateStateLabel: String = "No relays"
+    var hasOutbox: Bool = false
+    var allConnectedForHeader: Bool = false
+    var anyConnectedForHeader: Bool = false
     var nip11ByUrl: [String: Nip11Document] = [:]
     var cacheStats: CacheStats?
     var isLoading: Bool = true
@@ -44,52 +51,6 @@ final class NetworkSettingsStore {
     func autoConnectedConfig(for url: String) -> RelayConfig? {
         autoConnectedConfigs[url]
     }
-
-    /// URLs of relays in the live pool that the user *didn't* configure —
-    /// added by the outbox planner, NIP-77 sync, or the hardcoded purple
-    /// indexer pin. We surface them in their own section so the
-    /// connected-count math reflects every relay we're actually talking
-    /// to (configured + auto-pinned).
-    var autoConnectedUrls: [String] {
-        let configured = Set(relays.map { $0.url })
-        return autoConnectedConfigs.keys
-            .filter { !configured.contains($0) }
-            .sorted()
-    }
-
-    /// Diagnostics rows for the auto-connected URLs, in the same order.
-    var autoConnectedDiagnostics: [RelayDiagnostic] {
-        autoConnectedUrls.compactMap { diagnostics[$0] }
-    }
-
-    /// Total relays the user can see in the screen — configured + auto.
-    var totalVisibleRelays: Int {
-        relays.count + autoConnectedUrls.count
-    }
-
-    /// Number of relays currently reporting `Connected`. Used for the header
-    /// "Online — N of M" pill. Counts every pool relay (configured + auto)
-    /// since both groups are visible in the UI.
-    var connectedCount: Int {
-        diagnostics.values.filter { $0.state == .connected }.count
-    }
-
-    /// Human-readable aggregate state for the header pill. The denominator
-    /// matches what's actually rendered (configured + auto-connected) so
-    /// the user never sees nonsense like "10 of 5".
-    var aggregateStateLabel: String {
-        let total = totalVisibleRelays
-        let online = connectedCount
-        if total == 0 { return "No relays" }
-        if online == 0 { return "Offline" }
-        if online == total { return "Online — \(online) of \(total)" }
-        return "\(online) of \(total) online"
-    }
-
-    /// True when at least one relay has the `write` flag on. When false,
-    /// the user's published events can't reach anyone — show the
-    /// no-outbox banner.
-    var hasOutbox: Bool { relays.contains { $0.write } }
 
     /// Kick the pool to attempt a reconnect on every disconnected relay.
     func reconnectAll() async {
@@ -121,6 +82,7 @@ final class NetworkSettingsStore {
         let outcome = await core.getRelays()
         if outcome.error.isEmpty {
             relays = outcome.values
+            applyRelaySettingsProjection(rows: Array(diagnostics.values))
             await refreshDiagnostics()
             lastError = nil
         } else {
@@ -254,27 +216,14 @@ final class NetworkSettingsStore {
                 connectedSinceTs: nil
             )
         }
-        if relays.allSatisfy({ $0.url != url }) && autoConnectedConfigs[url] == nil {
-            let core = self.core
-            Task { @MainActor [weak self] in
-                self?.autoConnectedConfigs[url] = await core.autoConnectedRelayConfig(url: url)
-            }
-        }
+        applyRelaySettingsProjection(rows: Array(diagnostics.values))
     }
 
     /// Called by `EventBridge` on `RelayDiagnosticsUpdated`. Applies the
     /// Rust-owned bounded diagnostics projection without a native polling
     /// loop.
     func applyDiagnostics(_ rows: [RelayDiagnostic]) async {
-        let configured = Set(relays.map { $0.url })
-        let autoUrls = rows.map(\.url).filter { !configured.contains($0) }.sorted()
-        let autoSet = Set(autoUrls)
-        var configs = autoConnectedConfigs.filter { url, _ in autoSet.contains(url) }
-        for url in autoUrls where configs[url] == nil {
-            configs[url] = await core.autoConnectedRelayConfig(url: url)
-        }
-        diagnostics = Dictionary(uniqueKeysWithValues: rows.map { ($0.url, $0) })
-        autoConnectedConfigs = configs
+        applyRelaySettingsProjection(rows: rows)
     }
 
     // MARK: - Private
@@ -284,5 +233,23 @@ final class NetworkSettingsStore {
         if outcome.error.isEmpty {
             await applyDiagnostics(outcome.values)
         }
+    }
+
+    private func applyRelaySettingsProjection(rows: [RelayDiagnostic]) {
+        let projection = core.projectRelaySettings(
+            configuredRelays: relays,
+            diagnostics: rows
+        )
+        diagnostics = Dictionary(uniqueKeysWithValues: rows.map { ($0.url, $0) })
+        autoConnectedUrls = projection.autoConnectedUrls
+        autoConnectedConfigs = Dictionary(
+            uniqueKeysWithValues: projection.autoConnectedConfigs.map { ($0.url, $0) }
+        )
+        totalVisibleRelays = Int(projection.totalVisibleRelays)
+        connectedCount = Int(projection.connectedCount)
+        aggregateStateLabel = projection.aggregateStateLabel
+        hasOutbox = projection.hasOutbox
+        allConnectedForHeader = projection.allConnectedForHeader
+        anyConnectedForHeader = projection.anyConnectedForHeader
     }
 }
