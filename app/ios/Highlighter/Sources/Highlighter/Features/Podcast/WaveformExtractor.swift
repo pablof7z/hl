@@ -11,8 +11,8 @@ import os
 /// Tradeoffs:
 /// - AVAssetReader needs the full asset bytes; for a 1h podcast that's
 ///   several tens of MB. We gate first-time extraction on Wi-Fi to avoid
-///   surprising cellular users, and cache the result so repeat plays of
-///   the same episode are free.
+///   surprising cellular users, and persist the render peaks so repeat
+///   plays of the same episode are free.
 /// - The reader runs at background priority and is cancellable, so
 ///   playback is never blocked.
 /// - Failure is silent: when extraction can't complete (cellular, asset
@@ -21,11 +21,11 @@ import os
 enum WaveformExtractor {
     private static let logger = Logger(subsystem: "com.highlighter.app", category: "Waveform")
 
-    /// Best-effort fetch with cache. Returns nil if extraction was skipped or
-    /// failed for any reason — callers must tolerate the absence of peaks.
+    /// Best-effort fetch with on-disk peak storage. Returns nil if extraction
+    /// was skipped or failed for any reason — callers tolerate absent peaks.
     static func peaks(forAudioURL url: URL, durationSeconds: TimeInterval) async -> [Float]? {
-        if let cached = WaveformCache.read(for: url) {
-            return cached
+        if let stored = WaveformPeakStore.read(for: url) {
+            return stored
         }
 
         guard isWiFiAvailable() else {
@@ -40,7 +40,7 @@ enum WaveformExtractor {
             logger.error("waveform extraction failed")
             return nil
         }
-        WaveformCache.write(peaks, for: url)
+        WaveformPeakStore.write(peaks, for: url)
         return peaks
     }
 
@@ -162,12 +162,12 @@ enum WaveformExtractor {
     }
 }
 
-/// Cache layer for extracted waveforms. Stored as raw `Float` little-endian
+/// File store for extracted waveform peaks. Stored as raw `Float` little-endian
 /// bytes (4 bytes per peak) under Library/Caches/highlighter/waveforms,
 /// keyed by SHA-256 of the audio URL string. A 1-hour podcast at one peak
 /// per second is 14 KB — cheap to keep around indefinitely.
-enum WaveformCache {
-    private static let logger = Logger(subsystem: "com.highlighter.app", category: "WaveformCache")
+enum WaveformPeakStore {
+    private static let logger = Logger(subsystem: "com.highlighter.app", category: "WaveformPeakStore")
 
     static func read(for url: URL) -> [Float]? {
         guard let path = filePath(for: url), FileManager.default.fileExists(atPath: path.path) else {
@@ -194,7 +194,7 @@ enum WaveformCache {
             }
             try data.write(to: path, options: .atomic)
         } catch {
-            logger.error("waveform cache write failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("waveform peak write failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
