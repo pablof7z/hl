@@ -90,12 +90,14 @@ struct ChatView: View {
                         }
 
                         ForEach(Array(store.messages.enumerated()), id: \.element.eventId) { index, message in
+                            let replyMessage = parentMessage(for: message)
+
                             ChatMessageRow(
                                 message: message,
-                                profile: app.profileSnapshots[message.authorPubkey],
+                                authorDisplay: profileDisplay(for: message.authorPubkey),
                                 showHeader: shouldShowHeader(at: index),
-                                replyToMessage: parentMessage(for: message),
-                                replyToProfile: parentProfile(for: message),
+                                replyToMessage: replyMessage,
+                                replyToAuthorDisplay: replyMessage.map { profileDisplay(for: $0.authorPubkey) },
                                 onReply: { replyTo = message; inputFocused = true }
                             )
                             .id(message.eventId)
@@ -198,7 +200,7 @@ struct ChatView: View {
                 .frame(width: 2)
                 .clipShape(Capsule())
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayName(for: message.authorPubkey))
+                Text(profileDisplay(for: message.authorPubkey).displayName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.highlighterAccent)
                 Text(message.content)
@@ -282,17 +284,14 @@ struct ChatView: View {
         return store.messages.first { $0.eventId == id }
     }
 
-    private func parentProfile(for message: ChatMessageRecord) -> ProfileMetadata? {
-        guard let parent = parentMessage(for: message) else { return nil }
-        return app.profileSnapshots[parent.authorPubkey]
-    }
-
-    private func displayName(for pubkey: String) -> String {
-        if let p = app.profileSnapshots[pubkey] {
-            if !p.displayName.isEmpty { return p.displayName }
-            if !p.name.isEmpty { return p.name }
-        }
-        return String(pubkey.prefix(8))
+    private func profileDisplay(for pubkey: String) -> ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: pubkey,
+                profile: app.profileSnapshots[pubkey],
+                fallback: .pubkey8
+            )
+        )
     }
 
 
@@ -302,10 +301,10 @@ struct ChatView: View {
 
 private struct ChatMessageRow: View {
     let message: ChatMessageRecord
-    let profile: ProfileMetadata?
+    let authorDisplay: ProfileDisplayProjection
     let showHeader: Bool
     let replyToMessage: ChatMessageRecord?
-    let replyToProfile: ProfileMetadata?
+    let replyToAuthorDisplay: ProfileDisplayProjection?
     let onReply: () -> Void
 
     @State private var swipeOffset: CGFloat = 0
@@ -360,14 +359,14 @@ private struct ChatMessageRow: View {
     private var rowContent: some View {
         HStack(alignment: .top, spacing: 10) {
             if showHeader {
-                ProfileAvatar(profile: profile, pubkey: message.authorPubkey, size: 28)
+                ProfileAvatar(display: authorDisplay, pubkey: message.authorPubkey, size: 28)
             } else {
                 Color.clear.frame(width: 28, height: 1)
             }
             VStack(alignment: .leading, spacing: 3) {
                 if showHeader {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(authorName)
+                        Text(authorDisplay.displayName)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color.highlighterInkStrong)
                         Text(timeLabel(message.createdAt))
@@ -394,7 +393,7 @@ private struct ChatMessageRow: View {
                 .frame(width: 2)
                 .clipShape(Capsule())
             VStack(alignment: .leading, spacing: 1) {
-                Text(quotedAuthorName(quoted))
+                Text(replyToAuthorDisplay?.displayName ?? "")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.highlighterAccent)
                 Text(quoted.content)
@@ -410,22 +409,6 @@ private struct ChatMessageRow: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color.highlighterAccent.opacity(0.06))
         )
-    }
-
-    private var authorName: String {
-        if let p = profile {
-            if !p.displayName.isEmpty { return p.displayName }
-            if !p.name.isEmpty { return p.name }
-        }
-        return String(message.authorPubkey.prefix(8))
-    }
-
-    private func quotedAuthorName(_ msg: ChatMessageRecord) -> String {
-        if let p = replyToProfile {
-            if !p.displayName.isEmpty { return p.displayName }
-            if !p.name.isEmpty { return p.name }
-        }
-        return String(msg.authorPubkey.prefix(8))
     }
 
     private func timeLabel(_ ts: UInt64) -> String {
@@ -449,13 +432,13 @@ private struct ChatMessageRow: View {
 // MARK: - ProfileAvatar
 
 private struct ProfileAvatar: View {
-    let profile: ProfileMetadata?
+    let display: ProfileDisplayProjection
     let pubkey: String
     let size: CGFloat
 
     var body: some View {
         Group {
-            if let urlString = profile?.picture, !urlString.isEmpty, let url = URL(string: urlString) {
+            if !display.pictureUrl.isEmpty, let url = URL(string: display.pictureUrl) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
@@ -483,9 +466,7 @@ private struct ProfileAvatar: View {
     }
 
     private var initial: String {
-        if let c = profile?.displayName.first ?? profile?.name.first {
-            return String(c).uppercased()
-        }
-        return String(pubkey.prefix(1)).uppercased()
+        let source = display.displayInitial.isEmpty ? pubkey : display.displayInitial
+        return source.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() } ?? ""
     }
 }
