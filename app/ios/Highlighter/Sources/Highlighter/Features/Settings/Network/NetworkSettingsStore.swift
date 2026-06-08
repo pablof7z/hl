@@ -107,12 +107,11 @@ final class NetworkSettingsStore {
         let previous = wifiOnlyEnabled
         wifiOnlyEnabled = on
         applyWifiOnlyEnforcement(on)
-        do {
-            try await core.setWifiOnlyEnabled(on)
-        } catch {
+        let outcome = await core.setWifiOnlyEnabled(on)
+        if !outcome.applied {
             wifiOnlyEnabled = previous
             applyWifiOnlyEnforcement(previous)
-            lastError = "Couldn't update Wi-Fi-only mode — \(error)"
+            lastError = "Couldn't update Wi-Fi-only mode — \(outcome.error)"
         }
     }
 

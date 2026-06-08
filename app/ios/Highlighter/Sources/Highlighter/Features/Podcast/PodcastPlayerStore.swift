@@ -344,15 +344,11 @@ final class PodcastPlayerStore {
         let position = position ?? currentTime
         guard position.isFinite, position >= 0 else { return }
         Task { [core, guid, position, artifact] in
-            do {
-                try await core.savePodcastPosition(
-                    guid: guid,
-                    positionSeconds: position,
-                    artifact: artifact
-                )
-            } catch {
-                // Playback should not fail because a local progress write did.
-            }
+            _ = await core.savePodcastPosition(
+                guid: guid,
+                positionSeconds: position,
+                artifact: artifact
+            )
         }
     }
 

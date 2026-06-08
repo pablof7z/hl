@@ -36,16 +36,16 @@ actor SafeHighlighterCore {
         core.isOnboardingComplete()
     }
 
-    func setOnboardingComplete(_ complete: Bool) throws {
-        try core.setOnboardingComplete(complete: complete)
+    func setOnboardingComplete(_ complete: Bool) -> MutationOutcome {
+        core.setOnboardingComplete(complete: complete)
     }
 
     func isWifiOnlyEnabled() -> Bool {
         core.isWifiOnlyEnabled()
     }
 
-    func setWifiOnlyEnabled(_ enabled: Bool) throws {
-        try core.setWifiOnlyEnabled(enabled: enabled)
+    func setWifiOnlyEnabled(_ enabled: Bool) -> MutationOutcome {
+        core.setWifiOnlyEnabled(enabled: enabled)
     }
 
     func getPodcastPosition() -> PodcastPositionRecord? {
@@ -60,8 +60,8 @@ actor SafeHighlighterCore {
         guid: String,
         positionSeconds: Double,
         artifact: ArtifactRecord
-    ) throws {
-        try core.savePodcastPosition(
+    ) -> MutationOutcome {
+        core.savePodcastPosition(
             guid: guid,
             positionSeconds: positionSeconds,
             artifact: artifact

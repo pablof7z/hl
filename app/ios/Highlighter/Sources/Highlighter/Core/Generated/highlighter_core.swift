@@ -570,9 +570,9 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 public protocol EventCallback: AnyObject, Sendable {
-    
-    func onDataChanged(delta: Delta) 
-    
+
+    func onDataChanged(delta: Delta)
+
 }
 open class EventCallbackImpl: EventCallback, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -623,16 +623,16 @@ open class EventCallbackImpl: EventCallback, @unchecked Sendable {
         try! rustCall { uniffi_highlighter_core_fn_free_eventcallback(pointer, $0) }
     }
 
-    
 
-    
+
+
 open func onDataChanged(delta: Delta)  {try! rustCall() {
     uniffi_highlighter_core_fn_method_eventcallback_on_data_changed(self.uniffiClonePointer(),
         FfiConverterTypeDelta_lower(delta),$0
     )
 }
 }
-    
+
 
 }
 
@@ -662,7 +662,7 @@ fileprivate struct UniffiCallbackInterfaceEventCallback {
                 )
             }
 
-            
+
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -743,14 +743,14 @@ public func FfiConverterTypeEventCallback_lower(_ value: EventCallback) -> Unsaf
 
 
 public protocol HighlighterCoreProtocol: AnyObject, Sendable {
-    
+
     /**
      * Add a Nostr user (by hex pubkey) to a room as a member. Must be
      * signed by a room admin — the relay enforces this. Returns the
      * kind:9000 event id on success.
      */
     func addRoomMember(groupId: String, pubkeyHex: String) async throws  -> String
-    
+
     func autoConnectedRelayConfig(url: String)  -> RelayConfig
 
     /**
@@ -759,7 +759,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * URL through this, then calls `publish_artifact` to post the kind:11.
      */
     func buildPreviewFromUrl(url: String) async throws  -> ArtifactPreview
-    
+
     func checkNip05Availability(name: String) async throws  -> Nip05Availability
 
     func clearRecentSearches() async throws  -> [String]
@@ -770,7 +770,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `id` (d-tag) to add items.
      */
     func createCurationSet(title: String) async throws  -> BookmarkSetRecord
-    
+
     /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
      * kind:9002 (edit-metadata) signed by the current user. Returns the
@@ -778,16 +778,16 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * follow-up events drive the iOS membership stream automatically.
      */
     func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async throws  -> String
-    
+
     /**
      * Mint `count` single-use invite codes for `group_id` by publishing a
      * kind:9009 event. Must be signed by an admin — the relay rejects
      * non-admin attempts. Returns the minted codes in order.
      */
     func createRoomInviteCodes(groupId: String, count: UInt32) async throws  -> [String]
-    
+
     func currentUser()  -> CurrentUser?
-    
+
     /**
      * Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,
      * `nevent1…`, `naddr1…`) into a renderable variant. Strips an
@@ -795,7 +795,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * to walk event content for inline mentions and event-ref cards.
      */
     func decodeNostrEntity(input: String) throws  -> NostrEntityRef
-    
+
     /**
      * Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
      * `nostr:` URI prefix) to a 64-char hex pubkey. Returns
@@ -803,14 +803,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * reference. Used by the room-invite picker to resolve a pasted handle.
      */
     func decodeNpub(input: String) throws  -> String
-    
+
     /**
      * Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
      * when the device drops off Wi-Fi — the Swift side re-enables by
      * calling `reconnect_all` once the path monitor reports Wi-Fi back.
      */
-    func disconnectAll() async throws 
-    
+    func disconnectAll() async throws
+
     func downloadPodcastArtwork(url: String) async throws  -> Data
 
     /**
@@ -819,60 +819,60 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * event id and author hint they are already rendering.
      */
     func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String) throws  -> String
-    
+
     func generateAccount() throws  -> GeneratedAccount
-    
+
     /**
      * Every cached room, newest first, truncated to `limit`. Powers the
      * explorer's "Browse all" grid.
      */
     func getAllRooms(limit: UInt32) async throws  -> [CommunitySummary]
-    
+
     /**
      * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
      * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
      * backfills via relays, and a later call returns `Some`.
      */
     func getArticle(pubkeyHex: String, dTag: String) async throws  -> ArticleRecord?
-    
+
     func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
 
     func getArtifacts(groupId: String, limit: UInt32) async throws  -> [ArtifactRecord]
-    
+
     /**
      * Return the user's ordered Blossom server list from nostrdb. Empty if no
      * kind:10063 has been cached yet (relay hasn't delivered it).
      */
     func getBlossomServers() async throws  -> [String]
-    
+
     /**
      * Return the set of article addresses the user has bookmarked in their
      * newest kind:10003 list (empty when not logged in or no list cached).
      */
     func getBookmarkedArticleAddresses() async throws  -> [String]
-    
+
     /**
      * Size + event-count snapshot of the local nostrdb cache. Order-of-
      * magnitude figures used by the Network Settings "Local cache" card.
      */
     func getCacheStats() async throws  -> CacheStats
-    
+
     /**
      * NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending
      * by `created_at`. UI can also peek with `limit=1` to detect chat
      * activity and decide whether to expose the chat tab at all.
      */
     func getChatMessages(groupId: String, limit: UInt32) async throws  -> [ChatMessageRecord]
-    
+
     /**
      * Read NIP-22 comments (kind:1111) rooted at the given uppercase
      * scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
      * books, etc. Newest first.
      */
     func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32) async throws  -> [CommentRecord]
-    
+
     func getDiscussions(groupId: String, limit: UInt32) async throws  -> [DiscussionRecord]
-    
+
     /**
      * Curator's latest kind:10012 list, resolved into `CommunitySummary`
      * items in curator-chosen order. Rooms without cached metadata are
@@ -880,37 +880,37 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * metadata returns the full list.
      */
     func getFeaturedRooms(curatorPubkeyHex: String) async throws  -> [CommunitySummary]
-    
+
     /**
      * Every message in a feedback thread, ordered ascending by `created_at`.
      */
     func getFeedbackThreadEvents(rootEventId: String) async throws  -> [FeedbackEventRecord]
-    
+
     /**
      * Threads scoped to `coordinate` authored by the current user. Returns
      * an empty list if not logged in.
      */
     func getFeedbackThreads(coordinate: String) async throws  -> [FeedbackThreadRecord]
-    
+
     /**
      * Return kind:30004 curation sets from users the current user follows.
      */
     func getFollowingCurationSets() async throws  -> [BookmarkSetRecord]
-    
+
     /**
      * Highlights home feed — kind:9802 events authored by follows plus
      * highlights tagged into joined rooms. See
      * `highlights::query_following_highlights` for semantics.
      */
     func getFollowingHighlights(limit: UInt32) async throws  -> [HydratedHighlight]
-    
+
     /**
      * Following Reads feed — articles surfaced through the user's follow
      * graph. See `reads::query_following_reads` for semantics. Returns an
      * empty list if the user isn't logged in or has no follows cached yet.
      */
     func getFollowingReads(limit: UInt32) async throws  -> [ReadingFeedItem]
-    
+
     /**
      * Pubkeys (hex) the current user follows per their cached kind:3 contact
      * list. Empty if the user isn't logged in or the cache hasn't seen a
@@ -918,15 +918,15 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * before any typing happens.
      */
     func getFollows() async throws  -> [String]
-    
+
     func getHighlights(groupId: String, limit: UInt32) async throws  -> [HydratedHighlight]
-    
+
     /**
      * Read all highlights referencing the given NIP-23 article address
      * (`30023:<pubkey>:<d>`) from nostrdb, newest first.
      */
     func getHighlightsForArticle(address: String, limit: UInt32) async throws  -> [HighlightRecord]
-    
+
     /**
      * Read highlights whose `tag_name` tag holds `tag_value`, newest
      * first. Generalizes `get_highlights_for_article`: pass `("a", "30023:pk:d")`
@@ -934,33 +934,33 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * podcasts. `tag_name` must be a single character.
      */
     func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32) async throws  -> [HighlightRecord]
-    
+
     func getJoinedCommunities() async throws  -> [CommunitySummary]
-    
+
     /**
      * Return all kind:30003 bookmark sets authored by the current user.
      */
     func getMyBookmarkSets() async throws  -> [BookmarkSetRecord]
-    
+
     /**
      * Return all kind:30004 curation sets authored by the current user.
      */
     func getMyCurationSets() async throws  -> [BookmarkSetRecord]
-    
+
     func getMyHighlights(limit: UInt32) async throws  -> [HighlightRecord]
-    
+
     /**
      * Return all NIP-B0 kind:39701 web bookmarks authored by the current user.
      */
     func getMyWebBookmarks() async throws  -> [WebBookmarkRecord]
-    
+
     /**
      * The N most-recently-seen rooms. Same underlying query as
      * `get_all_rooms` with a tighter limit — kept as a distinct method so
      * the Swift explorer store's shelves remain single-purpose.
      */
     func getNewRooms(limit: UInt32) async throws  -> [CommunitySummary]
-    
+
     func getPodcastPosition()  -> PodcastPositionRecord?
 
     func getPodcastPositionSeconds(guid: String)  -> Double?
@@ -972,19 +972,19 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * cached or has no agents.
      */
     func getProjectFirstAgentPubkey(coordinate: String) async throws  -> String?
-    
+
     /**
      * All cached kind:7 reactions on `target_event_id`, newest first.
      */
     func getReactionsForEvent(targetEventId: String, limit: UInt32) async throws  -> [ReactionRecord]
-    
+
     /**
      * Recent books across the user's joined communities — drives the
      * capture-flow book picker. Returns `[]` if no books are cached or the
      * user isn't logged in.
      */
     func getRecentBooks(limit: UInt32) async throws  -> [ArtifactRecord]
-    
+
     func getRecentSearches() async throws  -> [String]
 
     /**
@@ -993,14 +993,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * diagnostics poller at least once per second.
      */
     func getRelayDiagnostics() async throws  -> [RelayDiagnostic]
-    
+
     /**
      * Return the user's effective relay list, merging NIP-65 (read/write)
      * with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
      * when neither has been cached yet (first login).
      */
     func getRelays() async throws  -> [RelayConfig]
-    
+
     func getRoomExplorerCuratorPubkey() async throws  -> String
 
     /**
@@ -1008,29 +1008,29 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * artifacts. Empty when the user hasn't highlighted any articles yet.
      */
     func getRoomsFromReadAuthors(limit: UInt32) async throws  -> [RoomRecommendation]
-    
+
     /**
      * Rooms where 2+ of the user's follows are members. Empty when the user
      * isn't logged in, has no follows cached, or no room satisfies the
      * threshold.
      */
     func getRoomsWithFriends(limit: UInt32) async throws  -> [RoomRecommendation]
-    
+
     /**
      * Resolve the merged set of NIP-50 search relays for the current user —
      * always includes `wss://relay.highlighter.com`, plus every `relay` tag
      * from the newest cached kind:10007 (NIP-51 search relay list).
      */
     func getSearchRelays() async throws  -> [String]
-    
+
     func getUserArticles(pubkeyHex: String, limit: UInt32) async throws  -> [ArticleRecord]
-    
+
     func getUserCommunities(pubkeyHex: String) async throws  -> [CommunitySummary]
-    
+
     func getUserHighlights(pubkeyHex: String, limit: UInt32) async throws  -> [HighlightRecord]
-    
+
     func getUserProfile(pubkeyHex: String) async throws  -> ProfileMetadata?
-    
+
     /**
      * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
      * JSON-on-disk cache (7-day positive TTL, 1-hour negative TTL) and
@@ -1039,7 +1039,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `CoreError::Network` on transport failure.
      */
     func getWebMetadata(url: String) async throws  -> WebMetadata
-    
+
     /**
      * Fetch another user's kind:10002 via the indexer pool and return the
      * parsed `RelayConfig` rows. Useful for "adopt someone else's relay
@@ -1047,31 +1047,31 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * and upserts the selected subset through `upsert_relay`.
      */
     func importRelaysFromNpub(npub: String) async throws  -> [RelayConfig]
-    
+
     /**
      * Publish the default Blossom server list only if the user has no cached
      * kind:10063. Called once after login; no-op when the list already exists.
      */
-    func initDefaultBlossomServers() async throws 
-    
+    func initDefaultBlossomServers() async throws
+
     /**
      * Read-only predicate: is `address` currently bookmarked for the logged-in
      * user? Always `false` when no user is logged in.
      */
     func isArticleBookmarked(address: String) async throws  -> Bool
-    
+
     /**
      * Read-only predicate: is `event_id_hex` currently bookmarked for
      * the logged-in user? Always `false` when no user is logged in.
      */
     func isEventBookmarked(eventIdHex: String) async throws  -> Bool
-    
+
     /**
      * Returns true if the logged-in user's cached contact list currently
      * includes `target_pubkey_hex`.
      */
     func isFollowing(targetPubkeyHex: String) async throws  -> Bool
-    
+
     func isNip05UsernameValid(input: String)  -> Bool
 
     func isOnboardingComplete()  -> Bool
@@ -1081,17 +1081,17 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func loadPodcastTranscript(url: String) async throws  -> [TranscriptSegment]
 
     func loginNsec(nsec: String) throws  -> CurrentUser
-    
-    func logout() 
-    
+
+    func logout()
+
     func lookupIsbn(isbn: String) async throws  -> ArtifactPreview
-    
+
     func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async throws
 
     func normalizeNip05Username(input: String)  -> String
 
     func pairBunker(uri: String) async throws  -> CurrentUser
-    
+
     func prepareWhatsNew() async throws  -> [WhatsNewEntry]
 
     /**
@@ -1100,16 +1100,16 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `Accept: application/nostr+json`. Fails fast on timeout.
      */
     func probeRelayNip11(url: String) async throws  -> Nip11Document
-    
+
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async throws  -> ArtifactRecord
-    
+
     /**
      * Publish a NIP-29 kind:9 chat message into `group_id`. When
      * `reply_to_event_id` is set, the published event carries a marked
      * NIP-10 `["e", <id>, "", "reply"]` tag.
      */
     func publishChatMessage(groupId: String, content: String, replyToEventId: String?) async throws  -> ChatMessageRecord
-    
+
     /**
      * Publish a NIP-22 kind:1111 comment scoped to any artifact.
      *
@@ -1122,9 +1122,9 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * for replies (the parent kind:1111 comment).
      */
     func publishComment(rootTagName: String, rootTagValue: String, rootKind: UInt16, parentEventId: String?, content: String) async throws  -> CommentRecord
-    
+
     func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async throws  -> DiscussionRecord
-    
+
     /**
      * Publish a feedback note (kind:1) for the shake-to-share surface. When
      * `parent_event_id` is `Some`, the note is a reply marked NIP-10 root;
@@ -1133,16 +1133,16 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * just without a `p` tag).
      */
     func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEventId: String?, body: String) async throws  -> FeedbackEventRecord
-    
+
     /**
      * Publish a solo NIP-84 highlight without a NIP-29 repost. Used by the
      * article reader's text-selection flow: user highlights → event lands in
      * their vault; sharing into a community is a later explicit action.
      */
     func publishHighlight(draft: HighlightDraft, artifact: ArtifactRecord) async throws  -> HighlightRecord
-    
+
     func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [HighlightDraft], targetGroupId: String) async throws  -> [HighlightRecord]
-    
+
     /**
      * Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
      * Used by the capture flow when the user opts not to (or can't) extract
@@ -1150,22 +1150,22 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * the imeta metadata.
      */
     func publishPicture(draft: PictureDraft) async throws  -> PictureRecord
-    
+
     /**
      * Publish a kind:7 reaction targeting `event_id` authored by
      * `author_pubkey_hex` of `target_kind`. `content` is the reaction
      * body — pass `"+"` for a like.
      */
     func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String) async throws  -> ReactionRecord
-    
+
     /**
      * Nudge the relay pool to attempt a reconnect on every disconnected
      * relay. `Client::connect` is idempotent — already-connected relays
      * are unaffected; disconnected / terminated / banned relays get a
      * fresh WebSocket attempt.
      */
-    func reconnectAll() async throws 
-    
+    func reconnectAll() async throws
+
     func recordRecentSearch(query: String) async throws  -> [String]
 
     func registerNip05(name: String, domain: String) async throws  -> String
@@ -1173,8 +1173,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     /**
      * Remove a relay by URL.
      */
-    func removeRelay(url: String) async throws 
-    
+    func removeRelay(url: String) async throws
+
     /**
      * Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
      * event id on success. The UI treats this as fire-and-forget: a
@@ -1182,7 +1182,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * pubkey is the signal that the relay admitted the request.
      */
     func requestJoinRoom(groupId: String) async throws  -> String
-    
+
     /**
      * Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
      * resolved event when nostrdb already has it, `None` otherwise.
@@ -1190,19 +1190,19 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * cold-cache reference warms up over the wire.
      */
     func resolveNostrEntity(entity: NostrEntityRef) async throws  -> NostrEntityEvent?
-    
-    func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord) throws
+
+    func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)  -> MutationOutcome
 
     func searchArticles(query: String, limit: UInt32) async throws  -> [ArticleRecord]
-    
+
     func searchArtifacts(query: String, limit: UInt32) async throws  -> [ArtifactRecord]
-    
+
     func searchCommunities(query: String, limit: UInt32) async throws  -> [CommunitySummary]
-    
+
     func searchHighlights(query: String, limit: UInt32) async throws  -> [HighlightRecord]
-    
+
     func searchProfiles(query: String, limit: UInt32) async throws  -> [ProfileMetadata]
-    
+
     /**
      * Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
      * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
@@ -1210,15 +1210,15 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * absence. Returns the new membership state.
      */
     func setAddressInCurationSet(dTag: String, address: String, member: Bool) async throws  -> Bool
-    
+
     /**
      * Replace the user's Blossom server list with `servers` (must be
      * non-empty). Order is preserved — first server is the upload default.
      */
     func setBlossomServers(servers: [String]) async throws  -> String
-    
-    func setEventCallback(callback: EventCallback) 
-    
+
+    func setEventCallback(callback: EventCallback)
+
     /**
      * Publish a new kind:3 that adds (`follow=true`) or removes
      * (`follow=false`) `target_pubkey_hex` from the logged-in user's contact
@@ -1226,15 +1226,15 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * state (no republish).
      */
     func setFollow(targetPubkeyHex: String, follow: Bool) async throws  -> String?
-    
-    func setOnboardingComplete(complete: Bool) throws
+
+    func setOnboardingComplete(complete: Bool)  -> MutationOutcome
 
     /**
      * Atomically update a single relay's role flags.
      */
-    func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async throws 
-    
-    func setWifiOnlyEnabled(enabled: Bool) throws
+    func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async throws
+
+    func setWifiOnlyEnabled(enabled: Bool)  -> MutationOutcome
 
     func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary])  -> Data
 
@@ -1247,8 +1247,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
      * to the Highlighter relay as the e-tag relay hint.
      */
-    func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async throws 
-    
+    func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async throws
+
     /**
      * Install (if not already installed) the kind:10012 curated-list sub for
      * `curator_pubkey_hex`. Once the list lands in ndb, this method also
@@ -1256,8 +1256,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * subsequent `get_featured_rooms` returns rich summaries rather than
      * bare ids. Idempotent; the sub rides until logout.
      */
-    func startFeaturedRooms(curatorPubkeyHex: String) async throws 
-    
+    func startFeaturedRooms(curatorPubkeyHex: String) async throws
+
     /**
      * Install (if not already installed) two relay subs that together
      * power the "Friends are here" explorer shelf:
@@ -1271,17 +1271,17 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * No-op if the user isn't logged in or has no follows cached yet.
      * Idempotent; both subs ride until logout.
      */
-    func startFriendsRoomsDiscovery() async throws 
-    
+    func startFriendsRoomsDiscovery() async throws
+
     func startNostrConnect(options: NostrConnectOptions) async throws  -> String
-    
+
     /**
      * Install (if not already installed) a long-lived relay sub for every
      * kind:39000 metadata event. Call once on explorer appear from iOS.
      * Idempotent; the sub rides until logout.
      */
-    func startRoomDiscovery() async 
-    
+    func startRoomDiscovery() async
+
     func startRoomExplorerFeaturedRooms() async throws
 
     /**
@@ -1291,7 +1291,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * appearance; `unsubscribe(handle)` on disappearance.
      */
     func subscribeArticle(pubkeyHex: String, dTag: String) async throws  -> UInt64
-    
+
     /**
      * Open a NIP-50 relay subscription for kind:30023 against the user's
      * search relays. Returns a handle; the pump fires
@@ -1300,26 +1300,26 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * to merge the new events into its Articles bucket.
      */
     func subscribeArticleSearch(query: String) async throws  -> UInt64
-    
+
     /**
      * Open a live subscription for the current user's kind:30003/30004 sets.
      * Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
      */
     func subscribeBookmarkSets() async throws  -> UInt64
-    
+
     /**
      * Open a live subscription on the current user's kind:10003 bookmark
      * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
      * Swift bookmarks store re-queries on each.
      */
     func subscribeBookmarks() async throws  -> UInt64
-    
+
     /**
      * Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
      * deltas for every kind:1 `e`-tagged to the root (regardless of author).
      */
     func subscribeFeedbackThread(rootEventId: String) async throws  -> UInt64
-    
+
     /**
      * Feedback-threads subscription for the shake-to-share surface. Fires
      * `FeedbackThreadsUpdated` deltas whenever a kind:1 root authored by
@@ -1327,13 +1327,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * for the same project arrives. Swift re-queries on each.
      */
     func subscribeFeedbackThreads(coordinate: String) async throws  -> UInt64
-    
+
     /**
      * Open a live subscription for kind:30004 sets from followed authors.
      * Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
      */
     func subscribeFollowingCurationSets() async throws  -> UInt64
-    
+
     /**
      * Highlights home-feed view-scope subscription. Snapshots the user's
      * current follow list (plus self — nobody lists themselves in kind:3
@@ -1342,7 +1342,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * set or tagged into any joined room.
      */
     func subscribeFollowingHighlights() async throws  -> UInt64
-    
+
     /**
      * Following Reads view-scope subscription. Snapshots the user's current
      * follow list, then listens for: (a) new articles authored by a follow,
@@ -1351,7 +1351,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Install on tab appearance; `unsubscribe(handle)` on disappearance.
      */
     func subscribeFollowingReads() async throws  -> UInt64
-    
+
     /**
      * App-scope subscription for the joined-communities view. Returns a
      * handle; fires CommunityUpserted / MembershipChanged deltas tagged
@@ -1359,7 +1359,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * call is about setting up the nostrdb notification pump.
      */
     func subscribeJoinedCommunities() async throws  -> UInt64
-    
+
     /**
      * Install a view-scoped subscription for the missing event behind an
      * entity. Routes to relay hints first (when the bech32 carried any) plus
@@ -1368,7 +1368,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `NostrEntityResolved` when the target lands.
      */
     func subscribeNostrEntity(entity: NostrEntityRef) async throws  -> UInt64
-    
+
     /**
      * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
      * event bus. Relay status changes are app-scoped and ride
@@ -1376,46 +1376,46 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * value is a stable contract, not a unique sub id.
      */
     func subscribeRelayStatus() async throws  -> UInt64
-    
+
     /**
      * Per-room view-scope subscription. Returns a handle; fires
      * ArtifactUpserted / HighlightUpserted / HighlightShared for this
      * specific group.
      */
     func subscribeRoom(groupId: String) async throws  -> UInt64
-    
+
     /**
      * Per-room Chat view-scope subscription. Returns a handle; fires
      * `ChatMessageUpserted` deltas for kind:9 messages tagged
      * `#h=<group_id>`.
      */
     func subscribeRoomChat(groupId: String) async throws  -> UInt64
-    
+
     /**
      * Per-room Discussions view-scope subscription. Returns a handle; fires
      * `DiscussionUpserted` deltas for kind:11 threads in this group that
      * carry the `t=discussion` marker.
      */
     func subscribeRoomDiscussions(groupId: String) async throws  -> UInt64
-    
+
     /**
      * Profile view-scope subscription. Fires `UserProfileUpdated` deltas
      * when any event relevant to `pubkey_hex`'s profile arrives. Install on
      * profile view appearance; `unsubscribe(handle)` on disappearance.
      */
     func subscribeUserProfile(pubkeyHex: String) async throws  -> UInt64
-    
+
     /**
      * Vault view-scope subscription for the current user's own highlights.
      */
     func subscribeVault() async throws  -> UInt64
-    
+
     /**
      * Open a live subscription for the current user's NIP-B0 kind:39701 events.
      * Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
      */
     func subscribeWebBookmarks() async throws  -> UInt64
-    
+
     func suggestNip05Username(displayName: String)  -> String
 
     /**
@@ -1424,24 +1424,24 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * if it was removed.
      */
     func toggleArticleBookmark(address: String) async throws  -> Bool
-    
+
     /**
      * Toggle `event_id_hex` in the user's kind:10003 list (for comments
      * and other event-id-addressed targets). Returns the new membership
      * state.
      */
     func toggleEventBookmark(eventIdHex: String) async throws  -> Bool
-    
+
     /**
      * Delete one of the user's own kind:7 reactions via NIP-09.
      */
     func unpublishReaction(reactionEventId: String) async throws  -> String
-    
+
     /**
      * Drop a subscription by handle. Idempotent.
      */
-    func unsubscribe(handle: UInt64) 
-    
+    func unsubscribe(handle: UInt64)
+
     /**
      * Publish a new kind:0 metadata event for the current user. Preserves
      * any unknown JSON fields the user had set via other clients —
@@ -1451,7 +1451,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * waiting for the relay echo.
      */
     func updateProfile(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String) async throws  -> ProfileMetadata
-    
+
     /**
      * Upload a photo to the default Blossom server (`blossom.primal.net`)
      * using BUD-01 auth. The caller (iOS) is responsible for stripping EXIF
@@ -1461,14 +1461,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `alt` is the recognized OCR text, or empty if none.
      */
     func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async throws  -> BlossomUpload
-    
+
     /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
      * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
      * the live relay pool so the change takes effect immediately.
      */
-    func upsertRelay(cfg: RelayConfig) async throws 
-    
+    func upsertRelay(cfg: RelayConfig) async throws
+
 }
 open class HighlighterCore: HighlighterCoreProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -1526,9 +1526,9 @@ public convenience init() {
         try! rustCall { uniffi_highlighter_core_fn_free_highlightercore(pointer, $0) }
     }
 
-    
 
-    
+
+
     /**
      * Add a Nostr user (by hex pubkey) to a room as a member. Must be
      * signed by a room admin — the relay enforces this. Returns the
@@ -1550,7 +1550,7 @@ open func addRoomMember(groupId: String, pubkeyHex: String)async throws  -> Stri
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func autoConnectedRelayConfig(url: String) -> RelayConfig  {
     return try!  FfiConverterTypeRelayConfig_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_auto_connected_relay_config(self.uniffiClonePointer(),
@@ -1580,7 +1580,7 @@ open func buildPreviewFromUrl(url: String)async throws  -> ArtifactPreview  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func checkNip05Availability(name: String)async throws  -> Nip05Availability  {
     return
         try  await uniffiRustCallAsync(
@@ -1636,7 +1636,7 @@ open func createCurationSet(title: String)async throws  -> BookmarkSetRecord  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
      * kind:9002 (edit-metadata) signed by the current user. Returns the
@@ -1659,7 +1659,7 @@ open func createRoom(name: String, about: String, picture: String, visibility: R
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Mint `count` single-use invite codes for `group_id` by publishing a
      * kind:9009 event. Must be signed by an admin — the relay rejects
@@ -1681,14 +1681,14 @@ open func createRoomInviteCodes(groupId: String, count: UInt32)async throws  -> 
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func currentUser() -> CurrentUser?  {
     return try!  FfiConverterOptionTypeCurrentUser.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_current_user(self.uniffiClonePointer(),$0
     )
 })
 }
-    
+
     /**
      * Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,
      * `nevent1…`, `naddr1…`) into a renderable variant. Strips an
@@ -1702,7 +1702,7 @@ open func decodeNostrEntity(input: String)throws  -> NostrEntityRef  {
     )
 })
 }
-    
+
     /**
      * Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
      * `nostr:` URI prefix) to a 64-char hex pubkey. Returns
@@ -1716,7 +1716,7 @@ open func decodeNpub(input: String)throws  -> String  {
     )
 })
 }
-    
+
     /**
      * Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
      * when the device drops off Wi-Fi — the Swift side re-enables by
@@ -1728,7 +1728,7 @@ open func disconnectAll()async throws   {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_disconnect_all(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_void,
@@ -1738,7 +1738,7 @@ open func disconnectAll()async throws   {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func downloadPodcastArtwork(url: String)async throws  -> Data  {
     return
         try  await uniffiRustCallAsync(
@@ -1769,14 +1769,14 @@ open func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String
     )
 })
 }
-    
+
 open func generateAccount()throws  -> GeneratedAccount  {
     return try  FfiConverterTypeGeneratedAccount_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
     uniffi_highlighter_core_fn_method_highlightercore_generate_account(self.uniffiClonePointer(),$0
     )
 })
 }
-    
+
     /**
      * Every cached room, newest first, truncated to `limit`. Powers the
      * explorer's "Browse all" grid.
@@ -1797,7 +1797,7 @@ open func getAllRooms(limit: UInt32)async throws  -> [CommunitySummary]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
      * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
@@ -1819,7 +1819,7 @@ open func getArticle(pubkeyHex: String, dTag: String)async throws  -> ArticleRec
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getArtifactDetailRoute(artifact: ArtifactRecord) -> ArtifactDetailRoute  {
     return try!  FfiConverterTypeArtifactDetailRoute_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_artifact_detail_route(self.uniffiClonePointer(),
@@ -1844,7 +1844,7 @@ open func getArtifacts(groupId: String, limit: UInt32)async throws  -> [Artifact
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Return the user's ordered Blossom server list from nostrdb. Empty if no
      * kind:10063 has been cached yet (relay hasn't delivered it).
@@ -1855,7 +1855,7 @@ open func getBlossomServers()async throws  -> [String]  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_blossom_servers(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -1865,7 +1865,7 @@ open func getBlossomServers()async throws  -> [String]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Return the set of article addresses the user has bookmarked in their
      * newest kind:10003 list (empty when not logged in or no list cached).
@@ -1876,7 +1876,7 @@ open func getBookmarkedArticleAddresses()async throws  -> [String]  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_bookmarked_article_addresses(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -1886,7 +1886,7 @@ open func getBookmarkedArticleAddresses()async throws  -> [String]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Size + event-count snapshot of the local nostrdb cache. Order-of-
      * magnitude figures used by the Network Settings "Local cache" card.
@@ -1897,7 +1897,7 @@ open func getCacheStats()async throws  -> CacheStats  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_cache_stats(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -1907,7 +1907,7 @@ open func getCacheStats()async throws  -> CacheStats  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending
      * by `created_at`. UI can also peek with `limit=1` to detect chat
@@ -1929,7 +1929,7 @@ open func getChatMessages(groupId: String, limit: UInt32)async throws  -> [ChatM
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Read NIP-22 comments (kind:1111) rooted at the given uppercase
      * scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
@@ -1951,7 +1951,7 @@ open func getCommentsForReference(tagName: String, tagValue: String, limit: UInt
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getDiscussions(groupId: String, limit: UInt32)async throws  -> [DiscussionRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -1968,7 +1968,7 @@ open func getDiscussions(groupId: String, limit: UInt32)async throws  -> [Discus
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Curator's latest kind:10012 list, resolved into `CommunitySummary`
      * items in curator-chosen order. Rooms without cached metadata are
@@ -1991,7 +1991,7 @@ open func getFeaturedRooms(curatorPubkeyHex: String)async throws  -> [CommunityS
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Every message in a feedback thread, ordered ascending by `created_at`.
      */
@@ -2011,7 +2011,7 @@ open func getFeedbackThreadEvents(rootEventId: String)async throws  -> [Feedback
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Threads scoped to `coordinate` authored by the current user. Returns
      * an empty list if not logged in.
@@ -2032,7 +2032,7 @@ open func getFeedbackThreads(coordinate: String)async throws  -> [FeedbackThread
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Return kind:30004 curation sets from users the current user follows.
      */
@@ -2042,7 +2042,7 @@ open func getFollowingCurationSets()async throws  -> [BookmarkSetRecord]  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_following_curation_sets(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2052,7 +2052,7 @@ open func getFollowingCurationSets()async throws  -> [BookmarkSetRecord]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Highlights home feed — kind:9802 events authored by follows plus
      * highlights tagged into joined rooms. See
@@ -2074,7 +2074,7 @@ open func getFollowingHighlights(limit: UInt32)async throws  -> [HydratedHighlig
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Following Reads feed — articles surfaced through the user's follow
      * graph. See `reads::query_following_reads` for semantics. Returns an
@@ -2096,7 +2096,7 @@ open func getFollowingReads(limit: UInt32)async throws  -> [ReadingFeedItem]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Pubkeys (hex) the current user follows per their cached kind:3 contact
      * list. Empty if the user isn't logged in or the cache hasn't seen a
@@ -2109,7 +2109,7 @@ open func getFollows()async throws  -> [String]  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_follows(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2119,7 +2119,7 @@ open func getFollows()async throws  -> [String]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getHighlights(groupId: String, limit: UInt32)async throws  -> [HydratedHighlight]  {
     return
         try  await uniffiRustCallAsync(
@@ -2136,7 +2136,7 @@ open func getHighlights(groupId: String, limit: UInt32)async throws  -> [Hydrate
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Read all highlights referencing the given NIP-23 article address
      * (`30023:<pubkey>:<d>`) from nostrdb, newest first.
@@ -2157,7 +2157,7 @@ open func getHighlightsForArticle(address: String, limit: UInt32)async throws  -
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Read highlights whose `tag_name` tag holds `tag_value`, newest
      * first. Generalizes `get_highlights_for_article`: pass `("a", "30023:pk:d")`
@@ -2180,14 +2180,14 @@ open func getHighlightsForReference(tagName: String, tagValue: String, limit: UI
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getJoinedCommunities()async throws  -> [CommunitySummary]  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_joined_communities(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2197,7 +2197,7 @@ open func getJoinedCommunities()async throws  -> [CommunitySummary]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Return all kind:30003 bookmark sets authored by the current user.
      */
@@ -2207,7 +2207,7 @@ open func getMyBookmarkSets()async throws  -> [BookmarkSetRecord]  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_my_bookmark_sets(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2217,7 +2217,7 @@ open func getMyBookmarkSets()async throws  -> [BookmarkSetRecord]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Return all kind:30004 curation sets authored by the current user.
      */
@@ -2227,7 +2227,7 @@ open func getMyCurationSets()async throws  -> [BookmarkSetRecord]  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_my_curation_sets(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2237,7 +2237,7 @@ open func getMyCurationSets()async throws  -> [BookmarkSetRecord]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getMyHighlights(limit: UInt32)async throws  -> [HighlightRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -2254,7 +2254,7 @@ open func getMyHighlights(limit: UInt32)async throws  -> [HighlightRecord]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Return all NIP-B0 kind:39701 web bookmarks authored by the current user.
      */
@@ -2264,7 +2264,7 @@ open func getMyWebBookmarks()async throws  -> [WebBookmarkRecord]  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_my_web_bookmarks(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2274,7 +2274,7 @@ open func getMyWebBookmarks()async throws  -> [WebBookmarkRecord]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * The N most-recently-seen rooms. Same underlying query as
      * `get_all_rooms` with a tighter limit — kept as a distinct method so
@@ -2296,7 +2296,7 @@ open func getNewRooms(limit: UInt32)async throws  -> [CommunitySummary]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getPodcastPosition() -> PodcastPositionRecord?  {
     return try!  FfiConverterOptionTypePodcastPositionRecord.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_podcast_position(self.uniffiClonePointer(),$0
@@ -2334,7 +2334,7 @@ open func getProjectFirstAgentPubkey(coordinate: String)async throws  -> String?
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * All cached kind:7 reactions on `target_event_id`, newest first.
      */
@@ -2354,7 +2354,7 @@ open func getReactionsForEvent(targetEventId: String, limit: UInt32)async throws
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Recent books across the user's joined communities — drives the
      * capture-flow book picker. Returns `[]` if no books are cached or the
@@ -2376,7 +2376,7 @@ open func getRecentBooks(limit: UInt32)async throws  -> [ArtifactRecord]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getRecentSearches()async throws  -> [String]  {
     return
         try  await uniffiRustCallAsync(
@@ -2405,7 +2405,7 @@ open func getRelayDiagnostics()async throws  -> [RelayDiagnostic]  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_relay_diagnostics(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2415,7 +2415,7 @@ open func getRelayDiagnostics()async throws  -> [RelayDiagnostic]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Return the user's effective relay list, merging NIP-65 (read/write)
      * with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
@@ -2427,7 +2427,7 @@ open func getRelays()async throws  -> [RelayConfig]  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_relays(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2437,7 +2437,7 @@ open func getRelays()async throws  -> [RelayConfig]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getRoomExplorerCuratorPubkey()async throws  -> String  {
     return
         try  await uniffiRustCallAsync(
@@ -2475,7 +2475,7 @@ open func getRoomsFromReadAuthors(limit: UInt32)async throws  -> [RoomRecommenda
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Rooms where 2+ of the user's follows are members. Empty when the user
      * isn't logged in, has no follows cached, or no room satisfies the
@@ -2497,7 +2497,7 @@ open func getRoomsWithFriends(limit: UInt32)async throws  -> [RoomRecommendation
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Resolve the merged set of NIP-50 search relays for the current user —
      * always includes `wss://relay.highlighter.com`, plus every `relay` tag
@@ -2509,7 +2509,7 @@ open func getSearchRelays()async throws  -> [String]  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_search_relays(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2519,7 +2519,7 @@ open func getSearchRelays()async throws  -> [String]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getUserArticles(pubkeyHex: String, limit: UInt32)async throws  -> [ArticleRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -2536,7 +2536,7 @@ open func getUserArticles(pubkeyHex: String, limit: UInt32)async throws  -> [Art
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getUserCommunities(pubkeyHex: String)async throws  -> [CommunitySummary]  {
     return
         try  await uniffiRustCallAsync(
@@ -2553,7 +2553,7 @@ open func getUserCommunities(pubkeyHex: String)async throws  -> [CommunitySummar
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getUserHighlights(pubkeyHex: String, limit: UInt32)async throws  -> [HighlightRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -2570,7 +2570,7 @@ open func getUserHighlights(pubkeyHex: String, limit: UInt32)async throws  -> [H
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func getUserProfile(pubkeyHex: String)async throws  -> ProfileMetadata?  {
     return
         try  await uniffiRustCallAsync(
@@ -2587,7 +2587,7 @@ open func getUserProfile(pubkeyHex: String)async throws  -> ProfileMetadata?  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
      * JSON-on-disk cache (7-day positive TTL, 1-hour negative TTL) and
@@ -2611,7 +2611,7 @@ open func getWebMetadata(url: String)async throws  -> WebMetadata  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Fetch another user's kind:10002 via the indexer pool and return the
      * parsed `RelayConfig` rows. Useful for "adopt someone else's relay
@@ -2634,7 +2634,7 @@ open func importRelaysFromNpub(npub: String)async throws  -> [RelayConfig]  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Publish the default Blossom server list only if the user has no cached
      * kind:10063. Called once after login; no-op when the list already exists.
@@ -2645,7 +2645,7 @@ open func initDefaultBlossomServers()async throws   {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_init_default_blossom_servers(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_void,
@@ -2655,7 +2655,7 @@ open func initDefaultBlossomServers()async throws   {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Read-only predicate: is `address` currently bookmarked for the logged-in
      * user? Always `false` when no user is logged in.
@@ -2676,7 +2676,7 @@ open func isArticleBookmarked(address: String)async throws  -> Bool  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Read-only predicate: is `event_id_hex` currently bookmarked for
      * the logged-in user? Always `false` when no user is logged in.
@@ -2697,7 +2697,7 @@ open func isEventBookmarked(eventIdHex: String)async throws  -> Bool  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Returns true if the logged-in user's cached contact list currently
      * includes `target_pubkey_hex`.
@@ -2718,7 +2718,7 @@ open func isFollowing(targetPubkeyHex: String)async throws  -> Bool  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func isNip05UsernameValid(input: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_is_nip05_username_valid(self.uniffiClonePointer(),
@@ -2765,13 +2765,13 @@ open func loginNsec(nsec: String)throws  -> CurrentUser  {
     )
 })
 }
-    
+
 open func logout()  {try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_logout(self.uniffiClonePointer(),$0
     )
 }
 }
-    
+
 open func lookupIsbn(isbn: String)async throws  -> ArtifactPreview  {
     return
         try  await uniffiRustCallAsync(
@@ -2788,7 +2788,7 @@ open func lookupIsbn(isbn: String)async throws  -> ArtifactPreview  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -2830,7 +2830,7 @@ open func pairBunker(uri: String)async throws  -> CurrentUser  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func prepareWhatsNew()async throws  -> [WhatsNewEntry]  {
     return
         try  await uniffiRustCallAsync(
@@ -2869,7 +2869,7 @@ open func probeRelayNip11(url: String)async throws  -> Nip11Document  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?)async throws  -> ArtifactRecord  {
     return
         try  await uniffiRustCallAsync(
@@ -2886,7 +2886,7 @@ open func publishArtifact(preview: ArtifactPreview, groupId: String, note: Strin
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Publish a NIP-29 kind:9 chat message into `group_id`. When
      * `reply_to_event_id` is set, the published event carries a marked
@@ -2908,7 +2908,7 @@ open func publishChatMessage(groupId: String, content: String, replyToEventId: S
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Publish a NIP-22 kind:1111 comment scoped to any artifact.
      *
@@ -2936,7 +2936,7 @@ open func publishComment(rootTagName: String, rootTagValue: String, rootKind: UI
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?)async throws  -> DiscussionRecord  {
     return
         try  await uniffiRustCallAsync(
@@ -2953,7 +2953,7 @@ open func publishDiscussion(groupId: String, title: String, body: String, attach
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Publish a feedback note (kind:1) for the shake-to-share surface. When
      * `parent_event_id` is `Some`, the note is a reply marked NIP-10 root;
@@ -2977,7 +2977,7 @@ open func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEv
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Publish a solo NIP-84 highlight without a NIP-29 repost. Used by the
      * article reader's text-selection flow: user highlights → event lands in
@@ -2999,7 +2999,7 @@ open func publishHighlight(draft: HighlightDraft, artifact: ArtifactRecord)async
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [HighlightDraft], targetGroupId: String)async throws  -> [HighlightRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -3016,7 +3016,7 @@ open func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [Highlight
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
      * Used by the capture flow when the user opts not to (or can't) extract
@@ -3039,7 +3039,7 @@ open func publishPicture(draft: PictureDraft)async throws  -> PictureRecord  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Publish a kind:7 reaction targeting `event_id` authored by
      * `author_pubkey_hex` of `target_kind`. `content` is the reaction
@@ -3061,7 +3061,7 @@ open func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: 
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Nudge the relay pool to attempt a reconnect on every disconnected
      * relay. `Client::connect` is idempotent — already-connected relays
@@ -3074,7 +3074,7 @@ open func reconnectAll()async throws   {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_reconnect_all(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_void,
@@ -3084,7 +3084,7 @@ open func reconnectAll()async throws   {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func recordRecentSearch(query: String)async throws  -> [String]  {
     return
         try  await uniffiRustCallAsync(
@@ -3138,7 +3138,7 @@ open func removeRelay(url: String)async throws   {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
      * event id on success. The UI treats this as fire-and-forget: a
@@ -3161,7 +3161,7 @@ open func requestJoinRoom(groupId: String)async throws  -> String  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
      * resolved event when nostrdb already has it, `None` otherwise.
@@ -3184,14 +3184,15 @@ open func resolveNostrEntity(entity: NostrEntityRef)async throws  -> NostrEntity
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
-open func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+
+open func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord) -> MutationOutcome  {
+    return try!  FfiConverterTypeMutationOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_save_podcast_position(self.uniffiClonePointer(),
         FfiConverterString.lower(guid),
         FfiConverterDouble.lower(positionSeconds),
         FfiConverterTypeArtifactRecord_lower(artifact),$0
     )
-}
+})
 }
 
 open func searchArticles(query: String, limit: UInt32)async throws  -> [ArticleRecord]  {
@@ -3210,7 +3211,7 @@ open func searchArticles(query: String, limit: UInt32)async throws  -> [ArticleR
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func searchArtifacts(query: String, limit: UInt32)async throws  -> [ArtifactRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -3227,7 +3228,7 @@ open func searchArtifacts(query: String, limit: UInt32)async throws  -> [Artifac
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func searchCommunities(query: String, limit: UInt32)async throws  -> [CommunitySummary]  {
     return
         try  await uniffiRustCallAsync(
@@ -3244,7 +3245,7 @@ open func searchCommunities(query: String, limit: UInt32)async throws  -> [Commu
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func searchHighlights(query: String, limit: UInt32)async throws  -> [HighlightRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -3261,7 +3262,7 @@ open func searchHighlights(query: String, limit: UInt32)async throws  -> [Highli
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func searchProfiles(query: String, limit: UInt32)async throws  -> [ProfileMetadata]  {
     return
         try  await uniffiRustCallAsync(
@@ -3278,7 +3279,7 @@ open func searchProfiles(query: String, limit: UInt32)async throws  -> [ProfileM
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
      * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
@@ -3301,7 +3302,7 @@ open func setAddressInCurationSet(dTag: String, address: String, member: Bool)as
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Replace the user's Blossom server list with `servers` (must be
      * non-empty). Order is preserved — first server is the upload default.
@@ -3322,14 +3323,14 @@ open func setBlossomServers(servers: [String])async throws  -> String  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func setEventCallback(callback: EventCallback)  {try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_set_event_callback(self.uniffiClonePointer(),
         FfiConverterTypeEventCallback_lower(callback),$0
     )
 }
 }
-    
+
     /**
      * Publish a new kind:3 that adds (`follow=true`) or removes
      * (`follow=false`) `target_pubkey_hex` from the logged-in user's contact
@@ -3352,12 +3353,13 @@ open func setFollow(targetPubkeyHex: String, follow: Bool)async throws  -> Strin
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
-open func setOnboardingComplete(complete: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+
+open func setOnboardingComplete(complete: Bool) -> MutationOutcome  {
+    return try!  FfiConverterTypeMutationOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_set_onboarding_complete(self.uniffiClonePointer(),
         FfiConverterBool.lower(complete),$0
     )
-}
+})
 }
 
     /**
@@ -3379,12 +3381,13 @@ open func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, index
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
-open func setWifiOnlyEnabled(enabled: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+
+open func setWifiOnlyEnabled(enabled: Bool) -> MutationOutcome  {
+    return try!  FfiConverterTypeMutationOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_set_wifi_only_enabled(self.uniffiClonePointer(),
         FfiConverterBool.lower(enabled),$0
     )
-}
+})
 }
 
 open func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary]) -> Data  {
@@ -3420,7 +3423,7 @@ open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: St
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Install (if not already installed) the kind:10012 curated-list sub for
      * `curator_pubkey_hex`. Once the list lands in ndb, this method also
@@ -3444,7 +3447,7 @@ open func startFeaturedRooms(curatorPubkeyHex: String)async throws   {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Install (if not already installed) two relay subs that together
      * power the "Friends are here" explorer shelf:
@@ -3464,7 +3467,7 @@ open func startFriendsRoomsDiscovery()async throws   {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_start_friends_rooms_discovery(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_void,
@@ -3474,7 +3477,7 @@ open func startFriendsRoomsDiscovery()async throws   {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func startNostrConnect(options: NostrConnectOptions)async throws  -> String  {
     return
         try  await uniffiRustCallAsync(
@@ -3491,7 +3494,7 @@ open func startNostrConnect(options: NostrConnectOptions)async throws  -> String
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Install (if not already installed) a long-lived relay sub for every
      * kind:39000 metadata event. Call once on explorer appear from iOS.
@@ -3503,7 +3506,7 @@ open func startRoomDiscovery()async   {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_start_room_discovery(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_void,
@@ -3511,10 +3514,10 @@ open func startRoomDiscovery()async   {
             freeFunc: ffi_highlighter_core_rust_future_free_void,
             liftFunc: { $0 },
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func startRoomExplorerFeaturedRooms()async throws   {
     return
         try  await uniffiRustCallAsync(
@@ -3554,7 +3557,7 @@ open func subscribeArticle(pubkeyHex: String, dTag: String)async throws  -> UInt
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Open a NIP-50 relay subscription for kind:30023 against the user's
      * search relays. Returns a handle; the pump fires
@@ -3578,7 +3581,7 @@ open func subscribeArticleSearch(query: String)async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Open a live subscription for the current user's kind:30003/30004 sets.
      * Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
@@ -3589,7 +3592,7 @@ open func subscribeBookmarkSets()async throws  -> UInt64  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_bookmark_sets(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_u64,
@@ -3599,7 +3602,7 @@ open func subscribeBookmarkSets()async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Open a live subscription on the current user's kind:10003 bookmark
      * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
@@ -3611,7 +3614,7 @@ open func subscribeBookmarks()async throws  -> UInt64  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_bookmarks(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_u64,
@@ -3621,7 +3624,7 @@ open func subscribeBookmarks()async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
      * deltas for every kind:1 `e`-tagged to the root (regardless of author).
@@ -3642,7 +3645,7 @@ open func subscribeFeedbackThread(rootEventId: String)async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Feedback-threads subscription for the shake-to-share surface. Fires
      * `FeedbackThreadsUpdated` deltas whenever a kind:1 root authored by
@@ -3665,7 +3668,7 @@ open func subscribeFeedbackThreads(coordinate: String)async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Open a live subscription for kind:30004 sets from followed authors.
      * Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
@@ -3676,7 +3679,7 @@ open func subscribeFollowingCurationSets()async throws  -> UInt64  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_curation_sets(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_u64,
@@ -3686,7 +3689,7 @@ open func subscribeFollowingCurationSets()async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Highlights home-feed view-scope subscription. Snapshots the user's
      * current follow list (plus self — nobody lists themselves in kind:3
@@ -3700,7 +3703,7 @@ open func subscribeFollowingHighlights()async throws  -> UInt64  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_highlights(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_u64,
@@ -3710,7 +3713,7 @@ open func subscribeFollowingHighlights()async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Following Reads view-scope subscription. Snapshots the user's current
      * follow list, then listens for: (a) new articles authored by a follow,
@@ -3724,7 +3727,7 @@ open func subscribeFollowingReads()async throws  -> UInt64  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_reads(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_u64,
@@ -3734,7 +3737,7 @@ open func subscribeFollowingReads()async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * App-scope subscription for the joined-communities view. Returns a
      * handle; fires CommunityUpserted / MembershipChanged deltas tagged
@@ -3747,7 +3750,7 @@ open func subscribeJoinedCommunities()async throws  -> UInt64  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_joined_communities(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_u64,
@@ -3757,7 +3760,7 @@ open func subscribeJoinedCommunities()async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Install a view-scoped subscription for the missing event behind an
      * entity. Routes to relay hints first (when the bech32 carried any) plus
@@ -3781,7 +3784,7 @@ open func subscribeNostrEntity(entity: NostrEntityRef)async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
      * event bus. Relay status changes are app-scoped and ride
@@ -3794,7 +3797,7 @@ open func subscribeRelayStatus()async throws  -> UInt64  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_relay_status(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_u64,
@@ -3804,7 +3807,7 @@ open func subscribeRelayStatus()async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Per-room view-scope subscription. Returns a handle; fires
      * ArtifactUpserted / HighlightUpserted / HighlightShared for this
@@ -3826,7 +3829,7 @@ open func subscribeRoom(groupId: String)async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Per-room Chat view-scope subscription. Returns a handle; fires
      * `ChatMessageUpserted` deltas for kind:9 messages tagged
@@ -3848,7 +3851,7 @@ open func subscribeRoomChat(groupId: String)async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Per-room Discussions view-scope subscription. Returns a handle; fires
      * `DiscussionUpserted` deltas for kind:11 threads in this group that
@@ -3870,7 +3873,7 @@ open func subscribeRoomDiscussions(groupId: String)async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Profile view-scope subscription. Fires `UserProfileUpdated` deltas
      * when any event relevant to `pubkey_hex`'s profile arrives. Install on
@@ -3892,7 +3895,7 @@ open func subscribeUserProfile(pubkeyHex: String)async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Vault view-scope subscription for the current user's own highlights.
      */
@@ -3902,7 +3905,7 @@ open func subscribeVault()async throws  -> UInt64  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_vault(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_u64,
@@ -3912,7 +3915,7 @@ open func subscribeVault()async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Open a live subscription for the current user's NIP-B0 kind:39701 events.
      * Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
@@ -3923,7 +3926,7 @@ open func subscribeWebBookmarks()async throws  -> UInt64  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_web_bookmarks(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_u64,
@@ -3933,7 +3936,7 @@ open func subscribeWebBookmarks()async throws  -> UInt64  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 open func suggestNip05Username(displayName: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_suggest_nip05_username(self.uniffiClonePointer(),
@@ -3963,7 +3966,7 @@ open func toggleArticleBookmark(address: String)async throws  -> Bool  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Toggle `event_id_hex` in the user's kind:10003 list (for comments
      * and other event-id-addressed targets). Returns the new membership
@@ -3985,7 +3988,7 @@ open func toggleEventBookmark(eventIdHex: String)async throws  -> Bool  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Delete one of the user's own kind:7 reactions via NIP-09.
      */
@@ -4005,7 +4008,7 @@ open func unpublishReaction(reactionEventId: String)async throws  -> String  {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Drop a subscription by handle. Idempotent.
      */
@@ -4015,7 +4018,7 @@ open func unsubscribe(handle: UInt64)  {try! rustCall() {
     )
 }
 }
-    
+
     /**
      * Publish a new kind:0 metadata event for the current user. Preserves
      * any unknown JSON fields the user had set via other clients —
@@ -4040,7 +4043,7 @@ open func updateProfile(name: String, displayName: String, about: String, pictur
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Upload a photo to the default Blossom server (`blossom.primal.net`)
      * using BUD-01 auth. The caller (iOS) is responsible for stripping EXIF
@@ -4065,7 +4068,7 @@ open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, 
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
     /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
      * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
@@ -4087,7 +4090,7 @@ open func upsertRelay(cfg: RelayConfig)async throws   {
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
-    
+
 
 }
 
@@ -4171,13 +4174,13 @@ public struct ArticleRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventId: String, pubkey: String, 
+    public init(eventId: String, pubkey: String,
         /**
          * `d` tag — stable identifier. Combined with pubkey forms the addressable id.
-         */identifier: String, title: String, summary: String, image: String, 
+         */identifier: String, title: String, summary: String, image: String,
         /**
          * Markdown body from the event content.
-         */content: String, hashtags: [String], 
+         */content: String, hashtags: [String],
         /**
          * `published_at` tag (seconds since epoch) if present; otherwise falls back to `created_at`.
          */publishedAt: UInt64?, createdAt: UInt64?) {
@@ -4257,15 +4260,15 @@ public struct FfiConverterTypeArticleRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleRecord {
         return
             try ArticleRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                identifier: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                summary: FfiConverterString.read(from: &buf), 
-                image: FfiConverterString.read(from: &buf), 
-                content: FfiConverterString.read(from: &buf), 
-                hashtags: FfiConverterSequenceString.read(from: &buf), 
-                publishedAt: FfiConverterOptionUInt64.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                identifier: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                summary: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                hashtags: FfiConverterSequenceString.read(from: &buf),
+                publishedAt: FfiConverterOptionUInt64.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -4455,26 +4458,26 @@ public struct ArtifactPreview {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, url: String, title: String, author: String, image: String, description: String, 
+    public init(id: String, url: String, title: String, author: String, image: String, description: String,
         /**
          * "article" | "book" | "podcast" | "video" | "paper" | "web"
-         */source: String, domain: String, catalogId: String, catalogKind: String, 
+         */source: String, domain: String, catalogId: String, catalogKind: String,
         /**
          * NIP-73 feed GUID (from `<podcast:guid>` in the RSS feed). Identifies
          * the show. Emitted on shares as a secondary `i podcast:guid:<feed-guid>`
          * so discovery-by-feed still works alongside the episode identifier.
-         */podcastGuid: String, 
+         */podcastGuid: String,
         /**
          * NIP-73 episode GUID (from `<item><guid>` in the RSS feed). Identifies
          * a specific episode — the canonical NIP-73 target for podcast
          * highlights and NIP-22 comments: `i podcast:item:guid:<episode-guid>`.
-         */podcastItemGuid: String, podcastShowTitle: String, audioUrl: String, audioPreviewUrl: String, transcriptUrl: String, feedUrl: String, publishedAt: String, durationSeconds: Int64?, 
+         */podcastItemGuid: String, podcastShowTitle: String, audioUrl: String, audioPreviewUrl: String, transcriptUrl: String, feedUrl: String, publishedAt: String, durationSeconds: Int64?,
         /**
          * Primary reference tag: "a" | "e" | "i"
-         */referenceTagName: String, referenceTagValue: String, referenceKind: String, 
+         */referenceTagName: String, referenceTagValue: String, referenceKind: String,
         /**
          * Highlight reference tag: "a" | "e" | "r"
-         */highlightTagName: String, highlightTagValue: String, highlightReferenceKey: String, 
+         */highlightTagName: String, highlightTagValue: String, highlightReferenceKey: String,
         /**
          * NIP-73 podcast chapter list (from `chapter` tags on the kind:11
          * share). Each entry: `["chapter", "<seconds>", "<title>"]`. Empty when
@@ -4636,31 +4639,31 @@ public struct FfiConverterTypeArtifactPreview: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactPreview {
         return
             try ArtifactPreview(
-                id: FfiConverterString.read(from: &buf), 
-                url: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                author: FfiConverterString.read(from: &buf), 
-                image: FfiConverterString.read(from: &buf), 
-                description: FfiConverterString.read(from: &buf), 
-                source: FfiConverterString.read(from: &buf), 
-                domain: FfiConverterString.read(from: &buf), 
-                catalogId: FfiConverterString.read(from: &buf), 
-                catalogKind: FfiConverterString.read(from: &buf), 
-                podcastGuid: FfiConverterString.read(from: &buf), 
-                podcastItemGuid: FfiConverterString.read(from: &buf), 
-                podcastShowTitle: FfiConverterString.read(from: &buf), 
-                audioUrl: FfiConverterString.read(from: &buf), 
-                audioPreviewUrl: FfiConverterString.read(from: &buf), 
-                transcriptUrl: FfiConverterString.read(from: &buf), 
-                feedUrl: FfiConverterString.read(from: &buf), 
-                publishedAt: FfiConverterString.read(from: &buf), 
-                durationSeconds: FfiConverterOptionInt64.read(from: &buf), 
-                referenceTagName: FfiConverterString.read(from: &buf), 
-                referenceTagValue: FfiConverterString.read(from: &buf), 
-                referenceKind: FfiConverterString.read(from: &buf), 
-                highlightTagName: FfiConverterString.read(from: &buf), 
-                highlightTagValue: FfiConverterString.read(from: &buf), 
-                highlightReferenceKey: FfiConverterString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                url: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
+                description: FfiConverterString.read(from: &buf),
+                source: FfiConverterString.read(from: &buf),
+                domain: FfiConverterString.read(from: &buf),
+                catalogId: FfiConverterString.read(from: &buf),
+                catalogKind: FfiConverterString.read(from: &buf),
+                podcastGuid: FfiConverterString.read(from: &buf),
+                podcastItemGuid: FfiConverterString.read(from: &buf),
+                podcastShowTitle: FfiConverterString.read(from: &buf),
+                audioUrl: FfiConverterString.read(from: &buf),
+                audioPreviewUrl: FfiConverterString.read(from: &buf),
+                transcriptUrl: FfiConverterString.read(from: &buf),
+                feedUrl: FfiConverterString.read(from: &buf),
+                publishedAt: FfiConverterString.read(from: &buf),
+                durationSeconds: FfiConverterOptionInt64.read(from: &buf),
+                referenceTagName: FfiConverterString.read(from: &buf),
+                referenceTagValue: FfiConverterString.read(from: &buf),
+                referenceKind: FfiConverterString.read(from: &buf),
+                highlightTagName: FfiConverterString.read(from: &buf),
+                highlightTagValue: FfiConverterString.read(from: &buf),
+                highlightReferenceKey: FfiConverterString.read(from: &buf),
                 chapters: FfiConverterSequenceTypeChapter.read(from: &buf)
         )
     }
@@ -4781,11 +4784,11 @@ public struct FfiConverterTypeArtifactRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactRecord {
         return
             try ArtifactRecord(
-                preview: FfiConverterTypeArtifactPreview.read(from: &buf), 
-                groupId: FfiConverterString.read(from: &buf), 
-                shareEventId: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterOptionUInt64.read(from: &buf), 
+                preview: FfiConverterTypeArtifactPreview.read(from: &buf),
+                groupId: FfiConverterString.read(from: &buf),
+                shareEventId: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterOptionUInt64.read(from: &buf),
                 note: FfiConverterString.read(from: &buf)
         )
     }
@@ -4845,13 +4848,13 @@ public struct BlossomUpload {
     public init(
         /**
          * Public URL the server returned (e.g. `https://blossom.primal.net/<sha>.jpg`).
-         */url: String, 
+         */url: String,
         /**
          * Lowercase hex SHA-256 of the uploaded bytes.
-         */sha256Hex: String, 
+         */sha256Hex: String,
         /**
          * MIME type the client uploaded as.
-         */mime: String, sizeBytes: UInt64, width: UInt32, height: UInt32, 
+         */mime: String, sizeBytes: UInt64, width: UInt32, height: UInt32,
         /**
          * Optional alt text — for OCR captures, the recognized text. Empty if none.
          */alt: String) {
@@ -4916,12 +4919,12 @@ public struct FfiConverterTypeBlossomUpload: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomUpload {
         return
             try BlossomUpload(
-                url: FfiConverterString.read(from: &buf), 
-                sha256Hex: FfiConverterString.read(from: &buf), 
-                mime: FfiConverterString.read(from: &buf), 
-                sizeBytes: FfiConverterUInt64.read(from: &buf), 
-                width: FfiConverterUInt32.read(from: &buf), 
-                height: FfiConverterUInt32.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                sha256Hex: FfiConverterString.read(from: &buf),
+                mime: FfiConverterString.read(from: &buf),
+                sizeBytes: FfiConverterUInt64.read(from: &buf),
+                width: FfiConverterUInt32.read(from: &buf),
+                height: FfiConverterUInt32.read(from: &buf),
                 alt: FfiConverterString.read(from: &buf)
         )
     }
@@ -4985,13 +4988,13 @@ public struct BookmarkSetRecord {
     public init(
         /**
          * `d` tag — stable identifier within the author's sets.
-         */id: String, pubkey: String, 
+         */id: String, pubkey: String,
         /**
          * 30003 for bookmark sets, 30004 for curation sets.
-         */kind: UInt32, title: String, description: String, image: String, 
+         */kind: UInt32, title: String, description: String, image: String,
         /**
          * `a`-tag references — NIP-33 addresses like `"30023:<pubkey>:<d>"`.
-         */articleAddresses: [String], 
+         */articleAddresses: [String],
         /**
          * `e`-tag references — event ids of kind:1 notes.
          */noteIds: [String], createdAt: UInt64?) {
@@ -5066,14 +5069,14 @@ public struct FfiConverterTypeBookmarkSetRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetRecord {
         return
             try BookmarkSetRecord(
-                id: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                kind: FfiConverterUInt32.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                description: FfiConverterString.read(from: &buf), 
-                image: FfiConverterString.read(from: &buf), 
-                articleAddresses: FfiConverterSequenceString.read(from: &buf), 
-                noteIds: FfiConverterSequenceString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                kind: FfiConverterUInt32.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                description: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
+                articleAddresses: FfiConverterSequenceString.read(from: &buf),
+                noteIds: FfiConverterSequenceString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -5155,7 +5158,7 @@ public struct FfiConverterTypeCacheStats: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CacheStats {
         return
             try CacheStats(
-                diskBytes: FfiConverterUInt64.read(from: &buf), 
+                diskBytes: FfiConverterUInt64.read(from: &buf),
                 eventCountEstimate: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -5225,7 +5228,7 @@ public struct FfiConverterTypeChapter: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Chapter {
         return
             try Chapter(
-                startSeconds: FfiConverterDouble.read(from: &buf), 
+                startSeconds: FfiConverterDouble.read(from: &buf),
                 title: FfiConverterString.read(from: &buf)
         )
     }
@@ -5273,10 +5276,10 @@ public struct ChatMessageRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventId: String, groupId: String, authorPubkey: String, content: String, 
+    public init(eventId: String, groupId: String, authorPubkey: String, content: String,
         /**
          * Seconds since epoch — required (we drop messages without one upstream).
-         */createdAt: UInt64, 
+         */createdAt: UInt64,
         /**
          * When set, this message replies to the named event id (NIP-10 `["e",
          * <id>, "", "reply"]`). UI can render an inline reply chip.
@@ -5337,11 +5340,11 @@ public struct FfiConverterTypeChatMessageRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatMessageRecord {
         return
             try ChatMessageRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                groupId: FfiConverterString.read(from: &buf), 
-                authorPubkey: FfiConverterString.read(from: &buf), 
-                content: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterUInt64.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                groupId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
                 replyToEventId: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -5463,14 +5466,14 @@ public struct FfiConverterTypeCommentRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentRecord {
         return
             try CommentRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                body: FfiConverterString.read(from: &buf), 
-                rootTagName: FfiConverterString.read(from: &buf), 
-                rootTagValue: FfiConverterString.read(from: &buf), 
-                parentTagName: FfiConverterString.read(from: &buf), 
-                parentTagValue: FfiConverterString.read(from: &buf), 
-                rootKind: FfiConverterString.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf),
+                rootTagName: FfiConverterString.read(from: &buf),
+                rootTagValue: FfiConverterString.read(from: &buf),
+                parentTagName: FfiConverterString.read(from: &buf),
+                parentTagValue: FfiConverterString.read(from: &buf),
+                rootKind: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -5528,10 +5531,10 @@ public struct CommunitySummary {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, name: String, about: String, picture: String, 
+    public init(id: String, name: String, about: String, picture: String,
         /**
          * "open" or "closed"
-         */access: String, 
+         */access: String,
         /**
          * "public" or "private"
          */visibility: String, adminPubkeys: [String], memberCount: UInt64?, relayUrl: String, metadataEventId: String, createdAt: UInt64?) {
@@ -5616,16 +5619,16 @@ public struct FfiConverterTypeCommunitySummary: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommunitySummary {
         return
             try CommunitySummary(
-                id: FfiConverterString.read(from: &buf), 
-                name: FfiConverterString.read(from: &buf), 
-                about: FfiConverterString.read(from: &buf), 
-                picture: FfiConverterString.read(from: &buf), 
-                access: FfiConverterString.read(from: &buf), 
-                visibility: FfiConverterString.read(from: &buf), 
-                adminPubkeys: FfiConverterSequenceString.read(from: &buf), 
-                memberCount: FfiConverterOptionUInt64.read(from: &buf), 
-                relayUrl: FfiConverterString.read(from: &buf), 
-                metadataEventId: FfiConverterString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                picture: FfiConverterString.read(from: &buf),
+                access: FfiConverterString.read(from: &buf),
+                visibility: FfiConverterString.read(from: &buf),
+                adminPubkeys: FfiConverterSequenceString.read(from: &buf),
+                memberCount: FfiConverterOptionUInt64.read(from: &buf),
+                relayUrl: FfiConverterString.read(from: &buf),
+                metadataEventId: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -5704,7 +5707,7 @@ public struct FfiConverterTypeCurrentUser: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurrentUser {
         return
             try CurrentUser(
-                pubkey: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
                 npub: FfiConverterString.read(from: &buf)
         )
     }
@@ -5779,7 +5782,7 @@ public struct FfiConverterTypeDelta: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Delta {
         return
             try Delta(
-                subscriptionId: FfiConverterUInt64.read(from: &buf), 
+                subscriptionId: FfiConverterUInt64.read(from: &buf),
                 change: FfiConverterTypeDataChangeType.read(from: &buf)
         )
     }
@@ -5896,13 +5899,13 @@ public struct FfiConverterTypeDiscussionAttachment: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionAttachment {
         return
             try DiscussionAttachment(
-                referenceTagName: FfiConverterString.read(from: &buf), 
-                referenceTagValue: FfiConverterString.read(from: &buf), 
-                referenceKind: FfiConverterString.read(from: &buf), 
-                url: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                author: FfiConverterString.read(from: &buf), 
-                image: FfiConverterString.read(from: &buf), 
+                referenceTagName: FfiConverterString.read(from: &buf),
+                referenceTagValue: FfiConverterString.read(from: &buf),
+                referenceKind: FfiConverterString.read(from: &buf),
+                url: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
                 summary: FfiConverterString.read(from: &buf)
         )
     }
@@ -5964,7 +5967,7 @@ public struct DiscussionRecord {
     public init(
         /**
          * Stable slug from the `d` tag (or event id if the author omitted one).
-         */id: String, eventId: String, groupId: String, pubkey: String, title: String, body: String, summary: String, createdAt: UInt64?, 
+         */id: String, eventId: String, groupId: String, pubkey: String, title: String, body: String, summary: String, createdAt: UInt64?,
         /**
          * Present iff the thread references an artifact via `a | e | i+k`, or
          * carries an `r` fallback URL. When set, consumers can render the
@@ -6041,14 +6044,14 @@ public struct FfiConverterTypeDiscussionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionRecord {
         return
             try DiscussionRecord(
-                id: FfiConverterString.read(from: &buf), 
-                eventId: FfiConverterString.read(from: &buf), 
-                groupId: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                body: FfiConverterString.read(from: &buf), 
-                summary: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterOptionUInt64.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                eventId: FfiConverterString.read(from: &buf),
+                groupId: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf),
+                summary: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterOptionUInt64.read(from: &buf),
                 attachment: FfiConverterOptionTypeDiscussionAttachment.read(from: &buf)
         )
     }
@@ -6098,7 +6101,7 @@ public struct FeedbackEventRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventId: String, 
+    public init(eventId: String,
         /**
          * Hex id of the thread's root note. Equals `event_id` for the root.
          */rootEventId: String, authorPubkey: String, createdAt: UInt64, content: String) {
@@ -6153,10 +6156,10 @@ public struct FfiConverterTypeFeedbackEventRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackEventRecord {
         return
             try FeedbackEventRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                rootEventId: FfiConverterString.read(from: &buf), 
-                authorPubkey: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterUInt64.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                rootEventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
                 content: FfiConverterString.read(from: &buf)
         )
     }
@@ -6208,7 +6211,7 @@ public struct FeedbackThreadRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(rootEventId: String, authorPubkey: String, createdAt: UInt64, lastActivityAt: UInt64, title: String?, summary: String?, statusLabel: String?, 
+    public init(rootEventId: String, authorPubkey: String, createdAt: UInt64, lastActivityAt: UInt64, title: String?, summary: String?, statusLabel: String?,
         /**
          * First ~140 chars of the root note's content, whitespace-collapsed.
          * Rendered when no `title` is available.
@@ -6279,13 +6282,13 @@ public struct FfiConverterTypeFeedbackThreadRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackThreadRecord {
         return
             try FeedbackThreadRecord(
-                rootEventId: FfiConverterString.read(from: &buf), 
-                authorPubkey: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterUInt64.read(from: &buf), 
-                lastActivityAt: FfiConverterUInt64.read(from: &buf), 
-                title: FfiConverterOptionString.read(from: &buf), 
-                summary: FfiConverterOptionString.read(from: &buf), 
-                statusLabel: FfiConverterOptionString.read(from: &buf), 
+                rootEventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                lastActivityAt: FfiConverterUInt64.read(from: &buf),
+                title: FfiConverterOptionString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
+                statusLabel: FfiConverterOptionString.read(from: &buf),
                 preview: FfiConverterString.read(from: &buf)
         )
     }
@@ -6361,7 +6364,7 @@ public struct FfiConverterTypeGeneratedAccount: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GeneratedAccount {
         return
             try GeneratedAccount(
-                user: FfiConverterTypeCurrentUser.read(from: &buf), 
+                user: FfiConverterTypeCurrentUser.read(from: &buf),
                 nsec: FfiConverterString.read(from: &buf)
         )
     }
@@ -6417,16 +6420,16 @@ public struct HighlightDraft {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(quote: String, context: String, note: String, 
+    public init(quote: String, context: String, note: String,
         /**
          * Optional clip bounds for audio/video (seconds).
-         */clipStartSeconds: Double?, clipEndSeconds: Double?, 
+         */clipStartSeconds: Double?, clipEndSeconds: Double?,
         /**
          * Speaker name for audio clips — empty if unknown or N/A.
-         */clipSpeaker: String, 
+         */clipSpeaker: String,
         /**
          * Transcript segment IDs that the clip spans. Empty for non-clip highlights.
-         */clipTranscriptSegmentIds: [String], 
+         */clipTranscriptSegmentIds: [String],
         /**
          * Optional photo accompanying the highlight (e.g. the page captured for an
          * OCR'd book quote). When set, the published kind:9802 carries an
@@ -6498,13 +6501,13 @@ public struct FfiConverterTypeHighlightDraft: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightDraft {
         return
             try HighlightDraft(
-                quote: FfiConverterString.read(from: &buf), 
-                context: FfiConverterString.read(from: &buf), 
-                note: FfiConverterString.read(from: &buf), 
-                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf), 
-                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf), 
-                clipSpeaker: FfiConverterString.read(from: &buf), 
-                clipTranscriptSegmentIds: FfiConverterSequenceString.read(from: &buf), 
+                quote: FfiConverterString.read(from: &buf),
+                context: FfiConverterString.read(from: &buf),
+                note: FfiConverterString.read(from: &buf),
+                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipSpeaker: FfiConverterString.read(from: &buf),
+                clipTranscriptSegmentIds: FfiConverterSequenceString.read(from: &buf),
                 image: FfiConverterOptionTypeBlossomUpload.read(from: &buf)
         )
     }
@@ -6570,12 +6573,12 @@ public struct HighlightRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventId: String, pubkey: String, quote: String, context: String, note: String, artifactAddress: String, eventReference: String, 
+    public init(eventId: String, pubkey: String, quote: String, context: String, note: String, artifactAddress: String, eventReference: String,
         /**
          * NIP-73 external content identifier from the `i` tag (e.g.
          * `podcast:item:guid:<episode-guid>`, `isbn:…`). Empty when the
          * highlight uses a different reference scheme.
-         */externalReference: String, sourceUrl: String, sourceReferenceKey: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String, clipTranscriptSegmentIds: [String], 
+         */externalReference: String, sourceUrl: String, sourceReferenceKey: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String, clipTranscriptSegmentIds: [String],
         /**
          * NIP-92 `imeta` image URL — the photo of the page the highlight was
          * captured from (e.g. a Blossom-hosted scan with the passage marked
@@ -6687,21 +6690,21 @@ public struct FfiConverterTypeHighlightRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightRecord {
         return
             try HighlightRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                quote: FfiConverterString.read(from: &buf), 
-                context: FfiConverterString.read(from: &buf), 
-                note: FfiConverterString.read(from: &buf), 
-                artifactAddress: FfiConverterString.read(from: &buf), 
-                eventReference: FfiConverterString.read(from: &buf), 
-                externalReference: FfiConverterString.read(from: &buf), 
-                sourceUrl: FfiConverterString.read(from: &buf), 
-                sourceReferenceKey: FfiConverterString.read(from: &buf), 
-                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf), 
-                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf), 
-                clipSpeaker: FfiConverterString.read(from: &buf), 
-                clipTranscriptSegmentIds: FfiConverterSequenceString.read(from: &buf), 
-                imageUrl: FfiConverterString.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                quote: FfiConverterString.read(from: &buf),
+                context: FfiConverterString.read(from: &buf),
+                note: FfiConverterString.read(from: &buf),
+                artifactAddress: FfiConverterString.read(from: &buf),
+                eventReference: FfiConverterString.read(from: &buf),
+                externalReference: FfiConverterString.read(from: &buf),
+                sourceUrl: FfiConverterString.read(from: &buf),
+                sourceReferenceKey: FfiConverterString.read(from: &buf),
+                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipSpeaker: FfiConverterString.read(from: &buf),
+                clipTranscriptSegmentIds: FfiConverterSequenceString.read(from: &buf),
+                imageUrl: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -6759,10 +6762,10 @@ public struct HydratedHighlight {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(highlight: HighlightRecord, artifact: ArtifactRecord?, 
+    public init(highlight: HighlightRecord, artifact: ArtifactRecord?,
         /**
          * If this highlight arrived via a kind:16 repost, this is the id of the repost event.
-         */sharedByEventId: String?, 
+         */sharedByEventId: String?,
         /**
          * The author of the repost (may differ from highlight author).
          */sharedByPubkey: String?) {
@@ -6812,9 +6815,9 @@ public struct FfiConverterTypeHydratedHighlight: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HydratedHighlight {
         return
             try HydratedHighlight(
-                highlight: FfiConverterTypeHighlightRecord.read(from: &buf), 
-                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf), 
-                sharedByEventId: FfiConverterOptionString.read(from: &buf), 
+                highlight: FfiConverterTypeHighlightRecord.read(from: &buf),
+                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
+                sharedByEventId: FfiConverterOptionString.read(from: &buf),
                 sharedByPubkey: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -6840,6 +6843,76 @@ public func FfiConverterTypeHydratedHighlight_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeHydratedHighlight_lower(_ value: HydratedHighlight) -> RustBuffer {
     return FfiConverterTypeHydratedHighlight.lower(value)
+}
+
+
+public struct MutationOutcome {
+    public var applied: Bool
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(applied: Bool, error: String) {
+        self.applied = applied
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension MutationOutcome: Sendable {}
+#endif
+
+
+extension MutationOutcome: Equatable, Hashable {
+    public static func ==(lhs: MutationOutcome, rhs: MutationOutcome) -> Bool {
+        if lhs.applied != rhs.applied {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(applied)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMutationOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MutationOutcome {
+        return
+            try MutationOutcome(
+                applied: FfiConverterBool.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MutationOutcome, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.applied, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMutationOutcome_lift(_ buf: RustBuffer) throws -> MutationOutcome {
+    return try FfiConverterTypeMutationOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMutationOutcome_lower(_ value: MutationOutcome) -> RustBuffer {
+    return FfiConverterTypeMutationOutcome.lower(value)
 }
 
 
@@ -6952,7 +7025,7 @@ public struct Nip11Document {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(url: String, name: String?, description: String?, pubkey: String?, contact: String?, software: String?, version: String?, supportedNips: [UInt32], 
+    public init(url: String, name: String?, description: String?, pubkey: String?, contact: String?, software: String?, version: String?, supportedNips: [UInt32],
         /**
          * URL of the relay's icon / avatar (NIP-11 `icon`). Typically an
          * https:// URL the Swift side can hand to Kingfisher.
@@ -7028,14 +7101,14 @@ public struct FfiConverterTypeNip11Document: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip11Document {
         return
             try Nip11Document(
-                url: FfiConverterString.read(from: &buf), 
-                name: FfiConverterOptionString.read(from: &buf), 
-                description: FfiConverterOptionString.read(from: &buf), 
-                pubkey: FfiConverterOptionString.read(from: &buf), 
-                contact: FfiConverterOptionString.read(from: &buf), 
-                software: FfiConverterOptionString.read(from: &buf), 
-                version: FfiConverterOptionString.read(from: &buf), 
-                supportedNips: FfiConverterSequenceUInt32.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                name: FfiConverterOptionString.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf),
+                pubkey: FfiConverterOptionString.read(from: &buf),
+                contact: FfiConverterOptionString.read(from: &buf),
+                software: FfiConverterOptionString.read(from: &buf),
+                version: FfiConverterOptionString.read(from: &buf),
+                supportedNips: FfiConverterSequenceUInt32.read(from: &buf),
                 icon: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -7084,7 +7157,7 @@ public struct NostrConnectOptions {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(name: String, url: String, image: String, 
+    public init(name: String, url: String, image: String,
         /**
          * e.g. "sign_event:11,sign_event:9802,nip44_encrypt"
          */perms: String) {
@@ -7134,9 +7207,9 @@ public struct FfiConverterTypeNostrConnectOptions: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrConnectOptions {
         return
             try NostrConnectOptions(
-                name: FfiConverterString.read(from: &buf), 
-                url: FfiConverterString.read(from: &buf), 
-                image: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf),
+                url: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
                 perms: FfiConverterString.read(from: &buf)
         )
     }
@@ -7187,7 +7260,7 @@ public struct NostrEntityEvent {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventIdHex: String, kind: UInt32, pubkeyHex: String, content: String, createdAt: UInt64, 
+    public init(eventIdHex: String, kind: UInt32, pubkeyHex: String, content: String, createdAt: UInt64,
         /**
          * Serialised `[["k", "v"], …]` so Swift can extract `title` /
          * `image` etc. for an article card without needing a second FFI
@@ -7249,11 +7322,11 @@ public struct FfiConverterTypeNostrEntityEvent: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityEvent {
         return
             try NostrEntityEvent(
-                eventIdHex: FfiConverterString.read(from: &buf), 
-                kind: FfiConverterUInt32.read(from: &buf), 
-                pubkeyHex: FfiConverterString.read(from: &buf), 
-                content: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterUInt64.read(from: &buf), 
+                eventIdHex: FfiConverterString.read(from: &buf),
+                kind: FfiConverterUInt32.read(from: &buf),
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
                 tagsJson: FfiConverterString.read(from: &buf)
         )
     }
@@ -7314,14 +7387,14 @@ public struct PictureDraft {
     public init(
         /**
          * The Blossom upload to attach (must already have been uploaded).
-         */image: BlossomUpload, 
+         */image: BlossomUpload,
         /**
          * Free-form note from the user — populates event content.
-         */note: String, 
+         */note: String,
         /**
          * Optional book/article context. When present, an `a`/`e`/`i` reference
          * tag is included so the picture is discoverable next to that artifact.
-         */artifact: ArtifactRecord?, 
+         */artifact: ArtifactRecord?,
         /**
          * NIP-29 group id this picture is being shared into. `None` publishes the
          * picture as a standalone event (no `h` tag, not scoped to any community).
@@ -7372,9 +7445,9 @@ public struct FfiConverterTypePictureDraft: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PictureDraft {
         return
             try PictureDraft(
-                image: FfiConverterTypeBlossomUpload.read(from: &buf), 
-                note: FfiConverterString.read(from: &buf), 
-                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf), 
+                image: FfiConverterTypeBlossomUpload.read(from: &buf),
+                note: FfiConverterString.read(from: &buf),
+                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
                 targetGroupId: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -7422,7 +7495,7 @@ public struct PictureRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventId: String, pubkey: String, groupId: String, note: String, imageUrl: String, imageSha256: String, 
+    public init(eventId: String, pubkey: String, groupId: String, note: String, imageUrl: String, imageSha256: String,
         /**
          * Address/id/url of the artifact this picture references — empty when
          * the picture stands alone.
@@ -7493,13 +7566,13 @@ public struct FfiConverterTypePictureRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PictureRecord {
         return
             try PictureRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                groupId: FfiConverterString.read(from: &buf), 
-                note: FfiConverterString.read(from: &buf), 
-                imageUrl: FfiConverterString.read(from: &buf), 
-                imageSha256: FfiConverterString.read(from: &buf), 
-                artifactReferenceKey: FfiConverterString.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                groupId: FfiConverterString.read(from: &buf),
+                note: FfiConverterString.read(from: &buf),
+                imageUrl: FfiConverterString.read(from: &buf),
+                imageSha256: FfiConverterString.read(from: &buf),
+                artifactReferenceKey: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -7645,7 +7718,7 @@ public struct ProfileMetadata {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(pubkey: String, name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String, 
+    public init(pubkey: String, name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String,
         /**
          * created_at of the kind:0 event this came from (seconds since epoch).
          */createdAt: UInt64?) {
@@ -7725,15 +7798,15 @@ public struct FfiConverterTypeProfileMetadata: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileMetadata {
         return
             try ProfileMetadata(
-                pubkey: FfiConverterString.read(from: &buf), 
-                name: FfiConverterString.read(from: &buf), 
-                displayName: FfiConverterString.read(from: &buf), 
-                about: FfiConverterString.read(from: &buf), 
-                picture: FfiConverterString.read(from: &buf), 
-                banner: FfiConverterString.read(from: &buf), 
-                nip05: FfiConverterString.read(from: &buf), 
-                website: FfiConverterString.read(from: &buf), 
-                lud16: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                picture: FfiConverterString.read(from: &buf),
+                banner: FfiConverterString.read(from: &buf),
+                nip05: FfiConverterString.read(from: &buf),
+                website: FfiConverterString.read(from: &buf),
+                lud16: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -7833,10 +7906,10 @@ public struct FfiConverterTypeReactionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReactionRecord {
         return
             try ReactionRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                targetEventId: FfiConverterString.read(from: &buf), 
-                content: FfiConverterString.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                targetEventId: FfiConverterString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -7892,14 +7965,14 @@ public struct ReadingFeedItem {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(article: ArticleRecord, 
+    public init(article: ArticleRecord,
         /**
          * The article's author is someone the user follows.
-         */authorFollowed: Bool, 
+         */authorFollowed: Bool,
         /**
          * Hex pubkeys of follows who interacted with the article. Deduped.
          * Empty when the only surfacing signal is `author_followed`.
-         */interactorPubkeys: [String], 
+         */interactorPubkeys: [String],
         /**
          * Most recent timestamp among the article and all interactions — drives
          * feed sort order. Seconds since epoch.
@@ -7950,9 +8023,9 @@ public struct FfiConverterTypeReadingFeedItem: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadingFeedItem {
         return
             try ReadingFeedItem(
-                article: FfiConverterTypeArticleRecord.read(from: &buf), 
-                authorFollowed: FfiConverterBool.read(from: &buf), 
-                interactorPubkeys: FfiConverterSequenceString.read(from: &buf), 
+                article: FfiConverterTypeArticleRecord.read(from: &buf),
+                authorFollowed: FfiConverterBool.read(from: &buf),
+                interactorPubkeys: FfiConverterSequenceString.read(from: &buf),
                 latestActivityAt: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -8045,10 +8118,10 @@ public struct FfiConverterTypeRelayConfig: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayConfig {
         return
             try RelayConfig(
-                url: FfiConverterString.read(from: &buf), 
-                read: FfiConverterBool.read(from: &buf), 
-                write: FfiConverterBool.read(from: &buf), 
-                rooms: FfiConverterBool.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                read: FfiConverterBool.read(from: &buf),
+                write: FfiConverterBool.read(from: &buf),
+                rooms: FfiConverterBool.read(from: &buf),
                 indexer: FfiConverterBool.read(from: &buf)
         )
     }
@@ -8110,19 +8183,19 @@ public struct RelayDiagnostic {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(url: String, state: RelayStatus, 
+    public init(url: String, state: RelayStatus,
         /**
          * Round-trip time in milliseconds when the relay is connected. `None`
          * until the first ping completes.
-         */rttMs: UInt32?, 
+         */rttMs: UInt32?,
         /**
          * Cumulative bytes sent on this connection since it was first opened
          * this session.
-         */bytesSent: UInt64, 
+         */bytesSent: UInt64,
         /**
          * Cumulative bytes received on this connection since it was first
          * opened this session.
-         */bytesReceived: UInt64, 
+         */bytesReceived: UInt64,
         /**
          * Unix seconds of the most recent successful connect, `None` if never
          * connected in this session.
@@ -8183,11 +8256,11 @@ public struct FfiConverterTypeRelayDiagnostic: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayDiagnostic {
         return
             try RelayDiagnostic(
-                url: FfiConverterString.read(from: &buf), 
-                state: FfiConverterTypeRelayStatus.read(from: &buf), 
-                rttMs: FfiConverterOptionUInt32.read(from: &buf), 
-                bytesSent: FfiConverterUInt64.read(from: &buf), 
-                bytesReceived: FfiConverterUInt64.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                state: FfiConverterTypeRelayStatus.read(from: &buf),
+                rttMs: FfiConverterOptionUInt32.read(from: &buf),
+                bytesSent: FfiConverterUInt64.read(from: &buf),
+                bytesReceived: FfiConverterUInt64.read(from: &buf),
                 connectedSinceTs: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -8234,7 +8307,7 @@ public struct RoomRecommendation {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(summary: CommunitySummary, 
+    public init(summary: CommunitySummary,
         /**
          * Hex pubkeys that triggered the recommendation — follows who are in
          * the room, or authors who post to it. Capped at 5 by the recommender.
@@ -8280,8 +8353,8 @@ public struct FfiConverterTypeRoomRecommendation: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendation {
         return
             try RoomRecommendation(
-                summary: FfiConverterTypeCommunitySummary.read(from: &buf), 
-                reasonPubkeys: FfiConverterSequenceString.read(from: &buf), 
+                summary: FfiConverterTypeCommunitySummary.read(from: &buf),
+                reasonPubkeys: FfiConverterSequenceString.read(from: &buf),
                 reasonKind: FfiConverterTypeRoomRecommendationReason.read(from: &buf)
         )
     }
@@ -8430,10 +8503,10 @@ public struct WebBookmarkRecord {
     public init(
         /**
          * Full URL — `"https://"` prepended to the `d` tag.
-         */url: String, pubkey: String, title: String, 
+         */url: String, pubkey: String, title: String,
         /**
          * Detailed description from the event's `content` field.
-         */description: String, 
+         */description: String,
         /**
          * `t` tags (topics / hashtags).
          */topics: [String], publishedAt: UInt64?, createdAt: UInt64?) {
@@ -8498,12 +8571,12 @@ public struct FfiConverterTypeWebBookmarkRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebBookmarkRecord {
         return
             try WebBookmarkRecord(
-                url: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                description: FfiConverterString.read(from: &buf), 
-                topics: FfiConverterSequenceString.read(from: &buf), 
-                publishedAt: FfiConverterOptionUInt64.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                description: FfiConverterString.read(from: &buf),
+                topics: FfiConverterSequenceString.read(from: &buf),
+                publishedAt: FfiConverterOptionUInt64.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -8618,13 +8691,13 @@ public struct FfiConverterTypeWebMetadata: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebMetadata {
         return
             try WebMetadata(
-                url: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                description: FfiConverterString.read(from: &buf), 
-                image: FfiConverterString.read(from: &buf), 
-                siteName: FfiConverterString.read(from: &buf), 
-                author: FfiConverterString.read(from: &buf), 
-                favicon: FfiConverterString.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                description: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
+                siteName: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                favicon: FfiConverterString.read(from: &buf),
                 fetchedAt: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -8833,26 +8906,26 @@ extension ArtifactDetailTarget: Equatable, Hashable {}
 
 public enum CoreError: Swift.Error {
 
-    
-    
+
+
     case NotInitialized(message: String)
-    
+
     case NotAuthenticated(message: String)
-    
+
     case InvalidInput(message: String)
-    
+
     case Network(message: String)
-    
+
     case Signer(message: String)
-    
+
     case Relay(message: String)
-    
+
     case Cache(message: String)
-    
+
     case NotFound(message: String)
-    
+
     case Other(message: String)
-    
+
 }
 
 
@@ -8866,45 +8939,45 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .NotInitialized(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 2: return .NotAuthenticated(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 3: return .InvalidInput(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 4: return .Network(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 5: return .Signer(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 6: return .Relay(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 7: return .Cache(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 8: return .NotFound(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 9: return .Other(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -8913,9 +8986,9 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
     public static func write(_ value: CoreError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
+
+
         case .NotInitialized(_ /* message is ignored*/):
             writeInt(&buf, Int32(1))
         case .NotAuthenticated(_ /* message is ignored*/):
@@ -8935,7 +9008,7 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
         case .Other(_ /* message is ignored*/):
             writeInt(&buf, Int32(9))
 
-        
+
         }
     }
 }
@@ -8974,7 +9047,7 @@ extension CoreError: Foundation.LocalizedError {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum DataChangeType {
-    
+
     case communityUpserted(community: CommunitySummary
     )
     case membershipChanged(groupId: String
@@ -9120,69 +9193,69 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DataChangeType {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .communityUpserted(community: try FfiConverterTypeCommunitySummary.read(from: &buf)
         )
-        
+
         case 2: return .membershipChanged(groupId: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 3: return .artifactUpserted(groupId: try FfiConverterString.read(from: &buf), artifact: try FfiConverterTypeArtifactRecord.read(from: &buf)
         )
-        
+
         case 4: return .discussionUpserted(groupId: try FfiConverterString.read(from: &buf), discussion: try FfiConverterTypeDiscussionRecord.read(from: &buf)
         )
-        
+
         case 5: return .chatMessageUpserted(groupId: try FfiConverterString.read(from: &buf), message: try FfiConverterTypeChatMessageRecord.read(from: &buf)
         )
-        
+
         case 6: return .highlightUpserted(groupId: try FfiConverterString.read(from: &buf), highlight: try FfiConverterTypeHydratedHighlight.read(from: &buf)
         )
-        
+
         case 7: return .highlightShared(groupId: try FfiConverterString.read(from: &buf), highlightId: try FfiConverterString.read(from: &buf), sharedByPubkey: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 8: return .myHighlightUpserted(highlight: try FfiConverterTypeHighlightRecord.read(from: &buf)
         )
-        
+
         case 9: return .userProfileUpdated(pubkey: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
         )
-        
+
         case 10: return .articleUpdated(address: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
         )
-        
+
         case 11: return .followingReadsUpdated
-        
+
         case 12: return .followingHighlightsUpdated
-        
+
         case 13: return .feedbackThreadsUpdated
-        
+
         case 14: return .feedbackThreadEventUpserted(event: try FfiConverterTypeFeedbackEventRecord.read(from: &buf)
         )
-        
+
         case 15: return .searchArticlesUpdated(query: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 16: return .bookmarksUpdated
-        
+
         case 17: return .bookmarkSetsUpdated
-        
+
         case 18: return .followingCurationSetsUpdated
-        
+
         case 19: return .webBookmarksUpdated
-        
+
         case 20: return .nostrEntityResolved(event: try FfiConverterTypeNostrEntityEvent.read(from: &buf)
         )
-        
+
         case 21: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
         )
-        
+
         case 22: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
         )
 
         case 23: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
         )
-        
+
         case 24: return .relayDiagnosticsUpdated(diagnostics: try FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf)
         )
 
@@ -9192,104 +9265,104 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
 
     public static func write(_ value: DataChangeType, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case let .communityUpserted(community):
             writeInt(&buf, Int32(1))
             FfiConverterTypeCommunitySummary.write(community, into: &buf)
-            
-        
+
+
         case let .membershipChanged(groupId):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(groupId, into: &buf)
-            
-        
+
+
         case let .artifactUpserted(groupId,artifact):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeArtifactRecord.write(artifact, into: &buf)
-            
-        
+
+
         case let .discussionUpserted(groupId,discussion):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeDiscussionRecord.write(discussion, into: &buf)
-            
-        
+
+
         case let .chatMessageUpserted(groupId,message):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeChatMessageRecord.write(message, into: &buf)
-            
-        
+
+
         case let .highlightUpserted(groupId,highlight):
             writeInt(&buf, Int32(6))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeHydratedHighlight.write(highlight, into: &buf)
-            
-        
+
+
         case let .highlightShared(groupId,highlightId,sharedByPubkey):
             writeInt(&buf, Int32(7))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterString.write(highlightId, into: &buf)
             FfiConverterString.write(sharedByPubkey, into: &buf)
-            
-        
+
+
         case let .myHighlightUpserted(highlight):
             writeInt(&buf, Int32(8))
             FfiConverterTypeHighlightRecord.write(highlight, into: &buf)
-            
-        
+
+
         case let .userProfileUpdated(pubkey,kind):
             writeInt(&buf, Int32(9))
             FfiConverterString.write(pubkey, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
-            
-        
+
+
         case let .articleUpdated(address,kind):
             writeInt(&buf, Int32(10))
             FfiConverterString.write(address, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
-            
-        
+
+
         case .followingReadsUpdated:
             writeInt(&buf, Int32(11))
-        
-        
+
+
         case .followingHighlightsUpdated:
             writeInt(&buf, Int32(12))
-        
-        
+
+
         case .feedbackThreadsUpdated:
             writeInt(&buf, Int32(13))
-        
-        
+
+
         case let .feedbackThreadEventUpserted(event):
             writeInt(&buf, Int32(14))
             FfiConverterTypeFeedbackEventRecord.write(event, into: &buf)
-            
-        
+
+
         case let .searchArticlesUpdated(query):
             writeInt(&buf, Int32(15))
             FfiConverterString.write(query, into: &buf)
-            
-        
+
+
         case .bookmarksUpdated:
             writeInt(&buf, Int32(16))
-        
-        
+
+
         case .bookmarkSetsUpdated:
             writeInt(&buf, Int32(17))
-        
-        
+
+
         case .followingCurationSetsUpdated:
             writeInt(&buf, Int32(18))
-        
-        
+
+
         case .webBookmarksUpdated:
             writeInt(&buf, Int32(19))
-        
-        
+
+
         case let .nostrEntityResolved(event):
             writeInt(&buf, Int32(20))
             FfiConverterTypeNostrEntityEvent.write(event, into: &buf)
@@ -9298,18 +9371,18 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         case let .signerConnected(user):
             writeInt(&buf, Int32(21))
             FfiConverterTypeCurrentUser.write(user, into: &buf)
-            
-        
+
+
         case let .bunkerSignRequest(requestId):
             writeInt(&buf, Int32(22))
             FfiConverterString.write(requestId, into: &buf)
-            
-        
+
+
         case let .relayStatusChanged(url,state):
             writeInt(&buf, Int32(23))
             FfiConverterString.write(url, into: &buf)
             FfiConverterTypeRelayStatus.write(state, into: &buf)
-            
+
 
         case let .relayDiagnosticsUpdated(diagnostics):
             writeInt(&buf, Int32(24))
@@ -9349,7 +9422,7 @@ extension DataChangeType: Equatable, Hashable {}
  */
 
 public enum NostrEntityRef {
-    
+
     /**
      * `npub1…` / `nprofile1…` — reference to a user's profile.
      */
@@ -9358,10 +9431,10 @@ public enum NostrEntityRef {
     /**
      * `note1…` / `nevent1…` — reference to a specific event by id.
      */
-    case event(eventIdHex: String, relays: [String], 
+    case event(eventIdHex: String, relays: [String],
         /**
          * `nevent` can carry a hinted author pubkey. `None` for `note1…`.
-         */authorHintHex: String?, 
+         */authorHintHex: String?,
         /**
          * `nevent` can carry a hinted kind so the UI can pick a
          * renderer skeleton (article card vs. note card vs. highlight
@@ -9390,45 +9463,45 @@ public struct FfiConverterTypeNostrEntityRef: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityRef {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .profile(pubkeyHex: try FfiConverterString.read(from: &buf), relays: try FfiConverterSequenceString.read(from: &buf)
         )
-        
+
         case 2: return .event(eventIdHex: try FfiConverterString.read(from: &buf), relays: try FfiConverterSequenceString.read(from: &buf), authorHintHex: try FfiConverterOptionString.read(from: &buf), kindHint: try FfiConverterOptionUInt32.read(from: &buf)
         )
-        
+
         case 3: return .address(kind: try FfiConverterUInt32.read(from: &buf), pubkeyHex: try FfiConverterString.read(from: &buf), dTag: try FfiConverterString.read(from: &buf), relays: try FfiConverterSequenceString.read(from: &buf)
         )
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: NostrEntityRef, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case let .profile(pubkeyHex,relays):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(pubkeyHex, into: &buf)
             FfiConverterSequenceString.write(relays, into: &buf)
-            
-        
+
+
         case let .event(eventIdHex,relays,authorHintHex,kindHint):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(eventIdHex, into: &buf)
             FfiConverterSequenceString.write(relays, into: &buf)
             FfiConverterOptionString.write(authorHintHex, into: &buf)
             FfiConverterOptionUInt32.write(kindHint, into: &buf)
-            
-        
+
+
         case let .address(kind,pubkeyHex,dTag,relays):
             writeInt(&buf, Int32(3))
             FfiConverterUInt32.write(kind, into: &buf)
             FfiConverterString.write(pubkeyHex, into: &buf)
             FfiConverterString.write(dTag, into: &buf)
             FfiConverterSequenceString.write(relays, into: &buf)
-            
+
         }
     }
 }
@@ -9467,7 +9540,7 @@ extension NostrEntityRef: Equatable, Hashable {}
  */
 
 public enum RelayStatus {
-    
+
     case connecting
     case connected
     case disconnected
@@ -9489,44 +9562,44 @@ public struct FfiConverterTypeRelayStatus: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayStatus {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .connecting
-        
+
         case 2: return .connected
-        
+
         case 3: return .disconnected
-        
+
         case 4: return .terminated
-        
+
         case 5: return .banned
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RelayStatus, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .connecting:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .connected:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .disconnected:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .terminated:
             writeInt(&buf, Int32(4))
-        
-        
+
+
         case .banned:
             writeInt(&buf, Int32(5))
-        
+
         }
     }
 }
@@ -9563,7 +9636,7 @@ extension RelayStatus: Equatable, Hashable {}
  */
 
 public enum RoomAccess {
-    
+
     case `open`
     case closed
 }
@@ -9582,26 +9655,26 @@ public struct FfiConverterTypeRoomAccess: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomAccess {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .`open`
-        
+
         case 2: return .closed
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RoomAccess, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .`open`:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .closed:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -9637,7 +9710,7 @@ extension RoomAccess: Equatable, Hashable {}
  */
 
 public enum RoomRecommendationReason {
-    
+
     /**
      * People the user follows (kind:3) are members of this room.
      */
@@ -9662,26 +9735,26 @@ public struct FfiConverterTypeRoomRecommendationReason: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationReason {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .friends
-        
+
         case 2: return .authors
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RoomRecommendationReason, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .friends:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .authors:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -9718,7 +9791,7 @@ extension RoomRecommendationReason: Equatable, Hashable {}
  */
 
 public enum RoomVisibility {
-    
+
     case `public`
     case `private`
 }
@@ -9737,26 +9810,26 @@ public struct FfiConverterTypeRoomVisibility: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomVisibility {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .`public`
-        
+
         case 2: return .`private`
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RoomVisibility, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .`public`:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .`private`:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -11054,7 +11127,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 56937) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_save_podcast_position() != 55048) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_save_podcast_position() != 15916) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_articles() != 31180) {
@@ -11084,13 +11157,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_follow() != 22034) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_onboarding_complete() != 56588) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_onboarding_complete() != 42515) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_relay_roles() != 25561) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_wifi_only_enabled() != 61233) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_wifi_only_enabled() != 42691) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_extension_communities_snapshot() != 38830) {

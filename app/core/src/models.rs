@@ -16,6 +16,12 @@ pub struct GeneratedAccount {
     pub nsec: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct MutationOutcome {
+    pub applied: bool,
+    pub error: String,
+}
+
 /// Mirrors `CommunitySummary` in `web/src/lib/ndk/groups.ts:23-35`.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CommunitySummary {

@@ -121,9 +121,8 @@ struct OnboardingInterestsView: View {
 
         Task {
             await store.completeLogin(user: account.user)
-            do {
-                try store.markOnboardingComplete()
-            } catch {
+            let outcome = store.markOnboardingComplete()
+            if !outcome.applied {
                 isWorking = false
                 return
             }

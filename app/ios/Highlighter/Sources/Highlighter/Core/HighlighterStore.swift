@@ -135,7 +135,7 @@ final class HighlighterStore {
         core.logout()
         eventBridge = nil
         AppSessionStore.shared.clear()
-        try? core.setOnboardingComplete(complete: false)
+        _ = core.setOnboardingComplete(complete: false)
         isOnboardingComplete = false
         currentUser = nil
         currentUserProfile = nil
@@ -144,9 +144,12 @@ final class HighlighterStore {
         SharedCommunitiesSnapshot.clear()
     }
 
-    func markOnboardingComplete() throws {
-        try core.setOnboardingComplete(complete: true)
-        isOnboardingComplete = true
+    func markOnboardingComplete() -> MutationOutcome {
+        let outcome = core.setOnboardingComplete(complete: true)
+        if outcome.applied {
+            isOnboardingComplete = true
+        }
+        return outcome
     }
 
     // MARK: - Bookmarks

@@ -27,8 +27,8 @@ use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactPreview, ArtifactRecord, BlossomUpload,
     ChatMessageRecord, CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord,
     FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft, HighlightRecord,
-    HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord, PodcastPositionRecord,
-    ProfileMetadata, ReadingFeedItem, RoomRecommendation,
+    HydratedHighlight, MutationOutcome, NostrConnectOptions, PictureDraft, PictureRecord,
+    PodcastPositionRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -80,6 +80,19 @@ pub struct HighlighterCore {
 
 struct Inner {
     session: Session,
+}
+
+fn mutation_outcome(result: Result<(), CoreError>) -> MutationOutcome {
+    match result {
+        Ok(()) => MutationOutcome {
+            applied: true,
+            error: String::new(),
+        },
+        Err(error) => MutationOutcome {
+            applied: false,
+            error: error.to_string(),
+        },
+    }
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -213,16 +226,16 @@ impl HighlighterCore {
         self.onboarding.is_complete()
     }
 
-    pub fn set_onboarding_complete(&self, complete: bool) -> Result<(), CoreError> {
-        self.onboarding.set_complete(complete)
+    pub fn set_onboarding_complete(&self, complete: bool) -> MutationOutcome {
+        mutation_outcome(self.onboarding.set_complete(complete))
     }
 
     pub fn is_wifi_only_enabled(&self) -> bool {
         self.network_preferences.wifi_only_enabled()
     }
 
-    pub fn set_wifi_only_enabled(&self, enabled: bool) -> Result<(), CoreError> {
-        self.network_preferences.set_wifi_only_enabled(enabled)
+    pub fn set_wifi_only_enabled(&self, enabled: bool) -> MutationOutcome {
+        mutation_outcome(self.network_preferences.set_wifi_only_enabled(enabled))
     }
 
     pub fn get_podcast_position(&self) -> Option<PodcastPositionRecord> {
@@ -238,9 +251,8 @@ impl HighlighterCore {
         guid: String,
         position_seconds: f64,
         artifact: ArtifactRecord,
-    ) -> Result<(), CoreError> {
-        self.podcast_position
-            .save(guid, position_seconds, artifact)
+    ) -> MutationOutcome {
+        mutation_outcome(self.podcast_position.save(guid, position_seconds, artifact))
     }
 
     pub async fn load_podcast_transcript(
