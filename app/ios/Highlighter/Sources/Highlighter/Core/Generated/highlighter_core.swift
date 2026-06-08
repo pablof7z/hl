@@ -840,6 +840,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func decodeNpub(input: String)  -> StringOutcome
 
+    func defaultHighlightCropBox(highlightBoxes: [OcrRect], imageWidth: Double, imageHeight: Double, marginFraction: Double)  -> OcrRect?
+
     func detectOcrActivePage(lines: [OcrLine])  -> OcrPageDetection?
 
     /**
@@ -1374,6 +1376,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * cold-cache reference warms up over the wire.
      */
     func resolveNostrEntity(entity: NostrEntityRef) async  -> NostrEntityEventOutcome
+
+    func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?)  -> OcrRect
 
     func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)  -> MutationOutcome
 
@@ -1981,6 +1985,17 @@ open func decodeNpub(input: String) -> StringOutcome  {
     return try!  FfiConverterTypeStringOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_decode_npub(self.uniffiClonePointer(),
         FfiConverterString.lower(input),$0
+    )
+})
+}
+
+open func defaultHighlightCropBox(highlightBoxes: [OcrRect], imageWidth: Double, imageHeight: Double, marginFraction: Double) -> OcrRect?  {
+    return try!  FfiConverterOptionTypeOcrRect.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_default_highlight_crop_box(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeOcrRect.lower(highlightBoxes),
+        FfiConverterDouble.lower(imageWidth),
+        FfiConverterDouble.lower(imageHeight),
+        FfiConverterDouble.lower(marginFraction),$0
     )
 })
 }
@@ -3933,6 +3948,15 @@ open func resolveNostrEntity(entity: NostrEntityRef)async  -> NostrEntityEventOu
             errorHandler: nil
 
         )
+}
+
+open func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?) -> OcrRect  {
+    return try!  FfiConverterTypeOcrRect_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_sanitize_highlight_crop_box(self.uniffiClonePointer(),
+        FfiConverterTypeOcrRect_lower(cropBox),
+        FfiConverterOptionTypeOcrRect.lower(fallback),$0
+    )
+})
 }
 
 open func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord) -> MutationOutcome  {
@@ -16530,6 +16554,30 @@ fileprivate struct FfiConverterOptionTypeOcrPageDetection: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeOcrRect: FfiConverterRustBuffer {
+    typealias SwiftType = OcrRect?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeOcrRect.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeOcrRect.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypePictureRecord: FfiConverterRustBuffer {
     typealias SwiftType = PictureRecord?
 
@@ -17123,6 +17171,31 @@ fileprivate struct FfiConverterSequenceTypeOcrLine: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeOcrRect: FfiConverterRustBuffer {
+    typealias SwiftType = [OcrRect]
+
+    public static func write(_ value: [OcrRect], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeOcrRect.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [OcrRect] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [OcrRect]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeOcrRect.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeOcrWord: FfiConverterRustBuffer {
     typealias SwiftType = [OcrWord]
 
@@ -17532,6 +17605,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_decode_npub() != 65494) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_default_highlight_crop_box() != 34951) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_detect_ocr_active_page() != 8731) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17863,6 +17939,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 40698) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_sanitize_highlight_crop_box() != 64518) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_save_podcast_position() != 15916) {

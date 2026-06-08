@@ -2486,6 +2486,29 @@ impl HighlighterCore {
         crate::ocr::crop_lines(&lines, page_rect)
     }
 
+    pub fn default_highlight_crop_box(
+        &self,
+        highlight_boxes: Vec<crate::ocr::OcrRect>,
+        image_width: f64,
+        image_height: f64,
+        margin_fraction: f64,
+    ) -> Option<crate::ocr::OcrRect> {
+        crate::ocr::default_highlight_crop_box(
+            &highlight_boxes,
+            image_width,
+            image_height,
+            margin_fraction,
+        )
+    }
+
+    pub fn sanitize_highlight_crop_box(
+        &self,
+        crop_box: crate::ocr::OcrRect,
+        fallback: Option<crate::ocr::OcrRect>,
+    ) -> crate::ocr::OcrRect {
+        crate::ocr::sanitize_highlight_crop_box(crop_box, fallback)
+    }
+
     /// Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
     /// Extension flow — the main app drains the share queue, normalizes each
     /// URL through this, then calls `publish_artifact` to post the kind:11.

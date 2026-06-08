@@ -286,6 +286,24 @@ actor SafeHighlighterCore {
         core.cropOcrLines(lines: lines, pageRect: pageRect)
     }
 
+    nonisolated func defaultHighlightCropBox(
+        highlightBoxes: [OcrRect],
+        imageWidth: Double,
+        imageHeight: Double,
+        marginFraction: Double
+    ) -> OcrRect? {
+        core.defaultHighlightCropBox(
+            highlightBoxes: highlightBoxes,
+            imageWidth: imageWidth,
+            imageHeight: imageHeight,
+            marginFraction: marginFraction
+        )
+    }
+
+    nonisolated func sanitizeHighlightCropBox(_ cropBox: OcrRect, fallback: OcrRect?) -> OcrRect {
+        core.sanitizeHighlightCropBox(cropBox: cropBox, fallback: fallback)
+    }
+
     nonisolated func buildEditedBookPreview(
         isbn: String,
         basePreview: ArtifactPreview?,

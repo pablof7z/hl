@@ -101,34 +101,12 @@ enum ImageProcessing {
         )
     }
 
-    /// Build a normalized crop box around the selected OCR boxes. Coordinates
-    /// use Vision's normalized bottom-left origin.
-    static func defaultHighlightCropBox(
-        highlightBoxes: [CGRect],
-        imageSize: CGSize,
-        marginFraction: CGFloat = 0.08
-    ) -> CGRect? {
-        guard let selectedBounds = highlightBoxes
-            .filter({ !$0.isNull && !$0.isEmpty })
-            .union()
-        else {
-            return nil
-        }
-
-        let marginX = max(marginFraction, 48 / max(imageSize.width, 1))
-        let marginY = max(marginFraction, selectedBounds.height * 0.55, 48 / max(imageSize.height, 1))
-        return selectedBounds
-            .insetBy(dx: -marginX, dy: -marginY)
-            .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
-    }
-
     /// Crop the already-sanitized capture around the selected OCR boxes and
     /// bake the yellow highlight treatment into the pixels that get uploaded.
     static func cropAndAnnotateHighlight(
         _ processed: Result,
         highlightBoxes: [CGRect],
-        cropBox: CGRect? = nil,
-        marginFraction: CGFloat = 0.08,
+        cropBox: CGRect,
         quality: CGFloat = 0.88
     ) -> Result? {
         guard let provider = CGDataProvider(data: processed.data as CFData),
@@ -151,23 +129,13 @@ enum ImageProcessing {
             .map { visionToPixelRect($0, imageSize: imageBounds.size) }
             .filter { !$0.isNull && !$0.isEmpty }
 
-        guard let selectedBounds = pixelRects.union() else {
+        guard !pixelRects.isEmpty else {
             return processed
         }
 
-        let cropRect: CGRect
-        if let cropBox {
-            cropRect = visionToPixelRect(cropBox, imageSize: imageBounds.size)
-                .intersection(imageBounds)
-                .integral
-        } else {
-            let marginX = max(imageBounds.width * marginFraction, 48)
-            let marginY = max(imageBounds.height * marginFraction, selectedBounds.height * 0.55, 48)
-            cropRect = selectedBounds
-                .insetBy(dx: -marginX, dy: -marginY)
-                .intersection(imageBounds)
-                .integral
-        }
+        let cropRect = visionToPixelRect(cropBox, imageSize: imageBounds.size)
+            .intersection(imageBounds)
+            .integral
 
         guard let croppedImage = sourceImage.cropping(to: cropRect) else {
             return nil
@@ -247,16 +215,6 @@ enum ImageProcessing {
             return nil
         }
         return buffer as Data
-    }
-}
-
-private extension Array where Element == CGRect {
-    func union() -> CGRect? {
-        guard var result = first else { return nil }
-        for rect in dropFirst() {
-            result = result.union(rect)
-        }
-        return result
     }
 }
 

@@ -57,6 +57,41 @@ impl OcrRect {
         };
         rect.is_usable().then_some(rect)
     }
+
+    fn standardized(self) -> OcrRect {
+        let min_x = self.min_x().min(self.max_x());
+        let min_y = self.min_y().min(self.max_y());
+        let max_x = self.min_x().max(self.max_x());
+        let max_y = self.min_y().max(self.max_y());
+        OcrRect {
+            x: min_x,
+            y: min_y,
+            w: max_x - min_x,
+            h: max_y - min_y,
+        }
+    }
+
+    fn union(self, other: OcrRect) -> OcrRect {
+        let min_x = self.min_x().min(other.min_x());
+        let min_y = self.min_y().min(other.min_y());
+        let max_x = self.max_x().max(other.max_x());
+        let max_y = self.max_y().max(other.max_y());
+        OcrRect {
+            x: min_x,
+            y: min_y,
+            w: max_x - min_x,
+            h: max_y - min_y,
+        }
+    }
+
+    fn inset_by(self, dx: f64, dy: f64) -> OcrRect {
+        OcrRect {
+            x: self.x + dx,
+            y: self.y + dy,
+            w: self.w - 2.0 * dx,
+            h: self.h - 2.0 * dy,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -372,6 +407,69 @@ pub fn crop_lines(lines: &[OcrLine], page_rect: OcrRect) -> Vec<OcrLine> {
             })
         })
         .collect()
+}
+
+/// Compute the normalized image crop around a selected OCR passage.
+pub fn default_highlight_crop_box(
+    highlight_boxes: &[OcrRect],
+    image_width: f64,
+    image_height: f64,
+    margin_fraction: f64,
+) -> Option<OcrRect> {
+    let selected_bounds = highlight_boxes
+        .iter()
+        .copied()
+        .filter(|rect| rect.is_usable())
+        .reduce(OcrRect::union)?;
+
+    let safe_margin_fraction = if margin_fraction.is_finite() {
+        margin_fraction.max(0.0)
+    } else {
+        0.08
+    };
+    let safe_width = image_width.max(1.0);
+    let safe_height = image_height.max(1.0);
+    let margin_x = safe_margin_fraction.max(48.0 / safe_width);
+    let margin_y = safe_margin_fraction
+        .max(selected_bounds.h * 0.55)
+        .max(48.0 / safe_height);
+
+    selected_bounds
+        .inset_by(-margin_x, -margin_y)
+        .intersection(unit_rect())
+}
+
+/// Clamp a user-edited highlight crop rectangle back into the normalized image.
+pub fn sanitize_highlight_crop_box(crop_box: OcrRect, fallback: Option<OcrRect>) -> OcrRect {
+    let unit = unit_rect();
+    let Some(mut rect) = crop_box.standardized().intersection(unit) else {
+        return fallback.unwrap_or(unit);
+    };
+
+    let min_size = 0.08;
+    if rect.w < min_size {
+        let center = rect.mid_x();
+        rect.x = center - min_size / 2.0;
+        rect.w = min_size;
+    }
+    if rect.h < min_size {
+        let center = rect.mid_y();
+        rect.y = center - min_size / 2.0;
+        rect.h = min_size;
+    }
+
+    rect.x = rect.min_x().max(0.0).min((1.0 - rect.w).max(0.0));
+    rect.y = rect.min_y().max(0.0).min((1.0 - rect.h).max(0.0));
+    rect.intersection(unit).unwrap_or(unit)
+}
+
+fn unit_rect() -> OcrRect {
+    OcrRect {
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+    }
 }
 
 fn normalize(raw: &str) -> String {
@@ -914,5 +1012,92 @@ mod tests {
         assert_eq!(cropped[0].words.len(), 1);
         assert!((cropped[0].words[0].bbox.x - 0.3).abs() < 0.0001);
         assert!((cropped[0].words[0].bbox.y - 0.24).abs() < 0.0001);
+    }
+
+    #[test]
+    fn default_highlight_crop_box_expands_selection_with_pixel_floor() {
+        let crop = default_highlight_crop_box(
+            &[
+                OcrRect {
+                    x: 0.40,
+                    y: 0.40,
+                    w: 0.05,
+                    h: 0.04,
+                },
+                OcrRect {
+                    x: 0.50,
+                    y: 0.42,
+                    w: 0.04,
+                    h: 0.03,
+                },
+            ],
+            400.0,
+            800.0,
+            0.08,
+        )
+        .expect("selected boxes should produce a crop");
+
+        assert!((crop.x - 0.28).abs() < 0.0001);
+        assert!((crop.y - 0.32).abs() < 0.0001);
+        assert!((crop.w - 0.38).abs() < 0.0001);
+        assert!((crop.h - 0.21).abs() < 0.0001);
+    }
+
+    #[test]
+    fn default_highlight_crop_box_returns_none_for_invalid_boxes() {
+        assert_eq!(
+            default_highlight_crop_box(
+                &[OcrRect {
+                    x: 0.1,
+                    y: 0.1,
+                    w: 0.0,
+                    h: 0.2,
+                }],
+                1000.0,
+                1000.0,
+                0.08,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn sanitize_highlight_crop_box_clamps_and_enforces_min_size() {
+        let sanitized = sanitize_highlight_crop_box(
+            OcrRect {
+                x: 0.98,
+                y: 0.98,
+                w: 0.01,
+                h: 0.01,
+            },
+            None,
+        );
+
+        assert!((sanitized.x - 0.92).abs() < 0.0001);
+        assert!((sanitized.y - 0.92).abs() < 0.0001);
+        assert!((sanitized.w - 0.08).abs() < 0.0001);
+        assert!((sanitized.h - 0.08).abs() < 0.0001);
+    }
+
+    #[test]
+    fn sanitize_highlight_crop_box_uses_fallback_for_empty_input() {
+        let fallback = OcrRect {
+            x: 0.2,
+            y: 0.3,
+            w: 0.4,
+            h: 0.5,
+        };
+        assert_eq!(
+            sanitize_highlight_crop_box(
+                OcrRect {
+                    x: 0.2,
+                    y: 0.2,
+                    w: 0.0,
+                    h: 0.0,
+                },
+                Some(fallback),
+            ),
+            fallback
+        );
     }
 }

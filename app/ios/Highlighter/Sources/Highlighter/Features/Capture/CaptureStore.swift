@@ -183,11 +183,7 @@ final class CaptureStore {
         stashedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
         selectedHighlightBoxes = selectedBoxes
         if let processedJPEG {
-            highlightCropBox = ImageProcessing.defaultHighlightCropBox(
-                highlightBoxes: selectedBoxes,
-                imageSize: CGSize(width: processedJPEG.width, height: processedJPEG.height),
-                marginFraction: CGFloat(highlightCropMarginFraction)
-            )
+            highlightCropBox = defaultHighlightCropBox(processed: processedJPEG)
         }
         prepareHighlightedCrop(reupload: true)
     }
@@ -216,7 +212,11 @@ final class CaptureStore {
     }
 
     func updateHighlightCropBox(_ cropBox: CGRect, reupload: Bool) {
-        highlightCropBox = sanitizedCropBox(cropBox)
+        let fallback = highlightCropBox.map { OcrRect($0) }
+        highlightCropBox = safeCore.sanitizeHighlightCropBox(
+            OcrRect(cropBox),
+            fallback: fallback
+        ).cgRect
         if reupload {
             prepareHighlightedCrop(reupload: true)
         }
@@ -403,11 +403,21 @@ final class CaptureStore {
     private func prepareHighlightedCrop(reupload: Bool) {
         guard !selectedHighlightBoxes.isEmpty, let processed = processedJPEG else { return }
 
+        if highlightCropBox == nil {
+            highlightCropBox = defaultHighlightCropBox(processed: processed)
+        }
+        guard let highlightCropBox else {
+            preparedUploadJPEG = processed
+            if reupload {
+                startUpload(processed: processed)
+            }
+            return
+        }
+
         guard let highlighted = ImageProcessing.cropAndAnnotateHighlight(
             processed,
             highlightBoxes: selectedHighlightBoxes,
-            cropBox: highlightCropBox,
-            marginFraction: CGFloat(highlightCropMarginFraction)
+            cropBox: highlightCropBox
         ) else {
             upload = nil
             uploadError = ImageProcessing.failureMessage
@@ -454,27 +464,12 @@ final class CaptureStore {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func sanitizedCropBox(_ cropBox: CGRect) -> CGRect {
-        let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
-        var rect = cropBox.standardized.intersection(unit)
-        if rect.isNull || rect.isEmpty {
-            return highlightCropBox ?? unit
-        }
-
-        let minSize: CGFloat = 0.08
-        if rect.width < minSize {
-            let center = rect.midX
-            rect.origin.x = center - minSize / 2
-            rect.size.width = minSize
-        }
-        if rect.height < minSize {
-            let center = rect.midY
-            rect.origin.y = center - minSize / 2
-            rect.size.height = minSize
-        }
-
-        rect.origin.x = min(max(rect.minX, 0), max(0, 1 - rect.width))
-        rect.origin.y = min(max(rect.minY, 0), max(0, 1 - rect.height))
-        return rect.intersection(unit)
+    private func defaultHighlightCropBox(processed: ImageProcessing.Result) -> CGRect? {
+        safeCore.defaultHighlightCropBox(
+            highlightBoxes: selectedHighlightBoxes.map { OcrRect($0) },
+            imageWidth: Double(processed.width),
+            imageHeight: Double(processed.height),
+            marginFraction: highlightCropMarginFraction
+        )?.cgRect
     }
 }
