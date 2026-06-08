@@ -67,6 +67,8 @@ private struct ShareToastBanner: View {
     let text: String
     let onDismiss: () -> Void
 
+    @State private var dismissTimer = OneShotUITimer()
+
     var body: some View {
         HStack {
             Image(systemName: "checkmark.circle.fill")
@@ -79,9 +81,13 @@ private struct ShareToastBanner: View {
         .padding(.vertical, 10)
         .background(Color.green.opacity(0.9), in: .capsule)
         .shadow(radius: 6)
-        .task {
-            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
-            onDismiss()
+        .onAppear {
+            dismissTimer.schedule(after: 3) {
+                onDismiss()
+            }
+        }
+        .onDisappear {
+            dismissTimer.cancel()
         }
     }
 }

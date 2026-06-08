@@ -16,6 +16,7 @@ struct CommentComposer: View {
     @FocusState private var focused: Bool
     @State private var isPublishing: Bool = false
     @State private var errorMessage: String?
+    @State private var errorResetTimer = OneShotUITimer()
 
     private var draft: Binding<String> {
         Binding(
@@ -107,9 +108,10 @@ struct CommentComposer: View {
                 withAnimation(.easeOut(duration: 0.18)) {
                     errorMessage = "Couldn't publish — \(msg)"
                 }
-                try? await Task.sleep(nanoseconds: 2_400_000_000)
-                withAnimation(.easeIn(duration: 0.18)) {
-                    errorMessage = nil
+                errorResetTimer.schedule(after: 2.4) {
+                    withAnimation(.easeIn(duration: 0.18)) {
+                        errorMessage = nil
+                    }
                 }
             }
         }

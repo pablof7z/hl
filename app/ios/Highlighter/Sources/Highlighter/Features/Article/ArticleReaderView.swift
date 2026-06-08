@@ -15,6 +15,7 @@ struct ArticleReaderView: View {
     @State private var toast: String?
     @State private var scrollAnchor: ScrollAnchor = .idle
     @State private var shareTarget: ShareToCommunityTarget?
+    @State private var toastResetTimer = OneShotUITimer()
 
     enum ScrollAnchor: Equatable {
         case idle
@@ -162,14 +163,16 @@ struct ArticleReaderView: View {
             withAnimation(.easeOut(duration: 0.2)) {
                 toast = note.isEmpty ? "Highlighted" : "Highlighted with note"
             }
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
-            withAnimation(.easeIn(duration: 0.2)) { toast = nil }
+            toastResetTimer.schedule(after: 1.8) {
+                withAnimation(.easeIn(duration: 0.2)) { toast = nil }
+            }
         } catch {
             withAnimation(.easeOut(duration: 0.2)) {
                 toast = "Couldn't save — \(error.localizedDescription)"
             }
-            try? await Task.sleep(nanoseconds: 2_800_000_000)
-            withAnimation(.easeIn(duration: 0.2)) { toast = nil }
+            toastResetTimer.schedule(after: 2.8) {
+                withAnimation(.easeIn(duration: 0.2)) { toast = nil }
+            }
         }
     }
 }

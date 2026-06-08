@@ -5,6 +5,8 @@ struct KeysView: View {
     @State private var isRevealed = false
     @State private var copiedNsec = false
     @State private var copiedNpub = false
+    @State private var nsecCopyResetTimer = OneShotUITimer()
+    @State private var npubCopyResetTimer = OneShotUITimer()
     @Environment(HighlighterStore.self) private var store
 
     var body: some View {
@@ -52,8 +54,7 @@ struct KeysView: View {
                     Button {
                         UIPasteboard.general.string = nsec
                         copiedNsec = true
-                        Task {
-                            try? await Task.sleep(for: .seconds(2))
+                        nsecCopyResetTimer.schedule(after: 2) {
                             copiedNsec = false
                         }
                     } label: {
@@ -98,8 +99,7 @@ struct KeysView: View {
                     Button {
                         UIPasteboard.general.string = user.npub
                         copiedNpub = true
-                        Task {
-                            try? await Task.sleep(for: .seconds(2))
+                        npubCopyResetTimer.schedule(after: 2) {
                             copiedNpub = false
                         }
                     } label: {

@@ -22,6 +22,7 @@ struct RoomShareCard: View {
     @State private var copied = false
     @State private var inviteCode: String?
     @State private var mintError: String?
+    @State private var copiedResetTimer = OneShotUITimer()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -156,9 +157,8 @@ struct RoomShareCard: View {
         UIPasteboard.general.string = url
         UISelectionFeedbackGenerator().selectionChanged()
         copied = true
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            await MainActor.run { copied = false }
+        copiedResetTimer.schedule(after: 2) {
+            copied = false
         }
     }
 

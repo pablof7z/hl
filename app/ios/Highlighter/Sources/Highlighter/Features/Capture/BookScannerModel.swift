@@ -19,8 +19,8 @@ final class BookScannerModel: NSObject {
     private(set) var torchOn = false
     private(set) var locked = false
     private(set) var notABookFlash = false
-    /// Seconds that *some* barcode has been visible without decoding to a
-    /// valid ISBN. Drives the "Hold steady" tip at ~3s.
+    /// Threshold marker for showing the "Hold steady" tip after a barcode has
+    /// stayed visible without decoding to a valid ISBN.
     private(set) var visibleButUndecodedSeconds: Double = 0
 
     let session = AVCaptureSession()
@@ -29,8 +29,9 @@ final class BookScannerModel: NSObject {
     private let metadataQueue = DispatchQueue(label: "app.highlighter.scanner.metadata")
     private var metadataOutput: AVCaptureMetadataOutput?
     private var previewLayerBounds: CGRect = .zero
-    private var firstVisibleAt: Date?
-    private var tipTimer: Timer?
+    private let notABookResetTimer = OneShotUITimer()
+    private let holdSteadyTipTimer = OneShotUITimer()
+    private var holdSteadyTipArmed = false
     private var resultHandler: ((String) -> Void)?
 
     /// Returns once the camera session is started (or permission is resolved
@@ -58,12 +59,12 @@ final class BookScannerModel: NSObject {
         guard permission == .granted else { return }
 
         await configureAndStart()
-        startTipTimer()
     }
 
     func stop() {
-        tipTimer?.invalidate()
-        tipTimer = nil
+        notABookResetTimer.cancel()
+        holdSteadyTipTimer.cancel()
+        holdSteadyTipArmed = false
         let session = self.session
         sessionQueue.async {
             if session.isRunning { session.stopRunning() }
@@ -120,9 +121,25 @@ final class BookScannerModel: NSObject {
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
         }
         notABookFlash = true
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
-            notABookFlash = false
+        notABookResetTimer.schedule(after: 1.8) { [weak self] in
+            self?.notABookFlash = false
+        }
+    }
+
+    private func updateDetectedBoxes(_ boxes: [CGRect]) {
+        detectedBoxes = boxes
+        if boxes.isEmpty {
+            holdSteadyTipTimer.cancel()
+            holdSteadyTipArmed = false
+            visibleButUndecodedSeconds = 0
+        } else if !holdSteadyTipArmed && visibleButUndecodedSeconds == 0 {
+            holdSteadyTipArmed = true
+            holdSteadyTipTimer.schedule(after: 3) { [weak self] in
+                guard let self else { return }
+                self.holdSteadyTipArmed = false
+                guard !self.detectedBoxes.isEmpty else { return }
+                self.visibleButUndecodedSeconds = 3
+            }
         }
     }
 
@@ -162,27 +179,6 @@ final class BookScannerModel: NSObject {
         }
     }
 
-    // MARK: - Tip timer
-
-    /// Accumulates seconds-since-first-barcode-seen. Resets whenever nothing
-    /// has been visible for a while — the tip only shows when the user IS
-    /// trying, just not succeeding.
-    private func startTipTimer() {
-        tipTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if self.detectedBoxes.isEmpty {
-                    self.firstVisibleAt = nil
-                    self.visibleButUndecodedSeconds = 0
-                } else {
-                    if self.firstVisibleAt == nil { self.firstVisibleAt = Date() }
-                    if let since = self.firstVisibleAt {
-                        self.visibleButUndecodedSeconds = Date().timeIntervalSince(since)
-                    }
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Metadata delegate
@@ -201,7 +197,7 @@ extension BookScannerModel: AVCaptureMetadataOutputObjectsDelegate {
 
         Task { @MainActor in
             guard !self.locked else { return }
-            self.detectedBoxes = codes.map(\.bounds)
+            self.updateDetectedBoxes(codes.map(\.bounds))
             if let first = codes.first {
                 // The raw payload goes to the view; it decides whether it's
                 // a book (and calls `lock()` + stop) or a false positive

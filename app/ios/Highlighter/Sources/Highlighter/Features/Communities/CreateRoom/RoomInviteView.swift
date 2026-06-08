@@ -33,6 +33,7 @@ struct RoomInviteView: View {
     @State private var sending = false
     @State private var error: String?
     @State private var sentToast: String?
+    @State private var sentToastResetTimer = OneShotUITimer()
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -428,8 +429,7 @@ struct RoomInviteView: View {
                     selected.removeAll()
                     sentToast = added == 1 ? "Added 1 person" : "Added \(added) people"
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    Task {
-                        try? await Task.sleep(for: .seconds(2))
+                    sentToastResetTimer.schedule(after: 2) {
                         sentToast = nil
                     }
                 } else if failures.count == toAdd.count {
