@@ -12,7 +12,7 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::{FeedbackEventRecord, FeedbackThreadRecord};
+use crate::models::{FeedbackEventRecord, FeedbackThreadRecord, ProfileMetadata};
 use crate::nostr_runtime::NostrRuntime;
 use crate::relays::feedback_relay;
 
@@ -44,6 +44,23 @@ pub struct FeedbackThreadPresentationProjection {
     pub status_label: Option<String>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackMessagePresentationInput {
+    pub event: FeedbackEventRecord,
+    pub previous_event: Option<FeedbackEventRecord>,
+    pub current_user_pubkey: Option<String>,
+    pub profile: Option<ProfileMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackMessagePresentationProjection {
+    pub is_from_me: bool,
+    pub show_header: bool,
+    pub display_name: String,
+    pub display_initial: String,
+    pub picture_url: String,
+}
+
 pub fn feedback_composer_projection(
     input: FeedbackComposerProjectionInput,
 ) -> FeedbackComposerProjection {
@@ -51,6 +68,34 @@ pub fn feedback_composer_projection(
     FeedbackComposerProjection {
         can_send: !submit_body.is_empty() && !input.is_publishing,
         submit_body,
+    }
+}
+
+pub fn feedback_message_presentation(
+    input: FeedbackMessagePresentationInput,
+) -> FeedbackMessagePresentationProjection {
+    let is_from_me = input
+        .current_user_pubkey
+        .as_deref()
+        .is_some_and(|pubkey| pubkey == input.event.author_pubkey);
+    let show_header = input.previous_event.as_ref().is_none_or(|previous| {
+        previous.author_pubkey != input.event.author_pubkey
+            || input.event.created_at > previous.created_at.saturating_add(300)
+    });
+    let display_name = profile_display_name(input.profile.as_ref(), &input.event.author_pubkey);
+    let display_initial = display_initial(&display_name);
+    let picture_url = input
+        .profile
+        .as_ref()
+        .map(|profile| profile.picture.clone())
+        .unwrap_or_default();
+
+    FeedbackMessagePresentationProjection {
+        is_from_me,
+        show_header,
+        display_name,
+        display_initial,
+        picture_url,
     }
 }
 
@@ -488,6 +533,26 @@ fn renderable_text(value: Option<String>) -> Option<String> {
     value.filter(|text| !text.is_empty())
 }
 
+fn profile_display_name(profile: Option<&ProfileMetadata>, fallback_pubkey: &str) -> String {
+    if let Some(profile) = profile {
+        if !profile.display_name.is_empty() {
+            return profile.display_name.clone();
+        }
+        if !profile.name.is_empty() {
+            return profile.name.clone();
+        }
+    }
+    fallback_pubkey.chars().take(8).collect()
+}
+
+fn display_initial(display_name: &str) -> String {
+    display_name
+        .chars()
+        .next()
+        .map(|ch| ch.to_uppercase().collect())
+        .unwrap_or_default()
+}
+
 fn has_root_e_marker(event: &Event) -> bool {
     event.tags.iter().any(|tag| {
         let s = tag.as_slice();
@@ -900,6 +965,86 @@ mod tests {
     }
 
     #[test]
+    fn feedback_message_presentation_marks_current_user_and_profile_name() {
+        let event = feedback_event("event", "root", 100, "body");
+        let projection = feedback_message_presentation(FeedbackMessagePresentationInput {
+            event: FeedbackEventRecord {
+                author_pubkey: "me".into(),
+                ..event
+            },
+            previous_event: None,
+            current_user_pubkey: Some("me".into()),
+            profile: Some(profile("alice", "Alice Smith", "https://example.com/a.png")),
+        });
+
+        assert!(projection.is_from_me);
+        assert!(projection.show_header);
+        assert_eq!(projection.display_name, "Alice Smith");
+        assert_eq!(projection.display_initial, "A");
+        assert_eq!(projection.picture_url, "https://example.com/a.png");
+    }
+
+    #[test]
+    fn feedback_message_presentation_groups_adjacent_messages() {
+        let previous = FeedbackEventRecord {
+            author_pubkey: "agent".into(),
+            ..feedback_event("previous", "root", 100, "previous")
+        };
+        let current = FeedbackEventRecord {
+            author_pubkey: "agent".into(),
+            ..feedback_event("current", "root", 399, "current")
+        };
+        let later = FeedbackEventRecord {
+            author_pubkey: "agent".into(),
+            ..feedback_event("later", "root", 401, "later")
+        };
+
+        let grouped = feedback_message_presentation(FeedbackMessagePresentationInput {
+            event: current,
+            previous_event: Some(previous.clone()),
+            current_user_pubkey: Some("me".into()),
+            profile: Some(profile("agent-name", "", "")),
+        });
+        let separated = feedback_message_presentation(FeedbackMessagePresentationInput {
+            event: later,
+            previous_event: Some(previous),
+            current_user_pubkey: Some("me".into()),
+            profile: None,
+        });
+
+        assert!(!grouped.is_from_me);
+        assert!(!grouped.show_header);
+        assert_eq!(grouped.display_name, "agent-name");
+        assert_eq!(grouped.display_initial, "A");
+        assert!(separated.show_header);
+        assert_eq!(separated.display_name, "agent");
+        assert_eq!(separated.picture_url, "");
+    }
+
+    #[test]
+    fn feedback_message_presentation_shows_header_when_author_changes() {
+        let previous = FeedbackEventRecord {
+            author_pubkey: "agent".into(),
+            ..feedback_event("previous", "root", 100, "previous")
+        };
+        let current = FeedbackEventRecord {
+            author_pubkey: "user".into(),
+            ..feedback_event("current", "root", 120, "current")
+        };
+
+        let projection = feedback_message_presentation(FeedbackMessagePresentationInput {
+            event: current,
+            previous_event: Some(previous),
+            current_user_pubkey: None,
+            profile: None,
+        });
+
+        assert!(projection.show_header);
+        assert_eq!(projection.display_name, "user");
+        assert_eq!(projection.display_initial, "U");
+    }
+
+    #[test]
     fn optimistically_insert_root_thread_dedupes_previews_and_sorts() {
         let older = feedback_thread("older", 10);
         let root = feedback_event("new", "new", 30, "hello   world");
@@ -1103,6 +1248,21 @@ mod tests {
             author_pubkey: "pubkey".into(),
             created_at,
             content: content.into(),
+        }
+    }
+
+    fn profile(name: &str, display_name: &str, picture: &str) -> ProfileMetadata {
+        ProfileMetadata {
+            pubkey: "profile-pubkey".into(),
+            name: name.into(),
+            display_name: display_name.into(),
+            about: String::new(),
+            picture: picture.into(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            created_at: None,
         }
     }
 }

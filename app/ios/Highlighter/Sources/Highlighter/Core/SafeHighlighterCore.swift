@@ -523,6 +523,12 @@ actor SafeHighlighterCore {
         core.projectFeedbackThreadPresentation(thread: thread)
     }
 
+    nonisolated func projectFeedbackMessagePresentation(
+        input: FeedbackMessagePresentationInput
+    ) -> FeedbackMessagePresentationProjection {
+        core.projectFeedbackMessagePresentation(input: input)
+    }
+
     nonisolated func optimisticallyInsertFeedbackRootThread(
         threads: [FeedbackThreadRecord],
         rootEvent: FeedbackEventRecord

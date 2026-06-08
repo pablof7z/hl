@@ -2893,6 +2893,16 @@ impl HighlighterCore {
         feedback::feedback_thread_presentation(thread)
     }
 
+    /// Feedback message bubble presentation projection. Rust owns current-user
+    /// classification, header grouping, and profile fallback semantics; native
+    /// shells keep markdown and time rendering.
+    pub fn project_feedback_message_presentation(
+        &self,
+        input: feedback::FeedbackMessagePresentationInput,
+    ) -> feedback::FeedbackMessagePresentationProjection {
+        feedback::feedback_message_presentation(input)
+    }
+
     /// Optimistically insert a newly-published feedback root into the thread
     /// list. Rust owns root validation, preview text, dedupe, and ordering.
     pub fn optimistically_insert_feedback_root_thread(

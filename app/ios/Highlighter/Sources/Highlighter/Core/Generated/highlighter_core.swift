@@ -1414,6 +1414,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectFeedbackComposer(input: FeedbackComposerProjectionInput)  -> FeedbackComposerProjection
 
     /**
+     * Feedback message bubble presentation projection. Rust owns current-user
+     * classification, header grouping, and profile fallback semantics; native
+     * shells keep markdown and time rendering.
+     */
+    func projectFeedbackMessagePresentation(input: FeedbackMessagePresentationInput)  -> FeedbackMessagePresentationProjection
+
+    /**
      * Feedback thread row/detail presentation projection. Rust owns title,
      * preview, summary, and status fallback rules; native shells keep
      * localized relative-time formatting and rendering.
@@ -4132,6 +4139,19 @@ open func projectFeedbackComposer(input: FeedbackComposerProjectionInput) -> Fee
     return try!  FfiConverterTypeFeedbackComposerProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_feedback_composer(self.uniffiClonePointer(),
         FfiConverterTypeFeedbackComposerProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Feedback message bubble presentation projection. Rust owns current-user
+     * classification, header grouping, and profile fallback semantics; native
+     * shells keep markdown and time rendering.
+     */
+open func projectFeedbackMessagePresentation(input: FeedbackMessagePresentationInput) -> FeedbackMessagePresentationProjection  {
+    return try!  FfiConverterTypeFeedbackMessagePresentationProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_feedback_message_presentation(self.uniffiClonePointer(),
+        FfiConverterTypeFeedbackMessagePresentationInput_lower(input),$0
     )
 })
 }
@@ -10845,6 +10865,186 @@ public func FfiConverterTypeFeedbackEventRecord_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeFeedbackEventRecord_lower(_ value: FeedbackEventRecord) -> RustBuffer {
     return FfiConverterTypeFeedbackEventRecord.lower(value)
+}
+
+
+public struct FeedbackMessagePresentationInput {
+    public var event: FeedbackEventRecord
+    public var previousEvent: FeedbackEventRecord?
+    public var currentUserPubkey: String?
+    public var profile: ProfileMetadata?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(event: FeedbackEventRecord, previousEvent: FeedbackEventRecord?, currentUserPubkey: String?, profile: ProfileMetadata?) {
+        self.event = event
+        self.previousEvent = previousEvent
+        self.currentUserPubkey = currentUserPubkey
+        self.profile = profile
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackMessagePresentationInput: Sendable {}
+#endif
+
+
+extension FeedbackMessagePresentationInput: Equatable, Hashable {
+    public static func ==(lhs: FeedbackMessagePresentationInput, rhs: FeedbackMessagePresentationInput) -> Bool {
+        if lhs.event != rhs.event {
+            return false
+        }
+        if lhs.previousEvent != rhs.previousEvent {
+            return false
+        }
+        if lhs.currentUserPubkey != rhs.currentUserPubkey {
+            return false
+        }
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(event)
+        hasher.combine(previousEvent)
+        hasher.combine(currentUserPubkey)
+        hasher.combine(profile)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackMessagePresentationInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackMessagePresentationInput {
+        return
+            try FeedbackMessagePresentationInput(
+                event: FfiConverterTypeFeedbackEventRecord.read(from: &buf),
+                previousEvent: FfiConverterOptionTypeFeedbackEventRecord.read(from: &buf),
+                currentUserPubkey: FfiConverterOptionString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackMessagePresentationInput, into buf: inout [UInt8]) {
+        FfiConverterTypeFeedbackEventRecord.write(value.event, into: &buf)
+        FfiConverterOptionTypeFeedbackEventRecord.write(value.previousEvent, into: &buf)
+        FfiConverterOptionString.write(value.currentUserPubkey, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackMessagePresentationInput_lift(_ buf: RustBuffer) throws -> FeedbackMessagePresentationInput {
+    return try FfiConverterTypeFeedbackMessagePresentationInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackMessagePresentationInput_lower(_ value: FeedbackMessagePresentationInput) -> RustBuffer {
+    return FfiConverterTypeFeedbackMessagePresentationInput.lower(value)
+}
+
+
+public struct FeedbackMessagePresentationProjection {
+    public var isFromMe: Bool
+    public var showHeader: Bool
+    public var displayName: String
+    public var displayInitial: String
+    public var pictureUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(isFromMe: Bool, showHeader: Bool, displayName: String, displayInitial: String, pictureUrl: String) {
+        self.isFromMe = isFromMe
+        self.showHeader = showHeader
+        self.displayName = displayName
+        self.displayInitial = displayInitial
+        self.pictureUrl = pictureUrl
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackMessagePresentationProjection: Sendable {}
+#endif
+
+
+extension FeedbackMessagePresentationProjection: Equatable, Hashable {
+    public static func ==(lhs: FeedbackMessagePresentationProjection, rhs: FeedbackMessagePresentationProjection) -> Bool {
+        if lhs.isFromMe != rhs.isFromMe {
+            return false
+        }
+        if lhs.showHeader != rhs.showHeader {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.displayInitial != rhs.displayInitial {
+            return false
+        }
+        if lhs.pictureUrl != rhs.pictureUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isFromMe)
+        hasher.combine(showHeader)
+        hasher.combine(displayName)
+        hasher.combine(displayInitial)
+        hasher.combine(pictureUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackMessagePresentationProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackMessagePresentationProjection {
+        return
+            try FeedbackMessagePresentationProjection(
+                isFromMe: FfiConverterBool.read(from: &buf),
+                showHeader: FfiConverterBool.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                displayInitial: FfiConverterString.read(from: &buf),
+                pictureUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackMessagePresentationProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.isFromMe, into: &buf)
+        FfiConverterBool.write(value.showHeader, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.displayInitial, into: &buf)
+        FfiConverterString.write(value.pictureUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackMessagePresentationProjection_lift(_ buf: RustBuffer) throws -> FeedbackMessagePresentationProjection {
+    return try FfiConverterTypeFeedbackMessagePresentationProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackMessagePresentationProjection_lower(_ value: FeedbackMessagePresentationProjection) -> RustBuffer {
+    return FfiConverterTypeFeedbackMessagePresentationProjection.lower(value)
 }
 
 
@@ -23683,6 +23883,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_composer() != 43880) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_message_presentation() != 48372) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_thread_presentation() != 19722) {

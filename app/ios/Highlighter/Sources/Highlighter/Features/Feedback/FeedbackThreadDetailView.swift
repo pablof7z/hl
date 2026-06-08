@@ -48,9 +48,7 @@ struct FeedbackThreadDetailView: View {
                     ForEach(Array(detailStore.events.enumerated()), id: \.element.eventId) { index, event in
                         FeedbackMessageBubble(
                             event: event,
-                            isFromMe: event.authorPubkey == app.currentUser?.pubkey,
-                            showHeader: shouldShowHeader(at: index),
-                            profile: app.profileSnapshots[event.authorPubkey]
+                            projection: messagePresentation(for: event, at: index)
                         )
                         .id(event.eventId)
                         .task(id: event.authorPubkey) {
@@ -132,33 +130,36 @@ struct FeedbackThreadDetailView: View {
         }
     }
 
-    private func shouldShowHeader(at index: Int) -> Bool {
-        guard index > 0 else { return true }
-        let prev = detailStore.events[index - 1]
-        let curr = detailStore.events[index]
-        if prev.authorPubkey != curr.authorPubkey { return true }
-        if curr.createdAt > prev.createdAt + 300 { return true }
-        return false
+    private func messagePresentation(
+        for event: FeedbackEventRecord,
+        at index: Int
+    ) -> FeedbackMessagePresentationProjection {
+        app.safeCore.projectFeedbackMessagePresentation(
+            input: FeedbackMessagePresentationInput(
+                event: event,
+                previousEvent: index > 0 ? detailStore.events[index - 1] : nil,
+                currentUserPubkey: app.currentUser?.pubkey,
+                profile: app.profileSnapshots[event.authorPubkey]
+            )
+        )
     }
 }
 
 private struct FeedbackMessageBubble: View {
     let event: FeedbackEventRecord
-    let isFromMe: Bool
-    let showHeader: Bool
-    let profile: ProfileMetadata?
+    let projection: FeedbackMessagePresentationProjection
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 6) {
-            if isFromMe {
+            if projection.isFromMe {
                 Spacer(minLength: 40)
             } else {
                 avatarSlot
             }
 
-            VStack(alignment: isFromMe ? .trailing : .leading, spacing: 2) {
-                if showHeader {
-                    Text(displayName)
+            VStack(alignment: projection.isFromMe ? .trailing : .leading, spacing: 2) {
+                if projection.showHeader {
+                    Text(projection.displayName)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
@@ -166,11 +167,11 @@ private struct FeedbackMessageBubble: View {
                 }
                 Text(markdownContent)
                     .font(.body)
-                    .foregroundStyle(isFromMe ? Color.white : Color.primary)
+                    .foregroundStyle(projection.isFromMe ? Color.white : Color.primary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
-                        isFromMe
+                        projection.isFromMe
                             ? Color.accentColor
                             : Color(.secondarySystemBackground),
                         in: .rect(cornerRadius: 14)
@@ -181,23 +182,23 @@ private struct FeedbackMessageBubble: View {
                     .padding(.horizontal, 4)
             }
 
-            if isFromMe {
+            if projection.isFromMe {
                 avatarSlot
             } else {
                 Spacer(minLength: 40)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.top, showHeader ? 4 : 1)
+        .padding(.top, projection.showHeader ? 4 : 1)
     }
 
     @ViewBuilder
     private var avatarSlot: some View {
-        if showHeader {
+        if projection.showHeader {
             AuthorAvatar(
                 pubkey: event.authorPubkey,
-                pictureURL: profile?.picture ?? "",
-                displayInitial: displayInitial,
+                pictureURL: projection.pictureUrl,
+                displayInitial: projection.displayInitial,
                 size: 28
             )
         } else {
@@ -212,18 +213,6 @@ private struct FeedbackMessageBubble: View {
                 interpretedSyntax: .inlineOnlyPreservingWhitespace
             )
         )) ?? AttributedString(event.content)
-    }
-
-    private var displayName: String {
-        if let p = profile {
-            if !p.displayName.isEmpty { return p.displayName }
-            if !p.name.isEmpty { return p.name }
-        }
-        return String(event.authorPubkey.prefix(8))
-    }
-
-    private var displayInitial: String {
-        displayName.first.map { String($0).uppercased() } ?? ""
     }
 
     private func timeLabel(_ ts: UInt64) -> String {
