@@ -954,6 +954,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getNewRooms(limit: UInt32) async throws  -> [CommunitySummary]
     
+    func getPodcastPosition()  -> PodcastPositionRecord?
+
+    func getPodcastPositionSeconds(guid: String)  -> Double?
+
     /**
      * First `p` tag of the project's kind:31933 event by addressable
      * coordinate. The shake-to-share composer uses this to pick the agent
@@ -1172,6 +1176,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func resolveNostrEntity(entity: NostrEntityRef) async throws  -> NostrEntityEvent?
     
+    func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord) throws
+
     func searchArticles(query: String, limit: UInt32) async throws  -> [ArticleRecord]
     
     func searchArtifacts(query: String, limit: UInt32) async throws  -> [ArtifactRecord]
@@ -2243,6 +2249,21 @@ open func getNewRooms(limit: UInt32)async throws  -> [CommunitySummary]  {
         )
 }
     
+open func getPodcastPosition() -> PodcastPositionRecord?  {
+    return try!  FfiConverterOptionTypePodcastPositionRecord.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_position(self.uniffiClonePointer(),$0
+    )
+})
+}
+
+open func getPodcastPositionSeconds(guid: String) -> Double?  {
+    return try!  FfiConverterOptionDouble.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_position_seconds(self.uniffiClonePointer(),
+        FfiConverterString.lower(guid),$0
+    )
+})
+}
+
     /**
      * First `p` tag of the project's kind:31933 event by addressable
      * coordinate. The shake-to-share composer uses this to pick the agent
@@ -3066,6 +3087,15 @@ open func resolveNostrEntity(entity: NostrEntityRef)async throws  -> NostrEntity
         )
 }
     
+open func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_highlighter_core_fn_method_highlightercore_save_podcast_position(self.uniffiClonePointer(),
+        FfiConverterString.lower(guid),
+        FfiConverterDouble.lower(positionSeconds),
+        FfiConverterTypeArtifactRecord_lower(artifact),$0
+    )
+}
+}
+
 open func searchArticles(query: String, limit: UInt32)async throws  -> [ArticleRecord]  {
     return
         try  await uniffiRustCallAsync(
@@ -7253,6 +7283,97 @@ public func FfiConverterTypePictureRecord_lower(_ value: PictureRecord) -> RustB
 
 
 /**
+ * Last podcast playback position persisted by the Rust core. Native shells
+ * own AV playback handles, but durable playback state and the cold-launch
+ * episode projection live here so every platform resumes the same episode.
+ */
+public struct PodcastPositionRecord {
+    public var guid: String
+    public var positionSeconds: Double
+    public var lastPlayedAtUnixSeconds: UInt64
+    public var artifact: ArtifactRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(guid: String, positionSeconds: Double, lastPlayedAtUnixSeconds: UInt64, artifact: ArtifactRecord) {
+        self.guid = guid
+        self.positionSeconds = positionSeconds
+        self.lastPlayedAtUnixSeconds = lastPlayedAtUnixSeconds
+        self.artifact = artifact
+    }
+}
+
+#if compiler(>=6)
+extension PodcastPositionRecord: Sendable {}
+#endif
+
+
+extension PodcastPositionRecord: Equatable, Hashable {
+    public static func ==(lhs: PodcastPositionRecord, rhs: PodcastPositionRecord) -> Bool {
+        if lhs.guid != rhs.guid {
+            return false
+        }
+        if lhs.positionSeconds != rhs.positionSeconds {
+            return false
+        }
+        if lhs.lastPlayedAtUnixSeconds != rhs.lastPlayedAtUnixSeconds {
+            return false
+        }
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(guid)
+        hasher.combine(positionSeconds)
+        hasher.combine(lastPlayedAtUnixSeconds)
+        hasher.combine(artifact)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastPositionRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPositionRecord {
+        return
+            try PodcastPositionRecord(
+                guid: FfiConverterString.read(from: &buf),
+                positionSeconds: FfiConverterDouble.read(from: &buf),
+                lastPlayedAtUnixSeconds: FfiConverterUInt64.read(from: &buf),
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastPositionRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.guid, into: &buf)
+        FfiConverterDouble.write(value.positionSeconds, into: &buf)
+        FfiConverterUInt64.write(value.lastPlayedAtUnixSeconds, into: &buf)
+        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPositionRecord_lift(_ buf: RustBuffer) throws -> PodcastPositionRecord {
+    return try FfiConverterTypePodcastPositionRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPositionRecord_lower(_ value: PodcastPositionRecord) -> RustBuffer {
+    return FfiConverterTypePodcastPositionRecord.lower(value)
+}
+
+
+/**
  * NIP-01 kind:0 profile metadata. Mirrors the fields the web profile page
  * reads from `NDKUser.profile`. Empty strings for missing fields so Swift
  * call sites don't deal with `Option` everywhere.
@@ -9484,6 +9605,30 @@ fileprivate struct FfiConverterOptionTypeNostrEntityEvent: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypePodcastPositionRecord: FfiConverterRustBuffer {
+    typealias SwiftType = PodcastPositionRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePodcastPositionRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePodcastPositionRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeProfileMetadata: FfiConverterRustBuffer {
     typealias SwiftType = ProfileMetadata?
 
@@ -10255,6 +10400,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_new_rooms() != 38074) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_position() != 36439) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_position_seconds() != 16855) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_project_first_agent_pubkey() != 8227) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10382,6 +10533,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 56937) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_save_podcast_position() != 55048) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_articles() != 31180) {

@@ -26,9 +26,11 @@ use crate::models::{
     ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, ChatMessageRecord,
     CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord, FeedbackEventRecord,
     FeedbackThreadRecord, HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions,
-    PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
+    PictureDraft, PictureRecord, PodcastPositionRecord, ProfileMetadata, ReadingFeedItem,
+    RoomRecommendation,
 };
 use crate::network_preferences;
+use crate::podcast_position;
 use crate::reads;
 use crate::recent_searches;
 use crate::recommendations;
@@ -67,6 +69,8 @@ pub struct HighlighterCore {
     onboarding: Arc<onboarding::OnboardingStore>,
     /// Rust-owned network preference state.
     network_preferences: Arc<network_preferences::NetworkPreferencesStore>,
+    /// Rust-owned durable podcast playback position.
+    podcast_position: Arc<podcast_position::PodcastPositionStore>,
 }
 
 struct Inner {
@@ -214,6 +218,24 @@ impl HighlighterCore {
 
     pub fn set_wifi_only_enabled(&self, enabled: bool) -> Result<(), CoreError> {
         self.network_preferences.set_wifi_only_enabled(enabled)
+    }
+
+    pub fn get_podcast_position(&self) -> Option<PodcastPositionRecord> {
+        self.podcast_position.current()
+    }
+
+    pub fn get_podcast_position_seconds(&self, guid: String) -> Option<f64> {
+        self.podcast_position.position_for_guid(&guid)
+    }
+
+    pub fn save_podcast_position(
+        &self,
+        guid: String,
+        position_seconds: f64,
+        artifact: ArtifactRecord,
+    ) -> Result<(), CoreError> {
+        self.podcast_position
+            .save(guid, position_seconds, artifact)
     }
 
     pub async fn prepare_whats_new(&self) -> Result<Vec<whats_new::WhatsNewEntry>, CoreError> {
@@ -1952,6 +1974,9 @@ impl HighlighterCore {
         let network_preferences = Arc::new(network_preferences::NetworkPreferencesStore::new(
             runtime.data_dir(),
         ));
+        let podcast_position = Arc::new(podcast_position::PodcastPositionStore::new(
+            runtime.data_dir(),
+        ));
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {
                 session: Session::new(),
@@ -1966,6 +1991,7 @@ impl HighlighterCore {
             whats_new,
             onboarding,
             network_preferences,
+            podcast_position,
         })
     }
 

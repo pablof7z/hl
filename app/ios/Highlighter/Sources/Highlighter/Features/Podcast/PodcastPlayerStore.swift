@@ -5,104 +5,6 @@ import Observation
 import os
 import UIKit
 
-private struct PositionRecord: Codable {
-    var guid: String
-    var position: Double
-    var lastPlayedAt: Date
-    /// Minimal snapshot for cold-launch rehydration so the MiniPlayer can show
-    /// the last episode (paused) without waiting on relay sync. Once the user
-    /// taps play, we still go through `load(artifact:)` to wire AVPlayer.
-    var snapshot: ArtifactSnapshot?
-}
-
-private struct ChapterSnapshot: Codable {
-    var startSeconds: Double
-    var title: String
-}
-
-private struct ArtifactSnapshot: Codable {
-    var title: String
-    var image: String
-    var podcastShowTitle: String
-    var podcastItemGuid: String
-    var podcastGuid: String
-    var audioUrl: String
-    var audioPreviewUrl: String
-    var transcriptUrl: String
-    var durationSeconds: Int64?
-    var groupId: String
-    var shareEventId: String
-    var pubkey: String
-    var createdAt: UInt64?
-    var note: String
-    var chapters: [ChapterSnapshot]
-
-    init(from record: ArtifactRecord) {
-        self.title = record.preview.title
-        self.image = record.preview.image
-        self.podcastShowTitle = record.preview.podcastShowTitle
-        self.podcastItemGuid = record.preview.podcastItemGuid
-        self.podcastGuid = record.preview.podcastGuid
-        self.audioUrl = record.preview.audioUrl
-        self.audioPreviewUrl = record.preview.audioPreviewUrl
-        self.transcriptUrl = record.preview.transcriptUrl
-        self.durationSeconds = record.preview.durationSeconds
-        self.groupId = record.groupId
-        self.shareEventId = record.shareEventId
-        self.pubkey = record.pubkey
-        self.createdAt = record.createdAt
-        self.note = record.note
-        self.chapters = record.preview.chapters.map {
-            ChapterSnapshot(startSeconds: $0.startSeconds, title: $0.title)
-        }
-    }
-
-    func materialize() -> ArtifactRecord {
-        let preview = ArtifactPreview(
-            id: shareEventId,
-            url: "",
-            title: title,
-            author: "",
-            image: image,
-            description: "",
-            source: "podcast",
-            domain: "",
-            catalogId: podcastItemGuid.isEmpty ? podcastGuid : podcastItemGuid,
-            catalogKind: podcastItemGuid.isEmpty
-                ? (podcastGuid.isEmpty ? "" : "podcast:guid")
-                : "podcast:item:guid",
-            podcastGuid: podcastGuid,
-            podcastItemGuid: podcastItemGuid,
-            podcastShowTitle: podcastShowTitle,
-            audioUrl: audioUrl,
-            audioPreviewUrl: audioPreviewUrl,
-            transcriptUrl: transcriptUrl,
-            feedUrl: "",
-            publishedAt: "",
-            durationSeconds: durationSeconds,
-            referenceTagName: "i",
-            referenceTagValue: podcastItemGuid.isEmpty
-                ? (podcastGuid.isEmpty ? "" : "podcast:guid:\(podcastGuid)")
-                : "podcast:item:guid:\(podcastItemGuid)",
-            referenceKind: podcastItemGuid.isEmpty
-                ? (podcastGuid.isEmpty ? "" : "podcast:guid")
-                : "podcast:item:guid",
-            highlightTagName: "",
-            highlightTagValue: "",
-            highlightReferenceKey: "",
-            chapters: chapters.map { Chapter(startSeconds: $0.startSeconds, title: $0.title) }
-        )
-        return ArtifactRecord(
-            preview: preview,
-            groupId: groupId,
-            shareEventId: shareEventId,
-            pubkey: pubkey,
-            createdAt: createdAt,
-            note: note
-        )
-    }
-}
-
 @MainActor
 @Observable
 final class PodcastPlayerStore {
@@ -142,6 +44,7 @@ final class PodcastPlayerStore {
 
     // MARK: - Private plumbing
 
+    @ObservationIgnored private let core: SafeHighlighterCore
     @ObservationIgnored private var player: AVPlayer?
     @ObservationIgnored private let logger = Logger(subsystem: "com.highlighter.app", category: "PodcastPlayer")
     @ObservationIgnored private nonisolated(unsafe) var timeObserver: Any?
@@ -150,13 +53,14 @@ final class PodcastPlayerStore {
     @ObservationIgnored private nonisolated(unsafe) var rangesObserver: NSKeyValueObservation?
     @ObservationIgnored private nonisolated(unsafe) var errorObserver: NSKeyValueObservation?
     @ObservationIgnored private nonisolated(unsafe) var playbackEndObserver: NSObjectProtocol?
-    @ObservationIgnored private var positionPersistenceTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptTask: Task<Void, Never>?
     @ObservationIgnored private var waveformTask: Task<Void, Never>?
 
-    private static let positionDefaultsKey = "highlighter.podcast.lastPosition"
-
     // MARK: - Lifecycle
+
+    init(core: SafeHighlighterCore) {
+        self.core = core
+    }
 
     deinit {
         // Access only nonisolated(unsafe) properties here — no MainActor hop in deinit.
@@ -226,25 +130,10 @@ final class PodcastPlayerStore {
         observeError(item)
         observePlaybackEnd(item: item)
 
-        // Resume saved position if guid matches.
-        let savedGuid = artifact.preview.podcastItemGuid
-        if !savedGuid.isEmpty, let record = loadPositionRecord(), record.guid == savedGuid {
-            let age = Date().timeIntervalSince(record.lastPlayedAt)
-            if age < 7 * 24 * 3600 {
-                let seekTime = CMTime(seconds: record.position, preferredTimescale: 600)
-                newPlayer.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero)
-                currentTime = record.position
-            }
-        }
-
-        newPlayer.play()
-        isPlaying = true
-
         configureRemoteCommandCenter()
         updateNowPlayingInfo()
         fetchAndApplyArtwork(from: artifact.preview.image)
-
-        startPositionPersistence()
+        beginPlaybackAfterRestoringPosition(for: artifact)
 
         let transcriptUrl = artifact.preview.transcriptUrl
         if !transcriptUrl.isEmpty, let tUrl = URL(string: transcriptUrl) {
@@ -284,6 +173,7 @@ final class PodcastPlayerStore {
     }
 
     func clear() {
+        persistPosition()
         tearDownPlayer()
         currentArtifact = nil
         audioUrl = nil
@@ -322,6 +212,7 @@ final class PodcastPlayerStore {
 
     func pause() {
         logger.info("pause")
+        persistPosition()
         player?.pause()
         isPlaying = false
         updateNowPlayingInfo()
@@ -336,6 +227,7 @@ final class PodcastPlayerStore {
         let time = CMTime(seconds: clamped, preferredTimescale: 600)
         player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         currentTime = clamped
+        persistPosition(position: clamped)
     }
 
     func skip(by delta: TimeInterval) {
@@ -452,49 +344,58 @@ final class PodcastPlayerStore {
 
     // MARK: - Position persistence
 
-    private func startPositionPersistence() {
-        positionPersistenceTask?.cancel()
-        positionPersistenceTask = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
-                guard !Task.isCancelled else { break }
-                persistPosition()
+    private func persistPosition(position: TimeInterval? = nil) {
+        guard let artifact = currentArtifact else { return }
+        let guid = artifact.preview.podcastItemGuid
+        guard !guid.isEmpty else { return }
+        let position = position ?? currentTime
+        guard position.isFinite, position >= 0 else { return }
+        Task { [core, guid, position, artifact] in
+            do {
+                try await core.savePodcastPosition(
+                    guid: guid,
+                    positionSeconds: position,
+                    artifact: artifact
+                )
+            } catch {
+                // Playback should not fail because a local progress write did.
             }
         }
     }
 
-    private func persistPosition() {
-        guard let artifact = currentArtifact, isPlaying else { return }
+    private func beginPlaybackAfterRestoringPosition(for artifact: ArtifactRecord) {
         let guid = artifact.preview.podcastItemGuid
-        guard !guid.isEmpty else { return }
-        let record = PositionRecord(
-            guid: guid,
-            position: currentTime,
-            lastPlayedAt: Date(),
-            snapshot: ArtifactSnapshot(from: artifact)
-        )
-        if let data = try? JSONEncoder().encode(record) {
-            UserDefaults.standard.set(data, forKey: Self.positionDefaultsKey)
+        guard !guid.isEmpty else {
+            player?.play()
+            isPlaying = true
+            updateNowPlayingInfo()
+            return
         }
-    }
-
-    private func loadPositionRecord() -> PositionRecord? {
-        guard let data = UserDefaults.standard.data(forKey: Self.positionDefaultsKey) else { return nil }
-        return try? JSONDecoder().decode(PositionRecord.self, from: data)
+        let shareEventId = artifact.shareEventId
+        Task { @MainActor [weak self, core, guid, shareEventId] in
+            let position = await core.getPodcastPositionSeconds(guid: guid)
+            guard let self, self.currentArtifact?.shareEventId == shareEventId else { return }
+            if let position {
+                let seekTime = CMTime(seconds: position, preferredTimescale: 600)
+                _ = await self.player?.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                self.currentTime = position
+            }
+            self.player?.play()
+            self.isPlaying = true
+            self.updateNowPlayingInfo()
+        }
     }
 
     /// Cold-launch rehydration. Surfaces the MiniPlayer in a paused state with
     /// the last episode the user listened to (within the last 7 days). The
     /// AVPlayer is NOT created — that happens when the user taps play and we
     /// route through `load(artifact:)` which seeks to the saved position.
-    func rehydrateFromSavedRecord() {
+    func rehydrateFromSavedRecord() async {
         guard currentArtifact == nil else { return }
-        guard let record = loadPositionRecord(), let snapshot = record.snapshot else { return }
-        let age = Date().timeIntervalSince(record.lastPlayedAt)
-        guard age < 7 * 24 * 3600 else { return }
-        currentArtifact = snapshot.materialize()
-        currentTime = record.position
-        if let dur = snapshot.durationSeconds, dur > 0 {
+        guard let record = await core.getPodcastPosition() else { return }
+        currentArtifact = record.artifact
+        currentTime = record.positionSeconds
+        if let dur = record.artifact.preview.durationSeconds, dur > 0 {
             duration = TimeInterval(dur)
         }
         isPlaying = false
@@ -514,6 +415,9 @@ final class PodcastPlayerStore {
                 // lock screen scrubber accurate without excessive churn.
                 if Int(seconds) != previousWhole {
                     self.updateNowPlayingInfo()
+                    if self.isPlaying, Int(seconds) > 0, Int(seconds) % 5 == 0 {
+                        self.persistPosition(position: seconds)
+                    }
                 }
             }
         }
@@ -599,7 +503,9 @@ final class PodcastPlayerStore {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.isPlaying = false
+                guard let self else { return }
+                self.persistPosition()
+                self.isPlaying = false
             }
         }
     }
@@ -725,8 +631,6 @@ final class PodcastPlayerStore {
     }
 
     private func tearDownPlayer() {
-        positionPersistenceTask?.cancel()
-        positionPersistenceTask = nil
         transcriptTask?.cancel()
         transcriptTask = nil
         waveformTask?.cancel()

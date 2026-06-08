@@ -15,7 +15,7 @@ import Observation
 @Observable
 final class HighlighterStore {
     // Reactive — drives UI
-    var podcastPlayer = PodcastPlayerStore()
+    var podcastPlayer: PodcastPlayerStore
     var currentUser: CurrentUser?
     var currentUserProfile: ProfileMetadata?
     var joinedCommunities: [CommunitySummary] = [] {
@@ -72,13 +72,18 @@ final class HighlighterStore {
 
     init() {
         let core = HighlighterCore()
+        let safeCore = SafeHighlighterCore(core: core)
         self.core = core
-        self.safeCore = SafeHighlighterCore(core: core)
+        self.safeCore = safeCore
+        let podcastPlayer = PodcastPlayerStore(core: safeCore)
+        self.podcastPlayer = podcastPlayer
         self.isOnboardingComplete = core.isOnboardingComplete()
         // Surface the MiniPlayer (paused) with whatever episode the user was
         // last listening to, if any. Tapping play wires AVPlayer through the
         // normal `load(artifact:)` path which seeks to the saved position.
-        podcastPlayer.rehydrateFromSavedRecord()
+        Task { @MainActor in
+            await podcastPlayer.rehydrateFromSavedRecord()
+        }
     }
 
     func bootstrap() async {

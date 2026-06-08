@@ -48,6 +48,26 @@ actor SafeHighlighterCore {
         try core.setWifiOnlyEnabled(enabled: enabled)
     }
 
+    func getPodcastPosition() -> PodcastPositionRecord? {
+        core.getPodcastPosition()
+    }
+
+    func getPodcastPositionSeconds(guid: String) -> Double? {
+        core.getPodcastPositionSeconds(guid: guid)
+    }
+
+    func savePodcastPosition(
+        guid: String,
+        positionSeconds: Double,
+        artifact: ArtifactRecord
+    ) throws {
+        try core.savePodcastPosition(
+            guid: guid,
+            positionSeconds: positionSeconds,
+            artifact: artifact
+        )
+    }
+
     func prepareWhatsNew() async throws -> [WhatsNewEntry] {
         try await core.prepareWhatsNew()
     }

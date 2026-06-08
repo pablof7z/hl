@@ -2,6 +2,8 @@
 //! `web/src/lib/ndk/{groups,artifacts,highlights}.ts` so Swift/Rust/TS agree on
 //! the shape of a community, artifact, and highlight.
 
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CurrentUser {
     pub pubkey: String,
@@ -33,7 +35,7 @@ pub struct CommunitySummary {
 }
 
 /// Mirrors `ArtifactPreview` in `web/src/lib/ndk/artifacts.ts:19-53`.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
 pub struct ArtifactPreview {
     pub id: String,
     pub url: String,
@@ -75,14 +77,14 @@ pub struct ArtifactPreview {
     pub chapters: Vec<Chapter>,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
 pub struct Chapter {
     pub start_seconds: f64,
     pub title: String,
 }
 
 /// Mirrors `ArtifactRecord` in `web/src/lib/ndk/artifacts.ts`.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
 pub struct ArtifactRecord {
     pub preview: ArtifactPreview,
     pub group_id: String,
@@ -90,6 +92,17 @@ pub struct ArtifactRecord {
     pub pubkey: String,
     pub created_at: Option<u64>,
     pub note: String,
+}
+
+/// Last podcast playback position persisted by the Rust core. Native shells
+/// own AV playback handles, but durable playback state and the cold-launch
+/// episode projection live here so every platform resumes the same episode.
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+pub struct PodcastPositionRecord {
+    pub guid: String,
+    pub position_seconds: f64,
+    pub last_played_at_unix_seconds: u64,
+    pub artifact: ArtifactRecord,
 }
 
 /// Mirrors `RoomDiscussionRecord` in

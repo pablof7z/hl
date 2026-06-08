@@ -26,6 +26,7 @@ pub mod nostr_runtime;
 pub mod onboarding;
 pub mod outbox;
 pub mod pictures;
+pub mod podcast_position;
 pub mod profile;
 pub mod reactions;
 pub mod reads;
@@ -49,8 +50,8 @@ pub use models::{
     ChatMessageRecord, CommentRecord, CommunitySummary, CurrentUser, DiscussionAttachment,
     DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightDraft,
     HighlightRecord, HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord,
-    ProfileMetadata, ReadingFeedItem, RoomRecommendation, RoomRecommendationReason,
-    WebBookmarkRecord,
+    PodcastPositionRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
+    RoomRecommendationReason, WebBookmarkRecord,
 };
 pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;
