@@ -2462,6 +2462,12 @@ impl HighlighterCore {
 
     // -- Writes --
 
+    /// Wrap a local preview for highlight/picture publish paths before a
+    /// kind:11 share exists. Rust owns the empty record sentinel fields.
+    pub fn get_unpublished_artifact_record(&self, preview: ArtifactPreview) -> ArtifactOutcome {
+        artifact_outcome(Ok(crate::artifacts::unpublished_record(preview)))
+    }
+
     pub async fn publish_artifact(
         &self,
         preview: ArtifactPreview,

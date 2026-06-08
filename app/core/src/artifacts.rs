@@ -223,6 +223,20 @@ pub async fn publish(
     })
 }
 
+/// Wrap a local preview in the artifact record shape expected by publish paths
+/// before a kind:11 share exists. Rust owns the sentinel defaults so platform
+/// shells do not invent partial artifact records.
+pub fn unpublished_record(preview: ArtifactPreview) -> ArtifactRecord {
+    ArtifactRecord {
+        preview,
+        group_id: String::new(),
+        share_event_id: String::new(),
+        pubkey: String::new(),
+        created_at: None,
+        note: String::new(),
+    }
+}
+
 /// Read kind:11 artifact shares for `group_id` from nostrdb, newest first.
 /// Scans by kind only and checks `#h` manually — the nostrdb tag index is
 /// unreliable for non-standard tag names on some event kinds.
@@ -1003,6 +1017,19 @@ mod tests {
         assert!(has("i", "https://example.com/post"));
         assert!(has("k", "web"));
         assert!(has("r", "https://example.com/post"));
+    }
+
+    #[test]
+    fn unpublished_record_wraps_preview_with_empty_share_fields() {
+        let preview = build_preview("https://example.com/post").unwrap();
+        let expected_key = preview.highlight_reference_key.clone();
+        let record = unpublished_record(preview);
+        assert_eq!(record.preview.highlight_reference_key, expected_key);
+        assert!(record.group_id.is_empty());
+        assert!(record.share_event_id.is_empty());
+        assert!(record.pubkey.is_empty());
+        assert_eq!(record.created_at, None);
+        assert!(record.note.is_empty());
     }
 
     #[test]

@@ -447,6 +447,10 @@ actor SafeHighlighterCore {
         core.getArticleArtifactRecord(article: article)
     }
 
+    nonisolated func getUnpublishedArtifactRecord(preview: ArtifactPreview) -> ArtifactOutcome {
+        core.getUnpublishedArtifactRecord(preview: preview)
+    }
+
     nonisolated func getBookRoute(catalogId: String) -> BookRouteOutcome {
         core.getBookRoute(catalogId: catalogId)
     }

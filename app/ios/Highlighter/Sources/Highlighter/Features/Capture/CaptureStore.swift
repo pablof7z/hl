@@ -303,14 +303,12 @@ final class CaptureStore {
                         }
                         artifactForPicture = artifact
                     } else {
-                        artifactForPicture = ArtifactRecord(
-                            preview: preview,
-                            groupId: "",
-                            shareEventId: "",
-                            pubkey: "",
-                            createdAt: nil,
-                            note: ""
-                        )
+                        let outcome = safeCore.getUnpublishedArtifactRecord(preview: preview)
+                        guard outcome.error.isEmpty, let artifact = outcome.value else {
+                            self.phase = .error(outcome.error)
+                            return
+                        }
+                        artifactForPicture = artifact
                     }
                 case nil:
                     artifactForPicture = nil
@@ -347,14 +345,7 @@ final class CaptureStore {
                     note: nil
                 )
             } else {
-                return ArtifactOutcome(value: ArtifactRecord(
-                    preview: preview,
-                    groupId: "",
-                    shareEventId: "",
-                    pubkey: "",
-                    createdAt: nil,
-                    note: ""
-                ), error: "")
+                return safeCore.getUnpublishedArtifactRecord(preview: preview)
             }
         }
     }

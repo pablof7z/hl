@@ -1123,6 +1123,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getSearchRelays() async  -> StringListOutcome
 
+    /**
+     * Wrap a local preview for highlight/picture publish paths before a
+     * kind:11 share exists. Rust owns the empty record sentinel fields.
+     */
+    func getUnpublishedArtifactRecord(preview: ArtifactPreview)  -> ArtifactOutcome
+
     func getUserArticles(pubkeyHex: String, limit: UInt32) async  -> ArticleListOutcome
 
     func getUserCommunities(pubkeyHex: String) async  -> CommunityListOutcome
@@ -2950,6 +2956,18 @@ open func getSearchRelays()async  -> StringListOutcome  {
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Wrap a local preview for highlight/picture publish paths before a
+     * kind:11 share exists. Rust owns the empty record sentinel fields.
+     */
+open func getUnpublishedArtifactRecord(preview: ArtifactPreview) -> ArtifactOutcome  {
+    return try!  FfiConverterTypeArtifactOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_unpublished_artifact_record(self.uniffiClonePointer(),
+        FfiConverterTypeArtifactPreview_lower(preview),$0
+    )
+})
 }
 
 open func getUserArticles(pubkeyHex: String, limit: UInt32)async  -> ArticleListOutcome  {
@@ -16003,6 +16021,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_relays() != 44280) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_unpublished_artifact_record() != 13176) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_articles() != 49199) {
