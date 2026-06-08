@@ -44,6 +44,18 @@ actor SafeHighlighterCore {
         core.setOnboardingComplete(complete: complete)
     }
 
+    nonisolated func getOnboardingInterests() -> [OnboardingInterest] {
+        core.getOnboardingInterests()
+    }
+
+    nonisolated func getOnboardingInterestSelection(selectedIds: [String]) -> OnboardingInterestSelection {
+        core.getOnboardingInterestSelection(selectedIds: selectedIds)
+    }
+
+    func completeOnboardingInterests(selectedIds: [String]) async -> MutationOutcome {
+        await core.completeOnboardingInterests(selectedIds: selectedIds)
+    }
+
     func isWifiOnlyEnabled() -> Bool {
         core.isWifiOnlyEnabled()
     }

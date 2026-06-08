@@ -773,6 +773,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func clearRecentSearches() async  -> StringListOutcome
 
+    func completeOnboardingInterests(selectedIds: [String]) async  -> MutationOutcome
+
     /**
      * Consume a pending join when a matching NIP-29 membership delta arrives.
      * Swift routes the delta; Rust owns whether it was pending and what toast
@@ -1098,6 +1100,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * the Swift explorer store's shelves remain single-purpose.
      */
     func getNewRooms(limit: UInt32) async  -> CommunityListOutcome
+
+    func getOnboardingInterestSelection(selectedIds: [String])  -> OnboardingInterestSelection
+
+    func getOnboardingInterests()  -> [OnboardingInterest]
 
     func getPodcastPosition()  -> PodcastPositionRecord?
 
@@ -1801,6 +1807,24 @@ open func clearRecentSearches()async  -> StringListOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeStringListOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func completeOnboardingInterests(selectedIds: [String])async  -> MutationOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_complete_onboarding_interests(
+                    self.uniffiClonePointer(),
+                    FfiConverterSequenceString.lower(selectedIds)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeMutationOutcome_lift,
             errorHandler: nil
 
         )
@@ -2867,6 +2891,21 @@ open func getNewRooms(limit: UInt32)async  -> CommunityListOutcome  {
             errorHandler: nil
 
         )
+}
+
+open func getOnboardingInterestSelection(selectedIds: [String]) -> OnboardingInterestSelection  {
+    return try!  FfiConverterTypeOnboardingInterestSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_onboarding_interest_selection(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(selectedIds),$0
+    )
+})
+}
+
+open func getOnboardingInterests() -> [OnboardingInterest]  {
+    return try!  FfiConverterSequenceTypeOnboardingInterest.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_onboarding_interests(self.uniffiClonePointer(),$0
+    )
+})
 }
 
 open func getPodcastPosition() -> PodcastPositionRecord?  {
@@ -10714,6 +10753,178 @@ public func FfiConverterTypeNostrEntityRefOutcome_lower(_ value: NostrEntityRefO
 }
 
 
+public struct OnboardingInterest {
+    public var id: String
+    public var emoji: String
+    public var label: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, emoji: String, label: String) {
+        self.id = id
+        self.emoji = emoji
+        self.label = label
+    }
+}
+
+#if compiler(>=6)
+extension OnboardingInterest: Sendable {}
+#endif
+
+
+extension OnboardingInterest: Equatable, Hashable {
+    public static func ==(lhs: OnboardingInterest, rhs: OnboardingInterest) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.emoji != rhs.emoji {
+            return false
+        }
+        if lhs.label != rhs.label {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(emoji)
+        hasher.combine(label)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnboardingInterest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingInterest {
+        return
+            try OnboardingInterest(
+                id: FfiConverterString.read(from: &buf),
+                emoji: FfiConverterString.read(from: &buf),
+                label: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnboardingInterest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.emoji, into: &buf)
+        FfiConverterString.write(value.label, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingInterest_lift(_ buf: RustBuffer) throws -> OnboardingInterest {
+    return try FfiConverterTypeOnboardingInterest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingInterest_lower(_ value: OnboardingInterest) -> RustBuffer {
+    return FfiConverterTypeOnboardingInterest.lower(value)
+}
+
+
+public struct OnboardingInterestSelection {
+    public var minimumRequired: UInt32
+    public var selectedCount: UInt32
+    public var remaining: UInt32
+    public var canContinue: Bool
+    public var followPubkeys: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(minimumRequired: UInt32, selectedCount: UInt32, remaining: UInt32, canContinue: Bool, followPubkeys: [String]) {
+        self.minimumRequired = minimumRequired
+        self.selectedCount = selectedCount
+        self.remaining = remaining
+        self.canContinue = canContinue
+        self.followPubkeys = followPubkeys
+    }
+}
+
+#if compiler(>=6)
+extension OnboardingInterestSelection: Sendable {}
+#endif
+
+
+extension OnboardingInterestSelection: Equatable, Hashable {
+    public static func ==(lhs: OnboardingInterestSelection, rhs: OnboardingInterestSelection) -> Bool {
+        if lhs.minimumRequired != rhs.minimumRequired {
+            return false
+        }
+        if lhs.selectedCount != rhs.selectedCount {
+            return false
+        }
+        if lhs.remaining != rhs.remaining {
+            return false
+        }
+        if lhs.canContinue != rhs.canContinue {
+            return false
+        }
+        if lhs.followPubkeys != rhs.followPubkeys {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(minimumRequired)
+        hasher.combine(selectedCount)
+        hasher.combine(remaining)
+        hasher.combine(canContinue)
+        hasher.combine(followPubkeys)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnboardingInterestSelection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingInterestSelection {
+        return
+            try OnboardingInterestSelection(
+                minimumRequired: FfiConverterUInt32.read(from: &buf),
+                selectedCount: FfiConverterUInt32.read(from: &buf),
+                remaining: FfiConverterUInt32.read(from: &buf),
+                canContinue: FfiConverterBool.read(from: &buf),
+                followPubkeys: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnboardingInterestSelection, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.minimumRequired, into: &buf)
+        FfiConverterUInt32.write(value.selectedCount, into: &buf)
+        FfiConverterUInt32.write(value.remaining, into: &buf)
+        FfiConverterBool.write(value.canContinue, into: &buf)
+        FfiConverterSequenceString.write(value.followPubkeys, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingInterestSelection_lift(_ buf: RustBuffer) throws -> OnboardingInterestSelection {
+    return try FfiConverterTypeOnboardingInterestSelection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingInterestSelection_lower(_ value: OnboardingInterestSelection) -> RustBuffer {
+    return FfiConverterTypeOnboardingInterestSelection.lower(value)
+}
+
+
 public struct OptionalStringOutcome {
     public var value: String?
     public var error: String
@@ -16406,6 +16617,31 @@ fileprivate struct FfiConverterSequenceTypeHydratedHighlight: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeOnboardingInterest: FfiConverterRustBuffer {
+    typealias SwiftType = [OnboardingInterest]
+
+    public static func write(_ value: [OnboardingInterest], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeOnboardingInterest.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [OnboardingInterest] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [OnboardingInterest]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeOnboardingInterest.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeProfileMetadata: FfiConverterRustBuffer {
     typealias SwiftType = [ProfileMetadata]
 
@@ -16738,6 +16974,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches() != 18871) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_complete_onboarding_interests() != 32350) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_confirm_pending_join() != 50218) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -16913,6 +17152,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_new_rooms() != 59476) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_onboarding_interest_selection() != 25595) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_onboarding_interests() != 50053) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_position() != 36439) {

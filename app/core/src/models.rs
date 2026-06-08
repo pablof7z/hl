@@ -16,6 +16,22 @@ pub struct GeneratedAccount {
     pub nsec: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OnboardingInterest {
+    pub id: String,
+    pub emoji: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OnboardingInterestSelection {
+    pub minimum_required: u32,
+    pub selected_count: u32,
+    pub remaining: u32,
+    pub can_continue: bool,
+    pub follow_pubkeys: Vec<String>,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CurrentUserOutcome {
     pub value: Option<CurrentUser>,

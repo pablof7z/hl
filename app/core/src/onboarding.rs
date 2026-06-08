@@ -3,14 +3,191 @@
 //! Native shells choose the visual route, but the durable "has completed
 //! onboarding" flag lives in the shared core so iOS and Android agree.
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::errors::CoreError;
+use crate::models::{OnboardingInterest, OnboardingInterestSelection};
 
 const STATE_FILE_NAME: &str = "onboarding-state-v1.json";
+const MINIMUM_INTERESTS: u32 = 3;
+const JACK_PUBKEY: &str = "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2";
+const FIATJAF_PUBKEY: &str = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d";
+
+struct InterestSeed {
+    id: &'static str,
+    emoji: &'static str,
+    label: &'static str,
+    pubkeys: &'static [&'static str],
+}
+
+const INTERESTS: &[InterestSeed] = &[
+    InterestSeed {
+        id: "philosophy",
+        emoji: "🧠",
+        label: "Philosophy",
+        pubkeys: &[JACK_PUBKEY],
+    },
+    InterestSeed {
+        id: "science_fiction",
+        emoji: "🚀",
+        label: "Science Fiction",
+        pubkeys: &[JACK_PUBKEY],
+    },
+    InterestSeed {
+        id: "technology",
+        emoji: "💻",
+        label: "Technology",
+        pubkeys: &[FIATJAF_PUBKEY, JACK_PUBKEY],
+    },
+    InterestSeed {
+        id: "history",
+        emoji: "📜",
+        label: "History",
+        pubkeys: &[JACK_PUBKEY],
+    },
+    InterestSeed {
+        id: "economics",
+        emoji: "📈",
+        label: "Economics",
+        pubkeys: &[FIATJAF_PUBKEY],
+    },
+    InterestSeed {
+        id: "psychology",
+        emoji: "🔬",
+        label: "Psychology",
+        pubkeys: &[JACK_PUBKEY],
+    },
+    InterestSeed {
+        id: "literature",
+        emoji: "📚",
+        label: "Literature",
+        pubkeys: &[JACK_PUBKEY],
+    },
+    InterestSeed {
+        id: "politics",
+        emoji: "🗳️",
+        label: "Politics",
+        pubkeys: &[],
+    },
+    InterestSeed {
+        id: "bitcoin",
+        emoji: "₿",
+        label: "Bitcoin",
+        pubkeys: &[JACK_PUBKEY, FIATJAF_PUBKEY],
+    },
+    InterestSeed {
+        id: "self_improvement",
+        emoji: "🌱",
+        label: "Self-improvement",
+        pubkeys: &[JACK_PUBKEY],
+    },
+    InterestSeed {
+        id: "science",
+        emoji: "🔭",
+        label: "Science",
+        pubkeys: &[],
+    },
+    InterestSeed {
+        id: "art",
+        emoji: "🎨",
+        label: "Art",
+        pubkeys: &[],
+    },
+    InterestSeed {
+        id: "music",
+        emoji: "🎵",
+        label: "Music",
+        pubkeys: &[],
+    },
+    InterestSeed {
+        id: "design",
+        emoji: "✏️",
+        label: "Design",
+        pubkeys: &[],
+    },
+    InterestSeed {
+        id: "writing",
+        emoji: "✍️",
+        label: "Writing",
+        pubkeys: &[JACK_PUBKEY],
+    },
+    InterestSeed {
+        id: "startups",
+        emoji: "⚡️",
+        label: "Startups",
+        pubkeys: &[JACK_PUBKEY],
+    },
+    InterestSeed {
+        id: "nostr",
+        emoji: "🟣",
+        label: "Nostr",
+        pubkeys: &[FIATJAF_PUBKEY],
+    },
+    InterestSeed {
+        id: "food",
+        emoji: "🍳",
+        label: "Food",
+        pubkeys: &[],
+    },
+    InterestSeed {
+        id: "travel",
+        emoji: "🗺️",
+        label: "Travel",
+        pubkeys: &[],
+    },
+    InterestSeed {
+        id: "health",
+        emoji: "🏃",
+        label: "Health",
+        pubkeys: &[],
+    },
+];
+
+pub fn interest_catalog() -> Vec<OnboardingInterest> {
+    INTERESTS
+        .iter()
+        .map(|interest| OnboardingInterest {
+            id: interest.id.into(),
+            emoji: interest.emoji.into(),
+            label: interest.label.into(),
+        })
+        .collect()
+}
+
+pub fn interest_selection(selected_ids: Vec<String>) -> OnboardingInterestSelection {
+    let selected: HashSet<&str> = selected_ids.iter().map(String::as_str).collect();
+    let selected_count = selected.len() as u32;
+    let remaining = MINIMUM_INTERESTS.saturating_sub(selected_count);
+    OnboardingInterestSelection {
+        minimum_required: MINIMUM_INTERESTS,
+        selected_count,
+        remaining,
+        can_continue: remaining == 0,
+        follow_pubkeys: interest_follow_pubkeys(&selected),
+    }
+}
+
+fn interest_follow_pubkeys(selected: &HashSet<&str>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for interest in INTERESTS {
+        if !selected.contains(interest.id) {
+            continue;
+        }
+        for pubkey in interest.pubkeys {
+            if seen.insert(*pubkey) {
+                out.push((*pubkey).to_string());
+            }
+        }
+    }
+    out
+}
 
 pub struct OnboardingStore {
     path: PathBuf,
@@ -92,6 +269,40 @@ fn remove_state(path: &Path) -> Result<(), CoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn interest_catalog_preserves_ios_chip_order() {
+        let interests = interest_catalog();
+        assert_eq!(interests.len(), 20);
+        assert_eq!(interests[0].id, "philosophy");
+        assert_eq!(interests[0].emoji, "🧠");
+        assert_eq!(interests[0].label, "Philosophy");
+        assert_eq!(interests[19].id, "health");
+        assert_eq!(interests[19].label, "Health");
+    }
+
+    #[test]
+    fn interest_selection_computes_progress_and_deduped_follows() {
+        let selection = interest_selection(vec![
+            "bitcoin".into(),
+            "technology".into(),
+            "nostr".into(),
+            "technology".into(),
+        ]);
+        assert_eq!(selection.minimum_required, 3);
+        assert_eq!(selection.selected_count, 3);
+        assert_eq!(selection.remaining, 0);
+        assert!(selection.can_continue);
+        assert_eq!(
+            selection.follow_pubkeys,
+            vec![FIATJAF_PUBKEY.to_string(), JACK_PUBKEY.to_string()]
+        );
+
+        let incomplete = interest_selection(vec!["science".into()]);
+        assert_eq!(incomplete.remaining, 2);
+        assert!(!incomplete.can_continue);
+        assert!(incomplete.follow_pubkeys.is_empty());
+    }
 
     #[test]
     fn default_is_incomplete() {

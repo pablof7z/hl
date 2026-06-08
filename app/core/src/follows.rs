@@ -107,6 +107,52 @@ pub async fn publish_follow_toggle(
     Ok(Some(event.id.to_hex()))
 }
 
+pub async fn publish_follow_additions(
+    runtime: &NostrRuntime,
+    follower_hex: &str,
+    target_hexes: &[String],
+) -> Result<Option<String>, CoreError> {
+    let mut targets = Vec::new();
+    let mut seen = HashSet::new();
+    for target_hex in target_hexes {
+        let trimmed = target_hex.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if follower_hex.eq_ignore_ascii_case(trimmed) {
+            return Err(CoreError::InvalidInput("cannot follow yourself".into()));
+        }
+        let target = PublicKey::from_hex(trimmed)
+            .map_err(|e| CoreError::InvalidInput(format!("invalid target pubkey: {e}")))?;
+        if seen.insert(target.to_hex().to_ascii_lowercase()) {
+            targets.push(target);
+        }
+    }
+    if targets.is_empty() {
+        return Ok(None);
+    }
+
+    let current = latest_contact_list(runtime.ndb(), follower_hex)?;
+    let (new_tags, existing_content, changed) =
+        next_contact_tags_additions(current.as_ref(), &targets);
+    if !changed {
+        return Ok(None);
+    }
+
+    let builder = EventBuilder::new(Kind::Custom(KIND_CONTACTS), existing_content).tags(new_tags);
+    let client = runtime.client();
+    let event = client
+        .sign_event_builder(builder)
+        .await
+        .map_err(|e| CoreError::Signer(format!("sign contact list: {e}")))?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish contact list: {e}")))?;
+    crate::nostr_runtime::mirror_social_trio_to_purple(client, &event).await;
+    Ok(Some(event.id.to_hex()))
+}
+
 /// Pure: take the current (optional) contact list event, the target, and the
 /// desired state, and produce the next tag set + whether anything changed.
 ///
@@ -160,6 +206,42 @@ fn next_contact_tags(
     }
 
     (tags, content, removed_target)
+}
+
+fn next_contact_tags_additions(
+    current: Option<&Event>,
+    targets: &[PublicKey],
+) -> (Vec<Tag>, String, bool) {
+    let mut tags: Vec<Tag> = Vec::new();
+    let mut existing_p: HashSet<String> = HashSet::new();
+    let mut content = String::new();
+
+    if let Some(event) = current {
+        content = event.content.clone();
+        for tag in event.tags.iter() {
+            let slice = tag.as_slice();
+            match slice.first().map(String::as_str) {
+                Some("p") => {
+                    let Some(value) = slice.get(1) else { continue };
+                    if existing_p.insert(value.to_ascii_lowercase()) {
+                        tags.push(tag.clone());
+                    }
+                }
+                _ => tags.push(tag.clone()),
+            }
+        }
+    }
+
+    let mut changed = false;
+    for target in targets {
+        let target_lower = target.to_hex().to_ascii_lowercase();
+        if existing_p.insert(target_lower) {
+            tags.push(Tag::public_key(*target));
+            changed = true;
+        }
+    }
+
+    (tags, content, changed)
 }
 
 fn extract_p_tags(event: &Event) -> Vec<String> {
@@ -257,6 +339,40 @@ mod tests {
         let existing = sign_contacts(&me, &[], "", 1);
         let (_, _, changed) = next_contact_tags(Some(&existing), target.public_key(), false);
         assert!(!changed);
+    }
+
+    #[test]
+    fn next_contact_tags_additions_dedupes_targets_and_preserves_existing() {
+        let me = Keys::generate();
+        let existing = Keys::generate();
+        let first = Keys::generate();
+        let second = Keys::generate();
+        let current = sign_contacts(&me, &[existing.public_key(), first.public_key()], "kept", 1);
+
+        let (tags, content, changed) = next_contact_tags_additions(
+            Some(&current),
+            &[first.public_key(), second.public_key(), second.public_key()],
+        );
+
+        assert!(changed);
+        assert_eq!(content, "kept");
+        let values: Vec<String> = tags
+            .iter()
+            .filter_map(|tag| {
+                let slice = tag.as_slice();
+                (slice.first().map(String::as_str) == Some("p"))
+                    .then(|| slice.get(1).cloned())
+                    .flatten()
+            })
+            .collect();
+        assert_eq!(
+            values,
+            vec![
+                existing.public_key().to_hex(),
+                first.public_key().to_hex(),
+                second.public_key().to_hex(),
+            ]
+        );
     }
 
     #[test]

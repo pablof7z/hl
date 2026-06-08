@@ -146,6 +146,14 @@ final class HighlighterStore {
         return outcome
     }
 
+    func completeOnboardingInterests(selectedIds: [String]) async -> MutationOutcome {
+        let outcome = await safeCore.completeOnboardingInterests(selectedIds: selectedIds)
+        if outcome.applied {
+            isOnboardingComplete = true
+        }
+        return outcome
+    }
+
     // MARK: - Bookmarks
 
     /// Optimistic toggle: flip local state immediately for snappy UI, then

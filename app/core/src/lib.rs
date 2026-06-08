@@ -64,13 +64,13 @@ pub use models::{
     HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind,
     HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction, MutationOutcome,
     Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome,
-    OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
-    ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft, ReactionOutcome,
-    ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
-    RelayDiagnosticListOutcome, RoomRecommendation, RoomRecommendationListOutcome,
-    RoomRecommendationReason, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
+    OnboardingInterest, OnboardingInterestSelection, OptionalStringOutcome, PictureDraft,
+    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem,
+    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
+    RoomRecommendationListOutcome, RoomRecommendationReason, StringListOutcome, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
 pub use podcast_transcript::TranscriptSegment;

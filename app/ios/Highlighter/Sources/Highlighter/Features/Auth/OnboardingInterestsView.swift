@@ -8,7 +8,13 @@ struct OnboardingInterestsView: View {
     @State private var selected: Set<String> = []
     @State private var isWorking = false
 
-    private let interests = InterestCatalog.all
+    private var interests: [OnboardingInterest] {
+        store.safeCore.getOnboardingInterests()
+    }
+
+    private var selectionState: OnboardingInterestSelection {
+        store.safeCore.getOnboardingInterestSelection(selectedIds: Array(selected))
+    }
 
     var body: some View {
         ZStack {
@@ -43,8 +49,8 @@ struct OnboardingInterestsView: View {
                 Spacer()
 
                 VStack(spacing: 8) {
-                    if selected.count < 3 {
-                        Text("Choose \(3 - selected.count) more")
+                    if selectionState.remaining > 0 {
+                        Text("Choose \(selectionState.remaining) more")
                             .font(.caption)
                             .foregroundStyle(Color.highlighterInkMuted)
                             .transition(.opacity)
@@ -63,9 +69,9 @@ struct OnboardingInterestsView: View {
                         .padding(.vertical, 14)
                     }
                     .buttonStyle(.glassProminent)
-                    .disabled(selected.count < 3 || isWorking)
+                    .disabled(!selectionState.canContinue || isWorking)
                     .padding(.horizontal, 32)
-                    .animation(.easeInOut(duration: 0.15), value: selected.count)
+                    .animation(.easeInOut(duration: 0.15), value: selectionState.selectedCount)
                 }
                 .padding(.bottom, 48)
                 .background(
@@ -90,7 +96,7 @@ struct OnboardingInterestsView: View {
         }
     }
 
-    private func chip(_ interest: InterestCatalog.Interest) -> some View {
+    private func chip(_ interest: OnboardingInterest) -> some View {
         let active = selected.contains(interest.id)
         return Button {
             if active {
@@ -117,119 +123,17 @@ struct OnboardingInterestsView: View {
     private func finish() {
         guard !isWorking else { return }
         isWorking = true
-        let chosenIds = selected
+        let chosenIds = Array(selected)
 
         Task {
             await store.completeLogin(user: account.user)
-            let outcome = store.markOnboardingComplete()
+            let outcome = await store.completeOnboardingInterests(selectedIds: chosenIds)
             if !outcome.applied {
                 isWorking = false
                 return
             }
-
-            let pubkeys = InterestCatalog.pubkeys(for: chosenIds)
-            for pubkey in pubkeys {
-                _ = await store.safeCore.setFollow(targetPubkeyHex: pubkey, follow: true)
-            }
         }
     }
-}
-
-// MARK: - Interest catalog
-
-enum InterestCatalog {
-    struct Interest: Identifiable {
-        let id: String
-        let emoji: String
-        let label: String
-    }
-
-    static let all: [Interest] = [
-        Interest(id: "philosophy", emoji: "🧠", label: "Philosophy"),
-        Interest(id: "science_fiction", emoji: "🚀", label: "Science Fiction"),
-        Interest(id: "technology", emoji: "💻", label: "Technology"),
-        Interest(id: "history", emoji: "📜", label: "History"),
-        Interest(id: "economics", emoji: "📈", label: "Economics"),
-        Interest(id: "psychology", emoji: "🔬", label: "Psychology"),
-        Interest(id: "literature", emoji: "📚", label: "Literature"),
-        Interest(id: "politics", emoji: "🗳️", label: "Politics"),
-        Interest(id: "bitcoin", emoji: "₿", label: "Bitcoin"),
-        Interest(id: "self_improvement", emoji: "🌱", label: "Self-improvement"),
-        Interest(id: "science", emoji: "🔭", label: "Science"),
-        Interest(id: "art", emoji: "🎨", label: "Art"),
-        Interest(id: "music", emoji: "🎵", label: "Music"),
-        Interest(id: "design", emoji: "✏️", label: "Design"),
-        Interest(id: "writing", emoji: "✍️", label: "Writing"),
-        Interest(id: "startups", emoji: "⚡️", label: "Startups"),
-        Interest(id: "nostr", emoji: "🟣", label: "Nostr"),
-        Interest(id: "food", emoji: "🍳", label: "Food"),
-        Interest(id: "travel", emoji: "🗺️", label: "Travel"),
-        Interest(id: "health", emoji: "🏃", label: "Health"),
-    ]
-
-    /// Returns a deduplicated list of pubkeys to follow for the given interest ids.
-    static func pubkeys(for ids: Set<String>) -> [String] {
-        var result: [String] = []
-        var seen = Set<String>()
-        for id in ids {
-            for pk in curatedPubkeys[id] ?? [] {
-                if seen.insert(pk).inserted {
-                    result.append(pk)
-                }
-            }
-        }
-        return result
-    }
-
-    // Curated Nostr pubkeys (hex) per interest, sourced from public Nostr profiles.
-    private static let curatedPubkeys: [String: [String]] = [
-        "philosophy": [
-            "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2", // jack
-        ],
-        "technology": [
-            "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d", // fiatjaf
-            "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2", // jack
-        ],
-        "bitcoin": [
-            "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2", // jack
-            "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d", // fiatjaf
-        ],
-        "nostr": [
-            "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d", // fiatjaf
-        ],
-        "writing": [
-            "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
-        ],
-        "science_fiction": [
-            "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
-        ],
-        "history": [
-            "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
-        ],
-        "economics": [
-            "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
-        ],
-        "psychology": [
-            "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
-        ],
-        "literature": [
-            "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
-        ],
-        "startups": [
-            "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
-        ],
-        "self_improvement": [
-            "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2",
-        ],
-        "politics": [],
-        "science": [],
-        "art": [],
-        "music": [],
-        "design": [],
-        "food": [],
-        "travel": [],
-        "health": [],
-    ]
 }
 
 // MARK: - FlowLayout

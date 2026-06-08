@@ -37,13 +37,13 @@ use crate::models::{
     HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind,
     HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction, MutationOutcome,
     Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord,
-    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
-    ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome,
-    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
-    RoomRecommendation, RoomRecommendationListOutcome, StringListOutcome, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
-    WebMetadataOutcome, WhatsNewEntriesOutcome,
+    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestSelection, OptionalStringOutcome,
+    PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome,
+    ProfileMetadata, ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
+    ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
+    RelayDiagnosticListOutcome, RoomRecommendation, RoomRecommendationListOutcome,
+    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -1079,6 +1079,45 @@ impl HighlighterCore {
 
     pub fn set_onboarding_complete(&self, complete: bool) -> MutationOutcome {
         mutation_outcome(self.onboarding.set_complete(complete))
+    }
+
+    pub fn get_onboarding_interests(&self) -> Vec<OnboardingInterest> {
+        onboarding::interest_catalog()
+    }
+
+    pub fn get_onboarding_interest_selection(
+        &self,
+        selected_ids: Vec<String>,
+    ) -> OnboardingInterestSelection {
+        onboarding::interest_selection(selected_ids)
+    }
+
+    pub async fn complete_onboarding_interests(
+        &self,
+        selected_ids: Vec<String>,
+    ) -> MutationOutcome {
+        let result: Result<(), CoreError> = async {
+            let selection = onboarding::interest_selection(selected_ids);
+            if !selection.can_continue {
+                return Err(CoreError::InvalidInput(
+                    "choose at least three interests".into(),
+                ));
+            }
+            let follower = {
+                let guard = self.inner.read();
+                guard
+                    .session
+                    .current_user()
+                    .ok_or(CoreError::NotAuthenticated)?
+                    .pubkey
+            };
+            follows::publish_follow_additions(&self.runtime, &follower, &selection.follow_pubkeys)
+                .await?;
+            self.onboarding.set_complete(true)?;
+            Ok(())
+        }
+        .await;
+        mutation_outcome(result)
     }
 
     pub fn is_wifi_only_enabled(&self) -> bool {
