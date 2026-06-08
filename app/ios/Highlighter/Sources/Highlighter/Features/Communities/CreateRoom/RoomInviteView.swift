@@ -174,10 +174,10 @@ struct RoomInviteView: View {
                 personRow(
                     pubkeyHex: resolved.pubkeyHex,
                     profile: profile(for: resolved.pubkeyHex),
-                    secondary: resolved.kind.label,
+                    secondary: resolved.format.label,
                     isSelected: isSelected(resolved.pubkeyHex)
                 ) {
-                    add(Candidate(pubkeyHex: resolved.pubkeyHex, source: resolved.kind.candidateSource))
+                    add(Candidate(pubkeyHex: resolved.pubkeyHex, source: resolved.format.candidateSource))
                     query = ""
                     pasteResolution = nil
                 }
@@ -328,7 +328,7 @@ struct RoomInviteView: View {
 
     private func acceptPasteIfAny() {
         guard let resolved = pasteResolution else { return }
-        add(Candidate(pubkeyHex: resolved.pubkeyHex, source: resolved.kind.candidateSource))
+        add(Candidate(pubkeyHex: resolved.pubkeyHex, source: resolved.format.candidateSource))
         query = ""
         pasteResolution = nil
     }
@@ -365,7 +365,7 @@ struct RoomInviteView: View {
                 follows = outcome.values
                 followsLoaded = true
             }
-            // Warm the profile cache for the first chunk so suggestions
+            // Request profile projections for the first chunk so suggestions
             // render with names rather than truncated hex.
             for pubkey in outcome.values.prefix(40) {
                 await appStore.requestProfile(pubkeyHex: pubkey)
@@ -386,13 +386,13 @@ struct RoomInviteView: View {
         let outcome = appStore.safeCore.decodeNpub(trimmed)
         if outcome.error.isEmpty {
             let hex = outcome.value
-            let kind: ResolvedCandidate.Kind
-            if trimmed.lowercased().hasPrefix("npub") { kind = .npub }
-            else if trimmed.lowercased().hasPrefix("nprofile") { kind = .nprofile }
-            else { kind = .hex }
+            let format: ResolvedCandidate.InputFormat
+            if trimmed.lowercased().hasPrefix("npub") { format = .npub }
+            else if trimmed.lowercased().hasPrefix("nprofile") { format = .nprofile }
+            else { format = .hex }
             await appStore.requestProfile(pubkeyHex: hex)
             await MainActor.run {
-                pasteResolution = ResolvedCandidate(pubkeyHex: hex, kind: kind)
+                pasteResolution = ResolvedCandidate(pubkeyHex: hex, format: format)
             }
         } else {
             await MainActor.run { pasteResolution = nil }
@@ -460,7 +460,7 @@ private struct Candidate: Identifiable, Equatable {
 }
 
 private struct ResolvedCandidate {
-    enum Kind {
+    enum InputFormat {
         case npub, nprofile, hex
         var label: String {
             switch self {
@@ -472,7 +472,7 @@ private struct ResolvedCandidate {
         var candidateSource: Candidate.Source { .paste }
     }
     let pubkeyHex: String
-    let kind: Kind
+    let format: InputFormat
 }
 
 // MARK: - Avatar

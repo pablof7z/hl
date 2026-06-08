@@ -12,12 +12,12 @@ import SwiftUI
 ///   `["k", "9802"]`, `["p", author]`, `["h", target_group_id]`.
 struct ShareToCommunityTarget: Identifiable {
     let id = UUID()
-    let kind: Kind
+    let payload: Payload
     let displayTitle: String
     let displaySubtitle: String
     let imageURL: URL?
 
-    enum Kind {
+    enum Payload {
         /// Share the source artifact/article via kind:11.
         case artifactShare(preview: ArtifactPreview)
         /// Re-share an existing highlight via kind:16.
@@ -27,7 +27,7 @@ struct ShareToCommunityTarget: Identifiable {
     static func article(_ article: ArticleRecord) -> ShareToCommunityTarget {
         let preview = ArtifactPreviewBuilder.from(article: article)
         return ShareToCommunityTarget(
-            kind: .artifactShare(preview: preview),
+            payload: .artifactShare(preview: preview),
             displayTitle: article.title.isEmpty ? "Untitled" : article.title,
             displaySubtitle: article.summary,
             imageURL: article.image.isEmpty ? nil : URL(string: article.image)
@@ -37,7 +37,7 @@ struct ShareToCommunityTarget: Identifiable {
     static func artifact(_ artifact: ArtifactRecord) -> ShareToCommunityTarget {
         let preview = ArtifactPreviewBuilder.from(artifact: artifact)
         return ShareToCommunityTarget(
-            kind: .artifactShare(preview: preview),
+            payload: .artifactShare(preview: preview),
             displayTitle: artifact.preview.title.isEmpty ? "Untitled" : artifact.preview.title,
             displaySubtitle: artifact.preview.description,
             imageURL: artifact.preview.image.isEmpty ? nil : URL(string: artifact.preview.image)
@@ -55,7 +55,7 @@ struct ShareToCommunityTarget: Identifiable {
             ? "Highlight"
             : "\u{201C}\(highlight.quote)\u{201D}"
         return ShareToCommunityTarget(
-            kind: .highlightRepost(
+            payload: .highlightRepost(
                 eventId: highlight.eventId,
                 authorPubkeyHex: highlight.pubkey,
                 relayHint: relayHint
@@ -189,7 +189,7 @@ struct ShareToCommunitySheet: View {
     // MARK: - Action
 
     private var navigationTitle: String {
-        switch target.kind {
+        switch target.payload {
         case .artifactShare: return "Share to community"
         case .highlightRepost: return "Share highlight"
         }
@@ -201,7 +201,7 @@ struct ShareToCommunitySheet: View {
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         Task {
             let publishError: String?
-            switch target.kind {
+            switch target.payload {
             case .artifactShare(let preview):
                 let outcome = await app.safeCore.publishArtifact(
                     preview: preview,

@@ -104,7 +104,7 @@ struct WebReaderView: View {
         }
         await MainActor.run {
             shareTarget = ShareToCommunityTarget(
-                kind: .artifactShare(preview: preview),
+                payload: .artifactShare(preview: preview),
                 displayTitle: preview.title.isEmpty ? (target.url.host ?? target.url.absoluteString) : preview.title,
                 displaySubtitle: preview.description,
                 imageURL: preview.image.isEmpty ? nil : URL(string: preview.image)

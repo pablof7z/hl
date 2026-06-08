@@ -220,7 +220,7 @@ struct HighlightsTabView: View {
             chapters: []
         )
         return ShareToCommunityTarget(
-            kind: .artifactShare(preview: preview),
+            payload: .artifactShare(preview: preview),
             displayTitle: "Article",
             displaySubtitle: item.highlight.quote,
             imageURL: nil
