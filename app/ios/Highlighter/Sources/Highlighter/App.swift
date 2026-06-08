@@ -17,7 +17,8 @@ struct HighlighterApp: App {
             RootSceneView()
                 .environment(store)
                 .task {
-                    let unseen = (try? await store.safeCore.prepareWhatsNew()) ?? []
+                    let outcome = await store.safeCore.prepareWhatsNew()
+                    let unseen = outcome.error.isEmpty ? outcome.entries : []
                     if !unseen.isEmpty {
                         whatsNewPresentation = WhatsNewPresentation(entries: unseen)
                     }
@@ -25,7 +26,7 @@ struct HighlighterApp: App {
                 .sheet(item: $whatsNewPresentation) { presentation in
                     WhatsNewSheet(entries: presentation.entries) { entry in
                         Task {
-                            try? await store.safeCore.markWhatsNewSeen(
+                            _ = await store.safeCore.markWhatsNewSeen(
                                 shippedAtUnixSeconds: entry.shippedAtUnixSeconds
                             )
                         }

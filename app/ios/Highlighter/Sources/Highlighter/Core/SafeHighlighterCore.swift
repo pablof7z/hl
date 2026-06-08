@@ -1,8 +1,8 @@
 import Foundation
 
 /// Actor-isolated wrapper around the UniFFI-generated `HighlighterCore` so
-/// Swift call sites get a clean `async throws` API without worrying about
-/// FFI thread safety. Mirrors TENEX's `SafeTenexCore`.
+/// Swift call sites get serialized access without worrying about FFI thread
+/// safety. Mirrors TENEX's `SafeTenexCore`.
 actor SafeHighlighterCore {
     private let core: HighlighterCore
 
@@ -76,12 +76,12 @@ actor SafeHighlighterCore {
         try await core.downloadPodcastArtwork(url: url)
     }
 
-    func prepareWhatsNew() async throws -> [WhatsNewEntry] {
-        try await core.prepareWhatsNew()
+    func prepareWhatsNew() async -> WhatsNewEntriesOutcome {
+        await core.prepareWhatsNew()
     }
 
-    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async throws {
-        try await core.markWhatsNewSeen(shippedAtUnixSeconds: shippedAtUnixSeconds)
+    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async -> MutationOutcome {
+        await core.markWhatsNewSeen(shippedAtUnixSeconds: shippedAtUnixSeconds)
     }
 
     // MARK: - Reads
@@ -125,20 +125,20 @@ actor SafeHighlighterCore {
         try await core.searchProfiles(query: query, limit: limit)
     }
 
-    func getSearchRelays() async throws -> [String] {
-        try await core.getSearchRelays()
+    func getSearchRelays() async -> StringListOutcome {
+        await core.getSearchRelays()
     }
 
-    func getRecentSearches() async throws -> [String] {
-        try await core.getRecentSearches()
+    func getRecentSearches() async -> StringListOutcome {
+        await core.getRecentSearches()
     }
 
-    func recordRecentSearch(_ query: String) async throws -> [String] {
-        try await core.recordRecentSearch(query: query)
+    func recordRecentSearch(_ query: String) async -> StringListOutcome {
+        await core.recordRecentSearch(query: query)
     }
 
-    func clearRecentSearches() async throws -> [String] {
-        try await core.clearRecentSearches()
+    func clearRecentSearches() async -> StringListOutcome {
+        await core.clearRecentSearches()
     }
 
     func subscribeArticleSearch(query: String) async throws -> UInt64 {

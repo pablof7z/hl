@@ -68,8 +68,9 @@ final class SearchStore {
     // MARK: - Lifecycle
 
     func start() async {
-        if let relays = try? await safeCore.getSearchRelays() {
-            searchRelays = relays
+        let outcome = await safeCore.getSearchRelays()
+        if outcome.error.isEmpty {
+            searchRelays = outcome.values
         }
     }
 

@@ -29,6 +29,7 @@ use crate::models::{
     FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft, HighlightRecord,
     HydratedHighlight, MutationOutcome, NostrConnectOptions, PictureDraft, PictureRecord,
     PodcastPositionRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
+    StringListOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -90,6 +91,34 @@ fn mutation_outcome(result: Result<(), CoreError>) -> MutationOutcome {
         },
         Err(error) => MutationOutcome {
             applied: false,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn string_list_outcome(result: Result<Vec<String>, CoreError>) -> StringListOutcome {
+    match result {
+        Ok(values) => StringListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => StringListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn whats_new_entries_outcome(
+    result: Result<Vec<whats_new::WhatsNewEntry>, CoreError>,
+) -> WhatsNewEntriesOutcome {
+    match result {
+        Ok(entries) => WhatsNewEntriesOutcome {
+            entries,
+            error: String::new(),
+        },
+        Err(error) => WhatsNewEntriesOutcome {
+            entries: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -277,15 +306,15 @@ impl HighlighterCore {
         crate::share_extension::communities_snapshot_json(communities)
     }
 
-    pub async fn prepare_whats_new(&self) -> Result<Vec<whats_new::WhatsNewEntry>, CoreError> {
-        self.whats_new.prepare().await
+    pub async fn prepare_whats_new(&self) -> WhatsNewEntriesOutcome {
+        whats_new_entries_outcome(self.whats_new.prepare().await)
     }
 
     pub async fn mark_whats_new_seen(
         &self,
         shipped_at_unix_seconds: u64,
-    ) -> Result<(), CoreError> {
-        self.whats_new.mark_seen(shipped_at_unix_seconds).await
+    ) -> MutationOutcome {
+        mutation_outcome(self.whats_new.mark_seen(shipped_at_unix_seconds).await)
     }
 
     // -- Auth (async) --
@@ -1017,7 +1046,11 @@ impl HighlighterCore {
     /// Resolve the merged set of NIP-50 search relays for the current user —
     /// always includes `wss://relay.highlighter.com`, plus every `relay` tag
     /// from the newest cached kind:10007 (NIP-51 search relay list).
-    pub async fn get_search_relays(&self) -> Result<Vec<String>, CoreError> {
+    pub async fn get_search_relays(&self) -> StringListOutcome {
+        string_list_outcome(self.search_relays().await)
+    }
+
+    async fn search_relays(&self) -> Result<Vec<String>, CoreError> {
         let user_hex = self
             .inner
             .read()
@@ -1028,16 +1061,16 @@ impl HighlighterCore {
         crate::search::query_search_relays(self.runtime.ndb(), &user_hex)
     }
 
-    pub async fn get_recent_searches(&self) -> Result<Vec<String>, CoreError> {
-        self.recent_searches.all().await
+    pub async fn get_recent_searches(&self) -> StringListOutcome {
+        string_list_outcome(self.recent_searches.all().await)
     }
 
-    pub async fn record_recent_search(&self, query: String) -> Result<Vec<String>, CoreError> {
-        self.recent_searches.record(&query).await
+    pub async fn record_recent_search(&self, query: String) -> StringListOutcome {
+        string_list_outcome(self.recent_searches.record(&query).await)
     }
 
-    pub async fn clear_recent_searches(&self) -> Result<Vec<String>, CoreError> {
-        self.recent_searches.clear().await
+    pub async fn clear_recent_searches(&self) -> StringListOutcome {
+        string_list_outcome(self.recent_searches.clear().await)
     }
 
     /// Open a NIP-50 relay subscription for kind:30023 against the user's
@@ -1050,7 +1083,7 @@ impl HighlighterCore {
         if trimmed.is_empty() {
             return Err(CoreError::InvalidInput("search query must not be empty".into()));
         }
-        let relays = self.get_search_relays().await?;
+        let relays = self.search_relays().await?;
         if relays.is_empty() {
             return Err(CoreError::InvalidInput("no search relays resolved".into()));
         }

@@ -762,7 +762,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func checkNip05Availability(name: String) async throws  -> Nip05Availability
 
-    func clearRecentSearches() async throws  -> [String]
+    func clearRecentSearches() async  -> StringListOutcome
 
     /**
      * Create a new empty kind:30004 curation set with `title`. Returns
@@ -985,7 +985,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getRecentBooks(limit: UInt32) async throws  -> [ArtifactRecord]
 
-    func getRecentSearches() async throws  -> [String]
+    func getRecentSearches() async  -> StringListOutcome
 
     /**
      * Snapshot of the live per-relay diagnostics map. One row per URL
@@ -1021,7 +1021,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * always includes `wss://relay.highlighter.com`, plus every `relay` tag
      * from the newest cached kind:10007 (NIP-51 search relay list).
      */
-    func getSearchRelays() async throws  -> [String]
+    func getSearchRelays() async  -> StringListOutcome
 
     func getUserArticles(pubkeyHex: String, limit: UInt32) async throws  -> [ArticleRecord]
 
@@ -1086,13 +1086,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func lookupIsbn(isbn: String) async throws  -> ArtifactPreview
 
-    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async throws
+    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async  -> MutationOutcome
 
     func normalizeNip05Username(input: String)  -> String
 
     func pairBunker(uri: String) async throws  -> CurrentUser
 
-    func prepareWhatsNew() async throws  -> [WhatsNewEntry]
+    func prepareWhatsNew() async  -> WhatsNewEntriesOutcome
 
     /**
      * Fetch the target relay's NIP-11 information document via an HTTPS
@@ -1166,7 +1166,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func reconnectAll() async throws
 
-    func recordRecentSearch(query: String) async throws  -> [String]
+    func recordRecentSearch(query: String) async  -> StringListOutcome
 
     func registerNip05(name: String, domain: String) async throws  -> String
 
@@ -1202,6 +1202,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func searchHighlights(query: String, limit: UInt32) async throws  -> [HighlightRecord]
 
     func searchProfiles(query: String, limit: UInt32) async throws  -> [ProfileMetadata]
+
+    func searchRelays() async throws  -> [String]
 
     /**
      * Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
@@ -1598,9 +1600,9 @@ open func checkNip05Availability(name: String)async throws  -> Nip05Availability
         )
 }
 
-open func clearRecentSearches()async throws  -> [String]  {
+open func clearRecentSearches()async  -> StringListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_clear_recent_searches(
                     self.uniffiClonePointer()
@@ -1610,8 +1612,9 @@ open func clearRecentSearches()async throws  -> [String]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeStringListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2377,9 +2380,9 @@ open func getRecentBooks(limit: UInt32)async throws  -> [ArtifactRecord]  {
         )
 }
 
-open func getRecentSearches()async throws  -> [String]  {
+open func getRecentSearches()async  -> StringListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_recent_searches(
                     self.uniffiClonePointer()
@@ -2389,8 +2392,9 @@ open func getRecentSearches()async throws  -> [String]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeStringListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2503,9 +2507,9 @@ open func getRoomsWithFriends(limit: UInt32)async throws  -> [RoomRecommendation
      * always includes `wss://relay.highlighter.com`, plus every `relay` tag
      * from the newest cached kind:10007 (NIP-51 search relay list).
      */
-open func getSearchRelays()async throws  -> [String]  {
+open func getSearchRelays()async  -> StringListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_search_relays(
                     self.uniffiClonePointer()
@@ -2515,8 +2519,9 @@ open func getSearchRelays()async throws  -> [String]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeStringListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2789,20 +2794,21 @@ open func lookupIsbn(isbn: String)async throws  -> ArtifactPreview  {
         )
 }
 
-open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async throws   {
+open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async  -> MutationOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_mark_whats_new_seen(
                     self.uniffiClonePointer(),
                     FfiConverterUInt64.lower(shippedAtUnixSeconds)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2831,9 +2837,9 @@ open func pairBunker(uri: String)async throws  -> CurrentUser  {
         )
 }
 
-open func prepareWhatsNew()async throws  -> [WhatsNewEntry]  {
+open func prepareWhatsNew()async  -> WhatsNewEntriesOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_prepare_whats_new(
                     self.uniffiClonePointer()
@@ -2843,8 +2849,9 @@ open func prepareWhatsNew()async throws  -> [WhatsNewEntry]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeWhatsNewEntry.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeWhatsNewEntriesOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3085,9 +3092,9 @@ open func reconnectAll()async throws   {
         )
 }
 
-open func recordRecentSearch(query: String)async throws  -> [String]  {
+open func recordRecentSearch(query: String)async  -> StringListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_record_recent_search(
                     self.uniffiClonePointer(),
@@ -3097,8 +3104,9 @@ open func recordRecentSearch(query: String)async throws  -> [String]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeStringListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3276,6 +3284,23 @@ open func searchProfiles(query: String, limit: UInt32)async throws  -> [ProfileM
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeProfileMetadata.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
+open func searchRelays()async throws  -> [String]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_search_relays(
+                    self.uniffiClonePointer()
+
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceString.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -8382,6 +8407,76 @@ public func FfiConverterTypeRoomRecommendation_lower(_ value: RoomRecommendation
 }
 
 
+public struct StringListOutcome {
+    public var values: [String]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [String], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension StringListOutcome: Sendable {}
+#endif
+
+
+extension StringListOutcome: Equatable, Hashable {
+    public static func ==(lhs: StringListOutcome, rhs: StringListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStringListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StringListOutcome {
+        return
+            try StringListOutcome(
+                values: FfiConverterSequenceString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StringListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStringListOutcome_lift(_ buf: RustBuffer) throws -> StringListOutcome {
+    return try FfiConverterTypeStringListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStringListOutcome_lower(_ value: StringListOutcome) -> RustBuffer {
+    return FfiConverterTypeStringListOutcome.lower(value)
+}
+
+
 public struct TranscriptSegment {
     public var id: String
     public var start: Double
@@ -8727,6 +8822,76 @@ public func FfiConverterTypeWebMetadata_lift(_ buf: RustBuffer) throws -> WebMet
 #endif
 public func FfiConverterTypeWebMetadata_lower(_ value: WebMetadata) -> RustBuffer {
     return FfiConverterTypeWebMetadata.lower(value)
+}
+
+
+public struct WhatsNewEntriesOutcome {
+    public var entries: [WhatsNewEntry]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entries: [WhatsNewEntry], error: String) {
+        self.entries = entries
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension WhatsNewEntriesOutcome: Sendable {}
+#endif
+
+
+extension WhatsNewEntriesOutcome: Equatable, Hashable {
+    public static func ==(lhs: WhatsNewEntriesOutcome, rhs: WhatsNewEntriesOutcome) -> Bool {
+        if lhs.entries != rhs.entries {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(entries)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWhatsNewEntriesOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhatsNewEntriesOutcome {
+        return
+            try WhatsNewEntriesOutcome(
+                entries: FfiConverterSequenceTypeWhatsNewEntry.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WhatsNewEntriesOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeWhatsNewEntry.write(value.entries, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhatsNewEntriesOutcome_lift(_ buf: RustBuffer) throws -> WhatsNewEntriesOutcome {
+    return try FfiConverterTypeWhatsNewEntriesOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhatsNewEntriesOutcome_lower(_ value: WhatsNewEntriesOutcome) -> RustBuffer {
+    return FfiConverterTypeWhatsNewEntriesOutcome.lower(value)
 }
 
 
@@ -10869,7 +11034,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 2201) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches() != 38398) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches() != 18871) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set() != 35369) {
@@ -10995,7 +11160,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 33628) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_searches() != 450) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_searches() != 49802) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relay_diagnostics() != 57074) {
@@ -11013,7 +11178,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_rooms_with_friends() != 10603) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_relays() != 43695) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_relays() != 44280) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_articles() != 2405) {
@@ -11067,7 +11232,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_lookup_isbn() != 58236) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_mark_whats_new_seen() != 65066) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_mark_whats_new_seen() != 22420) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_normalize_nip05_username() != 21732) {
@@ -11076,7 +11241,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 63581) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_prepare_whats_new() != 17824) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_prepare_whats_new() != 21865) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_probe_relay_nip11() != 47708) {
@@ -11112,7 +11277,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 18338) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_record_recent_search() != 63261) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_record_recent_search() != 32384) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_register_nip05() != 47895) {
@@ -11143,6 +11308,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_profiles() != 3897) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_search_relays() != 6604) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_address_in_curation_set() != 55665) {

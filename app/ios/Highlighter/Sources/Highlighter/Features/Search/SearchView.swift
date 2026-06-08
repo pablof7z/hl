@@ -73,7 +73,8 @@ struct SearchView: View {
                 store = s
                 await s.start()
             }
-            recentQueries = (try? await app.safeCore.getRecentSearches()) ?? []
+            let outcome = await app.safeCore.getRecentSearches()
+            recentQueries = outcome.error.isEmpty ? outcome.values : []
         }
         .onDisappear {
             store?.stop()
@@ -432,13 +433,19 @@ struct SearchView: View {
         let q = (store?.query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         Task { @MainActor in
-            recentQueries = (try? await app.safeCore.recordRecentSearch(q)) ?? recentQueries
+            let outcome = await app.safeCore.recordRecentSearch(q)
+            if outcome.error.isEmpty {
+                recentQueries = outcome.values
+            }
         }
     }
 
     private func clearRecentQueries() {
         Task { @MainActor in
-            recentQueries = (try? await app.safeCore.clearRecentSearches()) ?? []
+            let outcome = await app.safeCore.clearRecentSearches()
+            if outcome.error.isEmpty {
+                recentQueries = outcome.values
+            }
         }
     }
 

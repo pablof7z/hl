@@ -22,6 +22,18 @@ pub struct MutationOutcome {
     pub error: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct StringListOutcome {
+    pub values: Vec<String>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct WhatsNewEntriesOutcome {
+    pub entries: Vec<crate::whats_new::WhatsNewEntry>,
+    pub error: String,
+}
+
 /// Mirrors `CommunitySummary` in `web/src/lib/ndk/groups.ts:23-35`.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CommunitySummary {
