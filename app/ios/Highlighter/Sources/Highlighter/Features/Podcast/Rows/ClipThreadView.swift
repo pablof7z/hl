@@ -113,17 +113,19 @@ private struct CommentRowView: View {
     let comment: CommentRecord
 
     var body: some View {
+        let author = authorDisplay
+
         HStack(alignment: .top, spacing: 10) {
             AuthorAvatar(
                 pubkey: comment.pubkey,
-                pictureURL: app.profileSnapshots[comment.pubkey]?.picture ?? "",
-                displayInitial: initial,
+                pictureURL: author.pictureUrl,
+                displayInitial: author.displayInitial,
                 size: 26
             )
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(name)
+                    Text(author.displayName)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -148,15 +150,14 @@ private struct CommentRowView: View {
         }
     }
 
-    private var name: String {
-        let profile = app.profileSnapshots[comment.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(comment.pubkey.prefix(10))
-    }
-
-    private var initial: String {
-        name.first.map { String($0).uppercased() } ?? ""
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: comment.pubkey,
+                profile: app.profileSnapshots[comment.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var relativeTime: String? {

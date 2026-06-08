@@ -263,7 +263,7 @@ struct BookmarkedArticleRow: View {
                 }
 
                 HStack(spacing: 4) {
-                    Text(authorName)
+                    Text(authorDisplay.displayName)
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(Color.highlighterInkMuted)
                     if let date = relativeDate {
@@ -313,11 +313,14 @@ struct BookmarkedArticleRow: View {
         }
     }
 
-    private var authorName: String {
-        let profile = app.profileSnapshots[article.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(article.pubkey.prefix(10))
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: article.pubkey,
+                profile: app.profileSnapshots[article.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var relativeDate: String? {
@@ -351,18 +354,9 @@ struct CollectionRow: View {
         record.articleAddresses.count + record.noteIds.count
     }
 
-    private var curatorName: String {
-        let profile = app.profileSnapshots[record.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(record.pubkey.prefix(10))
-    }
-
-    private var curatorInitial: String {
-        curatorName.first.map { String($0).uppercased() } ?? ""
-    }
-
     var body: some View {
+        let curator = curatorDisplay
+
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -382,11 +376,11 @@ struct CollectionRow: View {
                 HStack(spacing: 6) {
                     AuthorAvatar(
                         pubkey: record.pubkey,
-                        pictureURL: app.profileSnapshots[record.pubkey]?.picture ?? "",
-                        displayInitial: curatorInitial,
+                        pictureURL: curator.pictureUrl,
+                        displayInitial: curator.displayInitial,
                         size: 16
                     )
-                    Text(curatorName)
+                    Text(curator.displayName)
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(1)
@@ -417,6 +411,16 @@ struct CollectionRow: View {
         .task(id: record.pubkey) {
             await app.requestProfile(pubkeyHex: record.pubkey)
         }
+    }
+
+    private var curatorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: record.pubkey,
+                profile: app.profileSnapshots[record.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 }
 
