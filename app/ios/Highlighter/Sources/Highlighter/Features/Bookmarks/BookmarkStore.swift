@@ -64,20 +64,24 @@ final class BookmarkStore {
         isLoading = true
         defer { isLoading = false }
 
-        async let sets = (try? await core.getMyBookmarkSets()) ?? []
-        async let curations = (try? await core.getMyCurationSets()) ?? []
-        async let webs = (try? await core.getMyWebBookmarks()) ?? []
-        async let following = (try? await core.getFollowingCurationSets()) ?? []
+        async let setsOutcome = core.getMyBookmarkSets()
+        async let curationsOutcome = core.getMyCurationSets()
+        async let websOutcome = core.getMyWebBookmarks()
+        async let followingOutcome = core.getFollowingCurationSets()
 
-        myBookmarkSets = await sets
-        myCurationSets = await curations
-        myWebBookmarks = await webs
+        let sets = await setsOutcome
+        let curations = await curationsOutcome
+        let webs = await websOutcome
+        myBookmarkSets = sets.error.isEmpty ? sets.values : []
+        myCurationSets = curations.error.isEmpty ? curations.values : []
+        myWebBookmarks = webs.error.isEmpty ? webs.values : []
 
         // Drop curations from Explore that would render as "Empty Collection"
         // — either zero items at all, or every articleAddress fails to resolve
         // against the local NostrDB cache and there are no note refs to
         // fall back on. Mine keeps empty sets so authors can edit drafts.
-        let raw = await following
+        let following = await followingOutcome
+        let raw = following.error.isEmpty ? following.values : []
         followingCurationSets = await Self.dropEmpty(raw, core: core)
     }
 

@@ -769,7 +769,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * the freshly published record so the UI can immediately use its
      * `id` (d-tag) to add items.
      */
-    func createCurationSet(title: String) async throws  -> BookmarkSetRecord
+    func createCurationSet(title: String) async  -> BookmarkSetOutcome
 
     /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
@@ -895,7 +895,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     /**
      * Return kind:30004 curation sets from users the current user follows.
      */
-    func getFollowingCurationSets() async throws  -> [BookmarkSetRecord]
+    func getFollowingCurationSets() async  -> BookmarkSetListOutcome
 
     /**
      * Highlights home feed — kind:9802 events authored by follows plus
@@ -940,19 +940,19 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     /**
      * Return all kind:30003 bookmark sets authored by the current user.
      */
-    func getMyBookmarkSets() async throws  -> [BookmarkSetRecord]
+    func getMyBookmarkSets() async  -> BookmarkSetListOutcome
 
     /**
      * Return all kind:30004 curation sets authored by the current user.
      */
-    func getMyCurationSets() async throws  -> [BookmarkSetRecord]
+    func getMyCurationSets() async  -> BookmarkSetListOutcome
 
     func getMyHighlights(limit: UInt32) async throws  -> [HighlightRecord]
 
     /**
      * Return all NIP-B0 kind:39701 web bookmarks authored by the current user.
      */
-    func getMyWebBookmarks() async throws  -> [WebBookmarkRecord]
+    func getMyWebBookmarks() async  -> WebBookmarkListOutcome
 
     /**
      * The N most-recently-seen rooms. Same underlying query as
@@ -1211,7 +1211,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * by `d_tag`. `member == true` ensures presence; `false` ensures
      * absence. Returns the new membership state.
      */
-    func setAddressInCurationSet(dTag: String, address: String, member: Bool) async throws  -> Bool
+    func setAddressInCurationSet(dTag: String, address: String, member: Bool) async  -> BoolOutcome
 
     /**
      * Replace the user's Blossom server list with `servers` (must be
@@ -1623,9 +1623,9 @@ open func clearRecentSearches()async  -> StringListOutcome  {
      * the freshly published record so the UI can immediately use its
      * `id` (d-tag) to add items.
      */
-open func createCurationSet(title: String)async throws  -> BookmarkSetRecord  {
+open func createCurationSet(title: String)async  -> BookmarkSetOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_create_curation_set(
                     self.uniffiClonePointer(),
@@ -1635,8 +1635,9 @@ open func createCurationSet(title: String)async throws  -> BookmarkSetRecord  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBookmarkSetRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeBookmarkSetOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2040,9 +2041,9 @@ open func getFeedbackThreads(coordinate: String)async throws  -> [FeedbackThread
     /**
      * Return kind:30004 curation sets from users the current user follows.
      */
-open func getFollowingCurationSets()async throws  -> [BookmarkSetRecord]  {
+open func getFollowingCurationSets()async  -> BookmarkSetListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_following_curation_sets(
                     self.uniffiClonePointer()
@@ -2052,8 +2053,9 @@ open func getFollowingCurationSets()async throws  -> [BookmarkSetRecord]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeBookmarkSetRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeBookmarkSetListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2205,9 +2207,9 @@ open func getJoinedCommunities()async throws  -> [CommunitySummary]  {
     /**
      * Return all kind:30003 bookmark sets authored by the current user.
      */
-open func getMyBookmarkSets()async throws  -> [BookmarkSetRecord]  {
+open func getMyBookmarkSets()async  -> BookmarkSetListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_my_bookmark_sets(
                     self.uniffiClonePointer()
@@ -2217,17 +2219,18 @@ open func getMyBookmarkSets()async throws  -> [BookmarkSetRecord]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeBookmarkSetRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeBookmarkSetListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
     /**
      * Return all kind:30004 curation sets authored by the current user.
      */
-open func getMyCurationSets()async throws  -> [BookmarkSetRecord]  {
+open func getMyCurationSets()async  -> BookmarkSetListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_my_curation_sets(
                     self.uniffiClonePointer()
@@ -2237,8 +2240,9 @@ open func getMyCurationSets()async throws  -> [BookmarkSetRecord]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeBookmarkSetRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeBookmarkSetListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2262,9 +2266,9 @@ open func getMyHighlights(limit: UInt32)async throws  -> [HighlightRecord]  {
     /**
      * Return all NIP-B0 kind:39701 web bookmarks authored by the current user.
      */
-open func getMyWebBookmarks()async throws  -> [WebBookmarkRecord]  {
+open func getMyWebBookmarks()async  -> WebBookmarkListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_my_web_bookmarks(
                     self.uniffiClonePointer()
@@ -2274,8 +2278,9 @@ open func getMyWebBookmarks()async throws  -> [WebBookmarkRecord]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeWebBookmarkRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeWebBookmarkListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3314,20 +3319,21 @@ open func searchRelays()async throws  -> [String]  {
      * by `d_tag`. `member == true` ensures presence; `false` ensures
      * absence. Returns the new membership state.
      */
-open func setAddressInCurationSet(dTag: String, address: String, member: Bool)async throws  -> Bool  {
+open func setAddressInCurationSet(dTag: String, address: String, member: Bool)async  -> BoolOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_set_address_in_curation_set(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(dTag),FfiConverterString.lower(address),FfiConverterBool.lower(member)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBoolOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -5001,6 +5007,146 @@ public func FfiConverterTypeBlossomUpload_lift(_ buf: RustBuffer) throws -> Blos
 #endif
 public func FfiConverterTypeBlossomUpload_lower(_ value: BlossomUpload) -> RustBuffer {
     return FfiConverterTypeBlossomUpload.lower(value)
+}
+
+
+public struct BookmarkSetListOutcome {
+    public var values: [BookmarkSetRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [BookmarkSetRecord], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkSetListOutcome: Sendable {}
+#endif
+
+
+extension BookmarkSetListOutcome: Equatable, Hashable {
+    public static func ==(lhs: BookmarkSetListOutcome, rhs: BookmarkSetListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkSetListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetListOutcome {
+        return
+            try BookmarkSetListOutcome(
+                values: FfiConverterSequenceTypeBookmarkSetRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkSetListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeBookmarkSetRecord.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetListOutcome_lift(_ buf: RustBuffer) throws -> BookmarkSetListOutcome {
+    return try FfiConverterTypeBookmarkSetListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetListOutcome_lower(_ value: BookmarkSetListOutcome) -> RustBuffer {
+    return FfiConverterTypeBookmarkSetListOutcome.lower(value)
+}
+
+
+public struct BookmarkSetOutcome {
+    public var value: BookmarkSetRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: BookmarkSetRecord?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkSetOutcome: Sendable {}
+#endif
+
+
+extension BookmarkSetOutcome: Equatable, Hashable {
+    public static func ==(lhs: BookmarkSetOutcome, rhs: BookmarkSetOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkSetOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetOutcome {
+        return
+            try BookmarkSetOutcome(
+                value: FfiConverterOptionTypeBookmarkSetRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkSetOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeBookmarkSetRecord.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetOutcome_lift(_ buf: RustBuffer) throws -> BookmarkSetOutcome {
+    return try FfiConverterTypeBookmarkSetOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetOutcome_lower(_ value: BookmarkSetOutcome) -> RustBuffer {
+    return FfiConverterTypeBookmarkSetOutcome.lower(value)
 }
 
 
@@ -8734,6 +8880,76 @@ public func FfiConverterTypeTranscriptSegment_lower(_ value: TranscriptSegment) 
 }
 
 
+public struct WebBookmarkListOutcome {
+    public var values: [WebBookmarkRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [WebBookmarkRecord], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension WebBookmarkListOutcome: Sendable {}
+#endif
+
+
+extension WebBookmarkListOutcome: Equatable, Hashable {
+    public static func ==(lhs: WebBookmarkListOutcome, rhs: WebBookmarkListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWebBookmarkListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebBookmarkListOutcome {
+        return
+            try WebBookmarkListOutcome(
+                values: FfiConverterSequenceTypeWebBookmarkRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WebBookmarkListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeWebBookmarkRecord.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebBookmarkListOutcome_lift(_ buf: RustBuffer) throws -> WebBookmarkListOutcome {
+    return try FfiConverterTypeWebBookmarkListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebBookmarkListOutcome_lower(_ value: WebBookmarkListOutcome) -> RustBuffer {
+    return FfiConverterTypeWebBookmarkListOutcome.lower(value)
+}
+
+
 /**
  * One NIP-B0 web bookmark (kind:39701). The `d` tag is the URL without
  * scheme; we always prepend `https://` when surfacing it to Swift.
@@ -10404,6 +10620,30 @@ fileprivate struct FfiConverterOptionTypeBlossomUpload: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeBookmarkSetRecord: FfiConverterRustBuffer {
+    typealias SwiftType = BookmarkSetRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBookmarkSetRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBookmarkSetRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeCurrentUser: FfiConverterRustBuffer {
     typealias SwiftType = CurrentUser?
 
@@ -11200,7 +11440,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches() != 18871) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set() != 35369) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set() != 614) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 43966) {
@@ -11269,7 +11509,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_feedback_threads() != 39148) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_curation_sets() != 5953) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_curation_sets() != 3269) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_highlights() != 12124) {
@@ -11293,16 +11533,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 31741) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_bookmark_sets() != 11257) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_bookmark_sets() != 59737) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_curation_sets() != 52536) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_curation_sets() != 7638) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_highlights() != 10939) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_web_bookmarks() != 49630) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_web_bookmarks() != 39742) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_new_rooms() != 38074) {
@@ -11476,7 +11716,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_relays() != 6604) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_address_in_curation_set() != 55665) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_address_in_curation_set() != 8659) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_blossom_servers() != 8768) {

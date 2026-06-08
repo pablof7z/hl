@@ -41,6 +41,24 @@ pub struct SubscriptionOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkSetListOutcome {
+    pub values: Vec<BookmarkSetRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkSetOutcome {
+    pub value: Option<BookmarkSetRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct WebBookmarkListOutcome {
+    pub values: Vec<WebBookmarkRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct WhatsNewEntriesOutcome {
     pub entries: Vec<crate::whats_new::WhatsNewEntry>,
     pub error: String,

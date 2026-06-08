@@ -25,11 +25,12 @@ use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactPreview, ArtifactRecord, BlossomUpload,
-    BoolOutcome, ChatMessageRecord, CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord,
-    FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft, HighlightRecord,
-    HydratedHighlight, MutationOutcome, NostrConnectOptions, PictureDraft, PictureRecord,
-    PodcastPositionRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
-    StringListOutcome, SubscriptionOutcome, WhatsNewEntriesOutcome,
+    BookmarkSetListOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, ChatMessageRecord,
+    CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord, FeedbackEventRecord,
+    FeedbackThreadRecord, HighlightDraft, HighlightRecord, HydratedHighlight, MutationOutcome,
+    NostrConnectOptions, PictureDraft, PictureRecord, PodcastPositionRecord, ProfileMetadata,
+    ReadingFeedItem, RoomRecommendation, StringListOutcome, SubscriptionOutcome,
+    WebBookmarkListOutcome, WebBookmarkRecord, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -130,6 +131,49 @@ fn subscription_outcome(result: Result<u64, CoreError>) -> SubscriptionOutcome {
         },
         Err(error) => SubscriptionOutcome {
             handle: 0,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn bookmark_set_list_outcome(
+    result: Result<Vec<BookmarkSetRecord>, CoreError>,
+) -> BookmarkSetListOutcome {
+    match result {
+        Ok(values) => BookmarkSetListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => BookmarkSetListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn bookmark_set_outcome(result: Result<BookmarkSetRecord, CoreError>) -> BookmarkSetOutcome {
+    match result {
+        Ok(value) => BookmarkSetOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => BookmarkSetOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn web_bookmark_list_outcome(
+    result: Result<Vec<WebBookmarkRecord>, CoreError>,
+) -> WebBookmarkListOutcome {
+    match result {
+        Ok(values) => WebBookmarkListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => WebBookmarkListOutcome {
+            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -1254,25 +1298,35 @@ impl HighlighterCore {
     // -- NIP-51 Bookmark sets (kind:30003) / Curation sets (kind:30004) -----
 
     /// Return all kind:30003 bookmark sets authored by the current user.
-    pub async fn get_my_bookmark_sets(&self) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
+    pub async fn get_my_bookmark_sets(&self) -> BookmarkSetListOutcome {
         let user_hex = self.inner.read().session.current_user()
             .map(|u| u.pubkey).unwrap_or_default();
-        crate::lists::query_user_sets(self.runtime.ndb(), &user_hex, crate::lists::KIND_BOOKMARK_SETS)
+        bookmark_set_list_outcome(crate::lists::query_user_sets(
+            self.runtime.ndb(),
+            &user_hex,
+            crate::lists::KIND_BOOKMARK_SETS,
+        ))
     }
 
     /// Return all kind:30004 curation sets authored by the current user.
-    pub async fn get_my_curation_sets(&self) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
+    pub async fn get_my_curation_sets(&self) -> BookmarkSetListOutcome {
         let user_hex = self.inner.read().session.current_user()
             .map(|u| u.pubkey).unwrap_or_default();
-        crate::lists::query_user_sets(self.runtime.ndb(), &user_hex, crate::lists::KIND_CURATION_SETS)
+        bookmark_set_list_outcome(crate::lists::query_user_sets(
+            self.runtime.ndb(),
+            &user_hex,
+            crate::lists::KIND_CURATION_SETS,
+        ))
     }
 
     /// Return kind:30004 curation sets from users the current user follows.
-    pub async fn get_following_curation_sets(&self) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).unwrap_or_default();
-        let follows = crate::follows::query_follows(self.runtime.ndb(), &user_hex)?;
-        crate::lists::query_following_curation_sets(self.runtime.ndb(), &follows)
+    pub async fn get_following_curation_sets(&self) -> BookmarkSetListOutcome {
+        bookmark_set_list_outcome((|| {
+            let user_hex = self.inner.read().session.current_user()
+                .map(|u| u.pubkey).unwrap_or_default();
+            let follows = crate::follows::query_follows(self.runtime.ndb(), &user_hex)?;
+            crate::lists::query_following_curation_sets(self.runtime.ndb(), &follows)
+        })())
     }
 
     /// Create a new empty kind:30004 curation set with `title`. Returns
@@ -1281,21 +1335,25 @@ impl HighlighterCore {
     pub async fn create_curation_set(
         &self,
         title: String,
-    ) -> Result<crate::models::BookmarkSetRecord, CoreError> {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .ok_or(CoreError::NotAuthenticated)?;
-        crate::lists::create_curation_set(
-            &self.runtime,
-            &user_hex,
-            title.trim(),
-            self.clock.as_ref(),
-        )
-        .await
+    ) -> BookmarkSetOutcome {
+        let result: Result<BookmarkSetRecord, CoreError> = async {
+            let user_hex = self
+                .inner
+                .read()
+                .session
+                .current_user()
+                .map(|u| u.pubkey)
+                .ok_or(CoreError::NotAuthenticated)?;
+            crate::lists::create_curation_set(
+                &self.runtime,
+                &user_hex,
+                title.trim(),
+                self.clock.as_ref(),
+            )
+            .await
+        }
+        .await;
+        bookmark_set_outcome(result)
     }
 
     /// Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
@@ -1307,17 +1365,21 @@ impl HighlighterCore {
         d_tag: String,
         address: String,
         member: bool,
-    ) -> Result<bool, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).ok_or(CoreError::NotAuthenticated)?;
-        crate::lists::set_address_in_curation_set(
-            &self.runtime,
-            &user_hex,
-            d_tag.trim(),
-            address.trim(),
-            member,
-        )
-        .await
+    ) -> BoolOutcome {
+        let result: Result<bool, CoreError> = async {
+            let user_hex = self.inner.read().session.current_user()
+                .map(|u| u.pubkey).ok_or(CoreError::NotAuthenticated)?;
+            crate::lists::set_address_in_curation_set(
+                &self.runtime,
+                &user_hex,
+                d_tag.trim(),
+                address.trim(),
+                member,
+            )
+            .await
+        }
+        .await;
+        bool_outcome(result)
     }
 
     /// Open a live subscription for the current user's kind:30003/30004 sets.
@@ -1349,10 +1411,13 @@ impl HighlighterCore {
     // -- NIP-B0 Web bookmarks (kind:39701) -----------------------------------
 
     /// Return all NIP-B0 kind:39701 web bookmarks authored by the current user.
-    pub async fn get_my_web_bookmarks(&self) -> Result<Vec<crate::models::WebBookmarkRecord>, CoreError> {
+    pub async fn get_my_web_bookmarks(&self) -> WebBookmarkListOutcome {
         let user_hex = self.inner.read().session.current_user()
             .map(|u| u.pubkey).unwrap_or_default();
-        crate::lists::query_user_web_bookmarks(self.runtime.ndb(), &user_hex)
+        web_bookmark_list_outcome(crate::lists::query_user_web_bookmarks(
+            self.runtime.ndb(),
+            &user_hex,
+        ))
     }
 
     /// Open a live subscription for the current user's NIP-B0 kind:39701 events.

@@ -86,37 +86,42 @@ struct BookmarkMenuButton: View {
     // MARK: - Actions
 
     private func loadCurations() async {
-        if let sets = try? await app.safeCore.getMyCurationSets() {
-            curationSets = sets.sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
+        let outcome = await app.safeCore.getMyCurationSets()
+        if outcome.error.isEmpty {
+            curationSets = outcome.values.sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
         }
     }
 
     private func toggleInCuration(_ set: BookmarkSetRecord) async {
         let nowMember = !set.articleAddresses.contains(articleAddress)
-        do {
-            try await app.safeCore.setAddressInCurationSet(
-                dTag: set.id,
-                address: articleAddress,
-                member: nowMember
-            )
-            await loadCurations()
-        } catch {
-            errorMessage = "Couldn't update collection — \(error.localizedDescription)"
+        let outcome = await app.safeCore.setAddressInCurationSet(
+            dTag: set.id,
+            address: articleAddress,
+            member: nowMember
+        )
+        guard outcome.error.isEmpty else {
+            errorMessage = "Couldn't update collection — \(outcome.error)"
+            return
         }
+        await loadCurations()
     }
 
     private func createAndAdd(title: String) async {
-        do {
-            let newSet = try await app.safeCore.createCurationSet(title: title)
-            try await app.safeCore.setAddressInCurationSet(
-                dTag: newSet.id,
-                address: articleAddress,
-                member: true
-            )
-            await loadCurations()
-        } catch {
-            errorMessage = "Couldn't create collection — \(error.localizedDescription)"
+        let createOutcome = await app.safeCore.createCurationSet(title: title)
+        guard createOutcome.error.isEmpty, let newSet = createOutcome.value else {
+            errorMessage = "Couldn't create collection — \(createOutcome.error)"
+            return
         }
+        let updateOutcome = await app.safeCore.setAddressInCurationSet(
+            dTag: newSet.id,
+            address: articleAddress,
+            member: true
+        )
+        guard updateOutcome.error.isEmpty else {
+            errorMessage = "Couldn't create collection — \(updateOutcome.error)"
+            return
+        }
+        await loadCurations()
     }
 }
 

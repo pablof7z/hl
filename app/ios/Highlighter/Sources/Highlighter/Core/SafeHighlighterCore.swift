@@ -189,20 +189,20 @@ actor SafeHighlighterCore {
 
     // MARK: - Bookmark sets (kind:30003/30004) + NIP-B0 (kind:39701)
 
-    func getMyBookmarkSets() async throws -> [BookmarkSetRecord] {
-        try await core.getMyBookmarkSets()
+    func getMyBookmarkSets() async -> BookmarkSetListOutcome {
+        await core.getMyBookmarkSets()
     }
 
-    func getMyCurationSets() async throws -> [BookmarkSetRecord] {
-        try await core.getMyCurationSets()
+    func getMyCurationSets() async -> BookmarkSetListOutcome {
+        await core.getMyCurationSets()
     }
 
-    func getFollowingCurationSets() async throws -> [BookmarkSetRecord] {
-        try await core.getFollowingCurationSets()
+    func getFollowingCurationSets() async -> BookmarkSetListOutcome {
+        await core.getFollowingCurationSets()
     }
 
-    func createCurationSet(title: String) async throws -> BookmarkSetRecord {
-        try await core.createCurationSet(title: title)
+    func createCurationSet(title: String) async -> BookmarkSetOutcome {
+        await core.createCurationSet(title: title)
     }
 
     @discardableResult
@@ -210,12 +210,12 @@ actor SafeHighlighterCore {
         dTag: String,
         address: String,
         member: Bool
-    ) async throws -> Bool {
-        try await core.setAddressInCurationSet(dTag: dTag, address: address, member: member)
+    ) async -> BoolOutcome {
+        await core.setAddressInCurationSet(dTag: dTag, address: address, member: member)
     }
 
-    func getMyWebBookmarks() async throws -> [WebBookmarkRecord] {
-        try await core.getMyWebBookmarks()
+    func getMyWebBookmarks() async -> WebBookmarkListOutcome {
+        await core.getMyWebBookmarks()
     }
 
     func subscribeBookmarkSets() async -> SubscriptionOutcome {
