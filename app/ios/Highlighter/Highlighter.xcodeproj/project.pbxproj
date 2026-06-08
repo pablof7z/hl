@@ -138,7 +138,6 @@
 		DBC69C0AC92ADF0903D5A425 /* ArticleCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD1A74201AF79434686C29ED /* ArticleCardView.swift */; };
 		DEF4ACD6D408D383F02A9C06 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = FD0A18959E4BA82ABE8BFBEE /* Kingfisher */; };
 		DF784373FE6F0996F8977D58 /* CommentRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DF2DE8B8D4347D4452B125A /* CommentRow.swift */; };
-		E0549D64A4E31AF73C9559F7 /* BlossomUploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE3EF2251578795CB04FF8D /* BlossomUploadService.swift */; };
 		E189108442C1D089B08D86E1 /* BookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3332EE4B83004D917A911C0E /* BookView.swift */; };
 		E1DE5A510F8579130B9FDDB1 /* NetworkSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE61609ED1748D762B7AF2EF /* NetworkSettingsStore.swift */; };
 		E2B394240768E5BA1E5C0316 /* MemberClipRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45C5D176CF84968D1BAED116 /* MemberClipRow.swift */; };
@@ -214,7 +213,6 @@
 		2552561394149D90168EC42C /* AddRelaySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddRelaySheet.swift; sourceTree = "<group>"; };
 		27DCF425EDBAC6B55009CBDE /* RoomLibraryPodcastCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomLibraryPodcastCardView.swift; sourceTree = "<group>"; };
 		2A232DA7DFDD08CEBA3B00FA /* DiscussionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscussionStore.swift; sourceTree = "<group>"; };
-		2AE3EF2251578795CB04FF8D /* BlossomUploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlossomUploadService.swift; sourceTree = "<group>"; };
 		2BD73D2989DCC5506509E5E3 /* BookmarkStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkStore.swift; sourceTree = "<group>"; };
 		30449650DF82730BEB6A17F1 /* EditProfileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileSheet.swift; sourceTree = "<group>"; };
 		30929C05472617D818D66641 /* MarkdownRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownRenderer.swift; sourceTree = "<group>"; };
@@ -564,7 +562,6 @@
 				093EDF3DDEC4D29F185B1BE6 /* Design */,
 				CE21EC935C6FD4490C764A79 /* Generated */,
 				4F2A3D1DA07539990A652979 /* RichText */,
-				2AE3EF2251578795CB04FF8D /* BlossomUploadService.swift */,
 				93C2998FA6F33E28DFCFAE50 /* EventBridge.swift */,
 				C68126D4A3083806ED488835 /* HighlighterStore.swift */,
 				FFB98694B90B62FBE7A589BF /* SafeHighlighterCore.swift */,
@@ -943,7 +940,6 @@
 				9FB49584EE11ABBB0474EBF3 /* ArtifactPreviewBuilder.swift in Sources */,
 				102BB60FA5DE023CB422ECBD /* ArtifactRef.swift in Sources */,
 				F4BB417D04CB238F9D18B078 /* AuthorAvatar.swift in Sources */,
-				E0549D64A4E31AF73C9559F7 /* BlossomUploadService.swift in Sources */,
 				0948ABBDC86FE631072D63E1 /* BookPicker.swift in Sources */,
 				BC11D8316DA1E122A07C7F3F /* BookScannerModel.swift in Sources */,
 				4EBC803A932362F2FF3759BF /* BookScannerView.swift in Sources */,
