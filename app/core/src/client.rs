@@ -3290,6 +3290,13 @@ impl HighlighterCore {
     /// kind:9002 (edit-metadata) signed by the current user. Returns the
     /// freshly-generated group id on success — the relay's 39000/39001/39002
     /// follow-up events drive the iOS membership stream automatically.
+    pub fn project_create_room(
+        &self,
+        input: groups::CreateRoomProjectionInput,
+    ) -> groups::CreateRoomProjection {
+        groups::create_room_projection(input)
+    }
+
     pub async fn create_room(
         &self,
         name: String,

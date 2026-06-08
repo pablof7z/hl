@@ -280,6 +280,37 @@ pub enum RoomAccess {
     Closed,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomProjectionInput {
+    pub name: String,
+    pub about: String,
+    pub visibility: RoomVisibility,
+    pub access: RoomAccess,
+    pub is_creating: bool,
+    pub cover_is_uploading: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomVisibilityOption {
+    pub id: String,
+    pub title: String,
+    pub summary: String,
+    pub glyph: String,
+    pub visibility: RoomVisibility,
+    pub access: RoomAccess,
+    pub is_selected: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomProjection {
+    pub can_create: bool,
+    pub create_name: String,
+    pub create_about: String,
+    pub visibility_glyph: String,
+    pub visibility_summary: String,
+    pub visibility_options: Vec<CreateRoomVisibilityOption>,
+}
+
 impl RoomVisibility {
     fn marker(self) -> &'static str {
         match self {
@@ -296,6 +327,83 @@ impl RoomAccess {
             Self::Closed => "closed",
         }
     }
+}
+
+pub fn create_room_projection(input: CreateRoomProjectionInput) -> CreateRoomProjection {
+    let create_name = input.name.trim().to_string();
+    let create_about = input.about.trim().to_string();
+    let (visibility_glyph, visibility_summary) =
+        create_room_visibility_display(input.visibility, input.access);
+
+    CreateRoomProjection {
+        can_create: create_name.chars().count() >= 2
+            && !input.is_creating
+            && !input.cover_is_uploading,
+        create_name,
+        create_about,
+        visibility_glyph: visibility_glyph.into(),
+        visibility_summary: visibility_summary.into(),
+        visibility_options: create_room_visibility_options(input.visibility, input.access),
+    }
+}
+
+fn create_room_visibility_display(
+    visibility: RoomVisibility,
+    access: RoomAccess,
+) -> (&'static str, &'static str) {
+    match (visibility, access) {
+        (RoomVisibility::Public, RoomAccess::Open) => ("globe", "Public · Anyone can join"),
+        (RoomVisibility::Public, RoomAccess::Closed) => {
+            ("globe.badge.chevron.backward", "Public · You approve joins")
+        }
+        (RoomVisibility::Private, _) => ("lock", "Private · Invite only"),
+    }
+}
+
+fn create_room_visibility_options(
+    selected_visibility: RoomVisibility,
+    selected_access: RoomAccess,
+) -> Vec<CreateRoomVisibilityOption> {
+    [
+        (
+            "public-open",
+            "Public",
+            "Anyone can find and join this room.",
+            "globe",
+            RoomVisibility::Public,
+            RoomAccess::Open,
+        ),
+        (
+            "public-closed",
+            "Public · By approval",
+            "Anyone can find it, but you approve who joins.",
+            "globe.badge.chevron.backward",
+            RoomVisibility::Public,
+            RoomAccess::Closed,
+        ),
+        (
+            "private",
+            "Private",
+            "Hidden from the explorer. Invite only.",
+            "lock",
+            RoomVisibility::Private,
+            RoomAccess::Closed,
+        ),
+    ]
+    .into_iter()
+    .map(
+        |(id, title, summary, glyph, visibility, access)| CreateRoomVisibilityOption {
+            id: id.into(),
+            title: title.into(),
+            summary: summary.into(),
+            glyph: glyph.into(),
+            visibility,
+            access,
+            is_selected: visibility == selected_visibility
+                && (visibility == RoomVisibility::Private || access == selected_access),
+        },
+    )
+    .collect()
 }
 
 /// Generate a fresh NIP-29 group identifier. Must match `[a-z0-9-_]+`. Uses
@@ -887,6 +995,88 @@ mod tests {
         assert_eq!(out[0].id, "solo");
         assert_eq!(out[0].name, "solo");
         assert_eq!(out[0].admin_pubkeys, vec![me.public_key().to_hex()]);
+    }
+
+    #[test]
+    fn create_room_projection_trims_and_enables_create() {
+        let projection = create_room_projection(CreateRoomProjectionInput {
+            name: "  HL Book Club  ".into(),
+            about: "  Reading together  ".into(),
+            visibility: RoomVisibility::Public,
+            access: RoomAccess::Open,
+            is_creating: false,
+            cover_is_uploading: false,
+        });
+
+        assert!(projection.can_create);
+        assert_eq!(projection.create_name, "HL Book Club");
+        assert_eq!(projection.create_about, "Reading together");
+        assert_eq!(projection.visibility_glyph, "globe");
+        assert_eq!(projection.visibility_summary, "Public · Anyone can join");
+        assert_eq!(projection.visibility_options.len(), 3);
+        assert!(projection.visibility_options[0].is_selected);
+        assert!(!projection.visibility_options[1].is_selected);
+        assert!(!projection.visibility_options[2].is_selected);
+    }
+
+    #[test]
+    fn create_room_projection_enforces_min_name_and_busy_flags() {
+        let short = create_room_projection(CreateRoomProjectionInput {
+            name: " a ".into(),
+            about: String::new(),
+            visibility: RoomVisibility::Public,
+            access: RoomAccess::Open,
+            is_creating: false,
+            cover_is_uploading: false,
+        });
+        assert!(!short.can_create);
+
+        let creating = create_room_projection(CreateRoomProjectionInput {
+            name: "Room".into(),
+            about: String::new(),
+            visibility: RoomVisibility::Public,
+            access: RoomAccess::Open,
+            is_creating: true,
+            cover_is_uploading: false,
+        });
+        assert!(!creating.can_create);
+
+        let uploading = create_room_projection(CreateRoomProjectionInput {
+            name: "Room".into(),
+            about: String::new(),
+            visibility: RoomVisibility::Public,
+            access: RoomAccess::Open,
+            is_creating: false,
+            cover_is_uploading: true,
+        });
+        assert!(!uploading.can_create);
+    }
+
+    #[test]
+    fn create_room_projection_matches_visibility_copy_and_private_selection() {
+        let closed = create_room_projection(CreateRoomProjectionInput {
+            name: "Room".into(),
+            about: String::new(),
+            visibility: RoomVisibility::Public,
+            access: RoomAccess::Closed,
+            is_creating: false,
+            cover_is_uploading: false,
+        });
+        assert_eq!(closed.visibility_glyph, "globe.badge.chevron.backward");
+        assert_eq!(closed.visibility_summary, "Public · You approve joins");
+        assert!(closed.visibility_options[1].is_selected);
+
+        let private = create_room_projection(CreateRoomProjectionInput {
+            name: "Room".into(),
+            about: String::new(),
+            visibility: RoomVisibility::Private,
+            access: RoomAccess::Open,
+            is_creating: false,
+            cover_is_uploading: false,
+        });
+        assert_eq!(private.visibility_glyph, "lock");
+        assert_eq!(private.visibility_summary, "Private · Invite only");
+        assert!(private.visibility_options[2].is_selected);
     }
 
     #[test]

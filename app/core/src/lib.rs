@@ -56,6 +56,10 @@ pub mod whats_new;
 pub use client::HighlighterCore;
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
+pub use groups::{
+    CreateRoomProjection, CreateRoomProjectionInput, CreateRoomVisibilityOption, RoomAccess,
+    RoomVisibility,
+};
 pub use models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactListOutcome, ArtifactOutcome,

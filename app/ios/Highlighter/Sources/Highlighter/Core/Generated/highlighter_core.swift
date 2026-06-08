@@ -833,12 +833,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func createCurationSet(title: String) async  -> BookmarkSetOutcome
 
-    /**
-     * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
-     * kind:9002 (edit-metadata) signed by the current user. Returns the
-     * freshly-generated group id on success — the relay's 39000/39001/39002
-     * follow-up events drive the iOS membership stream automatically.
-     */
     func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async  -> StringOutcome
 
     /**
@@ -1403,6 +1397,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func probeRelayNip11(url: String) async  -> Nip11DocumentOutcome
 
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
+
+    /**
+     * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
+     * kind:9002 (edit-metadata) signed by the current user. Returns the
+     * freshly-generated group id on success — the relay's 39000/39001/39002
+     * follow-up events drive the iOS membership stream automatically.
+     */
+    func projectCreateRoom(input: CreateRoomProjectionInput)  -> CreateRoomProjection
 
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
@@ -2130,12 +2132,6 @@ open func createCurationSet(title: String)async  -> BookmarkSetOutcome  {
         )
 }
 
-    /**
-     * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
-     * kind:9002 (edit-metadata) signed by the current user. Returns the
-     * freshly-generated group id on success — the relay's 39000/39001/39002
-     * follow-up events drive the iOS membership stream automatically.
-     */
 open func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess)async  -> StringOutcome  {
     return
         try!  await uniffiRustCallAsync(
@@ -4095,6 +4091,20 @@ open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelayS
     return try!  FfiConverterTypeAddRelaySheetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_add_relay_sheet(self.uniffiClonePointer(),
         FfiConverterTypeAddRelaySheetProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
+     * kind:9002 (edit-metadata) signed by the current user. Returns the
+     * freshly-generated group id on success — the relay's 39000/39001/39002
+     * follow-up events drive the iOS membership stream automatically.
+     */
+open func projectCreateRoom(input: CreateRoomProjectionInput) -> CreateRoomProjection  {
+    return try!  FfiConverterTypeCreateRoomProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_create_room(self.uniffiClonePointer(),
+        FfiConverterTypeCreateRoomProjectionInput_lower(input),$0
     )
 })
 }
@@ -9245,6 +9255,320 @@ public func FfiConverterTypeCommunitySummary_lift(_ buf: RustBuffer) throws -> C
 #endif
 public func FfiConverterTypeCommunitySummary_lower(_ value: CommunitySummary) -> RustBuffer {
     return FfiConverterTypeCommunitySummary.lower(value)
+}
+
+
+public struct CreateRoomProjection {
+    public var canCreate: Bool
+    public var createName: String
+    public var createAbout: String
+    public var visibilityGlyph: String
+    public var visibilitySummary: String
+    public var visibilityOptions: [CreateRoomVisibilityOption]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(canCreate: Bool, createName: String, createAbout: String, visibilityGlyph: String, visibilitySummary: String, visibilityOptions: [CreateRoomVisibilityOption]) {
+        self.canCreate = canCreate
+        self.createName = createName
+        self.createAbout = createAbout
+        self.visibilityGlyph = visibilityGlyph
+        self.visibilitySummary = visibilitySummary
+        self.visibilityOptions = visibilityOptions
+    }
+}
+
+#if compiler(>=6)
+extension CreateRoomProjection: Sendable {}
+#endif
+
+
+extension CreateRoomProjection: Equatable, Hashable {
+    public static func ==(lhs: CreateRoomProjection, rhs: CreateRoomProjection) -> Bool {
+        if lhs.canCreate != rhs.canCreate {
+            return false
+        }
+        if lhs.createName != rhs.createName {
+            return false
+        }
+        if lhs.createAbout != rhs.createAbout {
+            return false
+        }
+        if lhs.visibilityGlyph != rhs.visibilityGlyph {
+            return false
+        }
+        if lhs.visibilitySummary != rhs.visibilitySummary {
+            return false
+        }
+        if lhs.visibilityOptions != rhs.visibilityOptions {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(canCreate)
+        hasher.combine(createName)
+        hasher.combine(createAbout)
+        hasher.combine(visibilityGlyph)
+        hasher.combine(visibilitySummary)
+        hasher.combine(visibilityOptions)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateRoomProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomProjection {
+        return
+            try CreateRoomProjection(
+                canCreate: FfiConverterBool.read(from: &buf),
+                createName: FfiConverterString.read(from: &buf),
+                createAbout: FfiConverterString.read(from: &buf),
+                visibilityGlyph: FfiConverterString.read(from: &buf),
+                visibilitySummary: FfiConverterString.read(from: &buf),
+                visibilityOptions: FfiConverterSequenceTypeCreateRoomVisibilityOption.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateRoomProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.canCreate, into: &buf)
+        FfiConverterString.write(value.createName, into: &buf)
+        FfiConverterString.write(value.createAbout, into: &buf)
+        FfiConverterString.write(value.visibilityGlyph, into: &buf)
+        FfiConverterString.write(value.visibilitySummary, into: &buf)
+        FfiConverterSequenceTypeCreateRoomVisibilityOption.write(value.visibilityOptions, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomProjection_lift(_ buf: RustBuffer) throws -> CreateRoomProjection {
+    return try FfiConverterTypeCreateRoomProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomProjection_lower(_ value: CreateRoomProjection) -> RustBuffer {
+    return FfiConverterTypeCreateRoomProjection.lower(value)
+}
+
+
+public struct CreateRoomProjectionInput {
+    public var name: String
+    public var about: String
+    public var visibility: RoomVisibility
+    public var access: RoomAccess
+    public var isCreating: Bool
+    public var coverIsUploading: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, about: String, visibility: RoomVisibility, access: RoomAccess, isCreating: Bool, coverIsUploading: Bool) {
+        self.name = name
+        self.about = about
+        self.visibility = visibility
+        self.access = access
+        self.isCreating = isCreating
+        self.coverIsUploading = coverIsUploading
+    }
+}
+
+#if compiler(>=6)
+extension CreateRoomProjectionInput: Sendable {}
+#endif
+
+
+extension CreateRoomProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CreateRoomProjectionInput, rhs: CreateRoomProjectionInput) -> Bool {
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.visibility != rhs.visibility {
+            return false
+        }
+        if lhs.access != rhs.access {
+            return false
+        }
+        if lhs.isCreating != rhs.isCreating {
+            return false
+        }
+        if lhs.coverIsUploading != rhs.coverIsUploading {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(about)
+        hasher.combine(visibility)
+        hasher.combine(access)
+        hasher.combine(isCreating)
+        hasher.combine(coverIsUploading)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateRoomProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomProjectionInput {
+        return
+            try CreateRoomProjectionInput(
+                name: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                visibility: FfiConverterTypeRoomVisibility.read(from: &buf),
+                access: FfiConverterTypeRoomAccess.read(from: &buf),
+                isCreating: FfiConverterBool.read(from: &buf),
+                coverIsUploading: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateRoomProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.about, into: &buf)
+        FfiConverterTypeRoomVisibility.write(value.visibility, into: &buf)
+        FfiConverterTypeRoomAccess.write(value.access, into: &buf)
+        FfiConverterBool.write(value.isCreating, into: &buf)
+        FfiConverterBool.write(value.coverIsUploading, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomProjectionInput_lift(_ buf: RustBuffer) throws -> CreateRoomProjectionInput {
+    return try FfiConverterTypeCreateRoomProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomProjectionInput_lower(_ value: CreateRoomProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCreateRoomProjectionInput.lower(value)
+}
+
+
+public struct CreateRoomVisibilityOption {
+    public var id: String
+    public var title: String
+    public var summary: String
+    public var glyph: String
+    public var visibility: RoomVisibility
+    public var access: RoomAccess
+    public var isSelected: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, title: String, summary: String, glyph: String, visibility: RoomVisibility, access: RoomAccess, isSelected: Bool) {
+        self.id = id
+        self.title = title
+        self.summary = summary
+        self.glyph = glyph
+        self.visibility = visibility
+        self.access = access
+        self.isSelected = isSelected
+    }
+}
+
+#if compiler(>=6)
+extension CreateRoomVisibilityOption: Sendable {}
+#endif
+
+
+extension CreateRoomVisibilityOption: Equatable, Hashable {
+    public static func ==(lhs: CreateRoomVisibilityOption, rhs: CreateRoomVisibilityOption) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.summary != rhs.summary {
+            return false
+        }
+        if lhs.glyph != rhs.glyph {
+            return false
+        }
+        if lhs.visibility != rhs.visibility {
+            return false
+        }
+        if lhs.access != rhs.access {
+            return false
+        }
+        if lhs.isSelected != rhs.isSelected {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(title)
+        hasher.combine(summary)
+        hasher.combine(glyph)
+        hasher.combine(visibility)
+        hasher.combine(access)
+        hasher.combine(isSelected)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateRoomVisibilityOption: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomVisibilityOption {
+        return
+            try CreateRoomVisibilityOption(
+                id: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                summary: FfiConverterString.read(from: &buf),
+                glyph: FfiConverterString.read(from: &buf),
+                visibility: FfiConverterTypeRoomVisibility.read(from: &buf),
+                access: FfiConverterTypeRoomAccess.read(from: &buf),
+                isSelected: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateRoomVisibilityOption, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.summary, into: &buf)
+        FfiConverterString.write(value.glyph, into: &buf)
+        FfiConverterTypeRoomVisibility.write(value.visibility, into: &buf)
+        FfiConverterTypeRoomAccess.write(value.access, into: &buf)
+        FfiConverterBool.write(value.isSelected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomVisibilityOption_lift(_ buf: RustBuffer) throws -> CreateRoomVisibilityOption {
+    return try FfiConverterTypeCreateRoomVisibilityOption.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomVisibilityOption_lower(_ value: CreateRoomVisibilityOption) -> RustBuffer {
+    return FfiConverterTypeCreateRoomVisibilityOption.lower(value)
 }
 
 
@@ -21822,6 +22146,31 @@ fileprivate struct FfiConverterSequenceTypeCommunitySummary: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCreateRoomVisibilityOption: FfiConverterRustBuffer {
+    typealias SwiftType = [CreateRoomVisibilityOption]
+
+    public static func write(_ value: [CreateRoomVisibilityOption], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCreateRoomVisibilityOption.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CreateRoomVisibilityOption] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CreateRoomVisibilityOption]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCreateRoomVisibilityOption.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCurationMenuItem: FfiConverterRustBuffer {
     typealias SwiftType = [CurationMenuItem]
 
@@ -22678,7 +23027,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set() != 614) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 56766) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 37226) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_room_invite_codes() != 46771) {
@@ -23054,6 +23403,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_add_relay_sheet() != 14886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room() != 12904) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {

@@ -29,13 +29,20 @@ struct CreateRoomSheet: View {
     @FocusState private var focused: Field?
     private enum Field { case name, about }
 
-    private var canCreate: Bool {
-        name.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
-            && !isCreating
-            && !coverIsUploading
+    private var projection: CreateRoomProjection {
+        appStore.safeCore.projectCreateRoom(input: CreateRoomProjectionInput(
+            name: name,
+            about: about,
+            visibility: visibility,
+            access: access,
+            isCreating: isCreating,
+            coverIsUploading: coverIsUploading
+        ))
     }
 
     var body: some View {
+        let currentProjection = projection
+
         NavigationStack {
             ZStack(alignment: .bottom) {
                 ScrollView {
@@ -45,7 +52,7 @@ struct CreateRoomSheet: View {
                             .padding(.horizontal, 22)
                         Divider().overlay(Color.highlighterRule)
                             .padding(.horizontal, 22)
-                        visibilityRow
+                        visibilityRow(currentProjection)
                             .padding(.horizontal, 22)
                         Spacer(minLength: 120)
                     }
@@ -53,7 +60,7 @@ struct CreateRoomSheet: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
 
-                stickyCTA
+                stickyCTA(currentProjection)
             }
             .background(Color.highlighterPaper.ignoresSafeArea())
             .navigationTitle("")
@@ -72,7 +79,8 @@ struct CreateRoomSheet: View {
             .sheet(isPresented: $visibilityPickerPresented) {
                 VisibilityPickerSheet(
                     visibility: $visibility,
-                    access: $access
+                    access: $access,
+                    options: currentProjection.visibilityOptions
                 )
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
@@ -180,12 +188,12 @@ struct CreateRoomSheet: View {
         }
     }
 
-    private var visibilityRow: some View {
+    private func visibilityRow(_ projection: CreateRoomProjection) -> some View {
         Button {
             visibilityPickerPresented = true
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: visibilityGlyph)
+                Image(systemName: projection.visibilityGlyph)
                     .font(.body.weight(.medium))
                     .foregroundStyle(Color.highlighterAccent)
                     .frame(width: 22)
@@ -194,7 +202,7 @@ struct CreateRoomSheet: View {
                         .font(.footnote.weight(.semibold))
                         .tracking(0.6)
                         .foregroundStyle(Color.highlighterInkMuted)
-                    Text(visibilitySummary)
+                    Text(projection.visibilitySummary)
                         .font(.body.weight(.medium))
                         .foregroundStyle(Color.highlighterInkStrong)
                 }
@@ -208,7 +216,7 @@ struct CreateRoomSheet: View {
         .buttonStyle(.plain)
     }
 
-    private var stickyCTA: some View {
+    private func stickyCTA(_ projection: CreateRoomProjection) -> some View {
         VStack(spacing: 0) {
             LinearGradient(
                 colors: [Color.highlighterPaper.opacity(0), Color.highlighterPaper],
@@ -231,11 +239,11 @@ struct CreateRoomSheet: View {
                 .padding(.vertical, 16)
                 .background(
                     RoundedRectangle(cornerRadius: 16)
-                        .fill(canCreate ? Color.highlighterAccent : Color.highlighterAccent.opacity(0.35))
+                        .fill(projection.canCreate ? Color.highlighterAccent : Color.highlighterAccent.opacity(0.35))
                 )
             }
             .buttonStyle(.plain)
-            .disabled(!canCreate)
+            .disabled(!projection.canCreate)
             .padding(.horizontal, 22)
             .padding(.bottom, 24)
             .background(Color.highlighterPaper)
@@ -243,22 +251,6 @@ struct CreateRoomSheet: View {
     }
 
     // MARK: - Helpers
-
-    private var visibilityGlyph: String {
-        switch (visibility, access) {
-        case (.public, .open): return "globe"
-        case (.public, .closed): return "globe.badge.chevron.backward"
-        case (.private, _): return "lock"
-        }
-    }
-
-    private var visibilitySummary: String {
-        switch (visibility, access) {
-        case (.public, .open): return "Public · Anyone can join"
-        case (.public, .closed): return "Public · You approve joins"
-        case (.private, _): return "Private · Invite only"
-        }
-    }
 
     private var errorBinding: Binding<Bool> {
         Binding(get: { error != nil }, set: { if !$0 { error = nil } })
@@ -314,17 +306,16 @@ struct CreateRoomSheet: View {
     }
 
     private func create() {
-        guard canCreate else { return }
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedAbout = about.trimmingCharacters(in: .whitespacesAndNewlines)
+        let draft = projection
+        guard draft.canCreate else { return }
         let pictureURL = coverUpload?.url ?? ""
         isCreating = true
         focused = nil
         Task {
             defer { isCreating = false }
             let outcome = await appStore.safeCore.createRoom(
-                name: trimmedName,
-                about: trimmedAbout,
+                name: draft.createName,
+                about: draft.createAbout,
                 picture: pictureURL,
                 visibility: visibility,
                 access: access
@@ -349,49 +340,14 @@ extension String: @retroactive Identifiable {
 private struct VisibilityPickerSheet: View {
     @Binding var visibility: RoomVisibility
     @Binding var access: RoomAccess
+    let options: [CreateRoomVisibilityOption]
     @Environment(\.dismiss) private var dismiss
-
-    private struct Option: Identifiable {
-        let id: String
-        let title: String
-        let summary: String
-        let glyph: String
-        let visibility: RoomVisibility
-        let access: RoomAccess
-    }
-
-    private let options: [Option] = [
-        Option(
-            id: "public-open",
-            title: "Public",
-            summary: "Anyone can find and join this room.",
-            glyph: "globe",
-            visibility: .public,
-            access: .open
-        ),
-        Option(
-            id: "public-closed",
-            title: "Public · By approval",
-            summary: "Anyone can find it, but you approve who joins.",
-            glyph: "globe.badge.chevron.backward",
-            visibility: .public,
-            access: .closed
-        ),
-        Option(
-            id: "private",
-            title: "Private",
-            summary: "Hidden from the explorer. Invite only.",
-            glyph: "lock",
-            visibility: .private,
-            access: .closed
-        ),
-    ]
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(options) { option in
+                    ForEach(options, id: \.id) { option in
                         Button {
                             visibility = option.visibility
                             access = option.access
@@ -414,7 +370,7 @@ private struct VisibilityPickerSheet: View {
                                         .multilineTextAlignment(.leading)
                                 }
                                 Spacer(minLength: 0)
-                                if isSelected(option) {
+                                if option.isSelected {
                                     Image(systemName: "checkmark")
                                         .font(.body.weight(.semibold))
                                         .foregroundStyle(Color.highlighterAccent)
@@ -435,10 +391,5 @@ private struct VisibilityPickerSheet: View {
             .navigationTitle("Visibility")
             .navigationBarTitleDisplayMode(.inline)
         }
-    }
-
-    private func isSelected(_ option: VisibilityPickerSheet.Option) -> Bool {
-        option.visibility == visibility
-            && (option.visibility == .private || option.access == access)
     }
 }
