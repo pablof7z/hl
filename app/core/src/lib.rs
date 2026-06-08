@@ -26,6 +26,7 @@ pub mod nip05;
 pub mod nip46;
 pub mod nostr_entities;
 pub mod nostr_runtime;
+pub mod ocr;
 pub mod onboarding;
 pub mod outbox;
 pub mod pictures;
@@ -73,6 +74,7 @@ pub use models::{
     WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
+pub use ocr::{OcrLine, OcrRect, OcrWord};
 pub use podcast_transcript::TranscriptSegment;
 pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;

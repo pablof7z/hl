@@ -528,7 +528,7 @@ struct CapturePageView: View {
 
         // Keep selectionRange so the yellow highlight stays visible.
         guard !quote.isEmpty else { return }
-        store.stashHighlight(quote: quote, context: "", selectedBoxes: selected.map(\.bbox))
+        store.stashHighlight(quote: quote, context: "", selectedBoxes: selected.map { $0.bbox.cgRect })
     }
 
     private func clearHighlightSelection() {
@@ -610,7 +610,7 @@ struct CapturePageView: View {
         return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
 
-    private func pointToBBoxDistance(_ pt: CGPoint, bbox: CGRect) -> CGFloat {
+    private func pointToBBoxDistance(_ pt: CGPoint, bbox: OcrRect) -> CGFloat {
         let cx = min(max(pt.x, bbox.minX), bbox.maxX)
         let cy = min(max(pt.y, bbox.minY), bbox.maxY)
         return sqrt((pt.x - cx) * (pt.x - cx) + (pt.y - cy) * (pt.y - cy))
@@ -640,6 +640,11 @@ struct CapturePageView: View {
             y: (container.height - dispSize.height) / 2
         )
         return (dispSize, offset)
+    }
+
+    /// Vision normalized coords (bottom-left origin) → screen rect.
+    private func visionToScreen(_ bbox: OcrRect, size: CGSize, offset: CGPoint) -> CGRect {
+        visionToScreen(bbox.cgRect, size: size, offset: offset)
     }
 
     /// Vision normalized coords (bottom-left origin) → screen rect.

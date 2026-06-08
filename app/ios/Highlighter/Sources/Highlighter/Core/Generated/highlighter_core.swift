@@ -470,6 +470,22 @@ fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterFloat: FfiConverterPrimitive {
+    typealias FfiType = Float
+    typealias SwiftType = Float
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Float {
+        return try lift(readFloat(&buf))
+    }
+
+    public static func write(_ value: Float, into buf: inout [UInt8]) {
+        writeFloat(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterDouble: FfiConverterPrimitive {
     typealias FfiType = Double
     typealias SwiftType = Double
@@ -1328,6 +1344,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * fresh WebSocket attempt.
      */
     func reconnectAll() async  -> MutationOutcome
+
+    func reconstructOcrMarkdown(lines: [OcrLine])  -> String
 
     func recordRecentSearch(query: String) async  -> StringListOutcome
 
@@ -3782,6 +3800,14 @@ open func reconnectAll()async  -> MutationOutcome  {
             errorHandler: nil
 
         )
+}
+
+open func reconstructOcrMarkdown(lines: [OcrLine]) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_reconstruct_ocr_markdown(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeOcrLine.lower(lines),$0
+    )
+})
 }
 
 open func recordRecentSearch(query: String)async  -> StringListOutcome  {
@@ -10773,6 +10799,256 @@ public func FfiConverterTypeNostrEntityRefOutcome_lower(_ value: NostrEntityRefO
 }
 
 
+public struct OcrLine {
+    public var text: String
+    public var bbox: OcrRect
+    public var confidence: Float
+    public var words: [OcrWord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(text: String, bbox: OcrRect, confidence: Float, words: [OcrWord]) {
+        self.text = text
+        self.bbox = bbox
+        self.confidence = confidence
+        self.words = words
+    }
+}
+
+#if compiler(>=6)
+extension OcrLine: Sendable {}
+#endif
+
+
+extension OcrLine: Equatable, Hashable {
+    public static func ==(lhs: OcrLine, rhs: OcrLine) -> Bool {
+        if lhs.text != rhs.text {
+            return false
+        }
+        if lhs.bbox != rhs.bbox {
+            return false
+        }
+        if lhs.confidence != rhs.confidence {
+            return false
+        }
+        if lhs.words != rhs.words {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(text)
+        hasher.combine(bbox)
+        hasher.combine(confidence)
+        hasher.combine(words)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOcrLine: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrLine {
+        return
+            try OcrLine(
+                text: FfiConverterString.read(from: &buf),
+                bbox: FfiConverterTypeOcrRect.read(from: &buf),
+                confidence: FfiConverterFloat.read(from: &buf),
+                words: FfiConverterSequenceTypeOcrWord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OcrLine, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.text, into: &buf)
+        FfiConverterTypeOcrRect.write(value.bbox, into: &buf)
+        FfiConverterFloat.write(value.confidence, into: &buf)
+        FfiConverterSequenceTypeOcrWord.write(value.words, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrLine_lift(_ buf: RustBuffer) throws -> OcrLine {
+    return try FfiConverterTypeOcrLine.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrLine_lower(_ value: OcrLine) -> RustBuffer {
+    return FfiConverterTypeOcrLine.lower(value)
+}
+
+
+public struct OcrRect {
+    public var x: Double
+    public var y: Double
+    public var w: Double
+    public var h: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(x: Double, y: Double, w: Double, h: Double) {
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+    }
+}
+
+#if compiler(>=6)
+extension OcrRect: Sendable {}
+#endif
+
+
+extension OcrRect: Equatable, Hashable {
+    public static func ==(lhs: OcrRect, rhs: OcrRect) -> Bool {
+        if lhs.x != rhs.x {
+            return false
+        }
+        if lhs.y != rhs.y {
+            return false
+        }
+        if lhs.w != rhs.w {
+            return false
+        }
+        if lhs.h != rhs.h {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(x)
+        hasher.combine(y)
+        hasher.combine(w)
+        hasher.combine(h)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOcrRect: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrRect {
+        return
+            try OcrRect(
+                x: FfiConverterDouble.read(from: &buf),
+                y: FfiConverterDouble.read(from: &buf),
+                w: FfiConverterDouble.read(from: &buf),
+                h: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OcrRect, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.x, into: &buf)
+        FfiConverterDouble.write(value.y, into: &buf)
+        FfiConverterDouble.write(value.w, into: &buf)
+        FfiConverterDouble.write(value.h, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrRect_lift(_ buf: RustBuffer) throws -> OcrRect {
+    return try FfiConverterTypeOcrRect.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrRect_lower(_ value: OcrRect) -> RustBuffer {
+    return FfiConverterTypeOcrRect.lower(value)
+}
+
+
+public struct OcrWord {
+    public var text: String
+    public var bbox: OcrRect
+    public var confidence: Float
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(text: String, bbox: OcrRect, confidence: Float) {
+        self.text = text
+        self.bbox = bbox
+        self.confidence = confidence
+    }
+}
+
+#if compiler(>=6)
+extension OcrWord: Sendable {}
+#endif
+
+
+extension OcrWord: Equatable, Hashable {
+    public static func ==(lhs: OcrWord, rhs: OcrWord) -> Bool {
+        if lhs.text != rhs.text {
+            return false
+        }
+        if lhs.bbox != rhs.bbox {
+            return false
+        }
+        if lhs.confidence != rhs.confidence {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(text)
+        hasher.combine(bbox)
+        hasher.combine(confidence)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOcrWord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrWord {
+        return
+            try OcrWord(
+                text: FfiConverterString.read(from: &buf),
+                bbox: FfiConverterTypeOcrRect.read(from: &buf),
+                confidence: FfiConverterFloat.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OcrWord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.text, into: &buf)
+        FfiConverterTypeOcrRect.write(value.bbox, into: &buf)
+        FfiConverterFloat.write(value.confidence, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrWord_lift(_ buf: RustBuffer) throws -> OcrWord {
+    return try FfiConverterTypeOcrWord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrWord_lower(_ value: OcrWord) -> RustBuffer {
+    return FfiConverterTypeOcrWord.lower(value)
+}
+
+
 public struct OnboardingInterest {
     public var id: String
     public var emoji: String
@@ -16637,6 +16913,56 @@ fileprivate struct FfiConverterSequenceTypeHydratedHighlight: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeOcrLine: FfiConverterRustBuffer {
+    typealias SwiftType = [OcrLine]
+
+    public static func write(_ value: [OcrLine], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeOcrLine.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [OcrLine] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [OcrLine]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeOcrLine.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeOcrWord: FfiConverterRustBuffer {
+    typealias SwiftType = [OcrWord]
+
+    public static func write(_ value: [OcrWord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeOcrWord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [OcrWord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [OcrWord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeOcrWord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeOnboardingInterest: FfiConverterRustBuffer {
     typealias SwiftType = [OnboardingInterest]
 
@@ -17328,6 +17654,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 432) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_reconstruct_ocr_markdown() != 15497) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_record_recent_search() != 32384) {

@@ -26,11 +26,11 @@ enum OCRService {
                         guard let bbox = try? candidate.boundingBox(for: range)?.boundingBox else {
                             return nil
                         }
-                        return OCRWord(text: word, bbox: bbox, confidence: candidate.confidence)
+                        return OCRWord(text: word, bbox: OcrRect(bbox), confidence: candidate.confidence)
                     }
                     return OCRLine(
                         text: candidate.string,
-                        bbox: obs.boundingBox,
+                        bbox: OcrRect(obs.boundingBox),
                         confidence: candidate.confidence,
                         words: words
                     )

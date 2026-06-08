@@ -158,12 +158,12 @@ enum PageSegmentation {
                     height: word.bbox.height / ph
                 ).intersection(unit)
                 guard !newWordBBox.isNull, !newWordBBox.isEmpty else { return nil }
-                return OCRWord(text: word.text, bbox: newWordBBox, confidence: word.confidence)
+                return OCRWord(text: word.text, bbox: OcrRect(newWordBBox), confidence: word.confidence)
             }
 
             return OCRLine(
                 text: line.text,
-                bbox: newBBox,
+                bbox: OcrRect(newBBox),
                 confidence: line.confidence,
                 words: newWords
             )

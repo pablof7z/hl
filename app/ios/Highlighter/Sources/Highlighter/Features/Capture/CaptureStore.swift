@@ -131,7 +131,7 @@ final class CaptureStore {
             self.processedJPEG = processed
             self.preparedUploadJPEG = processed
             self.ocrLines = lines
-            let markdown = OCRStructureReconstructor.toMarkdown(lines)
+            let markdown = safeCore.reconstructOcrMarkdown(lines)
             self.ocrMarkdown = markdown
 
             // The imeta alt is a one-line summary; flatten the markdown

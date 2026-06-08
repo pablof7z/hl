@@ -2467,6 +2467,10 @@ impl HighlighterCore {
         ))
     }
 
+    pub fn reconstruct_ocr_markdown(&self, lines: Vec<crate::ocr::OcrLine>) -> String {
+        crate::ocr::reconstruct_markdown(&lines)
+    }
+
     /// Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
     /// Extension flow — the main app drains the share queue, normalizes each
     /// URL through this, then calls `publish_artifact` to post the kind:11.

@@ -274,6 +274,10 @@ actor SafeHighlighterCore {
         core.normalizeIsbnInput(raw: raw)
     }
 
+    nonisolated func reconstructOcrMarkdown(_ lines: [OCRLine]) -> String {
+        core.reconstructOcrMarkdown(lines: lines)
+    }
+
     nonisolated func buildEditedBookPreview(
         isbn: String,
         basePreview: ArtifactPreview?,
