@@ -17,13 +17,7 @@ const LOCAL_SCAN_FLOOR: i32 = 256;
 const LOCAL_SCAN_CEILING: i32 = 4096;
 
 const TRACKING_PARAMS: &[&str] = &[
-    "fbclid",
-    "gclid",
-    "mc_cid",
-    "mc_eid",
-    "ref",
-    "ref_src",
-    "ref_url",
+    "fbclid", "gclid", "mc_cid", "mc_eid", "ref", "ref_src", "ref_url",
 ];
 
 /// Port of `buildArtifactPreview` (`web/src/lib/ndk/artifacts.ts:170-236`).
@@ -130,8 +124,7 @@ pub fn build_preview_with(input: PreviewInput) -> Result<ArtifactPreview, CoreEr
     ]);
 
     let reference_key = reference_key_for_tag(&reference_tag_name, &reference_tag_value);
-    let highlight_reference_key =
-        reference_key_for_tag(&highlight_tag_name, &highlight_tag_value);
+    let highlight_reference_key = reference_key_for_tag(&highlight_tag_name, &highlight_tag_value);
     if reference_key.is_empty() {
         return Err(CoreError::InvalidInput(
             "artifact reference key is empty".into(),
@@ -242,13 +235,10 @@ pub fn query_for_group(
     if group_id.is_empty() {
         return Ok(Vec::new());
     }
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let cap = (limit.saturating_mul(4)).max(128) as i32;
-    let filter = NdbFilter::new()
-        .kinds([KIND_ARTIFACT_SHARE as u64])
-        .build();
+    let filter = NdbFilter::new().kinds([KIND_ARTIFACT_SHARE as u64]).build();
 
     let results = ndb
         .query(&txn, &[filter], cap)
@@ -256,10 +246,16 @@ pub fn query_for_group(
 
     let mut records: Vec<ArtifactRecord> = Vec::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
-        let Some(h) = first_tag_value(&event, "h") else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
+        let Some(h) = first_tag_value(&event, "h") else {
+            continue;
+        };
         if h != group_id {
             continue;
         }
@@ -277,36 +273,39 @@ pub fn query_for_group(
 }
 
 /// Simple title/author substring search over cached artifacts.
-pub fn search_cached(
-    ndb: &Ndb,
-    query: &str,
-    limit: u32,
-) -> Result<Vec<ArtifactRecord>, CoreError> {
+pub fn search_cached(ndb: &Ndb, query: &str, limit: u32) -> Result<Vec<ArtifactRecord>, CoreError> {
     let q = query.trim();
     if q.is_empty() || limit == 0 {
         return Ok(Vec::new());
     }
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
-    let filter = NdbFilter::new()
-        .kinds([KIND_ARTIFACT_SHARE as u64])
-        .build();
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let filter = NdbFilter::new().kinds([KIND_ARTIFACT_SHARE as u64]).build();
     let results = ndb
         .query(&txn, &[filter], scan_cap(limit))
         .map_err(|e| CoreError::Cache(format!("query artifact search: {e}")))?;
 
     let mut best_by_reference: BTreeMap<String, (u8, ArtifactRecord)> = BTreeMap::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
-        let Some(group_id) = first_tag_value(&event, "h") else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
+        let Some(group_id) = first_tag_value(&event, "h") else {
+            continue;
+        };
         if crate::discussions::is_discussion(&event) {
             continue;
         }
-        let Some(record) = artifact_record_from_event(&event, group_id) else { continue };
-        let Some(rank) = artifact_match_rank(&record, q) else { continue };
+        let Some(record) = artifact_record_from_event(&event, group_id) else {
+            continue;
+        };
+        let Some(rank) = artifact_match_rank(&record, q) else {
+            continue;
+        };
         let key = artifact_identity(&record);
         match best_by_reference.get(&key) {
             Some((existing_rank, existing))
@@ -347,9 +346,7 @@ fn starts_ci(haystack: &str, needle: &str) -> bool {
     if needle.is_empty() {
         return false;
     }
-    haystack
-        .to_lowercase()
-        .starts_with(&needle.to_lowercase())
+    haystack.to_lowercase().starts_with(&needle.to_lowercase())
 }
 
 fn artifact_match_rank(record: &ArtifactRecord, query: &str) -> Option<u8> {
@@ -493,8 +490,7 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
 
     let (highlight_tag_name, highlight_tag_value) =
         highlight_reference_for_artifact(&ref_name, &ref_value, &k, &url);
-    let highlight_reference_key =
-        reference_key_for_tag(&highlight_tag_name, &highlight_tag_value);
+    let highlight_reference_key = reference_key_for_tag(&highlight_tag_name, &highlight_tag_value);
 
     let preview = ArtifactPreview {
         id: d,
@@ -505,7 +501,11 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
         description: summary,
         source,
         domain: String::new(),
-        catalog_id: if ref_name == "i" { ref_value.clone() } else { String::new() },
+        catalog_id: if ref_name == "i" {
+            ref_value.clone()
+        } else {
+            String::new()
+        },
         catalog_kind: k.clone(),
         podcast_guid,
         podcast_item_guid,
@@ -513,10 +513,16 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
             .unwrap_or("")
             .to_string(),
         audio_url: first_tag_value(event, "audio").unwrap_or("").to_string(),
-        audio_preview_url: first_tag_value(event, "audio_preview").unwrap_or("").to_string(),
-        transcript_url: first_tag_value(event, "transcript").unwrap_or("").to_string(),
+        audio_preview_url: first_tag_value(event, "audio_preview")
+            .unwrap_or("")
+            .to_string(),
+        transcript_url: first_tag_value(event, "transcript")
+            .unwrap_or("")
+            .to_string(),
         feed_url: first_tag_value(event, "feed").unwrap_or("").to_string(),
-        published_at: first_tag_value(event, "published_at").unwrap_or("").to_string(),
+        published_at: first_tag_value(event, "published_at")
+            .unwrap_or("")
+            .to_string(),
         duration_seconds: first_tag_value(event, "duration").and_then(|v| v.parse::<i64>().ok()),
         reference_tag_name: ref_name.clone(),
         reference_tag_value: ref_value,
@@ -546,16 +552,19 @@ fn highlight_reference_for_artifact(
     let reference_tag_name = reference_tag_name.trim();
     let reference_tag_value = reference_tag_value.trim();
     match reference_tag_name {
-        "a" | "e" if !reference_tag_value.is_empty() => {
-            (reference_tag_name.to_string(), reference_tag_value.to_string())
-        }
-        "i" if is_external_content_reference(reference_tag_value, reference_kind) => {
-            (reference_tag_name.to_string(), reference_tag_value.to_string())
-        }
+        "a" | "e" if !reference_tag_value.is_empty() => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
+        "i" if is_external_content_reference(reference_tag_value, reference_kind) => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
         _ if !url.trim().is_empty() => ("r".to_string(), url.trim().to_string()),
-        "i" if !reference_tag_value.is_empty() => {
-            (reference_tag_name.to_string(), reference_tag_value.to_string())
-        }
+        "i" if !reference_tag_value.is_empty() => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
         _ => (String::new(), String::new()),
     }
 }
@@ -608,7 +617,11 @@ pub fn normalize_artifact_url(value: &str) -> Option<String> {
     // Strip trailing slashes except the root.
     if url.path() != "/" {
         let trimmed_path = url.path().trim_end_matches('/');
-        let new_path = if trimmed_path.is_empty() { "/" } else { trimmed_path };
+        let new_path = if trimmed_path.is_empty() {
+            "/"
+        } else {
+            trimmed_path
+        };
         let owned = new_path.to_string();
         url.set_path(&owned);
     }
@@ -682,7 +695,10 @@ pub fn detect_artifact_source(url: &str) -> &'static str {
 fn domain_label(url: &str) -> String {
     url::Url::parse(url)
         .ok()
-        .and_then(|u| u.host_str().map(|h| h.trim_start_matches("www.").to_string()))
+        .and_then(|u| {
+            u.host_str()
+                .map(|h| h.trim_start_matches("www.").to_string())
+        })
         .unwrap_or_else(|| url.to_string())
 }
 
@@ -706,9 +722,7 @@ fn title_case(value: &str) -> String {
         .map(|word| {
             let mut chars = word.chars();
             match chars.next() {
-                Some(first) => {
-                    first.to_uppercase().collect::<String>() + chars.as_str()
-                }
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
                 None => String::new(),
             }
         })
@@ -802,7 +816,11 @@ fn build_share_event(
     match preview.reference_tag_name.as_str() {
         "i" => {
             if !preview.url.is_empty() {
-                tags.push(parse_tag(&["i", &preview.reference_tag_value, &preview.url])?);
+                tags.push(parse_tag(&[
+                    "i",
+                    &preview.reference_tag_value,
+                    &preview.url,
+                ])?);
             } else {
                 tags.push(parse_tag(&["i", &preview.reference_tag_value])?);
             }
@@ -846,7 +864,10 @@ fn build_share_event(
         tags.push(parse_tag(&["podcast_guid", &preview.podcast_guid])?);
     }
     if !preview.podcast_show_title.is_empty() {
-        tags.push(parse_tag(&["podcast_show_title", &preview.podcast_show_title])?);
+        tags.push(parse_tag(&[
+            "podcast_show_title",
+            &preview.podcast_show_title,
+        ])?);
     }
     if !preview.audio_url.is_empty() {
         tags.push(parse_tag(&["audio", &preview.audio_url])?);
@@ -900,7 +921,10 @@ mod tests {
 
     #[test]
     fn detect_source_podcast_for_overcast() {
-        assert_eq!(detect_artifact_source("https://overcast.fm/+abc123"), "podcast");
+        assert_eq!(
+            detect_artifact_source("https://overcast.fm/+abc123"),
+            "podcast"
+        );
         assert_eq!(
             detect_artifact_source("https://podcasts.apple.com/us/ep/123"),
             "podcast"
@@ -917,7 +941,10 @@ mod tests {
 
     #[test]
     fn detect_source_fallback_is_article() {
-        assert_eq!(detect_artifact_source("https://example.com/post"), "article");
+        assert_eq!(
+            detect_artifact_source("https://example.com/post"),
+            "article"
+        );
     }
 
     #[test]
@@ -987,7 +1014,11 @@ mod tests {
             .tags(vec![
                 Tag::parse(vec!["h".to_string(), "signal-over-noise".to_string()]).unwrap(),
                 Tag::identifier("ccc5hrs"),
-                Tag::parse(vec!["title".to_string(), "Tucker Debates Biotech CEO".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "title".to_string(),
+                    "Tucker Debates Biotech CEO".to_string(),
+                ])
+                .unwrap(),
                 Tag::parse(vec!["source".to_string(), "podcast".to_string()]).unwrap(),
                 Tag::parse(vec![
                     "i".to_string(),
@@ -996,7 +1027,11 @@ mod tests {
                 ])
                 .unwrap(),
                 Tag::parse(vec!["k".to_string(), "podcast:guid".to_string()]).unwrap(),
-                Tag::parse(vec!["r".to_string(), "http://www.tuckercarlson.com/".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "r".to_string(),
+                    "http://www.tuckercarlson.com/".to_string(),
+                ])
+                .unwrap(),
                 Tag::parse(vec![
                     "podcast_guid".to_string(),
                     "D27CDB6E-AE6D-11cf-96B8-444553540000".to_string(),
@@ -1017,7 +1052,10 @@ mod tests {
             record.preview.audio_url,
             "https://www.podtrac.com/pts/redirect.mp3/example/TCN.mp3"
         );
-        assert_eq!(record.preview.podcast_guid, "D27CDB6E-AE6D-11cf-96B8-444553540000");
+        assert_eq!(
+            record.preview.podcast_guid,
+            "D27CDB6E-AE6D-11cf-96B8-444553540000"
+        );
         assert_eq!(record.preview.duration_seconds, Some(3742));
         assert_eq!(record.preview.catalog_kind, "podcast:guid");
         assert_eq!(record.preview.reference_kind, "podcast:guid");
@@ -1032,14 +1070,34 @@ mod tests {
                 Tag::identifier("ep1"),
                 Tag::parse(vec!["title".to_string(), "Ep 1".to_string()]).unwrap(),
                 Tag::parse(vec!["source".to_string(), "podcast".to_string()]).unwrap(),
-                Tag::parse(vec!["chapter".to_string(), "0".to_string(), "Cold open".to_string()]).unwrap(),
-                Tag::parse(vec!["chapter".to_string(), "245".to_string(), "First guest".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "chapter".to_string(),
+                    "0".to_string(),
+                    "Cold open".to_string(),
+                ])
+                .unwrap(),
+                Tag::parse(vec![
+                    "chapter".to_string(),
+                    "245".to_string(),
+                    "First guest".to_string(),
+                ])
+                .unwrap(),
                 // Out of order: should sort.
-                Tag::parse(vec!["chapter".to_string(), "120".to_string(), "Setup".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "chapter".to_string(),
+                    "120".to_string(),
+                    "Setup".to_string(),
+                ])
+                .unwrap(),
                 // Malformed: missing title — should be dropped.
                 Tag::parse(vec!["chapter".to_string(), "999".to_string()]).unwrap(),
                 // Malformed: non-numeric start — should be dropped.
-                Tag::parse(vec!["chapter".to_string(), "junk".to_string(), "Ignored".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "chapter".to_string(),
+                    "junk".to_string(),
+                    "Ignored".to_string(),
+                ])
+                .unwrap(),
             ])
             .sign_with_keys(&keys)
             .expect("sign");
@@ -1237,7 +1295,10 @@ mod tests {
         let (ndb, _tmp) = isolated_ndb();
         let keys = Keys::generate();
         for i in 0..5u64 {
-            ingest(&ndb, &make_share(&keys, "alpha", &format!("a{i}"), &format!("T{i}")));
+            ingest(
+                &ndb,
+                &make_share(&keys, "alpha", &format!("a{i}"), &format!("T{i}")),
+            );
         }
         wait_for_ndb();
         let records = query_for_group(&ndb, "alpha", 3).expect("query");
@@ -1265,7 +1326,10 @@ mod tests {
         assert_eq!(record.preview.reference_tag_value, "isbn:9781593278281");
         assert_eq!(record.preview.highlight_tag_name, "i");
         assert_eq!(record.preview.highlight_tag_value, "isbn:9781593278281");
-        assert_eq!(record.preview.highlight_reference_key, "i:isbn:9781593278281");
+        assert_eq!(
+            record.preview.highlight_reference_key,
+            "i:isbn:9781593278281"
+        );
     }
 
     #[test]
@@ -1279,11 +1343,20 @@ mod tests {
 
         let record = artifact_record_from_event(&event, "room-a").expect("record");
         assert_eq!(record.preview.reference_tag_name, "i");
-        assert_eq!(record.preview.reference_tag_value, "https://example.com/post");
+        assert_eq!(
+            record.preview.reference_tag_value,
+            "https://example.com/post"
+        );
         assert_eq!(record.preview.reference_kind, "web");
         assert_eq!(record.preview.highlight_tag_name, "r");
-        assert_eq!(record.preview.highlight_tag_value, "https://example.com/post");
-        assert_eq!(record.preview.highlight_reference_key, "r:https://example.com/post");
+        assert_eq!(
+            record.preview.highlight_tag_value,
+            "https://example.com/post"
+        );
+        assert_eq!(
+            record.preview.highlight_reference_key,
+            "r:https://example.com/post"
+        );
     }
 
     #[test]
@@ -1339,7 +1412,10 @@ mod tests {
 
         let by_reference = search_cached(&ndb, "9780679762881", 20).expect("reference search");
         assert_eq!(by_reference.len(), 1);
-        assert_eq!(by_reference[0].preview.highlight_reference_key, "i:isbn:9780679762881");
+        assert_eq!(
+            by_reference[0].preview.highlight_reference_key,
+            "i:isbn:9780679762881"
+        );
     }
 
     #[test]
@@ -1377,7 +1453,9 @@ mod tests {
 
         let hits = search_cached(&ndb, "rust", 2).expect("search");
         assert_eq!(hits.len(), 2);
-        assert!(hits.iter().all(|hit| hit.preview.title != "Rust Discussion"));
+        assert!(hits
+            .iter()
+            .all(|hit| hit.preview.title != "Rust Discussion"));
     }
 
     #[test]

@@ -117,12 +117,7 @@ actor SafeHighlighterCore {
     }
 
     func searchCommunities(query: String, limit: UInt32 = 20) async -> CommunityListOutcome {
-        let candidates = await core.searchCommunities(query: query, limit: publicRoomCandidateLimit(limit))
-        guard candidates.error.isEmpty else { return candidates }
-        return CommunityListOutcome(
-            values: Array(candidates.values.filter(\.isPublicOpenRoom).prefix(Int(limit))),
-            error: ""
-        )
+        await core.searchCommunities(query: query, limit: limit)
     }
 
     func searchProfiles(query: String, limit: UInt32 = 20) async -> ProfileListOutcome {
@@ -449,48 +444,23 @@ actor SafeHighlighterCore {
     }
 
     func getFeaturedRooms(curatorPubkeyHex: String) async -> CommunityListOutcome {
-        let outcome = await core.getFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
-        guard outcome.error.isEmpty else { return outcome }
-        return CommunityListOutcome(
-            values: outcome.values.filter(\.isPublicOpenRoom),
-            error: ""
-        )
+        await core.getFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
     }
 
     func getAllRooms(limit: UInt32 = 120) async -> CommunityListOutcome {
-        let outcome = await core.getAllRooms(limit: publicRoomCandidateLimit(limit))
-        guard outcome.error.isEmpty else { return outcome }
-        return CommunityListOutcome(
-            values: Array(outcome.values.filter(\.isPublicOpenRoom).prefix(Int(limit))),
-            error: ""
-        )
+        await core.getAllRooms(limit: limit)
     }
 
     func getNewRooms(limit: UInt32 = 24) async -> CommunityListOutcome {
-        let outcome = await core.getNewRooms(limit: publicRoomCandidateLimit(limit))
-        guard outcome.error.isEmpty else { return outcome }
-        return CommunityListOutcome(
-            values: Array(outcome.values.filter(\.isPublicOpenRoom).prefix(Int(limit))),
-            error: ""
-        )
+        await core.getNewRooms(limit: limit)
     }
 
     func getRoomsWithFriends(limit: UInt32 = 16) async -> RoomRecommendationListOutcome {
-        let outcome = await core.getRoomsWithFriends(limit: publicRoomCandidateLimit(limit))
-        guard outcome.error.isEmpty else { return outcome }
-        return RoomRecommendationListOutcome(
-            values: Array(outcome.values.filter { $0.summary.isPublicOpenRoom }.prefix(Int(limit))),
-            error: ""
-        )
+        await core.getRoomsWithFriends(limit: limit)
     }
 
     func getRoomsFromReadAuthors(limit: UInt32 = 16) async -> RoomRecommendationListOutcome {
-        let outcome = await core.getRoomsFromReadAuthors(limit: publicRoomCandidateLimit(limit))
-        guard outcome.error.isEmpty else { return outcome }
-        return RoomRecommendationListOutcome(
-            values: Array(outcome.values.filter { $0.summary.isPublicOpenRoom }.prefix(Int(limit))),
-            error: ""
-        )
+        await core.getRoomsFromReadAuthors(limit: limit)
     }
 
     func requestJoinRoom(groupId: String) async -> StringOutcome {
@@ -741,16 +711,5 @@ actor SafeHighlighterCore {
 
     func getCacheStats() async -> CacheStatsOutcome {
         await core.getCacheStats()
-    }
-
-    private func publicRoomCandidateLimit(_ limit: UInt32) -> UInt32 {
-        let expanded = limit > UInt32.max / 4 ? UInt32.max : limit * 4
-        return max(limit, min(expanded, 512))
-    }
-}
-
-private extension CommunitySummary {
-    var isPublicOpenRoom: Bool {
-        visibility == "public" && access == "open"
     }
 }

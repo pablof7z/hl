@@ -42,8 +42,7 @@ pub fn query_reactions_for_event(
         return Ok(Vec::new());
     }
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let cap = limit.max(64) as i32;
     let filter = NdbFilter::new()
         .kinds([KIND_REACTION as u64])
@@ -55,13 +54,19 @@ pub fn query_reactions_for_event(
 
     let mut records: Vec<ReactionRecord> = Vec::with_capacity(results.len());
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         if event.kind.as_u16() != KIND_REACTION {
             continue;
         }
-        let Some(target_id) = first_e_tag(&event) else { continue };
+        let Some(target_id) = first_e_tag(&event) else {
+            continue;
+        };
         records.push(ReactionRecord {
             event_id: event.id.to_hex(),
             pubkey: event.pubkey.to_hex(),
@@ -92,7 +97,9 @@ pub async fn publish_reaction(
         .map_err(|e| CoreError::InvalidInput(format!("invalid target author pubkey: {e}")))?;
     let content = content.trim();
     if content.is_empty() {
-        return Err(CoreError::InvalidInput("reaction content must not be empty".into()));
+        return Err(CoreError::InvalidInput(
+            "reaction content must not be empty".into(),
+        ));
     }
 
     let tags = vec![

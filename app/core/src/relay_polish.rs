@@ -53,7 +53,10 @@ pub async fn probe_nip11(relay_url: &str) -> Result<Nip11Document, CoreError> {
         .await
         .map_err(|e| CoreError::Network(format!("nip11 JSON: {e}")))?;
 
-    let name = json.get("name").and_then(|v| v.as_str()).map(str::to_string);
+    let name = json
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
     let description = json
         .get("description")
         .and_then(|v| v.as_str())
@@ -84,7 +87,10 @@ pub async fn probe_nip11(relay_url: &str) -> Result<Nip11Document, CoreError> {
                 .collect()
         })
         .unwrap_or_default();
-    let icon = json.get("icon").and_then(|v| v.as_str()).map(str::to_string);
+    let icon = json
+        .get("icon")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
 
     Ok(Nip11Document {
         url: relay_url.trim().to_string(),
@@ -164,8 +170,7 @@ pub async fn import_from_npub(
 pub fn cache_stats(ndb: &Ndb, data_dir: &Path) -> Result<CacheStats, CoreError> {
     let disk_bytes = dir_size(data_dir).unwrap_or(0);
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     // Match every event. The cap is defensive — iOS should never hold more
     // than ~500k events in the local cache; anything above that is treated
     // as "lots".

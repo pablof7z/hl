@@ -31,15 +31,12 @@ pub fn query_chat_messages(
         return Err(CoreError::InvalidInput("group_id must not be empty".into()));
     }
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     // Kind-only filter: nostrdb's #h tag index is unreliable across
     // parameterized-replaceable + chat kinds (same caveat as Room/
     // RoomDiscussions). We re-check the `h` tag in Rust below.
-    let filter = NdbFilter::new()
-        .kinds([KIND_CHAT_MESSAGE as u64])
-        .build();
+    let filter = NdbFilter::new().kinds([KIND_CHAT_MESSAGE as u64]).build();
 
     let limit_i: i32 = limit.max(1).try_into().unwrap_or(i32::MAX);
     let results = ndb
@@ -85,7 +82,9 @@ pub async fn publish_chat_message(
     }
     let content = content.trim();
     if content.is_empty() {
-        return Err(CoreError::InvalidInput("chat message must not be empty".into()));
+        return Err(CoreError::InvalidInput(
+            "chat message must not be empty".into(),
+        ));
     }
 
     let mut tags: Vec<Tag> = Vec::with_capacity(2);

@@ -19,6 +19,10 @@ use crate::relays::highlighter_relay;
 pub const KIND_GROUP_METADATA: u16 = 39000;
 pub const KIND_GROUP_ADMINS: u16 = 39001;
 pub const KIND_GROUP_MEMBERS: u16 = 39002;
+
+pub(crate) fn is_public_open_room(summary: &CommunitySummary) -> bool {
+    summary.visibility == "public" && summary.access == "open"
+}
 /// NIP-29 chat message. Flat conversational event scoped to the group via
 /// the `["h", <group_id>]` tag. Defined here next to the other NIP-29
 /// kind constants; the actual chat reader/writer lives in `chat.rs`.
@@ -48,8 +52,7 @@ pub const MAX_CODES_PER_INVITE_EVENT: usize = 10;
 /// 56-glyph alphabet for invite codes — same set as the web client's
 /// `INVITE_CODE_ALPHABET` so codes mint identically across platforms.
 /// Look-alikes (0/O, 1/I/l) are omitted so codes survive being dictated.
-const INVITE_CODE_ALPHABET: &[u8] =
-    b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+const INVITE_CODE_ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 
 /// Query the local nostrdb cache for the current user's joined communities.
 /// Returns `[]` if the cache has no relevant events yet (cold start).
@@ -61,8 +64,7 @@ pub fn query_joined_communities_from_ndb(
         return Ok(Vec::new());
     }
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     // 1. Fetch all admin+member events and manually check the p-tag.
     //    nostrdb's tag index for the 'p' character does not reliably match
@@ -171,7 +173,11 @@ pub fn build_joined_communities(
     // Metadata enriches the row but must never gate its existence — a group
     // without a cached kind:39000 should still appear in the list.
     let mut all_group_ids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for id in admin_by_id.keys().chain(member_by_id.keys()).chain(metadata_by_id.keys()) {
+    for id in admin_by_id
+        .keys()
+        .chain(member_by_id.keys())
+        .chain(metadata_by_id.keys())
+    {
         all_group_ids.insert(id.clone());
     }
 
@@ -210,9 +216,12 @@ pub async fn publish_join_request(
         return Err(CoreError::InvalidInput("group_id must not be empty".into()));
     }
 
-    let builder = EventBuilder::new(Kind::Custom(KIND_JOIN_REQUEST), "")
-        .tags(vec![Tag::parse(vec!["h".to_string(), group_id.to_string()])
-            .map_err(|e| CoreError::Other(format!("build h tag: {e}")))?]);
+    let builder =
+        EventBuilder::new(Kind::Custom(KIND_JOIN_REQUEST), "").tags(vec![Tag::parse(vec![
+            "h".to_string(),
+            group_id.to_string(),
+        ])
+        .map_err(|e| CoreError::Other(format!("build h tag: {e}")))?]);
 
     let client = runtime.client();
     let event = client
@@ -287,15 +296,17 @@ pub async fn create_room(
 ) -> Result<String, CoreError> {
     let trimmed_name = name.trim();
     if trimmed_name.is_empty() {
-        return Err(CoreError::InvalidInput("room name must not be empty".into()));
+        return Err(CoreError::InvalidInput(
+            "room name must not be empty".into(),
+        ));
     }
 
     let group_id = generate_group_id();
     let client = runtime.client();
 
     // 1. create-group: empty content, single `h` tag identifying the new room.
-    let create_builder = EventBuilder::new(Kind::Custom(KIND_CREATE_GROUP), "")
-        .tags(vec![h_tag(&group_id)?]);
+    let create_builder =
+        EventBuilder::new(Kind::Custom(KIND_CREATE_GROUP), "").tags(vec![h_tag(&group_id)?]);
     let create_event = client
         .sign_event_builder(create_builder)
         .await
@@ -353,10 +364,8 @@ pub async fn add_member(
     let pubkey = PublicKey::from_hex(pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
 
-    let builder = EventBuilder::new(Kind::Custom(KIND_PUT_USER), "").tags(vec![
-        h_tag(group_id)?,
-        Tag::public_key(pubkey),
-    ]);
+    let builder = EventBuilder::new(Kind::Custom(KIND_PUT_USER), "")
+        .tags(vec![h_tag(group_id)?, Tag::public_key(pubkey)]);
 
     let client = runtime.client();
     let event = client
@@ -466,21 +475,39 @@ fn build_summary(
     let id = group_id.to_string();
 
     // Tag presence, per the webapp's getters (`["public"]` / `["closed"]` etc.)
-    let has_private = metadata_event.map(|e| has_marker_tag(e, "private")).unwrap_or(false);
-    let has_closed = metadata_event.map(|e| has_marker_tag(e, "closed")).unwrap_or(false);
+    let has_private = metadata_event
+        .map(|e| has_marker_tag(e, "private"))
+        .unwrap_or(false);
+    let has_closed = metadata_event
+        .map(|e| has_marker_tag(e, "closed"))
+        .unwrap_or(false);
 
     // Match the webapp defaults: no visibility tag → public, no access tag → open.
     // Rooms created by the webapp carry no explicit marker tags, so they must
     // default to public/open or they will be invisible to the explorer.
     let visibility = if has_private { "private" } else { "public" };
-    let access = if visibility == "private" || has_closed { "closed" } else { "open" };
+    let access = if visibility == "private" || has_closed {
+        "closed"
+    } else {
+        "open"
+    };
 
     let name = {
-        let raw = metadata_event.map(|e| clean_text(first_tag_value(e, "name"))).unwrap_or_default();
-        if raw.is_empty() { id.clone() } else { raw }
+        let raw = metadata_event
+            .map(|e| clean_text(first_tag_value(e, "name")))
+            .unwrap_or_default();
+        if raw.is_empty() {
+            id.clone()
+        } else {
+            raw
+        }
     };
-    let about = metadata_event.map(|e| clean_text(first_tag_value(e, "about"))).unwrap_or_default();
-    let picture = metadata_event.map(|e| clean_text(first_tag_value(e, "picture"))).unwrap_or_default();
+    let about = metadata_event
+        .map(|e| clean_text(first_tag_value(e, "about")))
+        .unwrap_or_default();
+    let picture = metadata_event
+        .map(|e| clean_text(first_tag_value(e, "picture")))
+        .unwrap_or_default();
 
     let admin_pubkeys = unique_p_tag_values(admin_event);
     let member_pubkeys = unique_p_tag_values(member_event);
@@ -633,23 +660,43 @@ mod tests {
         let meta_a = sign(
             &other,
             39000,
-            vec![d("alpha"), named("name", "Alpha"), marker("open"), marker("public")],
+            vec![
+                d("alpha"),
+                named("name", "Alpha"),
+                marker("open"),
+                marker("public"),
+            ],
             "",
         );
         let meta_b = sign(
             &other,
             39000,
-            vec![d("bravo"), named("name", "Bravo"), marker("closed"), marker("private")],
+            vec![
+                d("bravo"),
+                named("name", "Bravo"),
+                marker("closed"),
+                marker("private"),
+            ],
             "",
         );
-        let meta_c = sign(&other, 39000, vec![d("charlie"), named("name", "Charlie")], "");
+        let meta_c = sign(
+            &other,
+            39000,
+            vec![d("charlie"), named("name", "Charlie")],
+            "",
+        );
 
         // admin list for alpha includes `me`
         let admins_a = sign(&other, 39001, vec![d("alpha"), p(&me.public_key())], "");
         // member list for bravo includes `me`
         let members_b = sign(&other, 39002, vec![d("bravo"), p(&me.public_key())], "");
         // charlie has memberships but not for me
-        let members_c = sign(&other, 39002, vec![d("charlie"), p(&other.public_key())], "");
+        let members_c = sign(
+            &other,
+            39002,
+            vec![d("charlie"), p(&other.public_key())],
+            "",
+        );
 
         let out = build_joined_communities(
             &me.public_key().to_hex(),
@@ -658,7 +705,11 @@ mod tests {
         );
 
         let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
-        assert_eq!(ids, vec!["alpha", "bravo"], "sorted by name, charlie excluded");
+        assert_eq!(
+            ids,
+            vec!["alpha", "bravo"],
+            "sorted by name, charlie excluded"
+        );
         assert_eq!(out[0].name, "Alpha");
         assert_eq!(out[0].admin_pubkeys, vec![me.public_key().to_hex()]);
         assert_eq!(out[0].access, "open");
@@ -689,11 +740,7 @@ mod tests {
 
         let members = sign(&other, 39002, vec![d("alpha"), p(&me.public_key())], "");
 
-        let out = build_joined_communities(
-            &me.public_key().to_hex(),
-            &[older, newer],
-            &[members],
-        );
+        let out = build_joined_communities(&me.public_key().to_hex(), &[older, newer], &[members]);
 
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].name, "New", "newest metadata event wins");
@@ -709,15 +756,17 @@ mod tests {
         let meta = sign(&other, 39000, vec![d("plain"), named("name", "Plain")], "");
         let members = sign(&other, 39002, vec![d("plain"), p(&me.public_key())], "");
 
-        let out = build_joined_communities(
-            &me.public_key().to_hex(),
-            &[meta],
-            &[members],
-        );
+        let out = build_joined_communities(&me.public_key().to_hex(), &[meta], &[members]);
 
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].access, "open", "access defaults to open when tag missing");
-        assert_eq!(out[0].visibility, "public", "visibility defaults to public when tag missing");
+        assert_eq!(
+            out[0].access, "open",
+            "access defaults to open when tag missing"
+        );
+        assert_eq!(
+            out[0].visibility, "public",
+            "visibility defaults to public when tag missing"
+        );
     }
 
     #[test]
@@ -756,7 +805,10 @@ mod tests {
 
         assert_eq!(out.len(), 1, "missing metadata must not hide membership");
         assert_eq!(out[0].id, "alpha");
-        assert_eq!(out[0].name, "alpha", "name falls back to id when 39000 absent");
+        assert_eq!(
+            out[0].name, "alpha",
+            "name falls back to id when 39000 absent"
+        );
         assert_eq!(out[0].about, "");
         assert_eq!(out[0].picture, "");
         assert!(out[0].metadata_event_id.is_empty());
@@ -787,8 +839,11 @@ mod tests {
         let b = generate_group_id();
         assert_ne!(a, b);
         assert_eq!(a.len(), 12);
-        assert!(a.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
-            "group id must satisfy [a-z0-9]+: {a}");
+        assert!(
+            a.chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+            "group id must satisfy [a-z0-9]+: {a}"
+        );
     }
 
     #[test]

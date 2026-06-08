@@ -52,7 +52,10 @@ impl RoomExplorerConfigStore {
         if guard.is_none() {
             *guard = Some(load_config(&self.path).await.and_then(validate_pubkey));
         }
-        guard.as_ref().expect("room explorer config initialized").clone()
+        guard
+            .as_ref()
+            .expect("room explorer config initialized")
+            .clone()
     }
 
     async fn persist_curator_pubkey(&self, pubkey: &str) -> Result<(), CoreError> {
@@ -74,7 +77,8 @@ struct RoomExplorerConfig {
 }
 
 async fn fetch_curator_pubkey() -> Result<String, CoreError> {
-    let doc = crate::relay_polish::probe_nip11(crate::relays::room_explorer_curator_relay()).await?;
+    let doc =
+        crate::relay_polish::probe_nip11(crate::relays::room_explorer_curator_relay()).await?;
     let pubkey = doc
         .pubkey
         .ok_or_else(|| CoreError::Network("curator relay NIP-11 omitted pubkey".into()))?;

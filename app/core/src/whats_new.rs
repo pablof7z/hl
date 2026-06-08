@@ -236,7 +236,10 @@ mod tests {
     #[test]
     fn iso8601_parser_matches_known_timestamp() {
         assert_eq!(parse_iso8601_utc("1970-01-01T00:00:00Z"), Some(0));
-        assert_eq!(parse_iso8601_utc("2026-05-14T21:45:00Z"), Some(1_778_795_100));
+        assert_eq!(
+            parse_iso8601_utc("2026-05-14T21:45:00Z"),
+            Some(1_778_795_100)
+        );
         assert_eq!(parse_iso8601_utc("2026-02-29T00:00:00Z"), None);
     }
 

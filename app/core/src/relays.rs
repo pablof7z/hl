@@ -261,8 +261,7 @@ fn latest_nip65(ndb: &Ndb, user_hex: &str) -> Result<Option<Event>, CoreError> {
     }
     let author = PublicKey::from_hex(user_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let pk_bytes: [u8; 32] = author.to_bytes();
     let filter = NdbFilter::new()
         .kinds([KIND_RELAY_LIST as u64])
@@ -329,8 +328,7 @@ fn latest_app_data(ndb: &Ndb, user_hex: &str) -> Result<Option<Event>, CoreError
     }
     let author = PublicKey::from_hex(user_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let pk_bytes: [u8; 32] = author.to_bytes();
     let filter = NdbFilter::new()
         .kinds([KIND_APP_DATA as u64])
@@ -484,10 +482,7 @@ pub async fn publish_app_data(
 /// Replace the user's relay list with `rows`. Re-publishes both NIP-65 and
 /// NIP-78 so every flag is durable. Validates that every row's URL is a
 /// non-empty `ws://` or `wss://` URL with no duplicates.
-pub async fn set_relays(
-    runtime: &NostrRuntime,
-    rows: Vec<RelayConfig>,
-) -> Result<(), CoreError> {
+pub async fn set_relays(runtime: &NostrRuntime, rows: Vec<RelayConfig>) -> Result<(), CoreError> {
     if rows.is_empty() {
         return Err(CoreError::InvalidInput(
             "relay list must not be empty".into(),
@@ -601,16 +596,28 @@ mod tests {
         let seed = seed_defaults();
         assert_eq!(seed.len(), 4);
 
-        let hl = seed.iter().find(|r| r.url.contains("highlighter")).expect("hl");
+        let hl = seed
+            .iter()
+            .find(|r| r.url.contains("highlighter"))
+            .expect("hl");
         assert!(hl.read && hl.write && hl.rooms && !hl.indexer);
 
-        let damus = seed.iter().find(|r| r.url.contains("damus")).expect("damus");
+        let damus = seed
+            .iter()
+            .find(|r| r.url.contains("damus"))
+            .expect("damus");
         assert!(damus.read && damus.write && !damus.rooms && !damus.indexer);
 
-        let purple = seed.iter().find(|r| r.url.contains("purplepag")).expect("purple");
+        let purple = seed
+            .iter()
+            .find(|r| r.url.contains("purplepag"))
+            .expect("purple");
         assert!(!purple.read && !purple.write && !purple.rooms && purple.indexer);
 
-        let primal = seed.iter().find(|r| r.url.contains("primal")).expect("primal");
+        let primal = seed
+            .iter()
+            .find(|r| r.url.contains("primal"))
+            .expect("primal");
         assert!(!primal.read && !primal.write && !primal.rooms && primal.indexer);
     }
 
@@ -692,8 +699,7 @@ mod tests {
         let keys = Keys::generate();
         let rows = sample_rows();
         let content = app_data_content(&rows);
-        let d_tag = Tag::parse(vec!["d".to_string(), APP_DATA_D_TAG.to_string()])
-            .expect("d tag");
+        let d_tag = Tag::parse(vec!["d".to_string(), APP_DATA_D_TAG.to_string()]).expect("d tag");
         let event = EventBuilder::new(Kind::Custom(KIND_APP_DATA), content)
             .tags([d_tag])
             .sign_with_keys(&keys)
@@ -718,8 +724,7 @@ mod tests {
     #[test]
     fn parse_nip65_event_handles_missing_marker_as_both() {
         let keys = Keys::generate();
-        let tag = Tag::parse(vec!["r".to_string(), "wss://one.example".to_string()])
-            .expect("tag");
+        let tag = Tag::parse(vec!["r".to_string(), "wss://one.example".to_string()]).expect("tag");
         let event = EventBuilder::new(Kind::Custom(KIND_RELAY_LIST), "")
             .tags([tag])
             .sign_with_keys(&keys)

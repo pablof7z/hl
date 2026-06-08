@@ -13,18 +13,14 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::groups::{build_community_summary, KIND_GROUP_METADATA};
+use crate::groups::{build_community_summary, is_public_open_room, KIND_GROUP_METADATA};
 use crate::models::CommunitySummary;
 
 /// Return every cached kind:39000 as a `CommunitySummary`, newest first,
 /// truncated to `limit`. Dedup by group id with the newest `created_at`
 /// winning.
-pub fn query_all_rooms_from_ndb(
-    ndb: &Ndb,
-    limit: u32,
-) -> Result<Vec<CommunitySummary>, CoreError> {
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+pub fn query_all_rooms_from_ndb(ndb: &Ndb, limit: u32) -> Result<Vec<CommunitySummary>, CoreError> {
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     // Cap the raw scan at 4x the requested limit — metadata events can collide
     // on `d` (same group, newer supersession), and we want enough headroom to
@@ -61,6 +57,7 @@ pub fn query_all_rooms_from_ndb(
     let mut summaries: Vec<CommunitySummary> = newest_by_id
         .values()
         .filter_map(|e| build_community_summary(e).ok())
+        .filter(is_public_open_room)
         .collect();
 
     summaries.sort_by(|a, b| {
@@ -105,12 +102,23 @@ mod tests {
     }
 
     fn meta(keys: &Keys, id: &str, name: &str, ts: u64) -> Event {
+        meta_with_markers(keys, id, name, ts, "public", "open")
+    }
+
+    fn meta_with_markers(
+        keys: &Keys,
+        id: &str,
+        name: &str,
+        ts: u64,
+        visibility: &str,
+        access: &str,
+    ) -> Event {
         EventBuilder::new(Kind::Custom(KIND_GROUP_METADATA), "")
             .tags(vec![
                 Tag::identifier(id),
                 Tag::parse(vec!["name".to_string(), name.to_string()]).unwrap(),
-                Tag::parse(vec!["public".to_string()]).unwrap(),
-                Tag::parse(vec!["open".to_string()]).unwrap(),
+                Tag::parse(vec![visibility.to_string()]).unwrap(),
+                Tag::parse(vec![access.to_string()]).unwrap(),
             ])
             .custom_created_at(Timestamp::from(ts))
             .sign_with_keys(keys)
@@ -143,12 +151,36 @@ mod tests {
         let (ndb, _tmp) = isolated_ndb();
         let author = Keys::generate();
         for i in 0..10u64 {
-            ingest(&ndb, &meta(&author, &format!("room{i}"), &format!("R{i}"), 100 + i));
+            ingest(
+                &ndb,
+                &meta(&author, &format!("room{i}"), &format!("R{i}"), 100 + i),
+            );
         }
         wait_for_ndb();
 
         let out = query_all_rooms_from_ndb(&ndb, 4).expect("ok");
         assert_eq!(out.len(), 4);
+    }
+
+    #[test]
+    fn filters_private_or_closed_rooms_before_limiting() {
+        let (ndb, _tmp) = isolated_ndb();
+        let author = Keys::generate();
+        ingest(
+            &ndb,
+            &meta_with_markers(&author, "private", "Private", 400, "private", "open"),
+        );
+        ingest(
+            &ndb,
+            &meta_with_markers(&author, "closed", "Closed", 300, "public", "closed"),
+        );
+        ingest(&ndb, &meta(&author, "alpha", "Alpha", 200));
+        ingest(&ndb, &meta(&author, "bravo", "Bravo", 100));
+        wait_for_ndb();
+
+        let out = query_all_rooms_from_ndb(&ndb, 2).expect("ok");
+        let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, vec!["alpha", "bravo"]);
     }
 
     #[test]

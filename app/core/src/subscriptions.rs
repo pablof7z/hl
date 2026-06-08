@@ -23,10 +23,10 @@ use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 
 use crate::events::{DataChangeType, Delta, EventCallback};
+use crate::feedback::{ensure_feedback_relay, KIND_FEEDBACK_NOTE, KIND_FEEDBACK_THREAD_META};
 use crate::groups::{
     build_community_summary, KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA,
 };
-use crate::feedback::{ensure_feedback_relay, KIND_FEEDBACK_NOTE, KIND_FEEDBACK_THREAD_META};
 use crate::models::{ArtifactRecord, CommunitySummary, HighlightRecord, HydratedHighlight};
 use crate::nostr_runtime::{pin_relay_for_read, NostrRuntime};
 use crate::outbox;
@@ -65,19 +65,31 @@ struct Inner {
 
 #[derive(Clone)]
 pub(crate) enum SubscriptionKind {
-    JoinedCommunities { user_pubkey: PublicKey },
-    Room { group_id: String },
-    RoomDiscussions { group_id: String },
+    JoinedCommunities {
+        user_pubkey: PublicKey,
+    },
+    Room {
+        group_id: String,
+    },
+    RoomDiscussions {
+        group_id: String,
+    },
     /// Powers the chat tab: kind:9 messages tagged `#h=group_id`. Lives on
     /// the same rooms-relays set as `Room` / `RoomDiscussions`.
-    RoomChat { group_id: String },
-    Vault { user_pubkey: PublicKey },
+    RoomChat {
+        group_id: String,
+    },
+    Vault {
+        user_pubkey: PublicKey,
+    },
     /// Powers the profile page: listens for every event that could affect
     /// what renders on a profile (kind:0 metadata, kind:3 contacts, kind:30023
     /// articles, kind:9802 highlights authored by `pubkey`, plus kind:39001 /
     /// kind:39002 membership events that #p-tag `pubkey`). Delivers generic
     /// `UserProfileUpdated` deltas; the Swift store re-queries on each.
-    UserProfile { pubkey: PublicKey },
+    UserProfile {
+        pubkey: PublicKey,
+    },
     /// Powers the article reader: listens for replaceable supersessions of
     /// this specific article (kind:30023 by `author` with matching `d`) and
     /// every kind:9802 highlight referencing the article's NIP-33 address
@@ -94,7 +106,9 @@ pub(crate) enum SubscriptionKind {
     /// interacted with by follows (kinds 1/7/16/1111 + `#k=30023`). `follows`
     /// is a snapshot at subscribe time; if the user's contact list changes,
     /// the Swift store should drop + re-install the subscription.
-    FollowingReads { follows: Vec<PublicKey> },
+    FollowingReads {
+        follows: Vec<PublicKey>,
+    },
     /// Powers the "Highlights" home tab: kind:9802 events authored by
     /// follows plus kind:9802 events tagged with `#h=<group_id>` for any
     /// joined room. Both sets are snapshots at subscribe time.
@@ -113,7 +127,9 @@ pub(crate) enum SubscriptionKind {
     /// Powers the open-thread chat: every kind:1 `e`-tagged to the root
     /// (regardless of author) plus the root itself. Author-agnostic so agent
     /// replies appear inline.
-    FeedbackThread { root_event_id: EventId },
+    FeedbackThread {
+        root_event_id: EventId,
+    },
     /// NIP-50 relay search for kind:30023 articles. `query` is the raw search
     /// term the user typed; `relays` is the resolved set to target (default
     /// `wss://relay.highlighter.com` plus any kind:10007 entries). The pump
@@ -129,16 +145,24 @@ pub(crate) enum SubscriptionKind {
     /// `BookmarksUpdated` (app-scope) when a newer list lands in nostrdb —
     /// the Swift bookmarks store re-queries the authoritative list and every
     /// observing row reacts.
-    Bookmarks { user_pubkey: PublicKey },
+    Bookmarks {
+        user_pubkey: PublicKey,
+    },
     /// Current user's kind:30003 / kind:30004 sets. Fires `BookmarkSetsUpdated`
     /// (view-scoped) when any of the user's sets change.
-    BookmarkSets { user_pubkey: PublicKey },
+    BookmarkSets {
+        user_pubkey: PublicKey,
+    },
     /// kind:30004 curation sets from followed authors. Fires
     /// `FollowingCurationSetsUpdated` (view-scoped) on each new set event.
-    FollowingCurationSets { follows: Vec<PublicKey> },
+    FollowingCurationSets {
+        follows: Vec<PublicKey>,
+    },
     /// Current user's NIP-B0 kind:39701 web bookmarks. Fires
     /// `WebBookmarksUpdated` (view-scoped) when any web bookmark changes.
-    WebBookmarks { user_pubkey: PublicKey },
+    WebBookmarks {
+        user_pubkey: PublicKey,
+    },
     /// View-scoped live resolution for a `nostr:` entity card. The ndb pump
     /// emits `NostrEntityResolved` when the referenced profile/event/address
     /// lands in the cache.
@@ -261,12 +285,8 @@ fn outbox_per_pubkey_for(
     let ndb = runtime.ndb();
     let mut out = std::collections::HashMap::with_capacity(follows.len());
     for pk in follows {
-        let urls = outbox::write_relays_for_pubkey(
-            ndb,
-            &pk.to_hex(),
-            OUTBOX_MAX_RELAYS_PER_PUBKEY,
-        )
-        .unwrap_or_default();
+        let urls = outbox::write_relays_for_pubkey(ndb, &pk.to_hex(), OUTBOX_MAX_RELAYS_PER_PUBKEY)
+            .unwrap_or_default();
         out.insert(*pk, urls);
     }
     out
@@ -287,10 +307,8 @@ fn spawn_outbox_subs(
     if follows.is_empty() {
         return Vec::new();
     }
-    let plan = outbox::compute_outbox_plan(
-        outbox_per_pubkey_for(runtime, follows),
-        OUTBOX_MAX_RELAYS,
-    );
+    let plan =
+        outbox::compute_outbox_plan(outbox_per_pubkey_for(runtime, follows), OUTBOX_MAX_RELAYS);
     tracing::info!(
         role = role_label,
         follows = follows.len(),
@@ -374,10 +392,7 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             runtime.runtime_handle().spawn(async move {
                 let filter = Filter::new()
                     .kinds([Kind::Custom(11), Kind::Custom(9802), Kind::Custom(16)])
-                    .custom_tag(
-                        SingleLetterTag::lowercase(Alphabet::H),
-                        group_id,
-                    );
+                    .custom_tag(SingleLetterTag::lowercase(Alphabet::H), group_id);
                 if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
                     tracing::warn!(error = %e, "failed to subscribe to room feed");
                 }
@@ -398,10 +413,7 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             runtime.runtime_handle().spawn(async move {
                 let filter = Filter::new()
                     .kinds([Kind::Custom(11)])
-                    .custom_tag(
-                        SingleLetterTag::lowercase(Alphabet::H),
-                        group_id,
-                    );
+                    .custom_tag(SingleLetterTag::lowercase(Alphabet::H), group_id);
                 if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
                     tracing::warn!(error = %e, "failed to subscribe to discussions feed");
                 }
@@ -421,14 +433,13 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             runtime.runtime_handle().spawn(async move {
                 let filter = Filter::new()
                     .kinds([Kind::Custom(crate::chat::KIND_CHAT_MESSAGE)])
-                    .custom_tag(
-                        SingleLetterTag::lowercase(Alphabet::H),
-                        group_id_owned,
-                    );
+                    .custom_tag(SingleLetterTag::lowercase(Alphabet::H), group_id_owned);
                 let result = if urls.is_empty() {
                     client.subscribe_with_id(id_clone, filter, None).await
                 } else {
-                    client.subscribe_with_id_to(urls, id_clone, filter, None).await
+                    client
+                        .subscribe_with_id_to(urls, id_clone, filter, None)
+                        .await
                 };
                 if let Err(e) = result {
                     tracing::warn!(error = %e, "failed to subscribe to room chat feed");
@@ -442,9 +453,7 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             let id_clone = id.clone();
             let pk = *user_pubkey;
             runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(9802)])
-                    .author(pk);
+                let filter = Filter::new().kinds([Kind::Custom(9802)]).author(pk);
                 if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
                     tracing::warn!(error = %e, "failed to subscribe to vault feed");
                 }
@@ -469,7 +478,10 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
                         Kind::Custom(KIND_HIGHLIGHT),
                     ])
                     .author(pk);
-                if let Err(e) = client_a.subscribe_with_id(author_id_clone, filter, None).await {
+                if let Err(e) = client_a
+                    .subscribe_with_id(author_id_clone, filter, None)
+                    .await
+                {
                     tracing::warn!(error = %e, "failed to subscribe to profile author feed");
                 }
             });
@@ -494,7 +506,11 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
 
             vec![author_id, membership_id]
         }
-        SubscriptionKind::Article { author, d_tag, address } => {
+        SubscriptionKind::Article {
+            author,
+            d_tag,
+            address,
+        } => {
             // Two relay filters: the article body (kind:30023 by author with
             // matching `d`) and its highlights (kind:9802 referencing the
             // `a`-tag). Keeping them as distinct subs keeps relay-side
@@ -512,7 +528,10 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
                     .kinds([Kind::Custom(KIND_LONG_FORM)])
                     .author(author_pk)
                     .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag_owned);
-                if let Err(e) = client_a.subscribe_with_id(body_id_clone, filter, None).await {
+                if let Err(e) = client_a
+                    .subscribe_with_id(body_id_clone, filter, None)
+                    .await
+                {
                     tracing::warn!(error = %e, "failed to subscribe to article body feed");
                 }
             });
@@ -593,7 +612,9 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
                         if let Err(e) = c.subscribe_with_id(id_clone, filter, None).await {
                             tracing::warn!(error = %e, "room highlights subscribe (default pool)");
                         }
-                    } else if let Err(e) = c.subscribe_with_id_to(urls, id_clone, filter, None).await {
+                    } else if let Err(e) =
+                        c.subscribe_with_id_to(urls, id_clone, filter, None).await
+                    {
                         tracing::warn!(error = %e, "room highlights subscribe (rooms relays)");
                     }
                 });
@@ -602,7 +623,10 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
 
             ids
         }
-        SubscriptionKind::FeedbackThreads { coordinate, current_user_pubkey } => {
+        SubscriptionKind::FeedbackThreads {
+            coordinate,
+            current_user_pubkey,
+        } => {
             // Both subs target only the feedback relay so kind:1/513 traffic
             // for the project never fans out across the user's relay set.
             let client = runtime.client().clone();
@@ -821,12 +845,10 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
         // is unreliable so we skip it here. `build_change` already checks
         // `first_tag_value(event, "h")` against the group_id in Rust, which
         // is the authoritative filter.
-        SubscriptionKind::Room { .. } => vec![NdbFilter::new()
-            .kinds([11u64, 9802u64, 16u64])
-            .build()],
-        SubscriptionKind::RoomDiscussions { .. } => vec![NdbFilter::new()
-            .kinds([11u64])
-            .build()],
+        SubscriptionKind::Room { .. } => {
+            vec![NdbFilter::new().kinds([11u64, 9802u64, 16u64]).build()]
+        }
+        SubscriptionKind::RoomDiscussions { .. } => vec![NdbFilter::new().kinds([11u64]).build()],
         // RoomChat: kind:9 only — `build_change` re-checks `#h` against
         // the group_id so misrouted events can't poison another room.
         SubscriptionKind::RoomChat { .. } => vec![NdbFilter::new()
@@ -857,7 +879,11 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
                 .build();
             vec![author_filter, membership_filter]
         }
-        SubscriptionKind::Article { author, d_tag, address } => {
+        SubscriptionKind::Article {
+            author,
+            d_tag,
+            address,
+        } => {
             let pk_bytes: [u8; 32] = author.to_bytes();
             let body_filter = NdbFilter::new()
                 .kinds([KIND_LONG_FORM as u64])
@@ -894,7 +920,10 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
             // ndb's tag index for `h` is unreliable, hence the broad filter.
             vec![NdbFilter::new().kinds([KIND_HIGHLIGHT as u64]).build()]
         }
-        SubscriptionKind::FeedbackThreads { current_user_pubkey, .. } => {
+        SubscriptionKind::FeedbackThreads {
+            current_user_pubkey,
+            ..
+        } => {
             // Kind:1 by current user (root or reply) and kind:513 from anyone.
             // The pump's `build_change` re-runs query_threads on each delta so
             // the title/summary/last_activity_at recompute after a 513 lands.
@@ -955,12 +984,11 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
                 .authors([&pk_bytes])
                 .build()]
         }
-        SubscriptionKind::NostrEntity { entity } => {
-            crate::nostr_entities::ndb_filters(entity).unwrap_or_else(|e| {
+        SubscriptionKind::NostrEntity { entity } => crate::nostr_entities::ndb_filters(entity)
+            .unwrap_or_else(|e| {
                 tracing::warn!(error = %e, "nostr-entity subscription: invalid ndb filter");
                 vec![NdbFilter::new().kinds([u64::MAX]).build()]
-            })
-        }
+            }),
     }
 }
 
@@ -1061,11 +1089,7 @@ async fn run_pump(
             // Article backfill: when a follow interacts with an uncached
             // article, pull that article so the next re-query surfaces it.
             if matches!(kind, SubscriptionKind::FollowingReads { .. }) {
-                maybe_backfill_article(
-                    &runtime,
-                    &event,
-                    &mut backfilled_articles,
-                );
+                maybe_backfill_article(&runtime, &event, &mut backfilled_articles);
             }
             if let Some(change) = build_change(&kind, &event) {
                 // Stage-2 hydrate: if this membership event introduces a new
@@ -1365,7 +1389,11 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
                 kind: relevant_kind as u32,
             })
         }
-        SubscriptionKind::Article { author, d_tag, address } => {
+        SubscriptionKind::Article {
+            author,
+            d_tag,
+            address,
+        } => {
             let event_kind = event.kind.as_u16();
             match event_kind {
                 KIND_LONG_FORM => {
@@ -1438,7 +1466,10 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             }
             Some(DataChangeType::FollowingHighlightsUpdated)
         }
-        SubscriptionKind::FeedbackThreads { coordinate, current_user_pubkey } => {
+        SubscriptionKind::FeedbackThreads {
+            coordinate,
+            current_user_pubkey,
+        } => {
             let has_coord = first_tag_value(event, "a")
                 .map(|v| v == coordinate)
                 .unwrap_or(false);
@@ -1465,7 +1496,9 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
                 return None;
             }
             let title = first_tag_value(event, "title").unwrap_or("").to_lowercase();
-            let summary = first_tag_value(event, "summary").unwrap_or("").to_lowercase();
+            let summary = first_tag_value(event, "summary")
+                .unwrap_or("")
+                .to_lowercase();
             let body_lower = event.content.to_lowercase();
             let tag_hit = event.tags.iter().any(|t| {
                 let s = t.as_slice();
@@ -1709,10 +1742,7 @@ mod tests {
     }
 
     fn process(ndb: &Ndb, event: &Event) {
-        let relay_line = format!(
-            "[\"EVENT\",\"sub\",{}]",
-            event.as_json()
-        );
+        let relay_line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
         ndb.process_event(&relay_line).expect("process event");
     }
 
@@ -1752,7 +1782,10 @@ mod tests {
             .expect("join")
         };
         let handle = expect_subscription(handle);
-        assert!(handle >= FIRST_HANDLE, "handle must start at 1 (0 is reserved)");
+        assert!(
+            handle >= FIRST_HANDLE,
+            "handle must start at 1 (0 is reserved)"
+        );
 
         // Seed a valid 39000 + 39002 pair. nostrdb ingest will deliver via
         // the pump.
@@ -1770,10 +1803,7 @@ mod tests {
         let members = sign(
             &other,
             39002,
-            vec![
-                Tag::identifier("alpha"),
-                Tag::public_key(me.public_key()),
-            ],
+            vec![Tag::identifier("alpha"), Tag::public_key(me.public_key())],
             "",
         );
 
@@ -1797,7 +1827,10 @@ mod tests {
                 assert_eq!(delta.subscription_id, 0);
                 continue;
             }
-            assert_eq!(delta.subscription_id, 0, "joined-communities rides app-scope bus");
+            assert_eq!(
+                delta.subscription_id, 0,
+                "joined-communities rides app-scope bus"
+            );
             match delta.change {
                 DataChangeType::CommunityUpserted { community } => {
                     assert_eq!(community.id, "alpha");
@@ -1839,10 +1872,7 @@ mod tests {
         let members = sign(
             &other,
             39002,
-            vec![
-                Tag::identifier("alpha"),
-                Tag::public_key(me.public_key()),
-            ],
+            vec![Tag::identifier("alpha"), Tag::public_key(me.public_key())],
             "",
         );
         let meta = sign(
@@ -1872,7 +1902,10 @@ mod tests {
                 break;
             }
         }
-        assert!(drained, "expected at least one community delivery before unsubscribe");
+        assert!(
+            drained,
+            "expected at least one community delivery before unsubscribe"
+        );
 
         core.unsubscribe(handle);
 
@@ -2088,10 +2121,7 @@ mod tests {
         let members_mine = sign(
             &other,
             39002,
-            vec![
-                Tag::identifier("mine"),
-                Tag::public_key(me.public_key()),
-            ],
+            vec![Tag::identifier("mine"), Tag::public_key(me.public_key())],
             "",
         );
         process(core.runtime().ndb(), &meta_mine);
@@ -2101,7 +2131,9 @@ mod tests {
         let mut saw_mine = false;
         while std::time::Instant::now() < deadline {
             let Ok(delta) = rx.recv_timeout(Duration::from_millis(200)) else {
-                if saw_mine { break; }
+                if saw_mine {
+                    break;
+                }
                 continue;
             };
             if matches!(delta.change, DataChangeType::SignerConnected { .. }) {
@@ -2129,7 +2161,10 @@ mod tests {
                 _ => {}
             }
         }
-        assert!(saw_mine, "must still deliver deltas for groups the user is in");
+        assert!(
+            saw_mine,
+            "must still deliver deltas for groups the user is in"
+        );
     }
 
     #[test]

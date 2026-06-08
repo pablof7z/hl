@@ -46,7 +46,10 @@ fn nsec_login_accepts_hex_secret_key() {
 #[test]
 fn nsec_login_rejects_garbage() {
     let (core, _tmp) = isolated_core();
-    assert!(!core.login_nsec("not a real nsec".to_string()).error.is_empty());
+    assert!(!core
+        .login_nsec("not a real nsec".to_string())
+        .error
+        .is_empty());
     assert!(!core.login_nsec(String::new()).error.is_empty());
     assert!(!core.login_nsec("nsec1garbage".to_string()).error.is_empty());
 }

@@ -203,7 +203,10 @@ impl NostrRuntime {
             // stage 2 by `spawn_group_metadata_subscription` once the pump
             // sees a membership event for each group.
             let filter = Filter::new()
-                .kinds([Kind::Custom(KIND_GROUP_ADMINS), Kind::Custom(KIND_GROUP_MEMBERS)])
+                .kinds([
+                    Kind::Custom(KIND_GROUP_ADMINS),
+                    Kind::Custom(KIND_GROUP_MEMBERS),
+                ])
                 .pubkey(pubkey);
             subscribe_routed(&client, id_clone, filter, urls, "rooms/membership").await;
         });
@@ -436,9 +439,7 @@ impl NostrRuntime {
         let id_clone = id.clone();
         let urls = self.indexer_urls();
         self.rt().spawn(async move {
-            let filter = Filter::new()
-                .kinds([Kind::Custom(10002)])
-                .authors(follows);
+            let filter = Filter::new().kinds([Kind::Custom(10002)]).authors(follows);
             subscribe_routed(&client, id_clone, filter, urls, "indexer/follows-nip65").await;
         });
         Some(id)
@@ -660,7 +661,8 @@ impl NostrRuntime {
             loop {
                 ticker.tick().await;
                 let relays = client.relays().await;
-                let mut next: HashMap<String, RelayDiagnostic> = HashMap::with_capacity(relays.len());
+                let mut next: HashMap<String, RelayDiagnostic> =
+                    HashMap::with_capacity(relays.len());
                 let mut changed_urls: Vec<(String, AppRelayStatus)> = Vec::new();
                 let mut changed_rows: Vec<RelayDiagnostic> = Vec::new();
 
@@ -789,9 +791,7 @@ pub async fn pin_relay_for_read(client: &Client, url: &str) {
     let refreshed = client.relays().await;
     if let Some((_, relay)) = refreshed.iter().find(|(u, _)| u.to_string() == url) {
         let flags = relay.flags();
-        flags.remove(
-            RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING,
-        );
+        flags.remove(RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING);
         flags.add(RelayServiceFlags::READ | RelayServiceFlags::PING);
     }
     if let Err(e) = client.connect_relay(url).await {
@@ -1079,7 +1079,11 @@ mod tests {
         apply_relay_config(&client, &initial).await;
 
         let after = client.relays().await;
-        assert_eq!(after.len(), 2, "pool should have exactly the two configured relays");
+        assert_eq!(
+            after.len(),
+            2,
+            "pool should have exactly the two configured relays"
+        );
 
         let one = after
             .iter()
@@ -1245,13 +1249,19 @@ mod tests {
         reads.sort();
         assert_eq!(
             reads,
-            vec!["wss://r.example".to_string(), "wss://rw.example".to_string()]
+            vec![
+                "wss://r.example".to_string(),
+                "wss://rw.example".to_string()
+            ]
         );
         let mut writes = rt.write_urls();
         writes.sort();
         assert_eq!(
             writes,
-            vec!["wss://rw.example".to_string(), "wss://w.example".to_string()]
+            vec![
+                "wss://rw.example".to_string(),
+                "wss://w.example".to_string()
+            ]
         );
     }
 
@@ -1263,8 +1273,10 @@ mod tests {
         // Cache starts empty until `apply_relay_config` populates it. The
         // background `spawn_connect` will eventually fill it; the accessor
         // contract is "empty until reconcile completes".
-        assert!(runtime.current_relays().is_empty() || !runtime.current_relays().is_empty(),
-                "accessor must not panic even when cache is unpopulated");
+        assert!(
+            runtime.current_relays().is_empty() || !runtime.current_relays().is_empty(),
+            "accessor must not panic even when cache is unpopulated"
+        );
         // Role accessors on a freshly-built runtime return empty vecs
         // without hitting any async state.
         let _ = runtime.rooms_urls();

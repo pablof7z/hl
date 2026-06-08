@@ -5,10 +5,9 @@ pub mod artifact_detail;
 pub mod artifacts;
 pub mod blossom;
 pub mod bookmarks;
-pub mod lists;
 pub mod chat;
-pub mod clock;
 pub mod client;
+pub mod clock;
 pub mod comments;
 pub mod curation;
 pub mod discovery;
@@ -20,6 +19,7 @@ pub mod follows;
 pub mod groups;
 pub mod highlights;
 pub mod isbn_lookup;
+pub mod lists;
 pub mod models;
 pub mod network_preferences;
 pub mod nip05;
@@ -53,10 +53,10 @@ pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
     ArticleListOutcome, ArticleOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget,
     ArtifactListOutcome, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord,
-    BlossomUpload, BlossomUploadOutcome, BookmarkSetListOutcome,
-    BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome,
-    ChatMessageOutcome, ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord,
-    CommunityListOutcome, CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionAttachment,
+    BlossomUpload, BlossomUploadOutcome, BookmarkSetListOutcome, BookmarkSetOutcome,
+    BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome,
+    ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord, CommunityListOutcome,
+    CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionAttachment,
     DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
     FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
     GeneratedAccount, GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome,
@@ -64,12 +64,11 @@ pub use models::{
     MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
     NostrEntityEventOutcome, NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft,
     PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
-    ProfileOutcome, ReactionListOutcome, ReactionOutcome, ReadingFeedItem,
-    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
-    RoomRecommendation, RoomRecommendationListOutcome,
-    RoomRecommendationReason, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
+    ProfileOutcome, ReactionListOutcome, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
+    RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
+    RoomRecommendationListOutcome, RoomRecommendationReason, StringListOutcome, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
 pub use podcast_transcript::TranscriptSegment;

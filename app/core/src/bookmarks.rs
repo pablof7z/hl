@@ -50,8 +50,7 @@ pub fn query_bookmarks(ndb: &Ndb, user_hex: &str) -> Result<BookmarkList, CoreEr
         .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
     let pk_bytes: [u8; 32] = author.to_bytes();
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let filter = NdbFilter::new()
         .kinds([KIND_BOOKMARKS as u64])
         .authors([&pk_bytes])
@@ -62,9 +61,13 @@ pub fn query_bookmarks(ndb: &Ndb, user_hex: &str) -> Result<BookmarkList, CoreEr
 
     let mut newest: Option<Event> = None;
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         newest = Some(match newest {
             Some(prev) if prev.created_at >= event.created_at => prev,
             _ => event,
