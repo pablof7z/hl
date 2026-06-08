@@ -577,6 +577,12 @@ actor SafeHighlighterCore {
         await core.getUserProfile(pubkeyHex: pubkeyHex)
     }
 
+    nonisolated func projectProfileDisplay(
+        input: ProfileDisplayProjectionInput
+    ) -> ProfileDisplayProjection {
+        core.projectProfileDisplay(input: input)
+    }
+
     nonisolated func decodeNostrEntity(_ input: String) -> NostrEntityRefOutcome {
         core.decodeNostrEntity(input: input)
     }

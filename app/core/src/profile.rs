@@ -113,6 +113,49 @@ struct RawMetadata {
     lud16: Option<String>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileDisplayProjectionInput {
+    pub pubkey: String,
+    pub profile: Option<ProfileMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProfileDisplayProjection {
+    pub display_name: String,
+    pub display_initial: String,
+    pub picture_url: String,
+}
+
+/// Pure profile presentation projection. Rust owns profile-name precedence,
+/// pubkey fallback, and avatar source selection; native shells only render.
+pub fn profile_display_projection(
+    input: ProfileDisplayProjectionInput,
+) -> ProfileDisplayProjection {
+    let display_name = match input.profile.as_ref() {
+        Some(profile) if !profile.display_name.is_empty() => profile.display_name.clone(),
+        Some(profile) if !profile.name.is_empty() => profile.name.clone(),
+        _ => input.pubkey.chars().take(8).collect(),
+    };
+    let display_initial = match input.profile.as_ref() {
+        Some(profile) if !profile.display_name.is_empty() => {
+            profile.display_name.chars().take(1).collect()
+        }
+        Some(profile) if !profile.name.is_empty() => profile.name.chars().take(1).collect(),
+        _ => input.pubkey.chars().take(1).collect(),
+    };
+    let picture_url = input
+        .profile
+        .as_ref()
+        .map(|profile| profile.picture.clone())
+        .unwrap_or_default();
+
+    ProfileDisplayProjection {
+        display_name,
+        display_initial,
+        picture_url,
+    }
+}
+
 /// Publish a fresh kind:0 metadata event for the current user. Preserves
 /// any unknown fields the user may have set from another client (e.g.
 /// `pronouns`, `bot`, `picture_animated`) — we deserialise the existing
@@ -285,5 +328,78 @@ mod tests {
         assert_eq!(p.pubkey, keys.public_key().to_hex());
         assert!(p.name.is_empty());
         assert!(p.about.is_empty());
+    }
+
+    #[test]
+    fn profile_display_projection_prefers_display_name() {
+        let projection = profile_display_projection(ProfileDisplayProjectionInput {
+            pubkey: "abcdef123456".to_string(),
+            profile: Some(ProfileMetadata {
+                pubkey: "abcdef123456".to_string(),
+                name: "alice".to_string(),
+                display_name: "Reader One".to_string(),
+                about: String::new(),
+                picture: "https://example.com/avatar.png".to_string(),
+                banner: String::new(),
+                nip05: String::new(),
+                website: String::new(),
+                lud16: String::new(),
+                created_at: None,
+            }),
+        });
+
+        assert_eq!(
+            projection,
+            ProfileDisplayProjection {
+                display_name: "Reader One".to_string(),
+                display_initial: "R".to_string(),
+                picture_url: "https://example.com/avatar.png".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn profile_display_projection_falls_back_to_name() {
+        let projection = profile_display_projection(ProfileDisplayProjectionInput {
+            pubkey: "abcdef123456".to_string(),
+            profile: Some(ProfileMetadata {
+                pubkey: "abcdef123456".to_string(),
+                name: "alice".to_string(),
+                display_name: String::new(),
+                about: String::new(),
+                picture: String::new(),
+                banner: String::new(),
+                nip05: String::new(),
+                website: String::new(),
+                lud16: String::new(),
+                created_at: None,
+            }),
+        });
+
+        assert_eq!(
+            projection,
+            ProfileDisplayProjection {
+                display_name: "alice".to_string(),
+                display_initial: "a".to_string(),
+                picture_url: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn profile_display_projection_falls_back_to_pubkey() {
+        let projection = profile_display_projection(ProfileDisplayProjectionInput {
+            pubkey: "abcdef123456".to_string(),
+            profile: None,
+        });
+
+        assert_eq!(
+            projection,
+            ProfileDisplayProjection {
+                display_name: "abcdef12".to_string(),
+                display_initial: "a".to_string(),
+                picture_url: String::new(),
+            }
+        );
     }
 }

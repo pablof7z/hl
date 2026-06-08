@@ -1716,6 +1716,16 @@ impl HighlighterCore {
         ))
     }
 
+    /// Profile/avatar presentation projection. Rust owns profile-name
+    /// precedence, pubkey fallback, and avatar URL selection; native shells
+    /// render the resulting values without reimplementing business rules.
+    pub fn project_profile_display(
+        &self,
+        input: profile::ProfileDisplayProjectionInput,
+    ) -> profile::ProfileDisplayProjection {
+        profile::profile_display_projection(input)
+    }
+
     /// Publish a new kind:0 metadata event for the current user. Preserves
     /// any unknown JSON fields the user had set via other clients —
     /// only the canonical fields the edit form drives get overwritten.

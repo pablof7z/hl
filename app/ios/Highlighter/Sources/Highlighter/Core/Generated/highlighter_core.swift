@@ -1429,6 +1429,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
+    /**
+     * Profile/avatar presentation projection. Rust owns profile-name
+     * precedence, pubkey fallback, and avatar URL selection; native shells
+     * render the resulting values without reimplementing business rules.
+     */
+    func projectProfileDisplay(input: ProfileDisplayProjectionInput)  -> ProfileDisplayProjection
+
     func projectRelayDetail(input: RelayDetailProjectionInput)  -> RelayDetailProjection
 
     func projectRelayRemove(input: RelayRemoveProjectionInput)  -> RelayRemoveProjection
@@ -4173,6 +4180,19 @@ open func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelay
     return try!  FfiConverterTypeImportRelaysProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_import_relays(self.uniffiClonePointer(),
         FfiConverterTypeImportRelaysProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Profile/avatar presentation projection. Rust owns profile-name
+     * precedence, pubkey fallback, and avatar URL selection; native shells
+     * render the resulting values without reimplementing business rules.
+     */
+open func projectProfileDisplay(input: ProfileDisplayProjectionInput) -> ProfileDisplayProjection  {
+    return try!  FfiConverterTypeProfileDisplayProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_profile_display(self.uniffiClonePointer(),
+        FfiConverterTypeProfileDisplayProjectionInput_lower(input),$0
     )
 })
 }
@@ -15239,6 +15259,154 @@ public func FfiConverterTypePodcastTimelineRow_lower(_ value: PodcastTimelineRow
 }
 
 
+public struct ProfileDisplayProjection {
+    public var displayName: String
+    public var displayInitial: String
+    public var pictureUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayName: String, displayInitial: String, pictureUrl: String) {
+        self.displayName = displayName
+        self.displayInitial = displayInitial
+        self.pictureUrl = pictureUrl
+    }
+}
+
+#if compiler(>=6)
+extension ProfileDisplayProjection: Sendable {}
+#endif
+
+
+extension ProfileDisplayProjection: Equatable, Hashable {
+    public static func ==(lhs: ProfileDisplayProjection, rhs: ProfileDisplayProjection) -> Bool {
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.displayInitial != rhs.displayInitial {
+            return false
+        }
+        if lhs.pictureUrl != rhs.pictureUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayName)
+        hasher.combine(displayInitial)
+        hasher.combine(pictureUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileDisplayProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileDisplayProjection {
+        return
+            try ProfileDisplayProjection(
+                displayName: FfiConverterString.read(from: &buf),
+                displayInitial: FfiConverterString.read(from: &buf),
+                pictureUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileDisplayProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.displayInitial, into: &buf)
+        FfiConverterString.write(value.pictureUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileDisplayProjection_lift(_ buf: RustBuffer) throws -> ProfileDisplayProjection {
+    return try FfiConverterTypeProfileDisplayProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileDisplayProjection_lower(_ value: ProfileDisplayProjection) -> RustBuffer {
+    return FfiConverterTypeProfileDisplayProjection.lower(value)
+}
+
+
+public struct ProfileDisplayProjectionInput {
+    public var pubkey: String
+    public var profile: ProfileMetadata?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkey: String, profile: ProfileMetadata?) {
+        self.pubkey = pubkey
+        self.profile = profile
+    }
+}
+
+#if compiler(>=6)
+extension ProfileDisplayProjectionInput: Sendable {}
+#endif
+
+
+extension ProfileDisplayProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ProfileDisplayProjectionInput, rhs: ProfileDisplayProjectionInput) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(profile)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileDisplayProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileDisplayProjectionInput {
+        return
+            try ProfileDisplayProjectionInput(
+                pubkey: FfiConverterString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileDisplayProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileDisplayProjectionInput_lift(_ buf: RustBuffer) throws -> ProfileDisplayProjectionInput {
+    return try FfiConverterTypeProfileDisplayProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileDisplayProjectionInput_lower(_ value: ProfileDisplayProjectionInput) -> RustBuffer {
+    return FfiConverterTypeProfileDisplayProjectionInput.lower(value)
+}
+
+
 public struct ProfileListOutcome {
     public var values: [ProfileMetadata]
     public var error: String
@@ -23892,6 +24060,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_display() != 29583) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_detail() != 11729) {
