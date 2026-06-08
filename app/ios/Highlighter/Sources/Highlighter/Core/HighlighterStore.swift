@@ -281,7 +281,9 @@ final class HighlighterStore {
 
     /// Public so `EventBridge` can re-query on a `MembershipChanged` delta.
     func refreshJoinedCommunities() async {
-        if let updated = try? await safeCore.getJoinedCommunities() {
+        let outcome = await safeCore.getJoinedCommunities()
+        if outcome.error.isEmpty {
+            let updated = outcome.values
             joinedCommunities = updated
             // Any pending join whose group is now in the joined set →
             // promote the toast from "Join requested" to "You're in ✓".
@@ -311,8 +313,9 @@ final class HighlighterStore {
     private func loadAppScopeData() async {
         // Immediate read from nostrdb via the Rust core. Non-blocking on
         // relays — the cache answers first, subscriptions catch up later.
-        if let snapshot = try? await safeCore.getJoinedCommunities() {
-            joinedCommunities = snapshot
+        let communitiesOutcome = await safeCore.getJoinedCommunities()
+        if communitiesOutcome.error.isEmpty {
+            joinedCommunities = communitiesOutcome.values
         }
 
         // Fetch the user's own kind:0 so the top-bar avatar shows their real

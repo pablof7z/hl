@@ -86,43 +86,47 @@ actor SafeHighlighterCore {
 
     // MARK: - Reads
 
-    func getJoinedCommunities() async throws -> [CommunitySummary] {
-        try await core.getJoinedCommunities()
+    func getJoinedCommunities() async -> CommunityListOutcome {
+        await core.getJoinedCommunities()
     }
 
-    func getArtifacts(groupId: String, limit: UInt32 = 32) async throws -> [ArtifactRecord] {
-        try await core.getArtifacts(groupId: groupId, limit: limit)
+    func getArtifacts(groupId: String, limit: UInt32 = 32) async -> ArtifactListOutcome {
+        await core.getArtifacts(groupId: groupId, limit: limit)
     }
 
-    func getHighlights(groupId: String, limit: UInt32 = 64) async throws -> [HydratedHighlight] {
-        try await core.getHighlights(groupId: groupId, limit: limit)
+    func getHighlights(groupId: String, limit: UInt32 = 64) async -> HydratedHighlightListOutcome {
+        await core.getHighlights(groupId: groupId, limit: limit)
     }
 
-    func getRecentBooks(limit: UInt32 = 24) async throws -> [ArtifactRecord] {
-        try await core.getRecentBooks(limit: limit)
+    func getRecentBooks(limit: UInt32 = 24) async -> ArtifactListOutcome {
+        await core.getRecentBooks(limit: limit)
     }
 
-    func searchArtifacts(query: String, limit: UInt32 = 20) async throws -> [ArtifactRecord] {
-        try await core.searchArtifacts(query: query, limit: limit)
+    func searchArtifacts(query: String, limit: UInt32 = 20) async -> ArtifactListOutcome {
+        await core.searchArtifacts(query: query, limit: limit)
     }
 
     // MARK: - Search (local ndb + NIP-50 relay)
 
-    func searchHighlights(query: String, limit: UInt32 = 20) async throws -> [HighlightRecord] {
-        try await core.searchHighlights(query: query, limit: limit)
+    func searchHighlights(query: String, limit: UInt32 = 20) async -> HighlightListOutcome {
+        await core.searchHighlights(query: query, limit: limit)
     }
 
-    func searchArticles(query: String, limit: UInt32 = 20) async throws -> [ArticleRecord] {
-        try await core.searchArticles(query: query, limit: limit)
+    func searchArticles(query: String, limit: UInt32 = 20) async -> ArticleListOutcome {
+        await core.searchArticles(query: query, limit: limit)
     }
 
-    func searchCommunities(query: String, limit: UInt32 = 20) async throws -> [CommunitySummary] {
-        let candidates = try await core.searchCommunities(query: query, limit: publicRoomCandidateLimit(limit))
-        return Array(candidates.filter(\.isPublicOpenRoom).prefix(Int(limit)))
+    func searchCommunities(query: String, limit: UInt32 = 20) async -> CommunityListOutcome {
+        let candidates = await core.searchCommunities(query: query, limit: publicRoomCandidateLimit(limit))
+        guard candidates.error.isEmpty else { return candidates }
+        return CommunityListOutcome(
+            values: Array(candidates.values.filter(\.isPublicOpenRoom).prefix(Int(limit))),
+            error: ""
+        )
     }
 
-    func searchProfiles(query: String, limit: UInt32 = 20) async throws -> [ProfileMetadata] {
-        try await core.searchProfiles(query: query, limit: limit)
+    func searchProfiles(query: String, limit: UInt32 = 20) async -> ProfileListOutcome {
+        await core.searchProfiles(query: query, limit: limit)
     }
 
     func getSearchRelays() async -> StringListOutcome {

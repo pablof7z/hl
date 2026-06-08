@@ -95,6 +95,12 @@ pub struct ArtifactOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct ArtifactListOutcome {
+    pub values: Vec<ArtifactRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct BlossomUploadOutcome {
     pub value: Option<BlossomUpload>,
     pub error: String,
@@ -109,6 +115,18 @@ pub struct ChatMessageOutcome {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CommentOutcome {
     pub value: Option<CommentRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleListOutcome {
+    pub values: Vec<ArticleRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommunityListOutcome {
+    pub values: Vec<CommunitySummary>,
     pub error: String,
 }
 
@@ -131,8 +149,20 @@ pub struct HighlightListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct HydratedHighlightListOutcome {
+    pub values: Vec<HydratedHighlight>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct HighlightOutcome {
     pub value: Option<HighlightRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileListOutcome {
+    pub values: Vec<ProfileMetadata>,
     pub error: String,
 }
 

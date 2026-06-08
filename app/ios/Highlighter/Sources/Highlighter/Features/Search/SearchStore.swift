@@ -142,19 +142,19 @@ final class SearchStore {
     }
 
     private func runSearch(for q: String, token: UInt64) async {
-        async let h = try? safeCore.searchHighlights(query: q, limit: 30)
-        async let a = try? safeCore.searchArticles(query: q, limit: 30)
-        async let c = try? safeCore.searchCommunities(query: q, limit: 20)
-        async let p = try? safeCore.searchProfiles(query: q, limit: 20)
+        async let h = safeCore.searchHighlights(query: q, limit: 30)
+        async let a = safeCore.searchArticles(query: q, limit: 30)
+        async let c = safeCore.searchCommunities(query: q, limit: 20)
+        async let p = safeCore.searchProfiles(query: q, limit: 20)
         let (hs, ars, cs, ps) = await (h, a, c, p)
 
         guard token == searchToken else { return }
 
         appliedQuery = q
-        highlights = hs ?? []
-        articles = ars ?? []
-        communities = cs ?? []
-        profiles = ps ?? []
+        highlights = hs.error.isEmpty ? hs.values : []
+        articles = ars.error.isEmpty ? ars.values : []
+        communities = cs.error.isEmpty ? cs.values : []
+        profiles = ps.error.isEmpty ? ps.values : []
         isLocalLoading = false
 
         if activeRelayQuery != q {
@@ -208,7 +208,8 @@ final class SearchStore {
         let token = searchToken
         Task { [weak self] in
             guard let self else { return }
-            let refreshed = (try? await self.safeCore.searchArticles(query: q, limit: 30)) ?? []
+            let outcome = await self.safeCore.searchArticles(query: q, limit: 30)
+            let refreshed = outcome.error.isEmpty ? outcome.values : []
             guard token == self.searchToken, q == self.appliedQuery else { return }
             self.articles = refreshed
         }

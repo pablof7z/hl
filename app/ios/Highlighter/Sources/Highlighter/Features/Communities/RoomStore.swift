@@ -43,11 +43,13 @@ final class RoomStore {
         async let artifactsFetch = core.getArtifacts(groupId: groupId)
         async let highlightsFetch = core.getHighlights(groupId: groupId)
 
-        do {
-            artifacts = try await artifactsFetch
-            highlights = try await highlightsFetch
-        } catch {
-            loadError = (error as? CoreError).map { "\($0)" }
+        let (artifactOutcome, highlightOutcome) = await (artifactsFetch, highlightsFetch)
+        artifacts = artifactOutcome.values
+        highlights = highlightOutcome.values
+        if !artifactOutcome.error.isEmpty {
+            loadError = artifactOutcome.error
+        } else if !highlightOutcome.error.isEmpty {
+            loadError = highlightOutcome.error
         }
         isLoading = false
 

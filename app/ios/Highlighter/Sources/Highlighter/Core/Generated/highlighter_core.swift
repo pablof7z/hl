@@ -837,7 +837,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
 
-    func getArtifacts(groupId: String, limit: UInt32) async throws  -> [ArtifactRecord]
+    func getArtifacts(groupId: String, limit: UInt32) async  -> ArtifactListOutcome
 
     /**
      * Return the user's ordered Blossom server list from nostrdb. Empty if no
@@ -919,7 +919,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getFollows() async throws  -> [String]
 
-    func getHighlights(groupId: String, limit: UInt32) async throws  -> [HydratedHighlight]
+    func getHighlights(groupId: String, limit: UInt32) async  -> HydratedHighlightListOutcome
 
     /**
      * Read all highlights referencing the given NIP-23 article address
@@ -935,7 +935,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32) async throws  -> [HighlightRecord]
 
-    func getJoinedCommunities() async throws  -> [CommunitySummary]
+    func getJoinedCommunities() async  -> CommunityListOutcome
 
     /**
      * Return all kind:30003 bookmark sets authored by the current user.
@@ -983,7 +983,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * capture-flow book picker. Returns `[]` if no books are cached or the
      * user isn't logged in.
      */
-    func getRecentBooks(limit: UInt32) async throws  -> [ArtifactRecord]
+    func getRecentBooks(limit: UInt32) async  -> ArtifactListOutcome
 
     func getRecentSearches() async  -> StringListOutcome
 
@@ -1193,15 +1193,15 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)  -> MutationOutcome
 
-    func searchArticles(query: String, limit: UInt32) async throws  -> [ArticleRecord]
+    func searchArticles(query: String, limit: UInt32) async  -> ArticleListOutcome
 
-    func searchArtifacts(query: String, limit: UInt32) async throws  -> [ArtifactRecord]
+    func searchArtifacts(query: String, limit: UInt32) async  -> ArtifactListOutcome
 
-    func searchCommunities(query: String, limit: UInt32) async throws  -> [CommunitySummary]
+    func searchCommunities(query: String, limit: UInt32) async  -> CommunityListOutcome
 
-    func searchHighlights(query: String, limit: UInt32) async throws  -> [HighlightRecord]
+    func searchHighlights(query: String, limit: UInt32) async  -> HighlightListOutcome
 
-    func searchProfiles(query: String, limit: UInt32) async throws  -> [ProfileMetadata]
+    func searchProfiles(query: String, limit: UInt32) async  -> ProfileListOutcome
 
     func searchRelays() async throws  -> [String]
 
@@ -1833,9 +1833,9 @@ open func getArtifactDetailRoute(artifact: ArtifactRecord) -> ArtifactDetailRout
 })
 }
 
-open func getArtifacts(groupId: String, limit: UInt32)async throws  -> [ArtifactRecord]  {
+open func getArtifacts(groupId: String, limit: UInt32)async  -> ArtifactListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_artifacts(
                     self.uniffiClonePointer(),
@@ -1845,8 +1845,9 @@ open func getArtifacts(groupId: String, limit: UInt32)async throws  -> [Artifact
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeArtifactRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeArtifactListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2127,9 +2128,9 @@ open func getFollows()async throws  -> [String]  {
         )
 }
 
-open func getHighlights(groupId: String, limit: UInt32)async throws  -> [HydratedHighlight]  {
+open func getHighlights(groupId: String, limit: UInt32)async  -> HydratedHighlightListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_highlights(
                     self.uniffiClonePointer(),
@@ -2139,8 +2140,9 @@ open func getHighlights(groupId: String, limit: UInt32)async throws  -> [Hydrate
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHydratedHighlight.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeHydratedHighlightListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2188,9 +2190,9 @@ open func getHighlightsForReference(tagName: String, tagValue: String, limit: UI
         )
 }
 
-open func getJoinedCommunities()async throws  -> [CommunitySummary]  {
+open func getJoinedCommunities()async  -> CommunityListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_joined_communities(
                     self.uniffiClonePointer()
@@ -2200,8 +2202,9 @@ open func getJoinedCommunities()async throws  -> [CommunitySummary]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeCommunityListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2370,9 +2373,9 @@ open func getReactionsForEvent(targetEventId: String, limit: UInt32)async throws
      * capture-flow book picker. Returns `[]` if no books are cached or the
      * user isn't logged in.
      */
-open func getRecentBooks(limit: UInt32)async throws  -> [ArtifactRecord]  {
+open func getRecentBooks(limit: UInt32)async  -> ArtifactListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_recent_books(
                     self.uniffiClonePointer(),
@@ -2382,8 +2385,9 @@ open func getRecentBooks(limit: UInt32)async throws  -> [ArtifactRecord]  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeArtifactRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeArtifactListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3222,9 +3226,9 @@ open func savePodcastPosition(guid: String, positionSeconds: Double, artifact: A
 })
 }
 
-open func searchArticles(query: String, limit: UInt32)async throws  -> [ArticleRecord]  {
+open func searchArticles(query: String, limit: UInt32)async  -> ArticleListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_search_articles(
                     self.uniffiClonePointer(),
@@ -3234,14 +3238,15 @@ open func searchArticles(query: String, limit: UInt32)async throws  -> [ArticleR
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeArticleRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeArticleListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
-open func searchArtifacts(query: String, limit: UInt32)async throws  -> [ArtifactRecord]  {
+open func searchArtifacts(query: String, limit: UInt32)async  -> ArtifactListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_search_artifacts(
                     self.uniffiClonePointer(),
@@ -3251,14 +3256,15 @@ open func searchArtifacts(query: String, limit: UInt32)async throws  -> [Artifac
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeArtifactRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeArtifactListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
-open func searchCommunities(query: String, limit: UInt32)async throws  -> [CommunitySummary]  {
+open func searchCommunities(query: String, limit: UInt32)async  -> CommunityListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_search_communities(
                     self.uniffiClonePointer(),
@@ -3268,14 +3274,15 @@ open func searchCommunities(query: String, limit: UInt32)async throws  -> [Commu
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeCommunityListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
-open func searchHighlights(query: String, limit: UInt32)async throws  -> [HighlightRecord]  {
+open func searchHighlights(query: String, limit: UInt32)async  -> HighlightListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_search_highlights(
                     self.uniffiClonePointer(),
@@ -3285,14 +3292,15 @@ open func searchHighlights(query: String, limit: UInt32)async throws  -> [Highli
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
-open func searchProfiles(query: String, limit: UInt32)async throws  -> [ProfileMetadata]  {
+open func searchProfiles(query: String, limit: UInt32)async  -> ProfileListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_search_profiles(
                     self.uniffiClonePointer(),
@@ -3302,8 +3310,9 @@ open func searchProfiles(query: String, limit: UInt32)async throws  -> [ProfileM
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeProfileMetadata.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeProfileListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -4215,6 +4224,76 @@ public func FfiConverterTypeHighlighterCore_lower(_ value: HighlighterCore) -> U
 
 
 
+public struct ArticleListOutcome {
+    public var values: [ArticleRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [ArticleRecord], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ArticleListOutcome: Sendable {}
+#endif
+
+
+extension ArticleListOutcome: Equatable, Hashable {
+    public static func ==(lhs: ArticleListOutcome, rhs: ArticleListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleListOutcome {
+        return
+            try ArticleListOutcome(
+                values: FfiConverterSequenceTypeArticleRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeArticleRecord.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleListOutcome_lift(_ buf: RustBuffer) throws -> ArticleListOutcome {
+    return try FfiConverterTypeArticleListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleListOutcome_lower(_ value: ArticleListOutcome) -> RustBuffer {
+    return FfiConverterTypeArticleListOutcome.lower(value)
+}
+
+
 /**
  * NIP-23 long-form article (kind:30023). Dedupe happens by `d` tag with the
  * newest `created_at` winning, matching how the web app renders.
@@ -4466,6 +4545,76 @@ public func FfiConverterTypeArtifactDetailRoute_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeArtifactDetailRoute_lower(_ value: ArtifactDetailRoute) -> RustBuffer {
     return FfiConverterTypeArtifactDetailRoute.lower(value)
+}
+
+
+public struct ArtifactListOutcome {
+    public var values: [ArtifactRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [ArtifactRecord], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ArtifactListOutcome: Sendable {}
+#endif
+
+
+extension ArtifactListOutcome: Equatable, Hashable {
+    public static func ==(lhs: ArtifactListOutcome, rhs: ArtifactListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArtifactListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactListOutcome {
+        return
+            try ArtifactListOutcome(
+                values: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArtifactListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeArtifactRecord.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactListOutcome_lift(_ buf: RustBuffer) throws -> ArtifactListOutcome {
+    return try FfiConverterTypeArtifactListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactListOutcome_lower(_ value: ArtifactListOutcome) -> RustBuffer {
+    return FfiConverterTypeArtifactListOutcome.lower(value)
 }
 
 
@@ -6062,6 +6211,76 @@ public func FfiConverterTypeCommentRecord_lift(_ buf: RustBuffer) throws -> Comm
 #endif
 public func FfiConverterTypeCommentRecord_lower(_ value: CommentRecord) -> RustBuffer {
     return FfiConverterTypeCommentRecord.lower(value)
+}
+
+
+public struct CommunityListOutcome {
+    public var values: [CommunitySummary]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [CommunitySummary], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CommunityListOutcome: Sendable {}
+#endif
+
+
+extension CommunityListOutcome: Equatable, Hashable {
+    public static func ==(lhs: CommunityListOutcome, rhs: CommunityListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommunityListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommunityListOutcome {
+        return
+            try CommunityListOutcome(
+                values: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommunityListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommunitySummary.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunityListOutcome_lift(_ buf: RustBuffer) throws -> CommunityListOutcome {
+    return try FfiConverterTypeCommunityListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunityListOutcome_lower(_ value: CommunityListOutcome) -> RustBuffer {
+    return FfiConverterTypeCommunityListOutcome.lower(value)
 }
 
 
@@ -7894,6 +8113,76 @@ public func FfiConverterTypeHydratedHighlight_lower(_ value: HydratedHighlight) 
 }
 
 
+public struct HydratedHighlightListOutcome {
+    public var values: [HydratedHighlight]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [HydratedHighlight], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension HydratedHighlightListOutcome: Sendable {}
+#endif
+
+
+extension HydratedHighlightListOutcome: Equatable, Hashable {
+    public static func ==(lhs: HydratedHighlightListOutcome, rhs: HydratedHighlightListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHydratedHighlightListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HydratedHighlightListOutcome {
+        return
+            try HydratedHighlightListOutcome(
+                values: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HydratedHighlightListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeHydratedHighlight.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHydratedHighlightListOutcome_lift(_ buf: RustBuffer) throws -> HydratedHighlightListOutcome {
+    return try FfiConverterTypeHydratedHighlightListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHydratedHighlightListOutcome_lower(_ value: HydratedHighlightListOutcome) -> RustBuffer {
+    return FfiConverterTypeHydratedHighlightListOutcome.lower(value)
+}
+
+
 public struct MutationOutcome {
     public var applied: Bool
     public var error: String
@@ -8811,6 +9100,76 @@ public func FfiConverterTypePodcastPositionRecord_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypePodcastPositionRecord_lower(_ value: PodcastPositionRecord) -> RustBuffer {
     return FfiConverterTypePodcastPositionRecord.lower(value)
+}
+
+
+public struct ProfileListOutcome {
+    public var values: [ProfileMetadata]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [ProfileMetadata], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ProfileListOutcome: Sendable {}
+#endif
+
+
+extension ProfileListOutcome: Equatable, Hashable {
+    public static func ==(lhs: ProfileListOutcome, rhs: ProfileListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileListOutcome {
+        return
+            try ProfileListOutcome(
+                values: FfiConverterSequenceTypeProfileMetadata.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeProfileMetadata.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileListOutcome_lift(_ buf: RustBuffer) throws -> ProfileListOutcome {
+    return try FfiConverterTypeProfileListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileListOutcome_lower(_ value: ProfileListOutcome) -> RustBuffer {
+    return FfiConverterTypeProfileListOutcome.lower(value)
 }
 
 
@@ -12641,7 +13000,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_route() != 10925) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifacts() != 30870) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifacts() != 37995) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_servers() != 32428) {
@@ -12683,7 +13042,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_follows() != 29379) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights() != 25748) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights() != 24276) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_article() != 24140) {
@@ -12692,7 +13051,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_reference() != 19698) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 31741) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 28655) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_bookmark_sets() != 59737) {
@@ -12722,7 +13081,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_reactions_for_event() != 45696) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 33628) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 59174) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_searches() != 49802) {
@@ -12860,19 +13219,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_save_podcast_position() != 15916) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_articles() != 31180) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_search_articles() != 49259) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_artifacts() != 51306) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_search_artifacts() != 20123) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_communities() != 5207) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_search_communities() != 754) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_highlights() != 49733) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_search_highlights() != 53923) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_profiles() != 3897) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_search_profiles() != 13489) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_relays() != 6604) {

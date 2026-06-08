@@ -24,18 +24,19 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactRecord,
-    BlossomUpload, BlossomUploadOutcome, BookmarkSetListOutcome, BookmarkSetOutcome,
+    ArticleListOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome,
+    ArtifactOutcome, ArtifactPreview, ArtifactRecord, BlossomUpload, BlossomUploadOutcome,
+    BookmarkSetListOutcome, BookmarkSetOutcome,
     BookmarkSetRecord, BoolOutcome, ChatMessageOutcome, ChatMessageRecord, CommentOutcome,
-    CommentRecord, CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome,
-    DiscussionOutcome, DiscussionRecord, FeedbackEventOutcome, FeedbackEventRecord,
+    CommentRecord, CommunityListOutcome, CommunitySummary, CurrentUser, CurrentUserOutcome,
+    DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventOutcome, FeedbackEventRecord,
     FeedbackThreadRecord,
     GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HydratedHighlight, MutationOutcome, NostrConnectOptions, PictureDraft,
-    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileMetadata, ReadingFeedItem,
-    RoomRecommendation, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
-    WhatsNewEntriesOutcome,
+    HighlightRecord, HydratedHighlight, HydratedHighlightListOutcome, MutationOutcome,
+    NostrConnectOptions, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
+    ProfileListOutcome, ProfileMetadata, ReadingFeedItem, RoomRecommendation, StringListOutcome,
+    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome,
+    WebBookmarkRecord, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -253,6 +254,19 @@ fn web_bookmark_list_outcome(
     }
 }
 
+fn article_list_outcome(result: Result<Vec<ArticleRecord>, CoreError>) -> ArticleListOutcome {
+    match result {
+        Ok(values) => ArticleListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => ArticleListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
 fn artifact_outcome(result: Result<ArtifactRecord, CoreError>) -> ArtifactOutcome {
     match result {
         Ok(value) => ArtifactOutcome {
@@ -261,6 +275,19 @@ fn artifact_outcome(result: Result<ArtifactRecord, CoreError>) -> ArtifactOutcom
         },
         Err(error) => ArtifactOutcome {
             value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn artifact_list_outcome(result: Result<Vec<ArtifactRecord>, CoreError>) -> ArtifactListOutcome {
+    match result {
+        Ok(values) => ArtifactListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => ArtifactListOutcome {
+            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -305,6 +332,21 @@ fn comment_outcome(result: Result<CommentRecord, CoreError>) -> CommentOutcome {
     }
 }
 
+fn community_list_outcome(
+    result: Result<Vec<CommunitySummary>, CoreError>,
+) -> CommunityListOutcome {
+    match result {
+        Ok(values) => CommunityListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => CommunityListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
 fn discussion_outcome(result: Result<DiscussionRecord, CoreError>) -> DiscussionOutcome {
     match result {
         Ok(value) => DiscussionOutcome {
@@ -344,6 +386,21 @@ fn highlight_list_outcome(result: Result<Vec<HighlightRecord>, CoreError>) -> Hi
     }
 }
 
+fn hydrated_highlight_list_outcome(
+    result: Result<Vec<HydratedHighlight>, CoreError>,
+) -> HydratedHighlightListOutcome {
+    match result {
+        Ok(values) => HydratedHighlightListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => HydratedHighlightListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
 fn highlight_outcome(result: Result<HighlightRecord, CoreError>) -> HighlightOutcome {
     match result {
         Ok(value) => HighlightOutcome {
@@ -352,6 +409,19 @@ fn highlight_outcome(result: Result<HighlightRecord, CoreError>) -> HighlightOut
         },
         Err(error) => HighlightOutcome {
             value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn profile_list_outcome(result: Result<Vec<ProfileMetadata>, CoreError>) -> ProfileListOutcome {
+    match result {
+        Ok(values) => ProfileListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => ProfileListOutcome {
+            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -972,27 +1042,37 @@ impl HighlighterCore {
 
     // -- Reads --
 
-    pub async fn get_joined_communities(&self) -> Result<Vec<CommunitySummary>, CoreError> {
-        let Some(user) = self.inner.read().session.current_user() else {
-            return Err(CoreError::NotAuthenticated);
-        };
-        groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user.pubkey)
+    pub async fn get_joined_communities(&self) -> CommunityListOutcome {
+        community_list_outcome((|| {
+            let Some(user) = self.inner.read().session.current_user() else {
+                return Err(CoreError::NotAuthenticated);
+            };
+            groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user.pubkey)
+        })())
     }
 
     pub async fn get_artifacts(
         &self,
         group_id: String,
         limit: u32,
-    ) -> Result<Vec<ArtifactRecord>, CoreError> {
-        crate::artifacts::query_for_group(self.runtime.ndb(), &group_id, limit)
+    ) -> ArtifactListOutcome {
+        artifact_list_outcome(crate::artifacts::query_for_group(
+            self.runtime.ndb(),
+            &group_id,
+            limit,
+        ))
     }
 
     pub async fn get_highlights(
         &self,
         group_id: String,
         limit: u32,
-    ) -> Result<Vec<HydratedHighlight>, CoreError> {
-        crate::highlights::query_for_group(self.runtime.ndb(), &group_id, limit)
+    ) -> HydratedHighlightListOutcome {
+        hydrated_highlight_list_outcome(crate::highlights::query_for_group(
+            self.runtime.ndb(),
+            &group_id,
+            limit,
+        ))
     }
 
     pub async fn get_my_highlights(&self, limit: u32) -> Result<Vec<HighlightRecord>, CoreError> {
@@ -1302,19 +1382,25 @@ impl HighlighterCore {
     /// Recent books across the user's joined communities — drives the
     /// capture-flow book picker. Returns `[]` if no books are cached or the
     /// user isn't logged in.
-    pub async fn get_recent_books(&self, limit: u32) -> Result<Vec<ArtifactRecord>, CoreError> {
-        let Some(user) = self.inner.read().session.current_user() else {
-            return Ok(Vec::new());
-        };
-        crate::recent_books::query_recent_books(self.runtime.ndb(), &user.pubkey, limit)
+    pub async fn get_recent_books(&self, limit: u32) -> ArtifactListOutcome {
+        artifact_list_outcome((|| {
+            let Some(user) = self.inner.read().session.current_user() else {
+                return Ok(Vec::new());
+            };
+            crate::recent_books::query_recent_books(self.runtime.ndb(), &user.pubkey, limit)
+        })())
     }
 
     pub async fn search_artifacts(
         &self,
         query: String,
         limit: u32,
-    ) -> Result<Vec<ArtifactRecord>, CoreError> {
-        crate::artifacts::search_cached(self.runtime.ndb(), &query, limit)
+    ) -> ArtifactListOutcome {
+        artifact_list_outcome(crate::artifacts::search_cached(
+            self.runtime.ndb(),
+            &query,
+            limit,
+        ))
     }
 
     // -- Search: across local nostrdb (all four surfaces) + NIP-50 relay ---
@@ -1323,32 +1409,48 @@ impl HighlighterCore {
         &self,
         query: String,
         limit: u32,
-    ) -> Result<Vec<HighlightRecord>, CoreError> {
-        crate::search::search_highlights(self.runtime.ndb(), &query, limit)
+    ) -> HighlightListOutcome {
+        highlight_list_outcome(crate::search::search_highlights(
+            self.runtime.ndb(),
+            &query,
+            limit,
+        ))
     }
 
     pub async fn search_articles(
         &self,
         query: String,
         limit: u32,
-    ) -> Result<Vec<ArticleRecord>, CoreError> {
-        crate::search::search_articles(self.runtime.ndb(), &query, limit)
+    ) -> ArticleListOutcome {
+        article_list_outcome(crate::search::search_articles(
+            self.runtime.ndb(),
+            &query,
+            limit,
+        ))
     }
 
     pub async fn search_communities(
         &self,
         query: String,
         limit: u32,
-    ) -> Result<Vec<CommunitySummary>, CoreError> {
-        crate::search::search_communities(self.runtime.ndb(), &query, limit)
+    ) -> CommunityListOutcome {
+        community_list_outcome(crate::search::search_communities(
+            self.runtime.ndb(),
+            &query,
+            limit,
+        ))
     }
 
     pub async fn search_profiles(
         &self,
         query: String,
         limit: u32,
-    ) -> Result<Vec<ProfileMetadata>, CoreError> {
-        crate::search::search_profiles(self.runtime.ndb(), &query, limit)
+    ) -> ProfileListOutcome {
+        profile_list_outcome(crate::search::search_profiles(
+            self.runtime.ndb(),
+            &query,
+            limit,
+        ))
     }
 
     /// Resolve the merged set of NIP-50 search relays for the current user —

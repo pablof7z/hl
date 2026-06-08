@@ -169,8 +169,8 @@ final class CaptureStore {
     private func prefillRecentBook() {
         guard selectedBook == nil else { return }
         Task {
-            guard let recent = try? await safeCore.getRecentBooks(limit: 1),
-                  let book = recent.first else { return }
+            let outcome = await safeCore.getRecentBooks(limit: 1)
+            guard outcome.error.isEmpty, let book = outcome.values.first else { return }
             if self.selectedBook == nil {
                 self.selectedBook = .existing(book)
             }

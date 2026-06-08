@@ -60,7 +60,8 @@ struct BookPicker: View {
             }
             .task {
                 if loadingRecents {
-                    recents = (try? await appStore.safeCore.getRecentBooks(limit: 24)) ?? []
+                    let outcome = await appStore.safeCore.getRecentBooks(limit: 24)
+                    recents = outcome.error.isEmpty ? outcome.values : []
                     loadingRecents = false
                 }
             }
@@ -435,7 +436,8 @@ struct BookPicker: View {
         }
         searching = true
         guard !Task.isCancelled, query.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
-        let results = (try? await appStore.safeCore.searchArtifacts(query: trimmed)) ?? []
+        let outcome = await appStore.safeCore.searchArtifacts(query: trimmed)
+        let results = outcome.error.isEmpty ? outcome.values : []
         guard !Task.isCancelled, query.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
         searchResults = results
         searching = false
