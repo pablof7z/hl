@@ -27,13 +27,15 @@ use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactRecord,
     BlossomUpload, BlossomUploadOutcome, BookmarkSetListOutcome, BookmarkSetOutcome,
     BookmarkSetRecord, BoolOutcome, ChatMessageOutcome, ChatMessageRecord, CommentOutcome,
-    CommentRecord, CommunitySummary, CurrentUser, CurrentUserOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadRecord,
+    CommentRecord, CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome,
+    DiscussionOutcome, DiscussionRecord, FeedbackEventOutcome, FeedbackEventRecord,
+    FeedbackThreadRecord,
     GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
     HighlightRecord, HydratedHighlight, MutationOutcome, NostrConnectOptions, PictureDraft,
     PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileMetadata, ReadingFeedItem,
     RoomRecommendation, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    WebBookmarkListOutcome, WebBookmarkRecord, WhatsNewEntriesOutcome,
+    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -134,6 +136,34 @@ fn string_outcome(result: Result<String, CoreError>) -> StringOutcome {
         },
         Err(error) => StringOutcome {
             value: String::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn data_outcome(result: Result<Vec<u8>, CoreError>) -> DataOutcome {
+    match result {
+        Ok(value) => DataOutcome {
+            value,
+            error: String::new(),
+        },
+        Err(error) => DataOutcome {
+            value: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn transcript_segment_list_outcome(
+    result: Result<Vec<TranscriptSegment>, CoreError>,
+) -> TranscriptSegmentListOutcome {
+    match result {
+        Ok(values) => TranscriptSegmentListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => TranscriptSegmentListOutcome {
+            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -531,12 +561,12 @@ impl HighlighterCore {
     pub async fn load_podcast_transcript(
         &self,
         url: String,
-    ) -> Result<Vec<TranscriptSegment>, CoreError> {
-        podcast_transcript::fetch_transcript(&url).await
+    ) -> TranscriptSegmentListOutcome {
+        transcript_segment_list_outcome(podcast_transcript::fetch_transcript(&url).await)
     }
 
-    pub async fn download_podcast_artwork(&self, url: String) -> Result<Vec<u8>, CoreError> {
-        podcast_transcript::download_artwork(&url).await
+    pub async fn download_podcast_artwork(&self, url: String) -> DataOutcome {
+        data_outcome(podcast_transcript::download_artwork(&url).await)
     }
 
     pub fn get_artifact_detail_route(&self, artifact: ArtifactRecord) -> ArtifactDetailRoute {

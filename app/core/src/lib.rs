@@ -54,15 +54,15 @@ pub use models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactOutcome, ArtifactPreview,
     ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookmarkSetListOutcome,
     BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, ChatMessageOutcome, ChatMessageRecord,
-    CommentOutcome, CommentRecord, CommunitySummary, CurrentUser, CurrentUserOutcome,
+    CommentOutcome, CommentRecord, CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome,
     DiscussionAttachment, DiscussionOutcome, DiscussionRecord, FeedbackEventOutcome,
     FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, GeneratedAccountOutcome,
     HighlightDraft, HighlightListOutcome,
     HighlightOutcome, HighlightRecord, HydratedHighlight, MutationOutcome, NostrConnectOptions,
     PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileMetadata,
     ReadingFeedItem, RoomRecommendation, RoomRecommendationReason, StringListOutcome,
-    StringOutcome, SubscriptionOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
-    WhatsNewEntriesOutcome,
+    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome,
+    WebBookmarkRecord, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
 pub use podcast_transcript::TranscriptSegment;

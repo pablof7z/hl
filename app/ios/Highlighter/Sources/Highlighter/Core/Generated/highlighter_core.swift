@@ -811,7 +811,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func disconnectAll() async throws
 
-    func downloadPodcastArtwork(url: String) async throws  -> Data
+    func downloadPodcastArtwork(url: String) async  -> DataOutcome
 
     /**
      * Mint a NIP-19 `nevent` for a kind:9802 highlight share link. The
@@ -1078,7 +1078,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func isWifiOnlyEnabled()  -> Bool
 
-    func loadPodcastTranscript(url: String) async throws  -> [TranscriptSegment]
+    func loadPodcastTranscript(url: String) async  -> TranscriptSegmentListOutcome
 
     func loginNsec(nsec: String)  -> CurrentUserOutcome
 
@@ -1743,9 +1743,9 @@ open func disconnectAll()async throws   {
         )
 }
 
-open func downloadPodcastArtwork(url: String)async throws  -> Data  {
+open func downloadPodcastArtwork(url: String)async  -> DataOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_download_podcast_artwork(
                     self.uniffiClonePointer(),
@@ -1755,8 +1755,9 @@ open func downloadPodcastArtwork(url: String)async throws  -> Data  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterData.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeDataOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -2754,9 +2755,9 @@ open func isWifiOnlyEnabled() -> Bool  {
 })
 }
 
-open func loadPodcastTranscript(url: String)async throws  -> [TranscriptSegment]  {
+open func loadPodcastTranscript(url: String)async  -> TranscriptSegmentListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_load_podcast_transcript(
                     self.uniffiClonePointer(),
@@ -2766,8 +2767,9 @@ open func loadPodcastTranscript(url: String)async throws  -> [TranscriptSegment]
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeTranscriptSegment.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeTranscriptSegmentListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -6360,6 +6362,76 @@ public func FfiConverterTypeCurrentUserOutcome_lower(_ value: CurrentUserOutcome
 }
 
 
+public struct DataOutcome {
+    public var value: Data
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: Data, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension DataOutcome: Sendable {}
+#endif
+
+
+extension DataOutcome: Equatable, Hashable {
+    public static func ==(lhs: DataOutcome, rhs: DataOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDataOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DataOutcome {
+        return
+            try DataOutcome(
+                value: FfiConverterData.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DataOutcome, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDataOutcome_lift(_ buf: RustBuffer) throws -> DataOutcome {
+    return try FfiConverterTypeDataOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDataOutcome_lower(_ value: DataOutcome) -> RustBuffer {
+    return FfiConverterTypeDataOutcome.lower(value)
+}
+
+
 /**
  * Every delta delivered to Swift. The `subscription_id` routes the change
  * to the specific Swift store that installed the subscription. `0` is
@@ -9732,6 +9804,76 @@ public func FfiConverterTypeTranscriptSegment_lower(_ value: TranscriptSegment) 
 }
 
 
+public struct TranscriptSegmentListOutcome {
+    public var values: [TranscriptSegment]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [TranscriptSegment], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension TranscriptSegmentListOutcome: Sendable {}
+#endif
+
+
+extension TranscriptSegmentListOutcome: Equatable, Hashable {
+    public static func ==(lhs: TranscriptSegmentListOutcome, rhs: TranscriptSegmentListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTranscriptSegmentListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TranscriptSegmentListOutcome {
+        return
+            try TranscriptSegmentListOutcome(
+                values: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TranscriptSegmentListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeTranscriptSegment.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTranscriptSegmentListOutcome_lift(_ buf: RustBuffer) throws -> TranscriptSegmentListOutcome {
+    return try FfiConverterTypeTranscriptSegmentListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTranscriptSegmentListOutcome_lower(_ value: TranscriptSegmentListOutcome) -> RustBuffer {
+    return FfiConverterTypeTranscriptSegmentListOutcome.lower(value)
+}
+
+
 public struct WebBookmarkListOutcome {
     public var values: [WebBookmarkRecord]
     public var error: String
@@ -12481,7 +12623,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 46894) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_download_podcast_artwork() != 45675) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_download_podcast_artwork() != 30059) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_encode_highlight_share_nevent() != 14836) {
@@ -12643,7 +12785,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_wifi_only_enabled() != 51997) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_load_podcast_transcript() != 61313) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_load_podcast_transcript() != 42829) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_login_nsec() != 40335) {

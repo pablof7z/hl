@@ -53,6 +53,18 @@ pub struct StringOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct DataOutcome {
+    pub value: Vec<u8>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct TranscriptSegmentListOutcome {
+    pub values: Vec<crate::podcast_transcript::TranscriptSegment>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct SubscriptionOutcome {
     pub handle: u64,
     pub error: String,
