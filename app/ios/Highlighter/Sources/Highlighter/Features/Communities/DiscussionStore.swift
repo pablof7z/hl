@@ -23,10 +23,11 @@ final class DiscussionStore {
         isLoading = true
         loadError = nil
 
-        do {
-            discussions = try await core.getDiscussions(groupId: groupId)
-        } catch {
-            loadError = (error as? CoreError).map { "\($0)" }
+        let discussionsOutcome = await core.getDiscussions(groupId: groupId)
+        if discussionsOutcome.error.isEmpty {
+            discussions = discussionsOutcome.values
+        } else {
+            loadError = discussionsOutcome.error
         }
         isLoading = false
 

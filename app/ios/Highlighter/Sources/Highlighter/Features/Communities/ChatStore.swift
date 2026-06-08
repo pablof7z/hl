@@ -31,8 +31,8 @@ final class ChatPresenceProbe {
         self.onActivity = onActivity
 
         // Cache peek first — instant if any kind:9 is already locally cached.
-        if let messages = try? await core.getChatMessages(groupId: groupId, limit: 1),
-           !messages.isEmpty {
+        let cachePeekOutcome = await core.getChatMessages(groupId: groupId, limit: 1)
+        if cachePeekOutcome.error.isEmpty, !cachePeekOutcome.values.isEmpty {
             onActivity()
         }
 
@@ -97,12 +97,13 @@ final class ChatStore {
         isLoading = true
         loadError = nil
 
-        do {
-            let batch = try await core.getChatMessages(groupId: groupId, limit: loadedLimit)
+        let batchOutcome = await core.getChatMessages(groupId: groupId, limit: loadedLimit)
+        if batchOutcome.error.isEmpty {
+            let batch = batchOutcome.values
             messages = batch
             hasMore = UInt32(batch.count) >= loadedLimit
-        } catch {
-            loadError = (error as? CoreError).map { "\($0)" }
+        } else {
+            loadError = batchOutcome.error
         }
         isLoading = false
 
@@ -122,12 +123,13 @@ final class ChatStore {
         guard !isLoadingMore, hasMore, let groupId, let core else { return }
         isLoadingMore = true
         let newLimit = loadedLimit + ChatStore.pageSize
-        do {
-            let batch = try await core.getChatMessages(groupId: groupId, limit: newLimit)
+        let batchOutcome = await core.getChatMessages(groupId: groupId, limit: newLimit)
+        if batchOutcome.error.isEmpty {
+            let batch = batchOutcome.values
             messages = batch
             loadedLimit = newLimit
             hasMore = UInt32(batch.count) >= newLimit
-        } catch {}
+        }
         isLoadingMore = false
     }
 

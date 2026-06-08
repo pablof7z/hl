@@ -862,7 +862,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * by `created_at`. UI can also peek with `limit=1` to detect chat
      * activity and decide whether to expose the chat tab at all.
      */
-    func getChatMessages(groupId: String, limit: UInt32) async throws  -> [ChatMessageRecord]
+    func getChatMessages(groupId: String, limit: UInt32) async  -> ChatMessageListOutcome
 
     /**
      * Read NIP-22 comments (kind:1111) rooted at the given uppercase
@@ -871,7 +871,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32) async throws  -> [CommentRecord]
 
-    func getDiscussions(groupId: String, limit: UInt32) async throws  -> [DiscussionRecord]
+    func getDiscussions(groupId: String, limit: UInt32) async  -> DiscussionListOutcome
 
     /**
      * Curator's latest kind:10012 list, resolved into `CommunitySummary`
@@ -1921,9 +1921,9 @@ open func getCacheStats()async throws  -> CacheStats  {
      * by `created_at`. UI can also peek with `limit=1` to detect chat
      * activity and decide whether to expose the chat tab at all.
      */
-open func getChatMessages(groupId: String, limit: UInt32)async throws  -> [ChatMessageRecord]  {
+open func getChatMessages(groupId: String, limit: UInt32)async  -> ChatMessageListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_chat_messages(
                     self.uniffiClonePointer(),
@@ -1933,8 +1933,9 @@ open func getChatMessages(groupId: String, limit: UInt32)async throws  -> [ChatM
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeChatMessageRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeChatMessageListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -1960,9 +1961,9 @@ open func getCommentsForReference(tagName: String, tagValue: String, limit: UInt
         )
 }
 
-open func getDiscussions(groupId: String, limit: UInt32)async throws  -> [DiscussionRecord]  {
+open func getDiscussions(groupId: String, limit: UInt32)async  -> DiscussionListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_discussions(
                     self.uniffiClonePointer(),
@@ -1972,8 +1973,9 @@ open func getDiscussions(groupId: String, limit: UInt32)async throws  -> [Discus
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeDiscussionRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeDiscussionListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -5898,6 +5900,76 @@ public func FfiConverterTypeChapter_lower(_ value: Chapter) -> RustBuffer {
 }
 
 
+public struct ChatMessageListOutcome {
+    public var values: [ChatMessageRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [ChatMessageRecord], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ChatMessageListOutcome: Sendable {}
+#endif
+
+
+extension ChatMessageListOutcome: Equatable, Hashable {
+    public static func ==(lhs: ChatMessageListOutcome, rhs: ChatMessageListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatMessageListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatMessageListOutcome {
+        return
+            try ChatMessageListOutcome(
+                values: FfiConverterSequenceTypeChatMessageRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatMessageListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeChatMessageRecord.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageListOutcome_lift(_ buf: RustBuffer) throws -> ChatMessageListOutcome {
+    return try FfiConverterTypeChatMessageListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageListOutcome_lower(_ value: ChatMessageListOutcome) -> RustBuffer {
+    return FfiConverterTypeChatMessageListOutcome.lower(value)
+}
+
+
 public struct ChatMessageOutcome {
     public var value: ChatMessageRecord?
     public var error: String
@@ -6928,6 +7000,76 @@ public func FfiConverterTypeDiscussionAttachment_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeDiscussionAttachment_lower(_ value: DiscussionAttachment) -> RustBuffer {
     return FfiConverterTypeDiscussionAttachment.lower(value)
+}
+
+
+public struct DiscussionListOutcome {
+    public var values: [DiscussionRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [DiscussionRecord], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension DiscussionListOutcome: Sendable {}
+#endif
+
+
+extension DiscussionListOutcome: Equatable, Hashable {
+    public static func ==(lhs: DiscussionListOutcome, rhs: DiscussionListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscussionListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionListOutcome {
+        return
+            try DiscussionListOutcome(
+                values: FfiConverterSequenceTypeDiscussionRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscussionListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeDiscussionRecord.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionListOutcome_lift(_ buf: RustBuffer) throws -> DiscussionListOutcome {
+    return try FfiConverterTypeDiscussionListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionListOutcome_lower(_ value: DiscussionListOutcome) -> RustBuffer {
+    return FfiConverterTypeDiscussionListOutcome.lower(value)
 }
 
 
@@ -13346,13 +13488,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 48741) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_messages() != 44460) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_messages() != 59404) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_reference() != 23769) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 41672) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 7889) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_featured_rooms() != 46959) {

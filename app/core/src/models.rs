@@ -125,6 +125,12 @@ pub struct ChatMessageOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct ChatMessageListOutcome {
+    pub values: Vec<ChatMessageRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct CommentOutcome {
     pub value: Option<CommentRecord>,
     pub error: String,
@@ -145,6 +151,12 @@ pub struct CommunityListOutcome {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct DiscussionOutcome {
     pub value: Option<DiscussionRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DiscussionListOutcome {
+    pub values: Vec<DiscussionRecord>,
     pub error: String,
 }
 

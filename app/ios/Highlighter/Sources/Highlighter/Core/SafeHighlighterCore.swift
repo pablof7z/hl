@@ -246,14 +246,14 @@ actor SafeHighlighterCore {
         await core.getWebMetadata(url: url)
     }
 
-    func getDiscussions(groupId: String, limit: UInt32 = 64) async throws -> [DiscussionRecord] {
-        try await core.getDiscussions(groupId: groupId, limit: limit)
+    func getDiscussions(groupId: String, limit: UInt32 = 64) async -> DiscussionListOutcome {
+        await core.getDiscussions(groupId: groupId, limit: limit)
     }
 
     // MARK: - Chat (NIP-29 kind:9)
 
-    func getChatMessages(groupId: String, limit: UInt32 = 200) async throws -> [ChatMessageRecord] {
-        try await core.getChatMessages(groupId: groupId, limit: limit)
+    func getChatMessages(groupId: String, limit: UInt32 = 200) async -> ChatMessageListOutcome {
+        await core.getChatMessages(groupId: groupId, limit: limit)
     }
 
     func publishChatMessage(

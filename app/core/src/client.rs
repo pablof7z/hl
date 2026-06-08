@@ -27,10 +27,10 @@ use crate::models::{
     ArticleListOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome,
     ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload,
     BlossomUploadOutcome, BookmarkSetListOutcome, BookmarkSetOutcome,
-    BookmarkSetRecord, BoolOutcome, ChatMessageOutcome, ChatMessageRecord, CommentOutcome,
-    CommentRecord, CommunityListOutcome, CommunitySummary, CurrentUser, CurrentUserOutcome,
-    DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventOutcome, FeedbackEventRecord,
-    FeedbackThreadRecord,
+    BookmarkSetRecord, BoolOutcome, ChatMessageListOutcome, ChatMessageOutcome,
+    ChatMessageRecord, CommentOutcome, CommentRecord, CommunityListOutcome, CommunitySummary,
+    CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
+    DiscussionRecord, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadRecord,
     GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
     HighlightRecord, HydratedHighlight, HydratedHighlightListOutcome, MutationOutcome,
     NostrConnectOptions, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
@@ -346,6 +346,21 @@ fn chat_message_outcome(result: Result<ChatMessageRecord, CoreError>) -> ChatMes
     }
 }
 
+fn chat_message_list_outcome(
+    result: Result<Vec<ChatMessageRecord>, CoreError>,
+) -> ChatMessageListOutcome {
+    match result {
+        Ok(values) => ChatMessageListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => ChatMessageListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
 fn comment_outcome(result: Result<CommentRecord, CoreError>) -> CommentOutcome {
     match result {
         Ok(value) => CommentOutcome {
@@ -382,6 +397,21 @@ fn discussion_outcome(result: Result<DiscussionRecord, CoreError>) -> Discussion
         },
         Err(error) => DiscussionOutcome {
             value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn discussion_list_outcome(
+    result: Result<Vec<DiscussionRecord>, CoreError>,
+) -> DiscussionListOutcome {
+    match result {
+        Ok(values) => DiscussionListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => DiscussionListOutcome {
+            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -1839,8 +1869,12 @@ impl HighlighterCore {
         &self,
         group_id: String,
         limit: u32,
-    ) -> Result<Vec<DiscussionRecord>, CoreError> {
-        crate::discussions::query_for_group(self.runtime.ndb(), &group_id, limit)
+    ) -> DiscussionListOutcome {
+        discussion_list_outcome(crate::discussions::query_for_group(
+            self.runtime.ndb(),
+            &group_id,
+            limit,
+        ))
     }
 
     /// NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending
@@ -1850,8 +1884,12 @@ impl HighlighterCore {
         &self,
         group_id: String,
         limit: u32,
-    ) -> Result<Vec<ChatMessageRecord>, CoreError> {
-        crate::chat::query_chat_messages(self.runtime.ndb(), &group_id, limit)
+    ) -> ChatMessageListOutcome {
+        chat_message_list_outcome(crate::chat::query_chat_messages(
+            self.runtime.ndb(),
+            &group_id,
+            limit,
+        ))
     }
 
     // -- Feedback (shake-to-share) --
