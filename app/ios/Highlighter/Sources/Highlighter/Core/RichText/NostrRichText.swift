@@ -546,6 +546,7 @@ private struct ProfileCalloutFromSnapshot: View {
 /// Fallback: any other kind. Show the kind, content snippet, author.
 private struct GenericEntityCard: View {
     let event: NostrEntityEvent
+    @Environment(HighlighterStore.self) private var appStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -559,7 +560,7 @@ private struct GenericEntityCard: View {
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(4)
             }
-            Text(String(event.pubkeyHex.prefix(12)) + "…")
+            Text("\(authorFallback)…")
                 .font(.caption.monospaced())
                 .foregroundStyle(Color.highlighterInkMuted)
         }
@@ -568,6 +569,16 @@ private struct GenericEntityCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.highlighterRule, lineWidth: 1)
         )
+    }
+
+    private var authorFallback: String {
+        appStore.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: event.pubkeyHex,
+                profile: nil,
+                fallback: .pubkey12
+            )
+        ).displayName
     }
 }
 
