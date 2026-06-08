@@ -304,6 +304,14 @@ actor SafeHighlighterCore {
         core.sanitizeHighlightCropBox(cropBox: cropBox, fallback: fallback)
     }
 
+    nonisolated func selectableOcrWords(from lines: [OCRLine]) -> [OCRWord] {
+        core.selectableOcrWords(lines: lines)
+    }
+
+    nonisolated func joinOcrQuote(_ words: [OCRWord]) -> String {
+        core.joinOcrQuote(words: words)
+    }
+
     nonisolated func buildEditedBookPreview(
         isbn: String,
         basePreview: ArtifactPreview?,

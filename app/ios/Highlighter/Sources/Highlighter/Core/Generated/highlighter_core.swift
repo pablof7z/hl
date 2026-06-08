@@ -1257,6 +1257,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func isWifiOnlyEnabled()  -> Bool
 
+    func joinOcrQuote(words: [OcrWord])  -> String
+
     func loadPodcastTranscript(url: String) async  -> TranscriptSegmentListOutcome
 
     func loginNsec(nsec: String)  -> CurrentUserOutcome
@@ -1390,6 +1392,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func searchHighlights(query: String, limit: UInt32) async  -> HighlightListOutcome
 
     func searchProfiles(query: String, limit: UInt32) async  -> ProfileListOutcome
+
+    func selectableOcrWords(lines: [OcrLine])  -> [OcrWord]
 
     /**
      * Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
@@ -3448,6 +3452,14 @@ open func isWifiOnlyEnabled() -> Bool  {
 })
 }
 
+open func joinOcrQuote(words: [OcrWord]) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_join_ocr_quote(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeOcrWord.lower(words),$0
+    )
+})
+}
+
 open func loadPodcastTranscript(url: String)async  -> TranscriptSegmentListOutcome  {
     return
         try!  await uniffiRustCallAsync(
@@ -4057,6 +4069,14 @@ open func searchProfiles(query: String, limit: UInt32)async  -> ProfileListOutco
             errorHandler: nil
 
         )
+}
+
+open func selectableOcrWords(lines: [OcrLine]) -> [OcrWord]  {
+    return try!  FfiConverterSequenceTypeOcrWord.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_selectable_ocr_words(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeOcrLine.lower(lines),$0
+    )
+})
 }
 
     /**
@@ -17854,6 +17874,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_wifi_only_enabled() != 51997) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_join_ocr_quote() != 34615) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_load_podcast_transcript() != 42829) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17960,6 +17983,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_profiles() != 13489) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_selectable_ocr_words() != 2832) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_address_in_curation_set() != 8659) {

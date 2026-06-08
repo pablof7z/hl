@@ -2509,6 +2509,17 @@ impl HighlighterCore {
         crate::ocr::sanitize_highlight_crop_box(crop_box, fallback)
     }
 
+    pub fn selectable_ocr_words(
+        &self,
+        lines: Vec<crate::ocr::OcrLine>,
+    ) -> Vec<crate::ocr::OcrWord> {
+        crate::ocr::selectable_words(&lines)
+    }
+
+    pub fn join_ocr_quote(&self, words: Vec<crate::ocr::OcrWord>) -> String {
+        crate::ocr::join_quote(&words)
+    }
+
     /// Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
     /// Extension flow — the main app drains the share queue, normalizes each
     /// URL through this, then calls `publish_artifact` to post the kind:11.

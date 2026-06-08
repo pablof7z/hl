@@ -33,7 +33,6 @@ struct CapturePageView: View {
     }
 
     // Drag-select state
-    @State private var sortedLines: [OCRLine] = []
     @State private var selectableWords: [OCRWord] = []
     @State private var selectionRange: ClosedRange<Int>? = nil
     @State private var activeCropDrag: ActiveCropDrag?
@@ -104,19 +103,7 @@ struct CapturePageView: View {
     }
 
     private func rebuildSelectionTargets(from lines: [OCRLine]) {
-        sortedLines = lines.sorted { lhs, rhs in
-            if abs(lhs.bbox.midY - rhs.bbox.midY) < 0.006 {
-                return lhs.bbox.minX < rhs.bbox.minX
-            }
-            return lhs.bbox.midY > rhs.bbox.midY
-        }
-        selectableWords = sortedLines.flatMap { line -> [OCRWord] in
-            let words = line.words.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            if words.isEmpty {
-                return [OCRWord(text: line.text, bbox: line.bbox, confidence: line.confidence)]
-            }
-            return words.sorted { $0.bbox.minX < $1.bbox.minX }
-        }
+        selectableWords = appStore.safeCore.selectableOcrWords(from: lines)
     }
 
     private func triggerSpringIfReady() {
@@ -167,7 +154,7 @@ struct CapturePageView: View {
                 Text("Highlight ready")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-            } else if !sortedLines.isEmpty {
+            } else if !selectableWords.isEmpty {
                 Text("Drag to select")
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.7))
@@ -523,7 +510,7 @@ struct CapturePageView: View {
             return
         }
         let selected = Array(selectableWords[range])
-        let quote = joinedQuote(from: selected)
+        let quote = appStore.safeCore.joinOcrQuote(selected)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Keep selectionRange so the yellow highlight stays visible.
@@ -542,17 +529,6 @@ struct CapturePageView: View {
             pointToBBoxDistance(pt, bbox: selectableWords[$0].bbox)
                 < pointToBBoxDistance(pt, bbox: selectableWords[$1].bbox)
         }) ?? 0
-    }
-
-    private func joinedQuote(from words: [OCRWord]) -> String {
-        words.map(\.text)
-            .joined(separator: " ")
-            .replacingOccurrences(of: " ,", with: ",")
-            .replacingOccurrences(of: " .", with: ".")
-            .replacingOccurrences(of: " ;", with: ";")
-            .replacingOccurrences(of: " :", with: ":")
-            .replacingOccurrences(of: " !", with: "!")
-            .replacingOccurrences(of: " ?", with: "?")
     }
 
     private func cropDragMode(

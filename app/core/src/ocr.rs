@@ -463,6 +463,54 @@ pub fn sanitize_highlight_crop_box(crop_box: OcrRect, fallback: Option<OcrRect>)
     rect.intersection(unit).unwrap_or(unit)
 }
 
+/// Project OCR lines into the ordered word sequence used for drag selection.
+pub fn selectable_words(lines: &[OcrLine]) -> Vec<OcrWord> {
+    let mut sorted_lines = lines.to_vec();
+    sorted_lines.sort_by(|lhs, rhs| {
+        if (lhs.bbox.mid_y() - rhs.bbox.mid_y()).abs() < 0.006 {
+            lhs.bbox.min_x().total_cmp(&rhs.bbox.min_x())
+        } else {
+            rhs.bbox.mid_y().total_cmp(&lhs.bbox.mid_y())
+        }
+    });
+
+    sorted_lines
+        .into_iter()
+        .flat_map(|line| {
+            let mut words = line
+                .words
+                .into_iter()
+                .filter(|word| !word.text.trim().is_empty())
+                .collect::<Vec<_>>();
+            if words.is_empty() {
+                vec![OcrWord {
+                    text: line.text,
+                    bbox: line.bbox,
+                    confidence: line.confidence,
+                }]
+            } else {
+                words.sort_by(|lhs, rhs| lhs.bbox.min_x().total_cmp(&rhs.bbox.min_x()));
+                words
+            }
+        })
+        .collect()
+}
+
+/// Join selected OCR words into a quote while folding spaces before punctuation.
+pub fn join_quote(words: &[OcrWord]) -> String {
+    words
+        .iter()
+        .map(|word| word.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace(" ,", ",")
+        .replace(" .", ".")
+        .replace(" ;", ";")
+        .replace(" :", ":")
+        .replace(" !", "!")
+        .replace(" ?", "?")
+}
+
 fn unit_rect() -> OcrRect {
     OcrRect {
         x: 0.0,
@@ -856,6 +904,14 @@ mod tests {
         }
     }
 
+    fn word(text: &str, bbox: OcrRect) -> OcrWord {
+        OcrWord {
+            text: text.to_string(),
+            bbox,
+            confidence: 0.8,
+        }
+    }
+
     #[test]
     fn reconstruct_markdown_soft_wraps_body_lines() {
         let markdown = reconstruct_markdown(&[
@@ -1099,5 +1155,97 @@ mod tests {
             ),
             fallback
         );
+    }
+
+    #[test]
+    fn selectable_words_preserves_ios_selection_order_and_line_fallbacks() {
+        let lines = vec![
+            OcrLine {
+                text: "right fallback".to_string(),
+                bbox: OcrRect {
+                    x: 0.55,
+                    y: 0.60,
+                    w: 0.20,
+                    h: 0.02,
+                },
+                confidence: 0.7,
+                words: vec![],
+            },
+            OcrLine {
+                text: "lower".to_string(),
+                bbox: OcrRect {
+                    x: 0.10,
+                    y: 0.40,
+                    w: 0.30,
+                    h: 0.02,
+                },
+                confidence: 0.9,
+                words: vec![
+                    word(
+                        "second",
+                        OcrRect {
+                            x: 0.25,
+                            y: 0.40,
+                            w: 0.08,
+                            h: 0.02,
+                        },
+                    ),
+                    word(
+                        "first",
+                        OcrRect {
+                            x: 0.12,
+                            y: 0.40,
+                            w: 0.08,
+                            h: 0.02,
+                        },
+                    ),
+                ],
+            },
+            OcrLine {
+                text: "left upper".to_string(),
+                bbox: OcrRect {
+                    x: 0.10,
+                    y: 0.602,
+                    w: 0.20,
+                    h: 0.02,
+                },
+                confidence: 0.9,
+                words: vec![word(
+                    "left",
+                    OcrRect {
+                        x: 0.12,
+                        y: 0.602,
+                        w: 0.08,
+                        h: 0.02,
+                    },
+                )],
+            },
+        ];
+
+        let texts = selectable_words(&lines)
+            .into_iter()
+            .map(|word| word.text)
+            .collect::<Vec<_>>();
+        assert_eq!(texts, ["left", "right fallback", "first", "second"]);
+    }
+
+    #[test]
+    fn join_quote_folds_spaces_before_punctuation() {
+        let words = ["Hello", ",", "world", "!", "Really", "?"]
+            .into_iter()
+            .map(|text| {
+                word(
+                    text,
+                    OcrRect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 0.1,
+                        h: 0.1,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(join_quote(&words), "Hello, world! Really?");
     }
 }
