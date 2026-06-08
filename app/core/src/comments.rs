@@ -7,11 +7,110 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::CommentRecord;
+use crate::models::{ArtifactPreview, CommentRecord, CommentScope};
 use crate::nostr_runtime::NostrRuntime;
 
 /// kind:1111 — NIP-22 comment.
 pub const KIND_NIP22_COMMENT: u16 = 1111;
+const KIND_NIP23_ARTICLE: u16 = 30023;
+
+/// Project a NIP-23 address into the NIP-22 root scope used for comment
+/// reads/writes. The shell passes addresses; Rust owns the tag/kind mapping.
+pub fn article_scope(address: &str) -> Result<CommentScope, CoreError> {
+    let value = address.trim();
+    if value.is_empty() {
+        return Err(CoreError::InvalidInput(
+            "article comment address must not be empty".into(),
+        ));
+    }
+    Ok(scope(
+        'A',
+        value,
+        address_kind(value).unwrap_or(KIND_NIP23_ARTICLE),
+    ))
+}
+
+/// Project an event id into a NIP-22 event root scope.
+pub fn event_scope(event_id_hex: &str, kind: u16) -> Result<CommentScope, CoreError> {
+    let value = event_id_hex.trim();
+    if value.is_empty() {
+        return Err(CoreError::InvalidInput(
+            "event comment id must not be empty".into(),
+        ));
+    }
+    Ok(scope('E', value, kind))
+}
+
+/// Project an external identifier into a NIP-22 external root scope. The
+/// identifier is preserved exactly after trimming because existing data uses
+/// both NIP-73 ids (`isbn:…`, `podcast:item:guid:…`) and raw URLs.
+pub fn external_scope(identifier: &str, kind: u16) -> Result<CommentScope, CoreError> {
+    let value = identifier.trim();
+    if value.is_empty() {
+        return Err(CoreError::InvalidInput(
+            "external comment identifier must not be empty".into(),
+        ));
+    }
+    Ok(scope('I', value, kind))
+}
+
+/// Project an artifact preview's protocol reference fields into the NIP-22
+/// scope used by comment surfaces. Native shells must not duplicate this
+/// `a/e/i` mapping or the default kind policy.
+pub fn scope_from_preview(preview: &ArtifactPreview) -> Result<CommentScope, CoreError> {
+    let value = preview.reference_tag_value.trim();
+    if value.is_empty() {
+        return Err(CoreError::InvalidInput(
+            "artifact comment reference must not be empty".into(),
+        ));
+    }
+    let parsed_kind = preview
+        .reference_kind
+        .trim()
+        .parse::<u16>()
+        .ok()
+        .filter(|k| *k > 0);
+    match preview
+        .reference_tag_name
+        .trim()
+        .chars()
+        .next()
+        .map(|c| c.to_ascii_lowercase())
+    {
+        Some('a') => Ok(scope(
+            'A',
+            value,
+            parsed_kind
+                .or_else(|| address_kind(value))
+                .unwrap_or(KIND_NIP23_ARTICLE),
+        )),
+        Some('e') => Ok(scope('E', value, parsed_kind.unwrap_or(0))),
+        Some('i') => Ok(scope('I', value, parsed_kind.unwrap_or(0))),
+        Some(other) => Err(CoreError::InvalidInput(format!(
+            "unsupported comment reference tag: {other}"
+        ))),
+        None => Err(CoreError::InvalidInput(
+            "artifact comment reference tag must not be empty".into(),
+        )),
+    }
+}
+
+fn scope(tag_name: char, tag_value: &str, kind: u16) -> CommentScope {
+    CommentScope {
+        root_tag_name: tag_name.to_string(),
+        root_tag_value: tag_value.to_string(),
+        root_kind: kind,
+    }
+}
+
+fn address_kind(value: &str) -> Option<u16> {
+    value
+        .split(':')
+        .next()?
+        .parse::<u16>()
+        .ok()
+        .filter(|k| *k > 0)
+}
 
 /// Read kind:1111 comments rooted at `tag_value` under a specific
 /// uppercase root tag (`'A'` addressable / `'E'` event / `'I'` external
@@ -54,6 +153,17 @@ pub fn query_for_reference(
     records.sort_by(|a, b| b.created_at.unwrap_or(0).cmp(&a.created_at.unwrap_or(0)));
     records.truncate(limit as usize);
     Ok(records)
+}
+
+pub fn query_for_scope(
+    ndb: &Ndb,
+    scope: &CommentScope,
+    limit: u32,
+) -> Result<Vec<CommentRecord>, CoreError> {
+    let Some(ch) = scope.root_tag_name.trim().chars().next() else {
+        return Ok(Vec::new());
+    };
+    query_for_reference(ndb, ch, &scope.root_tag_value, limit)
 }
 
 fn record_from_event(event: &Event) -> Option<CommentRecord> {
@@ -218,4 +328,81 @@ pub async fn publish_comment(
         root_kind: root_kind.to_string(),
         created_at: Some(event.created_at.as_secs()),
     })
+}
+
+pub async fn publish_comment_for_scope(
+    runtime: &NostrRuntime,
+    scope: &CommentScope,
+    parent_event_id: Option<&str>,
+    content: &str,
+) -> Result<CommentRecord, CoreError> {
+    let Some(root_tag_name) = scope.root_tag_name.trim().chars().next() else {
+        return Err(CoreError::InvalidInput("root tag must not be empty".into()));
+    };
+    publish_comment(
+        runtime,
+        root_tag_name,
+        &scope.root_tag_value,
+        scope.root_kind,
+        parent_event_id,
+        content,
+    )
+    .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn article_scope_uses_address_kind() {
+        let scope = article_scope("30023:pubkey:essay").expect("scope");
+        assert_eq!(scope.root_tag_name, "A");
+        assert_eq!(scope.root_tag_value, "30023:pubkey:essay");
+        assert_eq!(scope.root_kind, 30023);
+    }
+
+    #[test]
+    fn event_scope_preserves_event_kind() {
+        let scope = event_scope("abc123", 9802).expect("scope");
+        assert_eq!(scope.root_tag_name, "E");
+        assert_eq!(scope.root_tag_value, "abc123");
+        assert_eq!(scope.root_kind, 9802);
+    }
+
+    #[test]
+    fn external_scope_preserves_raw_identifier() {
+        let scope = external_scope(" https://example.com/post ", 0).expect("scope");
+        assert_eq!(scope.root_tag_name, "I");
+        assert_eq!(scope.root_tag_value, "https://example.com/post");
+        assert_eq!(scope.root_kind, 0);
+    }
+
+    #[test]
+    fn scope_from_preview_maps_article_reference() {
+        let preview = crate::articles::article_artifact_preview_from_address("30023:pk:essay")
+            .expect("preview");
+        let scope = scope_from_preview(&preview).expect("scope");
+        assert_eq!(scope.root_tag_name, "A");
+        assert_eq!(scope.root_tag_value, "30023:pk:essay");
+        assert_eq!(scope.root_kind, 30023);
+    }
+
+    #[test]
+    fn scope_from_preview_maps_external_web_kind_to_zero() {
+        let preview = crate::artifacts::build_preview("https://example.com/post").expect("preview");
+        let scope = scope_from_preview(&preview).expect("scope");
+        assert_eq!(scope.root_tag_name, "I");
+        assert_eq!(scope.root_tag_value, "https://example.com/post");
+        assert_eq!(scope.root_kind, 0);
+    }
+
+    #[test]
+    fn scope_from_preview_rejects_non_comment_reference_tag() {
+        let mut preview = crate::articles::article_artifact_preview_from_address("30023:pk:essay")
+            .expect("preview");
+        preview.reference_tag_name = "r".into();
+        let err = scope_from_preview(&preview).unwrap_err().to_string();
+        assert!(err.contains("unsupported comment reference tag"));
+    }
 }

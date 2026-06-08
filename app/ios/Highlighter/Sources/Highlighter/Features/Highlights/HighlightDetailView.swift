@@ -52,22 +52,24 @@ struct HighlightDetailView: View {
         .navigationTitle("Highlight")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showComments) {
-            CommentsView(
-                artifact: commentsArtifactRef,
-                artifactAuthorPubkey: highlight.pubkey,
-                artifactHeader: nil,
-                store: commentsStore
-            )
+            if let commentsScope {
+                CommentsView(
+                    scope: commentsScope,
+                    artifactAuthorPubkey: highlight.pubkey,
+                    artifactHeader: nil,
+                    store: commentsStore
+                )
+            }
         }
         .sheet(item: $shareTarget) { target in
             ShareToCommunitySheet(target: target)
                 .presentationDetents([.medium, .large])
         }
         .task {
-            guard !commentsStarted else { return }
+            guard !commentsStarted, let commentsScope else { return }
             commentsStarted = true
             await commentsStore.start(
-                artifact: commentsArtifactRef,
+                scope: commentsScope,
                 core: app.safeCore,
                 currentUserPubkey: app.currentUser?.pubkey
             )
@@ -313,8 +315,8 @@ struct HighlightDetailView: View {
 
     // MARK: - Comments scope
 
-    private var commentsArtifactRef: ArtifactRef {
-        .event(id: highlight.eventId, kind: 9802)
+    private var commentsScope: CommentScope? {
+        app.safeCore.getEventCommentScope(eventIdHex: highlight.eventId, kind: 9802).value
     }
 
     /// Public web URL that the share sheet hands to other apps. The

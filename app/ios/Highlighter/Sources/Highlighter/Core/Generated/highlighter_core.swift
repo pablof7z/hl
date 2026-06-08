@@ -880,6 +880,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getArticleByAddress(address: String) async  -> ArticleOutcome
 
     /**
+     * Project a NIP-23 article address into the NIP-22 root scope used by
+     * comment reads/writes.
+     */
+    func getArticleCommentScope(address: String)  -> CommentScopeOutcome
+
+    /**
      * Resolve a full NIP-23 article address into the native reader route.
      * Invalid or non-article addresses produce an empty value without error.
      */
@@ -890,6 +896,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * canonical `30023:<pubkey>:<d>` address construction.
      */
     func getArticleReaderRouteForArticle(pubkeyHex: String, dTag: String)  -> ArticleReaderRouteOutcome
+
+    /**
+     * Project an artifact preview into a NIP-22 root scope using the
+     * preview's Rust-owned protocol reference fields.
+     */
+    func getArtifactCommentScope(preview: ArtifactPreview)  -> CommentScopeOutcome
 
     func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
 
@@ -945,11 +957,9 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getChatMessages(groupId: String, limit: UInt32) async  -> ChatMessageListOutcome
 
     /**
-     * Read NIP-22 comments (kind:1111) rooted at the given uppercase
-     * scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
-     * books, etc. Newest first.
+     * Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
      */
-    func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32) async  -> CommentListOutcome
+    func getCommentsForScope(scope: CommentScope, limit: UInt32) async  -> CommentListOutcome
 
     /**
      * Return current user's curation sets projected for the bookmark menu.
@@ -958,6 +968,20 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getCurationMenuItems(address: String) async  -> CurationMenuItemListOutcome
 
     func getDiscussions(groupId: String, limit: UInt32) async  -> DiscussionListOutcome
+
+    /**
+     * Project a concrete event id into the NIP-22 root scope used by comment
+     * reads/writes. The native shell provides only the event identity and
+     * known kind; Rust owns tag selection.
+     */
+    func getEventCommentScope(eventIdHex: String, kind: UInt16)  -> CommentScopeOutcome
+
+    /**
+     * Project an external content identifier into the NIP-22 root scope used
+     * by comment reads/writes. Existing Highlighter data uses raw URLs as
+     * well as NIP-73 identifiers; Rust preserves the identifier value.
+     */
+    func getExternalCommentScope(identifier: String, kind: UInt16)  -> CommentScopeOutcome
 
     /**
      * Curator's latest kind:10012 list, resolved into `CommunitySummary`
@@ -1219,17 +1243,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func publishChatMessage(groupId: String, content: String, replyToEventId: String?) async  -> ChatMessageOutcome
 
     /**
-     * Publish a NIP-22 kind:1111 comment scoped to any artifact.
-     *
-     * `root_tag_name` is `"A"` (addressable, e.g. `30023:<pubkey>:<d>`),
-     * `"E"` (event id — a highlight, an event share), or `"I"` (external
-     * content like `url:…`, `podcast:item:guid:…`, `isbn:…`).
-     * `root_tag_value` is the corresponding scope value. `root_kind` is
-     * the kind of the root event (or 0 for purely external roots).
-     * `parent_event_id` is `None` for top-level comments and `Some(id)`
-     * for replies (the parent kind:1111 comment).
+     * Publish a NIP-22 kind:1111 comment scoped to a Rust-owned root.
+     * `parent_event_id` is `None` for top-level comments and `Some(id)` for
+     * replies (the parent kind:1111 comment).
      */
-    func publishComment(rootTagName: String, rootTagValue: String, rootKind: UInt16, parentEventId: String?, content: String) async  -> CommentOutcome
+    func publishCommentForScope(scope: CommentScope, parentEventId: String?, content: String) async  -> CommentOutcome
 
     func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async  -> DiscussionOutcome
 
@@ -2055,6 +2073,18 @@ open func getArticleByAddress(address: String)async  -> ArticleOutcome  {
 }
 
     /**
+     * Project a NIP-23 article address into the NIP-22 root scope used by
+     * comment reads/writes.
+     */
+open func getArticleCommentScope(address: String) -> CommentScopeOutcome  {
+    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_article_comment_scope(self.uniffiClonePointer(),
+        FfiConverterString.lower(address),$0
+    )
+})
+}
+
+    /**
      * Resolve a full NIP-23 article address into the native reader route.
      * Invalid or non-article addresses produce an empty value without error.
      */
@@ -2075,6 +2105,18 @@ open func getArticleReaderRouteForArticle(pubkeyHex: String, dTag: String) -> Ar
     uniffi_highlighter_core_fn_method_highlightercore_get_article_reader_route_for_article(self.uniffiClonePointer(),
         FfiConverterString.lower(pubkeyHex),
         FfiConverterString.lower(dTag),$0
+    )
+})
+}
+
+    /**
+     * Project an artifact preview into a NIP-22 root scope using the
+     * preview's Rust-owned protocol reference fields.
+     */
+open func getArtifactCommentScope(preview: ArtifactPreview) -> CommentScopeOutcome  {
+    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_artifact_comment_scope(self.uniffiClonePointer(),
+        FfiConverterTypeArtifactPreview_lower(preview),$0
     )
 })
 }
@@ -2273,17 +2315,15 @@ open func getChatMessages(groupId: String, limit: UInt32)async  -> ChatMessageLi
 }
 
     /**
-     * Read NIP-22 comments (kind:1111) rooted at the given uppercase
-     * scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
-     * books, etc. Newest first.
+     * Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
      */
-open func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32)async  -> CommentListOutcome  {
+open func getCommentsForScope(scope: CommentScope, limit: UInt32)async  -> CommentListOutcome  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_comments_for_reference(
+                uniffi_highlighter_core_fn_method_highlightercore_get_comments_for_scope(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(tagName),FfiConverterString.lower(tagValue),FfiConverterUInt32.lower(limit)
+                    FfiConverterTypeCommentScope_lower(scope),FfiConverterUInt32.lower(limit)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2333,6 +2373,34 @@ open func getDiscussions(groupId: String, limit: UInt32)async  -> DiscussionList
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Project a concrete event id into the NIP-22 root scope used by comment
+     * reads/writes. The native shell provides only the event identity and
+     * known kind; Rust owns tag selection.
+     */
+open func getEventCommentScope(eventIdHex: String, kind: UInt16) -> CommentScopeOutcome  {
+    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_event_comment_scope(self.uniffiClonePointer(),
+        FfiConverterString.lower(eventIdHex),
+        FfiConverterUInt16.lower(kind),$0
+    )
+})
+}
+
+    /**
+     * Project an external content identifier into the NIP-22 root scope used
+     * by comment reads/writes. Existing Highlighter data uses raw URLs as
+     * well as NIP-73 identifiers; Rust preserves the identifier value.
+     */
+open func getExternalCommentScope(identifier: String, kind: UInt16) -> CommentScopeOutcome  {
+    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_external_comment_scope(self.uniffiClonePointer(),
+        FfiConverterString.lower(identifier),
+        FfiConverterUInt16.lower(kind),$0
+    )
+})
 }
 
     /**
@@ -3386,23 +3454,17 @@ open func publishChatMessage(groupId: String, content: String, replyToEventId: S
 }
 
     /**
-     * Publish a NIP-22 kind:1111 comment scoped to any artifact.
-     *
-     * `root_tag_name` is `"A"` (addressable, e.g. `30023:<pubkey>:<d>`),
-     * `"E"` (event id — a highlight, an event share), or `"I"` (external
-     * content like `url:…`, `podcast:item:guid:…`, `isbn:…`).
-     * `root_tag_value` is the corresponding scope value. `root_kind` is
-     * the kind of the root event (or 0 for purely external roots).
-     * `parent_event_id` is `None` for top-level comments and `Some(id)`
-     * for replies (the parent kind:1111 comment).
+     * Publish a NIP-22 kind:1111 comment scoped to a Rust-owned root.
+     * `parent_event_id` is `None` for top-level comments and `Some(id)` for
+     * replies (the parent kind:1111 comment).
      */
-open func publishComment(rootTagName: String, rootTagValue: String, rootKind: UInt16, parentEventId: String?, content: String)async  -> CommentOutcome  {
+open func publishCommentForScope(scope: CommentScope, parentEventId: String?, content: String)async  -> CommentOutcome  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_comment(
+                uniffi_highlighter_core_fn_method_highlightercore_publish_comment_for_scope(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(rootTagName),FfiConverterString.lower(rootTagValue),FfiConverterUInt16.lower(rootKind),FfiConverterOptionString.lower(parentEventId),FfiConverterString.lower(content)
+                    FfiConverterTypeCommentScope_lower(scope),FfiConverterOptionString.lower(parentEventId),FfiConverterString.lower(content)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -7349,6 +7411,158 @@ public func FfiConverterTypeCommentRecord_lift(_ buf: RustBuffer) throws -> Comm
 #endif
 public func FfiConverterTypeCommentRecord_lower(_ value: CommentRecord) -> RustBuffer {
     return FfiConverterTypeCommentRecord.lower(value)
+}
+
+
+/**
+ * Rust-owned NIP-22 root scope projection. Native shells keep this record
+ * opaque and pass it back for comment reads/writes.
+ */
+public struct CommentScope {
+    public var rootTagName: String
+    public var rootTagValue: String
+    public var rootKind: UInt16
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(rootTagName: String, rootTagValue: String, rootKind: UInt16) {
+        self.rootTagName = rootTagName
+        self.rootTagValue = rootTagValue
+        self.rootKind = rootKind
+    }
+}
+
+#if compiler(>=6)
+extension CommentScope: Sendable {}
+#endif
+
+
+extension CommentScope: Equatable, Hashable {
+    public static func ==(lhs: CommentScope, rhs: CommentScope) -> Bool {
+        if lhs.rootTagName != rhs.rootTagName {
+            return false
+        }
+        if lhs.rootTagValue != rhs.rootTagValue {
+            return false
+        }
+        if lhs.rootKind != rhs.rootKind {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rootTagName)
+        hasher.combine(rootTagValue)
+        hasher.combine(rootKind)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentScope: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentScope {
+        return
+            try CommentScope(
+                rootTagName: FfiConverterString.read(from: &buf),
+                rootTagValue: FfiConverterString.read(from: &buf),
+                rootKind: FfiConverterUInt16.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentScope, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.rootTagName, into: &buf)
+        FfiConverterString.write(value.rootTagValue, into: &buf)
+        FfiConverterUInt16.write(value.rootKind, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentScope_lift(_ buf: RustBuffer) throws -> CommentScope {
+    return try FfiConverterTypeCommentScope.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentScope_lower(_ value: CommentScope) -> RustBuffer {
+    return FfiConverterTypeCommentScope.lower(value)
+}
+
+
+public struct CommentScopeOutcome {
+    public var value: CommentScope?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: CommentScope?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CommentScopeOutcome: Sendable {}
+#endif
+
+
+extension CommentScopeOutcome: Equatable, Hashable {
+    public static func ==(lhs: CommentScopeOutcome, rhs: CommentScopeOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentScopeOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentScopeOutcome {
+        return
+            try CommentScopeOutcome(
+                value: FfiConverterOptionTypeCommentScope.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentScopeOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeCommentScope.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentScopeOutcome_lift(_ buf: RustBuffer) throws -> CommentScopeOutcome {
+    return try FfiConverterTypeCommentScopeOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentScopeOutcome_lower(_ value: CommentScopeOutcome) -> RustBuffer {
+    return FfiConverterTypeCommentScopeOutcome.lower(value)
 }
 
 
@@ -14767,6 +14981,30 @@ fileprivate struct FfiConverterOptionTypeCommentRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeCommentScope: FfiConverterRustBuffer {
+    typealias SwiftType = CommentScope?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCommentScope.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCommentScope.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeCurrentUser: FfiConverterRustBuffer {
     typealias SwiftType = CurrentUser?
 
@@ -15885,10 +16123,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_by_address() != 8240) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_comment_scope() != 52849) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_route() != 34058) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_route_for_article() != 30297) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_comment_scope() != 41998) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_route() != 10925) {
@@ -15921,13 +16165,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_messages() != 59404) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_reference() != 62284) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_scope() != 40070) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_curation_menu_items() != 34499) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 7889) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_event_comment_scope() != 44632) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_external_comment_scope() != 56502) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_featured_rooms() != 33699) {
@@ -16101,7 +16351,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message() != 4279) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment() != 34503) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_for_scope() != 51702) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 58699) {

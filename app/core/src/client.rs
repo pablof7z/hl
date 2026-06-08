@@ -29,20 +29,20 @@ use crate::models::{
     ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute,
     BookRouteOutcome, BookmarkSetListOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome,
     CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord,
-    CommentListOutcome, CommentOutcome, CommentRecord, CommunityListOutcome, CommunitySummary,
-    CurationMenuItem, CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
-    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
-    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
-    GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HighlightSourceKind, HydratedHighlight, HydratedHighlightListOutcome,
-    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
-    NostrEntityEventOutcome, NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft,
-    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateDraft, ReactionListOutcome, ReactionOutcome, ReadingFeedItem,
-    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
-    RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
+    CommentListOutcome, CommentOutcome, CommentRecord, CommentScope, CommentScopeOutcome,
+    CommunityListOutcome, CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome,
+    CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
+    DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
+    FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft,
+    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind,
+    HydratedHighlight, HydratedHighlightListOutcome, MutationOutcome, Nip05AvailabilityOutcome,
+    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
+    OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
+    ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft, ReactionListOutcome,
+    ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
+    RelayDiagnosticListOutcome, RoomRecommendation, RoomRecommendationListOutcome,
+    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -481,6 +481,19 @@ fn comment_list_outcome(result: Result<Vec<CommentRecord>, CoreError>) -> Commen
         },
         Err(error) => CommentListOutcome {
             values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn comment_scope_outcome(result: Result<CommentScope, CoreError>) -> CommentScopeOutcome {
+    match result {
+        Ok(value) => CommentScopeOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => CommentScopeOutcome {
+            value: None,
             error: error.to_string(),
         },
     }
@@ -1713,64 +1726,57 @@ impl HighlighterCore {
         ))
     }
 
-    /// Read NIP-22 comments (kind:1111) rooted at the given uppercase
-    /// scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
-    /// books, etc. Newest first.
-    pub async fn get_comments_for_reference(
-        &self,
-        tag_name: String,
-        tag_value: String,
-        limit: u32,
-    ) -> CommentListOutcome {
-        let Some(ch) = tag_name.trim().chars().next() else {
-            return CommentListOutcome {
-                values: Vec::new(),
-                error: String::new(),
-            };
-        };
-        comment_list_outcome(comments::query_for_reference(
-            self.runtime.ndb(),
-            ch,
-            tag_value.trim(),
-            limit,
-        ))
+    /// Project a NIP-23 article address into the NIP-22 root scope used by
+    /// comment reads/writes.
+    pub fn get_article_comment_scope(&self, address: String) -> CommentScopeOutcome {
+        comment_scope_outcome(comments::article_scope(&address))
     }
 
-    /// Publish a NIP-22 kind:1111 comment scoped to any artifact.
-    ///
-    /// `root_tag_name` is `"A"` (addressable, e.g. `30023:<pubkey>:<d>`),
-    /// `"E"` (event id — a highlight, an event share), or `"I"` (external
-    /// content like `url:…`, `podcast:item:guid:…`, `isbn:…`).
-    /// `root_tag_value` is the corresponding scope value. `root_kind` is
-    /// the kind of the root event (or 0 for purely external roots).
-    /// `parent_event_id` is `None` for top-level comments and `Some(id)`
-    /// for replies (the parent kind:1111 comment).
-    pub async fn publish_comment(
+    /// Project a concrete event id into the NIP-22 root scope used by comment
+    /// reads/writes. The native shell provides only the event identity and
+    /// known kind; Rust owns tag selection.
+    pub fn get_event_comment_scope(&self, event_id_hex: String, kind: u16) -> CommentScopeOutcome {
+        comment_scope_outcome(comments::event_scope(&event_id_hex, kind))
+    }
+
+    /// Project an external content identifier into the NIP-22 root scope used
+    /// by comment reads/writes. Existing Highlighter data uses raw URLs as
+    /// well as NIP-73 identifiers; Rust preserves the identifier value.
+    pub fn get_external_comment_scope(&self, identifier: String, kind: u16) -> CommentScopeOutcome {
+        comment_scope_outcome(comments::external_scope(&identifier, kind))
+    }
+
+    /// Project an artifact preview into a NIP-22 root scope using the
+    /// preview's Rust-owned protocol reference fields.
+    pub fn get_artifact_comment_scope(&self, preview: ArtifactPreview) -> CommentScopeOutcome {
+        comment_scope_outcome(comments::scope_from_preview(&preview))
+    }
+
+    /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
+    pub async fn get_comments_for_scope(
         &self,
-        root_tag_name: String,
-        root_tag_value: String,
-        root_kind: u16,
+        scope: CommentScope,
+        limit: u32,
+    ) -> CommentListOutcome {
+        comment_list_outcome(comments::query_for_scope(self.runtime.ndb(), &scope, limit))
+    }
+
+    /// Publish a NIP-22 kind:1111 comment scoped to a Rust-owned root.
+    /// `parent_event_id` is `None` for top-level comments and `Some(id)` for
+    /// replies (the parent kind:1111 comment).
+    pub async fn publish_comment_for_scope(
+        &self,
+        scope: CommentScope,
         parent_event_id: Option<String>,
         content: String,
     ) -> CommentOutcome {
         let result: Result<CommentRecord, CoreError> = async {
             let _ = self.require_user_pubkey()?;
-            let Some(scope) = root_tag_name.trim().chars().next() else {
-                return Err(CoreError::InvalidInput("root tag must not be empty".into()));
-            };
             let parent = parent_event_id
                 .as_deref()
                 .map(str::trim)
                 .filter(|s| !s.is_empty());
-            comments::publish_comment(
-                &self.runtime,
-                scope,
-                root_tag_value.trim(),
-                root_kind,
-                parent,
-                content.trim(),
-            )
-            .await
+            comments::publish_comment_for_scope(&self.runtime, &scope, parent, content.trim()).await
         }
         .await;
         comment_outcome(result)

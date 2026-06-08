@@ -475,22 +475,32 @@ actor SafeHighlighterCore {
         await core.getBookHighlights(catalogId: catalogId, limit: limit)
     }
 
-    func getCommentsForReference(
-        tagName: String,
-        tagValue: String,
-        limit: UInt32 = 128
-    ) async -> CommentListOutcome {
-        await core.getCommentsForReference(tagName: tagName, tagValue: tagValue, limit: limit)
+    nonisolated func getArticleCommentScope(address: String) -> CommentScopeOutcome {
+        core.getArticleCommentScope(address: address)
     }
 
-    func publishComment(
-        rootTagName: String,
-        rootTagValue: String,
-        rootKind: UInt16,
+    nonisolated func getArtifactCommentScope(preview: ArtifactPreview) -> CommentScopeOutcome {
+        core.getArtifactCommentScope(preview: preview)
+    }
+
+    nonisolated func getEventCommentScope(eventIdHex: String, kind: UInt16) -> CommentScopeOutcome {
+        core.getEventCommentScope(eventIdHex: eventIdHex, kind: kind)
+    }
+
+    nonisolated func getExternalCommentScope(identifier: String, kind: UInt16) -> CommentScopeOutcome {
+        core.getExternalCommentScope(identifier: identifier, kind: kind)
+    }
+
+    func getCommentsForScope(scope: CommentScope, limit: UInt32 = 128) async -> CommentListOutcome {
+        await core.getCommentsForScope(scope: scope, limit: limit)
+    }
+
+    func publishCommentForScope(
+        scope: CommentScope,
         parentEventId: String? = nil,
         content: String
     ) async -> CommentOutcome {
-        await core.publishComment(rootTagName: rootTagName, rootTagValue: rootTagValue, rootKind: rootKind, parentEventId: parentEventId, content: content)
+        await core.publishCommentForScope(scope: scope, parentEventId: parentEventId, content: content)
     }
 
     func getUserHighlights(pubkeyHex: String, limit: UInt32 = 64) async -> HighlightListOutcome {

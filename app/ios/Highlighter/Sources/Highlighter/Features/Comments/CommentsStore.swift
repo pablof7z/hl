@@ -30,37 +30,36 @@ final class CommentsStore {
     /// deferred per design doc.)
     private(set) var drafts: [String: String] = [:]
 
-    @ObservationIgnored private var artifact: ArtifactRef?
+    @ObservationIgnored private var scope: CommentScope?
     @ObservationIgnored private var core: SafeHighlighterCore?
     @ObservationIgnored private var currentUserPubkey: String?
 
     // MARK: - Lifecycle
 
     func start(
-        artifact: ArtifactRef,
+        scope: CommentScope,
         core: SafeHighlighterCore,
         currentUserPubkey: String?
     ) async {
-        self.artifact = artifact
+        self.scope = scope
         self.core = core
         self.currentUserPubkey = currentUserPubkey
         await refresh()
     }
 
     func refresh() async {
-        guard let core, let artifact else { return }
+        guard let core, let scope else { return }
         isLoading = true
         loadError = nil
-        let outcome = await core.getCommentsForReference(
-            tagName: artifact.rootTagName,
-            tagValue: artifact.rootTagValue,
+        let outcome = await core.getCommentsForScope(
+            scope: scope,
             limit: 256
         )
         if outcome.error.isEmpty {
             records = outcome.values
             tree = CommentTreeBuilder.build(
                 records: outcome.values,
-                rootTagValue: artifact.rootTagValue
+                rootTagValue: scope.rootTagValue
             )
             await refreshReactionsAndBookmarks(for: outcome.values)
         } else {
@@ -127,7 +126,7 @@ final class CommentsStore {
     /// rebuilds the tree.
     @discardableResult
     func publish(content: String, parentEventId: String?) async -> CommentOutcome {
-        guard let core, let artifact else {
+        guard let core, let scope else {
             return CommentOutcome(value: nil, error: "store not started")
         }
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -135,10 +134,8 @@ final class CommentsStore {
             return CommentOutcome(value: nil, error: "comment body must not be empty")
         }
 
-        let outcome = await core.publishComment(
-            rootTagName: artifact.rootTagName,
-            rootTagValue: artifact.rootTagValue,
-            rootKind: artifact.rootKind,
+        let outcome = await core.publishCommentForScope(
+            scope: scope,
             parentEventId: parentEventId,
             content: trimmed
         )
@@ -149,7 +146,7 @@ final class CommentsStore {
             records.append(record)
             tree = CommentTreeBuilder.build(
                 records: records,
-                rootTagValue: artifact.rootTagValue
+                rootTagValue: scope.rootTagValue
             )
         }
         setDraft("", forParent: parentEventId)

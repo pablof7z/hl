@@ -186,11 +186,19 @@ private struct ArticleCommentsAttachmentModifier: ViewModifier {
     let article: ArticleRecord?
     let target: ArticleReaderTarget
 
+    @Environment(HighlighterStore.self) private var app
+
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content.commentsAttachment(
-            artifact: .article(addr: target.address),
-            artifactAuthorPubkey: target.pubkey
-        )
+        let outcome = app.safeCore.getArticleCommentScope(address: target.address)
+        if outcome.error.isEmpty, let scope = outcome.value {
+            content.commentsAttachment(
+                scope: scope,
+                artifactAuthorPubkey: target.pubkey
+            )
+        } else {
+            content
+        }
     }
 }
 

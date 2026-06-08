@@ -22,6 +22,7 @@ final class RoomStore {
     /// NIP-22 comments (kind:1111) per artifact, keyed by the UPPERCASE
     /// scope (`"A:30023:pk:d"` / `"I:isbn:…"` / `"E:<event-id>"`).
     private(set) var commentsByReference: [String: [CommentRecord]] = [:]
+    private(set) var commentKeysByArtifactId: [String: String] = [:]
     private(set) var isLoading: Bool = true
     private(set) var loadError: String?
 
@@ -111,8 +112,15 @@ final class RoomStore {
     /// for every artifact in `artifacts`. Each artifact dispatches both
     /// fetches in parallel; failures keep whatever was previously there.
     private func refreshReferenceQueries() async {
-        let targets: [ReferenceTarget] = artifacts.compactMap(referenceTarget(for:))
-        guard !targets.isEmpty, let core else { return }
+        guard let core else { return }
+        let targets: [ReferenceTarget] = artifacts.compactMap { referenceTarget(for: $0, core: core) }
+        guard !targets.isEmpty else { return }
+        commentKeysByArtifactId = Dictionary(
+            uniqueKeysWithValues: targets.compactMap { target in
+                guard let key = target.commentKey else { return nil }
+                return (target.artifactId, key)
+            }
+        )
 
         struct FetchResult {
             let target: ReferenceTarget
@@ -127,14 +135,16 @@ final class RoomStore {
                         tagName: target.lowercaseTag,
                         tagValue: target.value
                     )
-                    let commentOutcome = await core.getCommentsForReference(
-                        tagName: target.uppercaseTag,
-                        tagValue: target.value
-                    )
+                    let commentOutcome: CommentListOutcome?
+                    if let scope = target.commentScope {
+                        commentOutcome = await core.getCommentsForScope(scope: scope, limit: 128)
+                    } else {
+                        commentOutcome = nil
+                    }
                     return FetchResult(
                         target: target,
                         highlights: highlightOutcome.error.isEmpty ? highlightOutcome.values : nil,
-                        comments: commentOutcome.error.isEmpty ? commentOutcome.values : nil
+                        comments: commentOutcome?.error.isEmpty == true ? commentOutcome?.values : nil
                     )
                 }
             }
@@ -143,29 +153,38 @@ final class RoomStore {
                 if let hl = result.highlights {
                     highlightsByReference["\(t.lowercaseTag):\(t.value)"] = hl
                 }
-                if let cm = result.comments {
-                    commentsByReference["\(t.uppercaseTag):\(t.value)"] = cm
+                if let cm = result.comments, let key = t.commentKey {
+                    commentsByReference[key] = cm
                 }
             }
         }
     }
 
     private func refreshReferenceQueries(for artifact: ArtifactRecord) async {
-        guard let core, let target = referenceTarget(for: artifact) else { return }
+        guard let core, let target = referenceTarget(for: artifact, core: core) else { return }
+        if let key = target.commentKey {
+            commentKeysByArtifactId[target.artifactId] = key
+        } else {
+            commentKeysByArtifactId.removeValue(forKey: target.artifactId)
+        }
         let highlightOutcome = await core.getHighlightsForReference(
             tagName: target.lowercaseTag,
-            tagValue: target.value
-        )
-        let commentOutcome = await core.getCommentsForReference(
-            tagName: target.uppercaseTag,
             tagValue: target.value
         )
         if highlightOutcome.error.isEmpty {
             highlightsByReference["\(target.lowercaseTag):\(target.value)"] = highlightOutcome.values
         }
-        if commentOutcome.error.isEmpty {
-            commentsByReference["\(target.uppercaseTag):\(target.value)"] = commentOutcome.values
+        if let scope = target.commentScope, let key = target.commentKey {
+            let commentOutcome = await core.getCommentsForScope(scope: scope, limit: 128)
+            if commentOutcome.error.isEmpty {
+                commentsByReference[key] = commentOutcome.values
+            }
         }
+    }
+
+    func commentCount(for artifact: ArtifactRecord) -> Int {
+        guard let key = commentKeysByArtifactId[artifactId(for: artifact)] else { return 0 }
+        return commentsByReference[key]?.count ?? 0
     }
 
     // MARK: - Reference targets
@@ -174,28 +193,40 @@ final class RoomStore {
     /// the shared value. Returns `nil` for artifacts lacking a usable
     /// reference (no `i` / `a` / `r` information).
     private struct ReferenceTarget: Sendable {
+        let artifactId: String
         let lowercaseTag: String  // "a" | "i" | "e" | "r"
-        let uppercaseTag: String  // "A" | "I" | "E" | "R"
         let value: String
+        let commentScope: CommentScope?
+        let commentKey: String?
     }
 
-    private func referenceTarget(for artifact: ArtifactRecord) -> ReferenceTarget? {
+    private func referenceTarget(for artifact: ArtifactRecord, core: SafeHighlighterCore) -> ReferenceTarget? {
         let pv = artifact.preview
+        let commentScope = core.getArtifactCommentScope(preview: pv).value
+        let commentKey = commentScope.map { "\($0.rootTagName):\($0.rootTagValue)" }
         if !pv.referenceTagName.isEmpty, !pv.referenceTagValue.isEmpty {
             return ReferenceTarget(
+                artifactId: artifactId(for: artifact),
                 lowercaseTag: pv.referenceTagName.lowercased(),
-                uppercaseTag: pv.referenceTagName.uppercased(),
-                value: pv.referenceTagValue
+                value: pv.referenceTagValue,
+                commentScope: commentScope,
+                commentKey: commentKey
             )
         }
         if !pv.highlightTagName.isEmpty, !pv.highlightTagValue.isEmpty {
             return ReferenceTarget(
+                artifactId: artifactId(for: artifact),
                 lowercaseTag: pv.highlightTagName.lowercased(),
-                uppercaseTag: pv.highlightTagName.uppercased(),
-                value: pv.highlightTagValue
+                value: pv.highlightTagValue,
+                commentScope: commentScope,
+                commentKey: commentKey
             )
         }
         return nil
+    }
+
+    private func artifactId(for artifact: ArtifactRecord) -> String {
+        artifact.shareEventId.isEmpty ? artifact.preview.id : artifact.shareEventId
     }
 
     private func lowercaseReference(for highlight: HighlightRecord) -> (String, String)? {

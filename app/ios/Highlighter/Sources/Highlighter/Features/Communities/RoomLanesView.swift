@@ -18,6 +18,7 @@ struct RoomLanesView: View {
     let highlights: [HydratedHighlight]
     let highlightsByReference: [String: [HighlightRecord]]
     let commentsByReference: [String: [CommentRecord]]
+    let commentKeysByArtifactId: [String: String]
     let isLoading: Bool
     let onShareToCommunity: (ArtifactRecord) -> Void
 
@@ -55,7 +56,8 @@ struct RoomLanesView: View {
             artifacts: artifacts,
             highlights: highlights,
             highlightsByReference: highlightsByReference,
-            commentsByReference: commentsByReference
+            commentsByReference: commentsByReference,
+            commentKeysByArtifactId: commentKeysByArtifactId
         )
         .filter { !$0.isDormant }
     }
@@ -102,21 +104,22 @@ struct Lane: Identifiable {
 
     /// Build lanes from `artifacts` + reference-scoped highlight / comment
     /// fetches. `highlightsByReference` is keyed `"<lowercase>:<value>"`,
-    /// `commentsByReference` is keyed `"<UPPERCASE>:<value>"` (NIP-22
-    /// root scope convention). Falls back to a permissive match against
-    /// the group-scoped `highlights` stream for any artifact that didn't
-    /// pull a per-reference result.
+    /// while comment lookup keys come from Rust-owned NIP-22 scopes. Falls
+    /// back to a permissive match against the group-scoped `highlights`
+    /// stream for any artifact that didn't pull a per-reference result.
     static func build(
         artifacts: [ArtifactRecord],
         highlights: [HydratedHighlight],
         highlightsByReference: [String: [HighlightRecord]],
-        commentsByReference: [String: [CommentRecord]]
+        commentsByReference: [String: [CommentRecord]],
+        commentKeysByArtifactId: [String: String]
     ) -> [Lane] {
         var lanes: [Lane] = artifacts.map { art in
             var highlightBucket: [HydratedHighlight] = []
             var commentBucket: [CommentRecord] = []
 
-            let (lowerTag, upperTag, value) = referenceTriple(for: art)
+            let artifactId = laneId(for: art)
+            let (lowerTag, value) = referencePair(for: art)
             if !value.isEmpty {
                 if !lowerTag.isEmpty, let recs = highlightsByReference["\(lowerTag):\(value)"] {
                     highlightBucket.append(contentsOf: recs.map { rec in
@@ -128,7 +131,8 @@ struct Lane: Identifiable {
                         )
                     })
                 }
-                if !upperTag.isEmpty, let recs = commentsByReference["\(upperTag):\(value)"] {
+                if let commentKey = commentKeysByArtifactId[artifactId],
+                   let recs = commentsByReference[commentKey] {
                     commentBucket = recs
                 }
             }
@@ -144,7 +148,7 @@ struct Lane: Identifiable {
             commentBucket.sort { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
 
             return Lane(
-                id: art.shareEventId.isEmpty ? art.preview.id : art.shareEventId,
+                id: artifactId,
                 artifact: art,
                 highlights: highlightBucket,
                 comments: commentBucket
@@ -201,16 +205,20 @@ struct Lane: Identifiable {
         return false
     }
 
-    /// Returns `(lowercaseTag, uppercaseTag, value)` for the artifact's
-    /// primary reference, or empty strings for artifacts without one.
-    private static func referenceTriple(for art: ArtifactRecord) -> (String, String, String) {
+    /// Returns `(lowercaseTag, value)` for the artifact's primary highlight
+    /// reference, or empty strings for artifacts without one.
+    private static func referencePair(for art: ArtifactRecord) -> (String, String) {
         let pv = art.preview
         if !pv.referenceTagName.isEmpty, !pv.referenceTagValue.isEmpty {
-            return (pv.referenceTagName.lowercased(), pv.referenceTagName.uppercased(), pv.referenceTagValue)
+            return (pv.referenceTagName.lowercased(), pv.referenceTagValue)
         }
         if !pv.highlightTagName.isEmpty, !pv.highlightTagValue.isEmpty {
-            return (pv.highlightTagName.lowercased(), pv.highlightTagName.uppercased(), pv.highlightTagValue)
+            return (pv.highlightTagName.lowercased(), pv.highlightTagValue)
         }
-        return ("", "", "")
+        return ("", "")
+    }
+
+    private static func laneId(for art: ArtifactRecord) -> String {
+        art.shareEventId.isEmpty ? art.preview.id : art.shareEventId
     }
 }

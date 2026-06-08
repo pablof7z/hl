@@ -82,9 +82,7 @@ struct WebReaderView: View {
         } message: {
             Text(shareError ?? "")
         }
-        .commentsAttachment(
-            artifact: .external(id: target.url.absoluteString, kind: 0)
-        )
+        .modifier(WebCommentsScopeModifier(url: target.url))
     }
 
     /// Build an `ArtifactPreview` from the URL via the Rust core (which
@@ -109,6 +107,22 @@ struct WebReaderView: View {
                 displaySubtitle: preview.description,
                 imageURL: preview.image.isEmpty ? nil : URL(string: preview.image)
             )
+        }
+    }
+}
+
+private struct WebCommentsScopeModifier: ViewModifier {
+    let url: URL
+
+    @Environment(HighlighterStore.self) private var app
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let outcome = app.safeCore.getExternalCommentScope(identifier: url.absoluteString, kind: 0)
+        if outcome.error.isEmpty, let scope = outcome.value {
+            content.commentsAttachment(scope: scope)
+        } else {
+            content
         }
     }
 }

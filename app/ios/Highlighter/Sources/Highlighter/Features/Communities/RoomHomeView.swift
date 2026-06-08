@@ -164,6 +164,7 @@ struct RoomHomeView: View {
             highlights: room.highlights,
             highlightsByReference: room.highlightsByReference,
             commentsByReference: room.commentsByReference,
+            commentKeysByArtifactId: room.commentKeysByArtifactId,
             isLoading: room.isLoading,
             onShareToCommunity: { artifact in
                 shareTarget = .artifact(artifact)
@@ -242,21 +243,9 @@ struct RoomHomeView: View {
     }
 
     /// Resolve the count of NIP-22 comments anchored to an artifact, using
-    /// the same uppercase reference key convention as `Lane.build`.
+    /// the same Rust-derived scope key as `Lane.build`.
     private func commentCount(for artifact: ArtifactRecord) -> Int {
-        let pv = artifact.preview
-        let upperTag: String
-        let value: String
-        if !pv.referenceTagName.isEmpty, !pv.referenceTagValue.isEmpty {
-            upperTag = pv.referenceTagName.uppercased()
-            value = pv.referenceTagValue
-        } else if !pv.highlightTagName.isEmpty, !pv.highlightTagValue.isEmpty {
-            upperTag = pv.highlightTagName.uppercased()
-            value = pv.highlightTagValue
-        } else {
-            return 0
-        }
-        return room.commentsByReference["\(upperTag):\(value)"]?.count ?? 0
+        room.commentCount(for: artifact)
     }
 
     @ViewBuilder

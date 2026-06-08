@@ -5,7 +5,7 @@ import SwiftUI
 /// enclosing NavigationStack. Owns the CommentsStore lifecycle so the
 /// count is live before the user ever taps.
 struct CommentsAttachment: ViewModifier {
-    let artifact: ArtifactRef
+    let scope: CommentScope
     let artifactAuthorPubkey: String?
     let artifactHeader: AnyView?
 
@@ -30,17 +30,17 @@ struct CommentsAttachment: ViewModifier {
             }
             .navigationDestination(isPresented: $showComments) {
                 CommentsView(
-                    artifact: artifact,
+                    scope: scope,
                     artifactAuthorPubkey: artifactAuthorPubkey,
                     artifactHeader: artifactHeader,
                     store: store
                 )
             }
-            .task(id: artifact) {
+            .task(id: scope) {
                 guard !didStart else { return }
                 didStart = true
                 await store.start(
-                    artifact: artifact,
+                    scope: scope,
                     core: app.safeCore,
                     currentUserPubkey: app.currentUser?.pubkey
                 )
@@ -62,12 +62,12 @@ struct CommentsAttachment: ViewModifier {
 
 extension View {
     func commentsAttachment(
-        artifact: ArtifactRef,
+        scope: CommentScope,
         artifactAuthorPubkey: String? = nil,
         artifactHeader: AnyView? = nil
     ) -> some View {
         modifier(CommentsAttachment(
-            artifact: artifact,
+            scope: scope,
             artifactAuthorPubkey: artifactAuthorPubkey,
             artifactHeader: artifactHeader
         ))

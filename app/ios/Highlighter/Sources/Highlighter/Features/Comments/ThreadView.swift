@@ -11,7 +11,7 @@ struct ThreadView: View {
     let focused: CommentNode?
     let artifactHeader: AnyView?
     let store: CommentsStore
-    let artifact: ArtifactRef
+    let scope: CommentScope
     let artifactAuthorPubkey: String?
 
     @Environment(\.dismiss) private var dismiss
@@ -71,7 +71,7 @@ struct ThreadView: View {
                 focused: Self.locate(eventId: node.record.eventId, in: store.tree) ?? node,
                 artifactHeader: nil,
                 store: store,
-                artifact: artifact,
+                scope: scope,
                 artifactAuthorPubkey: artifactAuthorPubkey
             )
         }

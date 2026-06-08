@@ -173,6 +173,12 @@ pub struct CommentListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentScopeOutcome {
+    pub value: Option<CommentScope>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct ArticleOutcome {
     pub value: Option<ArticleRecord>,
     pub error: String,
@@ -545,6 +551,15 @@ pub struct CommentRecord {
     pub parent_tag_value: String,
     pub root_kind: String,
     pub created_at: Option<u64>,
+}
+
+/// Rust-owned NIP-22 root scope projection. Native shells keep this record
+/// opaque and pass it back for comment reads/writes.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentScope {
+    pub root_tag_name: String,
+    pub root_tag_value: String,
+    pub root_kind: u16,
 }
 
 /// Highlight + its associated artifact (for feed rendering).

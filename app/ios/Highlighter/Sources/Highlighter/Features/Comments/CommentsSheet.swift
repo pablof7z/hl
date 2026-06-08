@@ -4,7 +4,7 @@ import SwiftUI
 /// No inner NavigationStack — thread drill-down is handled by
 /// ThreadView's own `.navigationDestination(item:)`.
 struct CommentsView: View {
-    let artifact: ArtifactRef
+    let scope: CommentScope
     let artifactAuthorPubkey: String?
     let artifactHeader: AnyView?
     let store: CommentsStore
@@ -14,7 +14,7 @@ struct CommentsView: View {
             focused: nil,
             artifactHeader: artifactHeader,
             store: store,
-            artifact: artifact,
+            scope: scope,
             artifactAuthorPubkey: artifactAuthorPubkey
         )
     }

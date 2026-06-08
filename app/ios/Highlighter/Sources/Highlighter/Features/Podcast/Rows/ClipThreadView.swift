@@ -84,10 +84,14 @@ struct ClipThreadView: View {
         sendError = nil
         let id = clipEventId
         Task {
-            let outcome = await app.safeCore.publishComment(
-                rootTagName: "e",
-                rootTagValue: id,
-                rootKind: 9802,
+            let scopeOutcome = app.safeCore.getEventCommentScope(eventIdHex: id, kind: 9802)
+            guard scopeOutcome.error.isEmpty, let scope = scopeOutcome.value else {
+                sendError = scopeOutcome.error
+                isSending = false
+                return
+            }
+            let outcome = await app.safeCore.publishCommentForScope(
+                scope: scope,
                 content: text
             )
             guard outcome.error.isEmpty, let record = outcome.value else {

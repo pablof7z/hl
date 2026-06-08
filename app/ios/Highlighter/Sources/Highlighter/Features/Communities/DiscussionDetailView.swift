@@ -7,7 +7,9 @@ struct DiscussionDetailView: View {
     @State private var store = CommentsStore()
     @State private var focusedNode: CommentNode? = nil
 
-    private var artifactRef: ArtifactRef { .event(id: discussion.eventId, kind: 11) }
+    private var commentScope: CommentScope? {
+        app.safeCore.getEventCommentScope(eventIdHex: discussion.eventId, kind: 11).value
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,20 +38,23 @@ struct DiscussionDetailView: View {
         .navigationTitle(discussion.title)
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            guard let commentScope else { return }
             await store.start(
-                artifact: artifactRef,
+                scope: commentScope,
                 core: app.safeCore,
                 currentUserPubkey: app.currentUser?.pubkey
             )
         }
         .navigationDestination(item: $focusedNode) { node in
-            ThreadView(
-                focused: ThreadView.locate(eventId: node.record.eventId, in: store.tree) ?? node,
-                artifactHeader: nil,
-                store: store,
-                artifact: artifactRef,
-                artifactAuthorPubkey: discussion.pubkey
-            )
+            if let commentScope {
+                ThreadView(
+                    focused: ThreadView.locate(eventId: node.record.eventId, in: store.tree) ?? node,
+                    artifactHeader: nil,
+                    store: store,
+                    scope: commentScope,
+                    artifactAuthorPubkey: discussion.pubkey
+                )
+            }
         }
     }
 
