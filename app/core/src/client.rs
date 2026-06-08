@@ -2668,6 +2668,13 @@ impl HighlighterCore {
         nostr_entity_ref_outcome(crate::nostr_entities::decode_nostr_entity(&input))
     }
 
+    pub fn nostr_entity_fallback_label(
+        &self,
+        entity: crate::nostr_entities::NostrEntityRef,
+    ) -> String {
+        crate::nostr_entities::fallback_label(&entity)
+    }
+
     /// Mint a NIP-19 `nevent` for a kind:9802 highlight share link. The
     /// canonical relay hint is Rust policy; native shells provide only the
     /// event id and author hint they are already rendering.

@@ -132,6 +132,27 @@ pub fn decode_nostr_entity(input: &str) -> Result<NostrEntityRef, CoreError> {
     })
 }
 
+pub fn fallback_label(entity: &NostrEntityRef) -> String {
+    match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => {
+            format!("Profile · {}…", first_chars(pubkey_hex, 12))
+        }
+        NostrEntityRef::Event {
+            event_id_hex,
+            kind_hint,
+            ..
+        } => match kind_hint {
+            Some(kind) => format!("Event kind {kind} · {}…", first_chars(event_id_hex, 12)),
+            None => format!("Event · {}…", first_chars(event_id_hex, 12)),
+        },
+        NostrEntityRef::Address { kind, d_tag, .. } => format!("Kind {kind} · {d_tag}"),
+    }
+}
+
+fn first_chars(value: &str, count: usize) -> String {
+    value.chars().take(count).collect()
+}
+
 /// Encode a NIP-19 `nevent` for an event id, optionally carrying an
 /// author pubkey, kind hint, and relay hints. Used by clients (iOS app,
 /// share-link builder) to produce a single bech32 reference that the
@@ -426,6 +447,35 @@ mod tests {
         let err =
             decode_nostr_entity("nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5");
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn fallback_labels_match_ios_fallbacks() {
+        assert_eq!(
+            fallback_label(&NostrEntityRef::Profile {
+                pubkey_hex: "abcdef0123456789".into(),
+                relays: Vec::new(),
+            }),
+            "Profile · abcdef012345…"
+        );
+        assert_eq!(
+            fallback_label(&NostrEntityRef::Event {
+                event_id_hex: "1234567890abcdef".into(),
+                relays: Vec::new(),
+                author_hint_hex: None,
+                kind_hint: Some(9802),
+            }),
+            "Event kind 9802 · 1234567890ab…"
+        );
+        assert_eq!(
+            fallback_label(&NostrEntityRef::Address {
+                kind: 30023,
+                pubkey_hex: "abcdef".into(),
+                d_tag: "article-slug".into(),
+                relays: Vec::new(),
+            }),
+            "Kind 30023 · article-slug"
+        );
     }
 
     #[test]

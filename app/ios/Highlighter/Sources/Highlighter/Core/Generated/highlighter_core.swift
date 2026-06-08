@@ -1092,6 +1092,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func normalizeNip05Username(input: String)  -> String
 
+    func nostrEntityFallbackLabel(entity: NostrEntityRef)  -> String
+
     func pairBunker(uri: String) async  -> CurrentUserOutcome
 
     func prepareWhatsNew() async  -> WhatsNewEntriesOutcome
@@ -2887,6 +2889,14 @@ open func normalizeNip05Username(input: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_normalize_nip05_username(self.uniffiClonePointer(),
         FfiConverterString.lower(input),$0
+    )
+})
+}
+
+open func nostrEntityFallbackLabel(entity: NostrEntityRef) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_nostr_entity_fallback_label(self.uniffiClonePointer(),
+        FfiConverterTypeNostrEntityRef_lower(entity),$0
     )
 })
 }
@@ -14833,6 +14843,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_normalize_nip05_username() != 21732) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_nostr_entity_fallback_label() != 41592) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 14588) {

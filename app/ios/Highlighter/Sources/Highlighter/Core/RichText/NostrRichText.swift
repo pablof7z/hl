@@ -396,13 +396,7 @@ struct NostrEntityCard: View {
     }
 
     private var entityLabel: String {
-        switch entity {
-        case .profile(let pk, _): return "Profile · \(pk.prefix(12))…"
-        case .event(let id, _, _, let kind):
-            if let k = kind { return "Event kind \(k) · \(id.prefix(12))…" }
-            return "Event · \(id.prefix(12))…"
-        case .address(let kind, _, let d, _): return "Kind \(kind) · \(d)"
-        }
+        appStore.core.nostrEntityFallbackLabel(entity: entity)
     }
 
     private func start() async {
