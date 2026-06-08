@@ -359,18 +359,18 @@ struct RoomInviteView: View {
     // MARK: - Loading + actions
 
     private func loadFollows() async {
-        do {
-            let result = try await appStore.safeCore.getFollows()
+        let outcome = await appStore.safeCore.getFollows()
+        if outcome.error.isEmpty {
             await MainActor.run {
-                follows = result
+                follows = outcome.values
                 followsLoaded = true
             }
             // Warm the profile cache for the first chunk so suggestions
             // render with names rather than truncated hex.
-            for pubkey in result.prefix(40) {
+            for pubkey in outcome.values.prefix(40) {
                 await appStore.requestProfile(pubkeyHex: pubkey)
             }
-        } catch {
+        } else {
             await MainActor.run { followsLoaded = true }
         }
     }
@@ -383,8 +383,9 @@ struct RoomInviteView: View {
             await MainActor.run { pasteResolution = nil }
             return
         }
-        do {
-            let hex = try await appStore.safeCore.decodeNpub(trimmed)
+        let outcome = appStore.safeCore.decodeNpub(trimmed)
+        if outcome.error.isEmpty {
+            let hex = outcome.value
             let kind: ResolvedCandidate.Kind
             if trimmed.lowercased().hasPrefix("npub") { kind = .npub }
             else if trimmed.lowercased().hasPrefix("nprofile") { kind = .nprofile }
@@ -393,7 +394,7 @@ struct RoomInviteView: View {
             await MainActor.run {
                 pasteResolution = ResolvedCandidate(pubkeyHex: hex, kind: kind)
             }
-        } catch {
+        } else {
             await MainActor.run { pasteResolution = nil }
         }
     }
@@ -414,12 +415,11 @@ struct RoomInviteView: View {
             defer { Task { @MainActor in sending = false } }
             var failures: [String] = []
             for candidate in toAdd {
-                do {
-                    _ = try await appStore.safeCore.addRoomMember(
-                        groupId: groupId,
-                        pubkeyHex: candidate.pubkeyHex
-                    )
-                } catch {
+                let outcome = await appStore.safeCore.addRoomMember(
+                    groupId: groupId,
+                    pubkeyHex: candidate.pubkeyHex
+                )
+                if !outcome.error.isEmpty {
                     failures.append(shortPubkey(candidate.pubkeyHex))
                 }
             }

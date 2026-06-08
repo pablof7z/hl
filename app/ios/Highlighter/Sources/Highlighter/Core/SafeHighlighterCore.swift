@@ -432,48 +432,69 @@ actor SafeHighlighterCore {
         await core.startRoomDiscovery()
     }
 
-    func startFriendsRoomsDiscovery() async throws {
-        try await core.startFriendsRoomsDiscovery()
+    func startFriendsRoomsDiscovery() async -> MutationOutcome {
+        await core.startFriendsRoomsDiscovery()
     }
 
-    func startFeaturedRooms(curatorPubkeyHex: String) async throws {
-        try await core.startFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
+    func startFeaturedRooms(curatorPubkeyHex: String) async -> MutationOutcome {
+        await core.startFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
     }
 
-    func getRoomExplorerCuratorPubkey() async throws -> String {
-        try await core.getRoomExplorerCuratorPubkey()
+    func getRoomExplorerCuratorPubkey() async -> StringOutcome {
+        await core.getRoomExplorerCuratorPubkey()
     }
 
-    func startRoomExplorerFeaturedRooms() async throws {
-        try await core.startRoomExplorerFeaturedRooms()
+    func startRoomExplorerFeaturedRooms() async -> MutationOutcome {
+        await core.startRoomExplorerFeaturedRooms()
     }
 
-    func getFeaturedRooms(curatorPubkeyHex: String) async throws -> [CommunitySummary] {
-        try await core.getFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex).filter(\.isPublicOpenRoom)
+    func getFeaturedRooms(curatorPubkeyHex: String) async -> CommunityListOutcome {
+        let outcome = await core.getFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
+        guard outcome.error.isEmpty else { return outcome }
+        return CommunityListOutcome(
+            values: outcome.values.filter(\.isPublicOpenRoom),
+            error: ""
+        )
     }
 
-    func getAllRooms(limit: UInt32 = 120) async throws -> [CommunitySummary] {
-        let candidates = try await core.getAllRooms(limit: publicRoomCandidateLimit(limit))
-        return Array(candidates.filter(\.isPublicOpenRoom).prefix(Int(limit)))
+    func getAllRooms(limit: UInt32 = 120) async -> CommunityListOutcome {
+        let outcome = await core.getAllRooms(limit: publicRoomCandidateLimit(limit))
+        guard outcome.error.isEmpty else { return outcome }
+        return CommunityListOutcome(
+            values: Array(outcome.values.filter(\.isPublicOpenRoom).prefix(Int(limit))),
+            error: ""
+        )
     }
 
-    func getNewRooms(limit: UInt32 = 24) async throws -> [CommunitySummary] {
-        let candidates = try await core.getNewRooms(limit: publicRoomCandidateLimit(limit))
-        return Array(candidates.filter(\.isPublicOpenRoom).prefix(Int(limit)))
+    func getNewRooms(limit: UInt32 = 24) async -> CommunityListOutcome {
+        let outcome = await core.getNewRooms(limit: publicRoomCandidateLimit(limit))
+        guard outcome.error.isEmpty else { return outcome }
+        return CommunityListOutcome(
+            values: Array(outcome.values.filter(\.isPublicOpenRoom).prefix(Int(limit))),
+            error: ""
+        )
     }
 
-    func getRoomsWithFriends(limit: UInt32 = 16) async throws -> [RoomRecommendation] {
-        let candidates = try await core.getRoomsWithFriends(limit: publicRoomCandidateLimit(limit))
-        return Array(candidates.filter { $0.summary.isPublicOpenRoom }.prefix(Int(limit)))
+    func getRoomsWithFriends(limit: UInt32 = 16) async -> RoomRecommendationListOutcome {
+        let outcome = await core.getRoomsWithFriends(limit: publicRoomCandidateLimit(limit))
+        guard outcome.error.isEmpty else { return outcome }
+        return RoomRecommendationListOutcome(
+            values: Array(outcome.values.filter { $0.summary.isPublicOpenRoom }.prefix(Int(limit))),
+            error: ""
+        )
     }
 
-    func getRoomsFromReadAuthors(limit: UInt32 = 16) async throws -> [RoomRecommendation] {
-        let candidates = try await core.getRoomsFromReadAuthors(limit: publicRoomCandidateLimit(limit))
-        return Array(candidates.filter { $0.summary.isPublicOpenRoom }.prefix(Int(limit)))
+    func getRoomsFromReadAuthors(limit: UInt32 = 16) async -> RoomRecommendationListOutcome {
+        let outcome = await core.getRoomsFromReadAuthors(limit: publicRoomCandidateLimit(limit))
+        guard outcome.error.isEmpty else { return outcome }
+        return RoomRecommendationListOutcome(
+            values: Array(outcome.values.filter { $0.summary.isPublicOpenRoom }.prefix(Int(limit))),
+            error: ""
+        )
     }
 
-    func requestJoinRoom(groupId: String) async throws -> String {
-        try await core.requestJoinRoom(groupId: groupId)
+    func requestJoinRoom(groupId: String) async -> StringOutcome {
+        await core.requestJoinRoom(groupId: groupId)
     }
 
     func createRoom(
@@ -482,8 +503,8 @@ actor SafeHighlighterCore {
         picture: String,
         visibility: RoomVisibility,
         access: RoomAccess
-    ) async throws -> String {
-        try await core.createRoom(
+    ) async -> StringOutcome {
+        await core.createRoom(
             name: name,
             about: about,
             picture: picture,
@@ -492,28 +513,28 @@ actor SafeHighlighterCore {
         )
     }
 
-    func addRoomMember(groupId: String, pubkeyHex: String) async throws -> String {
-        try await core.addRoomMember(groupId: groupId, pubkeyHex: pubkeyHex)
+    func addRoomMember(groupId: String, pubkeyHex: String) async -> StringOutcome {
+        await core.addRoomMember(groupId: groupId, pubkeyHex: pubkeyHex)
     }
 
-    func createRoomInviteCodes(groupId: String, count: UInt32) async throws -> [String] {
-        try await core.createRoomInviteCodes(groupId: groupId, count: count)
+    func createRoomInviteCodes(groupId: String, count: UInt32) async -> StringListOutcome {
+        await core.createRoomInviteCodes(groupId: groupId, count: count)
     }
 
-    func getFollows() async throws -> [String] {
-        try await core.getFollows()
+    func getFollows() async -> StringListOutcome {
+        await core.getFollows()
     }
 
-    func decodeNpub(_ input: String) throws -> String {
-        try core.decodeNpub(input: input)
+    nonisolated func decodeNpub(_ input: String) -> StringOutcome {
+        core.decodeNpub(input: input)
     }
 
-    func isFollowing(targetPubkeyHex: String) async throws -> Bool {
-        try await core.isFollowing(targetPubkeyHex: targetPubkeyHex)
+    func isFollowing(targetPubkeyHex: String) async -> BoolOutcome {
+        await core.isFollowing(targetPubkeyHex: targetPubkeyHex)
     }
 
-    func setFollow(targetPubkeyHex: String, follow: Bool) async throws -> String? {
-        try await core.setFollow(targetPubkeyHex: targetPubkeyHex, follow: follow)
+    func setFollow(targetPubkeyHex: String, follow: Bool) async -> OptionalStringOutcome {
+        await core.setFollow(targetPubkeyHex: targetPubkeyHex, follow: follow)
     }
 
     // MARK: - Following Reads

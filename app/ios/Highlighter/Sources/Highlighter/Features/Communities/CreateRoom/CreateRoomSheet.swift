@@ -322,19 +322,19 @@ struct CreateRoomSheet: View {
         focused = nil
         Task {
             defer { isCreating = false }
-            do {
-                let groupId = try await appStore.safeCore.createRoom(
-                    name: trimmedName,
-                    about: trimmedAbout,
-                    picture: pictureURL,
-                    visibility: visibility,
-                    access: access
-                )
+            let outcome = await appStore.safeCore.createRoom(
+                name: trimmedName,
+                about: trimmedAbout,
+                picture: pictureURL,
+                visibility: visibility,
+                access: access
+            )
+            if outcome.error.isEmpty {
                 let generator = UINotificationFeedbackGenerator()
                 generator.notificationOccurred(.success)
-                createdGroupId = groupId
-            } catch {
-                self.error = "Couldn't publish: \(error.localizedDescription)"
+                createdGroupId = outcome.value
+            } else {
+                self.error = "Couldn't publish: \(outcome.error)"
             }
         }
     }

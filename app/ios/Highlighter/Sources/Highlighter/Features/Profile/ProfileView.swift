@@ -446,7 +446,7 @@ private struct TabContent: View {
                         onJoin: {
                             Task {
                                 appStore.noteJoinRequested(groupId: room.id, roomName: room.name)
-                                _ = try? await appStore.safeCore.requestJoinRoom(groupId: room.id)
+                                _ = await appStore.safeCore.requestJoinRoom(groupId: room.id)
                             }
                             previewRoom = nil
                         },
@@ -481,4 +481,3 @@ private struct TabContent: View {
         .padding(.vertical, 48)
     }
 }
-

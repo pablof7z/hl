@@ -87,7 +87,8 @@ final class ProfileStore {
             guard let viewer = viewerPubkey, viewer.lowercased() != pubkey.lowercased() else {
                 return false
             }
-            return (try? await safeCore.isFollowing(targetPubkeyHex: pubkey)) ?? false
+            let outcome = await safeCore.isFollowing(targetPubkeyHex: pubkey)
+            return outcome.error.isEmpty ? outcome.value : false
         }()
 
         let (profile, articles, highlights, communities, following) = await (
@@ -113,8 +114,9 @@ final class ProfileStore {
             // A contact list changed. If it's ours, refresh isFollowing.
             if let viewer = viewerPubkey,
                viewer.lowercased() != pubkey.lowercased() {
-                if let b = try? await safeCore.isFollowing(targetPubkeyHex: pubkey) {
-                    self.isFollowing = b
+                let outcome = await safeCore.isFollowing(targetPubkeyHex: pubkey)
+                if outcome.error.isEmpty {
+                    self.isFollowing = outcome.value
                 }
             }
         case 30023:
@@ -148,14 +150,13 @@ final class ProfileStore {
         followError = nil
         let wasFollowing = isFollowing
         isFollowing = !wasFollowing
-        do {
-            _ = try await safeCore.setFollow(
-                targetPubkeyHex: pubkey,
-                follow: !wasFollowing
-            )
-        } catch {
+        let outcome = await safeCore.setFollow(
+            targetPubkeyHex: pubkey,
+            follow: !wasFollowing
+        )
+        if !outcome.error.isEmpty {
             isFollowing = wasFollowing
-            followError = error.localizedDescription
+            followError = outcome.error
         }
         isMutatingFollow = false
     }

@@ -129,7 +129,7 @@ struct OnboardingInterestsView: View {
 
             let pubkeys = InterestCatalog.pubkeys(for: chosenIds)
             for pubkey in pubkeys {
-                _ = try? await store.safeCore.setFollow(targetPubkeyHex: pubkey, follow: true)
+                _ = await store.safeCore.setFollow(targetPubkeyHex: pubkey, follow: true)
             }
         }
     }

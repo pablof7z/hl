@@ -136,16 +136,16 @@ struct RoomShareCard: View {
 
     private func mintInviteIfNeeded() async {
         guard inviteCode == nil else { return }
-        do {
-            let codes = try await appStore.safeCore.createRoomInviteCodes(
-                groupId: groupId,
-                count: 1
-            )
+        let outcome = await appStore.safeCore.createRoomInviteCodes(
+            groupId: groupId,
+            count: 1
+        )
+        if outcome.error.isEmpty {
             await MainActor.run {
-                inviteCode = codes.first
+                inviteCode = outcome.values.first
                 mintError = inviteCode == nil ? "No code returned." : nil
             }
-        } catch {
+        } else {
             await MainActor.run {
                 mintError = "Couldn't mint invite link. Add people directly below."
             }

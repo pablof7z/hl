@@ -43,10 +43,12 @@ struct RoomBrowseAllView: View {
         .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always))
         .task {
             await appStore.safeCore.startRoomDiscovery()
-            rooms = (try? await appStore.safeCore.getAllRooms(limit: 200)) ?? []
+            let outcome = await appStore.safeCore.getAllRooms(limit: 200)
+            rooms = outcome.error.isEmpty ? outcome.values : []
         }
         .refreshable {
-            rooms = (try? await appStore.safeCore.getAllRooms(limit: 200)) ?? []
+            let outcome = await appStore.safeCore.getAllRooms(limit: 200)
+            rooms = outcome.error.isEmpty ? outcome.values : []
         }
         .sheet(item: $previewRoom) { room in
             NavigationStack {
@@ -55,7 +57,7 @@ struct RoomBrowseAllView: View {
                     onJoin: {
                         Task {
                             appStore.noteJoinRequested(groupId: room.id, roomName: room.name)
-                            _ = try? await appStore.safeCore.requestJoinRoom(groupId: room.id)
+                            _ = await appStore.safeCore.requestJoinRoom(groupId: room.id)
                         }
                         previewRoom = nil
                     }

@@ -42,18 +42,28 @@ final class RoomExplorerStore {
             hasStartedDiscovery = true
             Task { await safeCore.startRoomDiscovery() }
         }
-        Task { try? await safeCore.startFriendsRoomsDiscovery() }
+        Task { _ = await safeCore.startFriendsRoomsDiscovery() }
         Task { await ensureCurationSubscription(safeCore: safeCore) }
 
-        let curatorPubkey = (try? await safeCore.getRoomExplorerCuratorPubkey()) ?? ""
+        let curatorOutcome = await safeCore.getRoomExplorerCuratorPubkey()
+        let curatorPubkey = curatorOutcome.error.isEmpty ? curatorOutcome.value : ""
 
-        async let featuredTask: [CommunitySummary] =
-            (try? await safeCore.getFeaturedRooms(curatorPubkeyHex: curatorPubkey)) ?? []
-        async let newTask: [CommunitySummary] = (try? await safeCore.getNewRooms(limit: 24)) ?? []
-        async let friendsTask: [RoomRecommendation] =
-            (try? await safeCore.getRoomsWithFriends(limit: 16)) ?? []
-        async let authorsTask: [RoomRecommendation] =
-            (try? await safeCore.getRoomsFromReadAuthors(limit: 16)) ?? []
+        async let featuredTask: [CommunitySummary] = {
+            let outcome = await safeCore.getFeaturedRooms(curatorPubkeyHex: curatorPubkey)
+            return outcome.error.isEmpty ? outcome.values : []
+        }()
+        async let newTask: [CommunitySummary] = {
+            let outcome = await safeCore.getNewRooms(limit: 24)
+            return outcome.error.isEmpty ? outcome.values : []
+        }()
+        async let friendsTask: [RoomRecommendation] = {
+            let outcome = await safeCore.getRoomsWithFriends(limit: 16)
+            return outcome.error.isEmpty ? outcome.values : []
+        }()
+        async let authorsTask: [RoomRecommendation] = {
+            let outcome = await safeCore.getRoomsFromReadAuthors(limit: 16)
+            return outcome.error.isEmpty ? outcome.values : []
+        }()
 
         let (fetchedFeatured, fetchedNew, fetchedFriends, fetchedAuthors) =
             await (featuredTask, newTask, friendsTask, authorsTask)
@@ -73,13 +83,12 @@ final class RoomExplorerStore {
     func requestJoin(room: CommunitySummary) async {
         guard let appStore else { return }
         appStore.noteJoinRequested(groupId: room.id, roomName: room.name)
-        do {
-            _ = try await appStore.safeCore.requestJoinRoom(groupId: room.id)
-        } catch {
+        let outcome = await appStore.safeCore.requestJoinRoom(groupId: room.id)
+        if !outcome.error.isEmpty {
             // The toast already said "Join requested". Rather than contradict
             // it, let the user see nothing change — logging is sufficient for
             // debugging, and the relay-error path is rare.
-            print("requestJoinRoom failed for \(room.id): \(error)")
+            print("requestJoinRoom failed for \(room.id): \(outcome.error)")
         }
     }
 
@@ -89,12 +98,25 @@ final class RoomExplorerStore {
     func reloadFromCache() async {
         guard let appStore else { return }
         let safeCore = appStore.safeCore
-        let curatorPubkey = (try? await safeCore.getRoomExplorerCuratorPubkey()) ?? ""
+        let curatorOutcome = await safeCore.getRoomExplorerCuratorPubkey()
+        let curatorPubkey = curatorOutcome.error.isEmpty ? curatorOutcome.value : ""
 
-        async let featuredTask = (try? await safeCore.getFeaturedRooms(curatorPubkeyHex: curatorPubkey)) ?? []
-        async let newTask = (try? await safeCore.getNewRooms(limit: 24)) ?? []
-        async let friendsTask = (try? await safeCore.getRoomsWithFriends(limit: 16)) ?? []
-        async let authorsTask = (try? await safeCore.getRoomsFromReadAuthors(limit: 16)) ?? []
+        async let featuredTask: [CommunitySummary] = {
+            let outcome = await safeCore.getFeaturedRooms(curatorPubkeyHex: curatorPubkey)
+            return outcome.error.isEmpty ? outcome.values : []
+        }()
+        async let newTask: [CommunitySummary] = {
+            let outcome = await safeCore.getNewRooms(limit: 24)
+            return outcome.error.isEmpty ? outcome.values : []
+        }()
+        async let friendsTask: [RoomRecommendation] = {
+            let outcome = await safeCore.getRoomsWithFriends(limit: 16)
+            return outcome.error.isEmpty ? outcome.values : []
+        }()
+        async let authorsTask: [RoomRecommendation] = {
+            let outcome = await safeCore.getRoomsFromReadAuthors(limit: 16)
+            return outcome.error.isEmpty ? outcome.values : []
+        }()
 
         let (f, n, fr, a) = await (featuredTask, newTask, friendsTask, authorsTask)
         featured = f
@@ -107,11 +129,11 @@ final class RoomExplorerStore {
 
     private func ensureCurationSubscription(safeCore: SafeHighlighterCore) async {
         if !hasStartedCuration {
-            do {
-                try await safeCore.startRoomExplorerFeaturedRooms()
+            let outcome = await safeCore.startRoomExplorerFeaturedRooms()
+            if outcome.error.isEmpty {
                 hasStartedCuration = true
-            } catch {
-                print("startRoomExplorerFeaturedRooms failed: \(error)")
+            } else {
+                print("startRoomExplorerFeaturedRooms failed: \(outcome.error)")
             }
         }
     }

@@ -36,8 +36,8 @@ use crate::models::{
     HydratedHighlightListOutcome, MutationOutcome, NostrConnectOptions, NostrEntityEventOutcome,
     NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord,
     PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
-    ReactionListOutcome, ReactionOutcome, ReadingFeedItem,
-    RoomRecommendation, StringListOutcome, StringOutcome, SubscriptionOutcome,
+    ReactionListOutcome, ReactionOutcome, ReadingFeedItem, RoomRecommendation,
+    RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
     TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
     WhatsNewEntriesOutcome,
 };
@@ -424,6 +424,21 @@ fn community_list_outcome(
             error: String::new(),
         },
         Err(error) => CommunityListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn room_recommendation_list_outcome(
+    result: Result<Vec<RoomRecommendation>, CoreError>,
+) -> RoomRecommendationListOutcome {
+    match result {
+        Ok(values) => RoomRecommendationListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => RoomRecommendationListOutcome {
             values: Vec::new(),
             error: error.to_string(),
         },
@@ -1610,11 +1625,13 @@ impl HighlighterCore {
 
     /// Returns true if the logged-in user's cached contact list currently
     /// includes `target_pubkey_hex`.
-    pub async fn is_following(&self, target_pubkey_hex: String) -> Result<bool, CoreError> {
-        let Some(user) = self.inner.read().session.current_user() else {
-            return Err(CoreError::NotAuthenticated);
-        };
-        follows::is_following(self.runtime.ndb(), &user.pubkey, target_pubkey_hex.trim())
+    pub async fn is_following(&self, target_pubkey_hex: String) -> BoolOutcome {
+        bool_outcome((|| {
+            let Some(user) = self.inner.read().session.current_user() else {
+                return Err(CoreError::NotAuthenticated);
+            };
+            follows::is_following(self.runtime.ndb(), &user.pubkey, target_pubkey_hex.trim())
+        })())
     }
 
     /// Publish a new kind:3 that adds (`follow=true`) or removes
@@ -1625,22 +1642,26 @@ impl HighlighterCore {
         &self,
         target_pubkey_hex: String,
         follow: bool,
-    ) -> Result<Option<String>, CoreError> {
-        let follower = {
-            let guard = self.inner.read();
-            guard
-                .session
-                .current_user()
-                .ok_or(CoreError::NotAuthenticated)?
-                .pubkey
-        };
-        follows::publish_follow_toggle(
-            &self.runtime,
-            &follower,
-            target_pubkey_hex.trim(),
-            follow,
-        )
-        .await
+    ) -> OptionalStringOutcome {
+        let result: Result<Option<String>, CoreError> = async {
+            let follower = {
+                let guard = self.inner.read();
+                guard
+                    .session
+                    .current_user()
+                    .ok_or(CoreError::NotAuthenticated)?
+                    .pubkey
+            };
+            follows::publish_follow_toggle(
+                &self.runtime,
+                &follower,
+                target_pubkey_hex.trim(),
+                follow,
+            )
+            .await
+        }
+        .await;
+        optional_string_outcome(result)
     }
 
     /// Recent books across the user's joined communities — drives the
@@ -2287,50 +2308,52 @@ impl HighlighterCore {
     ///
     /// No-op if the user isn't logged in or has no follows cached yet.
     /// Idempotent; both subs ride until logout.
-    pub async fn start_friends_rooms_discovery(&self) -> Result<(), CoreError> {
-        let (have_memberships, have_groups_list) = {
-            let guard = self.inner.read();
-            (
-                guard.session.has_friends_memberships_subscription(),
-                guard.session.has_friends_groups_list_subscription(),
-            )
-        };
-        if have_memberships && have_groups_list {
-            return Ok(());
-        }
-        let Some(user) = self.inner.read().session.current_user() else {
-            return Ok(());
-        };
-        let follows_hex = follows::query_follows(self.runtime.ndb(), &user.pubkey)?;
-        let follows: Vec<PublicKey> = follows_hex
-            .iter()
-            .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
-            .collect();
-        if follows.is_empty() {
-            return Ok(());
-        }
-
-        if !have_groups_list {
-            if let Some(sub_id) = self
-                .runtime
-                .spawn_friends_groups_list_subscription(follows.clone())
-            {
-                self.inner
-                    .write()
-                    .session
-                    .set_friends_groups_list_subscription(sub_id);
+    pub async fn start_friends_rooms_discovery(&self) -> MutationOutcome {
+        mutation_outcome((|| {
+            let (have_memberships, have_groups_list) = {
+                let guard = self.inner.read();
+                (
+                    guard.session.has_friends_memberships_subscription(),
+                    guard.session.has_friends_groups_list_subscription(),
+                )
+            };
+            if have_memberships && have_groups_list {
+                return Ok(());
             }
-        }
-
-        if !have_memberships {
-            if let Some(sub_id) = self.runtime.spawn_friends_memberships_subscription(follows) {
-                self.inner
-                    .write()
-                    .session
-                    .set_friends_memberships_subscription(sub_id);
+            let Some(user) = self.inner.read().session.current_user() else {
+                return Ok(());
+            };
+            let follows_hex = follows::query_follows(self.runtime.ndb(), &user.pubkey)?;
+            let follows: Vec<PublicKey> = follows_hex
+                .iter()
+                .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
+                .collect();
+            if follows.is_empty() {
+                return Ok(());
             }
-        }
-        Ok(())
+
+            if !have_groups_list {
+                if let Some(sub_id) = self
+                    .runtime
+                    .spawn_friends_groups_list_subscription(follows.clone())
+                {
+                    self.inner
+                        .write()
+                        .session
+                        .set_friends_groups_list_subscription(sub_id);
+                }
+            }
+
+            if !have_memberships {
+                if let Some(sub_id) = self.runtime.spawn_friends_memberships_subscription(follows) {
+                    self.inner
+                        .write()
+                        .session
+                        .set_friends_memberships_subscription(sub_id);
+                }
+            }
+            Ok(())
+        })())
     }
 
     /// Install (if not already installed) the kind:10012 curated-list sub for
@@ -2338,48 +2361,56 @@ impl HighlighterCore {
     /// spawns a metadata backfill for every group the list references, so a
     /// subsequent `get_featured_rooms` returns rich summaries rather than
     /// bare ids. Idempotent; the sub rides until logout.
-    pub async fn start_featured_rooms(
-        &self,
-        curator_pubkey_hex: String,
-    ) -> Result<(), CoreError> {
-        let curator = PublicKey::from_hex(curator_pubkey_hex.trim())
-            .map_err(|e| CoreError::InvalidInput(format!("invalid curator pubkey: {e}")))?;
+    pub async fn start_featured_rooms(&self, curator_pubkey_hex: String) -> MutationOutcome {
+        mutation_outcome((|| {
+            let curator = PublicKey::from_hex(curator_pubkey_hex.trim())
+                .map_err(|e| CoreError::InvalidInput(format!("invalid curator pubkey: {e}")))?;
 
-        let already = self.inner.read().session.has_curation_subscription();
-        if !already {
-            let sub_id = self.runtime.spawn_curated_list_subscription(curator);
-            self.inner
-                .write()
-                .session
-                .set_curation_subscription(sub_id);
-        }
-
-        // Even if the sub was already installed, ensure any groups the
-        // currently-cached list references have their 39000s backfilled —
-        // the relay may have delivered the list but not the metadata.
-        let group_ids_from_list = {
-            let ndb = self.runtime.ndb();
-            // Reuse fetch_curated_rooms' internals indirectly by asking for
-            // the list's ids. A full fetch is cheap; we only need ids here.
-            match curation::fetch_curated_rooms_from_ndb(ndb, curator_pubkey_hex.trim()) {
-                Ok(summaries) => summaries.into_iter().map(|c| c.id).collect::<Vec<_>>(),
-                Err(_) => Vec::new(),
+            let already = self.inner.read().session.has_curation_subscription();
+            if !already {
+                let sub_id = self.runtime.spawn_curated_list_subscription(curator);
+                self.inner
+                    .write()
+                    .session
+                    .set_curation_subscription(sub_id);
             }
-        };
-        if !group_ids_from_list.is_empty() {
-            self.runtime
-                .spawn_group_metadata_subscription(group_ids_from_list);
+
+            // Even if the sub was already installed, ensure any groups the
+            // currently-cached list references have their 39000s backfilled —
+            // the relay may have delivered the list but not the metadata.
+            let group_ids_from_list = {
+                let ndb = self.runtime.ndb();
+                // Reuse fetch_curated_rooms' internals indirectly by asking for
+                // the list's ids. A full fetch is cheap; we only need ids here.
+                match curation::fetch_curated_rooms_from_ndb(ndb, curator_pubkey_hex.trim()) {
+                    Ok(summaries) => summaries.into_iter().map(|c| c.id).collect::<Vec<_>>(),
+                    Err(_) => Vec::new(),
+                }
+            };
+            if !group_ids_from_list.is_empty() {
+                self.runtime
+                    .spawn_group_metadata_subscription(group_ids_from_list);
+            }
+            Ok(())
+        })())
+    }
+
+    pub async fn get_room_explorer_curator_pubkey(&self) -> StringOutcome {
+        string_outcome(self.room_explorer_config.curator_pubkey().await)
+    }
+
+    pub async fn start_room_explorer_featured_rooms(&self) -> MutationOutcome {
+        let result: Result<(), CoreError> = async {
+            let curator_pubkey = self.room_explorer_config.refresh_curator_pubkey().await?;
+            let outcome = self.start_featured_rooms(curator_pubkey).await;
+            if outcome.error.is_empty() {
+                Ok(())
+            } else {
+                Err(CoreError::Other(outcome.error))
+            }
         }
-        Ok(())
-    }
-
-    pub async fn get_room_explorer_curator_pubkey(&self) -> Result<String, CoreError> {
-        self.room_explorer_config.curator_pubkey().await
-    }
-
-    pub async fn start_room_explorer_featured_rooms(&self) -> Result<(), CoreError> {
-        let curator_pubkey = self.room_explorer_config.refresh_curator_pubkey().await?;
-        self.start_featured_rooms(curator_pubkey).await
+        .await;
+        mutation_outcome(result)
     }
 
     /// Curator's latest kind:10012 list, resolved into `CommunitySummary`
@@ -2389,8 +2420,11 @@ impl HighlighterCore {
     pub async fn get_featured_rooms(
         &self,
         curator_pubkey_hex: String,
-    ) -> Result<Vec<CommunitySummary>, CoreError> {
-        curation::fetch_curated_rooms_from_ndb(self.runtime.ndb(), curator_pubkey_hex.trim())
+    ) -> CommunityListOutcome {
+        community_list_outcome(curation::fetch_curated_rooms_from_ndb(
+            self.runtime.ndb(),
+            curator_pubkey_hex.trim(),
+        ))
     }
 
     /// Every cached room, newest first, truncated to `limit`. Powers the
@@ -2398,8 +2432,11 @@ impl HighlighterCore {
     pub async fn get_all_rooms(
         &self,
         limit: u32,
-    ) -> Result<Vec<CommunitySummary>, CoreError> {
-        discovery::query_all_rooms_from_ndb(self.runtime.ndb(), limit)
+    ) -> CommunityListOutcome {
+        community_list_outcome(discovery::query_all_rooms_from_ndb(
+            self.runtime.ndb(),
+            limit,
+        ))
     }
 
     /// The N most-recently-seen rooms. Same underlying query as
@@ -2408,8 +2445,11 @@ impl HighlighterCore {
     pub async fn get_new_rooms(
         &self,
         limit: u32,
-    ) -> Result<Vec<CommunitySummary>, CoreError> {
-        discovery::query_all_rooms_from_ndb(self.runtime.ndb(), limit)
+    ) -> CommunityListOutcome {
+        community_list_outcome(discovery::query_all_rooms_from_ndb(
+            self.runtime.ndb(),
+            limit,
+        ))
     }
 
     /// Rooms where 2+ of the user's follows are members. Empty when the user
@@ -2418,11 +2458,18 @@ impl HighlighterCore {
     pub async fn get_rooms_with_friends(
         &self,
         limit: u32,
-    ) -> Result<Vec<RoomRecommendation>, CoreError> {
+    ) -> RoomRecommendationListOutcome {
         let Some(user) = self.inner.read().session.current_user() else {
-            return Ok(Vec::new());
+            return RoomRecommendationListOutcome {
+                values: Vec::new(),
+                error: String::new(),
+            };
         };
-        recommendations::query_rooms_with_friends(self.runtime.ndb(), &user.pubkey, limit)
+        room_recommendation_list_outcome(recommendations::query_rooms_with_friends(
+            self.runtime.ndb(),
+            &user.pubkey,
+            limit,
+        ))
     }
 
     /// Rooms where authors of articles the user has highlighted post
@@ -2430,20 +2477,31 @@ impl HighlighterCore {
     pub async fn get_rooms_from_read_authors(
         &self,
         limit: u32,
-    ) -> Result<Vec<RoomRecommendation>, CoreError> {
+    ) -> RoomRecommendationListOutcome {
         let Some(user) = self.inner.read().session.current_user() else {
-            return Ok(Vec::new());
+            return RoomRecommendationListOutcome {
+                values: Vec::new(),
+                error: String::new(),
+            };
         };
-        recommendations::query_rooms_from_read_authors(self.runtime.ndb(), &user.pubkey, limit)
+        room_recommendation_list_outcome(recommendations::query_rooms_from_read_authors(
+            self.runtime.ndb(),
+            &user.pubkey,
+            limit,
+        ))
     }
 
     /// Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
     /// event id on success. The UI treats this as fire-and-forget: a
     /// subsequent `MembershipChanged` delta for this group with the user's
     /// pubkey is the signal that the relay admitted the request.
-    pub async fn request_join_room(&self, group_id: String) -> Result<String, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        groups::publish_join_request(&self.runtime, group_id.trim()).await
+    pub async fn request_join_room(&self, group_id: String) -> StringOutcome {
+        let result: Result<String, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            groups::publish_join_request(&self.runtime, group_id.trim()).await
+        }
+        .await;
+        string_outcome(result)
     }
 
     /// Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
@@ -2457,17 +2515,21 @@ impl HighlighterCore {
         picture: String,
         visibility: groups::RoomVisibility,
         access: groups::RoomAccess,
-    ) -> Result<String, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        groups::create_room(
-            &self.runtime,
-            name.trim(),
-            about.trim(),
-            picture.trim(),
-            visibility,
-            access,
-        )
-        .await
+    ) -> StringOutcome {
+        let result: Result<String, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            groups::create_room(
+                &self.runtime,
+                name.trim(),
+                about.trim(),
+                picture.trim(),
+                visibility,
+                access,
+            )
+            .await
+        }
+        .await;
+        string_outcome(result)
     }
 
     /// Add a Nostr user (by hex pubkey) to a room as a member. Must be
@@ -2477,9 +2539,13 @@ impl HighlighterCore {
         &self,
         group_id: String,
         pubkey_hex: String,
-    ) -> Result<String, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        groups::add_member(&self.runtime, group_id.trim(), pubkey_hex.trim()).await
+    ) -> StringOutcome {
+        let result: Result<String, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            groups::add_member(&self.runtime, group_id.trim(), pubkey_hex.trim()).await
+        }
+        .await;
+        string_outcome(result)
     }
 
     /// Mint `count` single-use invite codes for `group_id` by publishing a
@@ -2489,36 +2555,43 @@ impl HighlighterCore {
         &self,
         group_id: String,
         count: u32,
-    ) -> Result<Vec<String>, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        groups::create_invite_codes(&self.runtime, group_id.trim(), count).await
+    ) -> StringListOutcome {
+        let result: Result<Vec<String>, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            groups::create_invite_codes(&self.runtime, group_id.trim(), count).await
+        }
+        .await;
+        string_list_outcome(result)
     }
 
     /// Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
     /// `nostr:` URI prefix) to a 64-char hex pubkey. Returns
     /// `CoreError::InvalidInput` if the input isn't a recognised pubkey
     /// reference. Used by the room-invite picker to resolve a pasted handle.
-    pub fn decode_npub(&self, input: String) -> Result<String, CoreError> {
-        let trimmed = input
-            .trim()
-            .strip_prefix("nostr:")
-            .unwrap_or(input.trim())
-            .trim();
-        if trimmed.is_empty() {
-            return Err(CoreError::InvalidInput("empty pubkey reference".into()));
-        }
-        if let Ok(pk) = PublicKey::from_bech32(trimmed) {
-            return Ok(pk.to_hex());
-        }
-        if let Ok(profile) = nostr_sdk::nips::nip19::Nip19Profile::from_bech32(trimmed) {
-            return Ok(profile.public_key.to_hex());
-        }
-        if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Ok(trimmed.to_ascii_lowercase());
-        }
-        Err(CoreError::InvalidInput(format!(
-            "unrecognised pubkey reference: {trimmed}"
-        )))
+    pub fn decode_npub(&self, input: String) -> StringOutcome {
+        let result: Result<String, CoreError> = (|| {
+            let trimmed = input
+                .trim()
+                .strip_prefix("nostr:")
+                .unwrap_or(input.trim())
+                .trim();
+            if trimmed.is_empty() {
+                return Err(CoreError::InvalidInput("empty pubkey reference".into()));
+            }
+            if let Ok(pk) = PublicKey::from_bech32(trimmed) {
+                return Ok(pk.to_hex());
+            }
+            if let Ok(profile) = nostr_sdk::nips::nip19::Nip19Profile::from_bech32(trimmed) {
+                return Ok(profile.public_key.to_hex());
+            }
+            if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Ok(trimmed.to_ascii_lowercase());
+            }
+            Err(CoreError::InvalidInput(format!(
+                "unrecognised pubkey reference: {trimmed}"
+            )))
+        })();
+        string_outcome(result)
     }
 
     /// Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,
@@ -2583,9 +2656,11 @@ impl HighlighterCore {
     /// list. Empty if the user isn't logged in or the cache hasn't seen a
     /// kind:3 yet. Used by the room-invite picker to surface "people you know"
     /// before any typing happens.
-    pub async fn get_follows(&self) -> Result<Vec<String>, CoreError> {
-        let user_pubkey = self.require_user_pubkey()?;
-        crate::follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())
+    pub async fn get_follows(&self) -> StringListOutcome {
+        string_list_outcome((|| {
+            let user_pubkey = self.require_user_pubkey()?;
+            crate::follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())
+        })())
     }
 
     // -- Blossom (BUD-03, kind:10063) --
