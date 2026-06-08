@@ -86,9 +86,8 @@ final class BookmarkStore {
     }
 
     /// Returns the subset of `sets` whose detail view would actually render
-    /// at least one item. Resolves articles against the local cache via
-    /// `getArticle` (cheap NostrDB read, no relay round-trip); short-circuits
-    /// per set on the first hit.
+    /// at least one item. Article address parsing and local cache resolution
+    /// stay in Rust; Swift only keeps or drops the projected set rows.
     private static func dropEmpty(
         _ sets: [BookmarkSetRecord],
         core: SafeHighlighterCore
@@ -114,18 +113,8 @@ final class BookmarkStore {
     ) async -> Bool {
         if !set.noteIds.isEmpty { return true }
         if set.articleAddresses.isEmpty { return false }
-        for address in set.articleAddresses {
-            let parts = address.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-            guard parts.count == 3, parts[0] == "30023" else { continue }
-            let pubkey = String(parts[1])
-            let dTag = String(parts[2])
-            guard !pubkey.isEmpty, !dTag.isEmpty else { continue }
-            let outcome = await core.getArticle(pubkeyHex: pubkey, dTag: dTag)
-            if outcome.error.isEmpty, outcome.value != nil {
-                return true
-            }
-        }
-        return false
+        let outcome = await core.getBookmarkSetArticles(record: set)
+        return outcome.error.isEmpty && !outcome.values.isEmpty
     }
 
     func loadArticles(addresses: Set<String>) async {
@@ -133,20 +122,7 @@ final class BookmarkStore {
             myArticles = []
             return
         }
-        var loaded: [ArticleRecord] = []
-        for address in addresses {
-            let parts = address.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-            guard parts.count == 3, parts[0] == "30023" else { continue }
-            let pubkey = String(parts[1])
-            let dTag = String(parts[2])
-            guard !pubkey.isEmpty, !dTag.isEmpty else { continue }
-            let outcome = await core.getArticle(pubkeyHex: pubkey, dTag: dTag)
-            if outcome.error.isEmpty, let article = outcome.value {
-                loaded.append(article)
-            }
-        }
-        myArticles = loaded.sorted {
-            ($0.publishedAt ?? $0.createdAt ?? 0) > ($1.publishedAt ?? $1.createdAt ?? 0)
-        }
+        let outcome = await core.getBookmarkedArticles(addresses: Array(addresses))
+        myArticles = outcome.error.isEmpty ? outcome.values : []
     }
 }

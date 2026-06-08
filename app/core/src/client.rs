@@ -1995,6 +1995,15 @@ impl HighlighterCore {
         ))
     }
 
+    /// Resolve cached article rows for the current user's kind:10003 article
+    /// bookmark addresses. Rust owns NIP-33 parsing and newest-first ordering.
+    pub async fn get_bookmarked_articles(&self, addresses: Vec<String>) -> ArticleListOutcome {
+        article_list_outcome(articles::query_articles_for_addresses(
+            self.runtime.ndb(),
+            &addresses,
+        ))
+    }
+
     /// Return all kind:30004 curation sets authored by the current user.
     pub async fn get_my_curation_sets(&self) -> BookmarkSetListOutcome {
         let user_hex = self

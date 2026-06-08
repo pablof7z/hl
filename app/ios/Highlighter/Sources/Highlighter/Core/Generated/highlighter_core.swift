@@ -871,6 +871,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getBookmarkedArticleAddresses() async  -> StringListOutcome
 
     /**
+     * Resolve cached article rows for the current user's kind:10003 article
+     * bookmark addresses. Rust owns NIP-33 parsing and newest-first ordering.
+     */
+    func getBookmarkedArticles(addresses: [String]) async  -> ArticleListOutcome
+
+    /**
      * Size + event-count snapshot of the local nostrdb cache. Order-of-
      * magnitude figures used by the Network Settings "Local cache" card.
      */
@@ -1974,6 +1980,28 @@ open func getBookmarkedArticleAddresses()async  -> StringListOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeStringListOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Resolve cached article rows for the current user's kind:10003 article
+     * bookmark addresses. Rust owns NIP-33 parsing and newest-first ordering.
+     */
+open func getBookmarkedArticles(addresses: [String])async  -> ArticleListOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_bookmarked_articles(
+                    self.uniffiClonePointer(),
+                    FfiConverterSequenceString.lower(addresses)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeArticleListOutcome_lift,
             errorHandler: nil
 
         )
@@ -14905,6 +14933,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmarked_article_addresses() != 46854) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmarked_articles() != 46013) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 59703) {
