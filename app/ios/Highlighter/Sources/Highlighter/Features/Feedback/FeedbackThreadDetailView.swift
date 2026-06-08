@@ -50,7 +50,7 @@ struct FeedbackThreadDetailView: View {
                             event: event,
                             isFromMe: event.authorPubkey == app.currentUser?.pubkey,
                             showHeader: shouldShowHeader(at: index),
-                            profile: app.profileCache[event.authorPubkey]
+                            profile: app.profileSnapshots[event.authorPubkey]
                         )
                         .id(event.eventId)
                         .task(id: event.authorPubkey) {

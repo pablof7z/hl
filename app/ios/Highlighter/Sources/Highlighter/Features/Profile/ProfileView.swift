@@ -69,7 +69,7 @@ struct ProfileView: View {
         .sheet(isPresented: $editPresented) {
             EditProfileSheet(initial: store.profile) { updated in
                 store.profile = updated
-                appStore.profileCache[pubkey] = updated
+                appStore.applyProfileSnapshot(updated)
                 if pubkey == appStore.currentUser?.pubkey {
                     appStore.currentUserProfile = updated
                 }

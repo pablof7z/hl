@@ -33,7 +33,7 @@ struct CommentRow: View {
                 HStack(alignment: .top, spacing: 12) {
                     AuthorAvatar(
                         pubkey: node.record.pubkey,
-                        pictureURL: app.profileCache[node.record.pubkey]?.picture ?? "",
+                        pictureURL: app.profileSnapshots[node.record.pubkey]?.picture ?? "",
                         displayInitial: initial(for: node.record.pubkey),
                         size: depth == 0 ? 40 : 30,
                         ringWidth: 1.5
@@ -178,7 +178,7 @@ struct CommentRow: View {
     // MARK: - Helpers
 
     private var displayName: String {
-        let profile = app.profileCache[node.record.pubkey]
+        let profile = app.profileSnapshots[node.record.pubkey]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(node.record.pubkey.prefix(10))

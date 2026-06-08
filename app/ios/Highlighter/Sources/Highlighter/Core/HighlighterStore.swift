@@ -34,12 +34,13 @@ final class HighlighterStore {
     /// of these arrives, the toast flips from "Join requested" to
     /// "You're in ✓" and the id drops from the map.
     @ObservationIgnored private var pendingJoins: [String: String] = [:]
-    /// Shared profile cache — keyed by pubkey hex. Reactive so all card views
-    /// observing a given pubkey re-render automatically when a fresh kind:0
-    /// arrives from a relay.
-    var profileCache: [String: ProfileMetadata] = [:]
+    /// Render projection for requested profile pubkeys. Rust/nostrdb remain
+    /// the source of truth; this app-scope snapshot only lets existing
+    /// SwiftUI surfaces render names and avatars synchronously, then refresh
+    /// when a fresh kind:0 arrives from a relay.
+    private(set) var profileSnapshots: [String: ProfileMetadata] = [:]
     /// OpenGraph + favicon cache for web URL highlights, keyed by the
-    /// canonical URL the metadata was fetched for. Mirrors `profileCache`'s
+    /// canonical URL the metadata was fetched for. Mirrors `profileSnapshots`'s
     /// shape so card views can look up enrichment synchronously and
     /// re-render when a fetch lands. The Rust core owns the on-disk cache;
     /// this dictionary is the in-memory mirror SwiftUI observes.
@@ -57,7 +58,7 @@ final class HighlighterStore {
     @ObservationIgnored private(set) var eventBridge: EventBridge?
     @ObservationIgnored private var joinedCommunitiesHandle: UInt64?
     @ObservationIgnored private var bookmarksHandle: UInt64?
-    @ObservationIgnored private var profileCacheHandles: [String: UInt64] = [:]
+    @ObservationIgnored private var profileSnapshotHandles: [String: UInt64] = [:]
     /// In-flight `requestWebMetadata` calls coalesce here so multiple rows
     /// referencing the same URL share a single Task. Cleared once the
     /// fetch completes (success or failure).
@@ -122,12 +123,12 @@ final class HighlighterStore {
             eventBridge?.unregister(handle: handle)
             bookmarksHandle = nil
         }
-        for (_, handle) in profileCacheHandles {
+        for (_, handle) in profileSnapshotHandles {
             core.unsubscribe(handle: handle)
             eventBridge?.unregister(handle: handle)
         }
-        profileCacheHandles.removeAll()
-        profileCache.removeAll()
+        profileSnapshotHandles.removeAll()
+        profileSnapshots.removeAll()
         for (_, task) in webMetadataInflight { task.cancel() }
         webMetadataInflight.removeAll()
         webMetadataCache.removeAll()
@@ -187,30 +188,34 @@ final class HighlighterStore {
         bookmarkedArticleAddresses.contains(articleAddress)
     }
 
-    /// Fetches a profile from the local nostrdb cache (fast path) and sets up
-    /// a relay subscription so the cache is updated when a fresh kind:0 arrives.
-    /// Safe to call from multiple views for the same pubkey — deduplicates.
+    /// Reads a profile projection from Rust's local nostrdb state and sets up
+    /// a relay subscription so the projection is replaced when a fresh kind:0
+    /// arrives. Safe to call from multiple views for the same pubkey.
     func requestProfile(pubkeyHex: String) async {
-        if profileCache[pubkeyHex] == nil {
+        if profileSnapshots[pubkeyHex] == nil {
             let outcome = await safeCore.getUserProfile(pubkeyHex: pubkeyHex)
             if outcome.error.isEmpty, let profile = outcome.value {
-                profileCache[pubkeyHex] = profile
+                applyProfileSnapshot(profile)
             }
         }
-        guard profileCacheHandles[pubkeyHex] == nil else { return }
+        guard profileSnapshotHandles[pubkeyHex] == nil else { return }
         let profileOutcome = await safeCore.subscribeUserProfile(pubkeyHex: pubkeyHex)
         if profileOutcome.error.isEmpty {
-            profileCacheHandles[pubkeyHex] = profileOutcome.handle
-            eventBridge?.registerProfileCache(pubkeyHex: pubkeyHex, handle: profileOutcome.handle)
+            profileSnapshotHandles[pubkeyHex] = profileOutcome.handle
+            eventBridge?.registerProfileSnapshot(pubkeyHex: pubkeyHex, handle: profileOutcome.handle)
         }
     }
 
     /// Called by `EventBridge` when a subscribed profile's kind:0 arrives from a relay.
-    func applyProfileCacheUpdate(pubkeyHex: String) async {
+    func applyProfileSnapshotUpdate(pubkeyHex: String) async {
         let outcome = await safeCore.getUserProfile(pubkeyHex: pubkeyHex)
         if outcome.error.isEmpty, let profile = outcome.value {
-            profileCache[pubkeyHex] = profile
+            applyProfileSnapshot(profile)
         }
+    }
+
+    func applyProfileSnapshot(_ profile: ProfileMetadata) {
+        profileSnapshots[profile.pubkey] = profile
     }
 
     /// Fetch OpenGraph + favicon metadata for a web URL via the Rust core

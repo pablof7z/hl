@@ -296,7 +296,7 @@ struct RoomInviteView: View {
     }
 
     private func profile(for pubkey: String) -> ProfileMetadata? {
-        appStore.profileCache[pubkey]
+        appStore.profileSnapshots[pubkey]
     }
 
     private func isSelected(_ pubkey: String) -> Bool {

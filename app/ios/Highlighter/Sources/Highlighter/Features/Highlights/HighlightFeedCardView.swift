@@ -155,7 +155,7 @@ struct HighlightFeedCardView: View {
                 ForEach(uniqueHighlighters.prefix(3), id: \.highlight.pubkey) { h in
                     AuthorAvatar(
                         pubkey: h.highlight.pubkey,
-                        pictureURL: app.profileCache[h.highlight.pubkey]?.picture ?? "",
+                        pictureURL: app.profileSnapshots[h.highlight.pubkey]?.picture ?? "",
                         displayInitial: initial(for: h.highlight.pubkey),
                         size: 20
                     )
@@ -324,7 +324,7 @@ struct HighlightFeedCardView: View {
         HStack(spacing: 8) {
             AuthorAvatar(
                 pubkey: h.highlight.pubkey,
-                pictureURL: app.profileCache[h.highlight.pubkey]?.picture ?? "",
+                pictureURL: app.profileSnapshots[h.highlight.pubkey]?.picture ?? "",
                 displayInitial: initial(for: h.highlight.pubkey),
                 size: 22
             )
@@ -500,7 +500,7 @@ struct HighlightFeedCardView: View {
     /// Returns nil for non-article kinds or unresolved profiles.
     private var articleAuthorDisplayName: String? {
         guard let pubkey = articleAuthorPubkey else { return nil }
-        let profile = app.profileCache[pubkey]
+        let profile = app.profileSnapshots[pubkey]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return nil
@@ -549,7 +549,7 @@ struct HighlightFeedCardView: View {
     // MARK: - Derived: profile helpers
 
     private func displayName(for pubkey: String) -> String {
-        let profile = app.profileCache[pubkey]
+        let profile = app.profileSnapshots[pubkey]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(pubkey.prefix(10))
@@ -680,7 +680,7 @@ private struct HighlightQuoteCard: View {
         HStack(spacing: 7) {
             AuthorAvatar(
                 pubkey: highlight.highlight.pubkey,
-                pictureURL: app.profileCache[highlight.highlight.pubkey]?.picture ?? "",
+                pictureURL: app.profileSnapshots[highlight.highlight.pubkey]?.picture ?? "",
                 displayInitial: initial,
                 size: 22
             )
@@ -702,7 +702,7 @@ private struct HighlightQuoteCard: View {
     }
 
     private var name: String {
-        let profile = app.profileCache[highlight.highlight.pubkey]
+        let profile = app.profileSnapshots[highlight.highlight.pubkey]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(highlight.highlight.pubkey.prefix(10))

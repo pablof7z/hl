@@ -43,8 +43,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         /// Explorer store — notified on CommunityUpserted so new rooms appear
         /// without requiring a pull-to-refresh.
         var explorerStore: WeakBox<RoomExplorerStore>? = nil
-        /// Maps subscription handles → pubkey for app-scoped profile cache subscriptions.
-        var profileCacheHandles: [UInt64: String] = [:]
+        /// Maps subscription handles to app-scoped profile projection pubkeys.
+        var profileSnapshotHandles: [UInt64: String] = [:]
 
         mutating func prune() {
             rooms = rooms.filter { $0.value.value != nil }
@@ -161,9 +161,9 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         }
     }
 
-    func registerProfileCache(pubkeyHex: String, handle: UInt64) {
+    func registerProfileSnapshot(pubkeyHex: String, handle: UInt64) {
         registry.withLock { reg in
-            reg.profileCacheHandles[handle] = pubkeyHex
+            reg.profileSnapshotHandles[handle] = pubkeyHex
             reg.prune()
         }
     }
@@ -195,7 +195,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             _ = reg.searches.removeValue(forKey: handle)
             _ = reg.bookmarks.removeValue(forKey: handle)
             _ = reg.nostrEntities.removeValue(forKey: handle)
-            _ = reg.profileCacheHandles.removeValue(forKey: handle)
+            _ = reg.profileSnapshotHandles.removeValue(forKey: handle)
         }
     }
 
@@ -226,7 +226,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                     search: reg.searches[id]?.value,
                     bookmark: reg.bookmarks[id]?.value,
                     nostrEntity: reg.nostrEntities[id]?.value,
-                    profileCachePubkey: reg.profileCacheHandles[id]
+                    profileSnapshotPubkey: reg.profileSnapshotHandles[id]
                 )
             }
 
@@ -256,8 +256,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 self.dispatchBookmarkStore(change, store: store)
             } else if let store = routed.nostrEntity {
                 self.dispatchNostrEntity(change, store: store)
-            } else if let pubkey = routed.profileCachePubkey {
-                self.dispatchProfileCache(change, pubkey: pubkey)
+            } else if let pubkey = routed.profileSnapshotPubkey {
+                self.dispatchProfileSnapshot(change, pubkey: pubkey)
             }
         }
     }
@@ -279,7 +279,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         let search: SearchStore?
         let bookmark: BookmarkStore?
         let nostrEntity: NostrEntityCardStore?
-        let profileCachePubkey: String?
+        let profileSnapshotPubkey: String?
     }
 
     @MainActor
@@ -311,9 +311,9 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     }
 
     @MainActor
-    private func dispatchProfileCache(_ change: DataChangeType, pubkey: String) {
+    private func dispatchProfileSnapshot(_ change: DataChangeType, pubkey: String) {
         guard case .userProfileUpdated(_, 0) = change else { return }
-        if let appStore { Task { await appStore.applyProfileCacheUpdate(pubkeyHex: pubkey) } }
+        if let appStore { Task { await appStore.applyProfileSnapshotUpdate(pubkeyHex: pubkey) } }
     }
 
     @MainActor

@@ -174,7 +174,7 @@ struct HighlightDetailView: View {
             HStack(spacing: 10) {
                 AuthorAvatar(
                     pubkey: highlight.pubkey,
-                    pictureURL: app.profileCache[highlight.pubkey]?.picture ?? "",
+                    pictureURL: app.profileSnapshots[highlight.pubkey]?.picture ?? "",
                     displayInitial: initial(for: highlight.pubkey),
                     size: 32
                 )
@@ -453,7 +453,7 @@ struct HighlightDetailView: View {
     // MARK: - Profile helpers
 
     private func displayName(for pubkey: String) -> String {
-        let profile = app.profileCache[pubkey]
+        let profile = app.profileSnapshots[pubkey]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(pubkey.prefix(10))

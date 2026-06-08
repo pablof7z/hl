@@ -21,7 +21,7 @@ struct ReadingFeedCardView: View {
             avatar: {
                 AuthorAvatar(
                     pubkey: item.article.pubkey,
-                    pictureURL: app.profileCache[item.article.pubkey]?.picture ?? "",
+                    pictureURL: app.profileSnapshots[item.article.pubkey]?.picture ?? "",
                     displayInitial: authorInitial,
                     size: 22
                 )
@@ -97,7 +97,7 @@ struct ReadingFeedCardView: View {
     // MARK: - Author name / initial resolution
 
     private var authorDisplayName: String {
-        let profile = app.profileCache[item.article.pubkey]
+        let profile = app.profileSnapshots[item.article.pubkey]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return shortPubkey(item.article.pubkey)
@@ -109,7 +109,7 @@ struct ReadingFeedCardView: View {
 
     private var firstInteractorName: String {
         guard let pk = primaryInteractor else { return "Someone" }
-        let profile = app.profileCache[pk]
+        let profile = app.profileSnapshots[pk]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return shortPubkey(pk)

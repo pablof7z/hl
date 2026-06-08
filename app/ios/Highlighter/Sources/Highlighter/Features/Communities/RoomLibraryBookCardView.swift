@@ -55,7 +55,7 @@ struct RoomLibraryBookCardView: View {
         HStack(spacing: 6) {
             AuthorAvatar(
                 pubkey: artifact.pubkey,
-                pictureURL: app.profileCache[artifact.pubkey]?.picture ?? "",
+                pictureURL: app.profileSnapshots[artifact.pubkey]?.picture ?? "",
                 displayInitial: sharerInitial,
                 size: 18
             )
@@ -123,7 +123,7 @@ struct RoomLibraryBookCardView: View {
     }
 
     private var sharerName: String {
-        let profile = app.profileCache[artifact.pubkey]
+        let profile = app.profileSnapshots[artifact.pubkey]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(artifact.pubkey.prefix(10))

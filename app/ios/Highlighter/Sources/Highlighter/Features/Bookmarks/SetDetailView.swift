@@ -12,7 +12,7 @@ struct SetDetailView: View {
     }
 
     private var curatorName: String {
-        let profile = app.profileCache[record.pubkey]
+        let profile = app.profileSnapshots[record.pubkey]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(record.pubkey.prefix(10))
@@ -49,7 +49,7 @@ struct SetDetailView: View {
         HStack(spacing: 10) {
             AuthorAvatar(
                 pubkey: record.pubkey,
-                pictureURL: app.profileCache[record.pubkey]?.picture ?? "",
+                pictureURL: app.profileSnapshots[record.pubkey]?.picture ?? "",
                 displayInitial: curatorInitial,
                 size: 32
             )

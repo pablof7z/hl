@@ -314,7 +314,7 @@ struct BookmarkedArticleRow: View {
     }
 
     private var authorName: String {
-        let profile = app.profileCache[article.pubkey]
+        let profile = app.profileSnapshots[article.pubkey]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(article.pubkey.prefix(10))
@@ -352,7 +352,7 @@ struct CollectionRow: View {
     }
 
     private var curatorName: String {
-        let profile = app.profileCache[record.pubkey]
+        let profile = app.profileSnapshots[record.pubkey]
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(record.pubkey.prefix(10))
@@ -382,7 +382,7 @@ struct CollectionRow: View {
                 HStack(spacing: 6) {
                     AuthorAvatar(
                         pubkey: record.pubkey,
-                        pictureURL: app.profileCache[record.pubkey]?.picture ?? "",
+                        pictureURL: app.profileSnapshots[record.pubkey]?.picture ?? "",
                         displayInitial: curatorInitial,
                         size: 16
                     )

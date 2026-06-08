@@ -216,7 +216,7 @@ struct BookView: View {
         HStack(spacing: 6) {
             AuthorAvatar(
                 pubkey: h.pubkey,
-                pictureURL: app.profileCache[h.pubkey]?.picture ?? "",
+                pictureURL: app.profileSnapshots[h.pubkey]?.picture ?? "",
                 displayInitial: displayName(h.pubkey).prefix(1).description.uppercased(),
                 size: 16,
                 ringWidth: 0
@@ -251,7 +251,7 @@ struct BookView: View {
     // MARK: - Helpers
 
     private func displayName(_ pubkey: String) -> String {
-        let p = app.profileCache[pubkey]
+        let p = app.profileSnapshots[pubkey]
         if let dn = p?.displayName, !dn.isEmpty { return dn }
         if let n = p?.name, !n.isEmpty { return n }
         return String(pubkey.prefix(8))

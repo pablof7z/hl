@@ -16,7 +16,7 @@ import SwiftUI
 ///      `Text`), event refs become block cards.
 ///   3. Each block renders the appropriate per-kind card (article,
 ///      note, highlight, profile-callout) by resolving the entity
-///      against the local cache and falling back to a backfill REQ
+///      against Rust's local projection and falling back to a backfill REQ
 ///      when it isn't there yet.
 struct NostrRichText: View {
     let content: String
@@ -47,7 +47,7 @@ struct NostrRichText: View {
     @ViewBuilder
     private func paragraph(_ runs: [Run]) -> some View {
         // Concatenate runs into a single Text so wrapping behaves like
-        // a normal paragraph. Mentions render with the cached display
+        // a normal paragraph. Mentions render with the projected display
         // name when available.
         runs.reduce(Text(""), { acc, run in
             switch run {
@@ -78,10 +78,10 @@ struct NostrRichText: View {
     }
 
     private func mentionLabel(for pubkeyHex: String) -> String {
-        let cached = appStore.profileCache[pubkeyHex]
-        if let display = cached?.displayName, !display.isEmpty { return display }
-        if let name = cached?.name, !name.isEmpty { return name }
-        // Warm the cache so the next render swaps in a real name.
+        let snapshot = appStore.profileSnapshots[pubkeyHex]
+        if let display = snapshot?.displayName, !display.isEmpty { return display }
+        if let name = snapshot?.name, !name.isEmpty { return name }
+        // Request a Rust-backed projection so the next render swaps in a real name.
         Task { await appStore.requestProfile(pubkeyHex: pubkeyHex) }
         return String(pubkeyHex.prefix(8))
     }
@@ -492,10 +492,10 @@ private struct ArticleEntityCard: View {
         }
         .buttonStyle(.plain)
         .task {
-            profile = appStore.profileCache[event.pubkeyHex]
+            profile = appStore.profileSnapshots[event.pubkeyHex]
             if profile == nil {
                 await appStore.requestProfile(pubkeyHex: event.pubkeyHex)
-                profile = appStore.profileCache[event.pubkeyHex]
+                profile = appStore.profileSnapshots[event.pubkeyHex]
             }
         }
     }
@@ -536,10 +536,10 @@ private struct NoteEntityCard: View {
                 .stroke(Color.highlighterRule, lineWidth: 1)
         )
         .task {
-            profile = appStore.profileCache[event.pubkeyHex]
+            profile = appStore.profileSnapshots[event.pubkeyHex]
             if profile == nil {
                 await appStore.requestProfile(pubkeyHex: event.pubkeyHex)
-                profile = appStore.profileCache[event.pubkeyHex]
+                profile = appStore.profileSnapshots[event.pubkeyHex]
             }
         }
     }
@@ -569,10 +569,10 @@ private struct HighlightEntityCard: View {
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
         .task {
-            profile = appStore.profileCache[event.pubkeyHex]
+            profile = appStore.profileSnapshots[event.pubkeyHex]
             if profile == nil {
                 await appStore.requestProfile(pubkeyHex: event.pubkeyHex)
-                profile = appStore.profileCache[event.pubkeyHex]
+                profile = appStore.profileSnapshots[event.pubkeyHex]
             }
         }
     }
@@ -583,14 +583,14 @@ private struct ProfileCalloutCard: View {
     let event: NostrEntityEvent
 
     var body: some View {
-        // The content is JSON; we let the upstream profileCache supply
+        // The content is JSON; we let the upstream profileSnapshots supply
         // the parsed data via NavigationLink. Render the avatar +
-        // name from the cache if present.
-        ProfileCalloutFromCache(pubkey: event.pubkeyHex)
+        // name from the projection if present.
+        ProfileCalloutFromSnapshot(pubkey: event.pubkeyHex)
     }
 }
 
-private struct ProfileCalloutFromCache: View {
+private struct ProfileCalloutFromSnapshot: View {
     let pubkey: String
     @Environment(HighlighterStore.self) private var appStore
     @State private var profile: ProfileMetadata?
@@ -629,10 +629,10 @@ private struct ProfileCalloutFromCache: View {
         }
         .buttonStyle(.plain)
         .task {
-            profile = appStore.profileCache[pubkey]
+            profile = appStore.profileSnapshots[pubkey]
             if profile == nil {
                 await appStore.requestProfile(pubkeyHex: pubkey)
-                profile = appStore.profileCache[pubkey]
+                profile = appStore.profileSnapshots[pubkey]
             }
         }
     }

@@ -124,7 +124,7 @@ struct ArticleReaderView: View {
         } else if let article = store.article {
             ReaderScroll(
                 article: article,
-                authorProfile: app.profileCache[target.pubkey] ?? store.authorProfile,
+                authorProfile: app.profileSnapshots[target.pubkey] ?? store.authorProfile,
                 highlights: store.highlights,
                 scrollAnchor: scrollAnchor,
                 onPublishHighlight: { quote, context in
@@ -255,9 +255,9 @@ private struct ReaderScroll: View {
         .fullScreenCover(item: $imageToOpen) { item in
             ImageZoomView(url: item.url, onDismiss: { imageToOpen = nil })
         }
-        .task(id: "\(article.eventId)-\(highlights.count)-\(app.profileCache.count)") {
+        .task(id: "\(article.eventId)-\(highlights.count)-\(app.profileSnapshots.count)") {
             let profileSnapshot = Dictionary(
-                uniqueKeysWithValues: app.profileCache.compactMap { (pk, meta) -> (String, String)? in
+                uniqueKeysWithValues: app.profileSnapshots.compactMap { (pk, meta) -> (String, String)? in
                     let name = meta.displayName.isEmpty ? meta.name : meta.displayName
                     guard !name.isEmpty else { return nil }
                     return (pk, name)
@@ -593,7 +593,7 @@ private struct HighlightDetailSheet: View {
         HStack(spacing: 12) {
             AuthorAvatar(
                 pubkey: highlight.pubkey,
-                pictureURL: app.profileCache[highlight.pubkey]?.picture ?? "",
+                pictureURL: app.profileSnapshots[highlight.pubkey]?.picture ?? "",
                 displayInitial: initial,
                 size: 40,
                 ringWidth: 2
@@ -634,7 +634,7 @@ private struct HighlightDetailSheet: View {
     }
 
     private var displayName: String {
-        let profile = app.profileCache[highlight.pubkey]
+        let profile = app.profileSnapshots[highlight.pubkey]
         let dn = profile?.displayName ?? ""
         if !dn.isEmpty { return dn }
         let n = profile?.name ?? ""
