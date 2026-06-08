@@ -207,9 +207,7 @@ private struct WebView: UIViewRepresentable {
 
         nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 350_000_000)
                 await self.applyMode()
-                try? await Task.sleep(nanoseconds: 120_000_000)
                 self.injectHighlight()
                 self.isLoadingBinding.wrappedValue = false
                 self.hasFinishedInitialLoad = true
@@ -481,9 +479,11 @@ private struct WebView: UIViewRepresentable {
                   }
                 }
 
-                setTimeout(function() {
-                  try { mark.scrollIntoView({behavior: 'smooth', block: 'center'}); } catch(_) {}
-                }, 80);
+                requestAnimationFrame(function() {
+                  requestAnimationFrame(function() {
+                    try { mark.scrollIntoView({behavior: 'smooth', block: 'center'}); } catch(_) {}
+                  });
+                });
               } catch (err) {}
             })();
             """
