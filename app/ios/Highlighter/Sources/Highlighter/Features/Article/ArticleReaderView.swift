@@ -283,6 +283,9 @@ private struct ReaderScroll: View {
                         let outcome = safeCore.decodeNostrEntity(input)
                         return outcome.error.isEmpty ? outcome.value : nil
                     },
+                    nostrInlineRender: { ref in
+                        safeCore.nostrEntityInlineRender(entity: ref)
+                    },
                     profileNames: profileSnapshot
                 )
             }.value

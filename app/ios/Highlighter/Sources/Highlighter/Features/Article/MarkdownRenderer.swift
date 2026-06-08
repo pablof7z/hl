@@ -57,6 +57,7 @@ enum MarkdownRenderer {
         muted: UIColor,
         bodyPointSize: CGFloat = 18,
         nostrDecoder: (@Sendable (String) -> NostrEntityRef?)? = nil,
+        nostrInlineRender: (@Sendable (NostrEntityRef) -> NostrEntityInlineRender)? = nil,
         profileNames: [String: String] = [:]
     ) -> Output {
         let preprocessed = FootnotePreprocessor.extract(content)
@@ -70,6 +71,7 @@ enum MarkdownRenderer {
             bodyPointSize: bodyPointSize,
             definitionsById: Dictionary(uniqueKeysWithValues: preprocessed.definitions.map { ($0.id, $0) }),
             nostrDecoder: nostrDecoder,
+            nostrInlineRender: nostrInlineRender,
             profileNames: profileNames
         )
         let rawSegments = walker.render(document)
@@ -154,6 +156,7 @@ enum MarkdownRenderer {
                 bodyPointSize: smallSize,
                 definitionsById: [:],
                 nostrDecoder: nil,
+                nostrInlineRender: nil,
                 profileNames: [:]
             )
             let innerDoc = Document(parsing: def.markdown)
@@ -198,6 +201,7 @@ private struct BodyWalker {
     let bodyPointSize: CGFloat
     let definitionsById: [String: FootnotePreprocessor.Definition]
     let nostrDecoder: (@Sendable (String) -> NostrEntityRef?)?
+    let nostrInlineRender: (@Sendable (NostrEntityRef) -> NostrEntityInlineRender)?
     let profileNames: [String: String]
 
     var footnoteAnchors: [Int: NSRange] = [:]
@@ -517,7 +521,7 @@ private struct BodyWalker {
     /// mentions, emitting styled runs for each. Everything else is plain serif.
     private mutating func renderPlainText(_ s: String) -> NSAttributedString {
         let hasFootnote = s.contains("[^")
-        let hasNostr = nostrDecoder != nil && s.contains("nostr:")
+        let hasNostr = nostrDecoder != nil && nostrInlineRender != nil && s.contains("nostr:")
         guard hasFootnote || hasNostr else {
             return NSAttributedString(string: s, attributes: [.font: serif, .foregroundColor: ink])
         }
@@ -586,25 +590,24 @@ private struct BodyWalker {
                 let isKnown = lower.hasPrefix("npub1") || lower.hasPrefix("nprofile1")
                     || lower.hasPrefix("note1") || lower.hasPrefix("nevent1") || lower.hasPrefix("naddr1")
 
-                if isKnown, let decoder = nostrDecoder, let ref = decoder(bech32) {
-                    switch ref {
-                    case .profile(let pk, _):
-                        let label = profileNames[pk] ?? "@" + String(pk.prefix(8))
+                if isKnown,
+                   let decoder = nostrDecoder,
+                   let inlineRender = nostrInlineRender,
+                   let ref = decoder(bech32) {
+                    switch inlineRender(ref) {
+                    case .profile(let pk, let fallbackLabel):
+                        let label = profileNames[pk] ?? fallbackLabel
                         let atLabel = label.hasPrefix("@") ? label : "@\(label)"
                         out.append(NSAttributedString(string: atLabel, attributes: [
                             .font: serifBold,
                             .foregroundColor: accent,
                             .link: URL(string: "highlighter://profile/\(pk)")!
                         ]))
-                    case .event, .address:
+                    case .reference(let chipLabel):
                         // Inline event refs are unlikely in body paragraphs;
                         // standalone ones become .nostrEntity segments above.
                         // Render a short dimmed chip so nothing vanishes.
-                        let kind: String
-                        if case .event(let id, _, _, _) = ref { kind = "note:\(id.prefix(8))…" }
-                        else if case .address(_, _, let d, _) = ref { kind = d.isEmpty ? "article" : d }
-                        else { kind = "…" }
-                        out.append(NSAttributedString(string: "[\(kind)]", attributes: [
+                        out.append(NSAttributedString(string: "[\(chipLabel)]", attributes: [
                             .font: mono,
                             .foregroundColor: muted
                         ]))

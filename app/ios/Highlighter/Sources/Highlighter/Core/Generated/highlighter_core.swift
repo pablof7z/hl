@@ -1234,6 +1234,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func nostrEntityFallbackLabel(entity: NostrEntityRef)  -> String
 
+    func nostrEntityInlineRender(entity: NostrEntityRef)  -> NostrEntityInlineRender
+
     func pairBunker(uri: String) async  -> CurrentUserOutcome
 
     func prepareWhatsNew() async  -> WhatsNewEntriesOutcome
@@ -3384,6 +3386,14 @@ open func normalizeNip05Username(input: String) -> String  {
 open func nostrEntityFallbackLabel(entity: NostrEntityRef) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_nostr_entity_fallback_label(self.uniffiClonePointer(),
+        FfiConverterTypeNostrEntityRef_lower(entity),$0
+    )
+})
+}
+
+open func nostrEntityInlineRender(entity: NostrEntityRef) -> NostrEntityInlineRender  {
+    return try!  FfiConverterTypeNostrEntityInlineRender_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_nostr_entity_inline_render(self.uniffiClonePointer(),
         FfiConverterTypeNostrEntityRef_lower(entity),$0
     )
 })
@@ -14294,6 +14304,83 @@ extension HighlightSourceKind: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum NostrEntityInlineRender {
+
+    case profile(pubkeyHex: String, fallbackLabel: String
+    )
+    case reference(chipLabel: String
+    )
+}
+
+
+#if compiler(>=6)
+extension NostrEntityInlineRender: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNostrEntityInlineRender: FfiConverterRustBuffer {
+    typealias SwiftType = NostrEntityInlineRender
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityInlineRender {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .profile(pubkeyHex: try FfiConverterString.read(from: &buf), fallbackLabel: try FfiConverterString.read(from: &buf)
+        )
+
+        case 2: return .reference(chipLabel: try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NostrEntityInlineRender, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .profile(pubkeyHex,fallbackLabel):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(pubkeyHex, into: &buf)
+            FfiConverterString.write(fallbackLabel, into: &buf)
+
+
+        case let .reference(chipLabel):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(chipLabel, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityInlineRender_lift(_ buf: RustBuffer) throws -> NostrEntityInlineRender {
+    return try FfiConverterTypeNostrEntityInlineRender.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityInlineRender_lower(_ value: NostrEntityInlineRender) -> RustBuffer {
+    return FfiConverterTypeNostrEntityInlineRender.lower(value)
+}
+
+
+extension NostrEntityInlineRender: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Parsed reference to a Nostr entity encoded as a NIP-19 bech32.
  */
@@ -16650,6 +16737,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_nostr_entity_fallback_label() != 41592) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_nostr_entity_inline_render() != 20611) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 14588) {

@@ -70,6 +70,17 @@ pub enum NostrEntityRenderKind {
     Generic,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum NostrEntityInlineRender {
+    Profile {
+        pubkey_hex: String,
+        fallback_label: String,
+    },
+    Reference {
+        chip_label: String,
+    },
+}
+
 /// Resolved event data for a [`NostrEntityRef`]. Returned by
 /// [`resolve_from_cache`] when the underlying event is already in nostrdb.
 #[derive(Debug, Clone, uniffi::Record)]
@@ -162,6 +173,25 @@ pub fn fallback_label(entity: &NostrEntityRef) -> String {
             None => format!("Event · {}…", first_chars(event_id_hex, 12)),
         },
         NostrEntityRef::Address { kind, d_tag, .. } => format!("Kind {kind} · {d_tag}"),
+    }
+}
+
+pub fn inline_render(entity: &NostrEntityRef) -> NostrEntityInlineRender {
+    match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => NostrEntityInlineRender::Profile {
+            pubkey_hex: pubkey_hex.clone(),
+            fallback_label: format!("@{}", first_chars(pubkey_hex, 8)),
+        },
+        NostrEntityRef::Event { event_id_hex, .. } => NostrEntityInlineRender::Reference {
+            chip_label: format!("note:{}…", first_chars(event_id_hex, 8)),
+        },
+        NostrEntityRef::Address { d_tag, .. } => NostrEntityInlineRender::Reference {
+            chip_label: if d_tag.is_empty() {
+                "article".into()
+            } else {
+                d_tag.clone()
+            },
+        },
     }
 }
 
@@ -502,6 +532,53 @@ mod tests {
                 relays: Vec::new(),
             }),
             "Kind 30023 · article-slug"
+        );
+    }
+
+    #[test]
+    fn inline_render_matches_markdown_fallbacks() {
+        assert_eq!(
+            inline_render(&NostrEntityRef::Profile {
+                pubkey_hex: "abcdef0123456789".into(),
+                relays: Vec::new(),
+            }),
+            NostrEntityInlineRender::Profile {
+                pubkey_hex: "abcdef0123456789".into(),
+                fallback_label: "@abcdef01".into(),
+            }
+        );
+        assert_eq!(
+            inline_render(&NostrEntityRef::Event {
+                event_id_hex: "1234567890abcdef".into(),
+                relays: Vec::new(),
+                author_hint_hex: None,
+                kind_hint: None,
+            }),
+            NostrEntityInlineRender::Reference {
+                chip_label: "note:12345678…".into(),
+            }
+        );
+        assert_eq!(
+            inline_render(&NostrEntityRef::Address {
+                kind: 30023,
+                pubkey_hex: "abcdef".into(),
+                d_tag: "article-slug".into(),
+                relays: Vec::new(),
+            }),
+            NostrEntityInlineRender::Reference {
+                chip_label: "article-slug".into(),
+            }
+        );
+        assert_eq!(
+            inline_render(&NostrEntityRef::Address {
+                kind: 30023,
+                pubkey_hex: "abcdef".into(),
+                d_tag: String::new(),
+                relays: Vec::new(),
+            }),
+            NostrEntityInlineRender::Reference {
+                chip_label: "article".into(),
+            }
         );
     }
 
