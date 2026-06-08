@@ -25,6 +25,7 @@ struct HighlightFeedCardView: View {
     private var lead: HydratedHighlight { items[0] }
 
     @State private var sourceArticle: ArticleRecord?
+    @State private var sourceArticleAuthorPubkey: String?
 
     private var bookPreview: ArtifactPreview? {
         guard let isbn = isbnFromLead else { return nil }
@@ -507,12 +508,9 @@ struct HighlightFeedCardView: View {
     }
 
     private var articleAuthorPubkey: String? {
-        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        let pubkey = String(parts[1])
-        return pubkey.isEmpty ? nil : pubkey
+        if let pubkey = sourceArticle?.pubkey, !pubkey.isEmpty { return pubkey }
+        if let pubkey = sourceArticleAuthorPubkey, !pubkey.isEmpty { return pubkey }
+        return nil
     }
 
     private var articleReadMinutes: Int? {
@@ -576,6 +574,7 @@ struct HighlightFeedCardView: View {
 
     private func resolveSource() async {
         sourceArticle = nil
+        sourceArticleAuthorPubkey = nil
 
         if let isbn = isbnFromLead {
             await app.requestIsbnPreview(isbn: isbn)
@@ -588,11 +587,13 @@ struct HighlightFeedCardView: View {
         let outcome = await app.safeCore.getArticleByAddress(address: addr)
         sourceArticle = outcome.error.isEmpty ? outcome.value : nil
         if let pubkey = sourceArticle?.pubkey, !pubkey.isEmpty {
+            sourceArticleAuthorPubkey = pubkey
             await app.requestProfile(pubkeyHex: pubkey)
             return
         }
         let authorOutcome = await app.safeCore.getArticleAddressAuthor(address: addr)
         if authorOutcome.error.isEmpty, let pubkey = authorOutcome.value, !pubkey.isEmpty {
+            sourceArticleAuthorPubkey = pubkey
             await app.requestProfile(pubkeyHex: pubkey)
         }
     }
