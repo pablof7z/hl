@@ -1292,7 +1292,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * highlighting this article's `a`-tag arrives. Install on reader view
      * appearance; `unsubscribe(handle)` on disappearance.
      */
-    func subscribeArticle(pubkeyHex: String, dTag: String) async throws  -> UInt64
+    func subscribeArticle(pubkeyHex: String, dTag: String) async  -> SubscriptionOutcome
 
     /**
      * Open a NIP-50 relay subscription for kind:30023 against the user's
@@ -1301,26 +1301,26 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * and the Swift store responds by re-running `search_articles` locally
      * to merge the new events into its Articles bucket.
      */
-    func subscribeArticleSearch(query: String) async throws  -> UInt64
+    func subscribeArticleSearch(query: String) async  -> SubscriptionOutcome
 
     /**
      * Open a live subscription for the current user's kind:30003/30004 sets.
      * Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
      */
-    func subscribeBookmarkSets() async throws  -> UInt64
+    func subscribeBookmarkSets() async  -> SubscriptionOutcome
 
     /**
      * Open a live subscription on the current user's kind:10003 bookmark
      * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
      * Swift bookmarks store re-queries on each.
      */
-    func subscribeBookmarks() async throws  -> UInt64
+    func subscribeBookmarks() async  -> SubscriptionOutcome
 
     /**
      * Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
      * deltas for every kind:1 `e`-tagged to the root (regardless of author).
      */
-    func subscribeFeedbackThread(rootEventId: String) async throws  -> UInt64
+    func subscribeFeedbackThread(rootEventId: String) async  -> SubscriptionOutcome
 
     /**
      * Feedback-threads subscription for the shake-to-share surface. Fires
@@ -1328,13 +1328,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * the current user (with the project `a` tag) or any kind:513 metadata
      * for the same project arrives. Swift re-queries on each.
      */
-    func subscribeFeedbackThreads(coordinate: String) async throws  -> UInt64
+    func subscribeFeedbackThreads(coordinate: String) async  -> SubscriptionOutcome
 
     /**
      * Open a live subscription for kind:30004 sets from followed authors.
      * Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
      */
-    func subscribeFollowingCurationSets() async throws  -> UInt64
+    func subscribeFollowingCurationSets() async  -> SubscriptionOutcome
 
     /**
      * Highlights home-feed view-scope subscription. Snapshots the user's
@@ -1343,7 +1343,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * ids, then listens for kind:9802 events authored by anyone in that
      * set or tagged into any joined room.
      */
-    func subscribeFollowingHighlights() async throws  -> UInt64
+    func subscribeFollowingHighlights() async  -> SubscriptionOutcome
 
     /**
      * Following Reads view-scope subscription. Snapshots the user's current
@@ -1352,7 +1352,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `FollowingReadsUpdated` deltas; the Swift store re-queries the feed.
      * Install on tab appearance; `unsubscribe(handle)` on disappearance.
      */
-    func subscribeFollowingReads() async throws  -> UInt64
+    func subscribeFollowingReads() async  -> SubscriptionOutcome
 
     /**
      * App-scope subscription for the joined-communities view. Returns a
@@ -1360,7 +1360,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * with that handle. Re-uses the relay sub installed at login; this
      * call is about setting up the nostrdb notification pump.
      */
-    func subscribeJoinedCommunities() async throws  -> UInt64
+    func subscribeJoinedCommunities() async  -> SubscriptionOutcome
 
     /**
      * Install a view-scoped subscription for the missing event behind an
@@ -1369,7 +1369,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `NdbDatabase` bridge; the subscription pump emits
      * `NostrEntityResolved` when the target lands.
      */
-    func subscribeNostrEntity(entity: NostrEntityRef) async throws  -> UInt64
+    func subscribeNostrEntity(entity: NostrEntityRef) async  -> SubscriptionOutcome
 
     /**
      * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
@@ -1377,46 +1377,46 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `subscription_id == 0`, so this returns `0` unconditionally — the
      * value is a stable contract, not a unique sub id.
      */
-    func subscribeRelayStatus() async throws  -> UInt64
+    func subscribeRelayStatus() async  -> SubscriptionOutcome
 
     /**
      * Per-room view-scope subscription. Returns a handle; fires
      * ArtifactUpserted / HighlightUpserted / HighlightShared for this
      * specific group.
      */
-    func subscribeRoom(groupId: String) async throws  -> UInt64
+    func subscribeRoom(groupId: String) async  -> SubscriptionOutcome
 
     /**
      * Per-room Chat view-scope subscription. Returns a handle; fires
      * `ChatMessageUpserted` deltas for kind:9 messages tagged
      * `#h=<group_id>`.
      */
-    func subscribeRoomChat(groupId: String) async throws  -> UInt64
+    func subscribeRoomChat(groupId: String) async  -> SubscriptionOutcome
 
     /**
      * Per-room Discussions view-scope subscription. Returns a handle; fires
      * `DiscussionUpserted` deltas for kind:11 threads in this group that
      * carry the `t=discussion` marker.
      */
-    func subscribeRoomDiscussions(groupId: String) async throws  -> UInt64
+    func subscribeRoomDiscussions(groupId: String) async  -> SubscriptionOutcome
 
     /**
      * Profile view-scope subscription. Fires `UserProfileUpdated` deltas
      * when any event relevant to `pubkey_hex`'s profile arrives. Install on
      * profile view appearance; `unsubscribe(handle)` on disappearance.
      */
-    func subscribeUserProfile(pubkeyHex: String) async throws  -> UInt64
+    func subscribeUserProfile(pubkeyHex: String) async  -> SubscriptionOutcome
 
     /**
      * Vault view-scope subscription for the current user's own highlights.
      */
-    func subscribeVault() async throws  -> UInt64
+    func subscribeVault() async  -> SubscriptionOutcome
 
     /**
      * Open a live subscription for the current user's NIP-B0 kind:39701 events.
      * Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
      */
-    func subscribeWebBookmarks() async throws  -> UInt64
+    func subscribeWebBookmarks() async  -> SubscriptionOutcome
 
     func suggestNip05Username(displayName: String)  -> String
 
@@ -3569,20 +3569,21 @@ open func startRoomExplorerFeaturedRooms()async throws   {
      * highlighting this article's `a`-tag arrives. Install on reader view
      * appearance; `unsubscribe(handle)` on disappearance.
      */
-open func subscribeArticle(pubkeyHex: String, dTag: String)async throws  -> UInt64  {
+open func subscribeArticle(pubkeyHex: String, dTag: String)async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_article(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(pubkeyHex),FfiConverterString.lower(dTag)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3593,20 +3594,21 @@ open func subscribeArticle(pubkeyHex: String, dTag: String)async throws  -> UInt
      * and the Swift store responds by re-running `search_articles` locally
      * to merge the new events into its Articles bucket.
      */
-open func subscribeArticleSearch(query: String)async throws  -> UInt64  {
+open func subscribeArticleSearch(query: String)async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_article_search(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(query)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3614,20 +3616,21 @@ open func subscribeArticleSearch(query: String)async throws  -> UInt64  {
      * Open a live subscription for the current user's kind:30003/30004 sets.
      * Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
      */
-open func subscribeBookmarkSets()async throws  -> UInt64  {
+open func subscribeBookmarkSets()async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_bookmark_sets(
                     self.uniffiClonePointer()
 
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3636,20 +3639,21 @@ open func subscribeBookmarkSets()async throws  -> UInt64  {
      * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
      * Swift bookmarks store re-queries on each.
      */
-open func subscribeBookmarks()async throws  -> UInt64  {
+open func subscribeBookmarks()async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_bookmarks(
                     self.uniffiClonePointer()
 
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3657,20 +3661,21 @@ open func subscribeBookmarks()async throws  -> UInt64  {
      * Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
      * deltas for every kind:1 `e`-tagged to the root (regardless of author).
      */
-open func subscribeFeedbackThread(rootEventId: String)async throws  -> UInt64  {
+open func subscribeFeedbackThread(rootEventId: String)async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_feedback_thread(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(rootEventId)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3680,20 +3685,21 @@ open func subscribeFeedbackThread(rootEventId: String)async throws  -> UInt64  {
      * the current user (with the project `a` tag) or any kind:513 metadata
      * for the same project arrives. Swift re-queries on each.
      */
-open func subscribeFeedbackThreads(coordinate: String)async throws  -> UInt64  {
+open func subscribeFeedbackThreads(coordinate: String)async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_feedback_threads(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(coordinate)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3701,20 +3707,21 @@ open func subscribeFeedbackThreads(coordinate: String)async throws  -> UInt64  {
      * Open a live subscription for kind:30004 sets from followed authors.
      * Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
      */
-open func subscribeFollowingCurationSets()async throws  -> UInt64  {
+open func subscribeFollowingCurationSets()async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_curation_sets(
                     self.uniffiClonePointer()
 
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3725,20 +3732,21 @@ open func subscribeFollowingCurationSets()async throws  -> UInt64  {
      * ids, then listens for kind:9802 events authored by anyone in that
      * set or tagged into any joined room.
      */
-open func subscribeFollowingHighlights()async throws  -> UInt64  {
+open func subscribeFollowingHighlights()async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_highlights(
                     self.uniffiClonePointer()
 
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3749,20 +3757,21 @@ open func subscribeFollowingHighlights()async throws  -> UInt64  {
      * `FollowingReadsUpdated` deltas; the Swift store re-queries the feed.
      * Install on tab appearance; `unsubscribe(handle)` on disappearance.
      */
-open func subscribeFollowingReads()async throws  -> UInt64  {
+open func subscribeFollowingReads()async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_reads(
                     self.uniffiClonePointer()
 
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3772,20 +3781,21 @@ open func subscribeFollowingReads()async throws  -> UInt64  {
      * with that handle. Re-uses the relay sub installed at login; this
      * call is about setting up the nostrdb notification pump.
      */
-open func subscribeJoinedCommunities()async throws  -> UInt64  {
+open func subscribeJoinedCommunities()async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_joined_communities(
                     self.uniffiClonePointer()
 
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3796,20 +3806,21 @@ open func subscribeJoinedCommunities()async throws  -> UInt64  {
      * `NdbDatabase` bridge; the subscription pump emits
      * `NostrEntityResolved` when the target lands.
      */
-open func subscribeNostrEntity(entity: NostrEntityRef)async throws  -> UInt64  {
+open func subscribeNostrEntity(entity: NostrEntityRef)async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_nostr_entity(
                     self.uniffiClonePointer(),
                     FfiConverterTypeNostrEntityRef_lower(entity)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3819,20 +3830,21 @@ open func subscribeNostrEntity(entity: NostrEntityRef)async throws  -> UInt64  {
      * `subscription_id == 0`, so this returns `0` unconditionally — the
      * value is a stable contract, not a unique sub id.
      */
-open func subscribeRelayStatus()async throws  -> UInt64  {
+open func subscribeRelayStatus()async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_relay_status(
                     self.uniffiClonePointer()
 
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3841,20 +3853,21 @@ open func subscribeRelayStatus()async throws  -> UInt64  {
      * ArtifactUpserted / HighlightUpserted / HighlightShared for this
      * specific group.
      */
-open func subscribeRoom(groupId: String)async throws  -> UInt64  {
+open func subscribeRoom(groupId: String)async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_room(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(groupId)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3863,20 +3876,21 @@ open func subscribeRoom(groupId: String)async throws  -> UInt64  {
      * `ChatMessageUpserted` deltas for kind:9 messages tagged
      * `#h=<group_id>`.
      */
-open func subscribeRoomChat(groupId: String)async throws  -> UInt64  {
+open func subscribeRoomChat(groupId: String)async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_room_chat(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(groupId)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3885,20 +3899,21 @@ open func subscribeRoomChat(groupId: String)async throws  -> UInt64  {
      * `DiscussionUpserted` deltas for kind:11 threads in this group that
      * carry the `t=discussion` marker.
      */
-open func subscribeRoomDiscussions(groupId: String)async throws  -> UInt64  {
+open func subscribeRoomDiscussions(groupId: String)async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_room_discussions(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(groupId)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3907,40 +3922,42 @@ open func subscribeRoomDiscussions(groupId: String)async throws  -> UInt64  {
      * when any event relevant to `pubkey_hex`'s profile arrives. Install on
      * profile view appearance; `unsubscribe(handle)` on disappearance.
      */
-open func subscribeUserProfile(pubkeyHex: String)async throws  -> UInt64  {
+open func subscribeUserProfile(pubkeyHex: String)async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_user_profile(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(pubkeyHex)
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
     /**
      * Vault view-scope subscription for the current user's own highlights.
      */
-open func subscribeVault()async throws  -> UInt64  {
+open func subscribeVault()async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_vault(
                     self.uniffiClonePointer()
 
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3948,20 +3965,21 @@ open func subscribeVault()async throws  -> UInt64  {
      * Open a live subscription for the current user's NIP-B0 kind:39701 events.
      * Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
      */
-open func subscribeWebBookmarks()async throws  -> UInt64  {
+open func subscribeWebBookmarks()async  -> SubscriptionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_web_bookmarks(
                     self.uniffiClonePointer()
 
                 )
             },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -8552,6 +8570,76 @@ public func FfiConverterTypeStringListOutcome_lower(_ value: StringListOutcome) 
 }
 
 
+public struct SubscriptionOutcome {
+    public var handle: UInt64
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(handle: UInt64, error: String) {
+        self.handle = handle
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension SubscriptionOutcome: Sendable {}
+#endif
+
+
+extension SubscriptionOutcome: Equatable, Hashable {
+    public static func ==(lhs: SubscriptionOutcome, rhs: SubscriptionOutcome) -> Bool {
+        if lhs.handle != rhs.handle {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(handle)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSubscriptionOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SubscriptionOutcome {
+        return
+            try SubscriptionOutcome(
+                handle: FfiConverterUInt64.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SubscriptionOutcome, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.handle, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSubscriptionOutcome_lift(_ buf: RustBuffer) throws -> SubscriptionOutcome {
+    return try FfiConverterTypeSubscriptionOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSubscriptionOutcome_lower(_ value: SubscriptionOutcome) -> RustBuffer {
+    return FfiConverterTypeSubscriptionOutcome.lower(value)
+}
+
+
 public struct TranscriptSegment {
     public var id: String
     public var start: Double
@@ -11430,58 +11518,58 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_explorer_featured_rooms() != 9712) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 35661) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 50162) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article_search() != 39992) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article_search() != 3961) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmark_sets() != 52089) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmark_sets() != 33547) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmarks() != 41073) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmarks() != 36659) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_thread() != 19940) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_thread() != 37453) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_threads() != 5574) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_threads() != 42524) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_curation_sets() != 24304) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_curation_sets() != 48600) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_highlights() != 25287) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_highlights() != 63581) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_reads() != 12398) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_reads() != 57904) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_joined_communities() != 33427) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_joined_communities() != 5805) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_nostr_entity() != 54924) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_nostr_entity() != 32465) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_relay_status() != 5993) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_relay_status() != 58504) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room() != 19851) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room() != 15617) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_chat() != 62044) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_chat() != 48782) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_discussions() != 25508) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_discussions() != 38212) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_user_profile() != 11829) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_user_profile() != 33636) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_vault() != 26608) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_vault() != 2040) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_web_bookmarks() != 9203) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_web_bookmarks() != 43717) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_suggest_nip05_username() != 36133) {

@@ -315,17 +315,17 @@ final class NostrEntityCardStore {
 
         guard !Task.isCancelled else { return }
 
-        do {
-            let handle = try await safeCore.subscribeNostrEntity(entity)
-            guard !Task.isCancelled else {
-                await safeCore.unsubscribe(handle)
-                return
-            }
-            subscriptionHandle = handle
-            eventBridge?.registerNostrEntity(self, handle: handle)
-        } catch {
+        let outcome = await safeCore.subscribeNostrEntity(entity)
+        guard outcome.error.isEmpty else {
             // Cache-only rendering remains valid; the placeholder stays visible.
+            return
         }
+        guard !Task.isCancelled else {
+            await safeCore.unsubscribe(outcome.handle)
+            return
+        }
+        subscriptionHandle = outcome.handle
+        eventBridge?.registerNostrEntity(self, handle: outcome.handle)
     }
 
     func stop() {

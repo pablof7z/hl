@@ -48,8 +48,9 @@ final class ReadsStore {
 
     private func installSubscription() async {
         guard subscriptionHandle == nil, let bridge = eventBridge else { return }
-        guard let handle = try? await safeCore.subscribeFollowingReads() else { return }
-        subscriptionHandle = handle
-        bridge.registerReads(self, handle: handle)
+        let outcome = await safeCore.subscribeFollowingReads()
+        guard outcome.error.isEmpty else { return }
+        subscriptionHandle = outcome.handle
+        bridge.registerReads(self, handle: outcome.handle)
     }
 }

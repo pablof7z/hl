@@ -168,19 +168,19 @@ final class SearchStore {
         tearDownRelaySearch()
         activeRelayQuery = q
         isRelayLoading = true
-        do {
-            let handle = try await safeCore.subscribeArticleSearch(query: q)
-            if appliedQuery != q {
-                // Query moved on while we were opening — tear down immediately.
-                await safeCore.unsubscribe(handle)
-                return
-            }
-            activeSearchHandle = handle
-            eventBridge?.registerSearch(self, handle: handle)
+        let outcome = await safeCore.subscribeArticleSearch(query: q)
+        guard outcome.error.isEmpty else {
             isRelayLoading = false
-        } catch {
-            isRelayLoading = false
+            return
         }
+        if appliedQuery != q {
+            // Query moved on while we were opening — tear down immediately.
+            await safeCore.unsubscribe(outcome.handle)
+            return
+        }
+        activeSearchHandle = outcome.handle
+        eventBridge?.registerSearch(self, handle: outcome.handle)
+        isRelayLoading = false
     }
 
     private func tearDownRelaySearch() {

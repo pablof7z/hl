@@ -141,8 +141,8 @@ actor SafeHighlighterCore {
         await core.clearRecentSearches()
     }
 
-    func subscribeArticleSearch(query: String) async throws -> UInt64 {
-        try await core.subscribeArticleSearch(query: query)
+    func subscribeArticleSearch(query: String) async -> SubscriptionOutcome {
+        await core.subscribeArticleSearch(query: query)
     }
 
     // MARK: - Bookmarks (NIP-51 kind:10003)
@@ -159,8 +159,8 @@ actor SafeHighlighterCore {
         await core.toggleArticleBookmark(address: address)
     }
 
-    func subscribeBookmarks() async throws -> UInt64 {
-        try await core.subscribeBookmarks()
+    func subscribeBookmarks() async -> SubscriptionOutcome {
+        await core.subscribeBookmarks()
     }
 
     // MARK: - Reactions (kind:7)
@@ -218,16 +218,16 @@ actor SafeHighlighterCore {
         try await core.getMyWebBookmarks()
     }
 
-    func subscribeBookmarkSets() async throws -> UInt64 {
-        try await core.subscribeBookmarkSets()
+    func subscribeBookmarkSets() async -> SubscriptionOutcome {
+        await core.subscribeBookmarkSets()
     }
 
-    func subscribeFollowingCurationSets() async throws -> UInt64 {
-        try await core.subscribeFollowingCurationSets()
+    func subscribeFollowingCurationSets() async -> SubscriptionOutcome {
+        await core.subscribeFollowingCurationSets()
     }
 
-    func subscribeWebBookmarks() async throws -> UInt64 {
-        try await core.subscribeWebBookmarks()
+    func subscribeWebBookmarks() async -> SubscriptionOutcome {
+        await core.subscribeWebBookmarks()
     }
 
     func lookupIsbn(_ isbn: String) async throws -> ArtifactPreview {
@@ -264,8 +264,8 @@ actor SafeHighlighterCore {
         )
     }
 
-    func subscribeRoomChat(groupId: String) async throws -> UInt64 {
-        try await core.subscribeRoomChat(groupId: groupId)
+    func subscribeRoomChat(groupId: String) async -> SubscriptionOutcome {
+        await core.subscribeRoomChat(groupId: groupId)
     }
 
     // MARK: - Feedback (shake-to-share)
@@ -296,12 +296,12 @@ actor SafeHighlighterCore {
         )
     }
 
-    func subscribeFeedbackThreads(coordinate: String) async throws -> UInt64 {
-        try await core.subscribeFeedbackThreads(coordinate: coordinate)
+    func subscribeFeedbackThreads(coordinate: String) async -> SubscriptionOutcome {
+        await core.subscribeFeedbackThreads(coordinate: coordinate)
     }
 
-    func subscribeFeedbackThread(rootEventId: String) async throws -> UInt64 {
-        try await core.subscribeFeedbackThread(rootEventId: rootEventId)
+    func subscribeFeedbackThread(rootEventId: String) async -> SubscriptionOutcome {
+        await core.subscribeFeedbackThread(rootEventId: rootEventId)
     }
 
     // MARK: - Profile reads
@@ -330,8 +330,8 @@ actor SafeHighlighterCore {
         try await core.resolveNostrEntity(entity: entity)
     }
 
-    func subscribeNostrEntity(_ entity: NostrEntityRef) async throws -> UInt64 {
-        try await core.subscribeNostrEntity(entity: entity)
+    func subscribeNostrEntity(_ entity: NostrEntityRef) async -> SubscriptionOutcome {
+        await core.subscribeNostrEntity(entity: entity)
     }
 
     func updateProfile(
@@ -526,32 +526,32 @@ actor SafeHighlighterCore {
 
     // MARK: - Subscriptions
 
-    func subscribeFollowingReads() async throws -> UInt64 {
-        try await core.subscribeFollowingReads()
+    func subscribeFollowingReads() async -> SubscriptionOutcome {
+        await core.subscribeFollowingReads()
     }
 
-    func subscribeFollowingHighlights() async throws -> UInt64 {
-        try await core.subscribeFollowingHighlights()
+    func subscribeFollowingHighlights() async -> SubscriptionOutcome {
+        await core.subscribeFollowingHighlights()
     }
 
-    func subscribeJoinedCommunities() async throws -> UInt64 {
-        try await core.subscribeJoinedCommunities()
+    func subscribeJoinedCommunities() async -> SubscriptionOutcome {
+        await core.subscribeJoinedCommunities()
     }
 
-    func subscribeRoom(groupId: String) async throws -> UInt64 {
-        try await core.subscribeRoom(groupId: groupId)
+    func subscribeRoom(groupId: String) async -> SubscriptionOutcome {
+        await core.subscribeRoom(groupId: groupId)
     }
 
-    func subscribeRoomDiscussions(groupId: String) async throws -> UInt64 {
-        try await core.subscribeRoomDiscussions(groupId: groupId)
+    func subscribeRoomDiscussions(groupId: String) async -> SubscriptionOutcome {
+        await core.subscribeRoomDiscussions(groupId: groupId)
     }
 
-    func subscribeUserProfile(pubkeyHex: String) async throws -> UInt64 {
-        try await core.subscribeUserProfile(pubkeyHex: pubkeyHex)
+    func subscribeUserProfile(pubkeyHex: String) async -> SubscriptionOutcome {
+        await core.subscribeUserProfile(pubkeyHex: pubkeyHex)
     }
 
-    func subscribeArticle(pubkeyHex: String, dTag: String) async throws -> UInt64 {
-        try await core.subscribeArticle(pubkeyHex: pubkeyHex, dTag: dTag)
+    func subscribeArticle(pubkeyHex: String, dTag: String) async -> SubscriptionOutcome {
+        await core.subscribeArticle(pubkeyHex: pubkeyHex, dTag: dTag)
     }
 
     func unsubscribe(_ handle: UInt64) {
@@ -694,8 +694,8 @@ actor SafeHighlighterCore {
         core.autoConnectedRelayConfig(url: url)
     }
 
-    func subscribeRelayStatus() async throws -> UInt64 {
-        try await core.subscribeRelayStatus()
+    func subscribeRelayStatus() async -> SubscriptionOutcome {
+        await core.subscribeRelayStatus()
     }
 
     func reconnectAll() async throws {

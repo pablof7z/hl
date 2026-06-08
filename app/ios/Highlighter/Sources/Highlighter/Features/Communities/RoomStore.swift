@@ -53,13 +53,13 @@ final class RoomStore {
 
         await refreshReferenceQueries()
 
-        do {
-            let handle = try await core.subscribeRoom(groupId: groupId)
-            subscriptionHandle = handle
-            bridge?.registerRoom(self, handle: handle)
-        } catch {
+        let outcome = await core.subscribeRoom(groupId: groupId)
+        guard outcome.error.isEmpty else {
             // Subscription failure leaves cache-only rendering working.
+            return
         }
+        subscriptionHandle = outcome.handle
+        bridge?.registerRoom(self, handle: outcome.handle)
     }
 
     func stop() {

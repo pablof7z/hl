@@ -30,13 +30,13 @@ final class DiscussionStore {
         }
         isLoading = false
 
-        do {
-            let handle = try await core.subscribeRoomDiscussions(groupId: groupId)
-            subscriptionHandle = handle
-            bridge?.registerDiscussions(self, handle: handle)
-        } catch {
+        let outcome = await core.subscribeRoomDiscussions(groupId: groupId)
+        guard outcome.error.isEmpty else {
             // Subscription failure leaves cache-only rendering working.
+            return
         }
+        subscriptionHandle = outcome.handle
+        bridge?.registerDiscussions(self, handle: outcome.handle)
     }
 
     func stop() {

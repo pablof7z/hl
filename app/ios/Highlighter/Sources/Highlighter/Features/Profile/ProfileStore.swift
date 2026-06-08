@@ -156,13 +156,13 @@ final class ProfileStore {
 
     private func installSubscription() async {
         guard subscriptionHandle == nil, let bridge = eventBridge else { return }
-        do {
-            let handle = try await safeCore.subscribeUserProfile(pubkeyHex: pubkey)
-            subscriptionHandle = handle
-            bridge.registerProfile(self, handle: handle)
-        } catch {
+        let outcome = await safeCore.subscribeUserProfile(pubkeyHex: pubkey)
+        guard outcome.error.isEmpty else {
             // Non-fatal: the profile view still has its initial load. Live
             // updates will simply not stream in until the next visit.
+            return
         }
+        subscriptionHandle = outcome.handle
+        bridge.registerProfile(self, handle: outcome.handle)
     }
 }

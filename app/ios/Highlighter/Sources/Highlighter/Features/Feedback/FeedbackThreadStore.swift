@@ -41,13 +41,13 @@ final class FeedbackThreadStore {
         }
         isLoading = false
 
-        do {
-            let handle = try await core.subscribeFeedbackThread(rootEventId: rootEventId)
-            subscriptionHandle = handle
-            bridge?.registerFeedbackThread(self, handle: handle)
-        } catch {
+        let outcome = await core.subscribeFeedbackThread(rootEventId: rootEventId)
+        guard outcome.error.isEmpty else {
             // Cache-only rendering still works.
+            return
         }
+        subscriptionHandle = outcome.handle
+        bridge?.registerFeedbackThread(self, handle: outcome.handle)
     }
 
     func stop() {

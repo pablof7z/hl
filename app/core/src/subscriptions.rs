@@ -1622,6 +1622,11 @@ mod tests {
         (Arc::new(ChannelCallback { tx }), rx)
     }
 
+    fn expect_subscription(outcome: crate::models::SubscriptionOutcome) -> u64 {
+        assert!(outcome.error.is_empty(), "subscribe: {}", outcome.error);
+        outcome.handle
+    }
+
     fn isolated_core() -> (Arc<HighlighterCore>, TempDir) {
         let tmp = tempfile::tempdir().expect("tempdir");
         let core = HighlighterCore::new_with_data_dir(tmp.path().join("ndb"));
@@ -1678,8 +1683,8 @@ mod tests {
             })
             .join()
             .expect("join")
-            .expect("subscribe")
         };
+        let handle = expect_subscription(handle);
         assert!(handle >= FIRST_HANDLE, "handle must start at 1 (0 is reserved)");
 
         // Seed a valid 39000 + 39002 pair. nostrdb ingest will deliver via
@@ -1760,8 +1765,8 @@ mod tests {
             })
             .join()
             .expect("join")
-            .expect("subscribe")
         };
+        let handle = expect_subscription(handle);
 
         // Membership first — this adds "alpha" to the hydrated set so the
         // subsequent 39000 is allowed through.
@@ -1851,8 +1856,8 @@ mod tests {
             })
             .join()
             .expect("join")
-            .expect("subscribe")
         };
+        let handle = expect_subscription(handle);
 
         // kind:11 event for alpha
         let share_alpha = sign(
@@ -1916,8 +1921,8 @@ mod tests {
             std::thread::spawn(move || futures::executor::block_on(core.subscribe_vault()))
                 .join()
                 .expect("join")
-                .expect("subscribe")
         };
+        let handle = expect_subscription(handle);
 
         // Highlight authored by `me` — should deliver.
         let mine = sign(
@@ -1979,8 +1984,8 @@ mod tests {
             })
             .join()
             .expect("join")
-            .expect("subscribe");
         };
+        let _handle = expect_subscription(_handle);
 
         // A 39000 for a group where ONLY `stranger` is a member — user `me`
         // has no membership event for this group.
@@ -2082,8 +2087,8 @@ mod tests {
             })
             .join()
             .expect("join")
-            .expect("subscribe")
         };
+        let handle = expect_subscription(handle);
 
         // kind:9 event for alpha — must deliver as ChatMessageUpserted.
         let chat_alpha = sign(

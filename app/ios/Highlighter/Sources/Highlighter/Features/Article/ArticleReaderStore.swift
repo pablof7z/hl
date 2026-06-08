@@ -159,18 +159,18 @@ final class ArticleReaderStore {
 
     private func installSubscription() async {
         guard subscriptionHandle == nil, let bridge = eventBridge else { return }
-        do {
-            let handle = try await safeCore.subscribeArticle(
-                pubkeyHex: target.pubkey,
-                dTag: target.dTag
-            )
-            subscriptionHandle = handle
-            bridge.registerArticle(self, handle: handle)
-        } catch {
+        let outcome = await safeCore.subscribeArticle(
+            pubkeyHex: target.pubkey,
+            dTag: target.dTag
+        )
+        guard outcome.error.isEmpty else {
             // Non-fatal: cold ndb path still shows the seeded article and
             // its cached highlights. Live updates will resume on the next
             // visit.
+            return
         }
+        subscriptionHandle = outcome.handle
+        bridge.registerArticle(self, handle: outcome.handle)
     }
 
     /// Build the `ArtifactRecord` shape the Rust `publish_highlight` path

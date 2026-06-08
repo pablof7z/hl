@@ -57,7 +57,7 @@ pub use models::{
     FeedbackThreadRecord, GeneratedAccount, HighlightDraft, HighlightRecord, HydratedHighlight,
     MutationOutcome, NostrConnectOptions, PictureDraft, PictureRecord, PodcastPositionRecord,
     ProfileMetadata, ReadingFeedItem, RoomRecommendation, RoomRecommendationReason,
-    StringListOutcome, WebBookmarkRecord, WhatsNewEntriesOutcome,
+    StringListOutcome, SubscriptionOutcome, WebBookmarkRecord, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
 pub use podcast_transcript::TranscriptSegment;

@@ -36,13 +36,13 @@ final class FeedbackStore {
         }
         isLoading = false
 
-        do {
-            let handle = try await core.subscribeFeedbackThreads(coordinate: coordinate)
-            subscriptionHandle = handle
-            bridge?.registerFeedbackThreads(self, handle: handle)
-        } catch {
+        let outcome = await core.subscribeFeedbackThreads(coordinate: coordinate)
+        guard outcome.error.isEmpty else {
             // Subscription failure leaves cache-only rendering working.
+            return
         }
+        subscriptionHandle = outcome.handle
+        bridge?.registerFeedbackThreads(self, handle: outcome.handle)
     }
 
     func stop() {

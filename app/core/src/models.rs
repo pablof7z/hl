@@ -35,6 +35,12 @@ pub struct StringListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct SubscriptionOutcome {
+    pub handle: u64,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct WhatsNewEntriesOutcome {
     pub entries: Vec<crate::whats_new::WhatsNewEntry>,
     pub error: String,

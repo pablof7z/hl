@@ -29,7 +29,7 @@ use crate::models::{
     FeedbackEventRecord, FeedbackThreadRecord, HighlightDraft, HighlightRecord,
     HydratedHighlight, MutationOutcome, NostrConnectOptions, PictureDraft, PictureRecord,
     PodcastPositionRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
-    StringListOutcome, WhatsNewEntriesOutcome,
+    StringListOutcome, SubscriptionOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -117,6 +117,19 @@ fn string_list_outcome(result: Result<Vec<String>, CoreError>) -> StringListOutc
         },
         Err(error) => StringListOutcome {
             values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn subscription_outcome(result: Result<u64, CoreError>) -> SubscriptionOutcome {
+    match result {
+        Ok(handle) => SubscriptionOutcome {
+            handle,
+            error: String::new(),
+        },
+        Err(error) => SubscriptionOutcome {
+            handle: 0,
             error: error.to_string(),
         },
     }
@@ -494,62 +507,74 @@ impl HighlighterCore {
     /// handle; fires CommunityUpserted / MembershipChanged deltas tagged
     /// with that handle. Re-uses the relay sub installed at login; this
     /// call is about setting up the nostrdb notification pump.
-    pub async fn subscribe_joined_communities(&self) -> Result<u64, CoreError> {
-        let user_pubkey = self.require_user_pubkey()?;
-        self.subscriptions.register(
-            &self.runtime,
-            SubscriptionKind::JoinedCommunities { user_pubkey },
-        )
+    pub async fn subscribe_joined_communities(&self) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let user_pubkey = self.require_user_pubkey()?;
+            self.subscriptions.register(
+                &self.runtime,
+                SubscriptionKind::JoinedCommunities { user_pubkey },
+            )
+        })())
     }
 
     /// Per-room view-scope subscription. Returns a handle; fires
     /// ArtifactUpserted / HighlightUpserted / HighlightShared for this
     /// specific group.
-    pub async fn subscribe_room(&self, group_id: String) -> Result<u64, CoreError> {
-        if group_id.trim().is_empty() {
-            return Err(CoreError::InvalidInput("group_id must not be empty".into()));
-        }
-        self.subscriptions
-            .register(&self.runtime, SubscriptionKind::Room { group_id })
+    pub async fn subscribe_room(&self, group_id: String) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            if group_id.trim().is_empty() {
+                return Err(CoreError::InvalidInput("group_id must not be empty".into()));
+            }
+            self.subscriptions
+                .register(&self.runtime, SubscriptionKind::Room { group_id })
+        })())
     }
 
     /// Per-room Discussions view-scope subscription. Returns a handle; fires
     /// `DiscussionUpserted` deltas for kind:11 threads in this group that
     /// carry the `t=discussion` marker.
-    pub async fn subscribe_room_discussions(&self, group_id: String) -> Result<u64, CoreError> {
-        if group_id.trim().is_empty() {
-            return Err(CoreError::InvalidInput("group_id must not be empty".into()));
-        }
-        self.subscriptions
-            .register(&self.runtime, SubscriptionKind::RoomDiscussions { group_id })
+    pub async fn subscribe_room_discussions(&self, group_id: String) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            if group_id.trim().is_empty() {
+                return Err(CoreError::InvalidInput("group_id must not be empty".into()));
+            }
+            self.subscriptions
+                .register(&self.runtime, SubscriptionKind::RoomDiscussions { group_id })
+        })())
     }
 
     /// Per-room Chat view-scope subscription. Returns a handle; fires
     /// `ChatMessageUpserted` deltas for kind:9 messages tagged
     /// `#h=<group_id>`.
-    pub async fn subscribe_room_chat(&self, group_id: String) -> Result<u64, CoreError> {
-        if group_id.trim().is_empty() {
-            return Err(CoreError::InvalidInput("group_id must not be empty".into()));
-        }
-        self.subscriptions
-            .register(&self.runtime, SubscriptionKind::RoomChat { group_id })
+    pub async fn subscribe_room_chat(&self, group_id: String) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            if group_id.trim().is_empty() {
+                return Err(CoreError::InvalidInput("group_id must not be empty".into()));
+            }
+            self.subscriptions
+                .register(&self.runtime, SubscriptionKind::RoomChat { group_id })
+        })())
     }
 
     /// Vault view-scope subscription for the current user's own highlights.
-    pub async fn subscribe_vault(&self) -> Result<u64, CoreError> {
-        let user_pubkey = self.require_user_pubkey()?;
-        self.subscriptions
-            .register(&self.runtime, SubscriptionKind::Vault { user_pubkey })
+    pub async fn subscribe_vault(&self) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let user_pubkey = self.require_user_pubkey()?;
+            self.subscriptions
+                .register(&self.runtime, SubscriptionKind::Vault { user_pubkey })
+        })())
     }
 
     /// Profile view-scope subscription. Fires `UserProfileUpdated` deltas
     /// when any event relevant to `pubkey_hex`'s profile arrives. Install on
     /// profile view appearance; `unsubscribe(handle)` on disappearance.
-    pub async fn subscribe_user_profile(&self, pubkey_hex: String) -> Result<u64, CoreError> {
-        let pubkey = PublicKey::from_hex(pubkey_hex.trim())
-            .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
-        self.subscriptions
-            .register(&self.runtime, SubscriptionKind::UserProfile { pubkey })
+    pub async fn subscribe_user_profile(&self, pubkey_hex: String) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let pubkey = PublicKey::from_hex(pubkey_hex.trim())
+                .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
+            self.subscriptions
+                .register(&self.runtime, SubscriptionKind::UserProfile { pubkey })
+        })())
     }
 
     /// Following Reads view-scope subscription. Snapshots the user's current
@@ -557,21 +582,23 @@ impl HighlighterCore {
     /// (b) interactions by a follow against any kind:30023 content. Fires
     /// `FollowingReadsUpdated` deltas; the Swift store re-queries the feed.
     /// Install on tab appearance; `unsubscribe(handle)` on disappearance.
-    pub async fn subscribe_following_reads(&self) -> Result<u64, CoreError> {
-        let user_pubkey = self.require_user_pubkey()?;
-        let follow_hex_strings =
-            follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())?;
-        let follows_pks: Vec<PublicKey> = follow_hex_strings
-            .iter()
-            .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
-            .collect();
-        self.refresh_follows_nip65_subscription(&follows_pks);
-        self.subscriptions.register(
-            &self.runtime,
-            SubscriptionKind::FollowingReads {
-                follows: follows_pks,
-            },
-        )
+    pub async fn subscribe_following_reads(&self) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let user_pubkey = self.require_user_pubkey()?;
+            let follow_hex_strings =
+                follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())?;
+            let follows_pks: Vec<PublicKey> = follow_hex_strings
+                .iter()
+                .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
+                .collect();
+            self.refresh_follows_nip65_subscription(&follows_pks);
+            self.subscriptions.register(
+                &self.runtime,
+                SubscriptionKind::FollowingReads {
+                    follows: follows_pks,
+                },
+            )
+        })())
     }
 
     /// Highlights home-feed view-scope subscription. Snapshots the user's
@@ -579,30 +606,32 @@ impl HighlighterCore {
     /// but we want our own highlights in the home feed) and joined-group
     /// ids, then listens for kind:9802 events authored by anyone in that
     /// set or tagged into any joined room.
-    pub async fn subscribe_following_highlights(&self) -> Result<u64, CoreError> {
-        let user_pubkey = self.require_user_pubkey()?;
-        let follow_hex_strings =
-            follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())?;
-        let mut follows_pks: Vec<PublicKey> = follow_hex_strings
-            .iter()
-            .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
-            .collect();
-        if !follows_pks.iter().any(|pk| *pk == user_pubkey) {
-            follows_pks.push(user_pubkey);
-        }
-        self.refresh_follows_nip65_subscription(&follows_pks);
-        let joined = groups::query_joined_communities_from_ndb(
-            self.runtime.ndb(),
-            &user_pubkey.to_hex(),
-        )?;
-        let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
-        self.subscriptions.register(
-            &self.runtime,
-            SubscriptionKind::FollowingHighlights {
-                follows: follows_pks,
-                group_ids,
-            },
-        )
+    pub async fn subscribe_following_highlights(&self) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let user_pubkey = self.require_user_pubkey()?;
+            let follow_hex_strings =
+                follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())?;
+            let mut follows_pks: Vec<PublicKey> = follow_hex_strings
+                .iter()
+                .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
+                .collect();
+            if !follows_pks.iter().any(|pk| *pk == user_pubkey) {
+                follows_pks.push(user_pubkey);
+            }
+            self.refresh_follows_nip65_subscription(&follows_pks);
+            let joined = groups::query_joined_communities_from_ndb(
+                self.runtime.ndb(),
+                &user_pubkey.to_hex(),
+            )?;
+            let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
+            self.subscriptions.register(
+                &self.runtime,
+                SubscriptionKind::FollowingHighlights {
+                    follows: follows_pks,
+                    group_ids,
+                },
+            )
+        })())
     }
 
     /// Article-reader view-scope subscription. Fires `ArticleUpdated` deltas
@@ -613,25 +642,27 @@ impl HighlighterCore {
         &self,
         pubkey_hex: String,
         d_tag: String,
-    ) -> Result<u64, CoreError> {
-        let pubkey_hex = pubkey_hex.trim();
-        let d_tag = d_tag.trim();
-        if pubkey_hex.is_empty() || d_tag.is_empty() {
-            return Err(CoreError::InvalidInput(
-                "pubkey_hex and d_tag must not be empty".into(),
-            ));
-        }
-        let author = PublicKey::from_hex(pubkey_hex)
-            .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
-        let address = format!("30023:{}:{}", pubkey_hex, d_tag);
-        self.subscriptions.register(
-            &self.runtime,
-            SubscriptionKind::Article {
-                author,
-                d_tag: d_tag.to_string(),
-                address,
-            },
-        )
+    ) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let pubkey_hex = pubkey_hex.trim();
+            let d_tag = d_tag.trim();
+            if pubkey_hex.is_empty() || d_tag.is_empty() {
+                return Err(CoreError::InvalidInput(
+                    "pubkey_hex and d_tag must not be empty".into(),
+                ));
+            }
+            let author = PublicKey::from_hex(pubkey_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
+            let address = format!("30023:{}:{}", pubkey_hex, d_tag);
+            self.subscriptions.register(
+                &self.runtime,
+                SubscriptionKind::Article {
+                    author,
+                    d_tag: d_tag.to_string(),
+                    address,
+                },
+            )
+        })())
     }
 
     /// Feedback-threads subscription for the shake-to-share surface. Fires
@@ -641,19 +672,21 @@ impl HighlighterCore {
     pub async fn subscribe_feedback_threads(
         &self,
         coordinate: String,
-    ) -> Result<u64, CoreError> {
-        let coordinate = coordinate.trim();
-        if coordinate.is_empty() {
-            return Err(CoreError::InvalidInput("coordinate must not be empty".into()));
-        }
-        let user_pubkey = self.require_user_pubkey()?;
-        self.subscriptions.register(
-            &self.runtime,
-            SubscriptionKind::FeedbackThreads {
-                coordinate: coordinate.to_string(),
-                current_user_pubkey: user_pubkey,
-            },
-        )
+    ) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let coordinate = coordinate.trim();
+            if coordinate.is_empty() {
+                return Err(CoreError::InvalidInput("coordinate must not be empty".into()));
+            }
+            let user_pubkey = self.require_user_pubkey()?;
+            self.subscriptions.register(
+                &self.runtime,
+                SubscriptionKind::FeedbackThreads {
+                    coordinate: coordinate.to_string(),
+                    current_user_pubkey: user_pubkey,
+                },
+            )
+        })())
     }
 
     /// Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
@@ -661,17 +694,19 @@ impl HighlighterCore {
     pub async fn subscribe_feedback_thread(
         &self,
         root_event_id: String,
-    ) -> Result<u64, CoreError> {
-        let root_event_id = root_event_id.trim();
-        if root_event_id.is_empty() {
-            return Err(CoreError::InvalidInput(
-                "root_event_id must not be empty".into(),
-            ));
-        }
-        let root = EventId::from_hex(root_event_id)
-            .map_err(|e| CoreError::InvalidInput(format!("invalid event id: {e}")))?;
-        self.subscriptions
-            .register(&self.runtime, SubscriptionKind::FeedbackThread { root_event_id: root })
+    ) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let root_event_id = root_event_id.trim();
+            if root_event_id.is_empty() {
+                return Err(CoreError::InvalidInput(
+                    "root_event_id must not be empty".into(),
+                ));
+            }
+            let root = EventId::from_hex(root_event_id)
+                .map_err(|e| CoreError::InvalidInput(format!("invalid event id: {e}")))?;
+            self.subscriptions
+                .register(&self.runtime, SubscriptionKind::FeedbackThread { root_event_id: root })
+        })())
     }
 
     /// Drop a subscription by handle. Idempotent.
@@ -1091,22 +1126,26 @@ impl HighlighterCore {
     /// `SearchArticlesUpdated { query }` deltas as matching events ingest,
     /// and the Swift store responds by re-running `search_articles` locally
     /// to merge the new events into its Articles bucket.
-    pub async fn subscribe_article_search(&self, query: String) -> Result<u64, CoreError> {
-        let trimmed = query.trim().to_string();
-        if trimmed.is_empty() {
-            return Err(CoreError::InvalidInput("search query must not be empty".into()));
+    pub async fn subscribe_article_search(&self, query: String) -> SubscriptionOutcome {
+        let result: Result<u64, CoreError> = async {
+            let trimmed = query.trim().to_string();
+            if trimmed.is_empty() {
+                return Err(CoreError::InvalidInput("search query must not be empty".into()));
+            }
+            let relays = self.search_relays().await?;
+            if relays.is_empty() {
+                return Err(CoreError::InvalidInput("no search relays resolved".into()));
+            }
+            self.subscriptions.register(
+                &self.runtime,
+                SubscriptionKind::SearchArticles {
+                    query: trimmed,
+                    relays,
+                },
+            )
         }
-        let relays = self.search_relays().await?;
-        if relays.is_empty() {
-            return Err(CoreError::InvalidInput("no search relays resolved".into()));
-        }
-        self.subscriptions.register(
-            &self.runtime,
-            SubscriptionKind::SearchArticles {
-                query: trimmed,
-                relays,
-            },
-        )
+        .await;
+        subscription_outcome(result)
     }
 
     // -- Bookmarks (NIP-51 kind:10003) -----------------------------------
@@ -1194,20 +1233,22 @@ impl HighlighterCore {
     /// Open a live subscription on the current user's kind:10003 bookmark
     /// events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
     /// Swift bookmarks store re-queries on each.
-    pub async fn subscribe_bookmarks(&self) -> Result<u64, CoreError> {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .ok_or(CoreError::NotInitialized)?;
-        let pk = PublicKey::from_hex(&user_hex)
-            .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
-        self.subscriptions.register(
-            &self.runtime,
-            SubscriptionKind::Bookmarks { user_pubkey: pk },
-        )
+    pub async fn subscribe_bookmarks(&self) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let user_hex = self
+                .inner
+                .read()
+                .session
+                .current_user()
+                .map(|u| u.pubkey)
+                .ok_or(CoreError::NotInitialized)?;
+            let pk = PublicKey::from_hex(&user_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
+            self.subscriptions.register(
+                &self.runtime,
+                SubscriptionKind::Bookmarks { user_pubkey: pk },
+            )
+        })())
     }
 
     // -- NIP-51 Bookmark sets (kind:30003) / Curation sets (kind:30004) -----
@@ -1281,24 +1322,28 @@ impl HighlighterCore {
 
     /// Open a live subscription for the current user's kind:30003/30004 sets.
     /// Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
-    pub async fn subscribe_bookmark_sets(&self) -> Result<u64, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
-        let pk = PublicKey::from_hex(&user_hex)
-            .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
-        self.subscriptions.register(&self.runtime, SubscriptionKind::BookmarkSets { user_pubkey: pk })
+    pub async fn subscribe_bookmark_sets(&self) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let user_hex = self.inner.read().session.current_user()
+                .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
+            let pk = PublicKey::from_hex(&user_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
+            self.subscriptions.register(&self.runtime, SubscriptionKind::BookmarkSets { user_pubkey: pk })
+        })())
     }
 
     /// Open a live subscription for kind:30004 sets from followed authors.
     /// Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
-    pub async fn subscribe_following_curation_sets(&self) -> Result<u64, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
-        let follow_hexes = crate::follows::query_follows(self.runtime.ndb(), &user_hex)?;
-        let follows: Vec<PublicKey> = follow_hexes.iter()
-            .filter_map(|h| PublicKey::from_hex(h).ok())
-            .collect();
-        self.subscriptions.register(&self.runtime, SubscriptionKind::FollowingCurationSets { follows })
+    pub async fn subscribe_following_curation_sets(&self) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let user_hex = self.inner.read().session.current_user()
+                .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
+            let follow_hexes = crate::follows::query_follows(self.runtime.ndb(), &user_hex)?;
+            let follows: Vec<PublicKey> = follow_hexes.iter()
+                .filter_map(|h| PublicKey::from_hex(h).ok())
+                .collect();
+            self.subscriptions.register(&self.runtime, SubscriptionKind::FollowingCurationSets { follows })
+        })())
     }
 
     // -- NIP-B0 Web bookmarks (kind:39701) -----------------------------------
@@ -1312,12 +1357,14 @@ impl HighlighterCore {
 
     /// Open a live subscription for the current user's NIP-B0 kind:39701 events.
     /// Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
-    pub async fn subscribe_web_bookmarks(&self) -> Result<u64, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
-        let pk = PublicKey::from_hex(&user_hex)
-            .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
-        self.subscriptions.register(&self.runtime, SubscriptionKind::WebBookmarks { user_pubkey: pk })
+    pub async fn subscribe_web_bookmarks(&self) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let user_hex = self.inner.read().session.current_user()
+                .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
+            let pk = PublicKey::from_hex(&user_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
+            self.subscriptions.register(&self.runtime, SubscriptionKind::WebBookmarks { user_pubkey: pk })
+        })())
     }
 
     pub async fn lookup_isbn(&self, isbn: String) -> Result<ArtifactPreview, CoreError> {
@@ -1831,11 +1878,13 @@ impl HighlighterCore {
     pub async fn subscribe_nostr_entity(
         &self,
         entity: crate::nostr_entities::NostrEntityRef,
-    ) -> Result<u64, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        let _ = crate::nostr_entities::relay_filter(&entity)?;
-        self.subscriptions
-            .register(&self.runtime, SubscriptionKind::NostrEntity { entity })
+    ) -> SubscriptionOutcome {
+        subscription_outcome((|| {
+            let _ = self.require_user_pubkey()?;
+            let _ = crate::nostr_entities::relay_filter(&entity)?;
+            self.subscriptions
+                .register(&self.runtime, SubscriptionKind::NostrEntity { entity })
+        })())
     }
 
     /// Pubkeys (hex) the current user follows per their cached kind:3 contact
@@ -2013,8 +2062,8 @@ impl HighlighterCore {
     /// event bus. Relay status changes are app-scoped and ride
     /// `subscription_id == 0`, so this returns `0` unconditionally — the
     /// value is a stable contract, not a unique sub id.
-    pub async fn subscribe_relay_status(&self) -> Result<u64, CoreError> {
-        Ok(0)
+    pub async fn subscribe_relay_status(&self) -> SubscriptionOutcome {
+        subscription_outcome(Ok(0))
     }
 
     /// Nudge the relay pool to attempt a reconnect on every disconnected

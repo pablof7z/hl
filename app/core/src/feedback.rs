@@ -799,10 +799,11 @@ mod tests {
 
         // Step 2: open the subscription — this is where ensure_feedback_relay
         // adds + connects the relay and the REQ goes out.
-        let _handle = core
+        let outcome = core
             .subscribe_feedback_thread(root_hex.clone())
-            .await
-            .expect("subscribe");
+            .await;
+        assert!(outcome.error.is_empty(), "subscribe: {}", outcome.error);
+        let _handle = outcome.handle;
 
         // Wait for the relay to backfill historical events.
         tokio::time::sleep(std::time::Duration::from_secs(4)).await;

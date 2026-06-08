@@ -47,8 +47,9 @@ final class HighlightsStore {
 
     private func installSubscription() async {
         guard subscriptionHandle == nil, let bridge = eventBridge else { return }
-        guard let handle = try? await safeCore.subscribeFollowingHighlights() else { return }
-        subscriptionHandle = handle
-        bridge.registerHighlights(self, handle: handle)
+        let outcome = await safeCore.subscribeFollowingHighlights()
+        guard outcome.error.isEmpty else { return }
+        subscriptionHandle = outcome.handle
+        bridge.registerHighlights(self, handle: outcome.handle)
     }
 }

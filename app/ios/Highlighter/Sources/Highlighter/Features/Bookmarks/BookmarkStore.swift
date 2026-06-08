@@ -31,17 +31,20 @@ final class BookmarkStore {
         self.core = core
         self.bridge = bridge
 
-        if let h = try? await core.subscribeBookmarkSets() {
-            setsHandle = h
-            bridge.registerBookmarkStore(self, handle: h)
+        let setsOutcome = await core.subscribeBookmarkSets()
+        if setsOutcome.error.isEmpty {
+            setsHandle = setsOutcome.handle
+            bridge.registerBookmarkStore(self, handle: setsOutcome.handle)
         }
-        if let h = try? await core.subscribeFollowingCurationSets() {
-            followingHandle = h
-            bridge.registerBookmarkStore(self, handle: h)
+        let followingOutcome = await core.subscribeFollowingCurationSets()
+        if followingOutcome.error.isEmpty {
+            followingHandle = followingOutcome.handle
+            bridge.registerBookmarkStore(self, handle: followingOutcome.handle)
         }
-        if let h = try? await core.subscribeWebBookmarks() {
-            webHandle = h
-            bridge.registerBookmarkStore(self, handle: h)
+        let webOutcome = await core.subscribeWebBookmarks()
+        if webOutcome.error.isEmpty {
+            webHandle = webOutcome.handle
+            bridge.registerBookmarkStore(self, handle: webOutcome.handle)
         }
 
         await withTaskGroup(of: Void.self) { group in

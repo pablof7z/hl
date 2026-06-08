@@ -196,9 +196,10 @@ final class HighlighterStore {
             profileCache[pubkeyHex] = profile
         }
         guard profileCacheHandles[pubkeyHex] == nil else { return }
-        if let handle = try? await safeCore.subscribeUserProfile(pubkeyHex: pubkeyHex) {
-            profileCacheHandles[pubkeyHex] = handle
-            eventBridge?.registerProfileCache(pubkeyHex: pubkeyHex, handle: handle)
+        let profileOutcome = await safeCore.subscribeUserProfile(pubkeyHex: pubkeyHex)
+        if profileOutcome.error.isEmpty {
+            profileCacheHandles[pubkeyHex] = profileOutcome.handle
+            eventBridge?.registerProfileCache(pubkeyHex: pubkeyHex, handle: profileOutcome.handle)
         }
     }
 
@@ -331,8 +332,9 @@ final class HighlighterStore {
         // MembershipChanged deltas (subscription_id == new handle, routed
         // by EventBridge).
         if joinedCommunitiesHandle == nil {
-            if let handle = try? await safeCore.subscribeJoinedCommunities() {
-                joinedCommunitiesHandle = handle
+            let joinedOutcome = await safeCore.subscribeJoinedCommunities()
+            if joinedOutcome.error.isEmpty {
+                joinedCommunitiesHandle = joinedOutcome.handle
                 // Joined-communities deltas are dispatched via the appStore
                 // path in EventBridge (not per-view). No store registration
                 // needed; we only hold the handle so logout can unsubscribe.
@@ -344,8 +346,9 @@ final class HighlighterStore {
         // `BookmarksUpdated` delta that refreshes the set.
         await refreshBookmarks()
         if bookmarksHandle == nil {
-            if let handle = try? await safeCore.subscribeBookmarks() {
-                bookmarksHandle = handle
+            let bookmarksOutcome = await safeCore.subscribeBookmarks()
+            if bookmarksOutcome.error.isEmpty {
+                bookmarksHandle = bookmarksOutcome.handle
             }
         }
     }

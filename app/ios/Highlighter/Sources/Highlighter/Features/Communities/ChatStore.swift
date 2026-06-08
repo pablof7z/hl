@@ -36,14 +36,14 @@ final class ChatPresenceProbe {
             onActivity()
         }
 
-        do {
-            let handle = try await core.subscribeRoomChat(groupId: groupId)
-            subscriptionHandle = handle
-            bridge?.registerChatPresence(self, handle: handle)
-        } catch {
+        let presenceOutcome = await core.subscribeRoomChat(groupId: groupId)
+        guard presenceOutcome.error.isEmpty else {
             // No live promotion if the subscription failed; the cache peek
             // result still applies.
+            return
         }
+        subscriptionHandle = presenceOutcome.handle
+        bridge?.registerChatPresence(self, handle: presenceOutcome.handle)
     }
 
     func stop() {
@@ -106,13 +106,13 @@ final class ChatStore {
         }
         isLoading = false
 
-        do {
-            let handle = try await core.subscribeRoomChat(groupId: groupId)
-            subscriptionHandle = handle
-            bridge?.registerChat(self, handle: handle)
-        } catch {
+        let outcome = await core.subscribeRoomChat(groupId: groupId)
+        guard outcome.error.isEmpty else {
             // Subscription failure leaves cache-only rendering working.
+            return
         }
+        subscriptionHandle = outcome.handle
+        bridge?.registerChat(self, handle: outcome.handle)
     }
 
     /// Expand the loaded window by one page. Replaces `messages` with a
