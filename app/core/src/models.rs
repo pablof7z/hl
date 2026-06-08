@@ -167,6 +167,18 @@ pub struct ProfileListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct ReactionListOutcome {
+    pub values: Vec<crate::reactions::ReactionRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ReactionOutcome {
+    pub value: Option<crate::reactions::ReactionRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct PictureOutcome {
     pub value: Option<PictureRecord>,
     pub error: String,

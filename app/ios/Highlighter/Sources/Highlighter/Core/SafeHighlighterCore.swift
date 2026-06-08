@@ -169,16 +169,16 @@ actor SafeHighlighterCore {
 
     // MARK: - Reactions (kind:7)
 
-    func getReactionsForEvent(targetEventId: String, limit: UInt32) async throws -> [ReactionRecord] {
-        try await core.getReactionsForEvent(targetEventId: targetEventId, limit: limit)
+    func getReactionsForEvent(targetEventId: String, limit: UInt32) async -> ReactionListOutcome {
+        await core.getReactionsForEvent(targetEventId: targetEventId, limit: limit)
     }
 
-    func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String) async throws -> ReactionRecord {
-        try await core.publishReaction(eventId: eventId, authorPubkeyHex: authorPubkeyHex, targetKind: targetKind, content: content)
+    func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String) async -> ReactionOutcome {
+        await core.publishReaction(eventId: eventId, authorPubkeyHex: authorPubkeyHex, targetKind: targetKind, content: content)
     }
 
-    func unpublishReaction(reactionEventId: String) async throws -> String {
-        try await core.unpublishReaction(reactionEventId: reactionEventId)
+    func unpublishReaction(reactionEventId: String) async -> StringOutcome {
+        await core.unpublishReaction(reactionEventId: reactionEventId)
     }
 
     // MARK: - Event bookmarks (kind:10003 note bookmarks)

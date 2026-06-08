@@ -34,9 +34,10 @@ use crate::models::{
     GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
     HighlightRecord, HydratedHighlight, HydratedHighlightListOutcome, MutationOutcome,
     NostrConnectOptions, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
-    ProfileListOutcome, ProfileMetadata, ReadingFeedItem, RoomRecommendation, StringListOutcome,
-    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome,
-    WebBookmarkRecord, WhatsNewEntriesOutcome,
+    ProfileListOutcome, ProfileMetadata, ReactionListOutcome, ReactionOutcome, ReadingFeedItem,
+    RoomRecommendation, StringListOutcome, StringOutcome, SubscriptionOutcome,
+    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -422,6 +423,36 @@ fn profile_list_outcome(result: Result<Vec<ProfileMetadata>, CoreError>) -> Prof
         },
         Err(error) => ProfileListOutcome {
             values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn reaction_list_outcome(
+    result: Result<Vec<crate::reactions::ReactionRecord>, CoreError>,
+) -> ReactionListOutcome {
+    match result {
+        Ok(values) => ReactionListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => ReactionListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn reaction_outcome(
+    result: Result<crate::reactions::ReactionRecord, CoreError>,
+) -> ReactionOutcome {
+    match result {
+        Ok(value) => ReactionOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => ReactionOutcome {
+            value: None,
             error: error.to_string(),
         },
     }
@@ -1292,12 +1323,12 @@ impl HighlighterCore {
         &self,
         target_event_id: String,
         limit: u32,
-    ) -> Result<Vec<crate::reactions::ReactionRecord>, CoreError> {
-        crate::reactions::query_reactions_for_event(
+    ) -> ReactionListOutcome {
+        reaction_list_outcome(crate::reactions::query_reactions_for_event(
             self.runtime.ndb(),
             target_event_id.trim(),
             limit,
-        )
+        ))
     }
 
     /// Publish a kind:7 reaction targeting `event_id` authored by
@@ -1309,22 +1340,30 @@ impl HighlighterCore {
         author_pubkey_hex: String,
         target_kind: u16,
         content: String,
-    ) -> Result<crate::reactions::ReactionRecord, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        crate::reactions::publish_reaction(
-            &self.runtime,
-            event_id.trim(),
-            author_pubkey_hex.trim(),
-            target_kind,
-            content.trim(),
-        )
-        .await
+    ) -> ReactionOutcome {
+        let result: Result<crate::reactions::ReactionRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            crate::reactions::publish_reaction(
+                &self.runtime,
+                event_id.trim(),
+                author_pubkey_hex.trim(),
+                target_kind,
+                content.trim(),
+            )
+            .await
+        }
+        .await;
+        reaction_outcome(result)
     }
 
     /// Delete one of the user's own kind:7 reactions via NIP-09.
-    pub async fn unpublish_reaction(&self, reaction_event_id: String) -> Result<String, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        crate::reactions::unpublish_reaction(&self.runtime, reaction_event_id.trim()).await
+    pub async fn unpublish_reaction(&self, reaction_event_id: String) -> StringOutcome {
+        let result: Result<String, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            crate::reactions::unpublish_reaction(&self.runtime, reaction_event_id.trim()).await
+        }
+        .await;
+        string_outcome(result)
     }
 
     pub async fn get_user_highlights(

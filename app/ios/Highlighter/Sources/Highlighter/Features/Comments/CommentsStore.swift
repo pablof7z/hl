@@ -78,7 +78,8 @@ final class CommentsStore {
             for r in records {
                 let id = r.eventId
                 group.addTask {
-                    let reactions = try? await captured.getReactionsForEvent(targetEventId: id, limit: 128)
+                    let reactionOutcome = await captured.getReactionsForEvent(targetEventId: id, limit: 128)
+                    let reactions = reactionOutcome.error.isEmpty ? reactionOutcome.values : nil
                     let bookmarkOutcome = await captured.isEventBookmarked(eventIdHex: id)
                     let bookmarked = bookmarkOutcome.error.isEmpty ? bookmarkOutcome.value : nil
                     return (id, reactions, bookmarked)
@@ -181,29 +182,30 @@ final class CommentsStore {
             myLikeEventIds[id] = "pending"
         }
 
-        do {
-            if alreadyLiked, let myReactionId = myLikeEventIds[id], myReactionId != "pending" {
-                _ = try await core.unpublishReaction(reactionEventId: myReactionId)
+        if alreadyLiked, let myReactionId = myLikeEventIds[id], myReactionId != "pending" {
+            let outcome = await core.unpublishReaction(reactionEventId: myReactionId)
+            if outcome.error.isEmpty {
                 myLikeEventIds.removeValue(forKey: id)
-            } else {
-                let kind = UInt16(1111)
-                let reaction = try await core.publishReaction(
-                    eventId: id,
-                    authorPubkeyHex: comment.pubkey,
-                    targetKind: kind,
-                    content: "+"
-                )
+                return
+            }
+        } else {
+            let kind = UInt16(1111)
+            let outcome = await core.publishReaction(
+                eventId: id,
+                authorPubkeyHex: comment.pubkey,
+                targetKind: kind,
+                content: "+"
+            )
+            if outcome.error.isEmpty, let reaction = outcome.value {
                 myLikeEventIds[id] = reaction.eventId
+                return
             }
-        } catch {
-            // Roll back on failure
-            likeCounts[id] = prevCount
-            if alreadyLiked {
-                // (we already had a reaction id; restore it if we still know it)
-                // Best effort: leave count restored.
-            } else {
-                myLikeEventIds.removeValue(forKey: id)
-            }
+        }
+
+        // Roll back on failure
+        likeCounts[id] = prevCount
+        if !alreadyLiked {
+            myLikeEventIds.removeValue(forKey: id)
         }
     }
 

@@ -976,7 +976,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     /**
      * All cached kind:7 reactions on `target_event_id`, newest first.
      */
-    func getReactionsForEvent(targetEventId: String, limit: UInt32) async throws  -> [ReactionRecord]
+    func getReactionsForEvent(targetEventId: String, limit: UInt32) async  -> ReactionListOutcome
 
     /**
      * Recent books across the user's joined communities — drives the
@@ -1156,7 +1156,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `author_pubkey_hex` of `target_kind`. `content` is the reaction
      * body — pass `"+"` for a like.
      */
-    func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String) async throws  -> ReactionRecord
+    func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String) async  -> ReactionOutcome
 
     /**
      * Nudge the relay pool to attempt a reconnect on every disconnected
@@ -1437,7 +1437,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     /**
      * Delete one of the user's own kind:7 reactions via NIP-09.
      */
-    func unpublishReaction(reactionEventId: String) async throws  -> String
+    func unpublishReaction(reactionEventId: String) async  -> StringOutcome
 
     /**
      * Drop a subscription by handle. Idempotent.
@@ -2351,9 +2351,9 @@ open func getProjectFirstAgentPubkey(coordinate: String)async throws  -> String?
     /**
      * All cached kind:7 reactions on `target_event_id`, newest first.
      */
-open func getReactionsForEvent(targetEventId: String, limit: UInt32)async throws  -> [ReactionRecord]  {
+open func getReactionsForEvent(targetEventId: String, limit: UInt32)async  -> ReactionListOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_reactions_for_event(
                     self.uniffiClonePointer(),
@@ -2363,8 +2363,9 @@ open func getReactionsForEvent(targetEventId: String, limit: UInt32)async throws
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeReactionRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeReactionListOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3075,9 +3076,9 @@ open func publishPicture(draft: PictureDraft)async  -> PictureOutcome  {
      * `author_pubkey_hex` of `target_kind`. `content` is the reaction
      * body — pass `"+"` for a like.
      */
-open func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String)async throws  -> ReactionRecord  {
+open func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String)async  -> ReactionOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_publish_reaction(
                     self.uniffiClonePointer(),
@@ -3087,8 +3088,9 @@ open func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: 
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeReactionRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeReactionOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -4068,9 +4070,9 @@ open func toggleEventBookmark(eventIdHex: String)async  -> BoolOutcome  {
     /**
      * Delete one of the user's own kind:7 reactions via NIP-09.
      */
-open func unpublishReaction(reactionEventId: String)async throws  -> String  {
+open func unpublishReaction(reactionEventId: String)async  -> StringOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_unpublish_reaction(
                     self.uniffiClonePointer(),
@@ -4080,8 +4082,9 @@ open func unpublishReaction(reactionEventId: String)async throws  -> String  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeStringOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -9318,6 +9321,146 @@ public func FfiConverterTypeProfileMetadata_lower(_ value: ProfileMetadata) -> R
 }
 
 
+public struct ReactionListOutcome {
+    public var values: [ReactionRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [ReactionRecord], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ReactionListOutcome: Sendable {}
+#endif
+
+
+extension ReactionListOutcome: Equatable, Hashable {
+    public static func ==(lhs: ReactionListOutcome, rhs: ReactionListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReactionListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReactionListOutcome {
+        return
+            try ReactionListOutcome(
+                values: FfiConverterSequenceTypeReactionRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReactionListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeReactionRecord.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionListOutcome_lift(_ buf: RustBuffer) throws -> ReactionListOutcome {
+    return try FfiConverterTypeReactionListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionListOutcome_lower(_ value: ReactionListOutcome) -> RustBuffer {
+    return FfiConverterTypeReactionListOutcome.lower(value)
+}
+
+
+public struct ReactionOutcome {
+    public var value: ReactionRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: ReactionRecord?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ReactionOutcome: Sendable {}
+#endif
+
+
+extension ReactionOutcome: Equatable, Hashable {
+    public static func ==(lhs: ReactionOutcome, rhs: ReactionOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReactionOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReactionOutcome {
+        return
+            try ReactionOutcome(
+                value: FfiConverterOptionTypeReactionRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReactionOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeReactionRecord.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionOutcome_lift(_ buf: RustBuffer) throws -> ReactionOutcome {
+    return try FfiConverterTypeReactionOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionOutcome_lower(_ value: ReactionOutcome) -> RustBuffer {
+    return FfiConverterTypeReactionOutcome.lower(value)
+}
+
+
 /**
  * One row of cached reaction data — what the UI needs to render
  * "12 likes · I liked this".
@@ -12285,6 +12428,30 @@ fileprivate struct FfiConverterOptionTypeProfileMetadata: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeReactionRecord: FfiConverterRustBuffer {
+    typealias SwiftType = ReactionRecord?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeReactionRecord.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeReactionRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
     typealias SwiftType = [UInt32]
 
@@ -13078,7 +13245,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_project_first_agent_pubkey() != 8227) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_reactions_for_event() != 45696) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_reactions_for_event() != 29591) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 59174) {
@@ -13195,7 +13362,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_picture() != 49633) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_reaction() != 53660) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_reaction() != 55916) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 18338) {
@@ -13342,7 +13509,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark() != 58235) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_unpublish_reaction() != 4906) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_unpublish_reaction() != 52811) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_unsubscribe() != 55013) {

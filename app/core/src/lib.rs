@@ -62,10 +62,10 @@ pub use models::{
     HighlightDraft, HighlightListOutcome,
     HighlightOutcome, HighlightRecord, HydratedHighlight, HydratedHighlightListOutcome,
     MutationOutcome, NostrConnectOptions, PictureDraft, PictureOutcome, PictureRecord,
-    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ReadingFeedItem,
-    RoomRecommendation, RoomRecommendationReason, StringListOutcome,
-    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome,
-    WebBookmarkRecord, WhatsNewEntriesOutcome,
+    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ReactionListOutcome,
+    ReactionOutcome, ReadingFeedItem, RoomRecommendation, RoomRecommendationReason,
+    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebBookmarkListOutcome, WebBookmarkRecord, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
 pub use podcast_transcript::TranscriptSegment;
