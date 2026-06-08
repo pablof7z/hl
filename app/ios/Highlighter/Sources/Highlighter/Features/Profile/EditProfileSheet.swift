@@ -429,26 +429,26 @@ struct EditProfileSheet: View {
         saving = true
         Task {
             defer { Task { @MainActor in saving = false } }
-            do {
-                let updated = try await appStore.safeCore.updateProfile(
-                    name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                    displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
-                    about: about.trimmingCharacters(in: .whitespacesAndNewlines),
-                    picture: picture.trimmingCharacters(in: .whitespacesAndNewlines),
-                    banner: banner.trimmingCharacters(in: .whitespacesAndNewlines),
-                    nip05: nip05.trimmingCharacters(in: .whitespacesAndNewlines),
-                    website: website.trimmingCharacters(in: .whitespacesAndNewlines),
-                    lud16: lud16.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
+            let outcome = await appStore.safeCore.updateProfile(
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+                about: about.trimmingCharacters(in: .whitespacesAndNewlines),
+                picture: picture.trimmingCharacters(in: .whitespacesAndNewlines),
+                banner: banner.trimmingCharacters(in: .whitespacesAndNewlines),
+                nip05: nip05.trimmingCharacters(in: .whitespacesAndNewlines),
+                website: website.trimmingCharacters(in: .whitespacesAndNewlines),
+                lud16: lud16.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+            guard outcome.error.isEmpty, let updated = outcome.value else {
                 await MainActor.run {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    onSaved(updated)
-                    dismiss()
+                    self.error = outcome.error.isEmpty ? "Unable to update profile." : outcome.error
                 }
-            } catch {
-                await MainActor.run {
-                    self.error = error.localizedDescription
-                }
+                return
+            }
+            await MainActor.run {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                onSaved(updated)
+                dismiss()
             }
         }
     }

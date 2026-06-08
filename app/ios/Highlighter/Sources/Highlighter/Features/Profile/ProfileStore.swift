@@ -68,7 +68,8 @@ final class ProfileStore {
 
     func loadAll() async {
         async let profileTask: ProfileMetadata? = {
-            try? await safeCore.getUserProfile(pubkeyHex: pubkey)
+            let outcome = await safeCore.getUserProfile(pubkeyHex: pubkey)
+            return outcome.error.isEmpty ? outcome.value : nil
         }()
         async let articlesTask: [ArticleRecord] = {
             (try? await safeCore.getUserArticles(pubkeyHex: pubkey)) ?? []
@@ -101,7 +102,8 @@ final class ProfileStore {
     func applyUpdate(kind: UInt32) async {
         switch kind {
         case 0:
-            if let p = try? await safeCore.getUserProfile(pubkeyHex: pubkey) {
+            let outcome = await safeCore.getUserProfile(pubkeyHex: pubkey)
+            if outcome.error.isEmpty, let p = outcome.value {
                 self.profile = p
             }
         case 3:

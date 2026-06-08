@@ -84,7 +84,8 @@ final class ArticleReaderStore {
             (try? await safeCore.getHighlightsForArticle(address: target.address)) ?? []
         }()
         async let profileTask: ProfileMetadata? = {
-            try? await safeCore.getUserProfile(pubkeyHex: target.pubkey)
+            let outcome = await safeCore.getUserProfile(pubkeyHex: target.pubkey)
+            return outcome.error.isEmpty ? outcome.value : nil
         }()
 
         let (article, highlights, profile) = await (articleTask, highlightsTask, profileTask)

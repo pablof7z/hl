@@ -209,6 +209,24 @@ pub struct ProfileListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileOutcome {
+    pub value: Option<ProfileMetadata>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NostrEntityRefOutcome {
+    pub value: Option<crate::nostr_entities::NostrEntityRef>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NostrEntityEventOutcome {
+    pub value: Option<crate::nostr_entities::NostrEntityEvent>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct ReactionListOutcome {
     pub values: Vec<crate::reactions::ReactionRecord>,
     pub error: String,

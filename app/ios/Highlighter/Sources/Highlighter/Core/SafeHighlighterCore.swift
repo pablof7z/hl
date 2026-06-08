@@ -310,12 +310,12 @@ actor SafeHighlighterCore {
 
     // MARK: - Profile reads
 
-    func getUserProfile(pubkeyHex: String) async throws -> ProfileMetadata? {
-        try await core.getUserProfile(pubkeyHex: pubkeyHex)
+    func getUserProfile(pubkeyHex: String) async -> ProfileOutcome {
+        await core.getUserProfile(pubkeyHex: pubkeyHex)
     }
 
-    func decodeNostrEntity(_ input: String) throws -> NostrEntityRef {
-        try core.decodeNostrEntity(input: input)
+    nonisolated func decodeNostrEntity(_ input: String) -> NostrEntityRefOutcome {
+        core.decodeNostrEntity(input: input)
     }
 
     /// Mint a NIP-19 `nevent` for a highlight share URL. Relay hints are
@@ -323,15 +323,15 @@ actor SafeHighlighterCore {
     func encodeHighlightShareNevent(
         eventIdHex: String,
         authorPubkeyHex: String
-    ) throws -> String {
-        try core.encodeHighlightShareNevent(
+    ) -> StringOutcome {
+        core.encodeHighlightShareNevent(
             eventIdHex: eventIdHex,
             authorPubkeyHex: authorPubkeyHex
         )
     }
 
-    func resolveNostrEntity(_ entity: NostrEntityRef) async throws -> NostrEntityEvent? {
-        try await core.resolveNostrEntity(entity: entity)
+    func resolveNostrEntity(_ entity: NostrEntityRef) async -> NostrEntityEventOutcome {
+        await core.resolveNostrEntity(entity: entity)
     }
 
     func subscribeNostrEntity(_ entity: NostrEntityRef) async -> SubscriptionOutcome {
@@ -347,8 +347,8 @@ actor SafeHighlighterCore {
         nip05: String,
         website: String,
         lud16: String
-    ) async throws -> ProfileMetadata {
-        try await core.updateProfile(
+    ) async -> ProfileOutcome {
+        await core.updateProfile(
             name: name,
             displayName: displayName,
             about: about,

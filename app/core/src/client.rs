@@ -33,9 +33,10 @@ use crate::models::{
     DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
     FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft,
     HighlightListOutcome, HighlightOutcome, HighlightRecord, HydratedHighlight,
-    HydratedHighlightListOutcome, MutationOutcome, NostrConnectOptions, OptionalStringOutcome,
-    PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome,
-    ProfileMetadata, ReactionListOutcome, ReactionOutcome, ReadingFeedItem,
+    HydratedHighlightListOutcome, MutationOutcome, NostrConnectOptions, NostrEntityEventOutcome,
+    NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord,
+    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome,
+    ReactionListOutcome, ReactionOutcome, ReadingFeedItem,
     RoomRecommendation, StringListOutcome, StringOutcome, SubscriptionOutcome,
     TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
     WhatsNewEntriesOutcome,
@@ -523,6 +524,62 @@ fn profile_list_outcome(result: Result<Vec<ProfileMetadata>, CoreError>) -> Prof
         },
         Err(error) => ProfileListOutcome {
             values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn profile_outcome(result: Result<ProfileMetadata, CoreError>) -> ProfileOutcome {
+    match result {
+        Ok(value) => ProfileOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => ProfileOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn optional_profile_outcome(result: Result<Option<ProfileMetadata>, CoreError>) -> ProfileOutcome {
+    match result {
+        Ok(value) => ProfileOutcome {
+            value,
+            error: String::new(),
+        },
+        Err(error) => ProfileOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn nostr_entity_ref_outcome(
+    result: Result<crate::nostr_entities::NostrEntityRef, CoreError>,
+) -> NostrEntityRefOutcome {
+    match result {
+        Ok(value) => NostrEntityRefOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => NostrEntityRefOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn nostr_entity_event_outcome(
+    result: Result<Option<crate::nostr_entities::NostrEntityEvent>, CoreError>,
+) -> NostrEntityEventOutcome {
+    match result {
+        Ok(value) => NostrEntityEventOutcome {
+            value,
+            error: String::new(),
+        },
+        Err(error) => NostrEntityEventOutcome {
+            value: None,
             error: error.to_string(),
         },
     }
@@ -1252,8 +1309,11 @@ impl HighlighterCore {
     pub async fn get_user_profile(
         &self,
         pubkey_hex: String,
-    ) -> Result<Option<ProfileMetadata>, CoreError> {
-        profile::query_profile_from_ndb(self.runtime.ndb(), pubkey_hex.trim())
+    ) -> ProfileOutcome {
+        optional_profile_outcome(profile::query_profile_from_ndb(
+            self.runtime.ndb(),
+            pubkey_hex.trim(),
+        ))
     }
 
     /// Publish a new kind:0 metadata event for the current user. Preserves
@@ -1272,20 +1332,24 @@ impl HighlighterCore {
         nip05: String,
         website: String,
         lud16: String,
-    ) -> Result<ProfileMetadata, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        profile::publish_profile(
-            &self.runtime,
-            &name,
-            &display_name,
-            &about,
-            &picture,
-            &banner,
-            &nip05,
-            &website,
-            &lud16,
-        )
-        .await
+    ) -> ProfileOutcome {
+        let result: Result<ProfileMetadata, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            profile::publish_profile(
+                &self.runtime,
+                &name,
+                &display_name,
+                &about,
+                &picture,
+                &banner,
+                &nip05,
+                &website,
+                &lud16,
+            )
+            .await
+        }
+        .await;
+        profile_outcome(result)
     }
 
     pub fn normalize_nip05_username(&self, input: String) -> String {
@@ -2403,8 +2467,8 @@ impl HighlighterCore {
     pub fn decode_nostr_entity(
         &self,
         input: String,
-    ) -> Result<crate::nostr_entities::NostrEntityRef, CoreError> {
-        crate::nostr_entities::decode_nostr_entity(&input)
+    ) -> NostrEntityRefOutcome {
+        nostr_entity_ref_outcome(crate::nostr_entities::decode_nostr_entity(&input))
     }
 
     /// Mint a NIP-19 `nevent` for a kind:9802 highlight share link. The
@@ -2414,13 +2478,13 @@ impl HighlighterCore {
         &self,
         event_id_hex: String,
         author_pubkey_hex: String,
-    ) -> Result<String, CoreError> {
-        crate::nostr_entities::encode_event_to_nevent(
+    ) -> StringOutcome {
+        string_outcome(crate::nostr_entities::encode_event_to_nevent(
             event_id_hex,
             Some(author_pubkey_hex),
             vec![crate::relays::highlighter_relay().to_string()],
             Some(9802),
-        )
+        ))
     }
 
     /// Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
@@ -2430,8 +2494,11 @@ impl HighlighterCore {
     pub async fn resolve_nostr_entity(
         &self,
         entity: crate::nostr_entities::NostrEntityRef,
-    ) -> Result<Option<crate::nostr_entities::NostrEntityEvent>, CoreError> {
-        crate::nostr_entities::resolve_from_cache(self.runtime.ndb(), &entity)
+    ) -> NostrEntityEventOutcome {
+        nostr_entity_event_outcome(crate::nostr_entities::resolve_from_cache(
+            self.runtime.ndb(),
+            &entity,
+        ))
     }
 
     /// Install a view-scoped subscription for the missing event behind an

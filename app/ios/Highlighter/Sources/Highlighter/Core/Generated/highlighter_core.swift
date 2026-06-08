@@ -794,7 +794,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * optional `nostr:` URI prefix. Used by the iOS rich-text renderer
      * to walk event content for inline mentions and event-ref cards.
      */
-    func decodeNostrEntity(input: String) throws  -> NostrEntityRef
+    func decodeNostrEntity(input: String)  -> NostrEntityRefOutcome
 
     /**
      * Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
@@ -818,7 +818,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * canonical relay hint is Rust policy; native shells provide only the
      * event id and author hint they are already rendering.
      */
-    func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String) throws  -> String
+    func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String)  -> StringOutcome
 
     func generateAccount()  -> GeneratedAccountOutcome
 
@@ -1029,7 +1029,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getUserHighlights(pubkeyHex: String, limit: UInt32) async throws  -> [HighlightRecord]
 
-    func getUserProfile(pubkeyHex: String) async throws  -> ProfileMetadata?
+    func getUserProfile(pubkeyHex: String) async  -> ProfileOutcome
 
     /**
      * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
@@ -1189,7 +1189,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * The caller should pair this with `subscribe_nostr_entity` so a
      * cold-cache reference warms up over the wire.
      */
-    func resolveNostrEntity(entity: NostrEntityRef) async throws  -> NostrEntityEvent?
+    func resolveNostrEntity(entity: NostrEntityRef) async  -> NostrEntityEventOutcome
 
     func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)  -> MutationOutcome
 
@@ -1452,7 +1452,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * metadata so the caller's UI can swap to the new state without
      * waiting for the relay echo.
      */
-    func updateProfile(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String) async throws  -> ProfileMetadata
+    func updateProfile(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String) async  -> ProfileOutcome
 
     /**
      * Upload a photo to the default Blossom server (`blossom.primal.net`)
@@ -1700,8 +1700,8 @@ open func currentUser() -> CurrentUser?  {
      * optional `nostr:` URI prefix. Used by the iOS rich-text renderer
      * to walk event content for inline mentions and event-ref cards.
      */
-open func decodeNostrEntity(input: String)throws  -> NostrEntityRef  {
-    return try  FfiConverterTypeNostrEntityRef_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+open func decodeNostrEntity(input: String) -> NostrEntityRefOutcome  {
+    return try!  FfiConverterTypeNostrEntityRefOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_decode_nostr_entity(self.uniffiClonePointer(),
         FfiConverterString.lower(input),$0
     )
@@ -1767,8 +1767,8 @@ open func downloadPodcastArtwork(url: String)async  -> DataOutcome  {
      * canonical relay hint is Rust policy; native shells provide only the
      * event id and author hint they are already rendering.
      */
-open func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+open func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String) -> StringOutcome  {
+    return try!  FfiConverterTypeStringOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_encode_highlight_share_nevent(self.uniffiClonePointer(),
         FfiConverterString.lower(eventIdHex),
         FfiConverterString.lower(authorPubkeyHex),$0
@@ -2594,9 +2594,9 @@ open func getUserHighlights(pubkeyHex: String, limit: UInt32)async throws  -> [H
         )
 }
 
-open func getUserProfile(pubkeyHex: String)async throws  -> ProfileMetadata?  {
+open func getUserProfile(pubkeyHex: String)async  -> ProfileOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_user_profile(
                     self.uniffiClonePointer(),
@@ -2606,8 +2606,9 @@ open func getUserProfile(pubkeyHex: String)async throws  -> ProfileMetadata?  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterOptionTypeProfileMetadata.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeProfileOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -3209,9 +3210,9 @@ open func requestJoinRoom(groupId: String)async throws  -> String  {
      * The caller should pair this with `subscribe_nostr_entity` so a
      * cold-cache reference warms up over the wire.
      */
-open func resolveNostrEntity(entity: NostrEntityRef)async throws  -> NostrEntityEvent?  {
+open func resolveNostrEntity(entity: NostrEntityRef)async  -> NostrEntityEventOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_resolve_nostr_entity(
                     self.uniffiClonePointer(),
@@ -3221,8 +3222,9 @@ open func resolveNostrEntity(entity: NostrEntityRef)async throws  -> NostrEntity
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterOptionTypeNostrEntityEvent.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeNostrEntityEventOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -4114,9 +4116,9 @@ open func unsubscribe(handle: UInt64)  {try! rustCall() {
      * metadata so the caller's UI can swap to the new state without
      * waiting for the relay echo.
      */
-open func updateProfile(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String)async throws  -> ProfileMetadata  {
+open func updateProfile(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String)async  -> ProfileOutcome  {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_update_profile(
                     self.uniffiClonePointer(),
@@ -4126,8 +4128,9 @@ open func updateProfile(name: String, displayName: String, about: String, pictur
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeProfileMetadata_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
+            liftFunc: FfiConverterTypeProfileOutcome_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -9055,6 +9058,146 @@ public func FfiConverterTypeNostrEntityEvent_lower(_ value: NostrEntityEvent) ->
 }
 
 
+public struct NostrEntityEventOutcome {
+    public var value: NostrEntityEvent?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: NostrEntityEvent?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension NostrEntityEventOutcome: Sendable {}
+#endif
+
+
+extension NostrEntityEventOutcome: Equatable, Hashable {
+    public static func ==(lhs: NostrEntityEventOutcome, rhs: NostrEntityEventOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNostrEntityEventOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityEventOutcome {
+        return
+            try NostrEntityEventOutcome(
+                value: FfiConverterOptionTypeNostrEntityEvent.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NostrEntityEventOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeNostrEntityEvent.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityEventOutcome_lift(_ buf: RustBuffer) throws -> NostrEntityEventOutcome {
+    return try FfiConverterTypeNostrEntityEventOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityEventOutcome_lower(_ value: NostrEntityEventOutcome) -> RustBuffer {
+    return FfiConverterTypeNostrEntityEventOutcome.lower(value)
+}
+
+
+public struct NostrEntityRefOutcome {
+    public var value: NostrEntityRef?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: NostrEntityRef?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension NostrEntityRefOutcome: Sendable {}
+#endif
+
+
+extension NostrEntityRefOutcome: Equatable, Hashable {
+    public static func ==(lhs: NostrEntityRefOutcome, rhs: NostrEntityRefOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNostrEntityRefOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityRefOutcome {
+        return
+            try NostrEntityRefOutcome(
+                value: FfiConverterOptionTypeNostrEntityRef.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NostrEntityRefOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeNostrEntityRef.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityRefOutcome_lift(_ buf: RustBuffer) throws -> NostrEntityRefOutcome {
+    return try FfiConverterTypeNostrEntityRefOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityRefOutcome_lower(_ value: NostrEntityRefOutcome) -> RustBuffer {
+    return FfiConverterTypeNostrEntityRefOutcome.lower(value)
+}
+
+
 public struct OptionalStringOutcome {
     public var value: String?
     public var error: String
@@ -9746,6 +9889,76 @@ public func FfiConverterTypeProfileMetadata_lift(_ buf: RustBuffer) throws -> Pr
 #endif
 public func FfiConverterTypeProfileMetadata_lower(_ value: ProfileMetadata) -> RustBuffer {
     return FfiConverterTypeProfileMetadata.lower(value)
+}
+
+
+public struct ProfileOutcome {
+    public var value: ProfileMetadata?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: ProfileMetadata?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ProfileOutcome: Sendable {}
+#endif
+
+
+extension ProfileOutcome: Equatable, Hashable {
+    public static func ==(lhs: ProfileOutcome, rhs: ProfileOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileOutcome {
+        return
+            try ProfileOutcome(
+                value: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeProfileMetadata.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileOutcome_lift(_ buf: RustBuffer) throws -> ProfileOutcome {
+    return try FfiConverterTypeProfileOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileOutcome_lower(_ value: ProfileOutcome) -> RustBuffer {
+    return FfiConverterTypeProfileOutcome.lower(value)
 }
 
 
@@ -12974,6 +13187,30 @@ fileprivate struct FfiConverterOptionTypeWebMetadata: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeNostrEntityRef: FfiConverterRustBuffer {
+    typealias SwiftType = NostrEntityRef?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeNostrEntityRef.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeNostrEntityRef.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
     typealias SwiftType = [UInt32]
 
@@ -13662,7 +13899,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_current_user() != 38772) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_decode_nostr_entity() != 32142) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_decode_nostr_entity() != 38143) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_decode_npub() != 51714) {
@@ -13674,7 +13911,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_download_podcast_artwork() != 30059) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_encode_highlight_share_nevent() != 14836) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_encode_highlight_share_nevent() != 64061) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 356) {
@@ -13803,7 +14040,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_highlights() != 58884) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 29632) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 11410) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 12216) {
@@ -13902,7 +14139,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_request_join_room() != 22012) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 56937) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 40698) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_save_podcast_position() != 15916) {
@@ -14037,7 +14274,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_unsubscribe() != 55013) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_update_profile() != 54507) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_update_profile() != 50594) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 28046) {

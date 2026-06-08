@@ -182,7 +182,8 @@ struct NostrRichText: View {
     }
 
     private func decode(_ raw: String) -> NostrEntityRef? {
-        try? appStore.core.decodeNostrEntity(input: raw)
+        let outcome = appStore.core.decodeNostrEntity(input: raw)
+        return outcome.error.isEmpty ? outcome.value : nil
     }
 
     /// Pull every `nostr:` event-reference entity (`note1…`, `nevent1…`,
@@ -198,7 +199,10 @@ struct NostrRichText: View {
     ) -> [NostrEntityRef] {
         var seen: Set<String> = []
         var out: [NostrEntityRef] = []
-        for run in tokeniseWithDecoder(content, decoder: { try? core.decodeNostrEntity(input: $0) }) {
+        for run in tokeniseWithDecoder(content, decoder: {
+            let outcome = core.decodeNostrEntity(input: $0)
+            return outcome.error.isEmpty ? outcome.value : nil
+        }) {
             guard case .entity(let ref) = run else { continue }
             switch ref {
             case .profile:
@@ -308,7 +312,8 @@ final class NostrEntityCardStore {
     }
 
     func start() async {
-        if let snapshot = try? await safeCore.resolveNostrEntity(entity) {
+        let snapshotOutcome = await safeCore.resolveNostrEntity(entity)
+        if snapshotOutcome.error.isEmpty, let snapshot = snapshotOutcome.value {
             resolved = snapshot
             return
         }

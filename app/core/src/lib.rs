@@ -61,11 +61,12 @@ pub use models::{
     FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
     GeneratedAccount, GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome,
     HighlightOutcome, HighlightRecord, HydratedHighlight, HydratedHighlightListOutcome,
-    MutationOutcome, NostrConnectOptions, OptionalStringOutcome, PictureDraft, PictureOutcome,
-    PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ReactionListOutcome,
-    ReactionOutcome, ReadingFeedItem, RoomRecommendation, RoomRecommendationReason,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    MutationOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
+    OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
+    ProfileListOutcome, ProfileMetadata, ProfileOutcome, ReactionListOutcome, ReactionOutcome,
+    ReadingFeedItem, RoomRecommendation, RoomRecommendationReason, StringListOutcome,
+    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome,
+    WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
 pub use podcast_transcript::TranscriptSegment;

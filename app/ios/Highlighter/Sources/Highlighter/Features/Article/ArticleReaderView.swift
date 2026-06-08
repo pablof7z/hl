@@ -272,7 +272,10 @@ private struct ReaderScroll: View {
                     tint: UIColor(Color.highlighterAccent),
                     ink: UIColor(Color.highlighterInkStrong),
                     muted: UIColor(Color.highlighterInkMuted),
-                    nostrDecoder: { input in try? safeCore.decodeNostrEntity(input) },
+                    nostrDecoder: { input in
+                        let outcome = safeCore.decodeNostrEntity(input)
+                        return outcome.error.isEmpty ? outcome.value : nil
+                    },
                     profileNames: profileSnapshot
                 )
             }.value

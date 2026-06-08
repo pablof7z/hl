@@ -255,7 +255,7 @@ struct OnboardingCreateAccountView: View {
                 }
 
                 Task {
-                    try? await store.safeCore.updateProfile(
+                    _ = await store.safeCore.updateProfile(
                         name: "",
                         displayName: name,
                         about: "",

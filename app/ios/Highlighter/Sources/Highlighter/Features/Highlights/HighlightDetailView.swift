@@ -322,16 +322,15 @@ struct HighlightDetailView: View {
     /// server-rendered with full Open Graph + Twitter Card meta so the
     /// link unfurls into a social card built around the quote.
     private func refreshShareURL() async {
-        guard
-            let nevent = try? await app.safeCore.encodeHighlightShareNevent(
-                eventIdHex: highlight.eventId,
-                authorPubkeyHex: highlight.pubkey
-            )
-        else {
+        let outcome = await app.safeCore.encodeHighlightShareNevent(
+            eventIdHex: highlight.eventId,
+            authorPubkeyHex: highlight.pubkey
+        )
+        guard outcome.error.isEmpty else {
             shareURL = nil
             return
         }
-        shareURL = URL(string: "https://beta.highlighter.com/highlight/\(nevent)")
+        shareURL = URL(string: "https://beta.highlighter.com/highlight/\(outcome.value)")
     }
 
     // MARK: - Reader-target dispatch (mirror of HighlightsTabView)

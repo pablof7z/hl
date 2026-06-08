@@ -191,9 +191,11 @@ final class HighlighterStore {
     /// a relay subscription so the cache is updated when a fresh kind:0 arrives.
     /// Safe to call from multiple views for the same pubkey — deduplicates.
     func requestProfile(pubkeyHex: String) async {
-        if profileCache[pubkeyHex] == nil,
-           let profile = try? await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
-            profileCache[pubkeyHex] = profile
+        if profileCache[pubkeyHex] == nil {
+            let outcome = await safeCore.getUserProfile(pubkeyHex: pubkeyHex)
+            if outcome.error.isEmpty, let profile = outcome.value {
+                profileCache[pubkeyHex] = profile
+            }
         }
         guard profileCacheHandles[pubkeyHex] == nil else { return }
         let profileOutcome = await safeCore.subscribeUserProfile(pubkeyHex: pubkeyHex)
@@ -205,7 +207,8 @@ final class HighlighterStore {
 
     /// Called by `EventBridge` when a subscribed profile's kind:0 arrives from a relay.
     func applyProfileCacheUpdate(pubkeyHex: String) async {
-        if let profile = try? await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
+        let outcome = await safeCore.getUserProfile(pubkeyHex: pubkeyHex)
+        if outcome.error.isEmpty, let profile = outcome.value {
             profileCache[pubkeyHex] = profile
         }
     }
@@ -321,9 +324,11 @@ final class HighlighterStore {
         // Fetch the user's own kind:0 so the top-bar avatar shows their real
         // picture. Cheap — single nostrdb read. Lives on the app-scope store
         // because multiple surfaces (toolbar + future editors) need it.
-        if let user = currentUser,
-           let profile = try? await safeCore.getUserProfile(pubkeyHex: user.pubkey) {
-            currentUserProfile = profile
+        if let user = currentUser {
+            let outcome = await safeCore.getUserProfile(pubkeyHex: user.pubkey)
+            if outcome.error.isEmpty, let profile = outcome.value {
+                currentUserProfile = profile
+            }
         }
 
         // Publish the default Blossom server list if the user has never set one.
