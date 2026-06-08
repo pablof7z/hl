@@ -754,6 +754,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func autoConnectedRelayConfig(url: String)  -> RelayConfig
 
     /**
+     * Build the edited ISBN book preview after scan/manual entry. Rust owns
+     * ISBN normalization and the NIP-73 reference fields; native supplies
+     * only the user's edited title/author and optional lookup metadata.
+     */
+    func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, title: String, author: String)  -> ArtifactPreviewOutcome
+
+    /**
      * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
      * Extension flow — the main app drains the share queue, normalizes each
      * URL through this, then calls `publish_artifact` to post the kind:11.
@@ -1658,6 +1665,22 @@ open func autoConnectedRelayConfig(url: String) -> RelayConfig  {
     return try!  FfiConverterTypeRelayConfig_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_auto_connected_relay_config(self.uniffiClonePointer(),
         FfiConverterString.lower(url),$0
+    )
+})
+}
+
+    /**
+     * Build the edited ISBN book preview after scan/manual entry. Rust owns
+     * ISBN normalization and the NIP-73 reference fields; native supplies
+     * only the user's edited title/author and optional lookup metadata.
+     */
+open func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, title: String, author: String) -> ArtifactPreviewOutcome  {
+    return try!  FfiConverterTypeArtifactPreviewOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_build_edited_book_preview(self.uniffiClonePointer(),
+        FfiConverterString.lower(isbn),
+        FfiConverterOptionTypeArtifactPreview.lower(basePreview),
+        FfiConverterString.lower(title),
+        FfiConverterString.lower(author),$0
     )
 })
 }
@@ -15776,6 +15799,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_auto_connected_relay_config() != 62438) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_build_edited_book_preview() != 19782) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 40366) {

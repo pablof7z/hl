@@ -254,6 +254,20 @@ actor SafeHighlighterCore {
         await core.lookupIsbn(isbn: isbn)
     }
 
+    nonisolated func buildEditedBookPreview(
+        isbn: String,
+        basePreview: ArtifactPreview?,
+        title: String,
+        author: String
+    ) -> ArtifactPreviewOutcome {
+        core.buildEditedBookPreview(
+            isbn: isbn,
+            basePreview: basePreview,
+            title: title,
+            author: author
+        )
+    }
+
     func buildPreviewFromUrl(_ url: String) async -> ArtifactPreviewOutcome {
         await core.buildPreviewFromUrl(url: url)
     }

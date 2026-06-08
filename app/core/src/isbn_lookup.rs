@@ -128,6 +128,29 @@ pub async fn lookup_isbn(isbn: &str) -> Result<ArtifactPreview, CoreError> {
     lookup_isbn_normalized(&isbn13).await
 }
 
+pub fn edited_book_preview(
+    isbn: &str,
+    base: Option<ArtifactPreview>,
+    title: &str,
+    author: &str,
+) -> Result<ArtifactPreview, CoreError> {
+    let isbn13 = normalize_isbn(isbn)?;
+    let mut preview = partial_preview(&isbn13);
+    if let Some(base) = base {
+        if !base.id.trim().is_empty() {
+            preview.id = base.id;
+        }
+        preview.url = base.url;
+        preview.image = base.image;
+        preview.description = base.description;
+        preview.domain = base.domain;
+        preview.published_at = base.published_at;
+    }
+    preview.title = title.trim().to_string();
+    preview.author = author.trim().to_string();
+    Ok(preview)
+}
+
 async fn lookup_isbn_normalized(isbn13: &str) -> Result<ArtifactPreview, CoreError> {
     // Build the preview on a successful fetch; fall back to the minimal one
     // on any failure (404, timeout, bad JSON, etc.).
@@ -482,6 +505,54 @@ mod tests {
         assert_eq!(p.highlight_tag_name, "i");
         assert_eq!(p.highlight_tag_value, "isbn:9780735211292");
         assert!(!p.highlight_reference_key.is_empty());
+    }
+
+    #[test]
+    fn edited_book_preview_preserves_lookup_media_and_canonical_references() {
+        let mut base = partial_preview("9780735211292");
+        base.id = "lookup-id".into();
+        base.url = "https://example.com/book".into();
+        base.image = "https://example.com/cover.jpg".into();
+        base.description = "Lookup description".into();
+        base.domain = "example.com".into();
+        base.published_at = "2026".into();
+        base.catalog_id = "wrong".into();
+        base.reference_tag_value = "wrong".into();
+        base.highlight_reference_key = "wrong".into();
+
+        let edited = edited_book_preview(
+            "978-0-7352-1129-2",
+            Some(base),
+            "  Manual Title  ",
+            " Author ",
+        )
+        .unwrap();
+        assert_eq!(edited.id, "lookup-id");
+        assert_eq!(edited.title, "Manual Title");
+        assert_eq!(edited.author, "Author");
+        assert_eq!(edited.image, "https://example.com/cover.jpg");
+        assert_eq!(edited.description, "Lookup description");
+        assert_eq!(edited.domain, "example.com");
+        assert_eq!(edited.published_at, "2026");
+        assert_eq!(edited.source, "book");
+        assert_eq!(edited.catalog_id, "isbn:9780735211292");
+        assert_eq!(edited.catalog_kind, "isbn");
+        assert_eq!(edited.reference_tag_name, "i");
+        assert_eq!(edited.reference_tag_value, "isbn:9780735211292");
+        assert_eq!(edited.reference_kind, "isbn");
+        assert_eq!(edited.highlight_tag_name, "i");
+        assert_eq!(edited.highlight_tag_value, "isbn:9780735211292");
+        assert_eq!(edited.highlight_reference_key, "i:isbn:9780735211292");
+    }
+
+    #[test]
+    fn edited_book_preview_without_lookup_still_has_stable_id() {
+        let edited = edited_book_preview("9780735211292", None, "Manual Title", "").unwrap();
+        assert!(edited.id.starts_with('c'));
+        assert_eq!(edited.title, "Manual Title");
+        assert_eq!(edited.catalog_id, "isbn:9780735211292");
+        assert_eq!(edited.highlight_reference_key, "i:isbn:9780735211292");
+        assert!(edited.image.is_empty());
     }
 
     #[tokio::test]

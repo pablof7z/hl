@@ -595,38 +595,13 @@ private struct ISBNPreviewSheet: View {
 
     private func commit() {
         guard !effectiveTitle.isEmpty else { return }
-        let base = preview
-        // Always derive reference/highlight tags from the ISBN we scanned —
-        // the catalog API may return these empty or wrong.
-        let catalogId = "isbn:\(isbn)"
-        let updated = ArtifactPreview(
-            id: base?.id ?? "",
-            url: base?.url ?? "",
+        let outcome = appStore.safeCore.buildEditedBookPreview(
+            isbn: isbn,
+            basePreview: preview,
             title: effectiveTitle,
-            author: manualAuthor.trimmingCharacters(in: .whitespacesAndNewlines),
-            image: base?.image ?? "",
-            description: base?.description ?? "",
-            source: "book",
-            domain: base?.domain ?? "",
-            catalogId: catalogId,
-            catalogKind: "isbn",
-            podcastGuid: "",
-            podcastItemGuid: "",
-            podcastShowTitle: "",
-            audioUrl: "",
-            audioPreviewUrl: "",
-            transcriptUrl: "",
-            feedUrl: "",
-            publishedAt: base?.publishedAt ?? "",
-            durationSeconds: nil,
-            referenceTagName: "i",
-            referenceTagValue: catalogId,
-            referenceKind: "isbn",
-            highlightTagName: "i",
-            highlightTagValue: catalogId,
-            highlightReferenceKey: "i:\(catalogId)",
-            chapters: []
+            author: manualAuthor
         )
+        guard let updated = outcome.value else { return }
         onEditTitle(updated)
         onUse(updated)
         dismiss()

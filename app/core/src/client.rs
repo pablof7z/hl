@@ -2367,6 +2367,24 @@ impl HighlighterCore {
         artifact_preview_outcome(self.isbn_previews.lookup(&isbn).await)
     }
 
+    /// Build the edited ISBN book preview after scan/manual entry. Rust owns
+    /// ISBN normalization and the NIP-73 reference fields; native supplies
+    /// only the user's edited title/author and optional lookup metadata.
+    pub fn build_edited_book_preview(
+        &self,
+        isbn: String,
+        base_preview: Option<ArtifactPreview>,
+        title: String,
+        author: String,
+    ) -> ArtifactPreviewOutcome {
+        artifact_preview_outcome(isbn_lookup::edited_book_preview(
+            isbn.trim(),
+            base_preview,
+            &title,
+            &author,
+        ))
+    }
+
     /// Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
     /// Extension flow — the main app drains the share queue, normalizes each
     /// URL through this, then calls `publish_artifact` to post the kind:11.
