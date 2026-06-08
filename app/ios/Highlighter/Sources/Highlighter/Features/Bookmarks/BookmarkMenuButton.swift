@@ -16,7 +16,7 @@ struct BookmarkMenuButton: View {
 
     @Environment(HighlighterStore.self) private var app
 
-    @State private var curationSets: [BookmarkSetRecord] = []
+    @State private var curationItems: [CurationMenuItem] = []
     @State private var newCollectionPresented: Bool = false
     @State private var errorMessage: String?
 
@@ -51,21 +51,21 @@ struct BookmarkMenuButton: View {
 
     @ViewBuilder
     private var curationsSection: some View {
-        if curationSets.isEmpty {
+        if curationItems.isEmpty {
             // Header-only section so the menu still reads as the
             // collection picker before any sets exist.
             Text("No collections yet")
                 .font(.footnote)
         } else {
             Section("Add to collection") {
-                ForEach(curationSets, id: \.id) { set in
+                ForEach(curationItems, id: \.id) { item in
                     Button {
-                        Task { await toggleInCuration(set) }
+                        Task { await toggleInCuration(item) }
                     } label: {
-                        if set.articleAddresses.contains(articleAddress) {
-                            Label(displayTitle(set), systemImage: "checkmark")
+                        if item.isMember {
+                            Label(item.title, systemImage: "checkmark")
                         } else {
-                            Text(displayTitle(set))
+                            Text(item.title)
                         }
                     }
                 }
@@ -77,24 +77,18 @@ struct BookmarkMenuButton: View {
         app.isBookmarked(articleAddress: articleAddress)
     }
 
-    private func displayTitle(_ set: BookmarkSetRecord) -> String {
-        if !set.title.isEmpty { return set.title }
-        if !set.id.isEmpty { return set.id }
-        return "Untitled"
-    }
-
     // MARK: - Actions
 
     private func loadCurations() async {
-        let outcome = await app.safeCore.getMyCurationSets()
+        let outcome = await app.safeCore.getCurationMenuItems(address: articleAddress)
         if outcome.error.isEmpty {
-            curationSets = outcome.values
+            curationItems = outcome.values
         }
     }
 
-    private func toggleInCuration(_ set: BookmarkSetRecord) async {
+    private func toggleInCuration(_ item: CurationMenuItem) async {
         let outcome = await app.safeCore.toggleAddressInCurationSet(
-            dTag: set.id,
+            dTag: item.id,
             address: articleAddress
         )
         guard outcome.error.isEmpty else {

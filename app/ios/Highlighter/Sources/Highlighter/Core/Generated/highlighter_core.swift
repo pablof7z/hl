@@ -896,6 +896,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32) async  -> CommentListOutcome
 
+    /**
+     * Return current user's curation sets projected for the bookmark menu.
+     * Rust owns display fallback, current membership, and ordering.
+     */
+    func getCurationMenuItems(address: String) async  -> CurationMenuItemListOutcome
+
     func getDiscussions(groupId: String, limit: UInt32) async  -> DiscussionListOutcome
 
     /**
@@ -2078,6 +2084,28 @@ open func getCommentsForReference(tagName: String, tagValue: String, limit: UInt
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCommentListOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Return current user's curation sets projected for the bookmark menu.
+     * Rust owns display fallback, current membership, and ordering.
+     */
+open func getCurationMenuItems(address: String)async  -> CurationMenuItemListOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_curation_menu_items(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(address)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCurationMenuItemListOutcome_lift,
             errorHandler: nil
 
         )
@@ -6987,6 +7015,157 @@ public func FfiConverterTypeCommunitySummary_lift(_ buf: RustBuffer) throws -> C
 #endif
 public func FfiConverterTypeCommunitySummary_lower(_ value: CommunitySummary) -> RustBuffer {
     return FfiConverterTypeCommunitySummary.lower(value)
+}
+
+
+/**
+ * Row projection for the bookmark toolbar's curation-set picker.
+ */
+public struct CurationMenuItem {
+    public var id: String
+    public var title: String
+    public var isMember: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, title: String, isMember: Bool) {
+        self.id = id
+        self.title = title
+        self.isMember = isMember
+    }
+}
+
+#if compiler(>=6)
+extension CurationMenuItem: Sendable {}
+#endif
+
+
+extension CurationMenuItem: Equatable, Hashable {
+    public static func ==(lhs: CurationMenuItem, rhs: CurationMenuItem) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.isMember != rhs.isMember {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(title)
+        hasher.combine(isMember)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCurationMenuItem: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationMenuItem {
+        return
+            try CurationMenuItem(
+                id: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                isMember: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CurationMenuItem, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterBool.write(value.isMember, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationMenuItem_lift(_ buf: RustBuffer) throws -> CurationMenuItem {
+    return try FfiConverterTypeCurationMenuItem.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationMenuItem_lower(_ value: CurationMenuItem) -> RustBuffer {
+    return FfiConverterTypeCurationMenuItem.lower(value)
+}
+
+
+public struct CurationMenuItemListOutcome {
+    public var values: [CurationMenuItem]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [CurationMenuItem], error: String) {
+        self.values = values
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CurationMenuItemListOutcome: Sendable {}
+#endif
+
+
+extension CurationMenuItemListOutcome: Equatable, Hashable {
+    public static func ==(lhs: CurationMenuItemListOutcome, rhs: CurationMenuItemListOutcome) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCurationMenuItemListOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationMenuItemListOutcome {
+        return
+            try CurationMenuItemListOutcome(
+                values: FfiConverterSequenceTypeCurationMenuItem.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CurationMenuItemListOutcome, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCurationMenuItem.write(value.values, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationMenuItemListOutcome_lift(_ buf: RustBuffer) throws -> CurationMenuItemListOutcome {
+    return try FfiConverterTypeCurationMenuItemListOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationMenuItemListOutcome_lower(_ value: CurationMenuItemListOutcome) -> RustBuffer {
+    return FfiConverterTypeCurationMenuItemListOutcome.lower(value)
 }
 
 
@@ -14459,6 +14638,31 @@ fileprivate struct FfiConverterSequenceTypeCommunitySummary: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCurationMenuItem: FfiConverterRustBuffer {
+    typealias SwiftType = [CurationMenuItem]
+
+    public static func write(_ value: [CurationMenuItem], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCurationMenuItem.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CurationMenuItem] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CurationMenuItem]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCurationMenuItem.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeDiscussionRecord: FfiConverterRustBuffer {
     typealias SwiftType = [DiscussionRecord]
 
@@ -14977,6 +15181,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_reference() != 62284) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_curation_menu_items() != 34499) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 7889) {

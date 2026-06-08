@@ -13,7 +13,7 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use crate::artifacts::first_tag_value;
 use crate::clock::Clock;
 use crate::errors::CoreError;
-use crate::models::{BookmarkSetRecord, WebBookmarkRecord};
+use crate::models::{BookmarkSetRecord, CurationMenuItem, WebBookmarkRecord};
 use crate::nostr_runtime::NostrRuntime;
 
 pub const KIND_BOOKMARK_SETS: u16 = 30003;
@@ -165,6 +165,32 @@ pub fn query_user_web_bookmarks(
         by_d.into_values().map(parse_web_bookmark_event).collect();
     records.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(records)
+}
+
+/// Project curation sets into menu rows for a single article address.
+/// Preserves the order already established by `query_user_sets`.
+pub fn curation_menu_items_for_address(
+    sets: Vec<BookmarkSetRecord>,
+    address: &str,
+) -> Vec<CurationMenuItem> {
+    let address = address.trim();
+    sets.into_iter()
+        .map(|set| CurationMenuItem {
+            id: set.id.clone(),
+            title: curation_set_display_title(&set),
+            is_member: !address.is_empty() && set.article_addresses.iter().any(|a| a == address),
+        })
+        .collect()
+}
+
+fn curation_set_display_title(set: &BookmarkSetRecord) -> String {
+    if !set.title.is_empty() {
+        return set.title.clone();
+    }
+    if !set.id.is_empty() {
+        return set.id.clone();
+    }
+    "Untitled".to_string()
 }
 
 // -- Publish API (curation sets) --------------------------------------------
@@ -474,7 +500,25 @@ fn parse_web_bookmark_event(event: Event) -> WebBookmarkRecord {
 
 #[cfg(test)]
 mod tests {
-    use super::{next_curation_address_membership, CurationMembershipChange};
+    use super::{
+        curation_menu_items_for_address, next_curation_address_membership,
+        CurationMembershipChange, KIND_CURATION_SETS,
+    };
+    use crate::models::BookmarkSetRecord;
+
+    fn set(id: &str, title: &str, article_addresses: Vec<&str>) -> BookmarkSetRecord {
+        BookmarkSetRecord {
+            id: id.to_string(),
+            pubkey: "author".to_string(),
+            kind: KIND_CURATION_SETS as u32,
+            title: title.to_string(),
+            description: String::new(),
+            image: String::new(),
+            article_addresses: article_addresses.into_iter().map(str::to_string).collect(),
+            note_ids: Vec::new(),
+            created_at: Some(1),
+        }
+    }
 
     #[test]
     fn curation_membership_toggle_flips_current_state() {
@@ -506,5 +550,37 @@ mod tests {
             true,
             CurationMembershipChange::Set(false)
         ));
+    }
+
+    #[test]
+    fn curation_menu_items_project_exact_membership() {
+        let items = curation_menu_items_for_address(
+            vec![
+                set("first", "First", vec!["30023:abc:one"]),
+                set("second", "Second", vec!["30023:abc:one-two"]),
+            ],
+            "30023:abc:one",
+        );
+
+        assert_eq!(items.len(), 2);
+        assert!(items[0].is_member);
+        assert!(!items[1].is_member);
+    }
+
+    #[test]
+    fn curation_menu_items_apply_title_fallbacks() {
+        let items = curation_menu_items_for_address(
+            vec![
+                set("with-id", "", Vec::new()),
+                set("", "", Vec::new()),
+                set("with-title", "Named", Vec::new()),
+            ],
+            "",
+        );
+
+        assert_eq!(items[0].title, "with-id");
+        assert_eq!(items[1].title, "Untitled");
+        assert_eq!(items[2].title, "Named");
+        assert!(items.iter().all(|item| !item.is_member));
     }
 }

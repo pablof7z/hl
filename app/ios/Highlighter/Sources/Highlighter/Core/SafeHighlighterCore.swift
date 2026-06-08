@@ -208,6 +208,10 @@ actor SafeHighlighterCore {
         await core.getMyCurationSets()
     }
 
+    func getCurationMenuItems(address: String) async -> CurationMenuItemListOutcome {
+        await core.getCurationMenuItems(address: address)
+    }
+
     func getFollowingCurationSets() async -> BookmarkSetListOutcome {
         await core.getFollowingCurationSets()
     }

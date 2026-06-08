@@ -89,6 +89,12 @@ pub struct BookmarkSetListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct CurationMenuItemListOutcome {
+    pub values: Vec<CurationMenuItem>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct BookmarkSetOutcome {
     pub value: Option<BookmarkSetRecord>,
     pub error: String,
@@ -813,6 +819,14 @@ pub struct BookmarkSetRecord {
     /// `e`-tag references — event ids of kind:1 notes.
     pub note_ids: Vec<String>,
     pub created_at: Option<u64>,
+}
+
+/// Row projection for the bookmark toolbar's curation-set picker.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CurationMenuItem {
+    pub id: String,
+    pub title: String,
+    pub is_member: bool,
 }
 
 /// One NIP-B0 web bookmark (kind:39701). The `d` tag is the URL without

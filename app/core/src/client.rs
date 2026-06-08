@@ -29,18 +29,19 @@ use crate::models::{
     BlossomUploadOutcome, BookmarkSetListOutcome, BookmarkSetOutcome, BookmarkSetRecord,
     BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord,
     CommentListOutcome, CommentOutcome, CommentRecord, CommunityListOutcome, CommunitySummary,
-    CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
-    FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightDraft,
-    HighlightListOutcome, HighlightOutcome, HighlightRecord, HydratedHighlight,
-    HydratedHighlightListOutcome, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
-    NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OptionalStringOutcome,
-    PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome,
-    ProfileMetadata, ProfileOutcome, ProfileUpdateDraft, ReactionListOutcome, ReactionOutcome,
-    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
-    RoomRecommendation, RoomRecommendationListOutcome, StringListOutcome, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
-    WebMetadataOutcome, WhatsNewEntriesOutcome,
+    CurationMenuItem, CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
+    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
+    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
+    GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
+    HighlightRecord, HydratedHighlight, HydratedHighlightListOutcome, MutationOutcome,
+    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
+    NostrEntityRefOutcome, OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord,
+    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
+    ReactionListOutcome, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
+    RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
+    RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
+    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
+    WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -262,6 +263,21 @@ fn bookmark_set_list_outcome(
             error: String::new(),
         },
         Err(error) => BookmarkSetListOutcome {
+            values: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+fn curation_menu_item_list_outcome(
+    result: Result<Vec<CurationMenuItem>, CoreError>,
+) -> CurationMenuItemListOutcome {
+    match result {
+        Ok(values) => CurationMenuItemListOutcome {
+            values,
+            error: String::new(),
+        },
+        Err(error) => CurationMenuItemListOutcome {
             values: Vec::new(),
             error: error.to_string(),
         },
@@ -2018,6 +2034,28 @@ impl HighlighterCore {
             &user_hex,
             crate::lists::KIND_CURATION_SETS,
         ))
+    }
+
+    /// Return current user's curation sets projected for the bookmark menu.
+    /// Rust owns display fallback, current membership, and ordering.
+    pub async fn get_curation_menu_items(&self, address: String) -> CurationMenuItemListOutcome {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .unwrap_or_default();
+        curation_menu_item_list_outcome((|| {
+            let sets = crate::lists::query_user_sets(
+                self.runtime.ndb(),
+                &user_hex,
+                crate::lists::KIND_CURATION_SETS,
+            )?;
+            Ok(crate::lists::curation_menu_items_for_address(
+                sets, &address,
+            ))
+        })())
     }
 
     /// Return kind:30004 curation sets from users the current user follows.
