@@ -27,7 +27,7 @@ use crate::groups::{
     build_community_summary, KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA,
 };
 use crate::feedback::{ensure_feedback_relay, KIND_FEEDBACK_NOTE, KIND_FEEDBACK_THREAD_META};
-use crate::models::{ArtifactRecord, HighlightRecord, HydratedHighlight};
+use crate::models::{ArtifactRecord, CommunitySummary, HighlightRecord, HydratedHighlight};
 use crate::nostr_runtime::{pin_relay_for_read, NostrRuntime};
 use crate::outbox;
 use crate::reads::INTERACTION_KINDS;
@@ -1022,6 +1022,7 @@ async fn run_pump(
         let mut saw_following_highlights_update = false;
         let mut saw_feedback_threads_update = false;
         let mut saw_search_articles_update = false;
+        let mut events: Vec<Event> = Vec::new();
         for key in note_keys {
             let Ok(note) = runtime.ndb().get_note_by_key(&txn, key) else {
                 continue;
@@ -1030,6 +1031,33 @@ async fn run_pump(
             let Ok(event) = Event::from_json(&json) else {
                 continue;
             };
+            events.push(event);
+        }
+        if matches!(kind, SubscriptionKind::JoinedCommunities { .. }) {
+            for event in &events {
+                if let Some(DataChangeType::MembershipChanged { group_id }) =
+                    build_change(&kind, event)
+                {
+                    if hydrated.insert(group_id.clone()) {
+                        runtime.spawn_group_metadata_subscription(vec![group_id.clone()]);
+                        if !events.iter().any(|event| {
+                            event.kind.as_u16() == KIND_GROUP_METADATA
+                                && first_tag_value(event, "d") == Some(group_id.as_str())
+                        }) {
+                            if let Some(community) =
+                                cached_group_metadata_summary(runtime.ndb(), &txn, &group_id)
+                            {
+                                deltas.push(Delta {
+                                    subscription_id: delivery_id,
+                                    change: DataChangeType::CommunityUpserted { community },
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for event in events {
             // Article backfill: when a follow interacts with an uncached
             // article, pull that article so the next re-query surfaces it.
             if matches!(kind, SubscriptionKind::FollowingReads { .. }) {
@@ -1162,6 +1190,41 @@ fn maybe_backfill_article(
             _ => {}
         }
     }
+}
+
+fn cached_group_metadata_summary(
+    ndb: &nostrdb::Ndb,
+    txn: &Transaction,
+    group_id: &str,
+) -> Option<CommunitySummary> {
+    let filter = NdbFilter::new()
+        .kinds([KIND_GROUP_METADATA as u64])
+        .tags([group_id], 'd')
+        .build();
+    let results = ndb.query(txn, &[filter], 16).ok()?;
+    let mut newest: Option<Event> = None;
+    for result in &results {
+        let Ok(note) = ndb.get_note_by_key(txn, result.note_key) else {
+            continue;
+        };
+        let Ok(json) = note.json() else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
+        if first_tag_value(&event, "d") != Some(group_id) {
+            continue;
+        }
+        let replace = newest
+            .as_ref()
+            .map(|current| event.created_at.as_secs() > current.created_at.as_secs())
+            .unwrap_or(true);
+        if replace {
+            newest = Some(event);
+        }
+    }
+    newest
+        .as_ref()
+        .and_then(|event| build_community_summary(event).ok())
 }
 
 fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType> {
