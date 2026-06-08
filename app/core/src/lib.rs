@@ -38,6 +38,7 @@ pub mod search;
 pub mod session;
 pub mod subscriptions;
 pub mod web_metadata;
+pub mod whats_new;
 
 pub use client::HighlighterCore;
 pub use errors::CoreError;
@@ -52,3 +53,4 @@ pub use models::{
 };
 pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;
+pub use whats_new::WhatsNewEntry;

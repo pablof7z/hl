@@ -32,6 +32,14 @@ actor SafeHighlighterCore {
         core.currentUser()
     }
 
+    func prepareWhatsNew() async throws -> [WhatsNewEntry] {
+        try await core.prepareWhatsNew()
+    }
+
+    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async throws {
+        try await core.markWhatsNewSeen(shippedAtUnixSeconds: shippedAtUnixSeconds)
+    }
+
     // MARK: - Reads
 
     func getJoinedCommunities() async throws -> [CommunitySummary] {

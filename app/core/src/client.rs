@@ -39,6 +39,7 @@ use crate::room_explorer_config;
 use crate::session::{current_user_from_pubkey, Session};
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
 use crate::web_metadata::{self, WebMetadata, WebMetadataStore};
+use crate::whats_new;
 
 #[derive(uniffi::Object)]
 pub struct HighlighterCore {
@@ -58,6 +59,8 @@ pub struct HighlighterCore {
     recent_searches: Arc<recent_searches::RecentSearchesStore>,
     /// Rust-owned rooms explorer curator config and NIP-11 refresh path.
     room_explorer_config: Arc<room_explorer_config::RoomExplorerConfigStore>,
+    /// Rust-owned What's New entries and seen marker.
+    whats_new: Arc<whats_new::WhatsNewStore>,
 }
 
 struct Inner {
@@ -189,6 +192,17 @@ impl HighlighterCore {
 
     pub fn current_user(&self) -> Option<CurrentUser> {
         self.inner.read().session.current_user()
+    }
+
+    pub async fn prepare_whats_new(&self) -> Result<Vec<whats_new::WhatsNewEntry>, CoreError> {
+        self.whats_new.prepare().await
+    }
+
+    pub async fn mark_whats_new_seen(
+        &self,
+        shipped_at_unix_seconds: u64,
+    ) -> Result<(), CoreError> {
+        self.whats_new.mark_seen(shipped_at_unix_seconds).await
     }
 
     // -- Auth (async) --
@@ -1911,6 +1925,7 @@ impl HighlighterCore {
         let room_explorer_config = Arc::new(
             room_explorer_config::RoomExplorerConfigStore::new(runtime.data_dir()),
         );
+        let whats_new = Arc::new(whats_new::WhatsNewStore::new(runtime.data_dir()));
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {
                 session: Session::new(),
@@ -1922,6 +1937,7 @@ impl HighlighterCore {
             isbn_previews,
             recent_searches,
             room_explorer_config,
+            whats_new,
         })
     }
 

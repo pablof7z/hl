@@ -22,16 +22,19 @@ struct HighlighterApp: App {
             RootSceneView()
                 .environment(store)
                 .task {
-                    WhatsNewService.seedIfNeeded()
-                    let unseen = WhatsNewService.unseenEntries(
-                        lastSeenAt: WhatsNewService.lastSeenAt
-                    )
+                    let unseen = (try? await store.safeCore.prepareWhatsNew()) ?? []
                     if !unseen.isEmpty {
                         whatsNewPresentation = WhatsNewPresentation(entries: unseen)
                     }
                 }
                 .sheet(item: $whatsNewPresentation) { presentation in
-                    WhatsNewSheet(entries: presentation.entries)
+                    WhatsNewSheet(entries: presentation.entries) { entry in
+                        Task {
+                            try? await store.safeCore.markWhatsNewSeen(
+                                shippedAtUnixSeconds: entry.shippedAtUnixSeconds
+                            )
+                        }
+                    }
                 }
                 .onOpenURL { url in
                     if ShareURLScheme.isProcessShare(url) {

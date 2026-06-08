@@ -1067,8 +1067,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     
     func lookupIsbn(isbn: String) async throws  -> ArtifactPreview
     
+    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async throws
+
     func pairBunker(uri: String) async throws  -> CurrentUser
     
+    func prepareWhatsNew() async throws  -> [WhatsNewEntry]
+
     /**
      * Fetch the target relay's NIP-11 information document via an HTTPS
      * GET to the `ws[s]://` URL's HTTP equivalent with
@@ -2669,6 +2673,23 @@ open func lookupIsbn(isbn: String)async throws  -> ArtifactPreview  {
         )
 }
     
+open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_mark_whats_new_seen(
+                    self.uniffiClonePointer(),
+                    FfiConverterUInt64.lower(shippedAtUnixSeconds)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_void,
+            completeFunc: ffi_highlighter_core_rust_future_complete_void,
+            freeFunc: ffi_highlighter_core_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
 open func pairBunker(uri: String)async throws  -> CurrentUser  {
     return
         try  await uniffiRustCallAsync(
@@ -2686,6 +2707,23 @@ open func pairBunker(uri: String)async throws  -> CurrentUser  {
         )
 }
     
+open func prepareWhatsNew()async throws  -> [WhatsNewEntry]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_prepare_whats_new(
+                    self.uniffiClonePointer()
+
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeWhatsNewEntry.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
     /**
      * Fetch the target relay's NIP-11 information document via an HTTPS
      * GET to the `ws[s]://` URL's HTTP equivalent with
@@ -8118,6 +8156,84 @@ public func FfiConverterTypeWebMetadata_lower(_ value: WebMetadata) -> RustBuffe
 }
 
 
+public struct WhatsNewEntry {
+    public var shippedAtIso: String
+    public var shippedAtUnixSeconds: UInt64
+    public var lines: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shippedAtIso: String, shippedAtUnixSeconds: UInt64, lines: [String]) {
+        self.shippedAtIso = shippedAtIso
+        self.shippedAtUnixSeconds = shippedAtUnixSeconds
+        self.lines = lines
+    }
+}
+
+#if compiler(>=6)
+extension WhatsNewEntry: Sendable {}
+#endif
+
+
+extension WhatsNewEntry: Equatable, Hashable {
+    public static func ==(lhs: WhatsNewEntry, rhs: WhatsNewEntry) -> Bool {
+        if lhs.shippedAtIso != rhs.shippedAtIso {
+            return false
+        }
+        if lhs.shippedAtUnixSeconds != rhs.shippedAtUnixSeconds {
+            return false
+        }
+        if lhs.lines != rhs.lines {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shippedAtIso)
+        hasher.combine(shippedAtUnixSeconds)
+        hasher.combine(lines)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWhatsNewEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhatsNewEntry {
+        return
+            try WhatsNewEntry(
+                shippedAtIso: FfiConverterString.read(from: &buf),
+                shippedAtUnixSeconds: FfiConverterUInt64.read(from: &buf),
+                lines: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WhatsNewEntry, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.shippedAtIso, into: &buf)
+        FfiConverterUInt64.write(value.shippedAtUnixSeconds, into: &buf)
+        FfiConverterSequenceString.write(value.lines, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhatsNewEntry_lift(_ buf: RustBuffer) throws -> WhatsNewEntry {
+    return try FfiConverterTypeWhatsNewEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhatsNewEntry_lower(_ value: WhatsNewEntry) -> RustBuffer {
+    return FfiConverterTypeWhatsNewEntry.lower(value)
+}
+
+
 public enum CoreError: Swift.Error {
 
     
@@ -9902,6 +10018,31 @@ fileprivate struct FfiConverterSequenceTypeWebBookmarkRecord: FfiConverterRustBu
         return seq
     }
 }
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeWhatsNewEntry: FfiConverterRustBuffer {
+    typealias SwiftType = [WhatsNewEntry]
+
+    public static func write(_ value: [WhatsNewEntry], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeWhatsNewEntry.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WhatsNewEntry] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [WhatsNewEntry]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeWhatsNewEntry.read(from: &buf))
+        }
+        return seq
+    }
+}
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_MAYBE_READY: Int8 = 1
 
@@ -10147,7 +10288,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_lookup_isbn() != 58236) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_mark_whats_new_seen() != 65066) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 63581) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_prepare_whats_new() != 17824) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_probe_relay_nip11() != 47708) {
