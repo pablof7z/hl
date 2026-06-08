@@ -1710,6 +1710,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async  -> BlossomUploadOutcome
 
     /**
+     * Upsert a live chat delta into a bounded room chat list. Rust owns
+     * replacement identity and oldest-first ordering.
+     */
+    func upsertChatMessage(messages: [ChatMessageRecord], message: ChatMessageRecord)  -> [ChatMessageRecord]
+
+    /**
      * Upsert a raw highlight into a per-reference bucket. Rust owns
      * replacement identity and newest-first ordering.
      */
@@ -1727,6 +1733,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Rust owns replacement identity and newest-first ordering.
      */
     func upsertRoomArtifact(artifacts: [ArtifactRecord], artifact: ArtifactRecord)  -> [ArtifactRecord]
+
+    /**
+     * Upsert a live discussion delta into a bounded room discussion list.
+     * Rust owns replacement identity and newest-first ordering.
+     */
+    func upsertRoomDiscussion(discussions: [DiscussionRecord], discussion: DiscussionRecord)  -> [DiscussionRecord]
 
     /**
      * Upsert a live room highlight delta into a bounded screen collection.
@@ -5097,6 +5109,19 @@ open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, 
 }
 
     /**
+     * Upsert a live chat delta into a bounded room chat list. Rust owns
+     * replacement identity and oldest-first ordering.
+     */
+open func upsertChatMessage(messages: [ChatMessageRecord], message: ChatMessageRecord) -> [ChatMessageRecord]  {
+    return try!  FfiConverterSequenceTypeChatMessageRecord.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_upsert_chat_message(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeChatMessageRecord.lower(messages),
+        FfiConverterTypeChatMessageRecord_lower(message),$0
+    )
+})
+}
+
+    /**
      * Upsert a raw highlight into a per-reference bucket. Rust owns
      * replacement identity and newest-first ordering.
      */
@@ -5141,6 +5166,19 @@ open func upsertRoomArtifact(artifacts: [ArtifactRecord], artifact: ArtifactReco
     uniffi_highlighter_core_fn_method_highlightercore_upsert_room_artifact(self.uniffiClonePointer(),
         FfiConverterSequenceTypeArtifactRecord.lower(artifacts),
         FfiConverterTypeArtifactRecord_lower(artifact),$0
+    )
+})
+}
+
+    /**
+     * Upsert a live discussion delta into a bounded room discussion list.
+     * Rust owns replacement identity and newest-first ordering.
+     */
+open func upsertRoomDiscussion(discussions: [DiscussionRecord], discussion: DiscussionRecord) -> [DiscussionRecord]  {
+    return try!  FfiConverterSequenceTypeDiscussionRecord.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_upsert_room_discussion(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeDiscussionRecord.lower(discussions),
+        FfiConverterTypeDiscussionRecord_lower(discussion),$0
     )
 })
 }
@@ -18967,6 +19005,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 28046) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_chat_message() != 4502) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_highlight_reference_bucket() != 35855) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -18974,6 +19015,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_room_artifact() != 51542) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_room_discussion() != 40134) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_room_highlight() != 21960) {

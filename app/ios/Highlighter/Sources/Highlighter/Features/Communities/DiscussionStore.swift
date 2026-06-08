@@ -49,11 +49,12 @@ final class DiscussionStore {
     }
 
     func apply(discussion: DiscussionRecord) {
-        if let i = discussions.firstIndex(where: { $0.eventId == discussion.eventId }) {
-            discussions[i] = discussion
-        } else {
-            let merged = discussions + [discussion]
-            discussions = merged.sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
+        guard let core else {
+            preconditionFailure("DiscussionStore.apply called before start")
         }
+        discussions = core.upsertRoomDiscussion(
+            discussions: discussions,
+            discussion: discussion
+        )
     }
 }

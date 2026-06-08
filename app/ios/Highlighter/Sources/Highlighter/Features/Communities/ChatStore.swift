@@ -145,17 +145,13 @@ final class ChatStore {
     /// or replaces by `eventId`; keeps the array sorted ascending so the
     /// view's reverse-stream renders newest-at-bottom for free.
     func apply(message: ChatMessageRecord) {
-        if let i = messages.firstIndex(where: { $0.eventId == message.eventId }) {
-            messages[i] = message
-            return
+        guard let core else {
+            preconditionFailure("ChatStore.apply called before start")
         }
-        // Most arrivals are newer than everything we have; cheap fast-path.
-        if let last = messages.last, message.createdAt >= last.createdAt {
-            messages.append(message)
-            return
-        }
-        messages.append(message)
-        messages.sort { $0.createdAt < $1.createdAt }
+        messages = core.upsertChatMessage(
+            messages: messages,
+            message: message
+        )
     }
 
     /// Send a chat message into the room. Network publish; the live

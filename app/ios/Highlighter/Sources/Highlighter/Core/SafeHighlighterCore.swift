@@ -660,6 +660,26 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func upsertRoomDiscussion(
+        discussions: [DiscussionRecord],
+        discussion: DiscussionRecord
+    ) -> [DiscussionRecord] {
+        core.upsertRoomDiscussion(
+            discussions: discussions,
+            discussion: discussion
+        )
+    }
+
+    nonisolated func upsertChatMessage(
+        messages: [ChatMessageRecord],
+        message: ChatMessageRecord
+    ) -> [ChatMessageRecord] {
+        core.upsertChatMessage(
+            messages: messages,
+            message: message
+        )
+    }
+
     nonisolated func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome {
         core.getHighlightCommentScope(eventIdHex: eventIdHex)
     }

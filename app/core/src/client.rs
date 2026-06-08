@@ -1910,6 +1910,26 @@ impl HighlighterCore {
         room_state::artifact_comment_count(&artifact, &comments_by_reference)
     }
 
+    /// Upsert a live discussion delta into a bounded room discussion list.
+    /// Rust owns replacement identity and newest-first ordering.
+    pub fn upsert_room_discussion(
+        &self,
+        discussions: Vec<DiscussionRecord>,
+        discussion: DiscussionRecord,
+    ) -> Vec<DiscussionRecord> {
+        room_state::upsert_room_discussion(&discussions, &discussion)
+    }
+
+    /// Upsert a live chat delta into a bounded room chat list. Rust owns
+    /// replacement identity and oldest-first ordering.
+    pub fn upsert_chat_message(
+        &self,
+        messages: Vec<ChatMessageRecord>,
+        message: ChatMessageRecord,
+    ) -> Vec<ChatMessageRecord> {
+        room_state::upsert_chat_message(&messages, &message)
+    }
+
     /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
     pub async fn get_comments_for_scope(
         &self,

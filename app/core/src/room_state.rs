@@ -3,7 +3,10 @@
 //! Native shells receive live deltas from the event bridge, but Rust owns the
 //! deterministic merge and ordering policy for the screen-shaped collections.
 
-use crate::models::{ArtifactRecord, CommentReferenceBucket, HighlightRecord, HydratedHighlight};
+use crate::models::{
+    ArtifactRecord, ChatMessageRecord, CommentReferenceBucket, DiscussionRecord, HighlightRecord,
+    HydratedHighlight,
+};
 use crate::reference_targets;
 
 pub fn upsert_room_artifact(
@@ -91,6 +94,48 @@ pub fn artifact_comment_count(
         .unwrap_or(0)
 }
 
+pub fn upsert_room_discussion(
+    discussions: &[DiscussionRecord],
+    discussion: &DiscussionRecord,
+) -> Vec<DiscussionRecord> {
+    let mut out = Vec::with_capacity(discussions.len() + 1);
+    let mut replaced = false;
+    for existing in discussions {
+        if existing.event_id == discussion.event_id {
+            out.push(discussion.clone());
+            replaced = true;
+        } else {
+            out.push(existing.clone());
+        }
+    }
+    if !replaced {
+        out.push(discussion.clone());
+    }
+    out.sort_by(|a, b| b.created_at.unwrap_or(0).cmp(&a.created_at.unwrap_or(0)));
+    out
+}
+
+pub fn upsert_chat_message(
+    messages: &[ChatMessageRecord],
+    message: &ChatMessageRecord,
+) -> Vec<ChatMessageRecord> {
+    let mut out = Vec::with_capacity(messages.len() + 1);
+    let mut replaced = false;
+    for existing in messages {
+        if existing.event_id == message.event_id {
+            out.push(message.clone());
+            replaced = true;
+        } else {
+            out.push(existing.clone());
+        }
+    }
+    if !replaced {
+        out.push(message.clone());
+    }
+    out.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,6 +201,38 @@ mod tests {
         );
 
         assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn upsert_room_discussion_replaces_and_orders_newest_first() {
+        let older = discussion("older", Some(10));
+        let newer = discussion("newer", Some(30));
+        let replacement = discussion("older", Some(40));
+
+        let out = upsert_room_discussion(&[older, newer], &replacement);
+
+        assert_eq!(
+            out.iter()
+                .map(|discussion| discussion.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["older", "newer"]
+        );
+    }
+
+    #[test]
+    fn upsert_chat_message_replaces_and_orders_oldest_first() {
+        let older = chat("older", 10);
+        let newer = chat("newer", 30);
+        let replacement = chat("newer", 5);
+
+        let out = upsert_chat_message(&[older, newer], &replacement);
+
+        assert_eq!(
+            out.iter()
+                .map(|message| message.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["newer", "older"]
+        );
     }
 
     fn artifact(
@@ -257,6 +334,31 @@ mod tests {
             parent_tag_value: "isbn:9780735211292".into(),
             root_kind: "0".into(),
             created_at: Some(1),
+        }
+    }
+
+    fn discussion(event_id: &str, created_at: Option<u64>) -> DiscussionRecord {
+        DiscussionRecord {
+            id: event_id.into(),
+            event_id: event_id.into(),
+            group_id: "room".into(),
+            pubkey: "pubkey".into(),
+            title: String::new(),
+            body: String::new(),
+            summary: String::new(),
+            created_at,
+            attachment: None,
+        }
+    }
+
+    fn chat(event_id: &str, created_at: u64) -> ChatMessageRecord {
+        ChatMessageRecord {
+            event_id: event_id.into(),
+            group_id: "room".into(),
+            author_pubkey: "pubkey".into(),
+            content: String::new(),
+            created_at,
+            reply_to_event_id: None,
         }
     }
 }
