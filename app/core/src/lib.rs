@@ -5,7 +5,6 @@ pub mod artifacts;
 pub mod blossom;
 pub mod bookmarks;
 pub mod lists;
-pub mod cache;
 pub mod chat;
 pub mod client;
 pub mod comments;

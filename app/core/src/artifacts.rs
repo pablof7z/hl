@@ -230,16 +230,6 @@ pub async fn publish(
     })
 }
 
-/// Port of `fetchArtifactSharesForGroup`. MVP leaves this to the live
-/// subscription — stub returns empty and lets the Room pump hydrate via
-/// deltas.
-pub async fn fetch_shares(
-    _group_id: &str,
-    _limit: u32,
-) -> Result<Vec<ArtifactRecord>, CoreError> {
-    Ok(Vec::new())
-}
-
 /// Read kind:11 artifact shares for `group_id` from nostrdb, newest first.
 /// Scans by kind only and checks `#h` manually — the nostrdb tag index is
 /// unreliable for non-standard tag names on some event kinds.
