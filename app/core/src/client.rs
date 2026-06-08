@@ -258,6 +258,13 @@ impl HighlighterCore {
         crate::artifact_detail::route_for_artifact(&artifact)
     }
 
+    pub fn share_extension_communities_snapshot(
+        &self,
+        communities: Vec<CommunitySummary>,
+    ) -> Vec<u8> {
+        crate::share_extension::communities_snapshot_json(communities)
+    }
+
     pub async fn prepare_whats_new(&self) -> Result<Vec<whats_new::WhatsNewEntry>, CoreError> {
         self.whats_new.prepare().await
     }

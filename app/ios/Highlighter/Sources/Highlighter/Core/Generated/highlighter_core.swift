@@ -1235,6 +1235,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     
     func setWifiOnlyEnabled(enabled: Bool) throws
 
+    func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary])  -> Data
+
     /**
      * Re-share an existing kind:9802 highlight into a NIP-29 room as a
      * kind:16 generic repost. Used to surface a friend's highlight (or
@@ -3379,6 +3381,14 @@ open func setWifiOnlyEnabled(enabled: Bool)throws   {try rustCallWithError(FfiCo
         FfiConverterBool.lower(enabled),$0
     )
 }
+}
+
+open func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary]) -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_share_extension_communities_snapshot(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeCommunitySummary.lower(communities),$0
+    )
+})
 }
 
     /**
@@ -11046,6 +11056,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_wifi_only_enabled() != 61233) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_share_extension_communities_snapshot() != 38830) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 10741) {

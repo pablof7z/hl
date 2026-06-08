@@ -42,6 +42,7 @@ pub mod relays;
 pub mod room_explorer_config;
 pub mod search;
 pub mod session;
+pub mod share_extension;
 pub mod subscriptions;
 pub mod web_metadata;
 pub mod whats_new;

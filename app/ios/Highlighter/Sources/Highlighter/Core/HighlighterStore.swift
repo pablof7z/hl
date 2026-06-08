@@ -141,7 +141,7 @@ final class HighlighterStore {
         currentUserProfile = nil
         joinedCommunities.removeAll()
         connectionState = .unknown
-        SharedCommunitiesCache.clear()
+        SharedCommunitiesSnapshot.clear()
     }
 
     func markOnboardingComplete() throws {
@@ -257,14 +257,13 @@ final class HighlighterStore {
         await task.value
     }
 
-    /// Snapshot `joinedCommunities` into the App Group cache so the Share
-    /// Extension can render its community picker without loading the Rust
-    /// core. Cheap — a JSON encode + UserDefaults set.
+    /// Snapshot `joinedCommunities` into the App Group handoff store so the
+    /// Share Extension can render its community picker without loading the
+    /// Rust core. Rust owns the projection bytes; Swift only writes them to
+    /// the platform container.
     private func mirrorCommunitiesToAppGroup() {
-        let snapshot = joinedCommunities.map {
-            SharedCommunitySummary(id: $0.id, name: $0.name, picture: $0.picture)
-        }
-        SharedCommunitiesCache.save(snapshot)
+        let snapshot = core.shareExtensionCommunitiesSnapshot(communities: joinedCommunities)
+        SharedCommunitiesSnapshot.save(snapshot)
     }
 
     // MARK: - Private

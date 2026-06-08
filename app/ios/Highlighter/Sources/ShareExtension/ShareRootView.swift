@@ -1,16 +1,16 @@
 import SwiftUI
 
 /// Picker the user sees when sharing into Highlighter from another app.
-/// Reads joined communities from the App Group cache (the main app mirrors
-/// them on every refresh), lets the user pick one and optionally type a
-/// comment, then hands the payload back to the containing extension to
-/// enqueue + bounce to the main app.
+/// Reads the latest Rust-built joined-community snapshot from the App Group,
+/// lets the user pick one and optionally type a comment, then hands the
+/// payload back to the containing extension to enqueue + bounce to the main
+/// app.
 struct ShareRootView: View {
     let incomingURL: URL?
     let onSubmit: (PendingShare) -> Void
     let onCancel: () -> Void
 
-    @State private var communities: [SharedCommunitySummary] = SharedCommunitiesCache.load()
+    @State private var communities: [SharedCommunitySummary] = SharedCommunitiesSnapshot.load()
     @State private var selectedGroupId: String?
     @State private var note: String = ""
 
