@@ -40,6 +40,14 @@ actor SafeHighlighterCore {
         try core.setOnboardingComplete(complete: complete)
     }
 
+    func isWifiOnlyEnabled() -> Bool {
+        core.isWifiOnlyEnabled()
+    }
+
+    func setWifiOnlyEnabled(_ enabled: Bool) throws {
+        try core.setWifiOnlyEnabled(enabled: enabled)
+    }
+
     func prepareWhatsNew() async throws -> [WhatsNewEntry] {
         try await core.prepareWhatsNew()
     }

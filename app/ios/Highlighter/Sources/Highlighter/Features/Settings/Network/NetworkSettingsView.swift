@@ -240,7 +240,9 @@ struct NetworkSettingsView: View {
         Section {
             Toggle(isOn: Binding(
                 get: { store.wifiOnlyEnabled },
-                set: { store.setWifiOnly($0) }
+                set: { enabled in
+                    Task { await store.setWifiOnly(enabled) }
+                }
             )) {
                 Label("Wi-Fi only", systemImage: "wifi")
             }

@@ -28,6 +28,7 @@ use crate::models::{
     FeedbackThreadRecord, HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions,
     PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
 };
+use crate::network_preferences;
 use crate::reads;
 use crate::recent_searches;
 use crate::recommendations;
@@ -64,6 +65,8 @@ pub struct HighlighterCore {
     whats_new: Arc<whats_new::WhatsNewStore>,
     /// Rust-owned durable onboarding completion flag.
     onboarding: Arc<onboarding::OnboardingStore>,
+    /// Rust-owned network preference state.
+    network_preferences: Arc<network_preferences::NetworkPreferencesStore>,
 }
 
 struct Inner {
@@ -203,6 +206,14 @@ impl HighlighterCore {
 
     pub fn set_onboarding_complete(&self, complete: bool) -> Result<(), CoreError> {
         self.onboarding.set_complete(complete)
+    }
+
+    pub fn is_wifi_only_enabled(&self) -> bool {
+        self.network_preferences.wifi_only_enabled()
+    }
+
+    pub fn set_wifi_only_enabled(&self, enabled: bool) -> Result<(), CoreError> {
+        self.network_preferences.set_wifi_only_enabled(enabled)
     }
 
     pub async fn prepare_whats_new(&self) -> Result<Vec<whats_new::WhatsNewEntry>, CoreError> {
@@ -1938,6 +1949,9 @@ impl HighlighterCore {
         );
         let whats_new = Arc::new(whats_new::WhatsNewStore::new(runtime.data_dir()));
         let onboarding = Arc::new(onboarding::OnboardingStore::new(runtime.data_dir()));
+        let network_preferences = Arc::new(network_preferences::NetworkPreferencesStore::new(
+            runtime.data_dir(),
+        ));
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {
                 session: Session::new(),
@@ -1951,6 +1965,7 @@ impl HighlighterCore {
             room_explorer_config,
             whats_new,
             onboarding,
+            network_preferences,
         })
     }
 

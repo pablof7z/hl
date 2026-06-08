@@ -19,6 +19,7 @@ pub mod groups;
 pub mod highlights;
 pub mod isbn_lookup;
 pub mod models;
+pub mod network_preferences;
 pub mod nip46;
 pub mod nostr_entities;
 pub mod nostr_runtime;

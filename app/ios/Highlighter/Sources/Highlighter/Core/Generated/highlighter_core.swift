@@ -1063,6 +1063,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     
     func isOnboardingComplete()  -> Bool
 
+    func isWifiOnlyEnabled()  -> Bool
+
     func loginNsec(nsec: String) throws  -> CurrentUser
     
     func logout() 
@@ -1211,6 +1213,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async throws 
     
+    func setWifiOnlyEnabled(enabled: Bool) throws
+
     /**
      * Re-share an existing kind:9802 highlight into a NIP-29 room as a
      * kind:16 generic repost. Used to surface a friend's highlight (or
@@ -2653,6 +2657,13 @@ open func isOnboardingComplete() -> Bool  {
 })
 }
 
+open func isWifiOnlyEnabled() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_is_wifi_only_enabled(self.uniffiClonePointer(),$0
+    )
+})
+}
+
 open func loginNsec(nsec: String)throws  -> CurrentUser  {
     return try  FfiConverterTypeCurrentUser_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
     uniffi_highlighter_core_fn_method_highlightercore_login_nsec(self.uniffiClonePointer(),
@@ -3241,6 +3252,13 @@ open func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, index
         )
 }
     
+open func setWifiOnlyEnabled(enabled: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+    uniffi_highlighter_core_fn_method_highlightercore_set_wifi_only_enabled(self.uniffiClonePointer(),
+        FfiConverterBool.lower(enabled),$0
+    )
+}
+}
+
     /**
      * Re-share an existing kind:9802 highlight into a NIP-29 room as a
      * kind:16 generic repost. Used to surface a friend's highlight (or
@@ -10300,6 +10318,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_onboarding_complete() != 27446) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_is_wifi_only_enabled() != 51997) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_login_nsec() != 30089) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10394,6 +10415,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_relay_roles() != 25561) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_wifi_only_enabled() != 61233) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 10741) {
