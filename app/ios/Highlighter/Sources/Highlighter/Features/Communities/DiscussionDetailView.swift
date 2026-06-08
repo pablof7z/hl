@@ -41,8 +41,7 @@ struct DiscussionDetailView: View {
             guard let commentScope else { return }
             await store.start(
                 scope: commentScope,
-                core: app.safeCore,
-                currentUserPubkey: app.currentUser?.pubkey
+                core: app.safeCore
             )
         }
         .navigationDestination(item: $focusedNode) { node in

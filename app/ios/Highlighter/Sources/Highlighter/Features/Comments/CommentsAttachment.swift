@@ -41,8 +41,7 @@ struct CommentsAttachment: ViewModifier {
                 didStart = true
                 await store.start(
                     scope: scope,
-                    core: app.safeCore,
-                    currentUserPubkey: app.currentUser?.pubkey
+                    core: app.safeCore
                 )
             }
     }

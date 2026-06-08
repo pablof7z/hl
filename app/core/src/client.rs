@@ -39,7 +39,7 @@ use crate::models::{
     Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
     OptionalStringOutcome, PictureDraft, PictureOutcome, PictureRecord, PodcastPositionRecord,
     ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft,
-    ReactionListOutcome, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
+    ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome,
     RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomRecommendation,
     RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
     TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
@@ -784,21 +784,6 @@ fn nostr_entity_event_outcome(
     }
 }
 
-fn reaction_list_outcome(
-    result: Result<Vec<crate::reactions::ReactionRecord>, CoreError>,
-) -> ReactionListOutcome {
-    match result {
-        Ok(values) => ReactionListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => ReactionListOutcome {
-            values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
 fn reaction_outcome(
     result: Result<crate::reactions::ReactionRecord, CoreError>,
 ) -> ReactionOutcome {
@@ -808,6 +793,21 @@ fn reaction_outcome(
             error: String::new(),
         },
         Err(error) => ReactionOutcome {
+            value: None,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn reaction_summary_outcome(
+    result: Result<crate::reactions::ReactionSummary, CoreError>,
+) -> ReactionSummaryOutcome {
+    match result {
+        Ok(value) => ReactionSummaryOutcome {
+            value: Some(value),
+            error: String::new(),
+        },
+        Err(error) => ReactionSummaryOutcome {
             value: None,
             error: error.to_string(),
         },
@@ -1797,37 +1797,40 @@ impl HighlighterCore {
 
     // -- Reactions (NIP-25 kind:7) ---------------------------------------
 
-    /// All cached kind:7 reactions on `target_event_id`, newest first.
-    pub async fn get_reactions_for_event(
+    /// Rust-owned like summary for a target event. The core classifies the
+    /// NIP-25 reaction content and resolves the current user's own like.
+    pub async fn get_like_summary_for_event(
         &self,
         target_event_id: String,
         limit: u32,
-    ) -> ReactionListOutcome {
-        reaction_list_outcome(crate::reactions::query_reactions_for_event(
+    ) -> ReactionSummaryOutcome {
+        let current_user = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|user| user.pubkey);
+        reaction_summary_outcome(crate::reactions::query_like_summary_for_event(
             self.runtime.ndb(),
             target_event_id.trim(),
+            current_user.as_deref(),
             limit,
         ))
     }
 
-    /// Publish a kind:7 reaction targeting `event_id` authored by
-    /// `author_pubkey_hex` of `target_kind`. `content` is the reaction
-    /// body — pass `"+"` for a like.
-    pub async fn publish_reaction(
+    /// Publish a like targeting a NIP-22 comment. Rust owns both the target
+    /// kind and the NIP-25 content marker for "like".
+    pub async fn publish_comment_like(
         &self,
         event_id: String,
         author_pubkey_hex: String,
-        target_kind: u16,
-        content: String,
     ) -> ReactionOutcome {
         let result: Result<crate::reactions::ReactionRecord, CoreError> = async {
             let _ = self.require_user_pubkey()?;
-            crate::reactions::publish_reaction(
+            crate::reactions::publish_comment_like(
                 &self.runtime,
                 event_id.trim(),
                 author_pubkey_hex.trim(),
-                target_kind,
-                content.trim(),
             )
             .await
         }

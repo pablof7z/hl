@@ -168,12 +168,12 @@ actor SafeHighlighterCore {
 
     // MARK: - Reactions (kind:7)
 
-    func getReactionsForEvent(targetEventId: String, limit: UInt32) async -> ReactionListOutcome {
-        await core.getReactionsForEvent(targetEventId: targetEventId, limit: limit)
+    func getLikeSummaryForEvent(targetEventId: String, limit: UInt32) async -> ReactionSummaryOutcome {
+        await core.getLikeSummaryForEvent(targetEventId: targetEventId, limit: limit)
     }
 
-    func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String) async -> ReactionOutcome {
-        await core.publishReaction(eventId: eventId, authorPubkeyHex: authorPubkeyHex, targetKind: targetKind, content: content)
+    func publishCommentLike(eventId: String, authorPubkeyHex: String) async -> ReactionOutcome {
+        await core.publishCommentLike(eventId: eventId, authorPubkeyHex: authorPubkeyHex)
     }
 
     func unpublishReaction(reactionEventId: String) async -> StringOutcome {

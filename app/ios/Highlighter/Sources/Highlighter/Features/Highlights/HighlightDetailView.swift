@@ -70,8 +70,7 @@ struct HighlightDetailView: View {
             commentsStarted = true
             await commentsStore.start(
                 scope: commentsScope,
-                core: app.safeCore,
-                currentUserPubkey: app.currentUser?.pubkey
+                core: app.safeCore
             )
         }
         .task(id: highlight.eventId) {

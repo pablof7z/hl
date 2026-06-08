@@ -16,6 +16,7 @@ use crate::errors::CoreError;
 use crate::nostr_runtime::NostrRuntime;
 
 pub const KIND_REACTION: u16 = 7;
+pub const KIND_COMMENT: u16 = 1111;
 pub const LIKE_CONTENT: &str = "+";
 
 /// One row of cached reaction data — what the UI needs to render
@@ -29,10 +30,16 @@ pub struct ReactionRecord {
     pub created_at: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ReactionSummary {
+    pub like_count: u32,
+    pub my_like_event_id: Option<String>,
+}
+
 /// All cached reactions on `target_event_id`, newest first. Counts and
 /// "did the current user react" predicates are computed from this list
 /// in the caller.
-pub fn query_reactions_for_event(
+fn query_reactions_for_event(
     ndb: &Ndb,
     target_event_id: &str,
     limit: u32,
@@ -80,10 +87,50 @@ pub fn query_reactions_for_event(
     Ok(records)
 }
 
+pub fn summarize_likes(
+    records: &[ReactionRecord],
+    current_user_pubkey: Option<&str>,
+) -> ReactionSummary {
+    let current_user_pubkey = current_user_pubkey
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let mut like_count = 0;
+    let mut my_like_event_id = None;
+
+    for record in records {
+        if record.content != LIKE_CONTENT {
+            continue;
+        }
+        like_count += 1;
+        if my_like_event_id.is_none()
+            && current_user_pubkey
+                .map(|me| record.pubkey == me)
+                .unwrap_or(false)
+        {
+            my_like_event_id = Some(record.event_id.clone());
+        }
+    }
+
+    ReactionSummary {
+        like_count,
+        my_like_event_id,
+    }
+}
+
+pub fn query_like_summary_for_event(
+    ndb: &Ndb,
+    target_event_id: &str,
+    current_user_pubkey: Option<&str>,
+    limit: u32,
+) -> Result<ReactionSummary, CoreError> {
+    let records = query_reactions_for_event(ndb, target_event_id, limit)?;
+    Ok(summarize_likes(&records, current_user_pubkey))
+}
+
 /// Publish a kind:7 reaction targeting `event_hex` authored by
 /// `author_pubkey_hex` of `target_kind`. `content` is the reaction body
 /// — pass `"+"` for a plain like.
-pub async fn publish_reaction(
+async fn publish_reaction(
     runtime: &NostrRuntime,
     event_hex: &str,
     author_pubkey_hex: &str,
@@ -131,6 +178,21 @@ pub async fn publish_reaction(
     })
 }
 
+pub async fn publish_comment_like(
+    runtime: &NostrRuntime,
+    event_hex: &str,
+    author_pubkey_hex: &str,
+) -> Result<ReactionRecord, CoreError> {
+    publish_reaction(
+        runtime,
+        event_hex,
+        author_pubkey_hex,
+        KIND_COMMENT,
+        LIKE_CONTENT,
+    )
+    .await
+}
+
 /// Publish a NIP-25 deletion (kind:5) for the user's own kind:7 reaction.
 /// Returns the deletion event id. Relays that honour NIP-09 will drop the
 /// original reaction; clients that re-cache the deletion will hide it.
@@ -169,4 +231,53 @@ fn first_e_tag(event: &Event) -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reaction(event_id: &str, pubkey: &str, content: &str) -> ReactionRecord {
+        ReactionRecord {
+            event_id: event_id.into(),
+            pubkey: pubkey.into(),
+            target_event_id: "target".into(),
+            content: content.into(),
+            created_at: None,
+        }
+    }
+
+    #[test]
+    fn summarize_likes_counts_likes_and_current_user_reaction() {
+        let records = vec![
+            reaction("newer", "alice", LIKE_CONTENT),
+            reaction("emoji", "bob", "🔥"),
+            reaction("mine", "me", LIKE_CONTENT),
+            reaction("dislike", "carol", "-"),
+        ];
+
+        assert_eq!(
+            summarize_likes(&records, Some("me")),
+            ReactionSummary {
+                like_count: 2,
+                my_like_event_id: Some("mine".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn summarize_likes_omits_current_user_when_not_liked() {
+        let records = vec![
+            reaction("one", "alice", LIKE_CONTENT),
+            reaction("two", "bob", LIKE_CONTENT),
+        ];
+
+        assert_eq!(
+            summarize_likes(&records, Some("me")),
+            ReactionSummary {
+                like_count: 2,
+                my_like_event_id: None,
+            }
+        );
+    }
 }

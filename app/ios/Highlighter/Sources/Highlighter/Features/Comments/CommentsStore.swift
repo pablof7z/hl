@@ -32,18 +32,15 @@ final class CommentsStore {
 
     @ObservationIgnored private var scope: CommentScope?
     @ObservationIgnored private var core: SafeHighlighterCore?
-    @ObservationIgnored private var currentUserPubkey: String?
 
     // MARK: - Lifecycle
 
     func start(
         scope: CommentScope,
-        core: SafeHighlighterCore,
-        currentUserPubkey: String?
+        core: SafeHighlighterCore
     ) async {
         self.scope = scope
         self.core = core
-        self.currentUserPubkey = currentUserPubkey
         await refresh()
     }
 
@@ -73,24 +70,22 @@ final class CommentsStore {
     private func refreshReactionsAndBookmarks(for records: [CommentRecord]) async {
         guard let core else { return }
         let captured = core
-        await withTaskGroup(of: (String, [ReactionRecord]?, Bool?).self) { group in
+        await withTaskGroup(of: (String, ReactionSummary?, Bool?).self) { group in
             for r in records {
                 let id = r.eventId
                 group.addTask {
-                    let reactionOutcome = await captured.getReactionsForEvent(targetEventId: id, limit: 128)
-                    let reactions = reactionOutcome.error.isEmpty ? reactionOutcome.values : nil
+                    let reactionOutcome = await captured.getLikeSummaryForEvent(targetEventId: id, limit: 128)
+                    let summary = reactionOutcome.error.isEmpty ? reactionOutcome.value : nil
                     let bookmarkOutcome = await captured.isEventBookmarked(eventIdHex: id)
                     let bookmarked = bookmarkOutcome.error.isEmpty ? bookmarkOutcome.value : nil
-                    return (id, reactions, bookmarked)
+                    return (id, summary, bookmarked)
                 }
             }
-            for await (id, reactions, isBookmarked) in group {
-                if let reactions {
-                    let likes = reactions.filter { $0.content == "+" }
-                    likeCounts[id] = likes.count
-                    if let me = currentUserPubkey,
-                       let mine = likes.first(where: { $0.pubkey == me }) {
-                        myLikeEventIds[id] = mine.eventId
+            for await (id, summary, isBookmarked) in group {
+                if let summary {
+                    likeCounts[id] = Int(summary.likeCount)
+                    if let myLikeEventId = summary.myLikeEventId {
+                        myLikeEventIds[id] = myLikeEventId
                     } else {
                         myLikeEventIds.removeValue(forKey: id)
                     }
@@ -186,12 +181,9 @@ final class CommentsStore {
                 return
             }
         } else {
-            let kind = UInt16(1111)
-            let outcome = await core.publishReaction(
+            let outcome = await core.publishCommentLike(
                 eventId: id,
-                authorPubkeyHex: comment.pubkey,
-                targetKind: kind,
-                content: "+"
+                authorPubkeyHex: comment.pubkey
             )
             if outcome.error.isEmpty, let reaction = outcome.value {
                 myLikeEventIds[id] = reaction.eventId

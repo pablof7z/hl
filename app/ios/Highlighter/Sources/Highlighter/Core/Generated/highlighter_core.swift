@@ -1068,6 +1068,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getJoinedRoomNamesForRelay(url: String) async  -> StringListOutcome
 
     /**
+     * Rust-owned like summary for a target event. The core classifies the
+     * NIP-25 reaction content and resolves the current user's own like.
+     */
+    func getLikeSummaryForEvent(targetEventId: String, limit: UInt32) async  -> ReactionSummaryOutcome
+
+    /**
      * Return all kind:30003 bookmark sets authored by the current user.
      */
     func getMyBookmarkSets() async  -> BookmarkSetListOutcome
@@ -1108,11 +1114,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * cached or has no agents.
      */
     func getProjectFirstAgentPubkey(coordinate: String) async  -> OptionalStringOutcome
-
-    /**
-     * All cached kind:7 reactions on `target_event_id`, newest first.
-     */
-    func getReactionsForEvent(targetEventId: String, limit: UInt32) async  -> ReactionListOutcome
 
     /**
      * Recent books across the user's joined communities — drives the
@@ -1263,6 +1264,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func publishCommentForScope(scope: CommentScope, parentEventId: String?, content: String) async  -> CommentOutcome
 
+    /**
+     * Publish a like targeting a NIP-22 comment. Rust owns both the target
+     * kind and the NIP-25 content marker for "like".
+     */
+    func publishCommentLike(eventId: String, authorPubkeyHex: String) async  -> ReactionOutcome
+
     func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async  -> DiscussionOutcome
 
     /**
@@ -1290,13 +1297,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * the imeta metadata.
      */
     func publishPicture(draft: PictureDraft) async  -> PictureOutcome
-
-    /**
-     * Publish a kind:7 reaction targeting `event_id` authored by
-     * `author_pubkey_hex` of `target_kind`. `content` is the reaction
-     * body — pass `"+"` for a like.
-     */
-    func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String) async  -> ReactionOutcome
 
     /**
      * Nudge the relay pool to attempt a reconnect on every disconnected
@@ -2716,6 +2716,28 @@ open func getJoinedRoomNamesForRelay(url: String)async  -> StringListOutcome  {
 }
 
     /**
+     * Rust-owned like summary for a target event. The core classifies the
+     * NIP-25 reaction content and resolves the current user's own like.
+     */
+open func getLikeSummaryForEvent(targetEventId: String, limit: UInt32)async  -> ReactionSummaryOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_like_summary_for_event(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(targetEventId),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeReactionSummaryOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
      * Return all kind:30003 bookmark sets authored by the current user.
      */
 open func getMyBookmarkSets()async  -> BookmarkSetListOutcome  {
@@ -2865,27 +2887,6 @@ open func getProjectFirstAgentPubkey(coordinate: String)async  -> OptionalString
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeOptionalStringOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * All cached kind:7 reactions on `target_event_id`, newest first.
-     */
-open func getReactionsForEvent(targetEventId: String, limit: UInt32)async  -> ReactionListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_reactions_for_event(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(targetEventId),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeReactionListOutcome_lift,
             errorHandler: nil
 
         )
@@ -3522,6 +3523,28 @@ open func publishCommentForScope(scope: CommentScope, parentEventId: String?, co
         )
 }
 
+    /**
+     * Publish a like targeting a NIP-22 comment. Rust owns both the target
+     * kind and the NIP-25 content marker for "like".
+     */
+open func publishCommentLike(eventId: String, authorPubkeyHex: String)async  -> ReactionOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_comment_like(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(eventId),FfiConverterString.lower(authorPubkeyHex)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeReactionOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
 open func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?)async  -> DiscussionOutcome  {
     return
         try!  await uniffiRustCallAsync(
@@ -3625,29 +3648,6 @@ open func publishPicture(draft: PictureDraft)async  -> PictureOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePictureOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Publish a kind:7 reaction targeting `event_id` authored by
-     * `author_pubkey_hex` of `target_kind`. `content` is the reaction
-     * body — pass `"+"` for a like.
-     */
-open func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String)async  -> ReactionOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_reaction(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(eventId),FfiConverterString.lower(authorPubkeyHex),FfiConverterUInt16.lower(targetKind),FfiConverterString.lower(content)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeReactionOutcome_lift,
             errorHandler: nil
 
         )
@@ -11624,76 +11624,6 @@ public func FfiConverterTypeProfileUpdateDraft_lower(_ value: ProfileUpdateDraft
 }
 
 
-public struct ReactionListOutcome {
-    public var values: [ReactionRecord]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [ReactionRecord], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ReactionListOutcome: Sendable {}
-#endif
-
-
-extension ReactionListOutcome: Equatable, Hashable {
-    public static func ==(lhs: ReactionListOutcome, rhs: ReactionListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeReactionListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReactionListOutcome {
-        return
-            try ReactionListOutcome(
-                values: FfiConverterSequenceTypeReactionRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ReactionListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeReactionRecord.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeReactionListOutcome_lift(_ buf: RustBuffer) throws -> ReactionListOutcome {
-    return try FfiConverterTypeReactionListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeReactionListOutcome_lower(_ value: ReactionListOutcome) -> RustBuffer {
-    return FfiConverterTypeReactionListOutcome.lower(value)
-}
-
-
 public struct ReactionOutcome {
     public var value: ReactionRecord?
     public var error: String
@@ -11859,6 +11789,146 @@ public func FfiConverterTypeReactionRecord_lift(_ buf: RustBuffer) throws -> Rea
 #endif
 public func FfiConverterTypeReactionRecord_lower(_ value: ReactionRecord) -> RustBuffer {
     return FfiConverterTypeReactionRecord.lower(value)
+}
+
+
+public struct ReactionSummary {
+    public var likeCount: UInt32
+    public var myLikeEventId: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(likeCount: UInt32, myLikeEventId: String?) {
+        self.likeCount = likeCount
+        self.myLikeEventId = myLikeEventId
+    }
+}
+
+#if compiler(>=6)
+extension ReactionSummary: Sendable {}
+#endif
+
+
+extension ReactionSummary: Equatable, Hashable {
+    public static func ==(lhs: ReactionSummary, rhs: ReactionSummary) -> Bool {
+        if lhs.likeCount != rhs.likeCount {
+            return false
+        }
+        if lhs.myLikeEventId != rhs.myLikeEventId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(likeCount)
+        hasher.combine(myLikeEventId)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReactionSummary: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReactionSummary {
+        return
+            try ReactionSummary(
+                likeCount: FfiConverterUInt32.read(from: &buf),
+                myLikeEventId: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReactionSummary, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.likeCount, into: &buf)
+        FfiConverterOptionString.write(value.myLikeEventId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionSummary_lift(_ buf: RustBuffer) throws -> ReactionSummary {
+    return try FfiConverterTypeReactionSummary.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionSummary_lower(_ value: ReactionSummary) -> RustBuffer {
+    return FfiConverterTypeReactionSummary.lower(value)
+}
+
+
+public struct ReactionSummaryOutcome {
+    public var value: ReactionSummary?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: ReactionSummary?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ReactionSummaryOutcome: Sendable {}
+#endif
+
+
+extension ReactionSummaryOutcome: Equatable, Hashable {
+    public static func ==(lhs: ReactionSummaryOutcome, rhs: ReactionSummaryOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReactionSummaryOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReactionSummaryOutcome {
+        return
+            try ReactionSummaryOutcome(
+                value: FfiConverterOptionTypeReactionSummary.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReactionSummaryOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeReactionSummary.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionSummaryOutcome_lift(_ buf: RustBuffer) throws -> ReactionSummaryOutcome {
+    return try FfiConverterTypeReactionSummaryOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionSummaryOutcome_lower(_ value: ReactionSummaryOutcome) -> RustBuffer {
+    return FfiConverterTypeReactionSummaryOutcome.lower(value)
 }
 
 
@@ -15714,6 +15784,30 @@ fileprivate struct FfiConverterOptionTypeReactionRecord: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeReactionSummary: FfiConverterRustBuffer {
+    typealias SwiftType = ReactionSummary?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeReactionSummary.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeReactionSummary.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeWebMetadata: FfiConverterRustBuffer {
     typealias SwiftType = WebMetadata?
 
@@ -16187,31 +16281,6 @@ fileprivate struct FfiConverterSequenceTypeProfileMetadata: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeReactionRecord: FfiConverterRustBuffer {
-    typealias SwiftType = [ReactionRecord]
-
-    public static func write(_ value: [ReactionRecord], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeReactionRecord.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ReactionRecord] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [ReactionRecord]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeReactionRecord.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeReadingFeedItem: FfiConverterRustBuffer {
     typealias SwiftType = [ReadingFeedItem]
 
@@ -16622,6 +16691,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_room_names_for_relay() != 42927) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_like_summary_for_event() != 35956) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_bookmark_sets() != 59737) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -16647,9 +16719,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_project_first_agent_pubkey() != 2324) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_reactions_for_event() != 29591) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 59174) {
@@ -16760,6 +16829,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_for_scope() != 51702) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_like() != 16813) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 58699) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -16773,9 +16845,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_picture() != 49633) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_reaction() != 55916) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 432) {
