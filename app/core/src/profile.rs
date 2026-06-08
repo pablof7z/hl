@@ -120,6 +120,15 @@ pub struct ProfileDisplayProjectionInput {
     pub fallback: ProfileDisplayFallback,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileDisplayWithLabelProjectionInput {
+    pub pubkey: String,
+    pub profile: Option<ProfileMetadata>,
+    pub label_fallback: String,
+    pub pubkey_fallback: ProfileDisplayFallback,
+    pub empty_fallback: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum ProfileDisplayFallback {
     Pubkey8,
@@ -167,6 +176,45 @@ pub fn profile_display_projection(
         }
         Some(profile) if !profile.name.is_empty() => profile.name.chars().take(1).collect(),
         _ => profile_display_fallback_initial(&input.pubkey, input.fallback),
+    };
+    let picture_url = input
+        .profile
+        .as_ref()
+        .map(|profile| profile.picture.clone())
+        .unwrap_or_default();
+
+    ProfileDisplayProjection {
+        display_name,
+        display_initial,
+        picture_url,
+    }
+}
+
+/// Profile/avatar projection for artifact bylines that carry their own author
+/// label. Rust owns the precedence: profile display name, profile name,
+/// supplied label, pubkey fallback, then empty fallback.
+pub fn profile_display_with_label_projection(
+    input: ProfileDisplayWithLabelProjectionInput,
+) -> ProfileDisplayProjection {
+    let label_fallback = input.label_fallback.trim();
+    let empty_fallback = input.empty_fallback.trim();
+    let has_pubkey = !input.pubkey.trim().is_empty();
+
+    let display_name = match input.profile.as_ref() {
+        Some(profile) if !profile.display_name.is_empty() => profile.display_name.clone(),
+        Some(profile) if !profile.name.is_empty() => profile.name.clone(),
+        _ if !label_fallback.is_empty() => label_fallback.to_string(),
+        _ if has_pubkey => profile_display_fallback_name(&input.pubkey, input.pubkey_fallback),
+        _ => empty_fallback.to_string(),
+    };
+    let display_initial = match input.profile.as_ref() {
+        Some(profile) if !profile.display_name.is_empty() => {
+            profile.display_name.chars().take(1).collect()
+        }
+        Some(profile) if !profile.name.is_empty() => profile.name.chars().take(1).collect(),
+        _ if !label_fallback.is_empty() => label_fallback.chars().take(1).collect(),
+        _ if has_pubkey => profile_display_fallback_initial(&input.pubkey, input.pubkey_fallback),
+        _ => empty_fallback.chars().take(1).collect(),
     };
     let picture_url = input
         .profile
@@ -537,6 +585,80 @@ mod tests {
             ProfileDisplayProjection {
                 display_name: "Nostr Account".to_string(),
                 display_initial: String::new(),
+                picture_url: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn profile_display_with_label_projection_prefers_label_before_pubkey() {
+        let projection =
+            profile_display_with_label_projection(ProfileDisplayWithLabelProjectionInput {
+                pubkey: "abcdef1234567890".to_string(),
+                profile: None,
+                label_fallback: "Jane Author".to_string(),
+                pubkey_fallback: ProfileDisplayFallback::Pubkey10,
+                empty_fallback: "Unknown".to_string(),
+            });
+
+        assert_eq!(
+            projection,
+            ProfileDisplayProjection {
+                display_name: "Jane Author".to_string(),
+                display_initial: "J".to_string(),
+                picture_url: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn profile_display_with_label_projection_keeps_profile_picture_with_label() {
+        let projection =
+            profile_display_with_label_projection(ProfileDisplayWithLabelProjectionInput {
+                pubkey: "abcdef1234567890".to_string(),
+                profile: Some(ProfileMetadata {
+                    pubkey: "abcdef1234567890".to_string(),
+                    name: String::new(),
+                    display_name: String::new(),
+                    about: String::new(),
+                    picture: "https://example.com/p.png".to_string(),
+                    banner: String::new(),
+                    nip05: String::new(),
+                    website: String::new(),
+                    lud16: String::new(),
+                    created_at: None,
+                }),
+                label_fallback: "Jane Author".to_string(),
+                pubkey_fallback: ProfileDisplayFallback::Pubkey10,
+                empty_fallback: "Unknown".to_string(),
+            });
+
+        assert_eq!(
+            projection,
+            ProfileDisplayProjection {
+                display_name: "Jane Author".to_string(),
+                display_initial: "J".to_string(),
+                picture_url: "https://example.com/p.png".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn profile_display_with_label_projection_uses_empty_fallback_without_label_or_pubkey() {
+        let projection =
+            profile_display_with_label_projection(ProfileDisplayWithLabelProjectionInput {
+                pubkey: String::new(),
+                profile: None,
+                label_fallback: String::new(),
+                pubkey_fallback: ProfileDisplayFallback::Pubkey10,
+                empty_fallback: "Unknown".to_string(),
+            });
+
+        assert_eq!(
+            projection,
+            ProfileDisplayProjection {
+                display_name: "Unknown".to_string(),
+                display_initial: "U".to_string(),
                 picture_url: String::new(),
             }
         );

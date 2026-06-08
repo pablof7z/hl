@@ -583,6 +583,12 @@ actor SafeHighlighterCore {
         core.projectProfileDisplay(input: input)
     }
 
+    nonisolated func projectProfileDisplayWithLabel(
+        input: ProfileDisplayWithLabelProjectionInput
+    ) -> ProfileDisplayProjection {
+        core.projectProfileDisplayWithLabel(input: input)
+    }
+
     nonisolated func projectProfileIdentity(
         input: ProfileIdentityProjectionInput
     ) -> ProfileIdentityProjection {

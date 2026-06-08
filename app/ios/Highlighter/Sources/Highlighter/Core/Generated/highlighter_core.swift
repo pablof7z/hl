@@ -1437,6 +1437,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectProfileDisplay(input: ProfileDisplayProjectionInput)  -> ProfileDisplayProjection
 
     /**
+     * Profile/avatar presentation projection for bylines that include an
+     * artifact-provided author label.
+     */
+    func projectProfileDisplayWithLabel(input: ProfileDisplayWithLabelProjectionInput)  -> ProfileDisplayProjection
+
+    /**
      * Profile header identity projection. Rust owns display fallbacks and
      * NIP-05 label normalization; native shells render the returned fields.
      */
@@ -4199,6 +4205,18 @@ open func projectProfileDisplay(input: ProfileDisplayProjectionInput) -> Profile
     return try!  FfiConverterTypeProfileDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_profile_display(self.uniffiClonePointer(),
         FfiConverterTypeProfileDisplayProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Profile/avatar presentation projection for bylines that include an
+     * artifact-provided author label.
+     */
+open func projectProfileDisplayWithLabel(input: ProfileDisplayWithLabelProjectionInput) -> ProfileDisplayProjection  {
+    return try!  FfiConverterTypeProfileDisplayProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_profile_display_with_label(self.uniffiClonePointer(),
+        FfiConverterTypeProfileDisplayWithLabelProjectionInput_lower(input),$0
     )
 })
 }
@@ -15433,6 +15451,100 @@ public func FfiConverterTypeProfileDisplayProjectionInput_lower(_ value: Profile
 }
 
 
+public struct ProfileDisplayWithLabelProjectionInput {
+    public var pubkey: String
+    public var profile: ProfileMetadata?
+    public var labelFallback: String
+    public var pubkeyFallback: ProfileDisplayFallback
+    public var emptyFallback: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkey: String, profile: ProfileMetadata?, labelFallback: String, pubkeyFallback: ProfileDisplayFallback, emptyFallback: String) {
+        self.pubkey = pubkey
+        self.profile = profile
+        self.labelFallback = labelFallback
+        self.pubkeyFallback = pubkeyFallback
+        self.emptyFallback = emptyFallback
+    }
+}
+
+#if compiler(>=6)
+extension ProfileDisplayWithLabelProjectionInput: Sendable {}
+#endif
+
+
+extension ProfileDisplayWithLabelProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ProfileDisplayWithLabelProjectionInput, rhs: ProfileDisplayWithLabelProjectionInput) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        if lhs.labelFallback != rhs.labelFallback {
+            return false
+        }
+        if lhs.pubkeyFallback != rhs.pubkeyFallback {
+            return false
+        }
+        if lhs.emptyFallback != rhs.emptyFallback {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(profile)
+        hasher.combine(labelFallback)
+        hasher.combine(pubkeyFallback)
+        hasher.combine(emptyFallback)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileDisplayWithLabelProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileDisplayWithLabelProjectionInput {
+        return
+            try ProfileDisplayWithLabelProjectionInput(
+                pubkey: FfiConverterString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                labelFallback: FfiConverterString.read(from: &buf),
+                pubkeyFallback: FfiConverterTypeProfileDisplayFallback.read(from: &buf),
+                emptyFallback: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileDisplayWithLabelProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+        FfiConverterString.write(value.labelFallback, into: &buf)
+        FfiConverterTypeProfileDisplayFallback.write(value.pubkeyFallback, into: &buf)
+        FfiConverterString.write(value.emptyFallback, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileDisplayWithLabelProjectionInput_lift(_ buf: RustBuffer) throws -> ProfileDisplayWithLabelProjectionInput {
+    return try FfiConverterTypeProfileDisplayWithLabelProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileDisplayWithLabelProjectionInput_lower(_ value: ProfileDisplayWithLabelProjectionInput) -> RustBuffer {
+    return FfiConverterTypeProfileDisplayWithLabelProjectionInput.lower(value)
+}
+
+
 public struct ProfileIdentityProjection {
     public var displayName: String
     public var displayInitial: String
@@ -24345,6 +24457,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_display() != 29583) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_display_with_label() != 13355) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_identity() != 18652) {

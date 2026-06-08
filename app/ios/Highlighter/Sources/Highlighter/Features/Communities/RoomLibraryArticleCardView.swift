@@ -11,11 +11,13 @@ struct RoomLibraryArticleCardView: View {
     var commentCount: Int = 0
 
     var body: some View {
+        let author = authorDisplay
+
         ReadingCard(
             title: artifact.preview.title,
             summary: artifact.preview.description,
             imageURL: coverURL,
-            authorName: authorDisplayName,
+            authorName: author.displayName,
             authorPubkey: articleAuthorPubkey,
             relativeDate: relativeDate,
             metaBits: metaBits,
@@ -24,8 +26,8 @@ struct RoomLibraryArticleCardView: View {
                 let pubkey = articleAuthorPubkey ?? artifact.pubkey
                 AuthorAvatar(
                     pubkey: pubkey,
-                    pictureURL: app.profileSnapshots[pubkey]?.picture ?? "",
-                    displayInitial: authorInitial,
+                    pictureURL: author.pictureUrl,
+                    displayInitial: author.displayInitial,
                     size: 22
                 )
             },
@@ -50,17 +52,17 @@ struct RoomLibraryArticleCardView: View {
         return route.articlePubkey
     }
 
-    private var authorDisplayName: String {
-        let profile = articleAuthorPubkey.flatMap { app.profileSnapshots[$0] }
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        if !artifact.preview.author.isEmpty { return artifact.preview.author }
-        if let pk = articleAuthorPubkey { return String(pk.prefix(10)) }
-        return "Unknown"
-    }
-
-    private var authorInitial: String {
-        authorDisplayName.first.map { String($0).uppercased() } ?? ""
+    private var authorDisplay: ProfileDisplayProjection {
+        let pubkey = articleAuthorPubkey ?? ""
+        return app.safeCore.projectProfileDisplayWithLabel(
+            input: ProfileDisplayWithLabelProjectionInput(
+                pubkey: pubkey,
+                profile: app.profileSnapshots[pubkey],
+                labelFallback: artifact.preview.author,
+                pubkeyFallback: .pubkey10,
+                emptyFallback: "Unknown"
+            )
+        )
     }
 
     private var relativeDate: String? {

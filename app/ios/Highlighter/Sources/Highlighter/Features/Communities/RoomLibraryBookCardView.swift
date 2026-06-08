@@ -51,16 +51,19 @@ struct RoomLibraryBookCardView: View {
         }
     }
 
+    @ViewBuilder
     private var sharerRow: some View {
+        let sharer = sharerDisplay
+
         HStack(spacing: 6) {
             AuthorAvatar(
                 pubkey: artifact.pubkey,
-                pictureURL: app.profileSnapshots[artifact.pubkey]?.picture ?? "",
-                displayInitial: sharerInitial,
+                pictureURL: sharer.pictureUrl,
+                displayInitial: sharer.displayInitial,
                 size: 18
             )
 
-            Text(sharerName.uppercased())
+            Text(sharer.displayName.uppercased())
                 .font(.caption2.weight(.bold))
                 .tracking(0.6)
                 .foregroundStyle(Color.highlighterInkMuted)
@@ -122,15 +125,14 @@ struct RoomLibraryBookCardView: View {
         )
     }
 
-    private var sharerName: String {
-        let profile = app.profileSnapshots[artifact.pubkey]
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(artifact.pubkey.prefix(10))
-    }
-
-    private var sharerInitial: String {
-        sharerName.first.map { String($0).uppercased() } ?? ""
+    private var sharerDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: artifact.pubkey,
+                profile: app.profileSnapshots[artifact.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var relativeDate: String? {

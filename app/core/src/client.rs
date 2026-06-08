@@ -1726,6 +1726,15 @@ impl HighlighterCore {
         profile::profile_display_projection(input)
     }
 
+    /// Profile/avatar presentation projection for bylines that include an
+    /// artifact-provided author label.
+    pub fn project_profile_display_with_label(
+        &self,
+        input: profile::ProfileDisplayWithLabelProjectionInput,
+    ) -> profile::ProfileDisplayProjection {
+        profile::profile_display_with_label_projection(input)
+    }
+
     /// Profile header identity projection. Rust owns display fallbacks and
     /// NIP-05 label normalization; native shells render the returned fields.
     pub fn project_profile_identity(
