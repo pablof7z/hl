@@ -1726,6 +1726,15 @@ impl HighlighterCore {
         profile::profile_display_projection(input)
     }
 
+    /// Profile header identity projection. Rust owns display fallbacks and
+    /// NIP-05 label normalization; native shells render the returned fields.
+    pub fn project_profile_identity(
+        &self,
+        input: profile::ProfileIdentityProjectionInput,
+    ) -> profile::ProfileIdentityProjection {
+        profile::profile_identity_projection(input)
+    }
+
     /// Publish a new kind:0 metadata event for the current user. Preserves
     /// any unknown JSON fields the user had set via other clients —
     /// only the canonical fields the edit form drives get overwritten.

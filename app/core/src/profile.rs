@@ -134,6 +134,22 @@ pub struct ProfileDisplayProjection {
     pub picture_url: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileIdentityProjectionInput {
+    pub pubkey: String,
+    pub profile: Option<ProfileMetadata>,
+    pub fallback: ProfileDisplayFallback,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProfileIdentityProjection {
+    pub display_name: String,
+    pub display_initial: String,
+    pub picture_url: String,
+    pub bio: String,
+    pub verified_nip05: Option<String>,
+}
+
 /// Pure profile presentation projection. Rust owns profile-name precedence,
 /// pubkey fallback, and avatar source selection; native shells only render.
 pub fn profile_display_projection(
@@ -164,6 +180,35 @@ pub fn profile_display_projection(
     }
 }
 
+/// Profile header identity projection. Rust owns profile display fallback and
+/// NIP-05 label normalization; native shells render and execute OS links.
+pub fn profile_identity_projection(
+    input: ProfileIdentityProjectionInput,
+) -> ProfileIdentityProjection {
+    let display = profile_display_projection(ProfileDisplayProjectionInput {
+        pubkey: input.pubkey,
+        profile: input.profile.clone(),
+        fallback: input.fallback,
+    });
+    let bio = input
+        .profile
+        .as_ref()
+        .map(|profile| profile.about.clone())
+        .unwrap_or_default();
+    let verified_nip05 = input
+        .profile
+        .as_ref()
+        .and_then(|profile| profile_verified_nip05_label(&profile.nip05));
+
+    ProfileIdentityProjection {
+        display_name: display.display_name,
+        display_initial: display.display_initial,
+        picture_url: display.picture_url,
+        bio,
+        verified_nip05,
+    }
+}
+
 fn profile_display_fallback_name(pubkey: &str, fallback: ProfileDisplayFallback) -> String {
     match fallback {
         ProfileDisplayFallback::Pubkey8 => pubkey.chars().take(8).collect(),
@@ -178,6 +223,16 @@ fn profile_display_fallback_initial(pubkey: &str, fallback: ProfileDisplayFallba
             pubkey.chars().take(1).collect()
         }
         ProfileDisplayFallback::AccountLabel => String::new(),
+    }
+}
+
+fn profile_verified_nip05_label(raw: &str) -> Option<String> {
+    if raw.is_empty() {
+        None
+    } else if let Some(root_label) = raw.strip_prefix("_@") {
+        Some(root_label.to_string())
+    } else {
+        Some(raw.to_string())
     }
 }
 
@@ -465,5 +520,48 @@ mod tests {
                 picture_url: String::new(),
             }
         );
+    }
+
+    #[test]
+    fn profile_identity_projection_normalizes_root_nip05_label() {
+        let projection = profile_identity_projection(ProfileIdentityProjectionInput {
+            pubkey: "abcdef123456".to_string(),
+            fallback: ProfileDisplayFallback::Pubkey12,
+            profile: Some(ProfileMetadata {
+                pubkey: "abcdef123456".to_string(),
+                name: "alice".to_string(),
+                display_name: "Alice".to_string(),
+                about: "Reader and writer".to_string(),
+                picture: "https://example.com/avatar.png".to_string(),
+                banner: String::new(),
+                nip05: "_@example.com".to_string(),
+                website: String::new(),
+                lud16: String::new(),
+                created_at: None,
+            }),
+        });
+
+        assert_eq!(
+            projection,
+            ProfileIdentityProjection {
+                display_name: "Alice".to_string(),
+                display_initial: "A".to_string(),
+                picture_url: "https://example.com/avatar.png".to_string(),
+                bio: "Reader and writer".to_string(),
+                verified_nip05: Some("example.com".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn profile_identity_projection_omits_empty_nip05() {
+        let projection = profile_identity_projection(ProfileIdentityProjectionInput {
+            pubkey: "abcdef123456".to_string(),
+            fallback: ProfileDisplayFallback::Pubkey12,
+            profile: None,
+        });
+
+        assert_eq!(projection.verified_nip05, None);
+        assert!(projection.bio.is_empty());
     }
 }

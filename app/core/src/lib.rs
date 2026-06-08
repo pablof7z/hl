@@ -98,6 +98,7 @@ pub use podcast_transcript::{
 };
 pub use profile::{
     ProfileDisplayFallback, ProfileDisplayProjection, ProfileDisplayProjectionInput,
+    ProfileIdentityProjection, ProfileIdentityProjectionInput,
 };
 pub use reactions::ReactionRecord;
 pub use relays::{

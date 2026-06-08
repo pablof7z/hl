@@ -144,24 +144,24 @@ private struct IdentityBlock: View {
     let pubkey: String
 
     var body: some View {
-        let projection = profileDisplay
+        let identity = profileIdentity
 
         VStack(spacing: 12) {
             AuthorAvatar(
                 pubkey: pubkey,
-                pictureURL: projection.pictureUrl,
-                displayInitial: projection.displayInitial,
+                pictureURL: identity.pictureUrl,
+                displayInitial: identity.displayInitial,
                 size: 88,
                 ringWidth: 4
             )
 
-            Text(projection.displayName)
+            Text(identity.displayName)
                 .font(.system(.largeTitle, design: .default).weight(.semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
 
-            if let nip05 = verifiedNip05 {
+            if let nip05 = identity.verifiedNip05 {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(Color.highlighterAccent)
@@ -172,33 +172,22 @@ private struct IdentityBlock: View {
                 }
             }
 
-            if !bio.isEmpty {
-                NostrRichText(content: bio, font: .body, ink: .highlighterInkMuted)
+            if !identity.bio.isEmpty {
+                NostrRichText(content: identity.bio, font: .body, ink: .highlighterInkMuted)
                     .frame(maxWidth: 480)
                     .multilineTextAlignment(.center)
             }
         }
     }
 
-    private var profileDisplay: ProfileDisplayProjection {
-        store.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
+    private var profileIdentity: ProfileIdentityProjection {
+        store.safeCore.projectProfileIdentity(
+            input: ProfileIdentityProjectionInput(
                 pubkey: pubkey,
                 profile: store.profile,
                 fallback: .pubkey12
             )
         )
-    }
-
-    private var bio: String {
-        store.profile?.about ?? ""
-    }
-
-    private var verifiedNip05: String? {
-        let raw = store.profile?.nip05 ?? ""
-        guard !raw.isEmpty else { return nil }
-        // Strip leading `_@` the spec permits for root-level identifiers.
-        return raw.hasPrefix("_@") ? String(raw.dropFirst(2)) : raw
     }
 }
 

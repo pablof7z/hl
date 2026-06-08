@@ -583,6 +583,12 @@ actor SafeHighlighterCore {
         core.projectProfileDisplay(input: input)
     }
 
+    nonisolated func projectProfileIdentity(
+        input: ProfileIdentityProjectionInput
+    ) -> ProfileIdentityProjection {
+        core.projectProfileIdentity(input: input)
+    }
+
     nonisolated func decodeNostrEntity(_ input: String) -> NostrEntityRefOutcome {
         core.decodeNostrEntity(input: input)
     }

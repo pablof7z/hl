@@ -1436,6 +1436,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectProfileDisplay(input: ProfileDisplayProjectionInput)  -> ProfileDisplayProjection
 
+    /**
+     * Profile header identity projection. Rust owns display fallbacks and
+     * NIP-05 label normalization; native shells render the returned fields.
+     */
+    func projectProfileIdentity(input: ProfileIdentityProjectionInput)  -> ProfileIdentityProjection
+
     func projectRelayDetail(input: RelayDetailProjectionInput)  -> RelayDetailProjection
 
     func projectRelayRemove(input: RelayRemoveProjectionInput)  -> RelayRemoveProjection
@@ -4193,6 +4199,18 @@ open func projectProfileDisplay(input: ProfileDisplayProjectionInput) -> Profile
     return try!  FfiConverterTypeProfileDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_profile_display(self.uniffiClonePointer(),
         FfiConverterTypeProfileDisplayProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Profile header identity projection. Rust owns display fallbacks and
+     * NIP-05 label normalization; native shells render the returned fields.
+     */
+open func projectProfileIdentity(input: ProfileIdentityProjectionInput) -> ProfileIdentityProjection  {
+    return try!  FfiConverterTypeProfileIdentityProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_profile_identity(self.uniffiClonePointer(),
+        FfiConverterTypeProfileIdentityProjectionInput_lower(input),$0
     )
 })
 }
@@ -15415,6 +15433,178 @@ public func FfiConverterTypeProfileDisplayProjectionInput_lower(_ value: Profile
 }
 
 
+public struct ProfileIdentityProjection {
+    public var displayName: String
+    public var displayInitial: String
+    public var pictureUrl: String
+    public var bio: String
+    public var verifiedNip05: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayName: String, displayInitial: String, pictureUrl: String, bio: String, verifiedNip05: String?) {
+        self.displayName = displayName
+        self.displayInitial = displayInitial
+        self.pictureUrl = pictureUrl
+        self.bio = bio
+        self.verifiedNip05 = verifiedNip05
+    }
+}
+
+#if compiler(>=6)
+extension ProfileIdentityProjection: Sendable {}
+#endif
+
+
+extension ProfileIdentityProjection: Equatable, Hashable {
+    public static func ==(lhs: ProfileIdentityProjection, rhs: ProfileIdentityProjection) -> Bool {
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.displayInitial != rhs.displayInitial {
+            return false
+        }
+        if lhs.pictureUrl != rhs.pictureUrl {
+            return false
+        }
+        if lhs.bio != rhs.bio {
+            return false
+        }
+        if lhs.verifiedNip05 != rhs.verifiedNip05 {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayName)
+        hasher.combine(displayInitial)
+        hasher.combine(pictureUrl)
+        hasher.combine(bio)
+        hasher.combine(verifiedNip05)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileIdentityProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileIdentityProjection {
+        return
+            try ProfileIdentityProjection(
+                displayName: FfiConverterString.read(from: &buf),
+                displayInitial: FfiConverterString.read(from: &buf),
+                pictureUrl: FfiConverterString.read(from: &buf),
+                bio: FfiConverterString.read(from: &buf),
+                verifiedNip05: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileIdentityProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.displayInitial, into: &buf)
+        FfiConverterString.write(value.pictureUrl, into: &buf)
+        FfiConverterString.write(value.bio, into: &buf)
+        FfiConverterOptionString.write(value.verifiedNip05, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileIdentityProjection_lift(_ buf: RustBuffer) throws -> ProfileIdentityProjection {
+    return try FfiConverterTypeProfileIdentityProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileIdentityProjection_lower(_ value: ProfileIdentityProjection) -> RustBuffer {
+    return FfiConverterTypeProfileIdentityProjection.lower(value)
+}
+
+
+public struct ProfileIdentityProjectionInput {
+    public var pubkey: String
+    public var profile: ProfileMetadata?
+    public var fallback: ProfileDisplayFallback
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkey: String, profile: ProfileMetadata?, fallback: ProfileDisplayFallback) {
+        self.pubkey = pubkey
+        self.profile = profile
+        self.fallback = fallback
+    }
+}
+
+#if compiler(>=6)
+extension ProfileIdentityProjectionInput: Sendable {}
+#endif
+
+
+extension ProfileIdentityProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ProfileIdentityProjectionInput, rhs: ProfileIdentityProjectionInput) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        if lhs.fallback != rhs.fallback {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(profile)
+        hasher.combine(fallback)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileIdentityProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileIdentityProjectionInput {
+        return
+            try ProfileIdentityProjectionInput(
+                pubkey: FfiConverterString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                fallback: FfiConverterTypeProfileDisplayFallback.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileIdentityProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+        FfiConverterTypeProfileDisplayFallback.write(value.fallback, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileIdentityProjectionInput_lift(_ buf: RustBuffer) throws -> ProfileIdentityProjectionInput {
+    return try FfiConverterTypeProfileIdentityProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileIdentityProjectionInput_lower(_ value: ProfileIdentityProjectionInput) -> RustBuffer {
+    return FfiConverterTypeProfileIdentityProjectionInput.lower(value)
+}
+
+
 public struct ProfileListOutcome {
     public var values: [ProfileMetadata]
     public var error: String
@@ -24148,6 +24338,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_display() != 29583) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_identity() != 18652) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_detail() != 11729) {
