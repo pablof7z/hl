@@ -23,6 +23,33 @@ pub const KIND_GROUP_MEMBERS: u16 = 39002;
 pub(crate) fn is_public_open_room(summary: &CommunitySummary) -> bool {
     summary.visibility == "public" && summary.access == "open"
 }
+
+pub(crate) fn room_names_for_relay(
+    communities: Vec<CommunitySummary>,
+    relay_url: &str,
+) -> Vec<String> {
+    let target = relay_url.trim();
+    communities
+        .into_iter()
+        .filter(|community| community.relay_url.trim() == target)
+        .map(|community| {
+            if community.name.is_empty() {
+                community.id
+            } else {
+                community.name
+            }
+        })
+        .collect()
+}
+
+pub fn query_joined_room_names_for_relay_from_ndb(
+    ndb: &Ndb,
+    current_pubkey_hex: &str,
+    relay_url: &str,
+) -> Result<Vec<String>, CoreError> {
+    let communities = query_joined_communities_from_ndb(ndb, current_pubkey_hex)?;
+    Ok(room_names_for_relay(communities, relay_url))
+}
 /// NIP-29 chat message. Flat conversational event scoped to the group via
 /// the `["h", <group_id>]` tag. Defined here next to the other NIP-29
 /// kind constants; the actual chat reader/writer lives in `chat.rs`.
@@ -646,10 +673,39 @@ mod tests {
         Tag::parse(vec![name.to_string(), value.to_string()]).expect("named tag")
     }
 
+    fn summary(id: &str, name: &str, relay_url: &str) -> CommunitySummary {
+        CommunitySummary {
+            id: id.to_string(),
+            name: name.to_string(),
+            about: String::new(),
+            picture: String::new(),
+            access: "open".to_string(),
+            visibility: "public".to_string(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: relay_url.to_string(),
+            metadata_event_id: String::new(),
+            created_at: None,
+        }
+    }
+
     #[test]
     fn empty_pubkey_returns_empty() {
         let out = build_joined_communities("", &[], &[]);
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn room_names_for_relay_filters_in_rust() {
+        let rooms = vec![
+            summary("alpha", "Alpha", "wss://relay.example.com"),
+            summary("bravo", "", " wss://relay.example.com "),
+            summary("charlie", "Charlie", "wss://other.example.com"),
+        ];
+
+        let names = room_names_for_relay(rooms, "wss://relay.example.com");
+
+        assert_eq!(names, vec!["Alpha", "bravo"]);
     }
 
     #[test]

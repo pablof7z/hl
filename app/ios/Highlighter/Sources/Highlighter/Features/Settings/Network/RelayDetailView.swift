@@ -6,22 +6,10 @@ struct RelayDetailView: View {
     let url: String
     let store: NetworkSettingsStore
 
-    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
+    @State private var orphanedRoomNames: [String] = []
     @State private var showRemoveConfirm = false
     @State private var isSaving = false
-
-    /// Names of joined rooms hosted on this relay. Non-empty → the user
-    /// would lose access to those rooms if they remove the relay. Listed
-    /// in the confirmation dialog so the user can decide.
-    private var orphanedRoomNames: [String] {
-        appStore.joinedCommunities
-            .filter {
-                $0.relayUrl.trimmingCharacters(in: .whitespaces)
-                    == url.trimmingCharacters(in: .whitespaces)
-            }
-            .map { $0.name.isEmpty ? $0.id : $0.name }
-    }
 
     var body: some View {
         List {
@@ -34,6 +22,9 @@ struct RelayDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Relay")
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: url) {
+            orphanedRoomNames = await store.joinedRoomNames(hostedOnRelay: url)
+        }
         .confirmationDialog(
             orphanedRoomNames.isEmpty
                 ? "Remove this relay?"

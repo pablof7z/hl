@@ -937,6 +937,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getJoinedCommunities() async  -> CommunityListOutcome
 
+    func getJoinedRoomNamesForRelay(relayUrl: String) async  -> StringListOutcome
+
     /**
      * Return all kind:30003 bookmark sets authored by the current user.
      */
@@ -2222,6 +2224,24 @@ open func getJoinedCommunities()async  -> CommunityListOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCommunityListOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func getJoinedRoomNamesForRelay(relayUrl: String)async  -> StringListOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_joined_room_names_for_relay(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(relayUrl)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeStringListOutcome_lift,
             errorHandler: nil
 
         )
@@ -14702,6 +14722,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 28655) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_room_names_for_relay() != 61296) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_bookmark_sets() != 59737) {

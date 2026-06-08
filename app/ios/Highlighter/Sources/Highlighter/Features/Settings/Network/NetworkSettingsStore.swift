@@ -216,6 +216,15 @@ final class NetworkSettingsStore {
         }
     }
 
+    func joinedRoomNames(hostedOnRelay url: String) async -> [String] {
+        let outcome = await core.getJoinedRoomNamesForRelay(relayUrl: url)
+        if outcome.error.isEmpty {
+            return outcome.values
+        }
+        lastError = outcome.error
+        return []
+    }
+
     func setRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async {
         let outcome = await core.setRelayRoles(
             url: url, read: read, write: write, rooms: rooms, indexer: indexer

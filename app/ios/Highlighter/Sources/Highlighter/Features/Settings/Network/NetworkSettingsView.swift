@@ -136,11 +136,13 @@ struct NetworkSettingsView: View {
                 // tapped into the detail view.
                 for idx in indexSet where idx < store.relays.count {
                     let url = store.relays[idx].url
-                    let orphans = orphanedRooms(for: url)
-                    pendingRemove = PendingRemove(
-                        url: url,
-                        orphanedRoomNames: orphans
-                    )
+                    Task {
+                        let orphans = await store.joinedRoomNames(hostedOnRelay: url)
+                        pendingRemove = PendingRemove(
+                            url: url,
+                            orphanedRoomNames: orphans
+                        )
+                    }
                     break // confirm one at a time
                 }
             }
@@ -250,15 +252,6 @@ struct NetworkSettingsView: View {
 
     private func formatBytes(_ bytes: UInt64) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .binary)
-    }
-
-    /// Joined-room names that live on the given relay URL, compared by
-    /// trimmed string equality. Used by the remove-confirmation flow.
-    private func orphanedRooms(for url: String) -> [String] {
-        let target = url.trimmingCharacters(in: .whitespaces)
-        return appStore.joinedCommunities
-            .filter { $0.relayUrl.trimmingCharacters(in: .whitespaces) == target }
-            .map { $0.name.isEmpty ? $0.id : $0.name }
     }
 
     private func banner(icon: String, tint: Color, title: String, detail: String) -> some View {
