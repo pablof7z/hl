@@ -421,6 +421,14 @@ actor SafeHighlighterCore {
         core.getArticleReaderRouteForArticle(pubkeyHex: pubkeyHex, dTag: dTag)
     }
 
+    nonisolated func getBookRoute(catalogId: String) -> BookRouteOutcome {
+        core.getBookRoute(catalogId: catalogId)
+    }
+
+    nonisolated func getHighlightBookRoute(externalReference: String, artifactAddress: String) -> BookRouteOutcome {
+        core.getHighlightBookRoute(externalReference: externalReference, artifactAddress: artifactAddress)
+    }
+
     func getHighlightsForArticle(address: String, limit: UInt32 = 128) async -> HighlightListOutcome {
         await core.getHighlightsForArticle(address: address, limit: limit)
     }

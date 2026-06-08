@@ -40,6 +40,18 @@ pub struct BoolOutcome {
     pub error: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookRoute {
+    pub catalog_id: String,
+    pub isbn: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookRouteOutcome {
+    pub value: Option<BookRoute>,
+    pub error: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct StringListOutcome {
     pub values: Vec<String>,

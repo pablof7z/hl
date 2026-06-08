@@ -883,6 +883,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getBookHighlights(catalogId: String, limit: UInt32) async  -> HighlightListOutcome
 
     /**
+     * Resolve a book catalog id into the canonical ISBN route used by native
+     * book screens. Accepts raw ISBNs and `isbn:<digits>` values.
+     */
+    func getBookRoute(catalogId: String)  -> BookRouteOutcome
+
+    /**
      * Resolve the cached article rows referenced by a bookmark/curation set.
      * Rust owns NIP-33 address parsing and collection ordering.
      */
@@ -973,6 +979,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * before any typing happens.
      */
     func getFollows() async  -> StringListOutcome
+
+    /**
+     * Resolve a highlight's book reference from its external reference or
+     * artifact address. Rust owns the precedence and canonical catalog id.
+     */
+    func getHighlightBookRoute(externalReference: String, artifactAddress: String)  -> BookRouteOutcome
 
     /**
      * Classify a highlight source for native icon/label rendering. Rust owns
@@ -2055,6 +2067,18 @@ open func getBookHighlights(catalogId: String, limit: UInt32)async  -> Highlight
 }
 
     /**
+     * Resolve a book catalog id into the canonical ISBN route used by native
+     * book screens. Accepts raw ISBNs and `isbn:<digits>` values.
+     */
+open func getBookRoute(catalogId: String) -> BookRouteOutcome  {
+    return try!  FfiConverterTypeBookRouteOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_book_route(self.uniffiClonePointer(),
+        FfiConverterString.lower(catalogId),$0
+    )
+})
+}
+
+    /**
      * Resolve the cached article rows referenced by a bookmark/curation set.
      * Rust owns NIP-33 address parsing and collection ordering.
      */
@@ -2384,6 +2408,19 @@ open func getFollows()async  -> StringListOutcome  {
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Resolve a highlight's book reference from its external reference or
+     * artifact address. Rust owns the precedence and canonical catalog id.
+     */
+open func getHighlightBookRoute(externalReference: String, artifactAddress: String) -> BookRouteOutcome  {
+    return try!  FfiConverterTypeBookRouteOutcome_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_highlight_book_route(self.uniffiClonePointer(),
+        FfiConverterString.lower(externalReference),
+        FfiConverterString.lower(artifactAddress),$0
+    )
+})
 }
 
     /**
@@ -5966,6 +6003,146 @@ public func FfiConverterTypeBlossomUploadOutcome_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeBlossomUploadOutcome_lower(_ value: BlossomUploadOutcome) -> RustBuffer {
     return FfiConverterTypeBlossomUploadOutcome.lower(value)
+}
+
+
+public struct BookRoute {
+    public var catalogId: String
+    public var isbn: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(catalogId: String, isbn: String) {
+        self.catalogId = catalogId
+        self.isbn = isbn
+    }
+}
+
+#if compiler(>=6)
+extension BookRoute: Sendable {}
+#endif
+
+
+extension BookRoute: Equatable, Hashable {
+    public static func ==(lhs: BookRoute, rhs: BookRoute) -> Bool {
+        if lhs.catalogId != rhs.catalogId {
+            return false
+        }
+        if lhs.isbn != rhs.isbn {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(catalogId)
+        hasher.combine(isbn)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookRoute: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookRoute {
+        return
+            try BookRoute(
+                catalogId: FfiConverterString.read(from: &buf),
+                isbn: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookRoute, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.catalogId, into: &buf)
+        FfiConverterString.write(value.isbn, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookRoute_lift(_ buf: RustBuffer) throws -> BookRoute {
+    return try FfiConverterTypeBookRoute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookRoute_lower(_ value: BookRoute) -> RustBuffer {
+    return FfiConverterTypeBookRoute.lower(value)
+}
+
+
+public struct BookRouteOutcome {
+    public var value: BookRoute?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: BookRoute?, error: String) {
+        self.value = value
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension BookRouteOutcome: Sendable {}
+#endif
+
+
+extension BookRouteOutcome: Equatable, Hashable {
+    public static func ==(lhs: BookRouteOutcome, rhs: BookRouteOutcome) -> Bool {
+        if lhs.value != rhs.value {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookRouteOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookRouteOutcome {
+        return
+            try BookRouteOutcome(
+                value: FfiConverterOptionTypeBookRoute.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookRouteOutcome, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeBookRoute.write(value.value, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookRouteOutcome_lift(_ buf: RustBuffer) throws -> BookRouteOutcome {
+    return try FfiConverterTypeBookRouteOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookRouteOutcome_lower(_ value: BookRouteOutcome) -> RustBuffer {
+    return FfiConverterTypeBookRouteOutcome.lower(value)
 }
 
 
@@ -14375,6 +14552,30 @@ fileprivate struct FfiConverterOptionTypeBlossomUpload: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeBookRoute: FfiConverterRustBuffer {
+    typealias SwiftType = BookRoute?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBookRoute.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBookRoute.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeBookmarkSetRecord: FfiConverterRustBuffer {
     typealias SwiftType = BookmarkSetRecord?
 
@@ -15595,6 +15796,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_highlights() != 13184) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_route() != 28033) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmark_set_articles() != 58353) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15638,6 +15842,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_follows() != 13105) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_book_route() != 28768) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_source_kind() != 42257) {

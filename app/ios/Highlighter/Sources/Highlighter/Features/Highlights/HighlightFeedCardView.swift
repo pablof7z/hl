@@ -33,11 +33,10 @@ struct HighlightFeedCardView: View {
     }
 
     private var isbnFromLead: String? {
-        let extRef = lead.highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
-        if extRef.hasPrefix("isbn:") { return String(extRef.dropFirst("isbn:".count)) }
-        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if addr.hasPrefix("isbn:") { return String(addr.dropFirst("isbn:".count)) }
-        return nil
+        app.core.getHighlightBookRoute(
+            externalReference: lead.highlight.externalReference,
+            artifactAddress: lead.highlight.artifactAddress
+        ).value?.isbn
     }
 
     var body: some View {

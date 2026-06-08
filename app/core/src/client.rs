@@ -26,11 +26,11 @@ use crate::isbn_lookup;
 use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome, ArtifactPreview,
-    ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome,
-    BookmarkSetListOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome,
-    ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord, CommentListOutcome,
-    CommentOutcome, CommentRecord, CommunityListOutcome, CommunitySummary, CurationMenuItem,
-    CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
+    ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute,
+    BookRouteOutcome, BookmarkSetListOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome,
+    CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord,
+    CommentListOutcome, CommentOutcome, CommentRecord, CommunityListOutcome, CommunitySummary,
+    CurationMenuItem, CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
     DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
     FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
     GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
@@ -118,6 +118,19 @@ fn bool_outcome(result: Result<bool, CoreError>) -> BoolOutcome {
         },
         Err(error) => BoolOutcome {
             value: false,
+            error: error.to_string(),
+        },
+    }
+}
+
+fn book_route_outcome(result: Result<Option<BookRoute>, CoreError>) -> BookRouteOutcome {
+    match result {
+        Ok(value) => BookRouteOutcome {
+            value,
+            error: String::new(),
+        },
+        Err(error) => BookRouteOutcome {
+            value: None,
             error: error.to_string(),
         },
     }
@@ -1640,6 +1653,25 @@ impl HighlighterCore {
             tag_value.trim(),
             limit,
         ))
+    }
+
+    /// Resolve a book catalog id into the canonical ISBN route used by native
+    /// book screens. Accepts raw ISBNs and `isbn:<digits>` values.
+    pub fn get_book_route(&self, catalog_id: String) -> BookRouteOutcome {
+        book_route_outcome(Ok(highlights::book_route_for_catalog(catalog_id.trim())))
+    }
+
+    /// Resolve a highlight's book reference from its external reference or
+    /// artifact address. Rust owns the precedence and canonical catalog id.
+    pub fn get_highlight_book_route(
+        &self,
+        external_reference: String,
+        artifact_address: String,
+    ) -> BookRouteOutcome {
+        book_route_outcome(Ok(highlights::book_route_for_highlight(
+            external_reference.trim(),
+            artifact_address.trim(),
+        )))
     }
 
     /// Read book passages from a catalog id. Rust owns the NIP-73 ISBN

@@ -355,11 +355,11 @@ struct HighlightDetailView: View {
     }
 
     private var bookReaderTarget: BookTarget? {
-        let extRef = highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
-        if extRef.hasPrefix("isbn:") { return BookTarget(catalogId: extRef) }
-        let addr = highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if addr.hasPrefix("isbn:") { return BookTarget(catalogId: addr) }
-        return nil
+        let route = app.core.getHighlightBookRoute(
+            externalReference: highlight.externalReference,
+            artifactAddress: highlight.artifactAddress
+        )
+        return route.value.map { BookTarget(catalogId: $0.catalogId) }
     }
 
     private var webReaderTarget: WebReaderTarget? {

@@ -9,7 +9,7 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use crate::articles;
 use crate::errors::CoreError;
 use crate::models::{
-    ArtifactRecord, BlossomUpload, HighlightDraft, HighlightRecord, HighlightSourceKind,
+    ArtifactRecord, BlossomUpload, BookRoute, HighlightDraft, HighlightRecord, HighlightSourceKind,
     HydratedHighlight,
 };
 use crate::nostr_runtime::NostrRuntime;
@@ -428,6 +428,29 @@ pub fn query_for_book_catalog(
         return Ok(Vec::new());
     };
     query_for_reference(ndb, 'i', &reference, limit)
+}
+
+pub fn book_route_for_catalog(catalog_id: &str) -> Option<BookRoute> {
+    let catalog_id = book_highlight_reference(catalog_id)?;
+    let isbn = catalog_id
+        .strip_prefix("isbn:")
+        .unwrap_or(&catalog_id)
+        .to_string();
+    Some(BookRoute { catalog_id, isbn })
+}
+
+pub fn book_route_for_highlight(
+    external_reference: &str,
+    artifact_address: &str,
+) -> Option<BookRoute> {
+    book_route_for_highlight_reference(external_reference)
+        .or_else(|| book_route_for_highlight_reference(artifact_address))
+}
+
+fn book_route_for_highlight_reference(reference: &str) -> Option<BookRoute> {
+    let trimmed = reference.trim();
+    trimmed.strip_prefix("isbn:")?;
+    book_route_for_catalog(trimmed)
 }
 
 fn book_highlight_reference(catalog_id: &str) -> Option<String> {
@@ -1052,6 +1075,51 @@ mod tests {
             HighlightSourceKind::Web
         );
         assert_eq!(source_kind("", "", "", ""), HighlightSourceKind::Unknown);
+    }
+
+    #[test]
+    fn book_route_accepts_raw_or_prefixed_isbn() {
+        assert_eq!(
+            book_route_for_catalog("9780735211292"),
+            Some(BookRoute {
+                catalog_id: "isbn:9780735211292".into(),
+                isbn: "9780735211292".into()
+            })
+        );
+        assert_eq!(
+            book_route_for_catalog(" isbn:9780735211292 "),
+            Some(BookRoute {
+                catalog_id: "isbn:9780735211292".into(),
+                isbn: "9780735211292".into()
+            })
+        );
+        assert_eq!(book_route_for_catalog(" isbn: "), None);
+    }
+
+    #[test]
+    fn book_route_for_highlight_prefers_external_reference() {
+        assert_eq!(
+            book_route_for_highlight("isbn:external", "isbn:address"),
+            Some(BookRoute {
+                catalog_id: "isbn:external".into(),
+                isbn: "external".into()
+            })
+        );
+        assert_eq!(
+            book_route_for_highlight("", "isbn:address"),
+            Some(BookRoute {
+                catalog_id: "isbn:address".into(),
+                isbn: "address".into()
+            })
+        );
+        assert_eq!(book_route_for_highlight("raw-isbn", ""), None);
+        assert_eq!(
+            book_route_for_highlight("raw-isbn", "isbn:address"),
+            Some(BookRoute {
+                catalog_id: "isbn:address".into(),
+                isbn: "address".into()
+            })
+        );
     }
 
     fn preview_for_podcast(url: &str) -> ArtifactPreview {

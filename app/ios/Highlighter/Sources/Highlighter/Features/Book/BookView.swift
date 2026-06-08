@@ -8,11 +8,12 @@ struct BookView: View {
     @State private var highlights: [HighlightRecord] = []
     @State private var descriptionExpanded = false
 
-    private var isbn: String {
-        catalogId.hasPrefix("isbn:") ? String(catalogId.dropFirst("isbn:".count)) : catalogId
-    }
+    private var bookRoute: BookRoute? { app.core.getBookRoute(catalogId: catalogId).value }
 
-    private var preview: ArtifactPreview? { app.isbnPreviewCache[isbn] }
+    private var preview: ArtifactPreview? {
+        guard let isbn = bookRoute?.isbn else { return nil }
+        return app.isbnPreviewCache[isbn]
+    }
 
     var body: some View {
         ScrollView {
@@ -236,8 +237,12 @@ struct BookView: View {
     // MARK: - Data loading
 
     private func load() async {
-        await app.requestIsbnPreview(isbn: isbn)
-        let outcome = await app.safeCore.getBookHighlights(catalogId: catalogId, limit: 64)
+        guard let route = bookRoute else {
+            await MainActor.run { highlights = [] }
+            return
+        }
+        await app.requestIsbnPreview(isbn: route.isbn)
+        let outcome = await app.safeCore.getBookHighlights(catalogId: route.catalogId, limit: 64)
         if outcome.error.isEmpty {
             await MainActor.run { highlights = outcome.values }
         }
