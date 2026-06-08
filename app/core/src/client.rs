@@ -49,6 +49,9 @@ pub struct HighlighterCore {
     /// OG/favicon cache shared across all `get_web_metadata` calls. Lives
     /// on the core so concurrent fetches for the same URL coalesce.
     web_metadata: Arc<WebMetadataStore>,
+    /// Rust-owned persistent ISBN preview cache. Native shells render these
+    /// previews but do not mirror them in platform storage.
+    isbn_previews: Arc<isbn_lookup::IsbnPreviewCache>,
 }
 
 struct Inner {
@@ -1104,7 +1107,7 @@ impl HighlighterCore {
     }
 
     pub async fn lookup_isbn(&self, isbn: String) -> Result<ArtifactPreview, CoreError> {
-        isbn_lookup::lookup_isbn(&isbn).await
+        self.isbn_previews.lookup(&isbn).await
     }
 
     /// Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
@@ -1875,6 +1878,7 @@ impl HighlighterCore {
         // via `set_event_callback`.
         runtime.spawn_diagnostics_poller(callback_slot.clone());
         let web_metadata = Arc::new(WebMetadataStore::open(runtime.data_dir()));
+        let isbn_previews = Arc::new(isbn_lookup::IsbnPreviewCache::new(runtime.data_dir()));
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {
                 session: Session::new(),
@@ -1883,6 +1887,7 @@ impl HighlighterCore {
             callback_slot,
             subscriptions,
             web_metadata,
+            isbn_previews,
         })
     }
 

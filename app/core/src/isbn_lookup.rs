@@ -7,14 +7,117 @@
 //! 4. On any network / parse failure, fall through to a partial preview so
 //!    the user can fill the rest in manually.
 
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::sync::Mutex;
 
 use crate::errors::CoreError;
 use crate::models::ArtifactPreview;
 
 const OPEN_LIBRARY_TIMEOUT: Duration = Duration::from_secs(5);
+const CACHE_FILE_NAME: &str = "isbn-preview-cache-v1.json";
+
+/// Rust-owned persistent ISBN preview cache.
+///
+/// Native callers should not mirror this in `UserDefaults`; they ask Rust for
+/// a preview and render the returned state. The cache is intentionally local
+/// to the app data directory beside nostrdb so it follows the rest of the
+/// mobile core's storage lifecycle.
+pub struct IsbnPreviewCache {
+    path: PathBuf,
+    entries: Mutex<Option<HashMap<String, CachedISBNPreview>>>,
+}
+
+impl IsbnPreviewCache {
+    pub fn new(data_dir: &Path) -> Self {
+        Self {
+            path: data_dir.join(CACHE_FILE_NAME),
+            entries: Mutex::new(None),
+        }
+    }
+
+    pub async fn lookup(&self, isbn: &str) -> Result<ArtifactPreview, CoreError> {
+        let isbn13 = normalize_isbn(isbn)?;
+
+        let mut guard = self.entries.lock().await;
+        if guard.is_none() {
+            *guard = Some(load_cache(&self.path).await);
+        }
+
+        let entries = guard.as_mut().expect("cache initialized above");
+        if let Some(hit) = entries.get(&isbn13) {
+            return Ok(hit.to_preview(&isbn13));
+        }
+
+        let preview = lookup_isbn_normalized(&isbn13).await?;
+        entries.insert(isbn13.clone(), CachedISBNPreview::from_preview(&preview));
+        persist_cache(&self.path, entries).await?;
+        Ok(preview)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CachedISBNPreview {
+    id: String,
+    url: String,
+    title: String,
+    author: String,
+    image: String,
+    description: String,
+    domain: String,
+    published_at: String,
+}
+
+impl CachedISBNPreview {
+    fn from_preview(preview: &ArtifactPreview) -> Self {
+        Self {
+            id: preview.id.clone(),
+            url: preview.url.clone(),
+            title: preview.title.clone(),
+            author: preview.author.clone(),
+            image: preview.image.clone(),
+            description: preview.description.clone(),
+            domain: preview.domain.clone(),
+            published_at: preview.published_at.clone(),
+        }
+    }
+
+    fn to_preview(&self, isbn13: &str) -> ArtifactPreview {
+        let catalog_id = format!("isbn:{isbn13}");
+        ArtifactPreview {
+            id: self.id.clone(),
+            url: self.url.clone(),
+            title: self.title.clone(),
+            author: self.author.clone(),
+            image: self.image.clone(),
+            description: self.description.clone(),
+            source: "book".into(),
+            domain: self.domain.clone(),
+            catalog_id: catalog_id.clone(),
+            catalog_kind: "isbn".into(),
+            podcast_guid: String::new(),
+            podcast_item_guid: String::new(),
+            podcast_show_title: String::new(),
+            audio_url: String::new(),
+            audio_preview_url: String::new(),
+            transcript_url: String::new(),
+            feed_url: String::new(),
+            published_at: self.published_at.clone(),
+            duration_seconds: None,
+            reference_tag_name: "i".into(),
+            reference_tag_value: catalog_id.clone(),
+            reference_kind: "isbn".into(),
+            highlight_tag_name: "i".into(),
+            highlight_tag_value: catalog_id.clone(),
+            highlight_reference_key: format!("i:{catalog_id}"),
+            chapters: Vec::new(),
+        }
+    }
+}
 
 /// Normalize, validate, and look up an ISBN via Open Library. On any failure,
 /// returns a partial `ArtifactPreview` with only `catalog_id=isbn:{digits}`,
@@ -22,16 +125,57 @@ const OPEN_LIBRARY_TIMEOUT: Duration = Duration::from_secs(5);
 /// through to manual entry.
 pub async fn lookup_isbn(isbn: &str) -> Result<ArtifactPreview, CoreError> {
     let isbn13 = normalize_isbn(isbn)?;
+    lookup_isbn_normalized(&isbn13).await
+}
 
+async fn lookup_isbn_normalized(isbn13: &str) -> Result<ArtifactPreview, CoreError> {
     // Build the preview on a successful fetch; fall back to the minimal one
     // on any failure (404, timeout, bad JSON, etc.).
-    match fetch_open_library(&isbn13).await {
+    match fetch_open_library(isbn13).await {
         Ok(preview) => Ok(preview),
         Err(e) => {
             tracing::warn!(isbn = %isbn13, error = %e, "open library lookup failed, returning partial");
-            Ok(partial_preview(&isbn13))
+            Ok(partial_preview(isbn13))
         }
     }
+}
+
+async fn load_cache(path: &Path) -> HashMap<String, CachedISBNPreview> {
+    match tokio::fs::read(path).await {
+        Ok(bytes) => match serde_json::from_slice::<HashMap<String, CachedISBNPreview>>(&bytes) {
+            Ok(cache) => cache,
+            Err(e) => {
+                tracing::warn!(path = %path.display(), error = %e, "failed to parse ISBN cache");
+                HashMap::new()
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => HashMap::new(),
+        Err(e) => {
+            tracing::warn!(path = %path.display(), error = %e, "failed to read ISBN cache");
+            HashMap::new()
+        }
+    }
+}
+
+async fn persist_cache(
+    path: &Path,
+    entries: &HashMap<String, CachedISBNPreview>,
+) -> Result<(), CoreError> {
+    let bytes = serde_json::to_vec(entries)
+        .map_err(|e| CoreError::Cache(format!("encode ISBN cache: {e}")))?;
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| CoreError::Cache(format!("create ISBN cache dir: {e}")))?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    tokio::fs::write(&tmp, bytes)
+        .await
+        .map_err(|e| CoreError::Cache(format!("write ISBN cache: {e}")))?;
+    tokio::fs::rename(&tmp, path)
+        .await
+        .map_err(|e| CoreError::Cache(format!("commit ISBN cache: {e}")))?;
+    Ok(())
 }
 
 /// Strip dashes/whitespace, require either 10 or 13 digits, canonicalize to
@@ -99,10 +243,7 @@ async fn fetch_open_library(isbn13: &str) -> Result<ArtifactPreview, String> {
     if !resp.status().is_success() {
         return Err(format!("HTTP {}", resp.status()));
     }
-    let body: Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("parse json: {e}"))?;
+    let body: Value = resp.json().await.map_err(|e| format!("parse json: {e}"))?;
 
     let title = body
         .get("title")
@@ -341,6 +482,35 @@ mod tests {
         assert_eq!(p.highlight_tag_name, "i");
         assert_eq!(p.highlight_tag_value, "isbn:9780735211292");
         assert!(!p.highlight_reference_key.is_empty());
+    }
+
+    #[tokio::test]
+    async fn cache_hit_returns_preview_without_network() {
+        let dir = tempfile::tempdir().unwrap();
+        let cached = CachedISBNPreview {
+            id: "cached-id".into(),
+            url: String::new(),
+            title: "Cached Book".into(),
+            author: "Cached Author".into(),
+            image: "https://example.test/cover.jpg".into(),
+            description: "Cached description".into(),
+            domain: String::new(),
+            published_at: "2026-01-01".into(),
+        };
+        let mut entries = HashMap::new();
+        entries.insert("9780735211292".into(), cached);
+        persist_cache(&dir.path().join(CACHE_FILE_NAME), &entries)
+            .await
+            .unwrap();
+
+        let cache = IsbnPreviewCache::new(dir.path());
+        let preview = cache.lookup("978-0-7352-1129-2").await.unwrap();
+
+        assert_eq!(preview.id, "cached-id");
+        assert_eq!(preview.title, "Cached Book");
+        assert_eq!(preview.author, "Cached Author");
+        assert_eq!(preview.catalog_id, "isbn:9780735211292");
+        assert_eq!(preview.highlight_reference_key, "i:isbn:9780735211292");
     }
 
     /// End-to-end hit against the real Open Library API. Ignored by default
