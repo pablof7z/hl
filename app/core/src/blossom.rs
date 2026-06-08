@@ -1,5 +1,5 @@
-//! Blossom server list (BUD-03, kind:10063) read + publish, NIP-98 auth, and
-//! BUD-01 PUT upload.
+//! Blossom server list (BUD-03, kind:10063) read + publish, and BUD-01 PUT
+//! upload.
 //!
 //! The kind:10063 "User Server List" is a replaceable event; publishing a new
 //! one supersedes the old one on every relay. Tags follow BUD-03: each server
@@ -21,7 +21,6 @@ use crate::models::BlossomUpload;
 use crate::nostr_runtime::NostrRuntime;
 
 const KIND_BLOSSOM_SERVERS: u16 = 10063;
-const KIND_NIP98_HTTP_AUTH: u16 = 27235;
 /// BUD-01 authorization event kind for Blossom uploads/deletes/listings.
 const KIND_BLOSSOM_AUTH: u16 = 24242;
 pub const DEFAULT_SERVER: &str = "https://blossom.primal.net";
@@ -150,58 +149,6 @@ pub async fn init_default_blossom_servers(
     }
     publish_blossom_servers(runtime, vec![DEFAULT_SERVER.to_string()]).await?;
     Ok(())
-}
-
-// -- NIP-98 HTTP Auth --
-
-/// Build and sign a kind:27235 NIP-98 HTTP auth event for use as a Blossom
-/// upload `Authorization` header. Returns the raw JSON of the signed event;
-/// the caller base64-encodes it and prefixes `"Nostr "`.
-///
-/// `payload_hash`: hex-encoded SHA-256 of the request body (required by
-/// BUD-01 for PUT uploads).
-pub async fn sign_nip98_auth(
-    runtime: &NostrRuntime,
-    url: &str,
-    method: &str,
-    payload_hash: Option<&str>,
-) -> Result<String, CoreError> {
-    let mut tags = vec![parse_tag(&["u", url])?, parse_tag(&["method", method])?];
-    if let Some(hash) = payload_hash {
-        tags.push(parse_tag(&["payload", hash])?);
-    }
-
-    let builder = EventBuilder::new(Kind::Custom(KIND_NIP98_HTTP_AUTH), "").tags(tags);
-    let client = runtime.client();
-    let event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign nip98 auth: {e}")))?;
-    Ok(event.as_json())
-}
-
-/// Build and sign a kind:27235 NIP-05 registration authorization event.
-/// Returns the raw JSON of the signed event for use in the `auth` field of the
-/// POST `/api/nip05` request body.
-pub async fn sign_nip05_registration_auth(
-    runtime: &NostrRuntime,
-    name: &str,
-    domain: &str,
-) -> Result<String, CoreError> {
-    let tags = vec![
-        parse_tag(&["t", "nip05-registration"])?,
-        parse_tag(&["action", "register"])?,
-        parse_tag(&["domain", domain])?,
-        parse_tag(&["name", name])?,
-    ];
-
-    let builder = EventBuilder::new(Kind::Custom(KIND_NIP98_HTTP_AUTH), "").tags(tags);
-    let client = runtime.client();
-    let event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign nip05 registration auth: {e}")))?;
-    Ok(event.as_json())
 }
 
 // -- BUD-01 upload --

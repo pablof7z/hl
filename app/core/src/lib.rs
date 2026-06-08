@@ -22,6 +22,7 @@ pub mod highlights;
 pub mod isbn_lookup;
 pub mod models;
 pub mod network_preferences;
+pub mod nip05;
 pub mod nip46;
 pub mod nostr_entities;
 pub mod nostr_runtime;
@@ -55,6 +56,7 @@ pub use models::{
     PictureDraft, PictureRecord, PodcastPositionRecord, ProfileMetadata, ReadingFeedItem,
     RoomRecommendation, RoomRecommendationReason, WebBookmarkRecord,
 };
+pub use nip05::Nip05Availability;
 pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;
 pub use whats_new::WhatsNewEntry;

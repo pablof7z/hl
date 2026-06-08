@@ -758,6 +758,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func buildPreviewFromUrl(url: String) async throws  -> ArtifactPreview
     
+    func checkNip05Availability(name: String) async throws  -> Nip05Availability
+
     func clearRecentSearches() async throws  -> [String]
 
     /**
@@ -1067,6 +1069,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func isFollowing(targetPubkeyHex: String) async throws  -> Bool
     
+    func isNip05UsernameValid(input: String)  -> Bool
+
     func isOnboardingComplete()  -> Bool
 
     func isWifiOnlyEnabled()  -> Bool
@@ -1078,6 +1082,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func lookupIsbn(isbn: String) async throws  -> ArtifactPreview
     
     func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async throws
+
+    func normalizeNip05Username(input: String)  -> String
 
     func pairBunker(uri: String) async throws  -> CurrentUser
     
@@ -1157,6 +1163,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     
     func recordRecentSearch(query: String) async throws  -> [String]
 
+    func registerNip05(name: String, domain: String) async throws  -> String
+
     /**
      * Remove a relay by URL.
      */
@@ -1233,22 +1241,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * to the Highlighter relay as the e-tag relay hint.
      */
     func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async throws 
-    
-    /**
-     * Sign a NIP-05 registration authorization event (kind:27235) for
-     * claiming `name@domain` on the Highlighter managed NIP-05 service.
-     * Returns the raw JSON of the signed event for use in the `auth` field
-     * of the POST `/api/nip05` request body.
-     */
-    func signNip05RegistrationAuth(name: String, domain: String) async throws  -> String
-    
-    /**
-     * Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
-     * request. Returns the raw JSON of the signed event; the Swift caller
-     * base64-encodes it and uses it as `Authorization: Nostr <base64>`.
-     * `payload_hash` is the hex SHA-256 of the file bytes (required for PUT).
-     */
-    func signNip98Auth(url: String, method: String, payloadHash: String?) async throws  -> String
     
     /**
      * Install (if not already installed) the kind:10012 curated-list sub for
@@ -1419,6 +1411,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func subscribeWebBookmarks() async throws  -> UInt64
     
+    func suggestNip05Username(displayName: String)  -> String
+
     /**
      * Toggle `address` in the user's kind:10003 list. Returns the new
      * membership state — `true` if the address is now bookmarked, `false`
@@ -1574,6 +1568,23 @@ open func buildPreviewFromUrl(url: String)async throws  -> ArtifactPreview  {
         )
 }
     
+open func checkNip05Availability(name: String)async throws  -> Nip05Availability  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_check_nip05_availability(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(name)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNip05Availability_lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
 open func clearRecentSearches()async throws  -> [String]  {
     return
         try  await uniffiRustCallAsync(
@@ -2681,6 +2692,14 @@ open func isFollowing(targetPubkeyHex: String)async throws  -> Bool  {
         )
 }
     
+open func isNip05UsernameValid(input: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_is_nip05_username_valid(self.uniffiClonePointer(),
+        FfiConverterString.lower(input),$0
+    )
+})
+}
+
 open func isOnboardingComplete() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_is_onboarding_complete(self.uniffiClonePointer(),$0
@@ -2741,6 +2760,14 @@ open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async throws   {
             liftFunc: { $0 },
             errorHandler: FfiConverterTypeCoreError_lift
         )
+}
+
+open func normalizeNip05Username(input: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_normalize_nip05_username(self.uniffiClonePointer(),
+        FfiConverterString.lower(input),$0
+    )
+})
 }
 
 open func pairBunker(uri: String)async throws  -> CurrentUser  {
@@ -3027,6 +3054,23 @@ open func recordRecentSearch(query: String)async throws  -> [String]  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceString.lift,
+            errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
+open func registerNip05(name: String, domain: String)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_register_nip05(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(name),FfiConverterString.lower(domain)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -3321,52 +3365,6 @@ open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: St
             completeFunc: ffi_highlighter_core_rust_future_complete_void,
             freeFunc: ffi_highlighter_core_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-    
-    /**
-     * Sign a NIP-05 registration authorization event (kind:27235) for
-     * claiming `name@domain` on the Highlighter managed NIP-05 service.
-     * Returns the raw JSON of the signed event for use in the `auth` field
-     * of the POST `/api/nip05` request body.
-     */
-open func signNip05RegistrationAuth(name: String, domain: String)async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_sign_nip05_registration_auth(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(name),FfiConverterString.lower(domain)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-    
-    /**
-     * Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
-     * request. Returns the raw JSON of the signed event; the Swift caller
-     * base64-encodes it and uses it as `Authorization: Nostr <base64>`.
-     * `payload_hash` is the hex SHA-256 of the file bytes (required for PUT).
-     */
-open func signNip98Auth(url: String, method: String, payloadHash: String?)async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_sign_nip98_auth(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(url),FfiConverterString.lower(method),FfiConverterOptionString.lower(payloadHash)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeCoreError_lift
         )
 }
@@ -3886,6 +3884,14 @@ open func subscribeWebBookmarks()async throws  -> UInt64  {
         )
 }
     
+open func suggestNip05Username(displayName: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_suggest_nip05_username(self.uniffiClonePointer(),
+        FfiConverterString.lower(displayName),$0
+    )
+})
+}
+
     /**
      * Toggle `address` in the user's kind:10003 list. Returns the new
      * membership state — `true` if the address is now bookmarked, `false`
@@ -6784,6 +6790,92 @@ public func FfiConverterTypeHydratedHighlight_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeHydratedHighlight_lower(_ value: HydratedHighlight) -> RustBuffer {
     return FfiConverterTypeHydratedHighlight.lower(value)
+}
+
+
+public struct Nip05Availability {
+    public var valid: Bool
+    public var available: Bool
+    public var identifier: String
+    public var domain: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(valid: Bool, available: Bool, identifier: String, domain: String) {
+        self.valid = valid
+        self.available = available
+        self.identifier = identifier
+        self.domain = domain
+    }
+}
+
+#if compiler(>=6)
+extension Nip05Availability: Sendable {}
+#endif
+
+
+extension Nip05Availability: Equatable, Hashable {
+    public static func ==(lhs: Nip05Availability, rhs: Nip05Availability) -> Bool {
+        if lhs.valid != rhs.valid {
+            return false
+        }
+        if lhs.available != rhs.available {
+            return false
+        }
+        if lhs.identifier != rhs.identifier {
+            return false
+        }
+        if lhs.domain != rhs.domain {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(valid)
+        hasher.combine(available)
+        hasher.combine(identifier)
+        hasher.combine(domain)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNip05Availability: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05Availability {
+        return
+            try Nip05Availability(
+                valid: FfiConverterBool.read(from: &buf),
+                available: FfiConverterBool.read(from: &buf),
+                identifier: FfiConverterString.read(from: &buf),
+                domain: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Nip05Availability, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.valid, into: &buf)
+        FfiConverterBool.write(value.available, into: &buf)
+        FfiConverterString.write(value.identifier, into: &buf)
+        FfiConverterString.write(value.domain, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNip05Availability_lift(_ buf: RustBuffer) throws -> Nip05Availability {
+    return try FfiConverterTypeNip05Availability.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNip05Availability_lower(_ value: Nip05Availability) -> RustBuffer {
+    return FfiConverterTypeNip05Availability.lower(value)
 }
 
 
@@ -10499,6 +10591,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 53328) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 2201) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches() != 38398) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10673,6 +10768,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_following() != 22885) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_is_nip05_username_valid() != 33870) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_onboarding_complete() != 27446) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10689,6 +10787,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_mark_whats_new_seen() != 65066) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_normalize_nip05_username() != 21732) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 63581) {
@@ -10731,6 +10832,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_record_recent_search() != 63261) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_register_nip05() != 47895) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 27189) {
@@ -10782,12 +10886,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 10741) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_sign_nip05_registration_auth() != 26895) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_sign_nip98_auth() != 43473) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_featured_rooms() != 4206) {
@@ -10857,6 +10955,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_web_bookmarks() != 9203) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_suggest_nip05_username() != 36133) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark() != 6523) {

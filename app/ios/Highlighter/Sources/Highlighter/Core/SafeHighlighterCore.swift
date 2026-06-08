@@ -353,6 +353,26 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func normalizeNip05Username(_ input: String) -> String {
+        core.normalizeNip05Username(input: input)
+    }
+
+    nonisolated func suggestNip05Username(displayName: String) -> String {
+        core.suggestNip05Username(displayName: displayName)
+    }
+
+    nonisolated func isNip05UsernameValid(_ input: String) -> Bool {
+        core.isNip05UsernameValid(input: input)
+    }
+
+    func checkNip05Availability(name: String) async throws -> Nip05Availability {
+        try await core.checkNip05Availability(name: name)
+    }
+
+    func registerNip05(name: String, domain: String) async throws -> String {
+        try await core.registerNip05(name: name, domain: domain)
+    }
+
     func getUserArticles(pubkeyHex: String, limit: UInt32 = 32) async throws -> [ArticleRecord] {
         try await core.getUserArticles(pubkeyHex: pubkeyHex, limit: limit)
     }
@@ -607,14 +627,6 @@ actor SafeHighlighterCore {
 
     func initDefaultBlossomServers() async throws {
         try await core.initDefaultBlossomServers()
-    }
-
-    func signNip98Auth(url: String, method: String, payloadHash: String?) async throws -> String {
-        try await core.signNip98Auth(url: url, method: method, payloadHash: payloadHash)
-    }
-
-    func signNip05RegistrationAuth(name: String, domain: String) async throws -> String {
-        try await core.signNip05RegistrationAuth(name: name, domain: domain)
     }
 
     // MARK: - Capture (Blossom upload + kind:20 picture)

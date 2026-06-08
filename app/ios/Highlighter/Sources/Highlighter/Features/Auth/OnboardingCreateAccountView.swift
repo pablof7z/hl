@@ -1,7 +1,5 @@
 import SwiftUI
 
-private let nip05BaseURL = URL(string: "https://beta.highlighter.com")!
-
 private enum UsernameState: Equatable {
     case idle
     case checking
@@ -20,12 +18,11 @@ struct OnboardingCreateAccountView: View {
     @State private var errorMessage: String?
     @State private var createdAccount: GeneratedAccount?
     @State private var navigateToInterests = false
+    @State private var usernameCheckTask: Task<Void, Never>?
 
     @FocusState private var focusedField: Field?
 
     private enum Field { case displayName, username }
-
-    private var checkTask: Task<Void, Never>? = nil
 
     var body: some View {
         ZStack {
@@ -60,7 +57,7 @@ struct OnboardingCreateAccountView: View {
                         .onSubmit { focusedField = .username }
                         .onChange(of: displayName) { _, new in
                             if username.isEmpty {
-                                let suggested = slugify(new)
+                                let suggested = store.safeCore.suggestNip05Username(displayName: new)
                                 if !suggested.isEmpty {
                                     username = suggested
                                     scheduleCheck(for: suggested)
@@ -127,7 +124,7 @@ struct OnboardingCreateAccountView: View {
                     .keyboardType(.asciiCapable)
                     .focused($focusedField, equals: .username)
                     .onChange(of: username) { _, new in
-                        let normalized = new.lowercased()
+                        let normalized = store.safeCore.normalizeNip05Username(new)
                         if normalized != new { username = normalized }
                         scheduleCheck(for: normalized)
                     }
@@ -193,36 +190,37 @@ struct OnboardingCreateAccountView: View {
     }
 
     private func scheduleCheck(for name: String) {
+        usernameCheckTask?.cancel()
         usernameState = .idle
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        guard isValidUsername(trimmed) else {
+        guard store.safeCore.isNip05UsernameValid(trimmed) else {
             usernameState = .invalid
             return
         }
 
         usernameState = .checking
 
-        Task {
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            guard username == trimmed else { return }
+        usernameCheckTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: 400_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, username == trimmed else { return }
             await checkAvailability(name: trimmed)
         }
     }
 
     private func checkAvailability(name: String) async {
-        var components = URLComponents(url: nip05BaseURL.appendingPathComponent("api/nip05"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "name", value: name)]
-        guard let url = components.url else { return }
-
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let decoded = try JSONDecoder().decode(Nip05AvailabilityResponse.self, from: data)
+            let decoded = try await store.safeCore.checkNip05Availability(name: name)
             guard username == name else { return }
-            if decoded.available {
-                let domain = decoded.identifier.components(separatedBy: "@").last ?? "highlighter.com"
-                usernameState = .available(identifier: decoded.identifier, domain: domain)
+            if !decoded.valid {
+                usernameState = .invalid
+            } else if decoded.available {
+                usernameState = .available(identifier: decoded.identifier, domain: decoded.domain)
             } else {
                 usernameState = .taken
             }
@@ -248,13 +246,11 @@ struct OnboardingCreateAccountView: View {
 
                 let claimedUsername: String
                 if case .available(let identifier, let domain) = usernameState, !username.isEmpty {
-                    let eventJson = try await store.safeCore.signNip05RegistrationAuth(
+                    let registered = try await store.safeCore.registerNip05(
                         name: username,
                         domain: domain
                     )
-                    let authEvent = try JSONDecoder().decode(RawNostrEvent.self, from: Data(eventJson.utf8))
-                    try await registerNip05(name: username, auth: authEvent)
-                    claimedUsername = identifier
+                    claimedUsername = registered.isEmpty ? identifier : registered
                 } else {
                     claimedUsername = ""
                 }
@@ -278,70 +274,5 @@ struct OnboardingCreateAccountView: View {
                 errorMessage = error.localizedDescription
             }
         }
-    }
-
-    private func registerNip05(name: String, auth: RawNostrEvent) async throws {
-        let url = nip05BaseURL.appendingPathComponent("api/nip05")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body = Nip05RegisterRequest(name: name, auth: auth)
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if statusCode < 200 || statusCode >= 300 {
-            let msg = (try? JSONDecoder().decode(ErrorResponse.self, from: data))?.error ?? "Registration failed (\(statusCode))"
-            throw RegistrationError.server(msg)
-        }
-    }
-
-    private func isValidUsername(_ value: String) -> Bool {
-        let re = try! NSRegularExpression(pattern: "^[a-z0-9_-]{1,64}$")
-        let range = NSRange(value.startIndex..., in: value)
-        return re.firstMatch(in: value, range: range) != nil
-    }
-
-    private func slugify(_ text: String) -> String {
-        text
-            .lowercased()
-            .components(separatedBy: .whitespacesAndNewlines)
-            .joined(separator: "_")
-            .filter { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
-    }
-}
-
-// MARK: - Supporting types
-
-private struct Nip05AvailabilityResponse: Decodable {
-    let available: Bool
-    let identifier: String
-}
-
-private struct RawNostrEvent: Codable {
-    let id: String
-    let pubkey: String
-    let created_at: Int
-    let kind: Int
-    let tags: [[String]]
-    let content: String
-    let sig: String
-}
-
-private struct Nip05RegisterRequest: Encodable {
-    let name: String
-    let auth: RawNostrEvent
-}
-
-private struct ErrorResponse: Decodable {
-    let error: String
-}
-
-private enum RegistrationError: LocalizedError {
-    case server(String)
-    var errorDescription: String? {
-        if case .server(let msg) = self { return msg }
-        return nil
     }
 }

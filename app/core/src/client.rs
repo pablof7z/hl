@@ -31,6 +31,7 @@ use crate::models::{
     ProfileMetadata, ReadingFeedItem, RoomRecommendation,
 };
 use crate::network_preferences;
+use crate::nip05::{self, Nip05Availability};
 use crate::podcast_position;
 use crate::reads;
 use crate::recent_searches;
@@ -709,6 +710,34 @@ impl HighlighterCore {
             &lud16,
         )
         .await
+    }
+
+    pub fn normalize_nip05_username(&self, input: String) -> String {
+        nip05::normalize_username(&input)
+    }
+
+    pub fn suggest_nip05_username(&self, display_name: String) -> String {
+        nip05::suggest_username(&display_name)
+    }
+
+    pub fn is_nip05_username_valid(&self, input: String) -> bool {
+        nip05::is_valid_username(&input)
+    }
+
+    pub async fn check_nip05_availability(
+        &self,
+        name: String,
+    ) -> Result<Nip05Availability, CoreError> {
+        nip05::check_availability(&name).await
+    }
+
+    pub async fn register_nip05(
+        &self,
+        name: String,
+        domain: String,
+    ) -> Result<String, CoreError> {
+        let _ = self.require_user_pubkey()?;
+        nip05::register_username(&self.runtime, &name, &domain).await
     }
 
     pub async fn get_user_articles(
@@ -1768,33 +1797,6 @@ impl HighlighterCore {
             .current_user()
             .ok_or(CoreError::NotAuthenticated)?;
         blossom::init_default_blossom_servers(&self.runtime, &user.pubkey).await
-    }
-
-    /// Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
-    /// request. Returns the raw JSON of the signed event; the Swift caller
-    /// base64-encodes it and uses it as `Authorization: Nostr <base64>`.
-    /// `payload_hash` is the hex SHA-256 of the file bytes (required for PUT).
-    pub async fn sign_nip98_auth(
-        &self,
-        url: String,
-        method: String,
-        payload_hash: Option<String>,
-    ) -> Result<String, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        blossom::sign_nip98_auth(&self.runtime, &url, &method, payload_hash.as_deref()).await
-    }
-
-    /// Sign a NIP-05 registration authorization event (kind:27235) for
-    /// claiming `name@domain` on the Highlighter managed NIP-05 service.
-    /// Returns the raw JSON of the signed event for use in the `auth` field
-    /// of the POST `/api/nip05` request body.
-    pub async fn sign_nip05_registration_auth(
-        &self,
-        name: String,
-        domain: String,
-    ) -> Result<String, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        blossom::sign_nip05_registration_auth(&self.runtime, &name, &domain).await
     }
 
     // -- Capture flow (BUD-01 upload + kind:20 picture publish) --
