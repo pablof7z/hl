@@ -348,7 +348,7 @@ final class NostrEntityCardStore {
 
 /// Block-level card for `nevent1…` / `naddr1…` references. Resolves
 /// against the local nostrdb first, then subscribes through Rust when cold.
-/// Per-kind rendering swap-in is handled inline.
+/// Per-entity rendering is selected by the Rust projection.
 struct NostrEntityCard: View {
     let entity: NostrEntityRef
 
@@ -369,12 +369,12 @@ struct NostrEntityCard: View {
 
     @ViewBuilder
     private func resolvedCard(_ event: NostrEntityEvent) -> some View {
-        switch Int(event.kind) {
-        case 30023: ArticleEntityCard(event: event)
-        case 1: NoteEntityCard(event: event)
-        case 9802: HighlightEntityCard(event: event)
-        case 0: ProfileCalloutCard(event: event)
-        default: GenericEntityCard(event: event)
+        switch event.renderKind {
+        case .article: ArticleEntityCard(event: event)
+        case .note: NoteEntityCard(event: event)
+        case .highlight: HighlightEntityCard(event: event)
+        case .profile: ProfileCalloutCard(event: event)
+        case .generic: GenericEntityCard(event: event)
         }
     }
 
@@ -416,9 +416,9 @@ struct NostrEntityCard: View {
     }
 }
 
-// MARK: - Per-kind cards
+// MARK: - Entity cards
 
-/// kind:30023 — long-form article. Compact magazine card.
+/// Long-form article. Compact magazine card.
 private struct ArticleEntityCard: View {
     let event: NostrEntityEvent
     @Environment(HighlighterStore.self) private var appStore
@@ -504,7 +504,7 @@ private struct ArticleEntityCard: View {
     }
 }
 
-/// kind:1 — short note. Tweet-like card with author header + content.
+/// Short note. Tweet-like card with author header + content.
 private struct NoteEntityCard: View {
     let event: NostrEntityEvent
     @Environment(HighlighterStore.self) private var appStore
@@ -548,7 +548,7 @@ private struct NoteEntityCard: View {
     }
 }
 
-/// kind:9802 — NIP-84 highlight. Pull-quote treatment.
+/// Highlight. Pull-quote treatment.
 private struct HighlightEntityCard: View {
     let event: NostrEntityEvent
     @Environment(HighlighterStore.self) private var appStore
@@ -581,7 +581,7 @@ private struct HighlightEntityCard: View {
     }
 }
 
-/// kind:0 — profile metadata. Compact callout.
+/// Profile metadata. Compact callout.
 private struct ProfileCalloutCard: View {
     let event: NostrEntityEvent
 

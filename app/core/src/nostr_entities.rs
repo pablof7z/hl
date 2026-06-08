@@ -10,7 +10,8 @@
 //!   prefixes and whitespace are stripped.
 //! - [`resolve_from_cache`] — if the referenced event is already in
 //!   nostrdb, return a [`NostrEntityEvent`] the UI can render
-//!   directly. Returns `None` when the cache is cold.
+//!   directly. Returns `None` when the cache is cold. Rust also carries the
+//!   semantic render kind so native shells do not duplicate event-kind policy.
 //! - The subscription registry installs a view-scoped REQ on the indexer
 //!   pool + any relay hints carried by the entity, so a cold cache warms up
 //!   without blocking the first paint.
@@ -22,6 +23,11 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
+
+const KIND_METADATA: u32 = 0;
+const KIND_SHORT_NOTE: u32 = 1;
+const KIND_HIGHLIGHT: u32 = 9802;
+const KIND_LONG_FORM: u32 = 30023;
 
 /// Parsed reference to a Nostr entity encoded as a NIP-19 bech32.
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -52,15 +58,25 @@ pub enum NostrEntityRef {
     },
 }
 
+/// Semantic card renderer for a resolved NIP-19 entity. The raw event kind
+/// remains on [`NostrEntityEvent`] for diagnostics and generic fallback copy,
+/// but Rust owns the mapping from protocol kind to UI semantic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum NostrEntityRenderKind {
+    Article,
+    Note,
+    Highlight,
+    Profile,
+    Generic,
+}
+
 /// Resolved event data for a [`NostrEntityRef`]. Returned by
-/// [`resolve_from_cache`] when the underlying event is already in
-/// nostrdb; the Swift layer switches on `kind` to pick the right
-/// inline card (30023 → article, 1 → note, 9802 → highlight quote,
-/// etc.) and falls back to a generic "Event <id>" rendering otherwise.
+/// [`resolve_from_cache`] when the underlying event is already in nostrdb.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct NostrEntityEvent {
     pub event_id_hex: String,
     pub kind: u32,
+    pub render_kind: NostrEntityRenderKind,
     pub pubkey_hex: String,
     pub content: String,
     pub created_at: u64,
@@ -321,6 +337,16 @@ pub(crate) fn entity_event_from_event(event: &Event) -> NostrEntityEvent {
     to_entity_event(event)
 }
 
+pub fn render_kind_for_event_kind(kind: u32) -> NostrEntityRenderKind {
+    match kind {
+        KIND_LONG_FORM => NostrEntityRenderKind::Article,
+        KIND_SHORT_NOTE => NostrEntityRenderKind::Note,
+        KIND_HIGHLIGHT => NostrEntityRenderKind::Highlight,
+        KIND_METADATA => NostrEntityRenderKind::Profile,
+        _ => NostrEntityRenderKind::Generic,
+    }
+}
+
 fn resolve_by_event_id(ndb: &Ndb, id_hex: &str) -> Result<Option<NostrEntityEvent>, CoreError> {
     let id = EventId::from_hex(id_hex)
         .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
@@ -406,6 +432,7 @@ fn to_entity_event(event: &Event) -> NostrEntityEvent {
     NostrEntityEvent {
         event_id_hex: event.id.to_hex(),
         kind: event.kind.as_u16() as u32,
+        render_kind: render_kind_for_event_kind(event.kind.as_u16() as u32),
         pubkey_hex: event.pubkey.to_hex(),
         content: event.content.clone(),
         created_at: event.created_at.as_secs(),
@@ -555,5 +582,26 @@ mod tests {
     fn encode_nevent_rejects_bad_event_id() {
         let err = encode_event_to_nevent("not-hex".to_string(), None, Vec::new(), None);
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn render_kind_for_event_kind_matches_rich_text_cards() {
+        assert_eq!(
+            render_kind_for_event_kind(30023),
+            NostrEntityRenderKind::Article
+        );
+        assert_eq!(render_kind_for_event_kind(1), NostrEntityRenderKind::Note);
+        assert_eq!(
+            render_kind_for_event_kind(9802),
+            NostrEntityRenderKind::Highlight
+        );
+        assert_eq!(
+            render_kind_for_event_kind(0),
+            NostrEntityRenderKind::Profile
+        );
+        assert_eq!(
+            render_kind_for_event_kind(11),
+            NostrEntityRenderKind::Generic
+        );
     }
 }

@@ -10466,14 +10466,12 @@ public func FfiConverterTypeNostrConnectOptions_lower(_ value: NostrConnectOptio
 
 /**
  * Resolved event data for a [`NostrEntityRef`]. Returned by
- * [`resolve_from_cache`] when the underlying event is already in
- * nostrdb; the Swift layer switches on `kind` to pick the right
- * inline card (30023 → article, 1 → note, 9802 → highlight quote,
- * etc.) and falls back to a generic "Event <id>" rendering otherwise.
+ * [`resolve_from_cache`] when the underlying event is already in nostrdb.
  */
 public struct NostrEntityEvent {
     public var eventIdHex: String
     public var kind: UInt32
+    public var renderKind: NostrEntityRenderKind
     public var pubkeyHex: String
     public var content: String
     public var createdAt: UInt64
@@ -10486,7 +10484,7 @@ public struct NostrEntityEvent {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventIdHex: String, kind: UInt32, pubkeyHex: String, content: String, createdAt: UInt64,
+    public init(eventIdHex: String, kind: UInt32, renderKind: NostrEntityRenderKind, pubkeyHex: String, content: String, createdAt: UInt64,
         /**
          * Serialised `[["k", "v"], …]` so Swift can extract `title` /
          * `image` etc. for an article card without needing a second FFI
@@ -10494,6 +10492,7 @@ public struct NostrEntityEvent {
          */tagsJson: String) {
         self.eventIdHex = eventIdHex
         self.kind = kind
+        self.renderKind = renderKind
         self.pubkeyHex = pubkeyHex
         self.content = content
         self.createdAt = createdAt
@@ -10514,6 +10513,9 @@ extension NostrEntityEvent: Equatable, Hashable {
         if lhs.kind != rhs.kind {
             return false
         }
+        if lhs.renderKind != rhs.renderKind {
+            return false
+        }
         if lhs.pubkeyHex != rhs.pubkeyHex {
             return false
         }
@@ -10532,6 +10534,7 @@ extension NostrEntityEvent: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(eventIdHex)
         hasher.combine(kind)
+        hasher.combine(renderKind)
         hasher.combine(pubkeyHex)
         hasher.combine(content)
         hasher.combine(createdAt)
@@ -10550,6 +10553,7 @@ public struct FfiConverterTypeNostrEntityEvent: FfiConverterRustBuffer {
             try NostrEntityEvent(
                 eventIdHex: FfiConverterString.read(from: &buf),
                 kind: FfiConverterUInt32.read(from: &buf),
+                renderKind: FfiConverterTypeNostrEntityRenderKind.read(from: &buf),
                 pubkeyHex: FfiConverterString.read(from: &buf),
                 content: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterUInt64.read(from: &buf),
@@ -10560,6 +10564,7 @@ public struct FfiConverterTypeNostrEntityEvent: FfiConverterRustBuffer {
     public static func write(_ value: NostrEntityEvent, into buf: inout [UInt8]) {
         FfiConverterString.write(value.eventIdHex, into: &buf)
         FfiConverterUInt32.write(value.kind, into: &buf)
+        FfiConverterTypeNostrEntityRenderKind.write(value.renderKind, into: &buf)
         FfiConverterString.write(value.pubkeyHex, into: &buf)
         FfiConverterString.write(value.content, into: &buf)
         FfiConverterUInt64.write(value.createdAt, into: &buf)
@@ -14395,6 +14400,102 @@ public func FfiConverterTypeNostrEntityRef_lower(_ value: NostrEntityRef) -> Rus
 
 
 extension NostrEntityRef: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Semantic card renderer for a resolved NIP-19 entity. The raw event kind
+ * remains on [`NostrEntityEvent`] for diagnostics and generic fallback copy,
+ * but Rust owns the mapping from protocol kind to UI semantic.
+ */
+
+public enum NostrEntityRenderKind {
+
+    case article
+    case note
+    case highlight
+    case profile
+    case generic
+}
+
+
+#if compiler(>=6)
+extension NostrEntityRenderKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNostrEntityRenderKind: FfiConverterRustBuffer {
+    typealias SwiftType = NostrEntityRenderKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityRenderKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .article
+
+        case 2: return .note
+
+        case 3: return .highlight
+
+        case 4: return .profile
+
+        case 5: return .generic
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NostrEntityRenderKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .article:
+            writeInt(&buf, Int32(1))
+
+
+        case .note:
+            writeInt(&buf, Int32(2))
+
+
+        case .highlight:
+            writeInt(&buf, Int32(3))
+
+
+        case .profile:
+            writeInt(&buf, Int32(4))
+
+
+        case .generic:
+            writeInt(&buf, Int32(5))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityRenderKind_lift(_ buf: RustBuffer) throws -> NostrEntityRenderKind {
+    return try FfiConverterTypeNostrEntityRenderKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityRenderKind_lower(_ value: NostrEntityRenderKind) -> RustBuffer {
+    return FfiConverterTypeNostrEntityRenderKind.lower(value)
+}
+
+
+extension NostrEntityRenderKind: Equatable, Hashable {}
 
 
 
