@@ -1155,6 +1155,28 @@ impl HighlighterCore {
         transcript_segment_list_outcome(podcast_transcript::fetch_transcript(&url).await)
     }
 
+    /// Build a podcast clip highlight draft from transcript selection inputs.
+    /// Rust owns selected segment matching, chronological quote assembly, and
+    /// protocol payload fields.
+    pub fn get_podcast_clip_highlight_draft(
+        &self,
+        segments: Vec<TranscriptSegment>,
+        selected_segment_ids: Vec<String>,
+        note: String,
+        clip_start_seconds: Option<f64>,
+        clip_end_seconds: Option<f64>,
+        clip_speaker: String,
+    ) -> HighlightDraft {
+        podcast_transcript::clip_highlight_draft(
+            &segments,
+            &selected_segment_ids,
+            note,
+            clip_start_seconds,
+            clip_end_seconds,
+            clip_speaker,
+        )
+    }
+
     pub async fn download_podcast_artwork(&self, url: String) -> DataOutcome {
         data_outcome(podcast_transcript::download_artwork(&url).await)
     }

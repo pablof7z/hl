@@ -1179,6 +1179,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getOnboardingInterests()  -> [OnboardingInterest]
 
+    /**
+     * Build a podcast clip highlight draft from transcript selection inputs.
+     * Rust owns selected segment matching, chronological quote assembly, and
+     * protocol payload fields.
+     */
+    func getPodcastClipHighlightDraft(segments: [TranscriptSegment], selectedSegmentIds: [String], note: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String)  -> HighlightDraft
+
     func getPodcastPosition()  -> PodcastPositionRecord?
 
     func getPodcastPositionSeconds(guid: String)  -> Double?
@@ -3191,6 +3198,24 @@ open func getOnboardingInterestSelection(selectedIds: [String]) -> OnboardingInt
 open func getOnboardingInterests() -> [OnboardingInterest]  {
     return try!  FfiConverterSequenceTypeOnboardingInterest.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_onboarding_interests(self.uniffiClonePointer(),$0
+    )
+})
+}
+
+    /**
+     * Build a podcast clip highlight draft from transcript selection inputs.
+     * Rust owns selected segment matching, chronological quote assembly, and
+     * protocol payload fields.
+     */
+open func getPodcastClipHighlightDraft(segments: [TranscriptSegment], selectedSegmentIds: [String], note: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String) -> HighlightDraft  {
+    return try!  FfiConverterTypeHighlightDraft_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_clip_highlight_draft(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeTranscriptSegment.lower(segments),
+        FfiConverterSequenceString.lower(selectedSegmentIds),
+        FfiConverterString.lower(note),
+        FfiConverterOptionDouble.lower(clipStartSeconds),
+        FfiConverterOptionDouble.lower(clipEndSeconds),
+        FfiConverterString.lower(clipSpeaker),$0
     )
 })
 }
@@ -19032,6 +19057,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_onboarding_interests() != 50053) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_highlight_draft() != 43495) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_position() != 36439) {

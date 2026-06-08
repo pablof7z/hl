@@ -4,6 +4,8 @@
 //! core owns reusable transcript interpretation and bounded HTTP loading so
 //! iOS and Android render the same segment model.
 
+use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -12,6 +14,7 @@ use futures::StreamExt;
 use regex::Regex;
 
 use crate::errors::CoreError;
+use crate::models::HighlightDraft;
 
 const MAX_TRANSCRIPT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ARTWORK_BYTES: usize = 10 * 1024 * 1024;
@@ -106,6 +109,52 @@ pub fn parse_transcript_bytes(
         Format::Vtt => parse_vtt(source),
         Format::Srt => parse_srt(source),
         Format::Unknown => Vec::new(),
+    }
+}
+
+/// Build the highlight draft for a podcast clip from the visible transcript
+/// selection. Rust owns segment matching, chronological ordering, quote
+/// assembly, and the protocol payload passed to highlight publishing.
+pub fn clip_highlight_draft(
+    segments: &[TranscriptSegment],
+    selected_segment_ids: &[String],
+    note: String,
+    clip_start_seconds: Option<f64>,
+    clip_end_seconds: Option<f64>,
+    clip_speaker: String,
+) -> HighlightDraft {
+    let selected_ids: HashSet<&str> = selected_segment_ids
+        .iter()
+        .map(String::as_str)
+        .filter(|id| !id.is_empty())
+        .collect();
+    let mut selected: Vec<&TranscriptSegment> = segments
+        .iter()
+        .filter(|segment| selected_ids.contains(segment.id.as_str()))
+        .collect();
+    selected.sort_by(|a, b| {
+        a.start
+            .partial_cmp(&b.start)
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+
+    HighlightDraft {
+        quote: selected
+            .iter()
+            .map(|segment| segment.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+        context: String::new(),
+        note,
+        clip_start_seconds,
+        clip_end_seconds,
+        clip_speaker,
+        clip_transcript_segment_ids: selected
+            .iter()
+            .map(|segment| segment.id.clone())
+            .collect::<Vec<_>>(),
+        image: None,
     }
 }
 
@@ -509,8 +558,68 @@ HOST: Segment text.
     }
 
     #[test]
+    fn clip_highlight_draft_orders_selected_segments_and_builds_quote() {
+        let segments = vec![
+            segment("later", 20.0, "later line"),
+            segment("earlier", 10.0, "earlier line"),
+            segment("unused", 5.0, "unused line"),
+        ];
+        let selected = vec![
+            "missing".to_string(),
+            "later".to_string(),
+            "earlier".to_string(),
+        ];
+
+        let draft = clip_highlight_draft(
+            &segments,
+            &selected,
+            "note".into(),
+            Some(9.0),
+            Some(25.0),
+            "Ada".into(),
+        );
+
+        assert_eq!(draft.quote, "earlier line later line");
+        assert_eq!(draft.context, "");
+        assert_eq!(draft.note, "note");
+        assert_eq!(draft.clip_start_seconds, Some(9.0));
+        assert_eq!(draft.clip_end_seconds, Some(25.0));
+        assert_eq!(draft.clip_speaker, "Ada");
+        assert_eq!(
+            draft.clip_transcript_segment_ids,
+            vec!["earlier".to_string(), "later".to_string()]
+        );
+        assert!(draft.image.is_none());
+    }
+
+    #[test]
+    fn clip_highlight_draft_allows_empty_selection() {
+        let draft = clip_highlight_draft(
+            &[segment("a", 1.0, "hello")],
+            &[],
+            String::new(),
+            None,
+            None,
+            String::new(),
+        );
+
+        assert_eq!(draft.quote, "");
+        assert!(draft.clip_transcript_segment_ids.is_empty());
+    }
+
+    #[test]
     fn unknown_or_invalid_transcripts_are_empty() {
         assert!(parse_transcript_bytes(b"not a transcript", None, None).is_empty());
         assert!(parse_transcript_bytes(&[0xff, 0xfe], Some("text/vtt"), None).is_empty());
+    }
+
+    fn segment(id: &str, start: f64, text: &str) -> TranscriptSegment {
+        TranscriptSegment {
+            id: id.into(),
+            start,
+            end: start + 1.0,
+            speaker: String::new(),
+            text: text.into(),
+        }
     }
 }

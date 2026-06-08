@@ -88,6 +88,24 @@ actor SafeHighlighterCore {
         await core.loadPodcastTranscript(url: url)
     }
 
+    nonisolated func getPodcastClipHighlightDraft(
+        segments: [TranscriptSegment],
+        selectedSegmentIds: [String],
+        note: String,
+        clipStartSeconds: Double?,
+        clipEndSeconds: Double?,
+        clipSpeaker: String
+    ) -> HighlightDraft {
+        core.getPodcastClipHighlightDraft(
+            segments: segments,
+            selectedSegmentIds: selectedSegmentIds,
+            note: note,
+            clipStartSeconds: clipStartSeconds,
+            clipEndSeconds: clipEndSeconds,
+            clipSpeaker: clipSpeaker
+        )
+    }
+
     func downloadPodcastArtwork(url: String) async -> DataOutcome {
         await core.downloadPodcastArtwork(url: url)
     }

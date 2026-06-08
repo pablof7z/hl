@@ -289,20 +289,13 @@ final class PodcastPlayerStore {
         publishError = nil
         defer { isPublishing = false }
 
-        let selected = segments
-            .filter { selectedSegmentIds.contains($0.id) }
-            .sorted { $0.start < $1.start }
-        let quote = selected.map(\.text).joined(separator: " ")
-
-        let draft = HighlightDraft(
-            quote: quote,
-            context: "",
+        let draft = core.getPodcastClipHighlightDraft(
+            segments: segments,
+            selectedSegmentIds: Array(selectedSegmentIds),
             note: note,
             clipStartSeconds: clipStart,
             clipEndSeconds: clipEnd,
-            clipSpeaker: speaker,
-            clipTranscriptSegmentIds: Array(selectedSegmentIds),
-            image: nil
+            clipSpeaker: speaker
         )
 
         let outcome = await core.publishHighlightsAndShare(
