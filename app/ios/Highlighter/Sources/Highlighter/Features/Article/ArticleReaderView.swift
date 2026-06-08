@@ -279,9 +279,11 @@ private struct ReaderScroll: View {
                     tint: UIColor(Color.highlighterAccent),
                     ink: UIColor(Color.highlighterInkStrong),
                     muted: UIColor(Color.highlighterInkMuted),
-                    nostrDecoder: { input in
-                        let outcome = safeCore.decodeNostrEntity(input)
-                        return outcome.error.isEmpty ? outcome.value : nil
+                    nostrStandaloneEntity: { input in
+                        safeCore.standaloneNostrEntity(input)
+                    },
+                    nostrInlineTokens: { input in
+                        safeCore.tokenizeNostrMarkdownInline(input)
                     },
                     nostrInlineRender: { ref in
                         safeCore.nostrEntityInlineRender(entity: ref)

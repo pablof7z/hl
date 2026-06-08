@@ -2981,6 +2981,20 @@ impl HighlighterCore {
         crate::nostr_entities::tokenize_nostr_content(&content)
     }
 
+    pub fn tokenize_nostr_markdown_inline(
+        &self,
+        content: String,
+    ) -> Vec<crate::nostr_entities::NostrContentRun> {
+        crate::nostr_entities::tokenize_nostr_markdown_inline(&content)
+    }
+
+    pub fn standalone_nostr_entity(
+        &self,
+        content: String,
+    ) -> Option<crate::nostr_entities::NostrEntityRef> {
+        crate::nostr_entities::standalone_nostr_entity(&content)
+    }
+
     pub fn extract_nostr_event_refs(
         &self,
         content: String,

@@ -1396,6 +1396,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async  -> MutationOutcome
 
+    func standaloneNostrEntity(content: String)  -> NostrEntityRef?
+
     /**
      * Install (if not already installed) the kind:10012 curated-list sub for
      * `curator_pubkey_hex`. Once the list lands in ndb, this method also
@@ -1588,6 +1590,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func toggleEventBookmark(eventIdHex: String) async  -> BoolOutcome
 
     func tokenizeNostrContent(content: String)  -> [NostrContentRun]
+
+    func tokenizeNostrMarkdownInline(content: String)  -> [NostrContentRun]
 
     /**
      * Delete one of the user's own kind:7 reactions via NIP-09.
@@ -4064,6 +4068,14 @@ open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: St
         )
 }
 
+open func standaloneNostrEntity(content: String) -> NostrEntityRef?  {
+    return try!  FfiConverterOptionTypeNostrEntityRef.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_standalone_nostr_entity(self.uniffiClonePointer(),
+        FfiConverterString.lower(content),$0
+    )
+})
+}
+
     /**
      * Install (if not already installed) the kind:10012 curated-list sub for
      * `curator_pubkey_hex`. Once the list lands in ndb, this method also
@@ -4680,6 +4692,14 @@ open func toggleEventBookmark(eventIdHex: String)async  -> BoolOutcome  {
 open func tokenizeNostrContent(content: String) -> [NostrContentRun]  {
     return try!  FfiConverterSequenceTypeNostrContentRun.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_tokenize_nostr_content(self.uniffiClonePointer(),
+        FfiConverterString.lower(content),$0
+    )
+})
+}
+
+open func tokenizeNostrMarkdownInline(content: String) -> [NostrContentRun]  {
+    return try!  FfiConverterSequenceTypeNostrContentRun.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_tokenize_nostr_markdown_inline(self.uniffiClonePointer(),
         FfiConverterString.lower(content),$0
     )
 })
@@ -17087,6 +17107,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 49295) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_standalone_nostr_entity() != 64485) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_featured_rooms() != 31596) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -17169,6 +17192,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_tokenize_nostr_content() != 57009) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_tokenize_nostr_markdown_inline() != 52789) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_unpublish_reaction() != 52811) {

@@ -360,6 +360,14 @@ actor SafeHighlighterCore {
         core.tokenizeNostrContent(content: content)
     }
 
+    nonisolated func tokenizeNostrMarkdownInline(_ content: String) -> [NostrContentRun] {
+        core.tokenizeNostrMarkdownInline(content: content)
+    }
+
+    nonisolated func standaloneNostrEntity(_ content: String) -> NostrEntityRef? {
+        core.standaloneNostrEntity(content: content)
+    }
+
     nonisolated func extractNostrEventRefs(_ content: String) -> [NostrEntityRef] {
         core.extractNostrEventRefs(content: content)
     }

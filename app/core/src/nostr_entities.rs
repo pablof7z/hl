@@ -247,6 +247,54 @@ pub fn tokenize_nostr_content(content: &str) -> Vec<NostrContentRun> {
     out
 }
 
+pub fn tokenize_nostr_markdown_inline(content: &str) -> Vec<NostrContentRun> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < content.len() {
+        let Some(prefix) = find_nostr_prefix(content, i) else {
+            out.push(NostrContentRun::Text {
+                value: content[i..].to_string(),
+            });
+            break;
+        };
+        if prefix.start > i {
+            out.push(NostrContentRun::Text {
+                value: content[i..prefix.start].to_string(),
+            });
+        }
+
+        let (end, body) = scan_nostr_body(content, prefix.end);
+        if end == prefix.end {
+            out.push(NostrContentRun::Text {
+                value: "nostr:".into(),
+            });
+            i = end;
+            continue;
+        }
+
+        if is_known_nip19_body(body) {
+            if let Ok(entity) = decode_nostr_entity(body) {
+                out.push(NostrContentRun::Entity { entity });
+            }
+        }
+        i = end;
+    }
+    out
+}
+
+pub fn standalone_nostr_entity(content: &str) -> Option<NostrEntityRef> {
+    let trimmed = content.trim();
+    let prefix = find_nostr_prefix(trimmed, 0)?;
+    if prefix.start != 0 {
+        return None;
+    }
+    let (end, body) = scan_nostr_body(trimmed, prefix.end);
+    if end == prefix.end || !is_known_nip19_body(body) {
+        return None;
+    }
+    decode_nostr_entity(body).ok()
+}
+
 pub fn extract_event_refs(content: &str) -> Vec<NostrEntityRef> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
@@ -265,9 +313,26 @@ pub fn extract_event_refs(content: &str) -> Vec<NostrEntityRef> {
 }
 
 fn scan_nostr_uri(content: &str, start: usize) -> Option<(Range<usize>, &str)> {
+    let prefix = find_nostr_prefix(content, start)?;
+    let (end, body) = scan_nostr_body(content, prefix.end);
+    if end == prefix.end {
+        return None;
+    }
+    if is_known_nip19_body(body) {
+        Some((prefix.start..end, body))
+    } else {
+        None
+    }
+}
+
+fn find_nostr_prefix(content: &str, start: usize) -> Option<Range<usize>> {
     let prefix_relative = content[start..].to_ascii_lowercase().find("nostr:")?;
     let prefix_start = start + prefix_relative;
-    let body_start = prefix_start + "nostr:".len();
+    let prefix_end = prefix_start + "nostr:".len();
+    Some(prefix_start..prefix_end)
+}
+
+fn scan_nostr_body(content: &str, body_start: usize) -> (usize, &str) {
     let mut end = body_start;
     for (offset, ch) in content[body_start..].char_indices() {
         if is_nostr_uri_body_char(ch) {
@@ -276,15 +341,7 @@ fn scan_nostr_uri(content: &str, start: usize) -> Option<(Range<usize>, &str)> {
             break;
         }
     }
-    if end == body_start {
-        return None;
-    }
-    let body = &content[body_start..end];
-    if is_known_nip19_body(body) {
-        Some((prefix_start..end, body))
-    } else {
-        None
-    }
+    (end, &content[body_start..end])
 }
 
 fn is_nostr_uri_body_char(ch: char) -> bool {
@@ -771,6 +828,50 @@ mod tests {
                 event_id_hex: id, ..
             } => assert_eq!(id, &event_id_hex),
             other => panic!("wrong ref: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tokenize_nostr_markdown_inline_drops_unknown_or_undecodable_entities() {
+        assert_eq!(
+            tokenize_nostr_markdown_inline("x nostr:nope y"),
+            vec![
+                NostrContentRun::Text { value: "x ".into() },
+                NostrContentRun::Text { value: " y".into() },
+            ]
+        );
+        assert_eq!(
+            tokenize_nostr_markdown_inline("x nostr:npub1notvalid y"),
+            vec![
+                NostrContentRun::Text { value: "x ".into() },
+                NostrContentRun::Text { value: " y".into() },
+            ]
+        );
+        assert_eq!(
+            tokenize_nostr_markdown_inline("x nostr: y"),
+            vec![
+                NostrContentRun::Text { value: "x ".into() },
+                NostrContentRun::Text {
+                    value: "nostr:".into()
+                },
+                NostrContentRun::Text { value: " y".into() },
+            ]
+        );
+    }
+
+    #[test]
+    fn standalone_nostr_entity_decodes_first_entity_body() {
+        let event_id_hex =
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string();
+        let nevent =
+            encode_event_to_nevent(event_id_hex.clone(), None, Vec::new(), None).expect("encode");
+        let entity = standalone_nostr_entity(&format!("  nostr:{nevent} trailing text  "))
+            .expect("standalone entity");
+        match entity {
+            NostrEntityRef::Event {
+                event_id_hex: id, ..
+            } => assert_eq!(id, event_id_hex),
+            other => panic!("wrong entity: {other:?}"),
         }
     }
 
