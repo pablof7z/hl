@@ -1406,6 +1406,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
+    func projectRelayDetail(input: RelayDetailProjectionInput)  -> RelayDetailProjection
+
+    func projectRelayRemove(input: RelayRemoveProjectionInput)  -> RelayRemoveProjection
+
+    func projectRelayRow(input: RelayRowProjectionInput)  -> RelayRowProjection
+
     func projectRelaySettings(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic])  -> RelaySettingsProjection
 
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
@@ -4097,6 +4103,30 @@ open func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelay
     return try!  FfiConverterTypeImportRelaysProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_import_relays(self.uniffiClonePointer(),
         FfiConverterTypeImportRelaysProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRelayDetail(input: RelayDetailProjectionInput) -> RelayDetailProjection  {
+    return try!  FfiConverterTypeRelayDetailProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_relay_detail(self.uniffiClonePointer(),
+        FfiConverterTypeRelayDetailProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRelayRemove(input: RelayRemoveProjectionInput) -> RelayRemoveProjection  {
+    return try!  FfiConverterTypeRelayRemoveProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_relay_remove(self.uniffiClonePointer(),
+        FfiConverterTypeRelayRemoveProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRelayRow(input: RelayRowProjectionInput) -> RelayRowProjection  {
+    return try!  FfiConverterTypeRelayRowProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_relay_row(self.uniffiClonePointer(),
+        FfiConverterTypeRelayRowProjectionInput_lower(input),$0
     )
 })
 }
@@ -15311,6 +15341,84 @@ public func FfiConverterTypeReadingFeedListOutcome_lower(_ value: ReadingFeedLis
 }
 
 
+public struct RelayAvatarProjection {
+    public var iconUrl: String?
+    public var initial: String
+    public var hue: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(iconUrl: String?, initial: String, hue: Double) {
+        self.iconUrl = iconUrl
+        self.initial = initial
+        self.hue = hue
+    }
+}
+
+#if compiler(>=6)
+extension RelayAvatarProjection: Sendable {}
+#endif
+
+
+extension RelayAvatarProjection: Equatable, Hashable {
+    public static func ==(lhs: RelayAvatarProjection, rhs: RelayAvatarProjection) -> Bool {
+        if lhs.iconUrl != rhs.iconUrl {
+            return false
+        }
+        if lhs.initial != rhs.initial {
+            return false
+        }
+        if lhs.hue != rhs.hue {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(iconUrl)
+        hasher.combine(initial)
+        hasher.combine(hue)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayAvatarProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayAvatarProjection {
+        return
+            try RelayAvatarProjection(
+                iconUrl: FfiConverterOptionString.read(from: &buf),
+                initial: FfiConverterString.read(from: &buf),
+                hue: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayAvatarProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.iconUrl, into: &buf)
+        FfiConverterString.write(value.initial, into: &buf)
+        FfiConverterDouble.write(value.hue, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayAvatarProjection_lift(_ buf: RustBuffer) throws -> RelayAvatarProjection {
+    return try FfiConverterTypeRelayAvatarProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayAvatarProjection_lower(_ value: RelayAvatarProjection) -> RustBuffer {
+    return FfiConverterTypeRelayAvatarProjection.lower(value)
+}
+
+
 /**
  * A single row in the user's relay list, carrying all four roles.
  */
@@ -15475,6 +15583,202 @@ public func FfiConverterTypeRelayConfigListOutcome_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeRelayConfigListOutcome_lower(_ value: RelayConfigListOutcome) -> RustBuffer {
     return FfiConverterTypeRelayConfigListOutcome.lower(value)
+}
+
+
+public struct RelayDetailProjection {
+    public var avatar: RelayAvatarProjection
+    public var name: String?
+    public var description: String?
+    public var stateLabel: String
+    public var statusTone: RelayStatusTone
+    public var rttLabel: String?
+    public var remove: RelayRemoveProjection
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(avatar: RelayAvatarProjection, name: String?, description: String?, stateLabel: String, statusTone: RelayStatusTone, rttLabel: String?, remove: RelayRemoveProjection) {
+        self.avatar = avatar
+        self.name = name
+        self.description = description
+        self.stateLabel = stateLabel
+        self.statusTone = statusTone
+        self.rttLabel = rttLabel
+        self.remove = remove
+    }
+}
+
+#if compiler(>=6)
+extension RelayDetailProjection: Sendable {}
+#endif
+
+
+extension RelayDetailProjection: Equatable, Hashable {
+    public static func ==(lhs: RelayDetailProjection, rhs: RelayDetailProjection) -> Bool {
+        if lhs.avatar != rhs.avatar {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.stateLabel != rhs.stateLabel {
+            return false
+        }
+        if lhs.statusTone != rhs.statusTone {
+            return false
+        }
+        if lhs.rttLabel != rhs.rttLabel {
+            return false
+        }
+        if lhs.remove != rhs.remove {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(avatar)
+        hasher.combine(name)
+        hasher.combine(description)
+        hasher.combine(stateLabel)
+        hasher.combine(statusTone)
+        hasher.combine(rttLabel)
+        hasher.combine(remove)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayDetailProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayDetailProjection {
+        return
+            try RelayDetailProjection(
+                avatar: FfiConverterTypeRelayAvatarProjection.read(from: &buf),
+                name: FfiConverterOptionString.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf),
+                stateLabel: FfiConverterString.read(from: &buf),
+                statusTone: FfiConverterTypeRelayStatusTone.read(from: &buf),
+                rttLabel: FfiConverterOptionString.read(from: &buf),
+                remove: FfiConverterTypeRelayRemoveProjection.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayDetailProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeRelayAvatarProjection.write(value.avatar, into: &buf)
+        FfiConverterOptionString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterString.write(value.stateLabel, into: &buf)
+        FfiConverterTypeRelayStatusTone.write(value.statusTone, into: &buf)
+        FfiConverterOptionString.write(value.rttLabel, into: &buf)
+        FfiConverterTypeRelayRemoveProjection.write(value.remove, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayDetailProjection_lift(_ buf: RustBuffer) throws -> RelayDetailProjection {
+    return try FfiConverterTypeRelayDetailProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayDetailProjection_lower(_ value: RelayDetailProjection) -> RustBuffer {
+    return FfiConverterTypeRelayDetailProjection.lower(value)
+}
+
+
+public struct RelayDetailProjectionInput {
+    public var url: String
+    public var diagnostic: RelayDiagnostic?
+    public var nip11: Nip11Document?
+    public var orphanedRoomNames: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, diagnostic: RelayDiagnostic?, nip11: Nip11Document?, orphanedRoomNames: [String]) {
+        self.url = url
+        self.diagnostic = diagnostic
+        self.nip11 = nip11
+        self.orphanedRoomNames = orphanedRoomNames
+    }
+}
+
+#if compiler(>=6)
+extension RelayDetailProjectionInput: Sendable {}
+#endif
+
+
+extension RelayDetailProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RelayDetailProjectionInput, rhs: RelayDetailProjectionInput) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.diagnostic != rhs.diagnostic {
+            return false
+        }
+        if lhs.nip11 != rhs.nip11 {
+            return false
+        }
+        if lhs.orphanedRoomNames != rhs.orphanedRoomNames {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(diagnostic)
+        hasher.combine(nip11)
+        hasher.combine(orphanedRoomNames)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayDetailProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayDetailProjectionInput {
+        return
+            try RelayDetailProjectionInput(
+                url: FfiConverterString.read(from: &buf),
+                diagnostic: FfiConverterOptionTypeRelayDiagnostic.read(from: &buf),
+                nip11: FfiConverterOptionTypeNip11Document.read(from: &buf),
+                orphanedRoomNames: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayDetailProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterOptionTypeRelayDiagnostic.write(value.diagnostic, into: &buf)
+        FfiConverterOptionTypeNip11Document.write(value.nip11, into: &buf)
+        FfiConverterSequenceString.write(value.orphanedRoomNames, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayDetailProjectionInput_lift(_ buf: RustBuffer) throws -> RelayDetailProjectionInput {
+    return try FfiConverterTypeRelayDetailProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayDetailProjectionInput_lower(_ value: RelayDetailProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRelayDetailProjectionInput.lower(value)
 }
 
 
@@ -15685,6 +15989,366 @@ public func FfiConverterTypeRelayDiagnosticListOutcome_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeRelayDiagnosticListOutcome_lower(_ value: RelayDiagnosticListOutcome) -> RustBuffer {
     return FfiConverterTypeRelayDiagnosticListOutcome.lower(value)
+}
+
+
+public struct RelayRemoveProjection {
+    public var title: String
+    public var message: String
+    public var orphanSummary: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String, message: String, orphanSummary: String?) {
+        self.title = title
+        self.message = message
+        self.orphanSummary = orphanSummary
+    }
+}
+
+#if compiler(>=6)
+extension RelayRemoveProjection: Sendable {}
+#endif
+
+
+extension RelayRemoveProjection: Equatable, Hashable {
+    public static func ==(lhs: RelayRemoveProjection, rhs: RelayRemoveProjection) -> Bool {
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.message != rhs.message {
+            return false
+        }
+        if lhs.orphanSummary != rhs.orphanSummary {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(title)
+        hasher.combine(message)
+        hasher.combine(orphanSummary)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayRemoveProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayRemoveProjection {
+        return
+            try RelayRemoveProjection(
+                title: FfiConverterString.read(from: &buf),
+                message: FfiConverterString.read(from: &buf),
+                orphanSummary: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayRemoveProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.message, into: &buf)
+        FfiConverterOptionString.write(value.orphanSummary, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayRemoveProjection_lift(_ buf: RustBuffer) throws -> RelayRemoveProjection {
+    return try FfiConverterTypeRelayRemoveProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayRemoveProjection_lower(_ value: RelayRemoveProjection) -> RustBuffer {
+    return FfiConverterTypeRelayRemoveProjection.lower(value)
+}
+
+
+public struct RelayRemoveProjectionInput {
+    public var url: String
+    public var orphanedRoomNames: [String]
+    public var emptyMessageUsesUrl: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, orphanedRoomNames: [String], emptyMessageUsesUrl: Bool) {
+        self.url = url
+        self.orphanedRoomNames = orphanedRoomNames
+        self.emptyMessageUsesUrl = emptyMessageUsesUrl
+    }
+}
+
+#if compiler(>=6)
+extension RelayRemoveProjectionInput: Sendable {}
+#endif
+
+
+extension RelayRemoveProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RelayRemoveProjectionInput, rhs: RelayRemoveProjectionInput) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.orphanedRoomNames != rhs.orphanedRoomNames {
+            return false
+        }
+        if lhs.emptyMessageUsesUrl != rhs.emptyMessageUsesUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(orphanedRoomNames)
+        hasher.combine(emptyMessageUsesUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayRemoveProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayRemoveProjectionInput {
+        return
+            try RelayRemoveProjectionInput(
+                url: FfiConverterString.read(from: &buf),
+                orphanedRoomNames: FfiConverterSequenceString.read(from: &buf),
+                emptyMessageUsesUrl: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayRemoveProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterSequenceString.write(value.orphanedRoomNames, into: &buf)
+        FfiConverterBool.write(value.emptyMessageUsesUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayRemoveProjectionInput_lift(_ buf: RustBuffer) throws -> RelayRemoveProjectionInput {
+    return try FfiConverterTypeRelayRemoveProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayRemoveProjectionInput_lower(_ value: RelayRemoveProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRelayRemoveProjectionInput.lower(value)
+}
+
+
+public struct RelayRowProjection {
+    public var avatar: RelayAvatarProjection
+    public var primaryLabel: String
+    public var displayUrl: String
+    public var statusTone: RelayStatusTone
+    public var rttLabel: String?
+    public var read: Bool
+    public var write: Bool
+    public var rooms: Bool
+    public var indexer: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(avatar: RelayAvatarProjection, primaryLabel: String, displayUrl: String, statusTone: RelayStatusTone, rttLabel: String?, read: Bool, write: Bool, rooms: Bool, indexer: Bool) {
+        self.avatar = avatar
+        self.primaryLabel = primaryLabel
+        self.displayUrl = displayUrl
+        self.statusTone = statusTone
+        self.rttLabel = rttLabel
+        self.read = read
+        self.write = write
+        self.rooms = rooms
+        self.indexer = indexer
+    }
+}
+
+#if compiler(>=6)
+extension RelayRowProjection: Sendable {}
+#endif
+
+
+extension RelayRowProjection: Equatable, Hashable {
+    public static func ==(lhs: RelayRowProjection, rhs: RelayRowProjection) -> Bool {
+        if lhs.avatar != rhs.avatar {
+            return false
+        }
+        if lhs.primaryLabel != rhs.primaryLabel {
+            return false
+        }
+        if lhs.displayUrl != rhs.displayUrl {
+            return false
+        }
+        if lhs.statusTone != rhs.statusTone {
+            return false
+        }
+        if lhs.rttLabel != rhs.rttLabel {
+            return false
+        }
+        if lhs.read != rhs.read {
+            return false
+        }
+        if lhs.write != rhs.write {
+            return false
+        }
+        if lhs.rooms != rhs.rooms {
+            return false
+        }
+        if lhs.indexer != rhs.indexer {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(avatar)
+        hasher.combine(primaryLabel)
+        hasher.combine(displayUrl)
+        hasher.combine(statusTone)
+        hasher.combine(rttLabel)
+        hasher.combine(read)
+        hasher.combine(write)
+        hasher.combine(rooms)
+        hasher.combine(indexer)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayRowProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayRowProjection {
+        return
+            try RelayRowProjection(
+                avatar: FfiConverterTypeRelayAvatarProjection.read(from: &buf),
+                primaryLabel: FfiConverterString.read(from: &buf),
+                displayUrl: FfiConverterString.read(from: &buf),
+                statusTone: FfiConverterTypeRelayStatusTone.read(from: &buf),
+                rttLabel: FfiConverterOptionString.read(from: &buf),
+                read: FfiConverterBool.read(from: &buf),
+                write: FfiConverterBool.read(from: &buf),
+                rooms: FfiConverterBool.read(from: &buf),
+                indexer: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayRowProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeRelayAvatarProjection.write(value.avatar, into: &buf)
+        FfiConverterString.write(value.primaryLabel, into: &buf)
+        FfiConverterString.write(value.displayUrl, into: &buf)
+        FfiConverterTypeRelayStatusTone.write(value.statusTone, into: &buf)
+        FfiConverterOptionString.write(value.rttLabel, into: &buf)
+        FfiConverterBool.write(value.read, into: &buf)
+        FfiConverterBool.write(value.write, into: &buf)
+        FfiConverterBool.write(value.rooms, into: &buf)
+        FfiConverterBool.write(value.indexer, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayRowProjection_lift(_ buf: RustBuffer) throws -> RelayRowProjection {
+    return try FfiConverterTypeRelayRowProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayRowProjection_lower(_ value: RelayRowProjection) -> RustBuffer {
+    return FfiConverterTypeRelayRowProjection.lower(value)
+}
+
+
+public struct RelayRowProjectionInput {
+    public var config: RelayConfig
+    public var diagnostic: RelayDiagnostic?
+    public var nip11: Nip11Document?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(config: RelayConfig, diagnostic: RelayDiagnostic?, nip11: Nip11Document?) {
+        self.config = config
+        self.diagnostic = diagnostic
+        self.nip11 = nip11
+    }
+}
+
+#if compiler(>=6)
+extension RelayRowProjectionInput: Sendable {}
+#endif
+
+
+extension RelayRowProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RelayRowProjectionInput, rhs: RelayRowProjectionInput) -> Bool {
+        if lhs.config != rhs.config {
+            return false
+        }
+        if lhs.diagnostic != rhs.diagnostic {
+            return false
+        }
+        if lhs.nip11 != rhs.nip11 {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(config)
+        hasher.combine(diagnostic)
+        hasher.combine(nip11)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayRowProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayRowProjectionInput {
+        return
+            try RelayRowProjectionInput(
+                config: FfiConverterTypeRelayConfig.read(from: &buf),
+                diagnostic: FfiConverterOptionTypeRelayDiagnostic.read(from: &buf),
+                nip11: FfiConverterOptionTypeNip11Document.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayRowProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeRelayConfig.write(value.config, into: &buf)
+        FfiConverterOptionTypeRelayDiagnostic.write(value.diagnostic, into: &buf)
+        FfiConverterOptionTypeNip11Document.write(value.nip11, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayRowProjectionInput_lift(_ buf: RustBuffer) throws -> RelayRowProjectionInput {
+    return try FfiConverterTypeRelayRowProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayRowProjectionInput_lower(_ value: RelayRowProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRelayRowProjectionInput.lower(value)
 }
 
 
@@ -19461,6 +20125,90 @@ extension RelayStatus: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum RelayStatusTone {
+
+    case connected
+    case connecting
+    case error
+    case unknown
+}
+
+
+#if compiler(>=6)
+extension RelayStatusTone: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayStatusTone: FfiConverterRustBuffer {
+    typealias SwiftType = RelayStatusTone
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayStatusTone {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .connected
+
+        case 2: return .connecting
+
+        case 3: return .error
+
+        case 4: return .unknown
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RelayStatusTone, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .connected:
+            writeInt(&buf, Int32(1))
+
+
+        case .connecting:
+            writeInt(&buf, Int32(2))
+
+
+        case .error:
+            writeInt(&buf, Int32(3))
+
+
+        case .unknown:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayStatusTone_lift(_ buf: RustBuffer) throws -> RelayStatusTone {
+    return try FfiConverterTypeRelayStatusTone.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayStatusTone_lower(_ value: RelayStatusTone) -> RustBuffer {
+    return FfiConverterTypeRelayStatusTone.lower(value)
+}
+
+
+extension RelayStatusTone: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Access control for join requests. Open rooms auto-admit; closed rooms
  * hold join requests for admin approval. Reflected in the metadata event
@@ -20671,6 +21419,30 @@ fileprivate struct FfiConverterOptionTypeReadingFeedItem: FfiConverterRustBuffer
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeReadingFeedItem.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeRelayDiagnostic: FfiConverterRustBuffer {
+    typealias SwiftType = RelayDiagnostic?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeRelayDiagnostic.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeRelayDiagnostic.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -22285,6 +23057,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_detail() != 11729) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_remove() != 7088) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_row() != 29116) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_settings() != 62661) {

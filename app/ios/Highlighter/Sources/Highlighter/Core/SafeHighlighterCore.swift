@@ -1224,6 +1224,18 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func projectRelayRow(input: RelayRowProjectionInput) -> RelayRowProjection {
+        core.projectRelayRow(input: input)
+    }
+
+    nonisolated func projectRelayDetail(input: RelayDetailProjectionInput) -> RelayDetailProjection {
+        core.projectRelayDetail(input: input)
+    }
+
+    nonisolated func projectRelayRemove(input: RelayRemoveProjectionInput) -> RelayRemoveProjection {
+        core.projectRelayRemove(input: input)
+    }
+
     nonisolated func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelaySheetProjection {
         core.projectAddRelaySheet(input: input)
     }

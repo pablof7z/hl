@@ -12,9 +12,11 @@ struct RelayDetailView: View {
     @State private var isSaving = false
 
     var body: some View {
+        let currentProjection = projection
+
         List {
-            headerSection
-            orphanRoomsSection
+            headerSection(currentProjection)
+            orphanRoomsSection(currentProjection)
             statsSection
             rolesSection
             removeSection
@@ -26,9 +28,7 @@ struct RelayDetailView: View {
             orphanedRoomNames = await store.joinedRoomNames(hostedOnRelay: url)
         }
         .confirmationDialog(
-            orphanedRoomNames.isEmpty
-                ? "Remove this relay?"
-                : "Remove — you're a member of rooms here",
+            currentProjection.remove.title,
             isPresented: $showRemoveConfirm,
             titleVisibility: .visible
         ) {
@@ -40,11 +40,7 @@ struct RelayDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            if orphanedRoomNames.isEmpty {
-                Text("Highlighter will stop sending and receiving events through this relay.")
-            } else {
-                Text("This relay hosts \(orphanedRoomNames.count) of your rooms (\(orphanedRoomNames.prefix(3).joined(separator: ", "))\(orphanedRoomNames.count > 3 ? ", …" : "")). Removing it will cut you off from them until you re-add it.")
-            }
+            Text(currentProjection.remove.message)
         }
     }
 
@@ -58,16 +54,18 @@ struct RelayDetailView: View {
         store.diagnostic(for: url)
     }
 
-    private var nip11: Nip11Document? { store.nip11(for: url) }
+    private var projection: RelayDetailProjection {
+        store.relayDetailProjection(url: url, orphanedRoomNames: orphanedRoomNames)
+    }
 
     @ViewBuilder
-    private var headerSection: some View {
+    private func headerSection(_ projection: RelayDetailProjection) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top, spacing: 12) {
-                    RelayAvatar(url: url, nip11: nip11, size: 52)
+                    RelayAvatar(projection: projection.avatar, size: 52)
                     VStack(alignment: .leading, spacing: 2) {
-                        if let name = nip11?.name?.trimmingCharacters(in: .whitespaces), !name.isEmpty {
+                        if let name = projection.name {
                             Text(name).font(.title3.weight(.semibold))
                         }
                         Text(url)
@@ -75,7 +73,7 @@ struct RelayDetailView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                             .truncationMode(.middle)
-                        if let desc = nip11?.description?.trimmingCharacters(in: .whitespaces), !desc.isEmpty {
+                        if let desc = projection.description {
                             Text(desc)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -85,11 +83,11 @@ struct RelayDetailView: View {
                     }
                 }
                 HStack(spacing: 8) {
-                    stateDot
-                    Text(stateLabel).font(.subheadline.weight(.medium))
+                    stateDot(projection.statusTone)
+                    Text(projection.stateLabel).font(.subheadline.weight(.medium))
                     Spacer()
-                    if let rtt = diagnostic?.rttMs {
-                        Text("\(rtt) ms")
+                    if let rtt = projection.rttLabel {
+                        Text(rtt)
                             .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
@@ -155,14 +153,14 @@ struct RelayDetailView: View {
     }
 
     @ViewBuilder
-    private var orphanRoomsSection: some View {
-        if !orphanedRoomNames.isEmpty {
+    private func orphanRoomsSection(_ projection: RelayDetailProjection) -> some View {
+        if let orphanSummary = projection.remove.orphanSummary {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Hosts your rooms", systemImage: "person.3.fill")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.orange)
-                    Text(orphanedRoomNames.prefix(5).joined(separator: ", ") + (orphanedRoomNames.count > 5 ? ", …" : ""))
+                    Text(orphanSummary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -175,28 +173,8 @@ struct RelayDetailView: View {
 
     // MARK: - State pieces
 
-    @ViewBuilder
-    private var stateDot: some View {
-        let color: Color = {
-            switch diagnostic?.state {
-            case .connected: return .green
-            case .connecting: return .yellow
-            case .disconnected, .terminated, .banned: return .red
-            case .none: return .gray
-            }
-        }()
-        Circle().fill(color).frame(width: 12, height: 12)
-    }
-
-    private var stateLabel: String {
-        switch diagnostic?.state {
-        case .connected: return "Connected"
-        case .connecting: return "Connecting…"
-        case .disconnected: return "Disconnected"
-        case .terminated: return "Terminated"
-        case .banned: return "Banned"
-        case .none: return "Unknown"
-        }
+    private func stateDot(_ tone: RelayStatusTone) -> some View {
+        Circle().fill(statusColor(tone)).frame(width: 12, height: 12)
     }
 
     // MARK: - Actions

@@ -3687,6 +3687,27 @@ impl HighlighterCore {
         crate::relays::settings_projection(&configured_relays, &diagnostics)
     }
 
+    pub fn project_relay_row(
+        &self,
+        input: crate::relays::RelayRowProjectionInput,
+    ) -> crate::relays::RelayRowProjection {
+        crate::relays::relay_row_projection(input)
+    }
+
+    pub fn project_relay_detail(
+        &self,
+        input: crate::relays::RelayDetailProjectionInput,
+    ) -> crate::relays::RelayDetailProjection {
+        crate::relays::relay_detail_projection(input)
+    }
+
+    pub fn project_relay_remove(
+        &self,
+        input: crate::relays::RelayRemoveProjectionInput,
+    ) -> crate::relays::RelayRemoveProjection {
+        crate::relays::relay_remove_projection(input)
+    }
+
     pub fn default_add_relay_config(&self) -> crate::relays::RelayConfig {
         crate::relays::default_add_relay_config()
     }

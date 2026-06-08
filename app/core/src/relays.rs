@@ -164,6 +164,74 @@ pub struct RelaySettingsProjection {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum RelayStatusTone {
+    Connected,
+    Connecting,
+    Error,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct RelayAvatarProjection {
+    pub icon_url: Option<String>,
+    pub initial: String,
+    pub hue: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct RelayRowProjection {
+    pub avatar: RelayAvatarProjection,
+    pub primary_label: String,
+    pub display_url: String,
+    pub status_tone: RelayStatusTone,
+    pub rtt_label: Option<String>,
+    pub read: bool,
+    pub write: bool,
+    pub rooms: bool,
+    pub indexer: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RelayRowProjectionInput {
+    pub config: RelayConfig,
+    pub diagnostic: Option<RelayDiagnostic>,
+    pub nip11: Option<Nip11Document>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RelayRemoveProjection {
+    pub title: String,
+    pub message: String,
+    pub orphan_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RelayRemoveProjectionInput {
+    pub url: String,
+    pub orphaned_room_names: Vec<String>,
+    pub empty_message_uses_url: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct RelayDetailProjection {
+    pub avatar: RelayAvatarProjection,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub state_label: String,
+    pub status_tone: RelayStatusTone,
+    pub rtt_label: Option<String>,
+    pub remove: RelayRemoveProjection,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RelayDetailProjectionInput {
+    pub url: String,
+    pub diagnostic: Option<RelayDiagnostic>,
+    pub nip11: Option<Nip11Document>,
+    pub orphaned_room_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum AddRelayProbeStatus {
     Idle,
     Checking,
@@ -322,6 +390,86 @@ pub fn settings_projection(
     }
 }
 
+pub fn relay_row_projection(input: RelayRowProjectionInput) -> RelayRowProjection {
+    let RelayRowProjectionInput {
+        config,
+        diagnostic,
+        nip11,
+    } = input;
+    let display_url = display_relay_url(&config.url);
+    let primary_label = nip11
+        .as_ref()
+        .and_then(|doc| trimmed_non_empty(doc.name.as_deref()))
+        .unwrap_or_else(|| display_url.clone());
+
+    RelayRowProjection {
+        avatar: relay_avatar_projection(&config.url, nip11.as_ref()),
+        primary_label,
+        display_url,
+        status_tone: relay_status_tone(diagnostic.as_ref().map(|row| row.state)),
+        rtt_label: diagnostic.as_ref().and_then(relay_rtt_label),
+        read: config.read,
+        write: config.write,
+        rooms: config.rooms,
+        indexer: config.indexer,
+    }
+}
+
+pub fn relay_detail_projection(input: RelayDetailProjectionInput) -> RelayDetailProjection {
+    let RelayDetailProjectionInput {
+        url,
+        diagnostic,
+        nip11,
+        orphaned_room_names,
+    } = input;
+
+    RelayDetailProjection {
+        avatar: relay_avatar_projection(&url, nip11.as_ref()),
+        name: nip11
+            .as_ref()
+            .and_then(|doc| trimmed_non_empty(doc.name.as_deref())),
+        description: nip11
+            .as_ref()
+            .and_then(|doc| trimmed_non_empty(doc.description.as_deref())),
+        state_label: relay_status_label(diagnostic.as_ref().map(|row| row.state)),
+        status_tone: relay_status_tone(diagnostic.as_ref().map(|row| row.state)),
+        rtt_label: diagnostic.as_ref().and_then(relay_rtt_label),
+        remove: relay_remove_projection(RelayRemoveProjectionInput {
+            url,
+            orphaned_room_names,
+            empty_message_uses_url: false,
+        }),
+    }
+}
+
+pub fn relay_remove_projection(input: RelayRemoveProjectionInput) -> RelayRemoveProjection {
+    let orphan_count = input.orphaned_room_names.len();
+    if orphan_count == 0 {
+        let message = if input.empty_message_uses_url {
+            format!(
+                "Highlighter will stop sending and receiving events through {}.",
+                input.url
+            )
+        } else {
+            "Highlighter will stop sending and receiving events through this relay.".into()
+        };
+        return RelayRemoveProjection {
+            title: "Remove this relay?".into(),
+            message,
+            orphan_summary: None,
+        };
+    }
+
+    RelayRemoveProjection {
+        title: "Remove — you're a member of rooms here".into(),
+        message: format!(
+            "This relay hosts {orphan_count} of your rooms ({}). Removing it will cut you off from them until you re-add it.",
+            joined_limited_names(&input.orphaned_room_names, 3)
+        ),
+        orphan_summary: Some(joined_limited_names(&input.orphaned_room_names, 5)),
+    }
+}
+
 pub fn add_relay_sheet_projection(input: AddRelaySheetProjectionInput) -> AddRelaySheetProjection {
     let normalized_url = normalize_relay_url_input(&input.url_text);
     let clipboard_url = input
@@ -402,6 +550,77 @@ fn relay_role_label(row: &RelayConfig) -> String {
         (false, true) => "Write".into(),
         (false, false) => "No roles".into(),
     }
+}
+
+fn relay_avatar_projection(url: &str, nip11: Option<&Nip11Document>) -> RelayAvatarProjection {
+    RelayAvatarProjection {
+        icon_url: nip11.and_then(|doc| trimmed_non_empty(doc.icon.as_deref())),
+        initial: relay_avatar_initial(url),
+        hue: relay_avatar_hue(url),
+    }
+}
+
+fn relay_avatar_initial(url: &str) -> String {
+    let host = url
+        .strip_prefix("wss://")
+        .or_else(|| url.strip_prefix("ws://"))
+        .unwrap_or(url);
+    host.chars()
+        .next()
+        .map(|ch| ch.to_uppercase().collect::<String>())
+        .unwrap_or_else(|| "?".into())
+}
+
+fn relay_avatar_hue(url: &str) -> f64 {
+    let seed = url.chars().map(|ch| ch as u32 as f64).sum::<f64>();
+    (seed % 360.0) / 360.0
+}
+
+fn relay_rtt_label(diagnostic: &RelayDiagnostic) -> Option<String> {
+    diagnostic.rtt_ms.map(|rtt| format!("{rtt} ms"))
+}
+
+fn relay_status_label(status: Option<RelayStatus>) -> String {
+    match status {
+        Some(RelayStatus::Connected) => "Connected",
+        Some(RelayStatus::Connecting) => "Connecting…",
+        Some(RelayStatus::Disconnected) => "Disconnected",
+        Some(RelayStatus::Terminated) => "Terminated",
+        Some(RelayStatus::Banned) => "Banned",
+        None => "Unknown",
+    }
+    .into()
+}
+
+fn relay_status_tone(status: Option<RelayStatus>) -> RelayStatusTone {
+    match status {
+        Some(RelayStatus::Connected) => RelayStatusTone::Connected,
+        Some(RelayStatus::Connecting) => RelayStatusTone::Connecting,
+        Some(RelayStatus::Disconnected | RelayStatus::Terminated | RelayStatus::Banned) => {
+            RelayStatusTone::Error
+        }
+        None => RelayStatusTone::Unknown,
+    }
+}
+
+fn joined_limited_names(names: &[String], limit: usize) -> String {
+    let mut summary = names
+        .iter()
+        .take(limit)
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
+    if names.len() > limit {
+        summary.push_str(", …");
+    }
+    summary
+}
+
+fn trimmed_non_empty(value: Option<&str>) -> Option<String> {
+    value.and_then(|raw| {
+        let trimmed = raw.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
 }
 
 fn normalize_relay_url_input(input: &str) -> String {
@@ -871,6 +1090,24 @@ mod tests {
         }
     }
 
+    fn nip11_doc(
+        name: Option<&str>,
+        description: Option<&str>,
+        icon: Option<&str>,
+    ) -> Nip11Document {
+        Nip11Document {
+            url: "wss://relay.example.com".into(),
+            name: name.map(str::to_string),
+            description: description.map(str::to_string),
+            pubkey: None,
+            contact: None,
+            software: None,
+            version: None,
+            supported_nips: Vec::new(),
+            icon: icon.map(str::to_string),
+        }
+    }
+
     #[test]
     fn seed_defaults_has_four_rows_with_expected_roles() {
         let seed = seed_defaults();
@@ -990,6 +1227,126 @@ mod tests {
         let empty = settings_projection(&[], &[]);
         assert_eq!(empty.aggregate_state_label, "No relays");
         assert_eq!(empty.total_visible_relays, 0);
+    }
+
+    #[test]
+    fn relay_row_projection_uses_nip11_name_and_status_facts() {
+        let mut diag = diagnostic("wss://relay.example.com", RelayStatus::Connected);
+        diag.rtt_ms = Some(42);
+
+        let projection = relay_row_projection(RelayRowProjectionInput {
+            config: RelayConfig {
+                url: "wss://relay.example.com".into(),
+                read: true,
+                write: false,
+                rooms: true,
+                indexer: false,
+            },
+            diagnostic: Some(diag),
+            nip11: Some(nip11_doc(
+                Some("  Example Relay  "),
+                None,
+                Some("  https://cdn.example/icon.png  "),
+            )),
+        });
+
+        assert_eq!(projection.primary_label, "Example Relay");
+        assert_eq!(projection.display_url, "relay.example.com");
+        assert_eq!(projection.status_tone, RelayStatusTone::Connected);
+        assert_eq!(projection.rtt_label.as_deref(), Some("42 ms"));
+        assert_eq!(
+            projection.avatar.icon_url.as_deref(),
+            Some("https://cdn.example/icon.png")
+        );
+        assert_eq!(projection.avatar.initial, "R");
+        assert!(projection.read);
+        assert!(!projection.write);
+        assert!(projection.rooms);
+        assert!(!projection.indexer);
+    }
+
+    #[test]
+    fn relay_row_projection_falls_back_to_url_and_unknown_status() {
+        let projection = relay_row_projection(RelayRowProjectionInput {
+            config: RelayConfig::read_write("ws://alpha.example"),
+            diagnostic: None,
+            nip11: Some(nip11_doc(Some("  "), None, Some("  "))),
+        });
+
+        assert_eq!(projection.primary_label, "ws://alpha.example");
+        assert_eq!(projection.display_url, "ws://alpha.example");
+        assert_eq!(projection.status_tone, RelayStatusTone::Unknown);
+        assert!(projection.rtt_label.is_none());
+        assert!(projection.avatar.icon_url.is_none());
+        assert_eq!(projection.avatar.initial, "A");
+    }
+
+    #[test]
+    fn relay_detail_projection_matches_previous_labels_and_remove_copy() {
+        let projection = relay_detail_projection(RelayDetailProjectionInput {
+            url: "wss://relay.example.com".into(),
+            diagnostic: Some(diagnostic(
+                "wss://relay.example.com",
+                RelayStatus::Connecting,
+            )),
+            nip11: Some(nip11_doc(
+                Some(" Relay Name "),
+                Some(" Relay description "),
+                None,
+            )),
+            orphaned_room_names: vec![
+                "Books".into(),
+                "Podcasts".into(),
+                "Articles".into(),
+                "Video".into(),
+                "Research".into(),
+                "Design".into(),
+            ],
+        });
+
+        assert_eq!(projection.name.as_deref(), Some("Relay Name"));
+        assert_eq!(projection.description.as_deref(), Some("Relay description"));
+        assert_eq!(projection.state_label, "Connecting…");
+        assert_eq!(projection.status_tone, RelayStatusTone::Connecting);
+        assert_eq!(
+            projection.remove.title,
+            "Remove — you're a member of rooms here"
+        );
+        assert_eq!(
+            projection.remove.message,
+            "This relay hosts 6 of your rooms (Books, Podcasts, Articles, …). Removing it will cut you off from them until you re-add it."
+        );
+        assert_eq!(
+            projection.remove.orphan_summary.as_deref(),
+            Some("Books, Podcasts, Articles, Video, Research, …")
+        );
+    }
+
+    #[test]
+    fn relay_remove_projection_handles_no_orphan_rooms() {
+        let projection = relay_remove_projection(RelayRemoveProjectionInput {
+            url: "wss://relay.example.com".into(),
+            orphaned_room_names: Vec::new(),
+            empty_message_uses_url: true,
+        });
+
+        assert_eq!(projection.title, "Remove this relay?");
+        assert_eq!(
+            projection.message,
+            "Highlighter will stop sending and receiving events through wss://relay.example.com."
+        );
+        assert!(projection.orphan_summary.is_none());
+
+        let detail_projection = relay_detail_projection(RelayDetailProjectionInput {
+            url: "wss://relay.example.com".into(),
+            diagnostic: None,
+            nip11: None,
+            orphaned_room_names: Vec::new(),
+        });
+        assert_eq!(
+            detail_projection.remove.message,
+            "Highlighter will stop sending and receiving events through this relay."
+        );
     }
 
     #[test]

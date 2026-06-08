@@ -52,6 +52,31 @@ final class NetworkSettingsStore {
         autoConnectedConfigs[url]
     }
 
+    func relayRowProjection(config: RelayConfig) -> RelayRowProjection {
+        core.projectRelayRow(input: RelayRowProjectionInput(
+            config: config,
+            diagnostic: diagnostic(for: config.url),
+            nip11: nip11(for: config.url)
+        ))
+    }
+
+    func relayDetailProjection(url: String, orphanedRoomNames: [String]) -> RelayDetailProjection {
+        core.projectRelayDetail(input: RelayDetailProjectionInput(
+            url: url,
+            diagnostic: diagnostic(for: url),
+            nip11: nip11(for: url),
+            orphanedRoomNames: orphanedRoomNames
+        ))
+    }
+
+    func relayRemoveProjection(url: String, orphanedRoomNames: [String]) -> RelayRemoveProjection {
+        core.projectRelayRemove(input: RelayRemoveProjectionInput(
+            url: url,
+            orphanedRoomNames: orphanedRoomNames,
+            emptyMessageUsesUrl: true
+        ))
+    }
+
     /// Kick the pool to attempt a reconnect on every disconnected relay.
     func reconnectAll() async {
         let outcome = await core.reconnectAll()

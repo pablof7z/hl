@@ -13,7 +13,7 @@ struct NetworkSettingsView: View {
     private struct PendingRemove: Identifiable {
         let id = UUID()
         let url: String
-        let orphanedRoomNames: [String]
+        let projection: RelayRemoveProjection
     }
 
     var body: some View {
@@ -59,9 +59,7 @@ struct NetworkSettingsView: View {
             }
         }
         .confirmationDialog(
-            pendingRemove?.orphanedRoomNames.isEmpty == false
-                ? "Remove — you're a member of rooms here"
-                : "Remove this relay?",
+            pendingRemove?.projection.title ?? "Remove this relay?",
             isPresented: Binding(
                 get: { pendingRemove != nil },
                 set: { if !$0 { pendingRemove = nil } }
@@ -74,11 +72,7 @@ struct NetworkSettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { remove in
-            if remove.orphanedRoomNames.isEmpty {
-                Text("Highlighter will stop sending and receiving events through \(remove.url).")
-            } else {
-                Text("This relay hosts \(remove.orphanedRoomNames.count) of your rooms (\(remove.orphanedRoomNames.prefix(3).joined(separator: ", "))\(remove.orphanedRoomNames.count > 3 ? ", …" : "")). Removing it will cut you off from them until you re-add it.")
-            }
+            Text(remove.projection.message)
         }
         .task {
             if store == nil {
@@ -123,11 +117,7 @@ struct NetworkSettingsView: View {
                 NavigationLink {
                     RelayDetailView(url: row.url, store: store)
                 } label: {
-                    RelayRowView(
-                        config: row,
-                        diagnostic: store.diagnostic(for: row.url),
-                        nip11: store.nip11(for: row.url)
-                    )
+                    RelayRowView(projection: store.relayRowProjection(config: row))
                 }
             }
             .onDelete { indexSet in
@@ -140,7 +130,10 @@ struct NetworkSettingsView: View {
                         let orphans = await store.joinedRoomNames(hostedOnRelay: url)
                         pendingRemove = PendingRemove(
                             url: url,
-                            orphanedRoomNames: orphans
+                            projection: store.relayRemoveProjection(
+                                url: url,
+                                orphanedRoomNames: orphans
+                            )
                         )
                     }
                     break // confirm one at a time
@@ -159,11 +152,7 @@ struct NetworkSettingsView: View {
             Section {
                 ForEach(store.autoConnectedUrls, id: \.self) { url in
                     if let config = store.autoConnectedConfig(for: url) {
-                        RelayRowView(
-                            config: config,
-                            diagnostic: store.diagnostic(for: url),
-                            nip11: store.nip11(for: url)
-                        )
+                        RelayRowView(projection: store.relayRowProjection(config: config))
                     }
                 }
             } header: {
