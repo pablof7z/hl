@@ -1,11 +1,15 @@
 //! NIP-84 highlights (kind:9802) + cross-community shares (kind:16). Ports
 //! `web/src/lib/ndk/highlights.ts`.
 
+use std::collections::{BTreeMap, HashSet};
+
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::{ArtifactRecord, BlossomUpload, HighlightDraft, HighlightRecord, HydratedHighlight};
+use crate::models::{
+    ArtifactRecord, BlossomUpload, HighlightDraft, HighlightRecord, HydratedHighlight,
+};
 use crate::nostr_runtime::NostrRuntime;
 use crate::relays::HIGHLIGHTER_RELAY;
 
@@ -126,12 +130,144 @@ pub async fn share_to_community(
     Ok(())
 }
 
-/// Port of `hydrateHighlights`. Given a set of highlights, look up the
-/// artifact each references and return joined records.
+/// Hydrate cached highlights with cached artifact share projections.
+/// The returned list preserves the input highlight order.
 pub fn hydrate(
-    _highlights: Vec<HighlightRecord>,
+    ndb: &Ndb,
+    highlights: Vec<HighlightRecord>,
 ) -> Result<Vec<HydratedHighlight>, CoreError> {
-    todo!()
+    if highlights.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let needed_keys: HashSet<String> = highlights
+        .iter()
+        .map(highlight_source_key)
+        .filter(|key| !key.is_empty())
+        .collect();
+    if needed_keys.is_empty() {
+        return Ok(highlights
+            .into_iter()
+            .map(|highlight| HydratedHighlight {
+                highlight,
+                artifact: None,
+                shared_by_event_id: None,
+                shared_by_pubkey: None,
+            })
+            .collect());
+    }
+
+    let txn = Transaction::new(ndb)
+        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let cap = ((highlights.len() as u32).saturating_mul(8)).clamp(256, 4096) as i32;
+    let filter = NdbFilter::new().kinds([11u64]).build();
+    let results = ndb
+        .query(&txn, &[filter], cap)
+        .map_err(|e| CoreError::Cache(format!("query artifact shares for hydration: {e}")))?;
+
+    let mut artifacts_by_key: BTreeMap<String, ArtifactRecord> = BTreeMap::new();
+    for r in &results {
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
+        let Ok(json) = note.json() else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
+        if crate::discussions::is_discussion(&event) {
+            continue;
+        }
+        let Some(group_id) = first_tag_value(&event, "h") else {
+            continue;
+        };
+        let Some(record) = crate::artifacts::artifact_record_from_event(&event, group_id) else {
+            continue;
+        };
+        for key in artifact_reference_keys(&record) {
+            if !needed_keys.contains(&key) {
+                continue;
+            }
+            match artifacts_by_key.get(&key) {
+                Some(existing)
+                    if existing.created_at.unwrap_or(0) >= record.created_at.unwrap_or(0) => {}
+                _ => {
+                    artifacts_by_key.insert(key, record.clone());
+                }
+            }
+        }
+    }
+
+    Ok(highlights
+        .into_iter()
+        .map(|highlight| {
+            let key = highlight_source_key(&highlight);
+            HydratedHighlight {
+                artifact: artifacts_by_key.get(&key).cloned(),
+                highlight,
+                shared_by_event_id: None,
+                shared_by_pubkey: None,
+            }
+        })
+        .collect())
+}
+
+fn highlight_source_key(highlight: &HighlightRecord) -> String {
+    let key = highlight.source_reference_key.trim();
+    if !key.is_empty() {
+        return key.to_string();
+    }
+    if !highlight.artifact_address.trim().is_empty() {
+        return format!("a:{}", highlight.artifact_address.trim());
+    }
+    if !highlight.event_reference.trim().is_empty() {
+        return format!("e:{}", highlight.event_reference.trim());
+    }
+    if !highlight.external_reference.trim().is_empty() {
+        return format!("i:{}", highlight.external_reference.trim());
+    }
+    if !highlight.source_url.trim().is_empty() {
+        return format!("r:{}", highlight.source_url.trim());
+    }
+    String::new()
+}
+
+fn artifact_reference_keys(record: &ArtifactRecord) -> Vec<String> {
+    let preview = &record.preview;
+    let mut keys = Vec::new();
+    push_reference_key(
+        &mut keys,
+        &preview.reference_tag_name,
+        &preview.reference_tag_value,
+    );
+    push_reference_key(
+        &mut keys,
+        &preview.highlight_tag_name,
+        &preview.highlight_tag_value,
+    );
+    push_reference_key(&mut keys, "r", &preview.url);
+    push_reference_key(&mut keys, "r", &preview.audio_url);
+    push_reference_key(&mut keys, "e", &record.share_event_id);
+    if !preview.catalog_id.trim().is_empty() {
+        push_reference_key(&mut keys, "i", &preview.catalog_id);
+    }
+    if !preview.podcast_item_guid.trim().is_empty() {
+        push_reference_key(
+            &mut keys,
+            "i",
+            &format!("podcast:item:guid:{}", preview.podcast_item_guid.trim()),
+        );
+    }
+    keys.sort();
+    keys.dedup();
+    keys
+}
+
+fn push_reference_key(keys: &mut Vec<String>, name: &str, value: &str) {
+    let name = name.trim();
+    let value = value.trim();
+    if !name.is_empty() && !value.is_empty() {
+        keys.push(format!("{name}:{value}"));
+    }
 }
 
 /// Read highlights referencing the given NIP-23 article address
@@ -854,6 +990,82 @@ mod tests {
             .collect()
     }
 
+    fn share_event(
+        keys: &Keys,
+        group_id: &str,
+        d_tag: &str,
+        title: &str,
+        source: &str,
+        reference_value: &str,
+        reference_kind: &str,
+        url: &str,
+        created_at: u64,
+    ) -> Event {
+        let mut tags = vec![
+            Tag::parse(vec!["h".to_string(), group_id.to_string()]).unwrap(),
+            Tag::identifier(d_tag),
+            Tag::parse(vec!["title".to_string(), title.to_string()]).unwrap(),
+            Tag::parse(vec!["source".to_string(), source.to_string()]).unwrap(),
+        ];
+        if !reference_value.is_empty() {
+            tags.push(
+                Tag::parse(vec![
+                    "i".to_string(),
+                    reference_value.to_string(),
+                    url.to_string(),
+                ])
+                .unwrap(),
+            );
+        }
+        if !reference_kind.is_empty() {
+            tags.push(Tag::parse(vec!["k".to_string(), reference_kind.to_string()]).unwrap());
+        }
+        if !url.is_empty() {
+            tags.push(Tag::parse(vec!["r".to_string(), url.to_string()]).unwrap());
+        }
+
+        EventBuilder::new(Kind::Custom(11), "")
+            .tags(tags)
+            .custom_created_at(Timestamp::from(created_at))
+            .sign_with_keys(keys)
+            .expect("sign")
+    }
+
+    fn highlight_for_source_key(
+        event_id: &str,
+        source_key: &str,
+        created_at: u64,
+    ) -> HighlightRecord {
+        let mut highlight = HighlightRecord {
+            event_id: event_id.to_string(),
+            pubkey: "b".repeat(64),
+            quote: "quote".into(),
+            context: String::new(),
+            note: String::new(),
+            artifact_address: String::new(),
+            event_reference: String::new(),
+            external_reference: String::new(),
+            source_url: String::new(),
+            source_reference_key: source_key.to_string(),
+            clip_start_seconds: None,
+            clip_end_seconds: None,
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: Vec::new(),
+            image_url: String::new(),
+            created_at: Some(created_at),
+        };
+        if let Some((name, value)) = source_key.split_once(':') {
+            match name {
+                "a" => highlight.artifact_address = value.to_string(),
+                "e" => highlight.event_reference = value.to_string(),
+                "i" => highlight.external_reference = value.to_string(),
+                "r" => highlight.source_url = value.to_string(),
+                _ => {}
+            }
+        }
+        highlight
+    }
+
     fn artifact_for_isbn(isbn: &str) -> ArtifactRecord {
         let catalog_id = format!("isbn:{isbn}");
         ArtifactRecord {
@@ -891,6 +1103,80 @@ mod tests {
             created_at: Some(1_700_000_000),
             note: String::new(),
         }
+    }
+
+    #[test]
+    fn hydrate_attaches_isbn_artifact_from_cached_share() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        let share = share_event(
+            &keys,
+            "books",
+            "book-1",
+            "The Rust Programming Language",
+            "book",
+            "isbn:9781593278281",
+            "isbn",
+            "https://openlibrary.org/isbn/9781593278281",
+            2_000,
+        );
+        ingest(&ndb, &share);
+        wait_for_ndb();
+
+        let highlight = highlight_for_source_key("h1", "i:isbn:9781593278281", 1_000);
+        let out = hydrate(&ndb, vec![highlight.clone()]).expect("hydrate");
+
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].highlight.event_id, "h1");
+        let artifact = out[0].artifact.as_ref().expect("artifact attached");
+        assert_eq!(artifact.preview.title, "The Rust Programming Language");
+        assert_eq!(
+            artifact.preview.highlight_reference_key,
+            "i:isbn:9781593278281"
+        );
+    }
+
+    #[test]
+    fn hydrate_attaches_web_artifact_by_url_reference() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        let share = share_event(
+            &keys,
+            "articles",
+            "web-1",
+            "A Useful Essay",
+            "article",
+            "https://example.com/essay",
+            "web",
+            "https://example.com/essay",
+            2_000,
+        );
+        ingest(&ndb, &share);
+        wait_for_ndb();
+
+        let highlight = highlight_for_source_key("h-web", "r:https://example.com/essay", 1_000);
+        let out = hydrate(&ndb, vec![highlight]).expect("hydrate");
+
+        let artifact = out[0].artifact.as_ref().expect("artifact attached");
+        assert_eq!(artifact.preview.title, "A Useful Essay");
+        assert_eq!(
+            artifact.preview.highlight_reference_key,
+            "r:https://example.com/essay"
+        );
+    }
+
+    #[test]
+    fn hydrate_preserves_highlight_when_artifact_missing() {
+        let (ndb, _tmp) = isolated_ndb();
+        let highlight = highlight_for_source_key("missing", "i:isbn:0000000000000", 1_000);
+
+        let out = hydrate(&ndb, vec![highlight]).expect("hydrate");
+
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].highlight.event_id, "missing");
+        assert!(out[0].artifact.is_none());
+        assert!(out[0].shared_by_event_id.is_none());
+        assert!(out[0].shared_by_pubkey.is_none());
     }
 
     #[test]
