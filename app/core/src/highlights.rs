@@ -251,6 +251,26 @@ pub fn hydrate(
         .collect())
 }
 
+/// Return a highlight list with `record` present exactly once at the front.
+/// Used for optimistic publish projection: native shells render the returned
+/// bounded list but do not own highlight identity or dedupe rules.
+pub fn insert_unique_front(
+    highlights: &[HighlightRecord],
+    record: &HighlightRecord,
+) -> Vec<HighlightRecord> {
+    if highlights
+        .iter()
+        .any(|highlight| highlight.event_id == record.event_id)
+    {
+        return highlights.to_vec();
+    }
+
+    let mut next = Vec::with_capacity(highlights.len() + 1);
+    next.push(record.clone());
+    next.extend_from_slice(highlights);
+    next
+}
+
 fn highlight_source_key(highlight: &HighlightRecord) -> String {
     let key = highlight.source_reference_key.trim();
     if !key.is_empty() {
@@ -1265,6 +1285,45 @@ mod tests {
             }
         }
         highlight
+    }
+
+    #[test]
+    fn insert_unique_front_adds_new_highlight_before_existing_records() {
+        let existing = vec![
+            highlight_for_source_key("old-1", "a:article", 2),
+            highlight_for_source_key("old-2", "a:article", 1),
+        ];
+        let published = highlight_for_source_key("new", "a:article", 3);
+
+        let out = insert_unique_front(&existing, &published);
+
+        let ids: Vec<_> = out
+            .iter()
+            .map(|highlight| highlight.event_id.as_str())
+            .collect();
+        assert_eq!(ids, ["new", "old-1", "old-2"]);
+        let original_ids: Vec<_> = existing
+            .iter()
+            .map(|highlight| highlight.event_id.as_str())
+            .collect();
+        assert_eq!(original_ids, ["old-1", "old-2"]);
+    }
+
+    #[test]
+    fn insert_unique_front_preserves_list_when_event_already_exists() {
+        let existing = vec![
+            highlight_for_source_key("old-1", "a:article", 2),
+            highlight_for_source_key("old-2", "a:article", 1),
+        ];
+        let duplicate = highlight_for_source_key("old-2", "a:article", 3);
+
+        let out = insert_unique_front(&existing, &duplicate);
+
+        let ids: Vec<_> = out
+            .iter()
+            .map(|highlight| highlight.event_id.as_str())
+            .collect();
+        assert_eq!(ids, ["old-1", "old-2"]);
     }
 
     fn artifact_for_isbn(isbn: &str) -> ArtifactRecord {

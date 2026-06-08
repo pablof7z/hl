@@ -1798,6 +1798,16 @@ impl HighlighterCore {
         crate::events::article_update_action(kind)
     }
 
+    /// Project an optimistically published highlight into the current visible
+    /// article highlight list. Rust owns duplicate suppression and ordering.
+    pub fn insert_unique_highlight_front(
+        &self,
+        highlights: Vec<HighlightRecord>,
+        highlight: HighlightRecord,
+    ) -> Vec<HighlightRecord> {
+        highlights::insert_unique_front(&highlights, &highlight)
+    }
+
     /// Classify a subscription event kind into the exact profile slice that
     /// native shells should refresh.
     pub fn get_profile_update_action(&self, kind: u32) -> ProfileUpdateAction {

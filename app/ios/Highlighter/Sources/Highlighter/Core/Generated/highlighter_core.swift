@@ -1286,6 +1286,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func initDefaultBlossomServers() async  -> MutationOutcome
 
     /**
+     * Project an optimistically published highlight into the current visible
+     * article highlight list. Rust owns duplicate suppression and ordering.
+     */
+    func insertUniqueHighlightFront(highlights: [HighlightRecord], highlight: HighlightRecord)  -> [HighlightRecord]
+
+    /**
      * Read-only predicate: is `address` currently bookmarked for the logged-in
      * user? Always `false` when no user is logged in.
      */
@@ -3572,6 +3578,19 @@ open func initDefaultBlossomServers()async  -> MutationOutcome  {
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Project an optimistically published highlight into the current visible
+     * article highlight list. Rust owns duplicate suppression and ordering.
+     */
+open func insertUniqueHighlightFront(highlights: [HighlightRecord], highlight: HighlightRecord) -> [HighlightRecord]  {
+    return try!  FfiConverterSequenceTypeHighlightRecord.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_insert_unique_highlight_front(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeHighlightRecord.lower(highlights),
+        FfiConverterTypeHighlightRecord_lower(highlight),$0
+    )
+})
 }
 
     /**
@@ -18982,6 +19001,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 36336) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_insert_unique_highlight_front() != 61304) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_article_bookmarked() != 17349) {

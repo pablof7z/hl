@@ -176,11 +176,10 @@ final class ArticleReaderStore {
         )
         let outcome = await safeCore.publishHighlight(draft: draft, artifact: artifact)
         guard outcome.error.isEmpty, let record = outcome.value else { return outcome }
-        // Optimistically inject into the local list so the overlay appears
-        // immediately; the subscription delta will reconcile shortly.
-        if !highlights.contains(where: { $0.eventId == record.eventId }) {
-            highlights.insert(record, at: 0)
-        }
+        highlights = safeCore.insertUniqueHighlightFront(
+            highlights: highlights,
+            highlight: record
+        )
         lastPublishedHighlightId = record.eventId
         return outcome
     }

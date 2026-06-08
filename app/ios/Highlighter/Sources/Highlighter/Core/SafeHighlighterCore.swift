@@ -592,6 +592,16 @@ actor SafeHighlighterCore {
         core.getArticleUpdateAction(kind: kind)
     }
 
+    nonisolated func insertUniqueHighlightFront(
+        highlights: [HighlightRecord],
+        highlight: HighlightRecord
+    ) -> [HighlightRecord] {
+        core.insertUniqueHighlightFront(
+            highlights: highlights,
+            highlight: highlight
+        )
+    }
+
     nonisolated func getProfileUpdateAction(kind: UInt32) -> ProfileUpdateAction {
         core.getProfileUpdateAction(kind: kind)
     }
