@@ -1418,6 +1418,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectCaptureCommunitySelection(input: CaptureCommunitySelectionProjectionInput)  -> CaptureCommunitySelectionProjection
 
+    /**
+     * Chat composer projection. Rust owns draft normalization and send
+     * eligibility; native shells render the composer affordance.
+     */
+    func projectChatComposer(input: ChatComposerProjectionInput)  -> ChatComposerProjection
+
     func projectCommunityRow(input: CommunityRowProjectionInput)  -> CommunityRowProjection
 
     /**
@@ -4287,6 +4293,18 @@ open func projectCaptureCommunitySelection(input: CaptureCommunitySelectionProje
     return try!  FfiConverterTypeCaptureCommunitySelectionProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_capture_community_selection(self.uniffiClonePointer(),
         FfiConverterTypeCaptureCommunitySelectionProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Chat composer projection. Rust owns draft normalization and send
+     * eligibility; native shells render the composer affordance.
+     */
+open func projectChatComposer(input: ChatComposerProjectionInput) -> ChatComposerProjection  {
+    return try!  FfiConverterTypeChatComposerProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_chat_composer(self.uniffiClonePointer(),
+        FfiConverterTypeChatComposerProjectionInput_lower(input),$0
     )
 })
 }
@@ -9668,6 +9686,138 @@ public func FfiConverterTypeChapter_lift(_ buf: RustBuffer) throws -> Chapter {
 #endif
 public func FfiConverterTypeChapter_lower(_ value: Chapter) -> RustBuffer {
     return FfiConverterTypeChapter.lower(value)
+}
+
+
+public struct ChatComposerProjection {
+    public var submitBody: String
+    public var canSend: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(submitBody: String, canSend: Bool) {
+        self.submitBody = submitBody
+        self.canSend = canSend
+    }
+}
+
+#if compiler(>=6)
+extension ChatComposerProjection: Sendable {}
+#endif
+
+
+extension ChatComposerProjection: Equatable, Hashable {
+    public static func ==(lhs: ChatComposerProjection, rhs: ChatComposerProjection) -> Bool {
+        if lhs.submitBody != rhs.submitBody {
+            return false
+        }
+        if lhs.canSend != rhs.canSend {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(submitBody)
+        hasher.combine(canSend)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatComposerProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatComposerProjection {
+        return
+            try ChatComposerProjection(
+                submitBody: FfiConverterString.read(from: &buf),
+                canSend: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatComposerProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.submitBody, into: &buf)
+        FfiConverterBool.write(value.canSend, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatComposerProjection_lift(_ buf: RustBuffer) throws -> ChatComposerProjection {
+    return try FfiConverterTypeChatComposerProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatComposerProjection_lower(_ value: ChatComposerProjection) -> RustBuffer {
+    return FfiConverterTypeChatComposerProjection.lower(value)
+}
+
+
+public struct ChatComposerProjectionInput {
+    public var body: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(body: String) {
+        self.body = body
+    }
+}
+
+#if compiler(>=6)
+extension ChatComposerProjectionInput: Sendable {}
+#endif
+
+
+extension ChatComposerProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ChatComposerProjectionInput, rhs: ChatComposerProjectionInput) -> Bool {
+        if lhs.body != rhs.body {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(body)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatComposerProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatComposerProjectionInput {
+        return
+            try ChatComposerProjectionInput(
+                body: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatComposerProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.body, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatComposerProjectionInput_lift(_ buf: RustBuffer) throws -> ChatComposerProjectionInput {
+    return try FfiConverterTypeChatComposerProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatComposerProjectionInput_lower(_ value: ChatComposerProjectionInput) -> RustBuffer {
+    return FfiConverterTypeChatComposerProjectionInput.lower(value)
 }
 
 
@@ -30733,6 +30883,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_community_selection() != 38232) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_chat_composer() != 32840) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_community_row() != 45428) {

@@ -160,12 +160,10 @@ final class ChatStore {
     /// the returned record — the apply path is idempotent).
     func send(text: String, replyTo: ChatMessageRecord? = nil) async {
         guard let groupId, let core else { return }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
         sendError = nil
         let outcome = await core.publishChatMessage(
             groupId: groupId,
-            content: trimmed,
+            content: text,
             replyToEventId: replyTo?.eventId
         )
         guard outcome.error.isEmpty, let record = outcome.value else {

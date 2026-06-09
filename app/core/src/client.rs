@@ -3228,6 +3228,15 @@ impl HighlighterCore {
         discussion_outcome(result)
     }
 
+    /// Chat composer projection. Rust owns draft normalization and send
+    /// eligibility; native shells render the composer affordance.
+    pub fn project_chat_composer(
+        &self,
+        input: crate::chat::ChatComposerProjectionInput,
+    ) -> crate::chat::ChatComposerProjection {
+        crate::chat::chat_composer_projection(input)
+    }
+
     /// Publish a NIP-29 kind:9 chat message into `group_id`. When
     /// `reply_to_event_id` is set, the published event carries a marked
     /// NIP-10 `["e", <id>, "", "reply"]` tag.

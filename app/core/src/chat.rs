@@ -17,6 +17,27 @@ use crate::nostr_runtime::NostrRuntime;
 /// `["e", <reply-target-id>, "", "reply"]` marks the message as a reply.
 pub const KIND_CHAT_MESSAGE: u16 = 9;
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatComposerProjectionInput {
+    pub body: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatComposerProjection {
+    pub submit_body: String,
+    pub can_send: bool,
+}
+
+/// Chat composer projection. Rust owns draft normalization and send
+/// eligibility; native shells render the composer affordance.
+pub fn chat_composer_projection(input: ChatComposerProjectionInput) -> ChatComposerProjection {
+    let submit_body = input.body.trim().to_string();
+    ChatComposerProjection {
+        can_send: !submit_body.is_empty(),
+        submit_body,
+    }
+}
+
 /// Query cached chat messages for `group_id`. Sorted ascending by
 /// `created_at` so the chat view can stream-append at the bottom without
 /// re-sorting on each apply. `limit` caps the most recent N events the
@@ -287,5 +308,22 @@ mod tests {
         let ndb = Ndb::new(tmp.path().to_str().unwrap(), &cfg).expect("ndb");
         let err = query_chat_messages(&ndb, "  ", 16).unwrap_err();
         assert!(matches!(err, CoreError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn chat_composer_projection_trims_and_blocks_blank_body() {
+        let projection = chat_composer_projection(ChatComposerProjectionInput {
+            body: "  hello room  ".into(),
+        });
+
+        assert_eq!(projection.submit_body, "hello room");
+        assert!(projection.can_send);
+
+        let projection = chat_composer_projection(ChatComposerProjectionInput {
+            body: " \n\t ".into(),
+        });
+
+        assert_eq!(projection.submit_body, "");
+        assert!(!projection.can_send);
     }
 }

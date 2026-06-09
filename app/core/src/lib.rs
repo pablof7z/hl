@@ -67,6 +67,7 @@ pub use capture::{
     CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput,
     CaptureCommunitySelectionProjection, CaptureCommunitySelectionProjectionInput,
 };
+pub use chat::{ChatComposerProjection, ChatComposerProjectionInput};
 pub use client::HighlighterCore;
 pub use discussions::{DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput};
 pub use errors::CoreError;

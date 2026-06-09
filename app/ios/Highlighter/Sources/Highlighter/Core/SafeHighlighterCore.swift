@@ -523,6 +523,12 @@ actor SafeHighlighterCore {
         await core.getChatMessages(groupId: groupId, limit: limit)
     }
 
+    nonisolated func projectChatComposer(
+        input: ChatComposerProjectionInput
+    ) -> ChatComposerProjection {
+        core.projectChatComposer(input: input)
+    }
+
     func publishChatMessage(
         groupId: String,
         content: String,

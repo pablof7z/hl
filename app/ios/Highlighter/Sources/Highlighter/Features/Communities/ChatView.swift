@@ -238,7 +238,7 @@ struct ChatView: View {
                 )
                 .focused($inputFocused)
 
-            if canSend {
+            if composerProjection.canSend {
                 Button {
                     Task { await send() }
                 } label: {
@@ -252,21 +252,28 @@ struct ChatView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: canSend)
+        .animation(
+            .spring(response: 0.25, dampingFraction: 0.7),
+            value: composerProjection.canSend
+        )
     }
 
     // MARK: - Helpers
 
-    private var canSend: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var composerProjection: ChatComposerProjection {
+        app.safeCore.projectChatComposer(
+            input: ChatComposerProjectionInput(body: draft)
+        )
     }
 
     private func send() async {
-        let text = draft
+        let projection = composerProjection
+        guard projection.canSend else { return }
+
         let reply = replyTo
         draft = ""
         replyTo = nil
-        await store.send(text: text, replyTo: reply)
+        await store.send(text: projection.submitBody, replyTo: reply)
         scrollRevision += 1
     }
 
