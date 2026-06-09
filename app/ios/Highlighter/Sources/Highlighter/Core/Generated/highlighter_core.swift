@@ -1408,6 +1408,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
 
+    /**
+     * Project article-reader highlight publish state. Rust owns note
+     * normalization and success/failure toast semantics.
+     */
+    func projectArticleHighlightPublish(input: ArticleHighlightPublishProjectionInput)  -> ArticleHighlightPublishProjection
+
     func projectArticleProfileCard(input: ArticleProfileCardProjectionInput)  -> ArticleProfileCardProjection
 
     func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput)  -> ArticleReaderHeaderProjection
@@ -4295,6 +4301,18 @@ open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelayS
 })
 }
 
+    /**
+     * Project article-reader highlight publish state. Rust owns note
+     * normalization and success/failure toast semantics.
+     */
+open func projectArticleHighlightPublish(input: ArticleHighlightPublishProjectionInput) -> ArticleHighlightPublishProjection  {
+    return try!  FfiConverterTypeArticleHighlightPublishProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_article_highlight_publish(self.uniffiClonePointer(),
+        FfiConverterTypeArticleHighlightPublishProjectionInput_lower(input),$0
+    )
+})
+}
+
 open func projectArticleProfileCard(input: ArticleProfileCardProjectionInput) -> ArticleProfileCardProjection  {
     return try!  FfiConverterTypeArticleProfileCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_article_profile_card(self.uniffiClonePointer(),
@@ -6550,6 +6568,162 @@ public func FfiConverterTypeAddRelaySheetProjectionInput_lift(_ buf: RustBuffer)
 #endif
 public func FfiConverterTypeAddRelaySheetProjectionInput_lower(_ value: AddRelaySheetProjectionInput) -> RustBuffer {
     return FfiConverterTypeAddRelaySheetProjectionInput.lower(value)
+}
+
+
+/**
+ * Native article-reader highlight publish projection. Rust owns the canonical
+ * note body and the user-visible toast copy.
+ */
+public struct ArticleHighlightPublishProjection {
+    public var submitNote: String
+    public var toastMessage: String
+    public var isSuccess: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(submitNote: String, toastMessage: String, isSuccess: Bool) {
+        self.submitNote = submitNote
+        self.toastMessage = toastMessage
+        self.isSuccess = isSuccess
+    }
+}
+
+#if compiler(>=6)
+extension ArticleHighlightPublishProjection: Sendable {}
+#endif
+
+
+extension ArticleHighlightPublishProjection: Equatable, Hashable {
+    public static func ==(lhs: ArticleHighlightPublishProjection, rhs: ArticleHighlightPublishProjection) -> Bool {
+        if lhs.submitNote != rhs.submitNote {
+            return false
+        }
+        if lhs.toastMessage != rhs.toastMessage {
+            return false
+        }
+        if lhs.isSuccess != rhs.isSuccess {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(submitNote)
+        hasher.combine(toastMessage)
+        hasher.combine(isSuccess)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleHighlightPublishProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleHighlightPublishProjection {
+        return
+            try ArticleHighlightPublishProjection(
+                submitNote: FfiConverterString.read(from: &buf),
+                toastMessage: FfiConverterString.read(from: &buf),
+                isSuccess: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleHighlightPublishProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.submitNote, into: &buf)
+        FfiConverterString.write(value.toastMessage, into: &buf)
+        FfiConverterBool.write(value.isSuccess, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleHighlightPublishProjection_lift(_ buf: RustBuffer) throws -> ArticleHighlightPublishProjection {
+    return try FfiConverterTypeArticleHighlightPublishProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleHighlightPublishProjection_lower(_ value: ArticleHighlightPublishProjection) -> RustBuffer {
+    return FfiConverterTypeArticleHighlightPublishProjection.lower(value)
+}
+
+
+/**
+ * Native article-reader highlight publish input. `error` is empty before
+ * publish and carries the Rust outcome error after publish.
+ */
+public struct ArticleHighlightPublishProjectionInput {
+    public var note: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(note: String, error: String) {
+        self.note = note
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ArticleHighlightPublishProjectionInput: Sendable {}
+#endif
+
+
+extension ArticleHighlightPublishProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ArticleHighlightPublishProjectionInput, rhs: ArticleHighlightPublishProjectionInput) -> Bool {
+        if lhs.note != rhs.note {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(note)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleHighlightPublishProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleHighlightPublishProjectionInput {
+        return
+            try ArticleHighlightPublishProjectionInput(
+                note: FfiConverterString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleHighlightPublishProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.note, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleHighlightPublishProjectionInput_lift(_ buf: RustBuffer) throws -> ArticleHighlightPublishProjectionInput {
+    return try FfiConverterTypeArticleHighlightPublishProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleHighlightPublishProjectionInput_lower(_ value: ArticleHighlightPublishProjectionInput) -> RustBuffer {
+    return FfiConverterTypeArticleHighlightPublishProjectionInput.lower(value)
 }
 
 
@@ -32734,6 +32908,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_add_relay_sheet() != 14886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_highlight_publish() != 64360) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_profile_card() != 51383) {

@@ -1775,6 +1775,15 @@ impl HighlighterCore {
         highlights::highlight_detail_content_projection(input)
     }
 
+    /// Project article-reader highlight publish state. Rust owns note
+    /// normalization and success/failure toast semantics.
+    pub fn project_article_highlight_publish(
+        &self,
+        input: highlights::ArticleHighlightPublishProjectionInput,
+    ) -> highlights::ArticleHighlightPublishProjection {
+        highlights::article_highlight_publish_projection(input)
+    }
+
     /// Compose following highlights and following reads into the home feed.
     /// Rust owns grouping, stable identity, duplicate suppression, and merged
     /// ordering; native shells render the returned rows.

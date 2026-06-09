@@ -90,6 +90,7 @@ pub use groups::{
     RoomAvatarProjectionInput, RoomVisibility,
 };
 pub use highlights::{
+    ArticleHighlightPublishProjection, ArticleHighlightPublishProjectionInput,
     HighlightDetailContentProjection, HighlightDetailContentProjectionInput,
     HighlightDetailResourceProjection, HighlightDetailResourceProjectionInput,
     HighlightFeedContentProjection, HighlightFeedContentProjectionInput,

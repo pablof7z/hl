@@ -153,21 +153,30 @@ struct ArticleReaderView: View {
 
     private func publish(quote: String, context: String, note: String) async {
         guard let store else { return }
+        let request = app.safeCore.projectArticleHighlightPublish(
+            input: ArticleHighlightPublishProjectionInput(note: note, error: "")
+        )
         let outcome = await store.publishHighlight(
             quote: quote,
-            note: note,
+            note: request.submitNote,
             context: context
         )
-        if outcome.error.isEmpty {
+        let result = app.safeCore.projectArticleHighlightPublish(
+            input: ArticleHighlightPublishProjectionInput(
+                note: request.submitNote,
+                error: outcome.error
+            )
+        )
+        if result.isSuccess {
             withAnimation(.easeOut(duration: 0.2)) {
-                toast = note.isEmpty ? "Highlighted" : "Highlighted with note"
+                toast = result.toastMessage
             }
             toastResetTimer.schedule(after: 1.8) {
                 withAnimation(.easeIn(duration: 0.2)) { toast = nil }
             }
         } else {
             withAnimation(.easeOut(duration: 0.2)) {
-                toast = "Couldn't save — \(outcome.error)"
+                toast = result.toastMessage
             }
             toastResetTimer.schedule(after: 2.8) {
                 withAnimation(.easeIn(duration: 0.2)) { toast = nil }
@@ -561,7 +570,7 @@ private struct NoteComposerSheet: View {
                     Button("Cancel", action: onCancel)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") { onSave(note.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                    Button("Save") { onSave(note) }
                         .fontWeight(.semibold)
                 }
             }

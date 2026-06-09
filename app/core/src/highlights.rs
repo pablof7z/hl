@@ -131,6 +131,23 @@ pub struct HighlightDetailContentProjection {
     pub share_message: String,
 }
 
+/// Native article-reader highlight publish input. `error` is empty before
+/// publish and carries the Rust outcome error after publish.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleHighlightPublishProjectionInput {
+    pub note: String,
+    pub error: String,
+}
+
+/// Native article-reader highlight publish projection. Rust owns the canonical
+/// note body and the user-visible toast copy.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleHighlightPublishProjection {
+    pub submit_note: String,
+    pub toast_message: String,
+    pub is_success: bool,
+}
+
 /// Presentation projection for a grouped highlight card. Rust owns unique
 /// highlighter order, strip visibility, avatar cap, overflow count, and the
 /// social byline text sequence; native shells only style the segments.
@@ -410,6 +427,31 @@ pub fn highlight_detail_content_projection(
         },
         page_image_url: non_empty_trimmed(&highlight.image_url),
         share_message: quote_text,
+    }
+}
+
+/// Project the article-reader highlight publish action. Rust owns note
+/// normalization and the semantic toast copy for success/failure.
+pub fn article_highlight_publish_projection(
+    input: ArticleHighlightPublishProjectionInput,
+) -> ArticleHighlightPublishProjection {
+    let submit_note = input.note.trim().to_string();
+    let error = input.error.trim();
+    let is_success = error.is_empty();
+    let toast_message = if is_success {
+        if submit_note.is_empty() {
+            "Highlighted".to_string()
+        } else {
+            "Highlighted with note".to_string()
+        }
+    } else {
+        format!("Couldn't save — {error}")
+    };
+
+    ArticleHighlightPublishProjection {
+        submit_note,
+        toast_message,
+        is_success,
     }
 }
 
@@ -2338,6 +2380,38 @@ mod tests {
             });
 
         assert_eq!(projection.note_text, Some(" Keep ".into()));
+    }
+
+    #[test]
+    fn article_highlight_publish_projection_trims_note_and_projects_success_toast() {
+        let blank = article_highlight_publish_projection(ArticleHighlightPublishProjectionInput {
+            note: " \n ".into(),
+            error: String::new(),
+        });
+        let noted = article_highlight_publish_projection(ArticleHighlightPublishProjectionInput {
+            note: "  keep this  ".into(),
+            error: String::new(),
+        });
+
+        assert_eq!(blank.submit_note, "");
+        assert_eq!(blank.toast_message, "Highlighted");
+        assert!(blank.is_success);
+        assert_eq!(noted.submit_note, "keep this");
+        assert_eq!(noted.toast_message, "Highlighted with note");
+        assert!(noted.is_success);
+    }
+
+    #[test]
+    fn article_highlight_publish_projection_projects_failure_toast() {
+        let projection =
+            article_highlight_publish_projection(ArticleHighlightPublishProjectionInput {
+                note: " note ".into(),
+                error: " relay rejected ".into(),
+            });
+
+        assert_eq!(projection.submit_note, "note");
+        assert_eq!(projection.toast_message, "Couldn't save — relay rejected");
+        assert!(!projection.is_success);
     }
 
     #[test]
