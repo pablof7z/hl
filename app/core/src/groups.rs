@@ -68,6 +68,12 @@ pub struct CommunityRowProjection {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct JoinedCommunitiesSnapshot {
+    pub communities: Vec<CommunitySummary>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct RoomCoverCardProjectionInput {
     pub room: CommunitySummary,
 }
@@ -332,6 +338,21 @@ pub fn build_joined_communities(
 
     joined.sort_by(|a, b| a.name.cmp(&b.name));
     joined
+}
+
+pub fn joined_communities_snapshot(
+    result: Result<Vec<CommunitySummary>, CoreError>,
+) -> JoinedCommunitiesSnapshot {
+    match result {
+        Ok(communities) => JoinedCommunitiesSnapshot {
+            communities,
+            error: String::new(),
+        },
+        Err(error) => JoinedCommunitiesSnapshot {
+            communities: Vec::new(),
+            error: error.to_string(),
+        },
+    }
 }
 
 /// Publish a NIP-29 kind:9021 join-request event for `group_id`. Fire-and-
@@ -953,6 +974,18 @@ mod tests {
     fn empty_pubkey_returns_empty() {
         let out = build_joined_communities("", &[], &[]);
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn joined_communities_snapshot_projects_rows_or_error_state() {
+        let ok = joined_communities_snapshot(Ok(vec![summary("alpha", "Alpha", "")]));
+        assert_eq!(ok.communities.len(), 1);
+        assert_eq!(ok.communities[0].id, "alpha");
+        assert!(ok.error.is_empty());
+
+        let err = joined_communities_snapshot(Err(CoreError::NotAuthenticated));
+        assert!(err.communities.is_empty());
+        assert_eq!(err.error, "not authenticated");
     }
 
     #[test]

@@ -1010,7 +1010,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getHomeFeedSnapshot(highlightLimit: UInt32, readLimit: UInt32) async  -> HomeFeedSnapshot
 
-    func getJoinedCommunities() async  -> CommunityListOutcome
+    func getJoinedCommunities() async  -> JoinedCommunitiesSnapshot
 
     /**
      * Size + event-count snapshot of the local nostrdb cache. Order-of-
@@ -2783,7 +2783,7 @@ open func getHomeFeedSnapshot(highlightLimit: UInt32, readLimit: UInt32)async  -
         )
 }
 
-open func getJoinedCommunities()async  -> CommunityListOutcome  {
+open func getJoinedCommunities()async  -> JoinedCommunitiesSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2795,7 +2795,7 @@ open func getJoinedCommunities()async  -> CommunityListOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommunityListOutcome_lift,
+            liftFunc: FfiConverterTypeJoinedCommunitiesSnapshot_lift,
             errorHandler: nil
 
         )
@@ -13539,76 +13539,6 @@ public func FfiConverterTypeCommentToolbarProjectionInput_lower(_ value: Comment
 }
 
 
-public struct CommunityListOutcome {
-    public var values: [CommunitySummary]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [CommunitySummary], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension CommunityListOutcome: Sendable {}
-#endif
-
-
-extension CommunityListOutcome: Equatable, Hashable {
-    public static func ==(lhs: CommunityListOutcome, rhs: CommunityListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCommunityListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommunityListOutcome {
-        return
-            try CommunityListOutcome(
-                values: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CommunityListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeCommunitySummary.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommunityListOutcome_lift(_ buf: RustBuffer) throws -> CommunityListOutcome {
-    return try FfiConverterTypeCommunityListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommunityListOutcome_lower(_ value: CommunityListOutcome) -> RustBuffer {
-    return FfiConverterTypeCommunityListOutcome.lower(value)
-}
-
-
 public struct CommunityRowProjection {
     public var displayName: String
     public var pictureUrl: String?
@@ -19509,6 +19439,76 @@ public func FfiConverterTypeJoinRoomRequestSnapshot_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeJoinRoomRequestSnapshot_lower(_ value: JoinRoomRequestSnapshot) -> RustBuffer {
     return FfiConverterTypeJoinRoomRequestSnapshot.lower(value)
+}
+
+
+public struct JoinedCommunitiesSnapshot {
+    public var communities: [CommunitySummary]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(communities: [CommunitySummary], error: String) {
+        self.communities = communities
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension JoinedCommunitiesSnapshot: Sendable {}
+#endif
+
+
+extension JoinedCommunitiesSnapshot: Equatable, Hashable {
+    public static func ==(lhs: JoinedCommunitiesSnapshot, rhs: JoinedCommunitiesSnapshot) -> Bool {
+        if lhs.communities != rhs.communities {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(communities)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeJoinedCommunitiesSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JoinedCommunitiesSnapshot {
+        return
+            try JoinedCommunitiesSnapshot(
+                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: JoinedCommunitiesSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommunitySummary.write(value.communities, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinedCommunitiesSnapshot_lift(_ buf: RustBuffer) throws -> JoinedCommunitiesSnapshot {
+    return try FfiConverterTypeJoinedCommunitiesSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinedCommunitiesSnapshot_lower(_ value: JoinedCommunitiesSnapshot) -> RustBuffer {
+    return FfiConverterTypeJoinedCommunitiesSnapshot.lower(value)
 }
 
 
@@ -38829,7 +38829,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_home_feed_snapshot() != 9098) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 28655) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 18685) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_network_cache_stats_snapshot() != 16607) {

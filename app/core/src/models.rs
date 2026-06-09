@@ -81,12 +81,6 @@ pub struct ArtifactOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct CommunityListOutcome {
-    pub values: Vec<CommunitySummary>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct DiscussionOutcome {
     pub value: Option<DiscussionRecord>,
     pub error: String,

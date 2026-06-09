@@ -115,8 +115,9 @@ pub use feedback::{
 pub use groups::{
     CommunityRowProjection, CommunityRowProjectionInput, CreateRoomProjection,
     CreateRoomProjectionInput, CreateRoomPublishSnapshot, CreateRoomVisibilityOption,
-    JoinRoomRequestSnapshot, RoomAccess, RoomAvatarProjection, RoomAvatarProjectionInput,
-    RoomCoverCardProjection, RoomCoverCardProjectionInput, RoomVisibility,
+    JoinRoomRequestSnapshot, JoinedCommunitiesSnapshot, RoomAccess, RoomAvatarProjection,
+    RoomAvatarProjectionInput, RoomCoverCardProjection, RoomCoverCardProjectionInput,
+    RoomVisibility,
 };
 pub use highlights::{
     ArticleHighlightPublishProjection, ArticleHighlightPublishProjectionInput,
@@ -147,9 +148,9 @@ pub use models::{
     ArticleReaderRoute, ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactOutcome,
     ArtifactPreview, ArtifactRecord, ArtifactReferenceTarget, BlossomUpload, BookRoute,
     BookmarkSetRecord, ChatMessageRecord, CommentRecord, CommentReferenceBucket, CommentThreadNode,
-    CommentThreadProjection, CommunityListOutcome, CommunitySummary, CurationMenuItem, CurrentUser,
-    DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
-    FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightOutcome, HighlightRecord,
+    CommentThreadProjection, CommunitySummary, CurationMenuItem, CurrentUser, DiscussionAttachment,
+    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventRecord,
+    FeedbackThreadRecord, GeneratedAccount, HighlightOutcome, HighlightRecord,
     HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem,
     HydratedHighlight, LoginInputAction, MutationOutcome, OnboardingInterest,
     OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,

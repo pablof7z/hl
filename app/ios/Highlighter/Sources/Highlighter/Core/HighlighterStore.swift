@@ -322,7 +322,7 @@ final class HighlighterStore {
     func refreshJoinedCommunities() async {
         let outcome = await safeCore.getJoinedCommunities()
         if outcome.error.isEmpty {
-            joinedCommunities = outcome.values
+            joinedCommunities = outcome.communities
         }
     }
 
@@ -331,7 +331,7 @@ final class HighlighterStore {
         // relays — the cache answers first, subscriptions catch up later.
         let communitiesOutcome = await safeCore.getJoinedCommunities()
         if communitiesOutcome.error.isEmpty {
-            joinedCommunities = communitiesOutcome.values
+            joinedCommunities = communitiesOutcome.communities
         }
 
         // Fetch the user's own kind:0 so the top-bar avatar shows their real

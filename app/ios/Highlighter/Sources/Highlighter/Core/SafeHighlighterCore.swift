@@ -206,7 +206,7 @@ actor SafeHighlighterCore {
 
     // MARK: - Reads
 
-    func getJoinedCommunities() async -> CommunityListOutcome {
+    func getJoinedCommunities() async -> JoinedCommunitiesSnapshot {
         await core.getJoinedCommunities()
     }
 

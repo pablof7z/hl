@@ -27,11 +27,11 @@ use crate::isbn_lookup;
 use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactRecord,
     BlossomUpload, BookRoute, BookmarkSetRecord, CommentRecord, CommentReferenceBucket,
-    CommentScope, CommunityListOutcome, CommunitySummary, CurrentUser, DiscussionOutcome,
-    DiscussionRecord, FeedbackThreadRecord, HighlightOutcome, HighlightRecord, HighlightSourceKind,
-    LoginInputAction, MutationOutcome, NostrConnectOptions, OnboardingInterest,
-    OnboardingInterestProjection, OnboardingInterestSelection, PodcastPositionRecord,
-    ProfileMetadata, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, SubscriptionOutcome,
+    CommentScope, CommunitySummary, CurrentUser, DiscussionOutcome, DiscussionRecord,
+    FeedbackThreadRecord, HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction,
+    MutationOutcome, NostrConnectOptions, OnboardingInterest, OnboardingInterestProjection,
+    OnboardingInterestSelection, PodcastPositionRecord, ProfileMetadata, ProfileUpdateAction,
+    ProfileUpdateDraft, RelayDiagnostic, SubscriptionOutcome,
 };
 use crate::network_preferences;
 use crate::nip05;
@@ -136,21 +136,6 @@ fn artifact_outcome(result: Result<ArtifactRecord, CoreError>) -> ArtifactOutcom
         },
         Err(error) => ArtifactOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn community_list_outcome(
-    result: Result<Vec<CommunitySummary>, CoreError>,
-) -> CommunityListOutcome {
-    match result {
-        Ok(values) => CommunityListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => CommunityListOutcome {
-            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -970,8 +955,8 @@ impl HighlighterCore {
 
     // -- Reads --
 
-    pub async fn get_joined_communities(&self) -> CommunityListOutcome {
-        community_list_outcome((|| {
+    pub async fn get_joined_communities(&self) -> groups::JoinedCommunitiesSnapshot {
+        groups::joined_communities_snapshot((|| {
             let Some(user) = self.inner.read().session.current_user() else {
                 return Err(CoreError::NotAuthenticated);
             };
