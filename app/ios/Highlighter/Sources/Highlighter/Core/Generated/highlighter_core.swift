@@ -781,13 +781,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * ISBN normalization and the NIP-73 reference fields; native supplies
      * only the user's edited title/author and optional lookup metadata.
      */
-    func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, title: String, author: String)  -> ArtifactPreviewOutcome
-
-    /**
-     * Build an `ArtifactPreview` from a bare URL. Used by reader flows that
-     * need to render or confirm a share target before publishing.
-     */
-    func buildPreviewFromUrl(url: String) async  -> ArtifactPreviewOutcome
+    func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, title: String, author: String)  -> EditedBookPreviewProjection
 
     func buildWebReaderShareTarget(url: String) async  -> ShareWebReaderTargetSnapshot
 
@@ -1160,7 +1154,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func logout()
 
-    func lookupIsbn(isbn: String) async  -> ArtifactPreviewOutcome
+    func lookupIsbn(isbn: String) async  -> IsbnPreviewLookupSnapshot
 
     func markPodcastClipIn(selection: PodcastClipSelection, currentTime: Double)  -> PodcastClipSelection
 
@@ -2009,8 +2003,8 @@ open func autoConnectedRelayConfig(url: String) -> RelayConfig  {
      * ISBN normalization and the NIP-73 reference fields; native supplies
      * only the user's edited title/author and optional lookup metadata.
      */
-open func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, title: String, author: String) -> ArtifactPreviewOutcome  {
-    return try!  FfiConverterTypeArtifactPreviewOutcome_lift(try! rustCall() {
+open func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, title: String, author: String) -> EditedBookPreviewProjection  {
+    return try!  FfiConverterTypeEditedBookPreviewProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_build_edited_book_preview(self.uniffiClonePointer(),
         FfiConverterString.lower(isbn),
         FfiConverterOptionTypeArtifactPreview.lower(basePreview),
@@ -2018,28 +2012,6 @@ open func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, ti
         FfiConverterString.lower(author),$0
     )
 })
-}
-
-    /**
-     * Build an `ArtifactPreview` from a bare URL. Used by reader flows that
-     * need to render or confirm a share target before publishing.
-     */
-open func buildPreviewFromUrl(url: String)async  -> ArtifactPreviewOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_build_preview_from_url(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(url)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactPreviewOutcome_lift,
-            errorHandler: nil
-
-        )
 }
 
 open func buildWebReaderShareTarget(url: String)async  -> ShareWebReaderTargetSnapshot  {
@@ -3366,7 +3338,7 @@ open func logout()  {try! rustCall() {
 }
 }
 
-open func lookupIsbn(isbn: String)async  -> ArtifactPreviewOutcome  {
+open func lookupIsbn(isbn: String)async  -> IsbnPreviewLookupSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -3378,7 +3350,7 @@ open func lookupIsbn(isbn: String)async  -> ArtifactPreviewOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactPreviewOutcome_lift,
+            liftFunc: FfiConverterTypeIsbnPreviewLookupSnapshot_lift,
             errorHandler: nil
 
         )
@@ -8059,76 +8031,6 @@ public func FfiConverterTypeArtifactPreview_lift(_ buf: RustBuffer) throws -> Ar
 #endif
 public func FfiConverterTypeArtifactPreview_lower(_ value: ArtifactPreview) -> RustBuffer {
     return FfiConverterTypeArtifactPreview.lower(value)
-}
-
-
-public struct ArtifactPreviewOutcome {
-    public var value: ArtifactPreview?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: ArtifactPreview?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ArtifactPreviewOutcome: Sendable {}
-#endif
-
-
-extension ArtifactPreviewOutcome: Equatable, Hashable {
-    public static func ==(lhs: ArtifactPreviewOutcome, rhs: ArtifactPreviewOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeArtifactPreviewOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactPreviewOutcome {
-        return
-            try ArtifactPreviewOutcome(
-                value: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ArtifactPreviewOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeArtifactPreview.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArtifactPreviewOutcome_lift(_ buf: RustBuffer) throws -> ArtifactPreviewOutcome {
-    return try FfiConverterTypeArtifactPreviewOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArtifactPreviewOutcome_lower(_ value: ArtifactPreviewOutcome) -> RustBuffer {
-    return FfiConverterTypeArtifactPreviewOutcome.lower(value)
 }
 
 
@@ -15496,6 +15398,76 @@ public func FfiConverterTypeDiscussionRecord_lower(_ value: DiscussionRecord) ->
 }
 
 
+public struct EditedBookPreviewProjection {
+    public var preview: ArtifactPreview?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(preview: ArtifactPreview?, error: String) {
+        self.preview = preview
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension EditedBookPreviewProjection: Sendable {}
+#endif
+
+
+extension EditedBookPreviewProjection: Equatable, Hashable {
+    public static func ==(lhs: EditedBookPreviewProjection, rhs: EditedBookPreviewProjection) -> Bool {
+        if lhs.preview != rhs.preview {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(preview)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEditedBookPreviewProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EditedBookPreviewProjection {
+        return
+            try EditedBookPreviewProjection(
+                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: EditedBookPreviewProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArtifactPreview.write(value.preview, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEditedBookPreviewProjection_lift(_ buf: RustBuffer) throws -> EditedBookPreviewProjection {
+    return try FfiConverterTypeEditedBookPreviewProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEditedBookPreviewProjection_lower(_ value: EditedBookPreviewProjection) -> RustBuffer {
+    return FfiConverterTypeEditedBookPreviewProjection.lower(value)
+}
+
+
 public struct FeedbackComposerProjection {
     public var submitBody: String
     public var canSend: Bool
@@ -19117,6 +19089,76 @@ public func FfiConverterTypeIsbnManualPreviewProjectionInput_lift(_ buf: RustBuf
 #endif
 public func FfiConverterTypeIsbnManualPreviewProjectionInput_lower(_ value: IsbnManualPreviewProjectionInput) -> RustBuffer {
     return FfiConverterTypeIsbnManualPreviewProjectionInput.lower(value)
+}
+
+
+public struct IsbnPreviewLookupSnapshot {
+    public var preview: ArtifactPreview?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(preview: ArtifactPreview?, error: String) {
+        self.preview = preview
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension IsbnPreviewLookupSnapshot: Sendable {}
+#endif
+
+
+extension IsbnPreviewLookupSnapshot: Equatable, Hashable {
+    public static func ==(lhs: IsbnPreviewLookupSnapshot, rhs: IsbnPreviewLookupSnapshot) -> Bool {
+        if lhs.preview != rhs.preview {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(preview)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIsbnPreviewLookupSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnPreviewLookupSnapshot {
+        return
+            try IsbnPreviewLookupSnapshot(
+                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IsbnPreviewLookupSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArtifactPreview.write(value.preview, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnPreviewLookupSnapshot_lift(_ buf: RustBuffer) throws -> IsbnPreviewLookupSnapshot {
+    return try FfiConverterTypeIsbnPreviewLookupSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnPreviewLookupSnapshot_lower(_ value: IsbnPreviewLookupSnapshot) -> RustBuffer {
+    return FfiConverterTypeIsbnPreviewLookupSnapshot.lower(value)
 }
 
 
@@ -38489,10 +38531,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_auto_connected_relay_config() != 62438) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_build_edited_book_preview() != 19782) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 17097) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_build_edited_book_preview() != 28807) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_web_reader_share_target() != 53169) {
@@ -38750,7 +38789,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_logout() != 15288) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_lookup_isbn() != 34204) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_lookup_isbn() != 55014) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_mark_podcast_clip_in() != 48745) {

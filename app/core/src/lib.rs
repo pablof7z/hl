@@ -131,8 +131,8 @@ pub use highlights::{
 pub use home_feed::HomeFeedSnapshot;
 pub use isbn_lookup::{
     BookPickerQueryProjection, BookPickerQueryProjectionInput, BookPickerSnapshot,
-    IsbnManualPreviewProjection, IsbnManualPreviewProjectionInput, IsbnPreviewRequestProjection,
-    IsbnPreviewRequestProjectionInput,
+    EditedBookPreviewProjection, IsbnManualPreviewProjection, IsbnManualPreviewProjectionInput,
+    IsbnPreviewLookupSnapshot, IsbnPreviewRequestProjection, IsbnPreviewRequestProjectionInput,
 };
 pub use lists::{
     BookmarkLibraryFilter, BookmarkLibraryFilterChipProjection, BookmarkLibraryPane,
@@ -144,18 +144,17 @@ pub use lists::{
 };
 pub use models::{
     ArticleReaderRoute, ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactOutcome,
-    ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget,
-    BlossomUpload, BlossomUploadOutcome, BookRoute, BookmarkSetRecord, ChatMessageRecord,
-    CommentRecord, CommentReferenceBucket, CommentThreadNode, CommentThreadProjection,
-    CommunityListOutcome, CommunitySummary, CurationMenuItem, CurrentUser, DiscussionAttachment,
-    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventRecord,
-    FeedbackThreadRecord, GeneratedAccount, HighlightOutcome, HighlightRecord,
-    HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem,
-    HydratedHighlight, LoginInputAction, MutationOutcome, OnboardingInterest,
-    OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
-    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
-    ReadingFeedItem, RoomLane, RoomRecommendation, RoomRecommendationReason, StringOutcome,
-    SubscriptionOutcome, WebBookmarkRecord,
+    ArtifactPreview, ArtifactRecord, ArtifactReferenceTarget, BlossomUpload, BlossomUploadOutcome,
+    BookRoute, BookmarkSetRecord, ChatMessageRecord, CommentRecord, CommentReferenceBucket,
+    CommentThreadNode, CommentThreadProjection, CommunityListOutcome, CommunitySummary,
+    CurationMenuItem, CurrentUser, DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome,
+    DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount,
+    HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
+    HighlightSourceKind, HomeFeedItem, HydratedHighlight, LoginInputAction, MutationOutcome,
+    OnboardingInterest, OnboardingInterestChip, OnboardingInterestProjection,
+    OnboardingInterestSelection, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RoomLane, RoomRecommendation,
+    RoomRecommendationReason, StringOutcome, SubscriptionOutcome, WebBookmarkRecord,
 };
 pub use nip05::{
     Nip05Availability, Nip05AvailabilitySnapshot, Nip05AvailabilityState,

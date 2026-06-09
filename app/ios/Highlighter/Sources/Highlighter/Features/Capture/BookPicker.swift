@@ -425,7 +425,7 @@ struct BookPicker: View {
             // Only commit the preview if we're still on the same ISBN
             // (user could have cancelled mid-flight).
             if resolvingISBN == isbn {
-                if outcome.error.isEmpty, let preview = outcome.value {
+                if outcome.error.isEmpty, let preview = outcome.preview {
                     resolvedPreview = preview
                 } else {
                     resolveError = outcome.error.isEmpty ? "Unable to resolve ISBN" : outcome.error
@@ -620,7 +620,7 @@ private struct ISBNPreviewSheet: View {
             title: projection.title,
             author: projection.author
         )
-        guard let updated = outcome.value else { return }
+        guard let updated = outcome.preview else { return }
         onEditTitle(updated)
         onUse(updated)
         dismiss()

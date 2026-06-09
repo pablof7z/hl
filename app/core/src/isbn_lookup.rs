@@ -42,6 +42,12 @@ pub struct BookPickerSnapshot {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct IsbnPreviewLookupSnapshot {
+    pub preview: Option<ArtifactPreview>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct IsbnManualPreviewProjectionInput {
     pub title: String,
     pub author: String,
@@ -52,6 +58,12 @@ pub struct IsbnManualPreviewProjection {
     pub title: String,
     pub author: String,
     pub can_use: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct EditedBookPreviewProjection {
+    pub preview: Option<ArtifactPreview>,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -172,6 +184,19 @@ pub async fn lookup_isbn(isbn: &str) -> Result<ArtifactPreview, CoreError> {
     lookup_isbn_normalized(&isbn13).await
 }
 
+pub fn lookup_snapshot(result: Result<ArtifactPreview, CoreError>) -> IsbnPreviewLookupSnapshot {
+    match result {
+        Ok(preview) => IsbnPreviewLookupSnapshot {
+            preview: Some(preview),
+            error: String::new(),
+        },
+        Err(error) => IsbnPreviewLookupSnapshot {
+            preview: None,
+            error: error.to_string(),
+        },
+    }
+}
+
 pub fn edited_book_preview(
     isbn: &str,
     base: Option<ArtifactPreview>,
@@ -193,6 +218,24 @@ pub fn edited_book_preview(
     preview.title = title.trim().to_string();
     preview.author = author.trim().to_string();
     Ok(preview)
+}
+
+pub fn edited_book_preview_projection(
+    isbn: &str,
+    base: Option<ArtifactPreview>,
+    title: &str,
+    author: &str,
+) -> EditedBookPreviewProjection {
+    match edited_book_preview(isbn, base, title, author) {
+        Ok(preview) => EditedBookPreviewProjection {
+            preview: Some(preview),
+            error: String::new(),
+        },
+        Err(error) => EditedBookPreviewProjection {
+            preview: None,
+            error: error.to_string(),
+        },
+    }
 }
 
 /// Project the book-picker search field. Rust owns query trimming and ISBN
@@ -739,6 +782,29 @@ mod tests {
         assert_eq!(edited.catalog_id, "isbn:9780735211292");
         assert_eq!(edited.highlight_reference_key, "i:isbn:9780735211292");
         assert!(edited.image.is_empty());
+    }
+
+    #[test]
+    fn edited_book_preview_projection_surfaces_invalid_isbn() {
+        let projection = edited_book_preview_projection("not-an-isbn", None, "Manual Title", "");
+
+        assert!(projection.preview.is_none());
+        assert!(projection.error.contains("valid Bookland ISBN-13"));
+    }
+
+    #[test]
+    fn lookup_snapshot_surfaces_preview_or_error() {
+        let preview = partial_preview("9780735211292");
+        let ok = lookup_snapshot(Ok(preview.clone()));
+        assert_eq!(
+            ok.preview.as_ref().map(|p| p.catalog_id.as_str()),
+            Some("isbn:9780735211292")
+        );
+        assert!(ok.error.is_empty());
+
+        let err = lookup_snapshot(Err(CoreError::InvalidInput("bad isbn".into())));
+        assert!(err.preview.is_none());
+        assert_eq!(err.error, "invalid input: bad isbn");
     }
 
     #[test]

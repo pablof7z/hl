@@ -87,12 +87,6 @@ pub struct ArtifactOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct ArtifactPreviewOutcome {
-    pub value: Option<ArtifactPreview>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct BlossomUploadOutcome {
     pub value: Option<BlossomUpload>,
     pub error: String,

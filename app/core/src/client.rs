@@ -25,11 +25,11 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome,
-    ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookmarkSetRecord,
-    CommentRecord, CommentReferenceBucket, CommentScope, CommunityListOutcome, CommunitySummary,
-    CurrentUser, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord, HighlightOutcome,
-    HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
+    ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactRecord,
+    BlossomUpload, BlossomUploadOutcome, BookRoute, BookmarkSetRecord, CommentRecord,
+    CommentReferenceBucket, CommentScope, CommunityListOutcome, CommunitySummary, CurrentUser,
+    DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord, HighlightOutcome, HighlightRecord,
+    HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
     OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
     PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
     ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
@@ -149,19 +149,6 @@ fn artifact_outcome(result: Result<ArtifactRecord, CoreError>) -> ArtifactOutcom
             error: String::new(),
         },
         Err(error) => ArtifactOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn artifact_preview_outcome(result: Result<ArtifactPreview, CoreError>) -> ArtifactPreviewOutcome {
-    match result {
-        Ok(value) => ArtifactPreviewOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => ArtifactPreviewOutcome {
             value: None,
             error: error.to_string(),
         },
@@ -2256,8 +2243,8 @@ impl HighlighterCore {
         })())
     }
 
-    pub async fn lookup_isbn(&self, isbn: String) -> ArtifactPreviewOutcome {
-        artifact_preview_outcome(self.isbn_previews.lookup(&isbn).await)
+    pub async fn lookup_isbn(&self, isbn: String) -> isbn_lookup::IsbnPreviewLookupSnapshot {
+        isbn_lookup::lookup_snapshot(self.isbn_previews.lookup(&isbn).await)
     }
 
     /// Normalize user-entered or scanned ISBN input. Native shells use this
@@ -2308,13 +2295,8 @@ impl HighlighterCore {
         base_preview: Option<ArtifactPreview>,
         title: String,
         author: String,
-    ) -> ArtifactPreviewOutcome {
-        artifact_preview_outcome(isbn_lookup::edited_book_preview(
-            isbn.trim(),
-            base_preview,
-            &title,
-            &author,
-        ))
+    ) -> isbn_lookup::EditedBookPreviewProjection {
+        isbn_lookup::edited_book_preview_projection(isbn.trim(), base_preview, &title, &author)
     }
 
     pub fn project_capture_book_display(
@@ -2504,12 +2486,6 @@ impl HighlighterCore {
 
     pub fn ocr_alt_text(&self, markdown: String) -> String {
         crate::ocr::alt_text_from_markdown(&markdown)
-    }
-
-    /// Build an `ArtifactPreview` from a bare URL. Used by reader flows that
-    /// need to render or confirm a share target before publishing.
-    pub async fn build_preview_from_url(&self, url: String) -> ArtifactPreviewOutcome {
-        artifact_preview_outcome(crate::artifacts::build_preview(&url))
     }
 
     /// Publish a queued iOS share-extension handoff. Rust owns URL preview

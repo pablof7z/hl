@@ -291,7 +291,7 @@ final class HighlighterStore {
             guard let self else { return }
             let outcome = await self.safeCore.lookupIsbn(key)
             await MainActor.run {
-                if outcome.error.isEmpty, let preview = outcome.value {
+                if outcome.error.isEmpty, let preview = outcome.preview {
                     self.isbnPreviewCache[key] = preview
                 }
                 self.isbnInflight.removeValue(forKey: key)

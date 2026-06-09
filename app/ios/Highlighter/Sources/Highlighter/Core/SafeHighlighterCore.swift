@@ -403,7 +403,7 @@ actor SafeHighlighterCore {
         await core.subscribeWebBookmarks()
     }
 
-    func lookupIsbn(_ isbn: String) async -> ArtifactPreviewOutcome {
+    func lookupIsbn(_ isbn: String) async -> IsbnPreviewLookupSnapshot {
         await core.lookupIsbn(isbn: isbn)
     }
 
@@ -483,7 +483,7 @@ actor SafeHighlighterCore {
         basePreview: ArtifactPreview?,
         title: String,
         author: String
-    ) -> ArtifactPreviewOutcome {
+    ) -> EditedBookPreviewProjection {
         core.buildEditedBookPreview(
             isbn: isbn,
             basePreview: basePreview,
@@ -518,10 +518,6 @@ actor SafeHighlighterCore {
 
     func publishCapture(input: CapturePublishInput) async -> StringOutcome {
         await core.publishCapture(input: input)
-    }
-
-    func buildPreviewFromUrl(_ url: String) async -> ArtifactPreviewOutcome {
-        await core.buildPreviewFromUrl(url: url)
     }
 
     func publishShareQueueItem(_ item: ShareQueueItem) async -> ShareQueueAttempt {
