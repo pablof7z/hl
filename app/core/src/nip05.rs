@@ -23,6 +23,21 @@ pub struct Nip05Availability {
     pub domain: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct OnboardingCreateAccountProjectionInput {
+    pub display_name: String,
+    pub username: String,
+    pub username_available: bool,
+    pub is_working: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OnboardingCreateAccountProjection {
+    pub display_name: String,
+    pub username: String,
+    pub can_continue: bool,
+}
+
 #[derive(Debug, Deserialize)]
 struct AvailabilityResponse {
     available: bool,
@@ -71,6 +86,19 @@ pub fn is_valid_username(input: &str) -> bool {
         && trimmed
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+}
+
+pub fn onboarding_create_account_projection(
+    input: OnboardingCreateAccountProjectionInput,
+) -> OnboardingCreateAccountProjection {
+    let display_name = input.display_name.trim().to_string();
+    let username = input.username.trim().to_string();
+    let username_allows_continue = username.is_empty() || input.username_available;
+    OnboardingCreateAccountProjection {
+        can_continue: !input.is_working && !display_name.is_empty() && username_allows_continue,
+        display_name,
+        username,
+    }
 }
 
 pub async fn check_availability(name: &str) -> Result<Nip05Availability, CoreError> {
@@ -211,5 +239,44 @@ mod tests {
     #[test]
     fn normalize_username_lowercases_without_trimming_the_field() {
         assert_eq!(normalize_username(" Alice "), " alice ");
+    }
+
+    #[test]
+    fn onboarding_create_account_projection_trims_and_gates_continue() {
+        let no_username =
+            onboarding_create_account_projection(OnboardingCreateAccountProjectionInput {
+                display_name: " Alice ".into(),
+                username: " ".into(),
+                username_available: false,
+                is_working: false,
+            });
+        let available =
+            onboarding_create_account_projection(OnboardingCreateAccountProjectionInput {
+                display_name: " Alice ".into(),
+                username: " alice ".into(),
+                username_available: true,
+                is_working: false,
+            });
+        let unavailable =
+            onboarding_create_account_projection(OnboardingCreateAccountProjectionInput {
+                display_name: " Alice ".into(),
+                username: " alice ".into(),
+                username_available: false,
+                is_working: false,
+            });
+        let working =
+            onboarding_create_account_projection(OnboardingCreateAccountProjectionInput {
+                display_name: " Alice ".into(),
+                username: String::new(),
+                username_available: false,
+                is_working: true,
+            });
+
+        assert_eq!(no_username.display_name, "Alice");
+        assert_eq!(available.username, "alice");
+        assert!(no_username.can_continue);
+        assert!(available.can_continue);
+        assert!(!unavailable.can_continue);
+        assert!(!working.can_continue);
     }
 }

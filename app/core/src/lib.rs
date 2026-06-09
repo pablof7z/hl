@@ -140,7 +140,9 @@ pub use models::{
     StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome,
     WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
-pub use nip05::Nip05Availability;
+pub use nip05::{
+    Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,
+};
 pub use nostr_entities::{NostrEntityArticleCardProjection, NostrEntityArticleCardProjectionInput};
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
 pub use podcast_transcript::{

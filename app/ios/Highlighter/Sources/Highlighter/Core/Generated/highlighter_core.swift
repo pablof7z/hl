@@ -1534,6 +1534,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput)  -> NostrEntityArticleCardProjection
 
     /**
+     * Project onboarding account creation state. Rust owns display-name
+     * trimming and continue eligibility.
+     */
+    func projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectionInput)  -> OnboardingCreateAccountProjection
+
+    /**
      * Profile/avatar presentation projection. Rust owns profile-name
      * precedence, pubkey fallback, and avatar URL selection; native shells
      * render the resulting values without reimplementing business rules.
@@ -4682,6 +4688,18 @@ open func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionI
     return try!  FfiConverterTypeNostrEntityArticleCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_nostr_entity_article_card(self.uniffiClonePointer(),
         FfiConverterTypeNostrEntityArticleCardProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project onboarding account creation state. Rust owns display-name
+     * trimming and continue eligibility.
+     */
+open func projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectionInput) -> OnboardingCreateAccountProjection  {
+    return try!  FfiConverterTypeOnboardingCreateAccountProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_onboarding_create_account(self.uniffiClonePointer(),
+        FfiConverterTypeOnboardingCreateAccountProjectionInput_lower(input),$0
     )
 })
 }
@@ -19480,6 +19498,170 @@ public func FfiConverterTypeOcrWord_lift(_ buf: RustBuffer) throws -> OcrWord {
 #endif
 public func FfiConverterTypeOcrWord_lower(_ value: OcrWord) -> RustBuffer {
     return FfiConverterTypeOcrWord.lower(value)
+}
+
+
+public struct OnboardingCreateAccountProjection {
+    public var displayName: String
+    public var username: String
+    public var canContinue: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayName: String, username: String, canContinue: Bool) {
+        self.displayName = displayName
+        self.username = username
+        self.canContinue = canContinue
+    }
+}
+
+#if compiler(>=6)
+extension OnboardingCreateAccountProjection: Sendable {}
+#endif
+
+
+extension OnboardingCreateAccountProjection: Equatable, Hashable {
+    public static func ==(lhs: OnboardingCreateAccountProjection, rhs: OnboardingCreateAccountProjection) -> Bool {
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.username != rhs.username {
+            return false
+        }
+        if lhs.canContinue != rhs.canContinue {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayName)
+        hasher.combine(username)
+        hasher.combine(canContinue)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnboardingCreateAccountProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingCreateAccountProjection {
+        return
+            try OnboardingCreateAccountProjection(
+                displayName: FfiConverterString.read(from: &buf),
+                username: FfiConverterString.read(from: &buf),
+                canContinue: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnboardingCreateAccountProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.username, into: &buf)
+        FfiConverterBool.write(value.canContinue, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingCreateAccountProjection_lift(_ buf: RustBuffer) throws -> OnboardingCreateAccountProjection {
+    return try FfiConverterTypeOnboardingCreateAccountProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingCreateAccountProjection_lower(_ value: OnboardingCreateAccountProjection) -> RustBuffer {
+    return FfiConverterTypeOnboardingCreateAccountProjection.lower(value)
+}
+
+
+public struct OnboardingCreateAccountProjectionInput {
+    public var displayName: String
+    public var username: String
+    public var usernameAvailable: Bool
+    public var isWorking: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayName: String, username: String, usernameAvailable: Bool, isWorking: Bool) {
+        self.displayName = displayName
+        self.username = username
+        self.usernameAvailable = usernameAvailable
+        self.isWorking = isWorking
+    }
+}
+
+#if compiler(>=6)
+extension OnboardingCreateAccountProjectionInput: Sendable {}
+#endif
+
+
+extension OnboardingCreateAccountProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: OnboardingCreateAccountProjectionInput, rhs: OnboardingCreateAccountProjectionInput) -> Bool {
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.username != rhs.username {
+            return false
+        }
+        if lhs.usernameAvailable != rhs.usernameAvailable {
+            return false
+        }
+        if lhs.isWorking != rhs.isWorking {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayName)
+        hasher.combine(username)
+        hasher.combine(usernameAvailable)
+        hasher.combine(isWorking)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnboardingCreateAccountProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingCreateAccountProjectionInput {
+        return
+            try OnboardingCreateAccountProjectionInput(
+                displayName: FfiConverterString.read(from: &buf),
+                username: FfiConverterString.read(from: &buf),
+                usernameAvailable: FfiConverterBool.read(from: &buf),
+                isWorking: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnboardingCreateAccountProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.username, into: &buf)
+        FfiConverterBool.write(value.usernameAvailable, into: &buf)
+        FfiConverterBool.write(value.isWorking, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingCreateAccountProjectionInput_lift(_ buf: RustBuffer) throws -> OnboardingCreateAccountProjectionInput {
+    return try FfiConverterTypeOnboardingCreateAccountProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingCreateAccountProjectionInput_lower(_ value: OnboardingCreateAccountProjectionInput) -> RustBuffer {
+    return FfiConverterTypeOnboardingCreateAccountProjectionInput.lower(value)
 }
 
 
@@ -34656,6 +34838,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_nostr_entity_article_card() != 6476) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_onboarding_create_account() != 11608) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_display() != 29583) {

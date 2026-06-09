@@ -92,7 +92,7 @@ struct OnboardingCreateAccountView: View {
                         .padding(.vertical, 14)
                     }
                     .buttonStyle(.glassProminent)
-                    .disabled(isWorking || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !usernameAllowsContinue)
+                    .disabled(!createProjection.canContinue)
                     .padding(.horizontal, 32)
 
                     NavigationLink {
@@ -183,8 +183,16 @@ struct OnboardingCreateAccountView: View {
         }
     }
 
-    private var usernameAllowsContinue: Bool {
-        if username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+    private var createProjection: OnboardingCreateAccountProjection {
+        store.safeCore.projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectionInput(
+            displayName: displayName,
+            username: username,
+            usernameAvailable: usernameAvailable,
+            isWorking: isWorking
+        ))
+    }
+
+    private var usernameAvailable: Bool {
         if case .available = usernameState { return true }
         return false
     }
@@ -225,9 +233,9 @@ struct OnboardingCreateAccountView: View {
     }
 
     private func createAccount() {
-        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, !isWorking else { return }
-        guard usernameAllowsContinue else { return }
+        let projection = createProjection
+        let name = projection.displayName
+        guard projection.canContinue else { return }
 
         isWorking = true
         errorMessage = nil
@@ -242,9 +250,10 @@ struct OnboardingCreateAccountView: View {
             AppSessionStore.shared.persistNsec(account.nsec)
 
             let claimedUsername: String
-            if case .available(let identifier, let domain) = usernameState, !username.isEmpty {
+            if case .available(let identifier, let domain) = usernameState,
+               !projection.username.isEmpty {
                 let registerOutcome = await store.safeCore.registerNip05(
-                    name: username,
+                    name: projection.username,
                     domain: domain
                 )
                 guard registerOutcome.error.isEmpty else {

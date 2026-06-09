@@ -856,6 +856,12 @@ actor SafeHighlighterCore {
         core.isNip05UsernameValid(input: input)
     }
 
+    nonisolated func projectOnboardingCreateAccount(
+        input: OnboardingCreateAccountProjectionInput
+    ) -> OnboardingCreateAccountProjection {
+        core.projectOnboardingCreateAccount(input: input)
+    }
+
     func checkNip05Availability(name: String) async -> Nip05AvailabilityOutcome {
         await core.checkNip05Availability(name: name)
     }

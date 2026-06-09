@@ -1886,6 +1886,15 @@ impl HighlighterCore {
         nip05::is_valid_username(&input)
     }
 
+    /// Project onboarding account creation state. Rust owns display-name
+    /// trimming and continue eligibility.
+    pub fn project_onboarding_create_account(
+        &self,
+        input: nip05::OnboardingCreateAccountProjectionInput,
+    ) -> nip05::OnboardingCreateAccountProjection {
+        nip05::onboarding_create_account_projection(input)
+    }
+
     pub async fn check_nip05_availability(&self, name: String) -> Nip05AvailabilityOutcome {
         nip05_availability_outcome(nip05::check_availability(&name).await)
     }
