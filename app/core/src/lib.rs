@@ -103,7 +103,7 @@ pub use comments::{
 pub use discussions::{
     DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput,
     DiscussionComposerProjection, DiscussionComposerProjectionInput,
-    DiscussionComposerPublishInput, RoomDiscussionSnapshot,
+    DiscussionComposerPublishInput, DiscussionPublishSnapshot, RoomDiscussionSnapshot,
 };
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
@@ -150,14 +150,13 @@ pub use models::{
     ArtifactRecord, ArtifactReferenceTarget, BlossomUpload, BookRoute, BookmarkSetRecord,
     ChatMessageRecord, CommentRecord, CommentReferenceBucket, CommentThreadNode,
     CommentThreadProjection, CommunitySummary, CurationMenuItem, CurrentUser, DiscussionAttachment,
-    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventRecord,
-    FeedbackThreadRecord, GeneratedAccount, HighlightOutcome, HighlightRecord,
-    HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem,
-    HydratedHighlight, LoginInputAction, MutationOutcome, OnboardingInterest,
-    OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
-    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileUpdateDraft,
-    ReadingFeedItem, RoomLane, RoomRecommendation, RoomRecommendationReason, SubscriptionOutcome,
-    WebBookmarkRecord,
+    DiscussionListOutcome, DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord,
+    GeneratedAccount, HighlightOutcome, HighlightRecord, HighlightReferenceBucket,
+    HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem, HydratedHighlight,
+    LoginInputAction, MutationOutcome, OnboardingInterest, OnboardingInterestChip,
+    OnboardingInterestProjection, OnboardingInterestSelection, PodcastPositionRecord,
+    ProfileListOutcome, ProfileMetadata, ProfileUpdateDraft, ReadingFeedItem, RoomLane,
+    RoomRecommendation, RoomRecommendationReason, SubscriptionOutcome, WebBookmarkRecord,
 };
 pub use nip05::{
     Nip05Availability, Nip05AvailabilitySnapshot, Nip05AvailabilityState,

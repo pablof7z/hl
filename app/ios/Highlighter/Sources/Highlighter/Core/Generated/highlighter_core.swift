@@ -1528,9 +1528,9 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func publishCommentForScopeSnapshot(scope: CommentScope, parentEventId: String?, content: String, limit: UInt32) async  -> CommentPublishSnapshotOutcome
 
-    func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async  -> DiscussionOutcome
+    func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async  -> DiscussionPublishSnapshot
 
-    func publishDiscussionFromComposer(input: DiscussionComposerPublishInput) async  -> DiscussionOutcome
+    func publishDiscussionFromComposer(input: DiscussionComposerPublishInput) async  -> DiscussionPublishSnapshot
 
     /**
      * Publish a feedback root note and return the refreshed bounded thread
@@ -4434,7 +4434,7 @@ open func publishCommentForScopeSnapshot(scope: CommentScope, parentEventId: Str
         )
 }
 
-open func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?)async  -> DiscussionOutcome  {
+open func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?)async  -> DiscussionPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4446,13 +4446,13 @@ open func publishDiscussion(groupId: String, title: String, body: String, attach
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeDiscussionOutcome_lift,
+            liftFunc: FfiConverterTypeDiscussionPublishSnapshot_lift,
             errorHandler: nil
 
         )
 }
 
-open func publishDiscussionFromComposer(input: DiscussionComposerPublishInput)async  -> DiscussionOutcome  {
+open func publishDiscussionFromComposer(input: DiscussionComposerPublishInput)async  -> DiscussionPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4464,7 +4464,7 @@ open func publishDiscussionFromComposer(input: DiscussionComposerPublishInput)as
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeDiscussionOutcome_lift,
+            liftFunc: FfiConverterTypeDiscussionPublishSnapshot_lift,
             errorHandler: nil
 
         )
@@ -15251,26 +15251,26 @@ public func FfiConverterTypeDiscussionListOutcome_lower(_ value: DiscussionListO
 }
 
 
-public struct DiscussionOutcome {
-    public var value: DiscussionRecord?
+public struct DiscussionPublishSnapshot {
+    public var discussion: DiscussionRecord?
     public var error: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(value: DiscussionRecord?, error: String) {
-        self.value = value
+    public init(discussion: DiscussionRecord?, error: String) {
+        self.discussion = discussion
         self.error = error
     }
 }
 
 #if compiler(>=6)
-extension DiscussionOutcome: Sendable {}
+extension DiscussionPublishSnapshot: Sendable {}
 #endif
 
 
-extension DiscussionOutcome: Equatable, Hashable {
-    public static func ==(lhs: DiscussionOutcome, rhs: DiscussionOutcome) -> Bool {
-        if lhs.value != rhs.value {
+extension DiscussionPublishSnapshot: Equatable, Hashable {
+    public static func ==(lhs: DiscussionPublishSnapshot, rhs: DiscussionPublishSnapshot) -> Bool {
+        if lhs.discussion != rhs.discussion {
             return false
         }
         if lhs.error != rhs.error {
@@ -15280,7 +15280,7 @@ extension DiscussionOutcome: Equatable, Hashable {
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
+        hasher.combine(discussion)
         hasher.combine(error)
     }
 }
@@ -15290,17 +15290,17 @@ extension DiscussionOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeDiscussionOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionOutcome {
+public struct FfiConverterTypeDiscussionPublishSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionPublishSnapshot {
         return
-            try DiscussionOutcome(
-                value: FfiConverterOptionTypeDiscussionRecord.read(from: &buf),
+            try DiscussionPublishSnapshot(
+                discussion: FfiConverterOptionTypeDiscussionRecord.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: DiscussionOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeDiscussionRecord.write(value.value, into: &buf)
+    public static func write(_ value: DiscussionPublishSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeDiscussionRecord.write(value.discussion, into: &buf)
         FfiConverterString.write(value.error, into: &buf)
     }
 }
@@ -15309,15 +15309,15 @@ public struct FfiConverterTypeDiscussionOutcome: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeDiscussionOutcome_lift(_ buf: RustBuffer) throws -> DiscussionOutcome {
-    return try FfiConverterTypeDiscussionOutcome.lift(buf)
+public func FfiConverterTypeDiscussionPublishSnapshot_lift(_ buf: RustBuffer) throws -> DiscussionPublishSnapshot {
+    return try FfiConverterTypeDiscussionPublishSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeDiscussionOutcome_lower(_ value: DiscussionOutcome) -> RustBuffer {
-    return FfiConverterTypeDiscussionOutcome.lower(value)
+public func FfiConverterTypeDiscussionPublishSnapshot_lower(_ value: DiscussionPublishSnapshot) -> RustBuffer {
+    return FfiConverterTypeDiscussionPublishSnapshot.lower(value)
 }
 
 
@@ -39246,10 +39246,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_for_scope_snapshot() != 49852) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 58699) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 23544) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion_from_composer() != 17266) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion_from_composer() != 57199) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_root_note_snapshot() != 21250) {

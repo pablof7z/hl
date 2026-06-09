@@ -100,7 +100,7 @@ struct DiscussionComposerView: View {
                 attachmentUrl: projection.submitAttachmentUrl
             )
         )
-        guard outcome.error.isEmpty, outcome.value != nil else {
+        guard outcome.error.isEmpty, outcome.discussion != nil else {
             errorMessage = outcome.error.isEmpty ? "Failed to publish." : outcome.error
             return
         }

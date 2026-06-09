@@ -27,8 +27,8 @@ use crate::isbn_lookup;
 use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactPreview, ArtifactRecord, BlossomUpload, BookRoute,
     BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommunitySummary,
-    CurrentUser, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord, HighlightOutcome,
-    HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
+    CurrentUser, DiscussionRecord, FeedbackThreadRecord, HighlightOutcome, HighlightRecord,
+    HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
     OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
     PodcastPositionRecord, ProfileMetadata, ProfileUpdateAction, ProfileUpdateDraft,
     RelayDiagnostic, SubscriptionOutcome,
@@ -123,19 +123,6 @@ fn subscription_outcome(result: Result<u64, CoreError>) -> SubscriptionOutcome {
         },
         Err(error) => SubscriptionOutcome {
             handle: 0,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn discussion_outcome(result: Result<DiscussionRecord, CoreError>) -> DiscussionOutcome {
-    match result {
-        Ok(value) => DiscussionOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => DiscussionOutcome {
-            value: None,
             error: error.to_string(),
         },
     }
@@ -2576,7 +2563,7 @@ impl HighlighterCore {
         title: String,
         body: String,
         attachment: Option<ArtifactPreview>,
-    ) -> DiscussionOutcome {
+    ) -> crate::discussions::DiscussionPublishSnapshot {
         let result: Result<DiscussionRecord, CoreError> = async {
             let _ = self.require_user_pubkey()?;
             crate::discussions::publish(
@@ -2590,20 +2577,20 @@ impl HighlighterCore {
             .await
         }
         .await;
-        discussion_outcome(result)
+        crate::discussions::publish_snapshot(result)
     }
 
     pub async fn publish_discussion_from_composer(
         &self,
         input: crate::discussions::DiscussionComposerPublishInput,
-    ) -> DiscussionOutcome {
+    ) -> crate::discussions::DiscussionPublishSnapshot {
         let result: Result<DiscussionRecord, CoreError> = async {
             let _ = self.require_user_pubkey()?;
             crate::discussions::publish_from_composer(&self.runtime, input, self.clock.as_ref())
                 .await
         }
         .await;
-        discussion_outcome(result)
+        crate::discussions::publish_snapshot(result)
     }
 
     /// Chat composer projection. Rust owns draft normalization and send

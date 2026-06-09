@@ -1255,7 +1255,7 @@ actor SafeHighlighterCore {
         title: String,
         body: String,
         attachment: ArtifactPreview?
-    ) async -> DiscussionOutcome {
+    ) async -> DiscussionPublishSnapshot {
         await core.publishDiscussion(
             groupId: groupId,
             title: title,
@@ -1266,7 +1266,7 @@ actor SafeHighlighterCore {
 
     func publishDiscussionFromComposer(
         input: DiscussionComposerPublishInput
-    ) async -> DiscussionOutcome {
+    ) async -> DiscussionPublishSnapshot {
         await core.publishDiscussionFromComposer(input: input)
     }
 

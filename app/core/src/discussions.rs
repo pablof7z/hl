@@ -25,6 +25,12 @@ pub struct RoomDiscussionSnapshot {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct DiscussionPublishSnapshot {
+    pub discussion: Option<DiscussionRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct DiscussionAttachmentProjectionInput {
     pub attachment: DiscussionAttachment,
 }
@@ -210,6 +216,19 @@ pub async fn publish(
 
     record_from_event(&event)
         .ok_or_else(|| CoreError::Other("signed discussion event failed to parse back".into()))
+}
+
+pub fn publish_snapshot(result: Result<DiscussionRecord, CoreError>) -> DiscussionPublishSnapshot {
+    match result {
+        Ok(discussion) => DiscussionPublishSnapshot {
+            discussion: Some(discussion),
+            error: String::new(),
+        },
+        Err(error) => DiscussionPublishSnapshot {
+            discussion: None,
+            error: error.to_string(),
+        },
+    }
 }
 
 pub fn is_discussion(event: &Event) -> bool {
@@ -537,6 +556,34 @@ mod tests {
         assert!(!blank.can_publish);
         assert_eq!(blank.submit_attachment_url, None);
         assert!(!publishing.can_publish);
+    }
+
+    #[test]
+    fn publish_snapshot_projects_discussion_or_error_state() {
+        let discussion = DiscussionRecord {
+            id: "thread-1".into(),
+            event_id: "event123".into(),
+            group_id: "room-a".into(),
+            pubkey: "pubkey".into(),
+            title: "Launch thread".into(),
+            body: "body".into(),
+            summary: "summary".into(),
+            created_at: Some(42),
+            attachment: None,
+        };
+
+        let ok = publish_snapshot(Ok(discussion));
+        assert_eq!(
+            ok.discussion
+                .as_ref()
+                .map(|discussion| discussion.event_id.as_str()),
+            Some("event123")
+        );
+        assert!(ok.error.is_empty());
+
+        let err = publish_snapshot(Err(CoreError::Signer("missing key".into())));
+        assert!(err.discussion.is_none());
+        assert_eq!(err.error, "signer error: missing key");
     }
 
     #[test]
