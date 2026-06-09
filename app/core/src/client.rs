@@ -28,11 +28,11 @@ use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome,
     ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookmarkSetRecord,
     CommentRecord, CommentReferenceBucket, CommentScope, CommunityListOutcome, CommunitySummary,
-    CurrentUser, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord, HighlightListOutcome,
-    HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome,
-    NostrConnectOptions, OnboardingInterest, OnboardingInterestProjection,
-    OnboardingInterestSelection, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
-    ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
+    CurrentUser, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord, HighlightOutcome,
+    HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
+    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
+    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
+    ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
     TranscriptSegmentListOutcome, WebMetadataOutcome,
 };
 use crate::network_preferences;
@@ -233,19 +233,6 @@ fn discussion_outcome(result: Result<DiscussionRecord, CoreError>) -> Discussion
         },
         Err(error) => DiscussionOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn highlight_list_outcome(result: Result<Vec<HighlightRecord>, CoreError>) -> HighlightListOutcome {
-    match result {
-        Ok(values) => HighlightListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => HighlightListOutcome {
-            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -1126,15 +1113,6 @@ impl HighlighterCore {
         )
     }
 
-    pub async fn get_my_highlights(&self, limit: u32) -> HighlightListOutcome {
-        highlight_list_outcome((|| {
-            let Some(user) = self.inner.read().session.current_user() else {
-                return Err(CoreError::NotAuthenticated);
-            };
-            highlights::query_highlights_by_author(self.runtime.ndb(), &user.pubkey, limit)
-        })())
-    }
-
     pub fn project_reading_feed_card(
         &self,
         input: reads::ReadingFeedCardProjectionInput,
@@ -1466,20 +1444,6 @@ impl HighlighterCore {
         input: groups::CommunityRowProjectionInput,
     ) -> groups::CommunityRowProjection {
         groups::community_row_projection(input)
-    }
-
-    /// Read all highlights referencing the given NIP-23 article address
-    /// (`30023:<pubkey>:<d>`) from nostrdb, newest first.
-    pub async fn get_highlights_for_article(
-        &self,
-        address: String,
-        limit: u32,
-    ) -> HighlightListOutcome {
-        highlight_list_outcome(highlights::query_for_article(
-            self.runtime.ndb(),
-            address.trim(),
-            limit,
-        ))
     }
 
     /// Resolve a book catalog id into the canonical ISBN route used by native
@@ -1825,25 +1789,6 @@ impl HighlighterCore {
             .map(|u| u.pubkey)
             .ok_or(CoreError::NotInitialized)?;
         crate::bookmarks::toggle_event_bookmark(&self.runtime, &user_hex, event_id_hex).await
-    }
-
-    pub async fn get_user_highlights(
-        &self,
-        pubkey_hex: String,
-        limit: u32,
-    ) -> HighlightListOutcome {
-        highlight_list_outcome(highlights::query_highlights_by_author(
-            self.runtime.ndb(),
-            pubkey_hex.trim(),
-            limit,
-        ))
-    }
-
-    pub async fn get_user_communities(&self, pubkey_hex: String) -> CommunityListOutcome {
-        community_list_outcome(groups::query_joined_communities_from_ndb(
-            self.runtime.ndb(),
-            pubkey_hex.trim(),
-        ))
     }
 
     /// Publish the Rust-projected profile follow mutation and return the

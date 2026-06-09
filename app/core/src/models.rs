@@ -128,12 +128,6 @@ pub struct DiscussionListOutcome {
     pub error: String,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct HighlightListOutcome {
-    pub values: Vec<HighlightRecord>,
-    pub error: String,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum HighlightSourceKind {
     Article,

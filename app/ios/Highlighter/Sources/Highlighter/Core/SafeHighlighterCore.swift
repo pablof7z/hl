@@ -902,10 +902,6 @@ actor SafeHighlighterCore {
         core.getHighlightBookRoute(externalReference: externalReference, artifactAddress: artifactAddress)
     }
 
-    func getHighlightsForArticle(address: String, limit: UInt32 = 128) async -> HighlightListOutcome {
-        await core.getHighlightsForArticle(address: address, limit: limit)
-    }
-
     func getBookDetailSnapshot(catalogId: String, limit: UInt32 = 64) async -> BookDetailSnapshot {
         await core.getBookDetailSnapshot(catalogId: catalogId, limit: limit)
     }
@@ -1006,14 +1002,6 @@ actor SafeHighlighterCore {
             content: content,
             limit: limit
         )
-    }
-
-    func getUserHighlights(pubkeyHex: String, limit: UInt32 = 64) async -> HighlightListOutcome {
-        await core.getUserHighlights(pubkeyHex: pubkeyHex, limit: limit)
-    }
-
-    func getUserCommunities(pubkeyHex: String) async -> CommunityListOutcome {
-        await core.getUserCommunities(pubkeyHex: pubkeyHex)
     }
 
     // MARK: - Rooms explorer

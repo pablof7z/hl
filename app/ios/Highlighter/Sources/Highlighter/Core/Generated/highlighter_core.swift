@@ -1010,12 +1010,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getHighlightSourceKind(previewSource: String, externalReference: String, artifactAddress: String, sourceUrl: String)  -> HighlightSourceKind
 
     /**
-     * Read all highlights referencing the given NIP-23 article address
-     * (`30023:<pubkey>:<d>`) from nostrdb, newest first.
-     */
-    func getHighlightsForArticle(address: String, limit: UInt32) async  -> HighlightListOutcome
-
-    /**
      * Full highlights home feed snapshot. Rust owns the following-highlights
      * query, following-reads query, cross-feed dedupe, grouping, stable ids,
      * and merged ordering.
@@ -1023,8 +1017,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getHomeFeedSnapshot(highlightLimit: UInt32, readLimit: UInt32) async  -> HomeFeedSnapshot
 
     func getJoinedCommunities() async  -> CommunityListOutcome
-
-    func getMyHighlights(limit: UInt32) async  -> HighlightListOutcome
 
     /**
      * Size + event-count snapshot of the local nostrdb cache. Order-of-
@@ -1124,10 +1116,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * returned buckets.
      */
     func getSearchResultsSnapshot(query: String) async  -> SearchResultsSnapshot
-
-    func getUserCommunities(pubkeyHex: String) async  -> CommunityListOutcome
-
-    func getUserHighlights(pubkeyHex: String, limit: UInt32) async  -> HighlightListOutcome
 
     func getUserProfile(pubkeyHex: String) async  -> ProfileOutcome
 
@@ -2801,28 +2789,6 @@ open func getHighlightSourceKind(previewSource: String, externalReference: Strin
 }
 
     /**
-     * Read all highlights referencing the given NIP-23 article address
-     * (`30023:<pubkey>:<d>`) from nostrdb, newest first.
-     */
-open func getHighlightsForArticle(address: String, limit: UInt32)async  -> HighlightListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_highlights_for_article(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(address),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Full highlights home feed snapshot. Rust owns the following-highlights
      * query, following-reads query, cross-feed dedupe, grouping, stable ids,
      * and merged ordering.
@@ -2858,24 +2824,6 @@ open func getJoinedCommunities()async  -> CommunityListOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCommunityListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-open func getMyHighlights(limit: UInt32)async  -> HighlightListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_my_highlights(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
             errorHandler: nil
 
         )
@@ -3257,42 +3205,6 @@ open func getSearchResultsSnapshot(query: String)async  -> SearchResultsSnapshot
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSearchResultsSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-open func getUserCommunities(pubkeyHex: String)async  -> CommunityListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_user_communities(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommunityListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-open func getUserHighlights(pubkeyHex: String, limit: UInt32)async  -> HighlightListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_user_highlights(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
             errorHandler: nil
 
         )
@@ -17509,76 +17421,6 @@ public func FfiConverterTypeHighlightGroupLabelSegment_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeHighlightGroupLabelSegment_lower(_ value: HighlightGroupLabelSegment) -> RustBuffer {
     return FfiConverterTypeHighlightGroupLabelSegment.lower(value)
-}
-
-
-public struct HighlightListOutcome {
-    public var values: [HighlightRecord]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [HighlightRecord], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension HighlightListOutcome: Sendable {}
-#endif
-
-
-extension HighlightListOutcome: Equatable, Hashable {
-    public static func ==(lhs: HighlightListOutcome, rhs: HighlightListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHighlightListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightListOutcome {
-        return
-            try HighlightListOutcome(
-                values: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: HighlightListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeHighlightRecord.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHighlightListOutcome_lift(_ buf: RustBuffer) throws -> HighlightListOutcome {
-    return try FfiConverterTypeHighlightListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHighlightListOutcome_lower(_ value: HighlightListOutcome) -> RustBuffer {
-    return FfiConverterTypeHighlightListOutcome.lower(value)
 }
 
 
@@ -38782,16 +38624,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_source_kind() != 42257) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_article() != 21511) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_home_feed_snapshot() != 9098) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 28655) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_highlights() != 57472) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_network_cache_stats_snapshot() != 16607) {
@@ -38864,12 +38700,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_results_snapshot() != 55653) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_communities() != 40783) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_highlights() != 58652) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 11410) {
