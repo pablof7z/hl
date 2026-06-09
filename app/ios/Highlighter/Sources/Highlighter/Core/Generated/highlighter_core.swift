@@ -883,7 +883,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Return the author pubkey from a valid NIP-23 article address
      * (`30023:<pubkey>:<d>`).
      */
-    func getArticleAddressAuthor(address: String) async  -> OptionalStringOutcome
+    func getArticleAddressAuthor(address: String) async  -> String?
 
     /**
      * Project a cached NIP-23 article into the artifact preview shape used by
@@ -2432,7 +2432,7 @@ open func getArticle(pubkeyHex: String, dTag: String)async  -> ArticleOutcome  {
      * Return the author pubkey from a valid NIP-23 article address
      * (`30023:<pubkey>:<d>`).
      */
-open func getArticleAddressAuthor(address: String)async  -> OptionalStringOutcome  {
+open func getArticleAddressAuthor(address: String)async  -> String?  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2444,7 +2444,7 @@ open func getArticleAddressAuthor(address: String)async  -> OptionalStringOutcom
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeOptionalStringOutcome_lift,
+            liftFunc: FfiConverterOptionString.lift,
             errorHandler: nil
 
         )
@@ -22120,76 +22120,6 @@ public func FfiConverterTypeOnboardingUsernameCheckProjection_lower(_ value: Onb
 }
 
 
-public struct OptionalStringOutcome {
-    public var value: String?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: String?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension OptionalStringOutcome: Sendable {}
-#endif
-
-
-extension OptionalStringOutcome: Equatable, Hashable {
-    public static func ==(lhs: OptionalStringOutcome, rhs: OptionalStringOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeOptionalStringOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OptionalStringOutcome {
-        return
-            try OptionalStringOutcome(
-                value: FfiConverterOptionString.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: OptionalStringOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionString.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOptionalStringOutcome_lift(_ buf: RustBuffer) throws -> OptionalStringOutcome {
-    return try FfiConverterTypeOptionalStringOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOptionalStringOutcome_lower(_ value: OptionalStringOutcome) -> RustBuffer {
-    return FfiConverterTypeOptionalStringOutcome.lower(value)
-}
-
-
 public struct PodcastClipComposerInput {
     public var segments: [TranscriptSegment]
     public var transcriptAvailable: Bool
@@ -39113,7 +39043,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article() != 62635) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_address_author() != 41220) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_address_author() != 16403) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_artifact_preview() != 14568) {

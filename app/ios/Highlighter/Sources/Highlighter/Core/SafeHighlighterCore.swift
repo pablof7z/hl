@@ -840,7 +840,7 @@ actor SafeHighlighterCore {
         await core.getArticleByAddress(address: address)
     }
 
-    func getArticleAddressAuthor(address: String) async -> OptionalStringOutcome {
+    func getArticleAddressAuthor(address: String) async -> String? {
         await core.getArticleAddressAuthor(address: address)
     }
 

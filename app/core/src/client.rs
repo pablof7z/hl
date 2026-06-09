@@ -31,10 +31,10 @@ use crate::models::{
     CommunityListOutcome, CommunitySummary, CurrentUser, DataOutcome, DiscussionOutcome,
     DiscussionRecord, FeedbackThreadRecord, HighlightListOutcome, HighlightOutcome,
     HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
-    OnboardingInterest, OnboardingInterestProjection,
-    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
+    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
+    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
+    ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
+    TranscriptSegmentListOutcome, WebMetadataOutcome,
 };
 use crate::network_preferences;
 use crate::nip05;
@@ -128,19 +128,6 @@ fn join_room_display_name(room_name: &str) -> String {
         "this room".to_string()
     } else {
         trimmed.to_string()
-    }
-}
-
-fn optional_string_outcome(result: Result<Option<String>, CoreError>) -> OptionalStringOutcome {
-    match result {
-        Ok(value) => OptionalStringOutcome {
-            value,
-            error: String::new(),
-        },
-        Err(error) => OptionalStringOutcome {
-            value: None,
-            error: error.to_string(),
-        },
     }
 }
 
@@ -1474,8 +1461,8 @@ impl HighlighterCore {
 
     /// Return the author pubkey from a valid NIP-23 article address
     /// (`30023:<pubkey>:<d>`).
-    pub async fn get_article_address_author(&self, address: String) -> OptionalStringOutcome {
-        optional_string_outcome(Ok(articles::article_author_from_address(address.trim())))
+    pub async fn get_article_address_author(&self, address: String) -> Option<String> {
+        articles::article_author_from_address(address.trim())
     }
 
     pub fn project_article_reader_header(

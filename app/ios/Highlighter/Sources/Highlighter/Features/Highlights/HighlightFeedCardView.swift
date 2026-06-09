@@ -452,8 +452,7 @@ struct HighlightFeedCardView: View {
             await app.requestProfile(pubkeyHex: pubkey)
             return
         }
-        let authorOutcome = await app.safeCore.getArticleAddressAuthor(address: addr)
-        if authorOutcome.error.isEmpty, let pubkey = authorOutcome.value, !pubkey.isEmpty {
+        if let pubkey = await app.safeCore.getArticleAddressAuthor(address: addr), !pubkey.isEmpty {
             sourceArticleAuthorPubkey = pubkey
             await app.requestProfile(pubkeyHex: pubkey)
         }

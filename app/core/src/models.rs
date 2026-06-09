@@ -75,12 +75,6 @@ pub struct StringOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct OptionalStringOutcome {
-    pub value: Option<String>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct DataOutcome {
     pub value: Vec<u8>,
     pub error: String,

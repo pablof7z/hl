@@ -153,10 +153,10 @@ pub use models::{
     HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
     HighlightSourceKind, HomeFeedItem, HydratedHighlight, LoginInputAction, MutationOutcome,
     OnboardingInterest, OnboardingInterestChip, OnboardingInterestProjection,
-    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome,
-    ProfileMetadata, ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RoomLane,
-    RoomRecommendation, RoomRecommendationReason, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome,
+    OnboardingInterestSelection, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RoomLane, RoomRecommendation,
+    RoomRecommendationReason, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebBookmarkRecord, WebMetadataOutcome,
 };
 pub use nip05::{
     Nip05Availability, Nip05AvailabilitySnapshot, Nip05AvailabilityState,
