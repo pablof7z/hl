@@ -178,6 +178,7 @@ final class NostrEntityCardStore {
         }
 
         guard !Task.isCancelled else { return }
+        guard subscriptionHandle == nil else { return }
 
         let outcome = await safeCore.subscribeNostrEntity(entity)
         guard outcome.error.isEmpty else {

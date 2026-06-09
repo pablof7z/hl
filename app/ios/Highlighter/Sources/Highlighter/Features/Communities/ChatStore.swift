@@ -25,6 +25,9 @@ final class ChatPresenceProbe {
         bridge: EventBridge?,
         onActivity: @escaping () -> Void
     ) async {
+        if self.groupId != nil, self.groupId != groupId {
+            stop()
+        }
         self.groupId = groupId
         self.core = core
         self.bridge = bridge
@@ -36,6 +39,7 @@ final class ChatPresenceProbe {
             onActivity()
         }
 
+        guard subscriptionHandle == nil else { return }
         let presenceStart = await core.subscribeRoomChat(groupId: groupId)
         guard presenceStart.error.isEmpty else {
             // No live promotion if the subscription failed; the cache peek
@@ -84,6 +88,9 @@ final class ChatStore {
     @ObservationIgnored private var loadedPageCount: UInt32 = 1
 
     func start(groupId: String, core: SafeHighlighterCore, bridge: EventBridge?) async {
+        if self.groupId != nil, self.groupId != groupId {
+            stop()
+        }
         self.groupId = groupId
         self.core = core
         self.bridge = bridge
@@ -92,6 +99,7 @@ final class ChatStore {
         await reloadSnapshot(pageCount: loadedPageCount)
         isLoading = false
 
+        guard subscriptionHandle == nil else { return }
         let outcome = await core.subscribeRoomChat(groupId: groupId)
         guard outcome.error.isEmpty else {
             // Subscription failure leaves cache-only rendering working.

@@ -27,6 +27,9 @@ final class RoomStore {
     /// instant offline rendering, then installs a live subscription so
     /// incoming events flow in as deltas routed by `EventBridge`.
     func start(groupId: String, core: SafeHighlighterCore, bridge: EventBridge?) async {
+        if self.groupId != nil, self.groupId != groupId {
+            stop()
+        }
         self.groupId = groupId
         self.core = core
         self.bridge = bridge
@@ -34,6 +37,7 @@ final class RoomStore {
         await reloadSnapshot()
         isLoading = false
 
+        guard subscriptionHandle == nil else { return }
         let outcome = await core.subscribeRoom(groupId: groupId)
         guard outcome.error.isEmpty else {
             // Subscription failure leaves cache-only rendering working.

@@ -23,6 +23,9 @@ final class FeedbackThreadStore {
         core: SafeHighlighterCore,
         bridge: EventBridge?
     ) async {
+        if self.rootEventId != nil, self.rootEventId != rootEventId {
+            stop()
+        }
         self.rootEventId = rootEventId
         self.coordinate = coordinate
         self.core = core
@@ -38,6 +41,7 @@ final class FeedbackThreadStore {
         }
         isLoading = false
 
+        guard subscriptionHandle == nil else { return }
         let outcome = await core.subscribeFeedbackThread(rootEventId: rootEventId)
         guard outcome.error.isEmpty else {
             // Cache-only rendering still works.

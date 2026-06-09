@@ -16,6 +16,9 @@ final class DiscussionStore {
     @ObservationIgnored private var subscriptionHandle: UInt64?
 
     func start(groupId: String, core: SafeHighlighterCore, bridge: EventBridge?) async {
+        if self.groupId != nil, self.groupId != groupId {
+            stop()
+        }
         self.groupId = groupId
         self.core = core
         self.bridge = bridge
@@ -23,6 +26,7 @@ final class DiscussionStore {
         await reloadSnapshot()
         isLoading = false
 
+        guard subscriptionHandle == nil else { return }
         let outcome = await core.subscribeRoomDiscussions(groupId: groupId)
         guard outcome.error.isEmpty else {
             // Subscription failure leaves cache-only rendering working.

@@ -16,6 +16,9 @@ final class FeedbackStore {
     @ObservationIgnored private var subscriptionHandle: UInt64?
 
     func start(coordinate: String, core: SafeHighlighterCore, bridge: EventBridge?) async {
+        if self.coordinate != nil, self.coordinate != coordinate {
+            stop()
+        }
         self.coordinate = coordinate
         self.core = core
         self.bridge = bridge
@@ -30,6 +33,7 @@ final class FeedbackStore {
         }
         isLoading = false
 
+        guard subscriptionHandle == nil else { return }
         let outcome = await core.subscribeFeedbackThreads(coordinate: coordinate)
         guard outcome.error.isEmpty else {
             // Subscription failure leaves cache-only rendering working.
