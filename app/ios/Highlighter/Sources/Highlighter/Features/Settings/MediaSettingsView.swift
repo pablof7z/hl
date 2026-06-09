@@ -21,15 +21,28 @@ struct MediaSettingsView: View {
                             .truncationMode(.middle)
                     }
                     .onMove { indices, newOffset in
-                        servers.move(fromOffsets: indices, toOffset: newOffset)
-                        Task { await save() }
+                        let projection = store.safeCore.projectBlossomServerList(
+                            input: BlossomServerListProjectionInput(
+                                servers: servers,
+                                addUrl: nil,
+                                removeIndexes: [],
+                                moveIndexes: indices.map(UInt64.init),
+                                moveToIndex: UInt64(newOffset)
+                            )
+                        )
+                        servers = projection.servers
+                        if projection.canSave {
+                            Task { await save() }
+                        }
                     }
                     .onDelete { indices in
                         let projection = store.safeCore.projectBlossomServerList(
                             input: BlossomServerListProjectionInput(
                                 servers: servers,
                                 addUrl: nil,
-                                removeIndexes: indices.map(UInt64.init)
+                                removeIndexes: indices.map(UInt64.init),
+                                moveIndexes: [],
+                                moveToIndex: nil
                             )
                         )
                         servers = projection.servers
@@ -68,7 +81,9 @@ struct MediaSettingsView: View {
                     input: BlossomServerListProjectionInput(
                         servers: servers,
                         addUrl: url,
-                        removeIndexes: []
+                        removeIndexes: [],
+                        moveIndexes: [],
+                        moveToIndex: nil
                     )
                 )
                 servers = projection.servers
@@ -91,7 +106,9 @@ struct MediaSettingsView: View {
             input: BlossomServerListProjectionInput(
                 servers: servers,
                 addUrl: nil,
-                removeIndexes: []
+                removeIndexes: [],
+                moveIndexes: [],
+                moveToIndex: nil
             )
         )
         guard projection.canSave else { return }

@@ -9311,13 +9311,17 @@ public struct BlossomServerListProjectionInput {
     public var servers: [String]
     public var addUrl: String?
     public var removeIndexes: [UInt64]
+    public var moveIndexes: [UInt64]
+    public var moveToIndex: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(servers: [String], addUrl: String?, removeIndexes: [UInt64]) {
+    public init(servers: [String], addUrl: String?, removeIndexes: [UInt64], moveIndexes: [UInt64], moveToIndex: UInt64?) {
         self.servers = servers
         self.addUrl = addUrl
         self.removeIndexes = removeIndexes
+        self.moveIndexes = moveIndexes
+        self.moveToIndex = moveToIndex
     }
 }
 
@@ -9337,6 +9341,12 @@ extension BlossomServerListProjectionInput: Equatable, Hashable {
         if lhs.removeIndexes != rhs.removeIndexes {
             return false
         }
+        if lhs.moveIndexes != rhs.moveIndexes {
+            return false
+        }
+        if lhs.moveToIndex != rhs.moveToIndex {
+            return false
+        }
         return true
     }
 
@@ -9344,6 +9354,8 @@ extension BlossomServerListProjectionInput: Equatable, Hashable {
         hasher.combine(servers)
         hasher.combine(addUrl)
         hasher.combine(removeIndexes)
+        hasher.combine(moveIndexes)
+        hasher.combine(moveToIndex)
     }
 }
 
@@ -9358,7 +9370,9 @@ public struct FfiConverterTypeBlossomServerListProjectionInput: FfiConverterRust
             try BlossomServerListProjectionInput(
                 servers: FfiConverterSequenceString.read(from: &buf),
                 addUrl: FfiConverterOptionString.read(from: &buf),
-                removeIndexes: FfiConverterSequenceUInt64.read(from: &buf)
+                removeIndexes: FfiConverterSequenceUInt64.read(from: &buf),
+                moveIndexes: FfiConverterSequenceUInt64.read(from: &buf),
+                moveToIndex: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
@@ -9366,6 +9380,8 @@ public struct FfiConverterTypeBlossomServerListProjectionInput: FfiConverterRust
         FfiConverterSequenceString.write(value.servers, into: &buf)
         FfiConverterOptionString.write(value.addUrl, into: &buf)
         FfiConverterSequenceUInt64.write(value.removeIndexes, into: &buf)
+        FfiConverterSequenceUInt64.write(value.moveIndexes, into: &buf)
+        FfiConverterOptionUInt64.write(value.moveToIndex, into: &buf)
     }
 }
 

@@ -49,6 +49,8 @@ pub struct BlossomServerListProjectionInput {
     pub servers: Vec<String>,
     pub add_url: Option<String>,
     pub remove_indexes: Vec<u64>,
+    pub move_indexes: Vec<u64>,
+    pub move_to_index: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -175,6 +177,10 @@ pub fn blossom_server_list_projection(
         }
     }
 
+    if let Some(to_index) = input.move_to_index {
+        move_servers(&mut servers, input.move_indexes, to_index);
+    }
+
     BlossomServerListProjection {
         can_save: !servers.is_empty(),
         servers,
@@ -190,6 +196,45 @@ fn normalize_server_list(servers: Vec<String>) -> Vec<String> {
         }
     }
     out
+}
+
+fn move_servers(servers: &mut Vec<String>, indexes: Vec<u64>, to_index: u64) {
+    if servers.len() < 2 {
+        return;
+    }
+
+    let mut indexes: Vec<usize> = indexes
+        .into_iter()
+        .filter_map(|index| usize::try_from(index).ok())
+        .filter(|index| *index < servers.len())
+        .collect();
+    indexes.sort_unstable();
+    indexes.dedup();
+    if indexes.is_empty() || indexes.len() >= servers.len() {
+        return;
+    }
+
+    let mut moved = Vec::with_capacity(indexes.len());
+    for index in indexes.iter().rev() {
+        moved.push(servers.remove(*index));
+    }
+    moved.reverse();
+
+    let raw_to_index = usize::try_from(to_index)
+        .ok()
+        .unwrap_or(usize::MAX)
+        .min(servers.len() + moved.len());
+    let indexes_before_target = indexes
+        .iter()
+        .filter(|index| **index < raw_to_index)
+        .count();
+    let insertion_index = raw_to_index
+        .saturating_sub(indexes_before_target)
+        .min(servers.len());
+
+    for (offset, server) in moved.into_iter().enumerate() {
+        servers.insert(insertion_index + offset, server);
+    }
 }
 
 // -- Writes --
@@ -461,6 +506,8 @@ mod tests {
             servers: vec![" https://blossom.primal.net ".into()],
             add_url: Some(" https://media.example.com ".into()),
             remove_indexes: Vec::new(),
+            move_indexes: Vec::new(),
+            move_to_index: None,
         });
         assert_eq!(
             added.servers,
@@ -472,6 +519,8 @@ mod tests {
             servers: added.servers.clone(),
             add_url: Some("https://media.example.com".into()),
             remove_indexes: Vec::new(),
+            move_indexes: Vec::new(),
+            move_to_index: None,
         });
         assert_eq!(duplicate.servers, added.servers);
 
@@ -479,6 +528,8 @@ mod tests {
             servers: duplicate.servers,
             add_url: None,
             remove_indexes: vec![0],
+            move_indexes: Vec::new(),
+            move_to_index: None,
         });
         assert_eq!(removed.servers, vec!["https://media.example.com"]);
 
@@ -486,6 +537,8 @@ mod tests {
             servers: removed.servers.clone(),
             add_url: None,
             remove_indexes: vec![0, 99],
+            move_indexes: Vec::new(),
+            move_to_index: None,
         });
         assert_eq!(protected.servers, removed.servers);
         assert!(protected.can_save);
@@ -497,8 +550,49 @@ mod tests {
             ],
             add_url: None,
             remove_indexes: vec![0, 99],
+            move_indexes: Vec::new(),
+            move_to_index: None,
         });
         assert_eq!(malformed.servers, vec!["https://two.example.com"]);
+    }
+
+    #[test]
+    fn blossom_server_list_projection_reorders_like_platform_list() {
+        let moved_down = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            add_url: None,
+            remove_indexes: Vec::new(),
+            move_indexes: vec![1],
+            move_to_index: Some(3),
+        });
+        assert_eq!(moved_down.servers, vec!["a", "c", "b", "d"]);
+
+        let moved_to_end = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            add_url: None,
+            remove_indexes: Vec::new(),
+            move_indexes: vec![1],
+            move_to_index: Some(4),
+        });
+        assert_eq!(moved_to_end.servers, vec!["a", "c", "d", "b"]);
+
+        let moved_up = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            add_url: None,
+            remove_indexes: Vec::new(),
+            move_indexes: vec![2],
+            move_to_index: Some(0),
+        });
+        assert_eq!(moved_up.servers, vec!["c", "a", "b", "d"]);
+
+        let moved_multiple = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec!["a".into(), "b".into(), "c".into(), "d".into(), "e".into()],
+            add_url: None,
+            remove_indexes: Vec::new(),
+            move_indexes: vec![1, 3],
+            move_to_index: Some(5),
+        });
+        assert_eq!(moved_multiple.servers, vec!["a", "c", "e", "b", "d"]);
     }
 
     #[test]
