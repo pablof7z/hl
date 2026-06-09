@@ -6,6 +6,7 @@
 
 use serde::Serialize;
 
+use crate::errors::CoreError;
 use crate::models::CommunitySummary;
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -90,6 +91,16 @@ pub fn share_queue_drain_projection(
     }
 }
 
+pub fn share_queue_attempt(
+    item: ShareQueueItem,
+    result: Result<(), CoreError>,
+) -> ShareQueueAttempt {
+    ShareQueueAttempt {
+        item,
+        succeeded: result.is_ok(),
+    }
+}
+
 fn community_label(group_id: &str, communities: &[CommunitySummary]) -> String {
     communities
         .iter()
@@ -167,6 +178,16 @@ mod tests {
         assert_eq!(projection.success_count, 2);
         assert_eq!(projection.toast.as_deref(), Some("Shared 2 items"));
         assert!(projection.requeue.is_empty());
+    }
+
+    #[test]
+    fn queue_attempt_projects_publish_result() {
+        let item = share("one", "group-a");
+        assert!(share_queue_attempt(item.clone(), Ok(())).succeeded);
+
+        let failed = share_queue_attempt(item.clone(), Err(CoreError::Network("offline".into())));
+        assert_eq!(failed.item, item);
+        assert!(!failed.succeeded);
     }
 
     fn share(id: &str, group_id: &str) -> ShareQueueItem {

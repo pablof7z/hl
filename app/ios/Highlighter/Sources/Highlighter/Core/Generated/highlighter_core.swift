@@ -784,9 +784,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, title: String, author: String)  -> ArtifactPreviewOutcome
 
     /**
-     * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
-     * Extension flow — the main app drains the share queue, normalizes each
-     * URL through this, then calls `publish_artifact` to post the kind:11.
+     * Build an `ArtifactPreview` from a bare URL. Used by reader flows that
+     * need to render or confirm a share target before publishing.
      */
     func buildPreviewFromUrl(url: String) async  -> ArtifactPreviewOutcome
 
@@ -1631,6 +1630,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func publishPodcastComposerClip(input: PodcastClipComposerPublishInput) async  -> HighlightOutcome
 
     /**
+     * Publish a queued iOS share-extension handoff. Rust owns URL preview
+     * construction, note normalization, and success/failure classification;
+     * Swift only moves items through native App Group storage.
+     */
+    func publishShareQueueItem(item: ShareQueueItem) async  -> ShareQueueAttempt
+
+    /**
      * Nudge the relay pool to attempt a reconnect on every disconnected
      * relay. `Client::connect` is idempotent — already-connected relays
      * are unaffected; disconnected / terminated / banned relays get a
@@ -2078,9 +2084,8 @@ open func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, ti
 }
 
     /**
-     * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
-     * Extension flow — the main app drains the share queue, normalizes each
-     * URL through this, then calls `publish_artifact` to post the kind:11.
+     * Build an `ArtifactPreview` from a bare URL. Used by reader flows that
+     * need to render or confirm a share target before publishing.
      */
 open func buildPreviewFromUrl(url: String)async  -> ArtifactPreviewOutcome  {
     return
@@ -4829,6 +4834,29 @@ open func publishPodcastComposerClip(input: PodcastClipComposerPublishInput)asyn
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeHighlightOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Publish a queued iOS share-extension handoff. Rust owns URL preview
+     * construction, note normalization, and success/failure classification;
+     * Swift only moves items through native App Group storage.
+     */
+open func publishShareQueueItem(item: ShareQueueItem)async  -> ShareQueueAttempt  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_share_queue_item(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeShareQueueItem_lower(item)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeShareQueueAttempt_lift,
             errorHandler: nil
 
         )
@@ -39000,7 +39028,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_edited_book_preview() != 19782) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 40366) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 17097) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 31035) {
@@ -39619,6 +39647,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_composer_clip() != 62896) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_share_queue_item() != 64561) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 13020) {

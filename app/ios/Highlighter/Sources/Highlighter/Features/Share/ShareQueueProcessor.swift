@@ -20,22 +20,7 @@ enum ShareQueueProcessor {
         var attempts: [ShareQueueAttempt] = []
 
         for share in pending {
-            let item = share.coreQueueItem
-            let previewOutcome = await app.safeCore.buildPreviewFromUrl(share.url)
-            guard previewOutcome.error.isEmpty, let preview = previewOutcome.value else {
-                attempts.append(ShareQueueAttempt(item: item, succeeded: false))
-                continue
-            }
-            let outcome = await app.safeCore.publishArtifact(
-                preview: preview,
-                groupId: share.groupId,
-                note: share.note
-            )
-            guard outcome.error.isEmpty else {
-                attempts.append(ShareQueueAttempt(item: item, succeeded: false))
-                continue
-            }
-            attempts.append(ShareQueueAttempt(item: item, succeeded: true))
+            attempts.append(await app.safeCore.publishShareQueueItem(share.coreQueueItem))
         }
 
         let projection = app.safeCore.projectShareQueueDrain(

@@ -524,6 +524,10 @@ actor SafeHighlighterCore {
         await core.buildPreviewFromUrl(url: url)
     }
 
+    func publishShareQueueItem(_ item: ShareQueueItem) async -> ShareQueueAttempt {
+        await core.publishShareQueueItem(item: item)
+    }
+
     nonisolated func projectWebMetadataRequest(
         input: WebMetadataRequestProjectionInput
     ) -> WebMetadataRequestProjection {

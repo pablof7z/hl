@@ -2747,11 +2747,35 @@ impl HighlighterCore {
         crate::ocr::alt_text_from_markdown(&markdown)
     }
 
-    /// Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
-    /// Extension flow — the main app drains the share queue, normalizes each
-    /// URL through this, then calls `publish_artifact` to post the kind:11.
+    /// Build an `ArtifactPreview` from a bare URL. Used by reader flows that
+    /// need to render or confirm a share target before publishing.
     pub async fn build_preview_from_url(&self, url: String) -> ArtifactPreviewOutcome {
         artifact_preview_outcome(crate::artifacts::build_preview(&url))
+    }
+
+    /// Publish a queued iOS share-extension handoff. Rust owns URL preview
+    /// construction, note normalization, and success/failure classification;
+    /// Swift only moves items through native App Group storage.
+    pub async fn publish_share_queue_item(
+        &self,
+        item: crate::share_extension::ShareQueueItem,
+    ) -> crate::share_extension::ShareQueueAttempt {
+        let result: Result<(), CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            let preview = crate::artifacts::build_preview(&item.url)?;
+            let trimmed_note = item.note.trim();
+            let normalized_note = (!trimmed_note.is_empty()).then(|| trimmed_note.to_string());
+            crate::artifacts::publish(
+                &self.runtime,
+                preview,
+                &item.group_id,
+                normalized_note.as_deref(),
+            )
+            .await?;
+            Ok(())
+        }
+        .await;
+        crate::share_extension::share_queue_attempt(item, result)
     }
 
     /// Project native web metadata request state. Rust owns URL validity,
