@@ -75,12 +75,6 @@ pub struct SubscriptionOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct ArtifactOutcome {
-    pub value: Option<ArtifactRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct DiscussionOutcome {
     pub value: Option<DiscussionRecord>,
     pub error: String,

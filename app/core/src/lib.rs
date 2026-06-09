@@ -69,6 +69,7 @@ pub use articles::{
     ArticleReaderHeaderProjectionInput,
 };
 pub use artifact_detail::ArtifactDetailProjection;
+pub use artifacts::ArtifactPublishSnapshot;
 pub use blossom::{
     BlossomServerEntryProjection, BlossomServerEntryProjectionInput, BlossomServerListProjection,
     BlossomServerListProjectionInput, BlossomServerSettingsMutationSnapshot,
@@ -145,9 +146,9 @@ pub use lists::{
     CurationSetCreateProjectionInput, WebBookmarkRowProjection, WebBookmarkRowProjectionInput,
 };
 pub use models::{
-    ArticleReaderRoute, ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactOutcome,
-    ArtifactPreview, ArtifactRecord, ArtifactReferenceTarget, BlossomUpload, BookRoute,
-    BookmarkSetRecord, ChatMessageRecord, CommentRecord, CommentReferenceBucket, CommentThreadNode,
+    ArticleReaderRoute, ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactPreview,
+    ArtifactRecord, ArtifactReferenceTarget, BlossomUpload, BookRoute, BookmarkSetRecord,
+    ChatMessageRecord, CommentRecord, CommentReferenceBucket, CommentThreadNode,
     CommentThreadProjection, CommunitySummary, CurationMenuItem, CurrentUser, DiscussionAttachment,
     DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventRecord,
     FeedbackThreadRecord, GeneratedAccount, HighlightOutcome, HighlightRecord,

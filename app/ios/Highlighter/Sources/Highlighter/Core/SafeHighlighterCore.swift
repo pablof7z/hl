@@ -1246,7 +1246,7 @@ actor SafeHighlighterCore {
         preview: ArtifactPreview,
         groupId: String,
         note: String?
-    ) async -> ArtifactOutcome {
+    ) async -> ArtifactPublishSnapshot {
         await core.publishArtifact(preview: preview, groupId: groupId, note: note)
     }
 

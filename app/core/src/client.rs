@@ -25,13 +25,13 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactRecord,
-    BlossomUpload, BookRoute, BookmarkSetRecord, CommentRecord, CommentReferenceBucket,
-    CommentScope, CommunitySummary, CurrentUser, DiscussionOutcome, DiscussionRecord,
-    FeedbackThreadRecord, HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction,
-    MutationOutcome, NostrConnectOptions, OnboardingInterest, OnboardingInterestProjection,
-    OnboardingInterestSelection, PodcastPositionRecord, ProfileMetadata, ProfileUpdateAction,
-    ProfileUpdateDraft, RelayDiagnostic, SubscriptionOutcome,
+    ArticleRecord, ArtifactDetailRoute, ArtifactPreview, ArtifactRecord, BlossomUpload, BookRoute,
+    BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommunitySummary,
+    CurrentUser, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord, HighlightOutcome,
+    HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
+    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
+    PodcastPositionRecord, ProfileMetadata, ProfileUpdateAction, ProfileUpdateDraft,
+    RelayDiagnostic, SubscriptionOutcome,
 };
 use crate::network_preferences;
 use crate::nip05;
@@ -123,19 +123,6 @@ fn subscription_outcome(result: Result<u64, CoreError>) -> SubscriptionOutcome {
         },
         Err(error) => SubscriptionOutcome {
             handle: 0,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn artifact_outcome(result: Result<ArtifactRecord, CoreError>) -> ArtifactOutcome {
-    match result {
-        Ok(value) => ArtifactOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => ArtifactOutcome {
-            value: None,
             error: error.to_string(),
         },
     }
@@ -2563,7 +2550,7 @@ impl HighlighterCore {
         preview: ArtifactPreview,
         group_id: String,
         note: Option<String>,
-    ) -> ArtifactOutcome {
+    ) -> crate::artifacts::ArtifactPublishSnapshot {
         let result: Result<ArtifactRecord, CoreError> = async {
             let _ = self.require_user_pubkey()?;
             let normalized_note = note
@@ -2580,7 +2567,7 @@ impl HighlighterCore {
             .await
         }
         .await;
-        artifact_outcome(result)
+        crate::artifacts::publish_snapshot(result)
     }
 
     pub async fn publish_discussion(

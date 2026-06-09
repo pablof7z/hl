@@ -1511,7 +1511,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String, article: ArticleRecord?, quote: String, note: String, context: String) async  -> ArticleReaderHighlightPublishSnapshotOutcome
 
-    func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
+    func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactPublishSnapshot
 
     func publishCapture(input: CapturePublishInput) async  -> CapturePublishSnapshot
 
@@ -4353,7 +4353,7 @@ open func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String,
         )
 }
 
-open func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?)async  -> ArtifactOutcome  {
+open func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?)async  -> ArtifactPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4365,7 +4365,7 @@ open func publishArtifact(preview: ArtifactPreview, groupId: String, note: Strin
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactOutcome_lift,
+            liftFunc: FfiConverterTypeArtifactPublishSnapshot_lift,
             errorHandler: nil
 
         )
@@ -7651,76 +7651,6 @@ public func FfiConverterTypeArtifactDetailRoute_lower(_ value: ArtifactDetailRou
 }
 
 
-public struct ArtifactOutcome {
-    public var value: ArtifactRecord?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: ArtifactRecord?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ArtifactOutcome: Sendable {}
-#endif
-
-
-extension ArtifactOutcome: Equatable, Hashable {
-    public static func ==(lhs: ArtifactOutcome, rhs: ArtifactOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeArtifactOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactOutcome {
-        return
-            try ArtifactOutcome(
-                value: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ArtifactOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeArtifactRecord.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArtifactOutcome_lift(_ buf: RustBuffer) throws -> ArtifactOutcome {
-    return try FfiConverterTypeArtifactOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArtifactOutcome_lower(_ value: ArtifactOutcome) -> RustBuffer {
-    return FfiConverterTypeArtifactOutcome.lower(value)
-}
-
-
 /**
  * Mirrors `ArtifactPreview` in `web/src/lib/ndk/artifacts.ts:19-53`.
  */
@@ -8031,6 +7961,76 @@ public func FfiConverterTypeArtifactPreview_lift(_ buf: RustBuffer) throws -> Ar
 #endif
 public func FfiConverterTypeArtifactPreview_lower(_ value: ArtifactPreview) -> RustBuffer {
     return FfiConverterTypeArtifactPreview.lower(value)
+}
+
+
+public struct ArtifactPublishSnapshot {
+    public var artifact: ArtifactRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifact: ArtifactRecord?, error: String) {
+        self.artifact = artifact
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ArtifactPublishSnapshot: Sendable {}
+#endif
+
+
+extension ArtifactPublishSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ArtifactPublishSnapshot, rhs: ArtifactPublishSnapshot) -> Bool {
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifact)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArtifactPublishSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactPublishSnapshot {
+        return
+            try ArtifactPublishSnapshot(
+                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArtifactPublishSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactPublishSnapshot_lift(_ buf: RustBuffer) throws -> ArtifactPublishSnapshot {
+    return try FfiConverterTypeArtifactPublishSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactPublishSnapshot_lower(_ value: ArtifactPublishSnapshot) -> RustBuffer {
+    return FfiConverterTypeArtifactPublishSnapshot.lower(value)
 }
 
 
@@ -39234,7 +39234,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_article_reader_highlight_snapshot() != 59085) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 1182) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 32184) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_capture() != 12749) {

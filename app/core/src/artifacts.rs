@@ -65,6 +65,12 @@ pub struct PreviewInput {
     pub highlight_tag_value: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArtifactPublishSnapshot {
+    pub artifact: Option<ArtifactRecord>,
+    pub error: String,
+}
+
 pub fn build_preview_with(input: PreviewInput) -> Result<ArtifactPreview, CoreError> {
     let normalized_url = normalize_artifact_url(&input.url)
         .ok_or_else(|| CoreError::InvalidInput("invalid URL".into()))?;
@@ -235,6 +241,19 @@ pub fn unpublished_record(preview: ArtifactPreview) -> ArtifactRecord {
         pubkey: String::new(),
         created_at: None,
         note: String::new(),
+    }
+}
+
+pub fn publish_snapshot(result: Result<ArtifactRecord, CoreError>) -> ArtifactPublishSnapshot {
+    match result {
+        Ok(artifact) => ArtifactPublishSnapshot {
+            artifact: Some(artifact),
+            error: String::new(),
+        },
+        Err(error) => ArtifactPublishSnapshot {
+            artifact: None,
+            error: error.to_string(),
+        },
     }
 }
 
@@ -1049,6 +1068,32 @@ mod tests {
         assert!(record.pubkey.is_empty());
         assert_eq!(record.created_at, None);
         assert!(record.note.is_empty());
+    }
+
+    #[test]
+    fn publish_snapshot_projects_artifact_or_error_state() {
+        let preview = build_preview("https://example.com/post").unwrap();
+        let record = ArtifactRecord {
+            preview,
+            group_id: "room-a".into(),
+            share_event_id: "event123".into(),
+            pubkey: "pubkey".into(),
+            created_at: Some(42),
+            note: "hello".into(),
+        };
+
+        let ok = publish_snapshot(Ok(record));
+        assert_eq!(
+            ok.artifact
+                .as_ref()
+                .map(|artifact| artifact.share_event_id.as_str()),
+            Some("event123")
+        );
+        assert!(ok.error.is_empty());
+
+        let err = publish_snapshot(Err(CoreError::Relay("offline".into())));
+        assert!(err.artifact.is_none());
+        assert_eq!(err.error, "relay error: offline");
     }
 
     #[test]
