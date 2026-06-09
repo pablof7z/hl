@@ -47,9 +47,8 @@ use crate::nostr_runtime::NostrRuntime;
 use crate::onboarding;
 use crate::podcast_position;
 use crate::podcast_transcript::{
-    self, PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipReference,
-    PodcastClipSelection, PodcastListeningProjection, PodcastListeningProjectionInput,
-    TranscriptSegment,
+    self, PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipSelection,
+    PodcastListeningProjection, PodcastListeningProjectionInput, TranscriptSegment,
 };
 use crate::profile;
 use crate::profile_page;
@@ -932,8 +931,30 @@ impl HighlighterCore {
         podcast_transcript::now_playing_projection(input)
     }
 
-    pub fn get_podcast_clip_reference(&self, artifact: ArtifactRecord) -> PodcastClipReference {
-        podcast_transcript::podcast_clip_reference(&artifact)
+    pub async fn get_podcast_listening_clips_snapshot(
+        &self,
+        artifact: Option<ArtifactRecord>,
+        limit: u32,
+    ) -> podcast_transcript::PodcastListeningClipsSnapshot {
+        let result = (|| {
+            let Some(artifact) = artifact else {
+                return Ok(Vec::new());
+            };
+            let reference = podcast_transcript::podcast_clip_reference(&artifact);
+            let Some(tag) = reference.tag_name.trim().chars().next() else {
+                return Ok(Vec::new());
+            };
+            highlights::query_for_reference(
+                self.runtime.ndb(),
+                tag,
+                reference.tag_value.trim(),
+                if limit == 0 { reference.limit } else { limit },
+            )
+        })();
+        match result {
+            Ok(clips) => podcast_transcript::listening_clips_snapshot(clips, ""),
+            Err(error) => podcast_transcript::listening_clips_snapshot(Vec::new(), error),
+        }
     }
 
     pub fn clear_podcast_clip_selection(&self) -> PodcastClipSelection {
@@ -1762,30 +1783,6 @@ impl HighlighterCore {
         highlight_list_outcome(highlights::query_for_article(
             self.runtime.ndb(),
             address.trim(),
-            limit,
-        ))
-    }
-
-    /// Read highlights whose `tag_name` tag holds `tag_value`, newest
-    /// first. Generalizes `get_highlights_for_article`: pass `("a", "30023:pk:d")`
-    /// for articles, `("i", "isbn:…")` for ISBN books, `("r", "<url>")` for
-    /// podcasts. `tag_name` must be a single character.
-    pub async fn get_highlights_for_reference(
-        &self,
-        tag_name: String,
-        tag_value: String,
-        limit: u32,
-    ) -> HighlightListOutcome {
-        let Some(ch) = tag_name.trim().chars().next() else {
-            return HighlightListOutcome {
-                values: Vec::new(),
-                error: String::new(),
-            };
-        };
-        highlight_list_outcome(highlights::query_for_reference(
-            self.runtime.ndb(),
-            ch,
-            tag_value.trim(),
             limit,
         ))
     }

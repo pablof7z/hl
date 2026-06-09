@@ -147,6 +147,12 @@ pub struct PodcastListeningProjection {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastListeningClipsSnapshot {
+    pub clips: Vec<HighlightRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct PodcastNowPlayingProjectionInput {
     pub artifact: ArtifactRecord,
 }
@@ -158,8 +164,8 @@ pub struct PodcastNowPlayingProjection {
     pub image_url: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct PodcastClipReference {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PodcastClipReference {
     pub tag_name: String,
     pub tag_value: String,
     pub limit: u32,
@@ -448,6 +454,16 @@ pub fn listening_projection(input: PodcastListeningProjectionInput) -> PodcastLi
     }
 }
 
+pub fn listening_clips_snapshot(
+    clips: Vec<HighlightRecord>,
+    error: impl ToString,
+) -> PodcastListeningClipsSnapshot {
+    PodcastListeningClipsSnapshot {
+        clips,
+        error: error.to_string(),
+    }
+}
+
 /// Project episode metadata for mini-player and system Now Playing surfaces.
 /// Rust owns episode title/show fallback parity across platform shells.
 pub fn now_playing_projection(
@@ -480,7 +496,7 @@ fn default_now_playing_projection() -> PodcastNowPlayingProjection {
     }
 }
 
-pub fn podcast_clip_reference(artifact: &ArtifactRecord) -> PodcastClipReference {
+pub(crate) fn podcast_clip_reference(artifact: &ArtifactRecord) -> PodcastClipReference {
     let guid = artifact.preview.podcast_item_guid.as_str();
     PodcastClipReference {
         tag_name: "i".into(),
@@ -1651,6 +1667,16 @@ HOST: Segment text.
         assert_eq!(projection.episode_title, "Untitled episode");
         assert_eq!(projection.episode_meta, "1m");
         assert_eq!(projection.current_speaker_or_timestamp, "1:02");
+    }
+
+    #[test]
+    fn listening_clips_snapshot_preserves_clips_and_error() {
+        let snapshot =
+            listening_clips_snapshot(vec![highlight("clip-a", Some(15.0))], "cache unavailable");
+
+        assert_eq!(snapshot.clips.len(), 1);
+        assert_eq!(snapshot.clips[0].event_id, "clip-a");
+        assert_eq!(snapshot.error, "cache unavailable");
     }
 
     #[test]

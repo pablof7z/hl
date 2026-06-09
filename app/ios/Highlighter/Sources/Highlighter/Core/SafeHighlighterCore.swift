@@ -133,8 +133,11 @@ actor SafeHighlighterCore {
         core.getPodcastNowPlayingProjection(input: input)
     }
 
-    nonisolated func getPodcastClipReference(artifact: ArtifactRecord) -> PodcastClipReference {
-        core.getPodcastClipReference(artifact: artifact)
+    func getPodcastListeningClipsSnapshot(
+        artifact: ArtifactRecord?,
+        limit: UInt32 = 128
+    ) async -> PodcastListeningClipsSnapshot {
+        await core.getPodcastListeningClipsSnapshot(artifact: artifact, limit: limit)
     }
 
     nonisolated func clearPodcastClipSelection() -> PodcastClipSelection {
@@ -924,14 +927,6 @@ actor SafeHighlighterCore {
 
     func getHighlightsForArticle(address: String, limit: UInt32 = 128) async -> HighlightListOutcome {
         await core.getHighlightsForArticle(address: address, limit: limit)
-    }
-
-    func getHighlightsForReference(
-        tagName: String,
-        tagValue: String,
-        limit: UInt32 = 128
-    ) async -> HighlightListOutcome {
-        await core.getHighlightsForReference(tagName: tagName, tagValue: tagValue, limit: limit)
     }
 
     func getBookDetailSnapshot(catalogId: String, limit: UInt32 = 64) async -> BookDetailSnapshot {

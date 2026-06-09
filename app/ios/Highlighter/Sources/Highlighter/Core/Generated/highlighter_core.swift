@@ -1075,14 +1075,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getHighlightsForArticle(address: String, limit: UInt32) async  -> HighlightListOutcome
 
     /**
-     * Read highlights whose `tag_name` tag holds `tag_value`, newest
-     * first. Generalizes `get_highlights_for_article`: pass `("a", "30023:pk:d")`
-     * for articles, `("i", "isbn:…")` for ISBN books, `("r", "<url>")` for
-     * podcasts. `tag_name` must be a single character.
-     */
-    func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32) async  -> HighlightListOutcome
-
-    /**
      * Full highlights home feed snapshot. Rust owns the following-highlights
      * query, following-reads query, cross-feed dedupe, grouping, stable ids,
      * and merged ordering.
@@ -1103,7 +1095,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getPodcastClipComposerProjection(input: PodcastClipComposerInput)  -> PodcastClipComposerProjection
 
-    func getPodcastClipReference(artifact: ArtifactRecord)  -> PodcastClipReference
+    func getPodcastListeningClipsSnapshot(artifact: ArtifactRecord?, limit: UInt32) async  -> PodcastListeningClipsSnapshot
 
     func getPodcastListeningProjection(input: PodcastListeningProjectionInput)  -> PodcastListeningProjection
 
@@ -3024,30 +3016,6 @@ open func getHighlightsForArticle(address: String, limit: UInt32)async  -> Highl
 }
 
     /**
-     * Read highlights whose `tag_name` tag holds `tag_value`, newest
-     * first. Generalizes `get_highlights_for_article`: pass `("a", "30023:pk:d")`
-     * for articles, `("i", "isbn:…")` for ISBN books, `("r", "<url>")` for
-     * podcasts. `tag_name` must be a single character.
-     */
-open func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32)async  -> HighlightListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_highlights_for_reference(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(tagName),FfiConverterString.lower(tagValue),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Full highlights home feed snapshot. Rust owns the following-highlights
      * query, following-reads query, cross-feed dedupe, grouping, stable ids,
      * and merged ordering.
@@ -3155,12 +3123,22 @@ open func getPodcastClipComposerProjection(input: PodcastClipComposerInput) -> P
 })
 }
 
-open func getPodcastClipReference(artifact: ArtifactRecord) -> PodcastClipReference  {
-    return try!  FfiConverterTypePodcastClipReference_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_clip_reference(self.uniffiClonePointer(),
-        FfiConverterTypeArtifactRecord_lower(artifact),$0
-    )
-})
+open func getPodcastListeningClipsSnapshot(artifact: ArtifactRecord?, limit: UInt32)async  -> PodcastListeningClipsSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_podcast_listening_clips_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterOptionTypeArtifactRecord.lower(artifact),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePodcastListeningClipsSnapshot_lift,
+            errorHandler: nil
+
+        )
 }
 
 open func getPodcastListeningProjection(input: PodcastListeningProjectionInput) -> PodcastListeningProjection  {
@@ -22044,84 +22022,6 @@ public func FfiConverterTypePodcastClipPublishInput_lower(_ value: PodcastClipPu
 }
 
 
-public struct PodcastClipReference {
-    public var tagName: String
-    public var tagValue: String
-    public var limit: UInt32
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(tagName: String, tagValue: String, limit: UInt32) {
-        self.tagName = tagName
-        self.tagValue = tagValue
-        self.limit = limit
-    }
-}
-
-#if compiler(>=6)
-extension PodcastClipReference: Sendable {}
-#endif
-
-
-extension PodcastClipReference: Equatable, Hashable {
-    public static func ==(lhs: PodcastClipReference, rhs: PodcastClipReference) -> Bool {
-        if lhs.tagName != rhs.tagName {
-            return false
-        }
-        if lhs.tagValue != rhs.tagValue {
-            return false
-        }
-        if lhs.limit != rhs.limit {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(tagName)
-        hasher.combine(tagValue)
-        hasher.combine(limit)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePodcastClipReference: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipReference {
-        return
-            try PodcastClipReference(
-                tagName: FfiConverterString.read(from: &buf),
-                tagValue: FfiConverterString.read(from: &buf),
-                limit: FfiConverterUInt32.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: PodcastClipReference, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.tagName, into: &buf)
-        FfiConverterString.write(value.tagValue, into: &buf)
-        FfiConverterUInt32.write(value.limit, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePodcastClipReference_lift(_ buf: RustBuffer) throws -> PodcastClipReference {
-    return try FfiConverterTypePodcastClipReference.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePodcastClipReference_lower(_ value: PodcastClipReference) -> RustBuffer {
-    return FfiConverterTypePodcastClipReference.lower(value)
-}
-
-
 public struct PodcastClipSelection {
     public var clipStartSeconds: Double?
     public var clipEndSeconds: Double?
@@ -22205,6 +22105,76 @@ public func FfiConverterTypePodcastClipSelection_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypePodcastClipSelection_lower(_ value: PodcastClipSelection) -> RustBuffer {
     return FfiConverterTypePodcastClipSelection.lower(value)
+}
+
+
+public struct PodcastListeningClipsSnapshot {
+    public var clips: [HighlightRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(clips: [HighlightRecord], error: String) {
+        self.clips = clips
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension PodcastListeningClipsSnapshot: Sendable {}
+#endif
+
+
+extension PodcastListeningClipsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: PodcastListeningClipsSnapshot, rhs: PodcastListeningClipsSnapshot) -> Bool {
+        if lhs.clips != rhs.clips {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(clips)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastListeningClipsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastListeningClipsSnapshot {
+        return
+            try PodcastListeningClipsSnapshot(
+                clips: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastListeningClipsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeHighlightRecord.write(value.clips, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastListeningClipsSnapshot_lift(_ buf: RustBuffer) throws -> PodcastListeningClipsSnapshot {
+    return try FfiConverterTypePodcastListeningClipsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastListeningClipsSnapshot_lower(_ value: PodcastListeningClipsSnapshot) -> RustBuffer {
+    return FfiConverterTypePodcastListeningClipsSnapshot.lower(value)
 }
 
 
@@ -37855,9 +37825,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_article() != 21511) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_reference() != 12852) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_home_feed_snapshot() != 9098) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -37882,7 +37849,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_composer_projection() != 10657) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_reference() != 12637) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_listening_clips_snapshot() != 47800) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_listening_projection() != 20038) {

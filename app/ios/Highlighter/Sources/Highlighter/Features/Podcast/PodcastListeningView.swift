@@ -434,15 +434,9 @@ struct PodcastListeningView: View {
     // MARK: - Helpers
 
     private func loadClips() async {
-        guard let artifact = player.currentArtifact else { return }
-        let reference = app.safeCore.getPodcastClipReference(artifact: artifact)
-        let outcome = await app.safeCore.getHighlightsForReference(
-            tagName: reference.tagName,
-            tagValue: reference.tagValue,
-            limit: reference.limit
+        let snapshot = await app.safeCore.getPodcastListeningClipsSnapshot(
+            artifact: player.currentArtifact
         )
-        if outcome.error.isEmpty {
-            memberClips = outcome.values
-        }
+        memberClips = snapshot.clips
     }
 }

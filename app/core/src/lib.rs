@@ -168,7 +168,7 @@ pub use nostr_entities::{NostrEntityArticleCardProjection, NostrEntityArticleCar
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
 pub use podcast_transcript::{
     PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipComposerPublishInput,
-    PodcastClipPublishInput, PodcastClipReference, PodcastClipSelection,
+    PodcastClipPublishInput, PodcastClipSelection, PodcastListeningClipsSnapshot,
     PodcastListeningProjection, PodcastListeningProjectionInput, PodcastNowPlayingProjection,
     PodcastNowPlayingProjectionInput, PodcastTimelineRow, PodcastTimelineRowKind,
     PodcastTimelineRowState, TranscriptSegment,
