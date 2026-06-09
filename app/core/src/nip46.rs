@@ -28,6 +28,33 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 /// How long we wait for an inbound `nostrconnect://` remote-signer handshake.
 const INBOUND_TIMEOUT: Duration = Duration::from_secs(300);
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NostrConnectStartSnapshot {
+    pub uri: String,
+    pub started: bool,
+    pub error_message: String,
+}
+
+pub fn start_snapshot(result: Result<String, CoreError>) -> NostrConnectStartSnapshot {
+    match result {
+        Ok(uri) if !uri.is_empty() => NostrConnectStartSnapshot {
+            uri,
+            started: true,
+            error_message: String::new(),
+        },
+        Ok(_) => NostrConnectStartSnapshot {
+            uri: String::new(),
+            started: false,
+            error_message: "Could not start Nostr Connect.".into(),
+        },
+        Err(error) => NostrConnectStartSnapshot {
+            uri: String::new(),
+            started: false,
+            error_message: error.to_string(),
+        },
+    }
+}
+
 /// A NIP-46 remote signer tied to a specific relay and remote pubkey.
 ///
 /// The signer is cheap to clone (all shared state is `Arc`-backed) and is
@@ -606,5 +633,23 @@ mod tests {
             ),
             "nostrconnect://abc?relay=wss://relay.primal.net&callback=highlighter%3A%2F%2Fnip46"
         );
+    }
+
+    #[test]
+    fn start_snapshot_projects_uri_empty_and_error_states() {
+        let success = start_snapshot(Ok("nostrconnect://abc".into()));
+        assert!(success.started);
+        assert_eq!(success.uri, "nostrconnect://abc");
+        assert!(success.error_message.is_empty());
+
+        let empty = start_snapshot(Ok(String::new()));
+        assert!(!empty.started);
+        assert!(empty.uri.is_empty());
+        assert_eq!(empty.error_message, "Could not start Nostr Connect.");
+
+        let failure = start_snapshot(Err(CoreError::Relay("offline".into())));
+        assert!(!failure.started);
+        assert!(failure.uri.is_empty());
+        assert_eq!(failure.error_message, "relay error: offline");
     }
 }

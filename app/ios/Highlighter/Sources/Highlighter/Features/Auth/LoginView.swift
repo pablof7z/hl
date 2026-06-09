@@ -182,16 +182,12 @@ struct LoginView: View {
         errorMessage = nil
         defer { isWorking = false }
 
-        let outcome = await store.safeCore.startDefaultNostrConnect(callback: "highlighter://nip46")
-        guard outcome.error.isEmpty else {
-            errorMessage = outcome.error
+        let snapshot = await store.safeCore.startDefaultNostrConnect(callback: "highlighter://nip46")
+        guard snapshot.started else {
+            errorMessage = snapshot.errorMessage
             return
         }
-        let uri = outcome.value
-        guard !uri.isEmpty else {
-            errorMessage = "Could not start Nostr Connect."
-            return
-        }
+        let uri = snapshot.uri
 
         if let url = URL(string: uri) {
             openURL(url)

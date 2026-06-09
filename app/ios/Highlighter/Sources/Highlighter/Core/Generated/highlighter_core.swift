@@ -1717,7 +1717,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func standaloneNostrEntity(content: String)  -> NostrEntityRef?
 
-    func startDefaultNostrConnect(callback: String) async  -> StringOutcome
+    func startDefaultNostrConnect(callback: String) async  -> NostrConnectStartSnapshot
 
     /**
      * Install (if not already installed) two relay subs that together
@@ -5178,7 +5178,7 @@ open func standaloneNostrEntity(content: String) -> NostrEntityRef?  {
 })
 }
 
-open func startDefaultNostrConnect(callback: String)async  -> StringOutcome  {
+open func startDefaultNostrConnect(callback: String)async  -> NostrConnectStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5190,7 +5190,7 @@ open func startDefaultNostrConnect(callback: String)async  -> StringOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringOutcome_lift,
+            liftFunc: FfiConverterTypeNostrConnectStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -20764,6 +20764,84 @@ public func FfiConverterTypeNip11Document_lift(_ buf: RustBuffer) throws -> Nip1
 #endif
 public func FfiConverterTypeNip11Document_lower(_ value: Nip11Document) -> RustBuffer {
     return FfiConverterTypeNip11Document.lower(value)
+}
+
+
+public struct NostrConnectStartSnapshot {
+    public var uri: String
+    public var started: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(uri: String, started: Bool, errorMessage: String) {
+        self.uri = uri
+        self.started = started
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension NostrConnectStartSnapshot: Sendable {}
+#endif
+
+
+extension NostrConnectStartSnapshot: Equatable, Hashable {
+    public static func ==(lhs: NostrConnectStartSnapshot, rhs: NostrConnectStartSnapshot) -> Bool {
+        if lhs.uri != rhs.uri {
+            return false
+        }
+        if lhs.started != rhs.started {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(uri)
+        hasher.combine(started)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNostrConnectStartSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrConnectStartSnapshot {
+        return
+            try NostrConnectStartSnapshot(
+                uri: FfiConverterString.read(from: &buf),
+                started: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NostrConnectStartSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.uri, into: &buf)
+        FfiConverterBool.write(value.started, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrConnectStartSnapshot_lift(_ buf: RustBuffer) throws -> NostrConnectStartSnapshot {
+    return try FfiConverterTypeNostrConnectStartSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrConnectStartSnapshot_lower(_ value: NostrConnectStartSnapshot) -> RustBuffer {
+    return FfiConverterTypeNostrConnectStartSnapshot.lower(value)
 }
 
 
@@ -39593,7 +39671,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_standalone_nostr_entity() != 64485) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_start_default_nostr_connect() != 22248) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_start_default_nostr_connect() != 32804) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_friends_rooms_discovery() != 44697) {

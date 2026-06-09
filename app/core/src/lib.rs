@@ -163,6 +163,7 @@ pub use nip05::{
     Nip05RegistrationSnapshot, OnboardingCreateAccountProjection,
     OnboardingCreateAccountProjectionInput, OnboardingUsernameCheckProjection,
 };
+pub use nip46::NostrConnectStartSnapshot;
 pub use nostr_entities::{NostrEntityArticleCardProjection, NostrEntityArticleCardProjectionInput};
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
 pub use podcast_transcript::{

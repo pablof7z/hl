@@ -902,11 +902,14 @@ impl HighlighterCore {
     // Async auth flows delegate without holding the parking_lot guard across
     // await. The session module is responsible for thread-safe internal state.
 
-    pub async fn start_default_nostr_connect(&self, callback: String) -> StringOutcome {
+    pub async fn start_default_nostr_connect(
+        &self,
+        callback: String,
+    ) -> nip46::NostrConnectStartSnapshot {
         let result = self
             .start_nostr_connect_with_options(NostrConnectOptions::default(), &callback)
             .await;
-        string_outcome(result)
+        nip46::start_snapshot(result)
     }
 
     pub async fn pair_bunker(&self, uri: String) -> crate::session::AuthSessionSnapshot {

@@ -20,7 +20,7 @@ actor SafeHighlighterCore {
         core.classifyLoginInput(input: input)
     }
 
-    func startDefaultNostrConnect(callback: String) async -> StringOutcome {
+    func startDefaultNostrConnect(callback: String) async -> NostrConnectStartSnapshot {
         await core.startDefaultNostrConnect(callback: callback)
     }
 

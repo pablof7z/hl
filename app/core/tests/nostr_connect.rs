@@ -16,15 +16,15 @@ fn isolated_core() -> (Arc<HighlighterCore>, TempDir) {
 async fn start_default_nostr_connect_returns_valid_uri_with_callback() {
     let (core, _tmp) = isolated_core();
 
-    let outcome = core
+    let snapshot = core
         .start_default_nostr_connect("highlighter://nip46".into())
         .await;
     assert!(
-        outcome.error.is_empty(),
+        snapshot.started,
         "start_default_nostr_connect: {}",
-        outcome.error
+        snapshot.error_message
     );
-    let uri = outcome.value;
+    let uri = snapshot.uri;
 
     // Shape: nostrconnect://<64-hex pubkey>?<query>
     assert!(uri.starts_with("nostrconnect://"), "got: {uri}");
