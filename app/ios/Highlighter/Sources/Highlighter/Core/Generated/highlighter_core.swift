@@ -886,24 +886,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getArticleAddressAuthor(address: String) async  -> String?
 
     /**
-     * Project a cached NIP-23 article into the artifact preview shape used by
-     * kind:11 sharing. Rust owns the `a`/`k`/highlight reference fields.
-     */
-    func getArticleArtifactPreview(article: ArticleRecord)  -> ArtifactPreviewOutcome
-
-    /**
-     * Project a NIP-23 article address into a minimal artifact preview for
-     * share flows that only have the address cached.
-     */
-    func getArticleArtifactPreviewForAddress(address: String)  -> ArtifactPreviewOutcome
-
-    /**
-     * Project a cached NIP-23 article into the artifact record shape expected
-     * by highlight publishing.
-     */
-    func getArticleArtifactRecord(article: ArticleRecord)  -> ArtifactOutcome
-
-    /**
      * Return the current article bookmark snapshot. Rust owns the nostrdb
      * query and error semantics; native shells render and cache the returned
      * address set.
@@ -1157,12 +1139,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * returned buckets.
      */
     func getSearchResultsSnapshot(query: String) async  -> SearchResultsSnapshot
-
-    /**
-     * Wrap a local preview for highlight/picture publish paths before a
-     * kind:11 share exists. Rust owns the empty record sentinel fields.
-     */
-    func getUnpublishedArtifactRecord(preview: ArtifactPreview)  -> ArtifactOutcome
 
     func getUserArticles(pubkeyHex: String, limit: UInt32) async  -> ArticleListOutcome
 
@@ -2451,42 +2427,6 @@ open func getArticleAddressAuthor(address: String)async  -> String?  {
 }
 
     /**
-     * Project a cached NIP-23 article into the artifact preview shape used by
-     * kind:11 sharing. Rust owns the `a`/`k`/highlight reference fields.
-     */
-open func getArticleArtifactPreview(article: ArticleRecord) -> ArtifactPreviewOutcome  {
-    return try!  FfiConverterTypeArtifactPreviewOutcome_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_article_artifact_preview(self.uniffiClonePointer(),
-        FfiConverterTypeArticleRecord_lower(article),$0
-    )
-})
-}
-
-    /**
-     * Project a NIP-23 article address into a minimal artifact preview for
-     * share flows that only have the address cached.
-     */
-open func getArticleArtifactPreviewForAddress(address: String) -> ArtifactPreviewOutcome  {
-    return try!  FfiConverterTypeArtifactPreviewOutcome_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_article_artifact_preview_for_address(self.uniffiClonePointer(),
-        FfiConverterString.lower(address),$0
-    )
-})
-}
-
-    /**
-     * Project a cached NIP-23 article into the artifact record shape expected
-     * by highlight publishing.
-     */
-open func getArticleArtifactRecord(article: ArticleRecord) -> ArtifactOutcome  {
-    return try!  FfiConverterTypeArtifactOutcome_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_article_artifact_record(self.uniffiClonePointer(),
-        FfiConverterTypeArticleRecord_lower(article),$0
-    )
-})
-}
-
-    /**
      * Return the current article bookmark snapshot. Rust owns the nostrdb
      * query and error semantics; native shells render and cache the returned
      * address set.
@@ -3374,18 +3314,6 @@ open func getSearchResultsSnapshot(query: String)async  -> SearchResultsSnapshot
             errorHandler: nil
 
         )
-}
-
-    /**
-     * Wrap a local preview for highlight/picture publish paths before a
-     * kind:11 share exists. Rust owns the empty record sentinel fields.
-     */
-open func getUnpublishedArtifactRecord(preview: ArtifactPreview) -> ArtifactOutcome  {
-    return try!  FfiConverterTypeArtifactOutcome_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_unpublished_artifact_record(self.uniffiClonePointer(),
-        FfiConverterTypeArtifactPreview_lower(preview),$0
-    )
-})
 }
 
 open func getUserArticles(pubkeyHex: String, limit: UInt32)async  -> ArticleListOutcome  {
@@ -39046,15 +38974,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_address_author() != 16403) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_artifact_preview() != 14568) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_artifact_preview_for_address() != 57769) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_artifact_record() != 57115) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_bookmarks_snapshot() != 7294) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -39209,9 +39128,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_results_snapshot() != 55653) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_unpublished_artifact_record() != 13176) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_articles() != 49199) {

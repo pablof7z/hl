@@ -902,22 +902,6 @@ actor SafeHighlighterCore {
         core.projectCommunityRow(input: input)
     }
 
-    nonisolated func getArticleArtifactPreview(article: ArticleRecord) -> ArtifactPreviewOutcome {
-        core.getArticleArtifactPreview(article: article)
-    }
-
-    nonisolated func getArticleArtifactPreviewForAddress(address: String) -> ArtifactPreviewOutcome {
-        core.getArticleArtifactPreviewForAddress(address: address)
-    }
-
-    nonisolated func getArticleArtifactRecord(article: ArticleRecord) -> ArtifactOutcome {
-        core.getArticleArtifactRecord(article: article)
-    }
-
-    nonisolated func getUnpublishedArtifactRecord(preview: ArtifactPreview) -> ArtifactOutcome {
-        core.getUnpublishedArtifactRecord(preview: preview)
-    }
-
     nonisolated func getBookRoute(catalogId: String) -> BookRoute? {
         core.getBookRoute(catalogId: catalogId)
     }
