@@ -78,6 +78,26 @@ pub struct CommentToolbarProjection {
     pub accessibility_label: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentActionChromeProjectionInput {
+    pub is_liked: bool,
+    pub is_bookmarked: bool,
+    pub like_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentActionChromeProjection {
+    pub shows_footer: bool,
+    pub footer_system_image: String,
+    pub footer_is_accented: bool,
+    pub shows_footer_count: bool,
+    pub footer_count_label: String,
+    pub like_title: String,
+    pub like_system_image: String,
+    pub bookmark_title: String,
+    pub bookmark_system_image: String,
+}
+
 /// Comment composer projection. Rust owns draft normalization and submit
 /// eligibility; native shells render the composer affordance.
 pub fn comment_composer_projection(
@@ -87,6 +107,49 @@ pub fn comment_composer_projection(
     CommentComposerProjection {
         can_submit: !submit_body.is_empty() && !input.is_publishing,
         submit_body,
+    }
+}
+
+/// Project comment row reaction/bookmark chrome. Native shells own the menu
+/// and button plumbing; Rust owns user-visible labels, SF Symbol choices, and
+/// footer count visibility.
+pub fn comment_action_chrome_projection(
+    input: CommentActionChromeProjectionInput,
+) -> CommentActionChromeProjection {
+    CommentActionChromeProjection {
+        shows_footer: input.is_liked || input.like_count > 0,
+        footer_system_image: if input.is_liked {
+            "heart.fill".into()
+        } else {
+            "heart".into()
+        },
+        footer_is_accented: input.is_liked,
+        shows_footer_count: input.like_count > 0,
+        footer_count_label: if input.like_count > 0 {
+            input.like_count.to_string()
+        } else {
+            String::new()
+        },
+        like_title: if input.is_liked {
+            "Unlike".into()
+        } else {
+            "Like".into()
+        },
+        like_system_image: if input.is_liked {
+            "heart.slash".into()
+        } else {
+            "heart".into()
+        },
+        bookmark_title: if input.is_bookmarked {
+            "Remove bookmark".into()
+        } else {
+            "Bookmark".into()
+        },
+        bookmark_system_image: if input.is_bookmarked {
+            "bookmark.slash".into()
+        } else {
+            "bookmark".into()
+        },
     }
 }
 
@@ -925,6 +988,49 @@ mod tests {
                 shows_count: true,
                 count_label: "2".into(),
                 accessibility_label: "2 comments".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn comment_action_chrome_projection_formats_footer_and_menu() {
+        let neutral = comment_action_chrome_projection(CommentActionChromeProjectionInput {
+            is_liked: false,
+            is_bookmarked: false,
+            like_count: 0,
+        });
+        assert_eq!(
+            neutral,
+            CommentActionChromeProjection {
+                shows_footer: false,
+                footer_system_image: "heart".into(),
+                footer_is_accented: false,
+                shows_footer_count: false,
+                footer_count_label: String::new(),
+                like_title: "Like".into(),
+                like_system_image: "heart".into(),
+                bookmark_title: "Bookmark".into(),
+                bookmark_system_image: "bookmark".into(),
+            }
+        );
+
+        let active = comment_action_chrome_projection(CommentActionChromeProjectionInput {
+            is_liked: true,
+            is_bookmarked: true,
+            like_count: 3,
+        });
+        assert_eq!(
+            active,
+            CommentActionChromeProjection {
+                shows_footer: true,
+                footer_system_image: "heart.fill".into(),
+                footer_is_accented: true,
+                shows_footer_count: true,
+                footer_count_label: "3".into(),
+                like_title: "Unlike".into(),
+                like_system_image: "heart.slash".into(),
+                bookmark_title: "Remove bookmark".into(),
+                bookmark_system_image: "bookmark.slash".into(),
             }
         );
     }

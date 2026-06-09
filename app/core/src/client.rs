@@ -2398,6 +2398,14 @@ impl HighlighterCore {
         comments::comment_toolbar_projection(input)
     }
 
+    /// Project comment row reaction/bookmark chrome.
+    pub fn project_comment_action_chrome(
+        &self,
+        input: comments::CommentActionChromeProjectionInput,
+    ) -> comments::CommentActionChromeProjection {
+        comments::comment_action_chrome_projection(input)
+    }
+
     /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
     pub async fn get_comments_for_scope(
         &self,

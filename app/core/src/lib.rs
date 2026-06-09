@@ -82,9 +82,10 @@ pub use capture::{
 pub use chat::{ChatComposerProjection, ChatComposerProjectionInput};
 pub use client::HighlighterCore;
 pub use comments::{
-    CommentComposerProjection, CommentComposerProjectionInput, CommentNodeChromeProjection,
-    CommentNodeChromeProjectionInput, CommentThreadViewProjection,
-    CommentThreadViewProjectionInput, CommentToolbarProjection, CommentToolbarProjectionInput,
+    CommentActionChromeProjection, CommentActionChromeProjectionInput, CommentComposerProjection,
+    CommentComposerProjectionInput, CommentNodeChromeProjection, CommentNodeChromeProjectionInput,
+    CommentThreadViewProjection, CommentThreadViewProjectionInput, CommentToolbarProjection,
+    CommentToolbarProjectionInput,
 };
 pub use discussions::{
     DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput,

@@ -113,15 +113,16 @@ struct CommentRow: View {
 
     @ViewBuilder
     private var footer: some View {
-        let liked = store.isLiked(node.record.eventId)
-        let count = store.likeCount(node.record.eventId)
-        if liked || count > 0 {
+        let chrome = actionChrome
+        if chrome.showsFooter {
             HStack(spacing: 6) {
-                Image(systemName: liked ? "heart.fill" : "heart")
+                Image(systemName: chrome.footerSystemImage)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(liked ? Color.highlighterAccent : Color.highlighterInkMuted)
-                if count > 0 {
-                    Text("\(count)")
+                    .foregroundStyle(
+                        chrome.footerIsAccented ? Color.highlighterAccent : Color.highlighterInkMuted
+                    )
+                if chrome.showsFooterCount {
+                    Text(chrome.footerCountLabel)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(Color.highlighterInkMuted)
                         .monospacedDigit()
@@ -129,7 +130,7 @@ struct CommentRow: View {
                 Spacer(minLength: 0)
             }
             .padding(.top, 2)
-            .opacity(liked ? 1.0 : 0.65)
+            .opacity(chrome.footerIsAccented ? 1.0 : 0.65)
         }
     }
 
@@ -151,7 +152,7 @@ struct CommentRow: View {
 
     @ViewBuilder
     private var actionMenu: some View {
-        let isBookmarked = store.isBookmarked(node.record.eventId)
+        let chrome = actionChrome
         Button {
             showProfile = true
         } label: {
@@ -161,16 +162,16 @@ struct CommentRow: View {
             Task { await store.toggleLike(node.record) }
         } label: {
             Label(
-                store.isLiked(node.record.eventId) ? "Unlike" : "Like",
-                systemImage: store.isLiked(node.record.eventId) ? "heart.slash" : "heart"
+                chrome.likeTitle,
+                systemImage: chrome.likeSystemImage
             )
         }
         Button {
             Task { await store.toggleBookmark(node.record) }
         } label: {
             Label(
-                isBookmarked ? "Remove bookmark" : "Bookmark",
-                systemImage: isBookmarked ? "bookmark.slash" : "bookmark"
+                chrome.bookmarkTitle,
+                systemImage: chrome.bookmarkSystemImage
             )
         }
         Button {
@@ -181,6 +182,16 @@ struct CommentRow: View {
     }
 
     // MARK: - Helpers
+
+    private var actionChrome: CommentActionChromeProjection {
+        app.safeCore.projectCommentActionChrome(
+            input: CommentActionChromeProjectionInput(
+                isLiked: store.isLiked(node.record.eventId),
+                isBookmarked: store.isBookmarked(node.record.eventId),
+                likeCount: UInt32(store.likeCount(node.record.eventId))
+            )
+        )
+    }
 
     private var nodeChrome: CommentNodeChromeProjection {
         app.safeCore.projectCommentNodeChrome(

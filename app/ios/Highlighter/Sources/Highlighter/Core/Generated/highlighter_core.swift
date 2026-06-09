@@ -1472,6 +1472,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectChatComposer(input: ChatComposerProjectionInput)  -> ChatComposerProjection
 
     /**
+     * Project comment row reaction/bookmark chrome.
+     */
+    func projectCommentActionChrome(input: CommentActionChromeProjectionInput)  -> CommentActionChromeProjection
+
+    /**
      * Comment composer projection. Rust owns draft normalization and submit
      * eligibility; native shells render the composer affordance.
      */
@@ -4598,6 +4603,17 @@ open func projectChatComposer(input: ChatComposerProjectionInput) -> ChatCompose
     return try!  FfiConverterTypeChatComposerProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_chat_composer(self.uniffiClonePointer(),
         FfiConverterTypeChatComposerProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project comment row reaction/bookmark chrome.
+     */
+open func projectCommentActionChrome(input: CommentActionChromeProjectionInput) -> CommentActionChromeProjection  {
+    return try!  FfiConverterTypeCommentActionChromeProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_comment_action_chrome(self.uniffiClonePointer(),
+        FfiConverterTypeCommentActionChromeProjectionInput_lower(input),$0
     )
 })
 }
@@ -12304,6 +12320,210 @@ public func FfiConverterTypeChatMessageRecord_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeChatMessageRecord_lower(_ value: ChatMessageRecord) -> RustBuffer {
     return FfiConverterTypeChatMessageRecord.lower(value)
+}
+
+
+public struct CommentActionChromeProjection {
+    public var showsFooter: Bool
+    public var footerSystemImage: String
+    public var footerIsAccented: Bool
+    public var showsFooterCount: Bool
+    public var footerCountLabel: String
+    public var likeTitle: String
+    public var likeSystemImage: String
+    public var bookmarkTitle: String
+    public var bookmarkSystemImage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(showsFooter: Bool, footerSystemImage: String, footerIsAccented: Bool, showsFooterCount: Bool, footerCountLabel: String, likeTitle: String, likeSystemImage: String, bookmarkTitle: String, bookmarkSystemImage: String) {
+        self.showsFooter = showsFooter
+        self.footerSystemImage = footerSystemImage
+        self.footerIsAccented = footerIsAccented
+        self.showsFooterCount = showsFooterCount
+        self.footerCountLabel = footerCountLabel
+        self.likeTitle = likeTitle
+        self.likeSystemImage = likeSystemImage
+        self.bookmarkTitle = bookmarkTitle
+        self.bookmarkSystemImage = bookmarkSystemImage
+    }
+}
+
+#if compiler(>=6)
+extension CommentActionChromeProjection: Sendable {}
+#endif
+
+
+extension CommentActionChromeProjection: Equatable, Hashable {
+    public static func ==(lhs: CommentActionChromeProjection, rhs: CommentActionChromeProjection) -> Bool {
+        if lhs.showsFooter != rhs.showsFooter {
+            return false
+        }
+        if lhs.footerSystemImage != rhs.footerSystemImage {
+            return false
+        }
+        if lhs.footerIsAccented != rhs.footerIsAccented {
+            return false
+        }
+        if lhs.showsFooterCount != rhs.showsFooterCount {
+            return false
+        }
+        if lhs.footerCountLabel != rhs.footerCountLabel {
+            return false
+        }
+        if lhs.likeTitle != rhs.likeTitle {
+            return false
+        }
+        if lhs.likeSystemImage != rhs.likeSystemImage {
+            return false
+        }
+        if lhs.bookmarkTitle != rhs.bookmarkTitle {
+            return false
+        }
+        if lhs.bookmarkSystemImage != rhs.bookmarkSystemImage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(showsFooter)
+        hasher.combine(footerSystemImage)
+        hasher.combine(footerIsAccented)
+        hasher.combine(showsFooterCount)
+        hasher.combine(footerCountLabel)
+        hasher.combine(likeTitle)
+        hasher.combine(likeSystemImage)
+        hasher.combine(bookmarkTitle)
+        hasher.combine(bookmarkSystemImage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentActionChromeProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentActionChromeProjection {
+        return
+            try CommentActionChromeProjection(
+                showsFooter: FfiConverterBool.read(from: &buf),
+                footerSystemImage: FfiConverterString.read(from: &buf),
+                footerIsAccented: FfiConverterBool.read(from: &buf),
+                showsFooterCount: FfiConverterBool.read(from: &buf),
+                footerCountLabel: FfiConverterString.read(from: &buf),
+                likeTitle: FfiConverterString.read(from: &buf),
+                likeSystemImage: FfiConverterString.read(from: &buf),
+                bookmarkTitle: FfiConverterString.read(from: &buf),
+                bookmarkSystemImage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentActionChromeProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.showsFooter, into: &buf)
+        FfiConverterString.write(value.footerSystemImage, into: &buf)
+        FfiConverterBool.write(value.footerIsAccented, into: &buf)
+        FfiConverterBool.write(value.showsFooterCount, into: &buf)
+        FfiConverterString.write(value.footerCountLabel, into: &buf)
+        FfiConverterString.write(value.likeTitle, into: &buf)
+        FfiConverterString.write(value.likeSystemImage, into: &buf)
+        FfiConverterString.write(value.bookmarkTitle, into: &buf)
+        FfiConverterString.write(value.bookmarkSystemImage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentActionChromeProjection_lift(_ buf: RustBuffer) throws -> CommentActionChromeProjection {
+    return try FfiConverterTypeCommentActionChromeProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentActionChromeProjection_lower(_ value: CommentActionChromeProjection) -> RustBuffer {
+    return FfiConverterTypeCommentActionChromeProjection.lower(value)
+}
+
+
+public struct CommentActionChromeProjectionInput {
+    public var isLiked: Bool
+    public var isBookmarked: Bool
+    public var likeCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(isLiked: Bool, isBookmarked: Bool, likeCount: UInt32) {
+        self.isLiked = isLiked
+        self.isBookmarked = isBookmarked
+        self.likeCount = likeCount
+    }
+}
+
+#if compiler(>=6)
+extension CommentActionChromeProjectionInput: Sendable {}
+#endif
+
+
+extension CommentActionChromeProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CommentActionChromeProjectionInput, rhs: CommentActionChromeProjectionInput) -> Bool {
+        if lhs.isLiked != rhs.isLiked {
+            return false
+        }
+        if lhs.isBookmarked != rhs.isBookmarked {
+            return false
+        }
+        if lhs.likeCount != rhs.likeCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isLiked)
+        hasher.combine(isBookmarked)
+        hasher.combine(likeCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentActionChromeProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentActionChromeProjectionInput {
+        return
+            try CommentActionChromeProjectionInput(
+                isLiked: FfiConverterBool.read(from: &buf),
+                isBookmarked: FfiConverterBool.read(from: &buf),
+                likeCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentActionChromeProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.isLiked, into: &buf)
+        FfiConverterBool.write(value.isBookmarked, into: &buf)
+        FfiConverterUInt32.write(value.likeCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentActionChromeProjectionInput_lift(_ buf: RustBuffer) throws -> CommentActionChromeProjectionInput {
+    return try FfiConverterTypeCommentActionChromeProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentActionChromeProjectionInput_lower(_ value: CommentActionChromeProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCommentActionChromeProjectionInput.lower(value)
 }
 
 
@@ -37468,6 +37688,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_chat_composer() != 32840) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_action_chrome() != 20671) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_composer() != 35257) {
