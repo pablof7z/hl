@@ -58,10 +58,10 @@ struct ClipThreadView: View {
                         send()
                     }
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(replyText.trimmingCharacters(in: .whitespaces).isEmpty
-                        ? Color.secondary
-                        : Color.highlighterAccent)
-                    .disabled(replyText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .foregroundStyle(composerProjection.canSubmit
+                        ? Color.highlighterAccent
+                        : Color.secondary)
+                    .disabled(!composerProjection.canSubmit)
                 }
             }
             .padding(.horizontal, 16)
@@ -77,9 +77,18 @@ struct ClipThreadView: View {
         }
     }
 
+    private var composerProjection: CommentComposerProjection {
+        app.safeCore.projectCommentComposer(
+            input: CommentComposerProjectionInput(
+                body: replyText,
+                isPublishing: isSending
+            )
+        )
+    }
+
     private func send() {
-        let text = replyText.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty, !isSending else { return }
+        let projection = composerProjection
+        guard projection.canSubmit else { return }
         isSending = true
         sendError = nil
         let id = clipEventId
@@ -92,7 +101,7 @@ struct ClipThreadView: View {
             }
             let outcome = await app.safeCore.publishCommentForScope(
                 scope: scope,
-                content: text
+                content: projection.submitBody
             )
             guard outcome.error.isEmpty, let record = outcome.value else {
                 sendError = outcome.error
