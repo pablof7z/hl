@@ -21,6 +21,14 @@ use crate::errors::CoreError;
 use crate::models::{CurrentUser, LoginInputAction};
 use crate::nip46::BunkerSigner;
 
+const COMPACT_NPUB_THRESHOLD: usize = 20;
+const COMPACT_NPUB_PREFIX: usize = 10;
+const COMPACT_NPUB_SUFFIX: usize = 8;
+const MASKED_NSEC_THRESHOLD: usize = 10;
+const MASKED_NSEC_PREFIX: usize = 8;
+const MASKED_NSEC_SUFFIX: usize = 6;
+const MASKED_NSEC_MIDDLE: &str = "••••••••••••••••••••••••";
+
 pub fn classify_login_input(input: &str) -> LoginInputAction {
     let trimmed = input.trim();
     let normalized = trimmed.strip_prefix("nostr:").unwrap_or(trimmed);
@@ -41,6 +49,77 @@ pub fn classify_login_input(input: &str) -> LoginInputAction {
             message: "Enter an nsec1… or bunker:// URI.".into(),
         }
     }
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PublicKeyDisplayProjectionInput {
+    pub npub: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PublicKeyDisplayProjection {
+    pub compact_label: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SecretKeyDisplayProjectionInput {
+    pub nsec: String,
+    pub is_revealed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SecretKeyDisplayProjection {
+    pub display_value: String,
+}
+
+/// Settings identity projection for the user's public NIP-19 key. Rust owns
+/// compact key labeling so native shells do not duplicate identity formatting.
+pub fn public_key_display_projection(
+    input: PublicKeyDisplayProjectionInput,
+) -> PublicKeyDisplayProjection {
+    PublicKeyDisplayProjection {
+        compact_label: compact_npub_label(&input.npub),
+    }
+}
+
+/// Secret-key display projection. Native shells may own ephemeral reveal
+/// toggles, but Rust owns how unrevealed identity material is masked.
+pub fn secret_key_display_projection(
+    input: SecretKeyDisplayProjectionInput,
+) -> SecretKeyDisplayProjection {
+    let display_value = if input.is_revealed {
+        input.nsec
+    } else {
+        masked_nsec_label(&input.nsec)
+    };
+    SecretKeyDisplayProjection { display_value }
+}
+
+fn compact_npub_label(npub: &str) -> String {
+    if npub.chars().count() <= COMPACT_NPUB_THRESHOLD {
+        return npub.to_string();
+    }
+
+    let prefix: String = npub.chars().take(COMPACT_NPUB_PREFIX).collect();
+    let suffix = trailing_chars(npub, COMPACT_NPUB_SUFFIX);
+    format!("{prefix}…{suffix}")
+}
+
+fn masked_nsec_label(nsec: &str) -> String {
+    let char_count = nsec.chars().count();
+    if char_count <= MASKED_NSEC_THRESHOLD {
+        return "•".repeat(char_count);
+    }
+
+    let prefix: String = nsec.chars().take(MASKED_NSEC_PREFIX).collect();
+    let suffix = trailing_chars(nsec, MASKED_NSEC_SUFFIX);
+    format!("{prefix}{MASKED_NSEC_MIDDLE}{suffix}")
+}
+
+fn trailing_chars(value: &str, count: usize) -> String {
+    let mut suffix: Vec<char> = value.chars().rev().take(count).collect();
+    suffix.reverse();
+    suffix.into_iter().collect()
 }
 
 #[derive(Default)]
@@ -280,5 +359,56 @@ mod tests {
                 message: "Enter an nsec1… or bunker:// URI.".into()
             }
         );
+    }
+
+    #[test]
+    fn public_key_display_projection_compacts_long_npubs() {
+        let projection = public_key_display_projection(PublicKeyDisplayProjectionInput {
+            npub: "npub1abcdefghijklmnopqrstuvwxyz".into(),
+        });
+
+        assert_eq!(projection.compact_label, "npub1abcde…stuvwxyz");
+    }
+
+    #[test]
+    fn public_key_display_projection_leaves_short_npubs_unmodified() {
+        let projection = public_key_display_projection(PublicKeyDisplayProjectionInput {
+            npub: "npub1short".into(),
+        });
+
+        assert_eq!(projection.compact_label, "npub1short");
+    }
+
+    #[test]
+    fn secret_key_display_projection_masks_hidden_nsec() {
+        let projection = secret_key_display_projection(SecretKeyDisplayProjectionInput {
+            nsec: "nsec1abcdefghijklmnopqrstuvwxyz".into(),
+            is_revealed: false,
+        });
+
+        assert_eq!(
+            projection.display_value,
+            "nsec1abc••••••••••••••••••••••••uvwxyz"
+        );
+    }
+
+    #[test]
+    fn secret_key_display_projection_masks_short_nsec_by_length() {
+        let projection = secret_key_display_projection(SecretKeyDisplayProjectionInput {
+            nsec: "nsec1".into(),
+            is_revealed: false,
+        });
+
+        assert_eq!(projection.display_value, "•••••");
+    }
+
+    #[test]
+    fn secret_key_display_projection_reveals_raw_nsec() {
+        let projection = secret_key_display_projection(SecretKeyDisplayProjectionInput {
+            nsec: "nsec1abcdefghijklmnopqrstuvwxyz".into(),
+            is_revealed: true,
+        });
+
+        assert_eq!(projection.display_value, "nsec1abcdefghijklmnopqrstuvwxyz");
     }
 }

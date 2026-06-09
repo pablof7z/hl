@@ -1456,6 +1456,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectProfileIdentity(input: ProfileIdentityProjectionInput)  -> ProfileIdentityProjection
 
+    func projectPublicKeyDisplay(input: PublicKeyDisplayProjectionInput)  -> PublicKeyDisplayProjection
+
     func projectRelayDetail(input: RelayDetailProjectionInput)  -> RelayDetailProjection
 
     func projectRelayRemove(input: RelayRemoveProjectionInput)  -> RelayRemoveProjection
@@ -1463,6 +1465,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectRelayRow(input: RelayRowProjectionInput)  -> RelayRowProjection
 
     func projectRelaySettings(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic])  -> RelaySettingsProjection
+
+    func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput)  -> SecretKeyDisplayProjection
 
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
 
@@ -4261,6 +4265,14 @@ open func projectProfileIdentity(input: ProfileIdentityProjectionInput) -> Profi
 })
 }
 
+open func projectPublicKeyDisplay(input: PublicKeyDisplayProjectionInput) -> PublicKeyDisplayProjection  {
+    return try!  FfiConverterTypePublicKeyDisplayProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_public_key_display(self.uniffiClonePointer(),
+        FfiConverterTypePublicKeyDisplayProjectionInput_lower(input),$0
+    )
+})
+}
+
 open func projectRelayDetail(input: RelayDetailProjectionInput) -> RelayDetailProjection  {
     return try!  FfiConverterTypeRelayDetailProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_relay_detail(self.uniffiClonePointer(),
@@ -4290,6 +4302,14 @@ open func projectRelaySettings(configuredRelays: [RelayConfig], diagnostics: [Re
     uniffi_highlighter_core_fn_method_highlightercore_project_relay_settings(self.uniffiClonePointer(),
         FfiConverterSequenceTypeRelayConfig.lower(configuredRelays),
         FfiConverterSequenceTypeRelayDiagnostic.lower(diagnostics),$0
+    )
+})
+}
+
+open func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput) -> SecretKeyDisplayProjection  {
+    return try!  FfiConverterTypeSecretKeyDisplayProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_secret_key_display(self.uniffiClonePointer(),
+        FfiConverterTypeSecretKeyDisplayProjectionInput_lower(input),$0
     )
 })
 }
@@ -16152,6 +16172,130 @@ public func FfiConverterTypeProfileUpdateDraft_lower(_ value: ProfileUpdateDraft
 }
 
 
+public struct PublicKeyDisplayProjection {
+    public var compactLabel: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(compactLabel: String) {
+        self.compactLabel = compactLabel
+    }
+}
+
+#if compiler(>=6)
+extension PublicKeyDisplayProjection: Sendable {}
+#endif
+
+
+extension PublicKeyDisplayProjection: Equatable, Hashable {
+    public static func ==(lhs: PublicKeyDisplayProjection, rhs: PublicKeyDisplayProjection) -> Bool {
+        if lhs.compactLabel != rhs.compactLabel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(compactLabel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublicKeyDisplayProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublicKeyDisplayProjection {
+        return
+            try PublicKeyDisplayProjection(
+                compactLabel: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PublicKeyDisplayProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.compactLabel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicKeyDisplayProjection_lift(_ buf: RustBuffer) throws -> PublicKeyDisplayProjection {
+    return try FfiConverterTypePublicKeyDisplayProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicKeyDisplayProjection_lower(_ value: PublicKeyDisplayProjection) -> RustBuffer {
+    return FfiConverterTypePublicKeyDisplayProjection.lower(value)
+}
+
+
+public struct PublicKeyDisplayProjectionInput {
+    public var npub: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(npub: String) {
+        self.npub = npub
+    }
+}
+
+#if compiler(>=6)
+extension PublicKeyDisplayProjectionInput: Sendable {}
+#endif
+
+
+extension PublicKeyDisplayProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: PublicKeyDisplayProjectionInput, rhs: PublicKeyDisplayProjectionInput) -> Bool {
+        if lhs.npub != rhs.npub {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(npub)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublicKeyDisplayProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublicKeyDisplayProjectionInput {
+        return
+            try PublicKeyDisplayProjectionInput(
+                npub: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PublicKeyDisplayProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.npub, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicKeyDisplayProjectionInput_lift(_ buf: RustBuffer) throws -> PublicKeyDisplayProjectionInput {
+    return try FfiConverterTypePublicKeyDisplayProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicKeyDisplayProjectionInput_lower(_ value: PublicKeyDisplayProjectionInput) -> RustBuffer {
+    return FfiConverterTypePublicKeyDisplayProjectionInput.lower(value)
+}
+
+
 public struct ReactionOutcome {
     public var value: ReactionRecord?
     public var error: String
@@ -18875,6 +19019,138 @@ public func FfiConverterTypeRoomRecommendationListOutcome_lift(_ buf: RustBuffer
 #endif
 public func FfiConverterTypeRoomRecommendationListOutcome_lower(_ value: RoomRecommendationListOutcome) -> RustBuffer {
     return FfiConverterTypeRoomRecommendationListOutcome.lower(value)
+}
+
+
+public struct SecretKeyDisplayProjection {
+    public var displayValue: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayValue: String) {
+        self.displayValue = displayValue
+    }
+}
+
+#if compiler(>=6)
+extension SecretKeyDisplayProjection: Sendable {}
+#endif
+
+
+extension SecretKeyDisplayProjection: Equatable, Hashable {
+    public static func ==(lhs: SecretKeyDisplayProjection, rhs: SecretKeyDisplayProjection) -> Bool {
+        if lhs.displayValue != rhs.displayValue {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayValue)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecretKeyDisplayProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecretKeyDisplayProjection {
+        return
+            try SecretKeyDisplayProjection(
+                displayValue: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SecretKeyDisplayProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayValue, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretKeyDisplayProjection_lift(_ buf: RustBuffer) throws -> SecretKeyDisplayProjection {
+    return try FfiConverterTypeSecretKeyDisplayProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretKeyDisplayProjection_lower(_ value: SecretKeyDisplayProjection) -> RustBuffer {
+    return FfiConverterTypeSecretKeyDisplayProjection.lower(value)
+}
+
+
+public struct SecretKeyDisplayProjectionInput {
+    public var nsec: String
+    public var isRevealed: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(nsec: String, isRevealed: Bool) {
+        self.nsec = nsec
+        self.isRevealed = isRevealed
+    }
+}
+
+#if compiler(>=6)
+extension SecretKeyDisplayProjectionInput: Sendable {}
+#endif
+
+
+extension SecretKeyDisplayProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: SecretKeyDisplayProjectionInput, rhs: SecretKeyDisplayProjectionInput) -> Bool {
+        if lhs.nsec != rhs.nsec {
+            return false
+        }
+        if lhs.isRevealed != rhs.isRevealed {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(nsec)
+        hasher.combine(isRevealed)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecretKeyDisplayProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecretKeyDisplayProjectionInput {
+        return
+            try SecretKeyDisplayProjectionInput(
+                nsec: FfiConverterString.read(from: &buf),
+                isRevealed: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SecretKeyDisplayProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.nsec, into: &buf)
+        FfiConverterBool.write(value.isRevealed, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretKeyDisplayProjectionInput_lift(_ buf: RustBuffer) throws -> SecretKeyDisplayProjectionInput {
+    return try FfiConverterTypeSecretKeyDisplayProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretKeyDisplayProjectionInput_lower(_ value: SecretKeyDisplayProjectionInput) -> RustBuffer {
+    return FfiConverterTypeSecretKeyDisplayProjectionInput.lower(value)
 }
 
 
@@ -24646,6 +24922,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_identity() != 18652) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_public_key_display() != 35557) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_detail() != 11729) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24656,6 +24935,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_settings() != 62661) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_secret_key_display() != 28126) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 1182) {

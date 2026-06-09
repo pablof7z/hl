@@ -959,6 +959,20 @@ impl HighlighterCore {
         crate::session::classify_login_input(&input)
     }
 
+    pub fn project_public_key_display(
+        &self,
+        input: crate::session::PublicKeyDisplayProjectionInput,
+    ) -> crate::session::PublicKeyDisplayProjection {
+        crate::session::public_key_display_projection(input)
+    }
+
+    pub fn project_secret_key_display(
+        &self,
+        input: crate::session::SecretKeyDisplayProjectionInput,
+    ) -> crate::session::SecretKeyDisplayProjection {
+        crate::session::secret_key_display_projection(input)
+    }
+
     pub fn login_nsec(&self, nsec: String) -> CurrentUserOutcome {
         let result: Result<CurrentUser, CoreError> = (|| {
             // Do the session mutation + keys extraction in a single write-guard

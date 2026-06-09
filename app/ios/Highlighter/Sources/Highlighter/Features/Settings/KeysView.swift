@@ -30,7 +30,7 @@ struct KeysView: View {
             if let nsec {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text(isRevealed ? nsec : maskedKey(nsec))
+                        Text(secretKeyDisplay(nsec).displayValue)
                             .font(.system(.footnote, design: .monospaced))
                             .foregroundStyle(isRevealed ? .primary : .secondary)
                             .lineLimit(isRevealed ? nil : 1)
@@ -141,8 +141,12 @@ struct KeysView: View {
 
     // MARK: - Helpers
 
-    private func maskedKey(_ key: String) -> String {
-        guard key.count > 10 else { return String(repeating: "•", count: key.count) }
-        return "\(key.prefix(8))••••••••••••••••••••••••\(key.suffix(6))"
+    private func secretKeyDisplay(_ nsec: String) -> SecretKeyDisplayProjection {
+        store.safeCore.projectSecretKeyDisplay(
+            input: SecretKeyDisplayProjectionInput(
+                nsec: nsec,
+                isRevealed: isRevealed
+            )
+        )
     }
 }

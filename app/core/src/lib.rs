@@ -115,5 +115,9 @@ pub use room_invites::{
     RoomInviteProjection, RoomInviteProjectionInput, RoomInviteResolvedCandidate,
     RoomInviteSendResultProjection, RoomInviteSuggestion,
 };
+pub use session::{
+    PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,
+    SecretKeyDisplayProjectionInput,
+};
 pub use web_metadata::WebMetadata;
 pub use whats_new::WhatsNewEntry;

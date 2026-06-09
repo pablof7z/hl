@@ -57,7 +57,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(projection.displayName)
                             .font(.title3.weight(.semibold))
-                        Text(shortenedNpub(user.npub))
+                        Text(publicKeyDisplay(for: user).compactLabel)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .monospaced()
@@ -132,9 +132,10 @@ struct SettingsView: View {
         )
     }
 
-    private func shortenedNpub(_ npub: String) -> String {
-        guard npub.count > 20 else { return npub }
-        return "\(npub.prefix(10))…\(npub.suffix(8))"
+    private func publicKeyDisplay(for user: CurrentUser) -> PublicKeyDisplayProjection {
+        store.safeCore.projectPublicKeyDisplay(
+            input: PublicKeyDisplayProjectionInput(npub: user.npub)
+        )
     }
 
     private var appVersionString: String {

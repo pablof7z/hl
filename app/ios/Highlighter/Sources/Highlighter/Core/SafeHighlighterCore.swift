@@ -577,6 +577,18 @@ actor SafeHighlighterCore {
         await core.getUserProfile(pubkeyHex: pubkeyHex)
     }
 
+    nonisolated func projectPublicKeyDisplay(
+        input: PublicKeyDisplayProjectionInput
+    ) -> PublicKeyDisplayProjection {
+        core.projectPublicKeyDisplay(input: input)
+    }
+
+    nonisolated func projectSecretKeyDisplay(
+        input: SecretKeyDisplayProjectionInput
+    ) -> SecretKeyDisplayProjection {
+        core.projectSecretKeyDisplay(input: input)
+    }
+
     nonisolated func projectProfileDisplay(
         input: ProfileDisplayProjectionInput
     ) -> ProfileDisplayProjection {
