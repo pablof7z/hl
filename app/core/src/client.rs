@@ -25,13 +25,13 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
-    ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome,
-    ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookmarkSetRecord,
-    CommentRecord, CommentReferenceBucket, CommentScope, CommunityListOutcome, CommunitySummary,
-    CurrentUser, DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord,
-    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction,
-    MutationOutcome, NostrConnectOptions, OnboardingInterest, OnboardingInterestProjection,
+    ArticleListOutcome, ArticleOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactOutcome,
+    ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome,
+    BookRoute, BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope,
+    CommunityListOutcome, CommunitySummary, CurrentUser, DataOutcome, DiscussionOutcome,
+    DiscussionRecord, FeedbackThreadRecord, HighlightListOutcome, HighlightOutcome,
+    HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
+    OnboardingInterest, OnboardingInterestProjection,
     OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
     ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome,
     SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
@@ -205,21 +205,6 @@ fn optional_article_outcome(result: Result<Option<ArticleRecord>, CoreError>) ->
             error: String::new(),
         },
         Err(error) => ArticleOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn article_reader_route_outcome(
-    result: Result<Option<ArticleReaderRoute>, CoreError>,
-) -> ArticleReaderRouteOutcome {
-    match result {
-        Ok(value) => ArticleReaderRouteOutcome {
-            value,
-            error: String::new(),
-        },
-        Err(error) => ArticleReaderRouteOutcome {
             value: None,
             error: error.to_string(),
         },
@@ -1491,27 +1476,6 @@ impl HighlighterCore {
     /// (`30023:<pubkey>:<d>`).
     pub async fn get_article_address_author(&self, address: String) -> OptionalStringOutcome {
         optional_string_outcome(Ok(articles::article_author_from_address(address.trim())))
-    }
-
-    /// Resolve a full NIP-23 article address into the native reader route.
-    /// Invalid or non-article addresses produce an empty value without error.
-    pub fn get_article_reader_route(&self, address: String) -> ArticleReaderRouteOutcome {
-        article_reader_route_outcome(Ok(articles::article_reader_route_from_address(
-            address.trim(),
-        )))
-    }
-
-    /// Resolve author + `d` tag into the native reader route. Rust owns the
-    /// canonical `30023:<pubkey>:<d>` address construction.
-    pub fn get_article_reader_route_for_article(
-        &self,
-        pubkey_hex: String,
-        d_tag: String,
-    ) -> ArticleReaderRouteOutcome {
-        article_reader_route_outcome(Ok(articles::article_reader_route(
-            pubkey_hex.trim(),
-            d_tag.trim(),
-        )))
     }
 
     pub fn project_article_reader_header(

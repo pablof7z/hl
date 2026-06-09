@@ -923,18 +923,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getArticleCommentScope(address: String)  -> CommentScopeSnapshot
 
     /**
-     * Resolve a full NIP-23 article address into the native reader route.
-     * Invalid or non-article addresses produce an empty value without error.
-     */
-    func getArticleReaderRoute(address: String)  -> ArticleReaderRouteOutcome
-
-    /**
-     * Resolve author + `d` tag into the native reader route. Rust owns the
-     * canonical `30023:<pubkey>:<d>` address construction.
-     */
-    func getArticleReaderRouteForArticle(pubkeyHex: String, dTag: String)  -> ArticleReaderRouteOutcome
-
-    /**
      * Full article-reader read model. Rust owns article/profile/highlight
      * cache reads, the highlight limit, and partial-failure fallback.
      */
@@ -2551,31 +2539,6 @@ open func getArticleCommentScope(address: String) -> CommentScopeSnapshot  {
     return try!  FfiConverterTypeCommentScopeSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_article_comment_scope(self.uniffiClonePointer(),
         FfiConverterString.lower(address),$0
-    )
-})
-}
-
-    /**
-     * Resolve a full NIP-23 article address into the native reader route.
-     * Invalid or non-article addresses produce an empty value without error.
-     */
-open func getArticleReaderRoute(address: String) -> ArticleReaderRouteOutcome  {
-    return try!  FfiConverterTypeArticleReaderRouteOutcome_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_article_reader_route(self.uniffiClonePointer(),
-        FfiConverterString.lower(address),$0
-    )
-})
-}
-
-    /**
-     * Resolve author + `d` tag into the native reader route. Rust owns the
-     * canonical `30023:<pubkey>:<d>` address construction.
-     */
-open func getArticleReaderRouteForArticle(pubkeyHex: String, dTag: String) -> ArticleReaderRouteOutcome  {
-    return try!  FfiConverterTypeArticleReaderRouteOutcome_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_article_reader_route_for_article(self.uniffiClonePointer(),
-        FfiConverterString.lower(pubkeyHex),
-        FfiConverterString.lower(dTag),$0
     )
 })
 }
@@ -7513,76 +7476,6 @@ public func FfiConverterTypeArticleReaderRoute_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeArticleReaderRoute_lower(_ value: ArticleReaderRoute) -> RustBuffer {
     return FfiConverterTypeArticleReaderRoute.lower(value)
-}
-
-
-public struct ArticleReaderRouteOutcome {
-    public var value: ArticleReaderRoute?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: ArticleReaderRoute?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ArticleReaderRouteOutcome: Sendable {}
-#endif
-
-
-extension ArticleReaderRouteOutcome: Equatable, Hashable {
-    public static func ==(lhs: ArticleReaderRouteOutcome, rhs: ArticleReaderRouteOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeArticleReaderRouteOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderRouteOutcome {
-        return
-            try ArticleReaderRouteOutcome(
-                value: FfiConverterOptionTypeArticleReaderRoute.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ArticleReaderRouteOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeArticleReaderRoute.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArticleReaderRouteOutcome_lift(_ buf: RustBuffer) throws -> ArticleReaderRouteOutcome {
-    return try FfiConverterTypeArticleReaderRouteOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArticleReaderRouteOutcome_lower(_ value: ArticleReaderRouteOutcome) -> RustBuffer {
-    return FfiConverterTypeArticleReaderRouteOutcome.lower(value)
 }
 
 
@@ -39239,12 +39132,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_comment_scope() != 12928) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_route() != 34058) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_route_for_article() != 30297) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_snapshot() != 58821) {

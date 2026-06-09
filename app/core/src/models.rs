@@ -129,12 +129,6 @@ pub struct ArticleOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct ArticleReaderRouteOutcome {
-    pub value: Option<ArticleReaderRoute>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct ArticleListOutcome {
     pub values: Vec<ArticleRecord>,
     pub error: String,

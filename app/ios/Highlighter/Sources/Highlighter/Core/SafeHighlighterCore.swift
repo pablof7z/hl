@@ -844,14 +844,6 @@ actor SafeHighlighterCore {
         await core.getArticleAddressAuthor(address: address)
     }
 
-    nonisolated func getArticleReaderRoute(address: String) -> ArticleReaderRouteOutcome {
-        core.getArticleReaderRoute(address: address)
-    }
-
-    nonisolated func getArticleReaderRouteForArticle(pubkeyHex: String, dTag: String) -> ArticleReaderRouteOutcome {
-        core.getArticleReaderRouteForArticle(pubkeyHex: pubkeyHex, dTag: dTag)
-    }
-
     nonisolated func projectArticleReaderHeader(
         input: ArticleReaderHeaderProjectionInput
     ) -> ArticleReaderHeaderProjection {
