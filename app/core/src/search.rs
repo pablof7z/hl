@@ -33,12 +33,31 @@ const KIND_HIGHLIGHT: u16 = 9802;
 /// kind:0 NIP-01 profile metadata.
 const KIND_METADATA: u16 = 0;
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchQueryProjectionInput {
+    pub query: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchQueryProjection {
+    pub search_query: String,
+    pub has_query: bool,
+}
+
 /// How many candidate notes to pull from ndb before filtering. Higher than the
 /// final `limit` so substring matches still surface when the candidate set is
 /// dominated by non-matching notes.
 const LOCAL_SCAN_MULTIPLIER: i32 = 8;
 const LOCAL_SCAN_FLOOR: i32 = 256;
 const LOCAL_SCAN_CEILING: i32 = 4096;
+
+pub fn search_query_projection(input: SearchQueryProjectionInput) -> SearchQueryProjection {
+    let search_query = input.query.trim().to_string();
+    SearchQueryProjection {
+        has_query: !search_query.is_empty(),
+        search_query,
+    }
+}
 
 fn scan_cap(limit: u32) -> i32 {
     let raw = (limit as i32).saturating_mul(LOCAL_SCAN_MULTIPLIER);
@@ -469,6 +488,21 @@ mod tests {
     fn process(ndb: &Ndb, event: &Event) {
         let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
         ndb.process_event(&line).unwrap();
+    }
+
+    #[test]
+    fn search_query_projection_trims_and_blocks_blank_queries() {
+        let ready = search_query_projection(SearchQueryProjectionInput {
+            query: "  nostr books\n".into(),
+        });
+        let blank = search_query_projection(SearchQueryProjectionInput {
+            query: " \n\t ".into(),
+        });
+
+        assert_eq!(ready.search_query, "nostr books");
+        assert!(ready.has_query);
+        assert_eq!(blank.search_query, "");
+        assert!(!blank.has_query);
     }
 
     #[test]

@@ -260,6 +260,12 @@ actor SafeHighlighterCore {
 
     // MARK: - Search (local ndb + NIP-50 relay)
 
+    nonisolated func projectSearchQuery(
+        input: SearchQueryProjectionInput
+    ) -> SearchQueryProjection {
+        core.projectSearchQuery(input: input)
+    }
+
     func searchHighlights(query: String, limit: UInt32 = 20) async -> HighlightListOutcome {
         await core.searchHighlights(query: query, limit: limit)
     }

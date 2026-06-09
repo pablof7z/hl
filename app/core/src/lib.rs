@@ -186,6 +186,7 @@ pub use room_preview::{
     RoomPreviewArtifactRowProjection, RoomPreviewArtifactsProjection,
     RoomPreviewArtifactsProjectionInput,
 };
+pub use search::{SearchQueryProjection, SearchQueryProjectionInput};
 pub use session::{
     PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,
     SecretKeyDisplayProjectionInput,

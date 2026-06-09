@@ -85,11 +85,10 @@ struct SearchView: View {
 
     @ViewBuilder
     private func content(store: SearchStore) -> some View {
-        let q = store.query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if q.isEmpty {
-            emptyState(store: store)
-        } else {
+        if store.hasQuery {
             results(store: store)
+        } else {
+            emptyState(store: store)
         }
     }
 
@@ -430,10 +429,12 @@ struct SearchView: View {
     // MARK: - Helpers
 
     private func commitRecentQuery() {
-        let q = (store?.query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return }
+        let projection = app.safeCore.projectSearchQuery(
+            input: SearchQueryProjectionInput(query: store?.query ?? "")
+        )
+        guard projection.hasQuery else { return }
         Task { @MainActor in
-            let outcome = await app.safeCore.recordRecentSearch(q)
+            let outcome = await app.safeCore.recordRecentSearch(projection.searchQuery)
             if outcome.error.isEmpty {
                 recentQueries = outcome.values
             }

@@ -2496,6 +2496,15 @@ impl HighlighterCore {
 
     // -- Search: across local nostrdb (all four surfaces) + NIP-50 relay ---
 
+    /// Project native search field state. Rust owns query trimming and whether
+    /// a search should run.
+    pub fn project_search_query(
+        &self,
+        input: crate::search::SearchQueryProjectionInput,
+    ) -> crate::search::SearchQueryProjection {
+        crate::search::search_query_projection(input)
+    }
+
     pub async fn search_highlights(&self, query: String, limit: u32) -> HighlightListOutcome {
         highlight_list_outcome(crate::search::search_highlights(
             self.runtime.ndb(),

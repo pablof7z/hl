@@ -26,6 +26,7 @@ final class SearchStore {
     private(set) var articles: [ArticleRecord] = []
     private(set) var communities: [CommunitySummary] = []
     private(set) var profiles: [ProfileMetadata] = []
+    private(set) var hasQuery: Bool = false
 
     /// True while a local scan is running for the current query — flickers to
     /// avoid a blank frame on a fresh query.
@@ -93,10 +94,17 @@ final class SearchStore {
         self.query = query
         // Fire immediately, replacing any in-flight query.
         searchTask?.cancel()
+        let projection = queryProjection(for: query)
+        guard projection.hasQuery else {
+            clearResultsForEmptyQuery()
+            return
+        }
+        hasQuery = true
+        isLocalLoading = true
         let token = bumpToken()
         searchTask = Task { [weak self] in
             guard let self else { return }
-            await self.runSearch(for: query, token: token)
+            await self.runSearch(for: projection.searchQuery, token: token)
         }
     }
 
@@ -104,6 +112,31 @@ final class SearchStore {
         searchTask?.cancel()
         searchTask = nil
         query = ""
+        clearResultsForEmptyQuery()
+    }
+
+    private func scheduleSearch(for q: String) {
+        searchTask?.cancel()
+        let projection = queryProjection(for: q)
+        if !projection.hasQuery {
+            clearResultsForEmptyQuery()
+            return
+        }
+        hasQuery = true
+        isLocalLoading = true
+        let token = bumpToken()
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runSearch(for: projection.searchQuery, token: token)
+        }
+    }
+
+    private func queryProjection(for query: String) -> SearchQueryProjection {
+        safeCore.projectSearchQuery(input: SearchQueryProjectionInput(query: query))
+    }
+
+    private func clearResultsForEmptyQuery() {
+        hasQuery = false
         appliedQuery = ""
         highlights = []
         articles = []
@@ -112,28 +145,6 @@ final class SearchStore {
         isLocalLoading = false
         isRelayLoading = false
         tearDownRelaySearch()
-    }
-
-    private func scheduleSearch(for q: String) {
-        searchTask?.cancel()
-        let trimmed = q.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            appliedQuery = ""
-            highlights = []
-            articles = []
-            communities = []
-            profiles = []
-            isLocalLoading = false
-            isRelayLoading = false
-            tearDownRelaySearch()
-            return
-        }
-        isLocalLoading = true
-        let token = bumpToken()
-        searchTask = Task { [weak self] in
-            guard let self else { return }
-            await self.runSearch(for: trimmed, token: token)
-        }
     }
 
     private func bumpToken() -> UInt64 {

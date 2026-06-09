@@ -1598,6 +1598,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput)  -> RoomRecommendationCardProjection
 
+    /**
+     * Project native search field state. Rust owns query trimming and whether
+     * a search should run.
+     */
+    func projectSearchQuery(input: SearchQueryProjectionInput)  -> SearchQueryProjection
+
     func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput)  -> SecretKeyDisplayProjection
 
     func projectShareArticleTarget(input: ShareArticleTargetProjectionInput)  -> ShareArtifactTargetProjection
@@ -4850,6 +4856,18 @@ open func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionI
     return try!  FfiConverterTypeRoomRecommendationCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_recommendation_card(self.uniffiClonePointer(),
         FfiConverterTypeRoomRecommendationCardProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project native search field state. Rust owns query trimming and whether
+     * a search should run.
+     */
+open func projectSearchQuery(input: SearchQueryProjectionInput) -> SearchQueryProjection  {
+    return try!  FfiConverterTypeSearchQueryProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_search_query(self.uniffiClonePointer(),
+        FfiConverterTypeSearchQueryProjectionInput_lower(input),$0
     )
 })
 }
@@ -26973,6 +26991,138 @@ public func FfiConverterTypeRoomRecommendationReasonProfile_lower(_ value: RoomR
 }
 
 
+public struct SearchQueryProjection {
+    public var searchQuery: String
+    public var hasQuery: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(searchQuery: String, hasQuery: Bool) {
+        self.searchQuery = searchQuery
+        self.hasQuery = hasQuery
+    }
+}
+
+#if compiler(>=6)
+extension SearchQueryProjection: Sendable {}
+#endif
+
+
+extension SearchQueryProjection: Equatable, Hashable {
+    public static func ==(lhs: SearchQueryProjection, rhs: SearchQueryProjection) -> Bool {
+        if lhs.searchQuery != rhs.searchQuery {
+            return false
+        }
+        if lhs.hasQuery != rhs.hasQuery {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(searchQuery)
+        hasher.combine(hasQuery)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchQueryProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchQueryProjection {
+        return
+            try SearchQueryProjection(
+                searchQuery: FfiConverterString.read(from: &buf),
+                hasQuery: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchQueryProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.searchQuery, into: &buf)
+        FfiConverterBool.write(value.hasQuery, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchQueryProjection_lift(_ buf: RustBuffer) throws -> SearchQueryProjection {
+    return try FfiConverterTypeSearchQueryProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchQueryProjection_lower(_ value: SearchQueryProjection) -> RustBuffer {
+    return FfiConverterTypeSearchQueryProjection.lower(value)
+}
+
+
+public struct SearchQueryProjectionInput {
+    public var query: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(query: String) {
+        self.query = query
+    }
+}
+
+#if compiler(>=6)
+extension SearchQueryProjectionInput: Sendable {}
+#endif
+
+
+extension SearchQueryProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: SearchQueryProjectionInput, rhs: SearchQueryProjectionInput) -> Bool {
+        if lhs.query != rhs.query {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(query)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchQueryProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchQueryProjectionInput {
+        return
+            try SearchQueryProjectionInput(
+                query: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchQueryProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.query, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchQueryProjectionInput_lift(_ buf: RustBuffer) throws -> SearchQueryProjectionInput {
+    return try FfiConverterTypeSearchQueryProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchQueryProjectionInput_lower(_ value: SearchQueryProjectionInput) -> RustBuffer {
+    return FfiConverterTypeSearchQueryProjectionInput.lower(value)
+}
+
+
 public struct SecretKeyDisplayProjection {
     public var displayValue: String
 
@@ -34274,6 +34424,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_recommendation_card() != 50552) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_query() != 17921) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_secret_key_display() != 28126) {
