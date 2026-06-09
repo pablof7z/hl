@@ -1406,6 +1406,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput)  -> ArticleReaderHeaderProjection
 
+    func projectCaptureBookDisplay(input: CaptureBookDisplayProjectionInput)  -> CaptureBookDisplayProjection
+
     /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
      * kind:9002 (edit-metadata) signed by the current user. Returns the
@@ -4221,6 +4223,14 @@ open func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput) 
     return try!  FfiConverterTypeArticleReaderHeaderProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_header(self.uniffiClonePointer(),
         FfiConverterTypeArticleReaderHeaderProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectCaptureBookDisplay(input: CaptureBookDisplayProjectionInput) -> CaptureBookDisplayProjection  {
+    return try!  FfiConverterTypeCaptureBookDisplayProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_capture_book_display(self.uniffiClonePointer(),
+        FfiConverterTypeCaptureBookDisplayProjectionInput_lower(input),$0
     )
 })
 }
@@ -8746,6 +8756,146 @@ public func FfiConverterTypeCacheStatsOutcome_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeCacheStatsOutcome_lower(_ value: CacheStatsOutcome) -> RustBuffer {
     return FfiConverterTypeCacheStatsOutcome.lower(value)
+}
+
+
+public struct CaptureBookDisplayProjection {
+    public var displayTitle: String
+    public var author: String?
+    public var imageUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayTitle: String, author: String?, imageUrl: String?) {
+        self.displayTitle = displayTitle
+        self.author = author
+        self.imageUrl = imageUrl
+    }
+}
+
+#if compiler(>=6)
+extension CaptureBookDisplayProjection: Sendable {}
+#endif
+
+
+extension CaptureBookDisplayProjection: Equatable, Hashable {
+    public static func ==(lhs: CaptureBookDisplayProjection, rhs: CaptureBookDisplayProjection) -> Bool {
+        if lhs.displayTitle != rhs.displayTitle {
+            return false
+        }
+        if lhs.author != rhs.author {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayTitle)
+        hasher.combine(author)
+        hasher.combine(imageUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCaptureBookDisplayProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureBookDisplayProjection {
+        return
+            try CaptureBookDisplayProjection(
+                displayTitle: FfiConverterString.read(from: &buf),
+                author: FfiConverterOptionString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CaptureBookDisplayProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayTitle, into: &buf)
+        FfiConverterOptionString.write(value.author, into: &buf)
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureBookDisplayProjection_lift(_ buf: RustBuffer) throws -> CaptureBookDisplayProjection {
+    return try FfiConverterTypeCaptureBookDisplayProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureBookDisplayProjection_lower(_ value: CaptureBookDisplayProjection) -> RustBuffer {
+    return FfiConverterTypeCaptureBookDisplayProjection.lower(value)
+}
+
+
+public struct CaptureBookDisplayProjectionInput {
+    public var preview: ArtifactPreview
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(preview: ArtifactPreview) {
+        self.preview = preview
+    }
+}
+
+#if compiler(>=6)
+extension CaptureBookDisplayProjectionInput: Sendable {}
+#endif
+
+
+extension CaptureBookDisplayProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CaptureBookDisplayProjectionInput, rhs: CaptureBookDisplayProjectionInput) -> Bool {
+        if lhs.preview != rhs.preview {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(preview)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCaptureBookDisplayProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureBookDisplayProjectionInput {
+        return
+            try CaptureBookDisplayProjectionInput(
+                preview: FfiConverterTypeArtifactPreview.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CaptureBookDisplayProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactPreview.write(value.preview, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureBookDisplayProjectionInput_lift(_ buf: RustBuffer) throws -> CaptureBookDisplayProjectionInput {
+    return try FfiConverterTypeCaptureBookDisplayProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureBookDisplayProjectionInput_lower(_ value: CaptureBookDisplayProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCaptureBookDisplayProjectionInput.lower(value)
 }
 
 
@@ -29433,6 +29583,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_header() != 55976) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_book_display() != 26332) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room() != 12904) {

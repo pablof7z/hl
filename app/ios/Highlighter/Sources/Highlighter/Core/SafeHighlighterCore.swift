@@ -469,6 +469,12 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func projectCaptureBookDisplay(
+        input: CaptureBookDisplayProjectionInput
+    ) -> CaptureBookDisplayProjection {
+        core.projectCaptureBookDisplay(input: input)
+    }
+
     func buildPreviewFromUrl(_ url: String) async -> ArtifactPreviewOutcome {
         await core.buildPreviewFromUrl(url: url)
     }

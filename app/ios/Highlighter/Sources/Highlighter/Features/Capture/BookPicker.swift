@@ -329,8 +329,10 @@ struct BookPicker: View {
     }
 
     private func searchRow(_ book: ArtifactRecord) -> some View {
-        HStack(spacing: 12) {
-            if !book.preview.image.isEmpty, let url = URL(string: book.preview.image) {
+        let projection = bookDisplay(book.preview)
+
+        return HStack(spacing: 12) {
+            if let imageURL = projection.imageUrl, let url = URL(string: imageURL) {
                 KFImage(url)
                     .placeholder { coverPlaceholder(title: book.preview.title) }
                     .fade(duration: 0.15)
@@ -344,12 +346,12 @@ struct BookPicker: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(book.preview.title.isEmpty ? "Untitled" : book.preview.title)
+                Text(projection.displayTitle)
                     .font(.body)
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
-                if !book.preview.author.isEmpty {
-                    Text(book.preview.author)
+                if let author = projection.author {
+                    Text(author)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
                 }
@@ -361,6 +363,12 @@ struct BookPicker: View {
         }
         .padding(12)
         .background(Color.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func bookDisplay(_ preview: ArtifactPreview) -> CaptureBookDisplayProjection {
+        appStore.safeCore.projectCaptureBookDisplay(
+            input: CaptureBookDisplayProjectionInput(preview: preview)
+        )
     }
 
     // MARK: - Photo-only

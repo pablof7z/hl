@@ -5,6 +5,7 @@ pub mod artifact_detail;
 pub mod artifacts;
 pub mod blossom;
 pub mod bookmarks;
+pub mod capture;
 pub mod chat;
 pub mod client;
 pub mod clock;
@@ -61,6 +62,7 @@ pub use articles::{
     ArticleProfileCardProjection, ArticleProfileCardProjectionInput, ArticleReaderHeaderProjection,
     ArticleReaderHeaderProjectionInput,
 };
+pub use capture::{CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput};
 pub use client::HighlighterCore;
 pub use discussions::{DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput};
 pub use errors::CoreError;
