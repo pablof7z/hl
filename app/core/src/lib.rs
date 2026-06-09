@@ -66,6 +66,9 @@ pub use artifact_detail::ArtifactDetailProjection;
 pub use capture::{
     CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput,
     CaptureCommunitySelectionProjection, CaptureCommunitySelectionProjectionInput,
+    CaptureHighlightDraftInput, CaptureHighlightDraftProjection, CapturePictureDraftInput,
+    CapturePublishPhase, CapturePublishProjection, CapturePublishProjectionInput,
+    CaptureStashProjection, CaptureStashProjectionInput,
 };
 pub use chat::{ChatComposerProjection, ChatComposerProjectionInput};
 pub use client::HighlighterCore;

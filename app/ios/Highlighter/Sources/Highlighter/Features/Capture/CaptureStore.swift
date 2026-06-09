@@ -81,13 +81,12 @@ final class CaptureStore {
     }
 
     var canPublish: Bool {
-        switch phase {
-        case .reviewing, .processing:
-            break
-        default:
-            return false
-        }
-        return upload != nil
+        safeCore.projectCapturePublish(
+            input: CapturePublishProjectionInput(
+                phase: capturePublishPhase,
+                hasUpload: upload != nil
+            )
+        ).canPublish
     }
 
     /// Entry point: user just snapped a photo. Strip metadata, kick OCR +
@@ -177,10 +176,15 @@ final class CaptureStore {
     /// Stash the user's current text selection as a pending highlight. Does
     /// not publish — Publish is the terminal action.
     func stashHighlight(quote: String, context: String, selectedBoxes: [CGRect] = []) {
-        let trimmedQuote = quote.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedQuote.isEmpty else { return }
-        stashedQuote = trimmedQuote
-        stashedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
+        let projection = safeCore.projectCaptureStash(
+            input: CaptureStashProjectionInput(
+                quote: quote,
+                context: context
+            )
+        )
+        guard projection.shouldStash else { return }
+        stashedQuote = projection.quote
+        stashedContext = projection.context
         selectedHighlightBoxes = selectedBoxes
         if let processedJPEG {
             highlightCropBox = defaultHighlightCropBox(processed: processedJPEG)
@@ -232,10 +236,8 @@ final class CaptureStore {
     /// from the preview so the highlight still carries the reference tags.
     func publish() {
         guard let upload else { return }
-        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let selection = selectedBook
         let groupId = selectedGroupId
-        let quote = stashedQuote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         // Refresh the imeta alt to reflect the current (possibly edited) OCR.
         let imageWithAlt = BlossomUpload(
@@ -247,25 +249,23 @@ final class CaptureStore {
             height: upload.height,
             alt: safeCore.ocrAltText(from: ocrMarkdown)
         )
+        let highlightDraftProjection = safeCore.buildCaptureHighlightDraft(
+            input: CaptureHighlightDraftInput(
+                quote: stashedQuote ?? "",
+                context: stashedContext,
+                note: note,
+                image: imageWithAlt
+            )
+        )
 
         phase = .publishing
         Task {
-            if !quote.isEmpty, let selection {
+            if let draft = highlightDraftProjection.draft, let selection {
                 let artifactOutcome = await resolveArtifact(selection, groupId: groupId)
                 guard artifactOutcome.error.isEmpty, let artifact = artifactOutcome.value else {
                     self.phase = .error(artifactOutcome.error)
                     return
                 }
-                let draft = HighlightDraft(
-                    quote: quote,
-                    context: stashedContext,
-                    note: trimmedNote,
-                    clipStartSeconds: nil,
-                    clipEndSeconds: nil,
-                    clipSpeaker: "",
-                    clipTranscriptSegmentIds: [],
-                    image: imageWithAlt
-                )
                 if let groupId {
                     let outcome = await safeCore.publishHighlightsAndShare(
                         artifact: artifact,
@@ -313,11 +313,13 @@ final class CaptureStore {
                 case nil:
                     artifactForPicture = nil
                 }
-                let draft = PictureDraft(
-                    image: imageWithAlt,
-                    note: trimmedNote,
-                    artifact: artifactForPicture,
-                    targetGroupId: groupId
+                let draft = safeCore.buildCapturePictureDraft(
+                    input: CapturePictureDraftInput(
+                        image: imageWithAlt,
+                        note: note,
+                        artifact: artifactForPicture,
+                        targetGroupId: groupId
+                    )
                 )
                 let outcome = await safeCore.publishPicture(draft)
                 guard outcome.error.isEmpty, let record = outcome.value else {
@@ -464,5 +466,22 @@ final class CaptureStore {
             imageHeight: Double(processed.height),
             marginFraction: highlightCropMarginFraction
         )?.cgRect
+    }
+
+    private var capturePublishPhase: CapturePublishPhase {
+        switch phase {
+        case .idle:
+            return .idle
+        case .processing:
+            return .processing
+        case .reviewing:
+            return .reviewing
+        case .publishing:
+            return .publishing
+        case .done:
+            return .done
+        case .error:
+            return .error
+        }
     }
 }

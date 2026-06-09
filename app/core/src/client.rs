@@ -3017,6 +3017,34 @@ impl HighlighterCore {
         crate::capture::community_selection_projection(input)
     }
 
+    pub fn project_capture_stash(
+        &self,
+        input: crate::capture::CaptureStashProjectionInput,
+    ) -> crate::capture::CaptureStashProjection {
+        crate::capture::stash_projection(input)
+    }
+
+    pub fn project_capture_publish(
+        &self,
+        input: crate::capture::CapturePublishProjectionInput,
+    ) -> crate::capture::CapturePublishProjection {
+        crate::capture::publish_projection(input)
+    }
+
+    pub fn build_capture_highlight_draft(
+        &self,
+        input: crate::capture::CaptureHighlightDraftInput,
+    ) -> crate::capture::CaptureHighlightDraftProjection {
+        crate::capture::highlight_draft_projection(input)
+    }
+
+    pub fn build_capture_picture_draft(
+        &self,
+        input: crate::capture::CapturePictureDraftInput,
+    ) -> PictureDraft {
+        crate::capture::picture_draft(input)
+    }
+
     pub fn reconstruct_ocr_markdown(&self, lines: Vec<crate::ocr::OcrLine>) -> String {
         crate::ocr::reconstruct_markdown(&lines)
     }

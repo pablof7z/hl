@@ -1,4 +1,6 @@
-use crate::models::{ArtifactPreview, CommunitySummary};
+use crate::models::{
+    ArtifactPreview, ArtifactRecord, BlossomUpload, CommunitySummary, HighlightDraft, PictureDraft,
+};
 
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CaptureBookDisplayProjectionInput {
@@ -22,6 +24,62 @@ pub struct CaptureCommunitySelectionProjectionInput {
 pub struct CaptureCommunitySelectionProjection {
     pub display_name: String,
     pub has_selection: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CaptureStashProjectionInput {
+    pub quote: String,
+    pub context: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CaptureStashProjection {
+    pub quote: String,
+    pub context: String,
+    pub should_stash: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CapturePublishPhase {
+    Idle,
+    Processing,
+    Reviewing,
+    Publishing,
+    Done,
+    Error,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CapturePublishProjectionInput {
+    pub phase: CapturePublishPhase,
+    pub has_upload: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CapturePublishProjection {
+    pub can_publish: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CaptureHighlightDraftInput {
+    pub quote: String,
+    pub context: String,
+    pub note: String,
+    pub image: BlossomUpload,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CaptureHighlightDraftProjection {
+    pub draft: Option<HighlightDraft>,
+    pub has_highlight: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CapturePictureDraftInput {
+    pub image: BlossomUpload,
+    pub note: String,
+    pub artifact: Option<ArtifactRecord>,
+    pub target_group_id: Option<String>,
 }
 
 /// Project book labels used by capture selection and search rows. Rust owns
@@ -58,6 +116,74 @@ pub fn community_selection_projection(
     CaptureCommunitySelectionProjection {
         display_name,
         has_selection: selected_group_id.is_some(),
+    }
+}
+
+/// Project a selected OCR passage into a stashed highlight. Rust owns text
+/// normalization and blank-selection rejection.
+pub fn stash_projection(input: CaptureStashProjectionInput) -> CaptureStashProjection {
+    let quote = input.quote.trim().to_string();
+    let context = input.context.trim().to_string();
+    CaptureStashProjection {
+        should_stash: !quote.is_empty(),
+        quote,
+        context,
+    }
+}
+
+/// Capture publish button projection. Rust owns the workflow-state predicate;
+/// native shells own how that state is rendered.
+pub fn publish_projection(input: CapturePublishProjectionInput) -> CapturePublishProjection {
+    let phase_allows_publish = matches!(
+        input.phase,
+        CapturePublishPhase::Processing | CapturePublishPhase::Reviewing
+    );
+    CapturePublishProjection {
+        can_publish: phase_allows_publish && input.has_upload,
+    }
+}
+
+/// Build the capture highlight draft. Rust owns note/context/quote
+/// normalization and the non-audio clip sentinel fields.
+pub fn highlight_draft_projection(
+    input: CaptureHighlightDraftInput,
+) -> CaptureHighlightDraftProjection {
+    let quote = input.quote.trim().to_string();
+    if quote.is_empty() {
+        return CaptureHighlightDraftProjection {
+            draft: None,
+            has_highlight: false,
+        };
+    }
+
+    CaptureHighlightDraftProjection {
+        draft: Some(HighlightDraft {
+            quote,
+            context: input.context.trim().to_string(),
+            note: input.note.trim().to_string(),
+            clip_start_seconds: None,
+            clip_end_seconds: None,
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: Vec::new(),
+            image: Some(input.image),
+        }),
+        has_highlight: true,
+    }
+}
+
+/// Build the capture picture draft. Rust owns note and target-room
+/// normalization; native shells provide already-resolved artifact context.
+pub fn picture_draft(input: CapturePictureDraftInput) -> PictureDraft {
+    PictureDraft {
+        image: input.image,
+        note: input.note.trim().to_string(),
+        artifact: input.artifact,
+        target_group_id: input
+            .target_group_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(str::to_string),
     }
 }
 
@@ -137,6 +263,98 @@ mod tests {
         assert!(projection.has_selection);
     }
 
+    #[test]
+    fn stash_projection_trims_and_rejects_blank_quote() {
+        let projection = stash_projection(CaptureStashProjectionInput {
+            quote: "  quote from page  ".into(),
+            context: "  paragraph context  ".into(),
+        });
+
+        assert_eq!(projection.quote, "quote from page");
+        assert_eq!(projection.context, "paragraph context");
+        assert!(projection.should_stash);
+
+        let blank = stash_projection(CaptureStashProjectionInput {
+            quote: " \n\t ".into(),
+            context: "ignored".into(),
+        });
+        assert!(!blank.should_stash);
+        assert_eq!(blank.quote, "");
+    }
+
+    #[test]
+    fn publish_projection_requires_processing_or_reviewing_upload() {
+        let reviewing = publish_projection(CapturePublishProjectionInput {
+            phase: CapturePublishPhase::Reviewing,
+            has_upload: true,
+        });
+        let processing = publish_projection(CapturePublishProjectionInput {
+            phase: CapturePublishPhase::Processing,
+            has_upload: true,
+        });
+        let no_upload = publish_projection(CapturePublishProjectionInput {
+            phase: CapturePublishPhase::Reviewing,
+            has_upload: false,
+        });
+        let publishing = publish_projection(CapturePublishProjectionInput {
+            phase: CapturePublishPhase::Publishing,
+            has_upload: true,
+        });
+
+        assert!(reviewing.can_publish);
+        assert!(processing.can_publish);
+        assert!(!no_upload.can_publish);
+        assert!(!publishing.can_publish);
+    }
+
+    #[test]
+    fn highlight_draft_projection_trims_and_omits_blank_quote() {
+        let projection = highlight_draft_projection(CaptureHighlightDraftInput {
+            quote: "  quote  ".into(),
+            context: "  context  ".into(),
+            note: "  note  ".into(),
+            image: upload(),
+        });
+        let draft = projection.draft.expect("highlight draft");
+
+        assert!(projection.has_highlight);
+        assert_eq!(draft.quote, "quote");
+        assert_eq!(draft.context, "context");
+        assert_eq!(draft.note, "note");
+        assert!(draft.image.is_some());
+        assert_eq!(draft.clip_start_seconds, None);
+        assert!(draft.clip_transcript_segment_ids.is_empty());
+
+        let blank = highlight_draft_projection(CaptureHighlightDraftInput {
+            quote: " \n\t ".into(),
+            context: "context".into(),
+            note: "note".into(),
+            image: upload(),
+        });
+        assert!(!blank.has_highlight);
+        assert!(blank.draft.is_none());
+    }
+
+    #[test]
+    fn picture_draft_trims_note_and_target_group() {
+        let draft = picture_draft(CapturePictureDraftInput {
+            image: upload(),
+            note: "  page note  ".into(),
+            artifact: None,
+            target_group_id: Some("  room-a  ".into()),
+        });
+        let standalone = picture_draft(CapturePictureDraftInput {
+            image: upload(),
+            note: String::new(),
+            artifact: None,
+            target_group_id: Some(" \n\t ".into()),
+        });
+
+        assert_eq!(draft.note, "page note");
+        assert_eq!(draft.target_group_id, Some("room-a".into()));
+        assert_eq!(standalone.target_group_id, None);
+    }
+
     fn preview(title: &str, author: &str, image: &str) -> ArtifactPreview {
         ArtifactPreview {
             id: "book".into(),
@@ -165,6 +383,18 @@ mod tests {
             highlight_tag_value: "isbn:9780593716717".into(),
             highlight_reference_key: "i:isbn:9780593716717".into(),
             chapters: Vec::<Chapter>::new(),
+        }
+    }
+
+    fn upload() -> BlossomUpload {
+        BlossomUpload {
+            url: "https://blossom.example/page.jpg".into(),
+            sha256_hex: "abc123".into(),
+            mime: "image/jpeg".into(),
+            size_bytes: 1024,
+            width: 800,
+            height: 1200,
+            alt: "page text".into(),
         }
     }
 

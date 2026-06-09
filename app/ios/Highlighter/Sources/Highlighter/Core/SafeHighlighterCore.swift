@@ -505,6 +505,30 @@ actor SafeHighlighterCore {
         core.projectCaptureCommunitySelection(input: input)
     }
 
+    nonisolated func projectCaptureStash(
+        input: CaptureStashProjectionInput
+    ) -> CaptureStashProjection {
+        core.projectCaptureStash(input: input)
+    }
+
+    nonisolated func projectCapturePublish(
+        input: CapturePublishProjectionInput
+    ) -> CapturePublishProjection {
+        core.projectCapturePublish(input: input)
+    }
+
+    nonisolated func buildCaptureHighlightDraft(
+        input: CaptureHighlightDraftInput
+    ) -> CaptureHighlightDraftProjection {
+        core.buildCaptureHighlightDraft(input: input)
+    }
+
+    nonisolated func buildCapturePictureDraft(
+        input: CapturePictureDraftInput
+    ) -> PictureDraft {
+        core.buildCapturePictureDraft(input: input)
+    }
+
     func buildPreviewFromUrl(_ url: String) async -> ArtifactPreviewOutcome {
         await core.buildPreviewFromUrl(url: url)
     }
