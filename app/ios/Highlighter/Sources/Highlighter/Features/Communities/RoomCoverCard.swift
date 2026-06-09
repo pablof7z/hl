@@ -9,6 +9,8 @@ struct RoomCoverCard: View {
     /// When `nil`, the card fills the width its container gives it.
     let fixedWidth: CGFloat?
 
+    @Environment(HighlighterStore.self) private var store
+
     init(room: CommunitySummary, width: CGFloat? = nil) {
         self.room = room
         self.fixedWidth = width
@@ -52,18 +54,19 @@ struct RoomCoverCard: View {
 
     @ViewBuilder
     private var cover: some View {
-        if let url = URL(string: room.picture), !room.picture.isEmpty {
+        let avatar = avatarProjection
+        if let url = URL(string: avatar.pictureUrl), !avatar.pictureUrl.isEmpty {
             KFImage(url)
-                .placeholder { coverFallback }
+                .placeholder { coverFallback(avatar) }
                 .fade(duration: 0.15)
                 .resizable()
                 .scaledToFill()
         } else {
-            coverFallback
+            coverFallback(avatar)
         }
     }
 
-    private var coverFallback: some View {
+    private func coverFallback(_ avatar: RoomAvatarProjection) -> some View {
         GeometryReader { geo in
             ZStack {
                 LinearGradient(
@@ -74,12 +77,22 @@ struct RoomCoverCard: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                if let ch = room.name.first {
-                    Text(String(ch).uppercased())
+                if !avatar.displayInitial.isEmpty {
+                    Text(avatar.displayInitial)
                         .font(.system(size: geo.size.width * 0.42, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.88))
                 }
             }
         }
+    }
+
+    private var avatarProjection: RoomAvatarProjection {
+        store.safeCore.projectRoomAvatar(
+            input: RoomAvatarProjectionInput(
+                name: room.name,
+                pictureUrl: room.picture,
+                uppercaseInitial: true
+            )
+        )
     }
 }

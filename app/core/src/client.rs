@@ -3378,6 +3378,13 @@ impl HighlighterCore {
         groups::create_room_projection(input)
     }
 
+    pub fn project_room_avatar(
+        &self,
+        input: groups::RoomAvatarProjectionInput,
+    ) -> groups::RoomAvatarProjection {
+        groups::room_avatar_projection(input)
+    }
+
     pub async fn create_room(
         &self,
         name: String,

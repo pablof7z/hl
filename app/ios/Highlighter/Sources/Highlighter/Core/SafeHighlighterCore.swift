@@ -1024,6 +1024,10 @@ actor SafeHighlighterCore {
         core.projectCreateRoom(input: input)
     }
 
+    nonisolated func projectRoomAvatar(input: RoomAvatarProjectionInput) -> RoomAvatarProjection {
+        core.projectRoomAvatar(input: input)
+    }
+
     func addRoomMember(groupId: String, pubkeyHex: String) async -> StringOutcome {
         await core.addRoomMember(groupId: groupId, pubkeyHex: pubkeyHex)
     }

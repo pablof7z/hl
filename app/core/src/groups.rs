@@ -42,6 +42,40 @@ pub(crate) fn room_names_for_relay(
         .collect()
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomAvatarProjectionInput {
+    pub name: String,
+    pub picture_url: String,
+    pub uppercase_initial: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomAvatarProjection {
+    pub picture_url: String,
+    pub display_initial: String,
+}
+
+/// Room cover/avatar projection. Rust owns room-picture fallback identity;
+/// native shells render the returned fields with platform-native image views.
+pub fn room_avatar_projection(input: RoomAvatarProjectionInput) -> RoomAvatarProjection {
+    let raw_initial: String = input
+        .name
+        .chars()
+        .next()
+        .map(|first| first.to_string())
+        .unwrap_or_default();
+    let display_initial = if input.uppercase_initial {
+        raw_initial.to_uppercase()
+    } else {
+        raw_initial
+    };
+
+    RoomAvatarProjection {
+        picture_url: input.picture_url,
+        display_initial,
+    }
+}
+
 pub fn query_joined_room_names_for_relay_from_ndb(
     ndb: &Ndb,
     current_pubkey_hex: &str,
@@ -814,6 +848,51 @@ mod tests {
         let names = room_names_for_relay(rooms, "wss://relay.example.com");
 
         assert_eq!(names, vec!["Alpha", "bravo"]);
+    }
+
+    #[test]
+    fn room_avatar_projection_uppercases_room_initial() {
+        let projection = room_avatar_projection(RoomAvatarProjectionInput {
+            name: "alpha readers".into(),
+            picture_url: "https://example.com/cover.png".into(),
+            uppercase_initial: true,
+        });
+
+        assert_eq!(
+            projection,
+            RoomAvatarProjection {
+                picture_url: "https://example.com/cover.png".into(),
+                display_initial: "A".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn room_avatar_projection_allows_empty_name_fallback() {
+        let projection = room_avatar_projection(RoomAvatarProjectionInput {
+            name: String::new(),
+            picture_url: String::new(),
+            uppercase_initial: true,
+        });
+
+        assert_eq!(
+            projection,
+            RoomAvatarProjection {
+                picture_url: String::new(),
+                display_initial: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn room_avatar_projection_can_preserve_initial_case() {
+        let projection = room_avatar_projection(RoomAvatarProjectionInput {
+            name: "alpha readers".into(),
+            picture_url: String::new(),
+            uppercase_initial: false,
+        });
+
+        assert_eq!(projection.display_initial, "a");
     }
 
     #[test]

@@ -598,7 +598,10 @@ private struct RoomCoverArt: View {
     let name: String
     let size: CGFloat
 
+    @Environment(HighlighterStore.self) private var app
+
     var body: some View {
+        let avatar = avatarProjection
         ZStack {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(
@@ -611,7 +614,7 @@ private struct RoomCoverArt: View {
                         endPoint: .bottomTrailing
                     )
                 )
-            if let url = URL(string: picture), !picture.isEmpty {
+            if let url = URL(string: avatar.pictureUrl), !avatar.pictureUrl.isEmpty {
                 AsyncImage(url: url) { phase in
                     if case .success(let image) = phase {
                         image.resizable().aspectRatio(contentMode: .fill)
@@ -620,7 +623,7 @@ private struct RoomCoverArt: View {
                 .frame(width: size, height: size)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
-                Text(String(name.prefix(1)))
+                Text(avatar.displayInitial)
                     .font(.system(size: size * 0.38, design: .default).weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong.opacity(0.75))
             }
@@ -630,6 +633,16 @@ private struct RoomCoverArt: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.highlighterRule, lineWidth: 0.5)
         }
+    }
+
+    private var avatarProjection: RoomAvatarProjection {
+        app.safeCore.projectRoomAvatar(
+            input: RoomAvatarProjectionInput(
+                name: name,
+                pictureUrl: picture,
+                uppercaseInitial: false
+            )
+        )
     }
 }
 

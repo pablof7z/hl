@@ -62,7 +62,7 @@ pub use feedback::{
 };
 pub use groups::{
     CreateRoomProjection, CreateRoomProjectionInput, CreateRoomVisibilityOption, RoomAccess,
-    RoomVisibility,
+    RoomAvatarProjection, RoomAvatarProjectionInput, RoomVisibility,
 };
 pub use models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,

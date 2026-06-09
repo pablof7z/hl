@@ -181,7 +181,10 @@ private struct SeeAllHighlightRow: View {
 private struct SeeAllCommunityRow: View {
     let community: CommunitySummary
 
+    @Environment(HighlighterStore.self) private var app
+
     var body: some View {
+        let avatar = avatarProjection
         HStack(spacing: 14) {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(
@@ -196,7 +199,7 @@ private struct SeeAllCommunityRow: View {
                 )
                 .frame(width: 56, height: 56)
                 .overlay {
-                    if !community.picture.isEmpty, let url = URL(string: community.picture) {
+                    if !avatar.pictureUrl.isEmpty, let url = URL(string: avatar.pictureUrl) {
                         AsyncImage(url: url) { phase in
                             if case .success(let img) = phase {
                                 img.resizable().aspectRatio(contentMode: .fill)
@@ -205,7 +208,7 @@ private struct SeeAllCommunityRow: View {
                         .frame(width: 56, height: 56)
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     } else {
-                        Text(String(community.name.prefix(1)))
+                        Text(avatar.displayInitial)
                             .font(.system(size: 22, design: .default).weight(.semibold))
                             .foregroundStyle(Color.highlighterInkStrong.opacity(0.8))
                     }
@@ -233,6 +236,16 @@ private struct SeeAllCommunityRow: View {
         }
         .padding(.vertical, 10)
         .contentShape(Rectangle())
+    }
+
+    private var avatarProjection: RoomAvatarProjection {
+        app.safeCore.projectRoomAvatar(
+            input: RoomAvatarProjectionInput(
+                name: community.name,
+                pictureUrl: community.picture,
+                uppercaseInitial: false
+            )
+        )
     }
 }
 
