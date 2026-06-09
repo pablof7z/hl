@@ -955,6 +955,12 @@ actor SafeHighlighterCore {
         core.projectShareHighlightArticleTarget(input: input)
     }
 
+    nonisolated func projectShareQueueDrain(
+        input: ShareQueueDrainProjectionInput
+    ) -> ShareQueueDrainProjection {
+        core.projectShareQueueDrain(input: input)
+    }
+
     nonisolated func projectCommunityRow(
         input: CommunityRowProjectionInput
     ) -> CommunityRowProjection {

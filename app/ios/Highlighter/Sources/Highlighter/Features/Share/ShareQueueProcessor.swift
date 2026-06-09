@@ -17,14 +17,13 @@ enum ShareQueueProcessor {
         let pending = ShareQueue.drain()
         if pending.isEmpty { return 0 }
 
-        var requeue: [PendingShare] = []
-        var successCount = 0
-        var lastSuccessCommunity: String?
+        var attempts: [ShareQueueAttempt] = []
 
         for share in pending {
+            let item = share.coreQueueItem
             let previewOutcome = await app.safeCore.buildPreviewFromUrl(share.url)
             guard previewOutcome.error.isEmpty, let preview = previewOutcome.value else {
-                requeue.append(share)
+                attempts.append(ShareQueueAttempt(item: item, succeeded: false))
                 continue
             }
             let outcome = await app.safeCore.publishArtifact(
@@ -33,28 +32,49 @@ enum ShareQueueProcessor {
                 note: share.note
             )
             guard outcome.error.isEmpty else {
-                requeue.append(share)
+                attempts.append(ShareQueueAttempt(item: item, succeeded: false))
                 continue
             }
-            successCount += 1
-            if let community = app.joinedCommunities.first(where: { $0.id == share.groupId }) {
-                lastSuccessCommunity = community.name
-            } else {
-                lastSuccessCommunity = share.groupId
-            }
+            attempts.append(ShareQueueAttempt(item: item, succeeded: true))
         }
 
-        if !requeue.isEmpty {
-            ShareQueue.replace(requeue)
+        let projection = app.safeCore.projectShareQueueDrain(
+            input: ShareQueueDrainProjectionInput(
+                attempts: attempts,
+                communities: app.joinedCommunities
+            )
+        )
+
+        if !projection.requeue.isEmpty {
+            ShareQueue.replace(projection.requeue.map(PendingShare.init(core:)))
         }
 
-        if successCount > 0 {
-            let label = lastSuccessCommunity ?? "community"
-            app.shareToast = successCount == 1
-                ? "Shared to \(label)"
-                : "Shared \(successCount) items"
+        if let toast = projection.toast {
+            app.shareToast = toast
         }
 
-        return successCount
+        return Int(projection.successCount)
+    }
+}
+
+private extension PendingShare {
+    var coreQueueItem: ShareQueueItem {
+        ShareQueueItem(
+            id: id.uuidString,
+            groupId: groupId,
+            url: url,
+            note: note,
+            createdAtUnixSeconds: createdAt.timeIntervalSince1970
+        )
+    }
+
+    init(core item: ShareQueueItem) {
+        self.init(
+            id: UUID(uuidString: item.id) ?? UUID(),
+            groupId: item.groupId,
+            url: item.url,
+            note: item.note,
+            createdAt: Date(timeIntervalSince1970: item.createdAtUnixSeconds)
+        )
     }
 }

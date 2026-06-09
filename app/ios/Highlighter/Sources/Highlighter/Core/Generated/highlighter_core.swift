@@ -1654,6 +1654,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectShareHighlightTarget(input: ShareHighlightTargetProjectionInput)  -> ShareHighlightTargetProjection
 
+    func projectShareQueueDrain(input: ShareQueueDrainProjectionInput)  -> ShareQueueDrainProjection
+
     func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput)  -> ShareArtifactTargetProjection
 
     func projectWebBookmarkRow(input: WebBookmarkRowProjectionInput)  -> WebBookmarkRowProjection
@@ -5039,6 +5041,14 @@ open func projectShareHighlightTarget(input: ShareHighlightTargetProjectionInput
     return try!  FfiConverterTypeShareHighlightTargetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_highlight_target(self.uniffiClonePointer(),
         FfiConverterTypeShareHighlightTargetProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectShareQueueDrain(input: ShareQueueDrainProjectionInput) -> ShareQueueDrainProjection  {
+    return try!  FfiConverterTypeShareQueueDrainProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_share_queue_drain(self.uniffiClonePointer(),
+        FfiConverterTypeShareQueueDrainProjectionInput_lower(input),$0
     )
 })
 }
@@ -28939,6 +28949,318 @@ public func FfiConverterTypeShareHighlightTargetProjectionInput_lower(_ value: S
 }
 
 
+public struct ShareQueueAttempt {
+    public var item: ShareQueueItem
+    public var succeeded: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(item: ShareQueueItem, succeeded: Bool) {
+        self.item = item
+        self.succeeded = succeeded
+    }
+}
+
+#if compiler(>=6)
+extension ShareQueueAttempt: Sendable {}
+#endif
+
+
+extension ShareQueueAttempt: Equatable, Hashable {
+    public static func ==(lhs: ShareQueueAttempt, rhs: ShareQueueAttempt) -> Bool {
+        if lhs.item != rhs.item {
+            return false
+        }
+        if lhs.succeeded != rhs.succeeded {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(item)
+        hasher.combine(succeeded)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareQueueAttempt: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareQueueAttempt {
+        return
+            try ShareQueueAttempt(
+                item: FfiConverterTypeShareQueueItem.read(from: &buf),
+                succeeded: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareQueueAttempt, into buf: inout [UInt8]) {
+        FfiConverterTypeShareQueueItem.write(value.item, into: &buf)
+        FfiConverterBool.write(value.succeeded, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareQueueAttempt_lift(_ buf: RustBuffer) throws -> ShareQueueAttempt {
+    return try FfiConverterTypeShareQueueAttempt.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareQueueAttempt_lower(_ value: ShareQueueAttempt) -> RustBuffer {
+    return FfiConverterTypeShareQueueAttempt.lower(value)
+}
+
+
+public struct ShareQueueDrainProjection {
+    public var requeue: [ShareQueueItem]
+    public var successCount: UInt64
+    public var toast: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(requeue: [ShareQueueItem], successCount: UInt64, toast: String?) {
+        self.requeue = requeue
+        self.successCount = successCount
+        self.toast = toast
+    }
+}
+
+#if compiler(>=6)
+extension ShareQueueDrainProjection: Sendable {}
+#endif
+
+
+extension ShareQueueDrainProjection: Equatable, Hashable {
+    public static func ==(lhs: ShareQueueDrainProjection, rhs: ShareQueueDrainProjection) -> Bool {
+        if lhs.requeue != rhs.requeue {
+            return false
+        }
+        if lhs.successCount != rhs.successCount {
+            return false
+        }
+        if lhs.toast != rhs.toast {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(requeue)
+        hasher.combine(successCount)
+        hasher.combine(toast)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareQueueDrainProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareQueueDrainProjection {
+        return
+            try ShareQueueDrainProjection(
+                requeue: FfiConverterSequenceTypeShareQueueItem.read(from: &buf),
+                successCount: FfiConverterUInt64.read(from: &buf),
+                toast: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareQueueDrainProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeShareQueueItem.write(value.requeue, into: &buf)
+        FfiConverterUInt64.write(value.successCount, into: &buf)
+        FfiConverterOptionString.write(value.toast, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareQueueDrainProjection_lift(_ buf: RustBuffer) throws -> ShareQueueDrainProjection {
+    return try FfiConverterTypeShareQueueDrainProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareQueueDrainProjection_lower(_ value: ShareQueueDrainProjection) -> RustBuffer {
+    return FfiConverterTypeShareQueueDrainProjection.lower(value)
+}
+
+
+public struct ShareQueueDrainProjectionInput {
+    public var attempts: [ShareQueueAttempt]
+    public var communities: [CommunitySummary]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(attempts: [ShareQueueAttempt], communities: [CommunitySummary]) {
+        self.attempts = attempts
+        self.communities = communities
+    }
+}
+
+#if compiler(>=6)
+extension ShareQueueDrainProjectionInput: Sendable {}
+#endif
+
+
+extension ShareQueueDrainProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ShareQueueDrainProjectionInput, rhs: ShareQueueDrainProjectionInput) -> Bool {
+        if lhs.attempts != rhs.attempts {
+            return false
+        }
+        if lhs.communities != rhs.communities {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(attempts)
+        hasher.combine(communities)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareQueueDrainProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareQueueDrainProjectionInput {
+        return
+            try ShareQueueDrainProjectionInput(
+                attempts: FfiConverterSequenceTypeShareQueueAttempt.read(from: &buf),
+                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareQueueDrainProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeShareQueueAttempt.write(value.attempts, into: &buf)
+        FfiConverterSequenceTypeCommunitySummary.write(value.communities, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareQueueDrainProjectionInput_lift(_ buf: RustBuffer) throws -> ShareQueueDrainProjectionInput {
+    return try FfiConverterTypeShareQueueDrainProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareQueueDrainProjectionInput_lower(_ value: ShareQueueDrainProjectionInput) -> RustBuffer {
+    return FfiConverterTypeShareQueueDrainProjectionInput.lower(value)
+}
+
+
+public struct ShareQueueItem {
+    public var id: String
+    public var groupId: String
+    public var url: String
+    public var note: String
+    public var createdAtUnixSeconds: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, groupId: String, url: String, note: String, createdAtUnixSeconds: Double) {
+        self.id = id
+        self.groupId = groupId
+        self.url = url
+        self.note = note
+        self.createdAtUnixSeconds = createdAtUnixSeconds
+    }
+}
+
+#if compiler(>=6)
+extension ShareQueueItem: Sendable {}
+#endif
+
+
+extension ShareQueueItem: Equatable, Hashable {
+    public static func ==(lhs: ShareQueueItem, rhs: ShareQueueItem) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.note != rhs.note {
+            return false
+        }
+        if lhs.createdAtUnixSeconds != rhs.createdAtUnixSeconds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(groupId)
+        hasher.combine(url)
+        hasher.combine(note)
+        hasher.combine(createdAtUnixSeconds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareQueueItem: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareQueueItem {
+        return
+            try ShareQueueItem(
+                id: FfiConverterString.read(from: &buf),
+                groupId: FfiConverterString.read(from: &buf),
+                url: FfiConverterString.read(from: &buf),
+                note: FfiConverterString.read(from: &buf),
+                createdAtUnixSeconds: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareQueueItem, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterString.write(value.note, into: &buf)
+        FfiConverterDouble.write(value.createdAtUnixSeconds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareQueueItem_lift(_ buf: RustBuffer) throws -> ShareQueueItem {
+    return try FfiConverterTypeShareQueueItem.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareQueueItem_lower(_ value: ShareQueueItem) -> RustBuffer {
+    return FfiConverterTypeShareQueueItem.lower(value)
+}
+
+
 public struct ShareWebReaderTargetProjectionInput {
     public var preview: ArtifactPreview
     public var fallbackUrl: String
@@ -34982,6 +35304,56 @@ fileprivate struct FfiConverterSequenceTypeSearchTextMatchSpan: FfiConverterRust
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeShareQueueAttempt: FfiConverterRustBuffer {
+    typealias SwiftType = [ShareQueueAttempt]
+
+    public static func write(_ value: [ShareQueueAttempt], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeShareQueueAttempt.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ShareQueueAttempt] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ShareQueueAttempt]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeShareQueueAttempt.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeShareQueueItem: FfiConverterRustBuffer {
+    typealias SwiftType = [ShareQueueItem]
+
+    public static func write(_ value: [ShareQueueItem], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeShareQueueItem.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ShareQueueItem] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ShareQueueItem]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeShareQueueItem.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTranscriptSegment: FfiConverterRustBuffer {
     typealias SwiftType = [TranscriptSegment]
 
@@ -35808,6 +36180,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_highlight_target() != 26659) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_queue_drain() != 43648) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_web_reader_target() != 11832) {

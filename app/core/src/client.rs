@@ -1329,6 +1329,13 @@ impl HighlighterCore {
         crate::share_extension::communities_snapshot_json(communities)
     }
 
+    pub fn project_share_queue_drain(
+        &self,
+        input: crate::share_extension::ShareQueueDrainProjectionInput,
+    ) -> crate::share_extension::ShareQueueDrainProjection {
+        crate::share_extension::share_queue_drain_projection(input)
+    }
+
     pub async fn prepare_whats_new(&self) -> WhatsNewEntriesOutcome {
         whats_new_entries_outcome(self.whats_new.prepare().await)
     }

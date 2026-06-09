@@ -200,6 +200,9 @@ pub use session::{
     PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,
     SecretKeyDisplayProjectionInput,
 };
+pub use share_extension::{
+    ShareQueueAttempt, ShareQueueDrainProjection, ShareQueueDrainProjectionInput, ShareQueueItem,
+};
 pub use share_targets::{
     ShareArticleTargetProjectionInput, ShareArtifactTargetProjection,
     ShareArtifactTargetProjectionInput, ShareHighlightArticleTargetProjectionInput,
