@@ -926,11 +926,11 @@ actor SafeHighlighterCore {
         core.getUnpublishedArtifactRecord(preview: preview)
     }
 
-    nonisolated func getBookRoute(catalogId: String) -> BookRouteOutcome {
+    nonisolated func getBookRoute(catalogId: String) -> BookRoute? {
         core.getBookRoute(catalogId: catalogId)
     }
 
-    nonisolated func getHighlightBookRoute(externalReference: String, artifactAddress: String) -> BookRouteOutcome {
+    nonisolated func getHighlightBookRoute(externalReference: String, artifactAddress: String) -> BookRoute? {
         core.getHighlightBookRoute(externalReference: externalReference, artifactAddress: artifactAddress)
     }
 

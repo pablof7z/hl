@@ -36,7 +36,7 @@ struct HighlightFeedCardView: View {
         app.safeCore.getHighlightBookRoute(
             externalReference: lead.highlight.externalReference,
             artifactAddress: lead.highlight.artifactAddress
-        ).value?.isbn
+        )?.isbn
     }
 
     var body: some View {

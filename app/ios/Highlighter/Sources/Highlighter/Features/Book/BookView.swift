@@ -10,7 +10,7 @@ struct BookView: View {
     @State private var descriptionExpanded = false
 
     private var bookRoute: BookRoute? {
-        loadedRoute ?? app.core.getBookRoute(catalogId: catalogId).value
+        loadedRoute ?? app.core.getBookRoute(catalogId: catalogId)
     }
 
     private var preview: ArtifactPreview? {

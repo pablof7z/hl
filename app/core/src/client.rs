@@ -27,15 +27,14 @@ use crate::isbn_lookup;
 use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome,
-    ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome,
-    BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommunityListOutcome,
-    CommunitySummary, CurrentUser, DataOutcome, DiscussionOutcome, DiscussionRecord,
-    FeedbackThreadRecord, HighlightListOutcome, HighlightOutcome, HighlightRecord,
-    HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
-    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
-    OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
-    ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebMetadataOutcome,
+    ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookmarkSetRecord,
+    CommentRecord, CommentReferenceBucket, CommentScope, CommunityListOutcome, CommunitySummary,
+    CurrentUser, DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord,
+    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction,
+    MutationOutcome, NostrConnectOptions, OnboardingInterest, OnboardingInterestProjection,
+    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
 };
 use crate::network_preferences;
 use crate::nip05;
@@ -105,19 +104,6 @@ fn mutation_outcome(result: Result<(), CoreError>) -> MutationOutcome {
         },
         Err(error) => MutationOutcome {
             applied: false,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn book_route_outcome(result: Result<Option<BookRoute>, CoreError>) -> BookRouteOutcome {
-    match result {
-        Ok(value) => BookRouteOutcome {
-            value,
-            error: String::new(),
-        },
-        Err(error) => BookRouteOutcome {
-            value: None,
             error: error.to_string(),
         },
     }
@@ -1632,8 +1618,8 @@ impl HighlighterCore {
 
     /// Resolve a book catalog id into the canonical ISBN route used by native
     /// book screens. Accepts raw ISBNs and `isbn:<digits>` values.
-    pub fn get_book_route(&self, catalog_id: String) -> BookRouteOutcome {
-        book_route_outcome(Ok(highlights::book_route_for_catalog(catalog_id.trim())))
+    pub fn get_book_route(&self, catalog_id: String) -> Option<BookRoute> {
+        highlights::book_route_for_catalog(catalog_id.trim())
     }
 
     /// Resolve a highlight's book reference from its external reference or
@@ -1642,11 +1628,8 @@ impl HighlighterCore {
         &self,
         external_reference: String,
         artifact_address: String,
-    ) -> BookRouteOutcome {
-        book_route_outcome(Ok(highlights::book_route_for_highlight(
-            external_reference.trim(),
-            artifact_address.trim(),
-        )))
+    ) -> Option<BookRoute> {
+        highlights::book_route_for_highlight(external_reference.trim(), artifact_address.trim())
     }
 
     /// Screen-shaped snapshot for the native book detail route. Rust owns

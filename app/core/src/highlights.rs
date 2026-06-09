@@ -2510,7 +2510,9 @@ mod tests {
 
         assert!(!snapshot.ready);
         assert!(snapshot.share_url.is_none());
-        assert!(snapshot.error_message.contains("invalid input: bad event id"));
+        assert!(snapshot
+            .error_message
+            .contains("invalid input: bad event id"));
     }
 
     #[test]

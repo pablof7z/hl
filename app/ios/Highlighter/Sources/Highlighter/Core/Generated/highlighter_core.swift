@@ -973,7 +973,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Resolve a book catalog id into the canonical ISBN route used by native
      * book screens. Accepts raw ISBNs and `isbn:<digits>` values.
      */
-    func getBookRoute(catalogId: String)  -> BookRouteOutcome
+    func getBookRoute(catalogId: String)  -> BookRoute?
 
     /**
      * Full bookmark library read model for the current user. Rust owns
@@ -1033,7 +1033,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Resolve a highlight's book reference from its external reference or
      * artifact address. Rust owns the precedence and canonical catalog id.
      */
-    func getHighlightBookRoute(externalReference: String, artifactAddress: String)  -> BookRouteOutcome
+    func getHighlightBookRoute(externalReference: String, artifactAddress: String)  -> BookRoute?
 
     /**
      * Project a NIP-84 highlight event id into the NIP-22 root scope used by
@@ -2701,8 +2701,8 @@ open func getBookPickerSnapshot(query: String, recentLimit: UInt32, searchLimit:
      * Resolve a book catalog id into the canonical ISBN route used by native
      * book screens. Accepts raw ISBNs and `isbn:<digits>` values.
      */
-open func getBookRoute(catalogId: String) -> BookRouteOutcome  {
-    return try!  FfiConverterTypeBookRouteOutcome_lift(try! rustCall() {
+open func getBookRoute(catalogId: String) -> BookRoute?  {
+    return try!  FfiConverterOptionTypeBookRoute.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_book_route(self.uniffiClonePointer(),
         FfiConverterString.lower(catalogId),$0
     )
@@ -2901,8 +2901,8 @@ open func getFeedbackThreadsSnapshot(coordinate: String)async  -> FeedbackThread
      * Resolve a highlight's book reference from its external reference or
      * artifact address. Rust owns the precedence and canonical catalog id.
      */
-open func getHighlightBookRoute(externalReference: String, artifactAddress: String) -> BookRouteOutcome  {
-    return try!  FfiConverterTypeBookRouteOutcome_lift(try! rustCall() {
+open func getHighlightBookRoute(externalReference: String, artifactAddress: String) -> BookRoute?  {
+    return try!  FfiConverterOptionTypeBookRoute.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_highlight_book_route(self.uniffiClonePointer(),
         FfiConverterString.lower(externalReference),
         FfiConverterString.lower(artifactAddress),$0
@@ -9954,76 +9954,6 @@ public func FfiConverterTypeBookRoute_lift(_ buf: RustBuffer) throws -> BookRout
 #endif
 public func FfiConverterTypeBookRoute_lower(_ value: BookRoute) -> RustBuffer {
     return FfiConverterTypeBookRoute.lower(value)
-}
-
-
-public struct BookRouteOutcome {
-    public var value: BookRoute?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: BookRoute?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension BookRouteOutcome: Sendable {}
-#endif
-
-
-extension BookRouteOutcome: Equatable, Hashable {
-    public static func ==(lhs: BookRouteOutcome, rhs: BookRouteOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeBookRouteOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookRouteOutcome {
-        return
-            try BookRouteOutcome(
-                value: FfiConverterOptionTypeBookRoute.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: BookRouteOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeBookRoute.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBookRouteOutcome_lift(_ buf: RustBuffer) throws -> BookRouteOutcome {
-    return try FfiConverterTypeBookRouteOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBookRouteOutcome_lower(_ value: BookRouteOutcome) -> RustBuffer {
-    return FfiConverterTypeBookRouteOutcome.lower(value)
 }
 
 
@@ -39338,7 +39268,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_picker_snapshot() != 51510) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_route() != 28033) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_route() != 15563) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmark_library_snapshot() != 44261) {
@@ -39368,7 +39298,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_feedback_threads_snapshot() != 11029) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_book_route() != 28768) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_book_route() != 42068) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_comment_scope() != 17710) {

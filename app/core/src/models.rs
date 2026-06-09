@@ -69,12 +69,6 @@ pub struct BookRoute {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct BookRouteOutcome {
-    pub value: Option<BookRoute>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct StringOutcome {
     pub value: String,
     pub error: String,
