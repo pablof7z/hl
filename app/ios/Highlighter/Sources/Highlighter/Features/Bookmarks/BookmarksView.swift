@@ -35,12 +35,15 @@ struct BookmarksView: View {
                 SetDetailView(record: rec)
             }
         }
-        .task(id: app.bookmarkedArticleAddresses) {
+        .task {
             guard let bridge = app.eventBridge else { return }
             await store.start(
                 core: app.safeCore,
                 bridge: bridge
             )
+        }
+        .onChange(of: app.bookmarkedArticleAddresses) {
+            Task { await store.reload() }
         }
         .onDisappear { store.stop() }
     }

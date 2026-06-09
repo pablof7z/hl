@@ -26,29 +26,50 @@ final class BookmarkStore {
         self.core = core
         self.bridge = bridge
 
-        let setsStart = await core.subscribeBookmarkSets()
-        if setsStart.error.isEmpty {
-            setsHandle = setsStart.handle
-            bridge.registerBookmarkStore(self, handle: setsStart.handle)
-        }
-        let followingStart = await core.subscribeFollowingCurationSets()
-        if followingStart.error.isEmpty {
-            followingHandle = followingStart.handle
-            bridge.registerBookmarkStore(self, handle: followingStart.handle)
-        }
-        let webStart = await core.subscribeWebBookmarks()
-        if webStart.error.isEmpty {
-            webHandle = webStart.handle
-            bridge.registerBookmarkStore(self, handle: webStart.handle)
-        }
+        await installSubscriptions(core: core, bridge: bridge)
 
         await reload()
     }
 
     func stop() {
-        if let h = setsHandle { bridge?.unregister(handle: h); setsHandle = nil }
-        if let h = followingHandle { bridge?.unregister(handle: h); followingHandle = nil }
-        if let h = webHandle { bridge?.unregister(handle: h); webHandle = nil }
+        let handles = [setsHandle, followingHandle, webHandle].compactMap { $0 }
+        setsHandle = nil
+        followingHandle = nil
+        webHandle = nil
+        for handle in handles {
+            bridge?.unregister(handle: handle)
+        }
+        if let core, !handles.isEmpty {
+            Task { [core, handles] in
+                for handle in handles {
+                    await core.unsubscribe(handle)
+                }
+            }
+        }
+    }
+
+    private func installSubscriptions(core: SafeHighlighterCore, bridge: EventBridge) async {
+        if setsHandle == nil {
+            let setsStart = await core.subscribeBookmarkSets()
+            if setsStart.error.isEmpty {
+                setsHandle = setsStart.handle
+                bridge.registerBookmarkStore(self, handle: setsStart.handle)
+            }
+        }
+        if followingHandle == nil {
+            let followingStart = await core.subscribeFollowingCurationSets()
+            if followingStart.error.isEmpty {
+                followingHandle = followingStart.handle
+                bridge.registerBookmarkStore(self, handle: followingStart.handle)
+            }
+        }
+        if webHandle == nil {
+            let webStart = await core.subscribeWebBookmarks()
+            if webStart.error.isEmpty {
+                webHandle = webStart.handle
+                bridge.registerBookmarkStore(self, handle: webStart.handle)
+            }
+        }
     }
 
     func reload() async {
