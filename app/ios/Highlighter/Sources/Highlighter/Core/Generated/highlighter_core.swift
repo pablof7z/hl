@@ -1833,16 +1833,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, authorPubkeyHex: String) async  -> CommentInteractionMutationSnapshot
 
-    func toggleCommentLikeState(eventId: String, authorPubkeyHex: String) async throws  -> Bool
-
     /**
      * Toggle a menu row and return the refreshed menu snapshot. Rust owns the
      * membership mutation and applies the returned state over the cached
      * snapshot so native shells do not sequence a follow-up read.
      */
     func toggleCurationMenuItemSnapshot(dTag: String, address: String) async  -> CurationMenuSnapshot
-
-    func toggleEventBookmarkState(eventIdHex: String) async throws  -> Bool
 
     func toggleImportRelaySelection(fetched: [RelayConfig], selectedUrls: [String], url: String)  -> [String]
 
@@ -5514,23 +5510,6 @@ open func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, a
         )
 }
 
-open func toggleCommentLikeState(eventId: String, authorPubkeyHex: String)async throws  -> Bool  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_toggle_comment_like_state(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(eventId),FfiConverterString.lower(authorPubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
     /**
      * Toggle a menu row and return the refreshed menu snapshot. Rust owns the
      * membership mutation and applies the returned state over the cached
@@ -5551,23 +5530,6 @@ open func toggleCurationMenuItemSnapshot(dTag: String, address: String)async  ->
             liftFunc: FfiConverterTypeCurationMenuSnapshot_lift,
             errorHandler: nil
 
-        )
-}
-
-open func toggleEventBookmarkState(eventIdHex: String)async throws  -> Bool  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_toggle_event_bookmark_state(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(eventIdHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
         )
 }
 
@@ -39271,13 +39233,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_comment_like_snapshot() != 7174) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_comment_like_state() != 57062) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_curation_menu_item_snapshot() != 16580) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark_state() != 26299) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_import_relay_selection() != 16615) {

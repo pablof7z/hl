@@ -1616,45 +1616,6 @@ impl HighlighterCore {
         }
     }
 
-    async fn toggle_comment_like_state(
-        &self,
-        event_id: &str,
-        author_pubkey_hex: &str,
-    ) -> Result<bool, CoreError> {
-        let current_user = self.require_user_pubkey()?;
-        let current_user_hex = current_user.to_hex();
-        let event_id = event_id.trim();
-        let summary = crate::reactions::query_like_summary_for_event(
-            self.runtime.ndb(),
-            event_id,
-            Some(current_user_hex.as_str()),
-            128,
-        )?;
-        if let Some(reaction_event_id) = summary.my_like_event_id {
-            crate::reactions::unpublish_reaction(&self.runtime, &reaction_event_id).await?;
-            Ok(false)
-        } else {
-            crate::reactions::publish_comment_like(
-                &self.runtime,
-                event_id,
-                author_pubkey_hex.trim(),
-            )
-            .await?;
-            Ok(true)
-        }
-    }
-
-    async fn toggle_event_bookmark_state(&self, event_id_hex: &str) -> Result<bool, CoreError> {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .ok_or(CoreError::NotInitialized)?;
-        crate::bookmarks::toggle_event_bookmark(&self.runtime, &user_hex, event_id_hex).await
-    }
-
     /// Publish the Rust-projected profile follow mutation and return the
     /// post-action screen state. Rust owns rollback on error; the shell only
     /// applies the returned snapshot.
@@ -3755,6 +3716,45 @@ impl HighlighterCore {
             .read()
             .pending_joins
             .contains_key(group_id.trim())
+    }
+
+    async fn toggle_comment_like_state(
+        &self,
+        event_id: &str,
+        author_pubkey_hex: &str,
+    ) -> Result<bool, CoreError> {
+        let current_user = self.require_user_pubkey()?;
+        let current_user_hex = current_user.to_hex();
+        let event_id = event_id.trim();
+        let summary = crate::reactions::query_like_summary_for_event(
+            self.runtime.ndb(),
+            event_id,
+            Some(current_user_hex.as_str()),
+            128,
+        )?;
+        if let Some(reaction_event_id) = summary.my_like_event_id {
+            crate::reactions::unpublish_reaction(&self.runtime, &reaction_event_id).await?;
+            Ok(false)
+        } else {
+            crate::reactions::publish_comment_like(
+                &self.runtime,
+                event_id,
+                author_pubkey_hex.trim(),
+            )
+            .await?;
+            Ok(true)
+        }
+    }
+
+    async fn toggle_event_bookmark_state(&self, event_id_hex: &str) -> Result<bool, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .ok_or(CoreError::NotInitialized)?;
+        crate::bookmarks::toggle_event_bookmark(&self.runtime, &user_hex, event_id_hex).await
     }
 
     /// Internal access for feature modules (artifacts, groups, highlights,
