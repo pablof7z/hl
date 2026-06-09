@@ -130,13 +130,13 @@ pub struct CommentThreadSnapshot {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct CommentPublishSnapshotOutcome {
+pub struct CommentPublishSnapshot {
     pub snapshot: CommentThreadSnapshot,
     pub error: String,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct CommentInteractionMutationOutcome {
+pub struct CommentInteractionMutationSnapshot {
     pub interactions: CommentInteractionSnapshot,
     pub error: String,
 }

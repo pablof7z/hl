@@ -94,7 +94,7 @@ final class CommentsStore {
     /// posts a top-level thread; otherwise posts as a reply to that
     /// kind:1111 comment. Rust returns the rebuilt snapshot.
     @discardableResult
-    func publish(content: String, parentEventId: String?) async -> CommentPublishSnapshotOutcome? {
+    func publish(content: String, parentEventId: String?) async -> CommentPublishSnapshot? {
         guard let core, let scope else {
             return nil
         }

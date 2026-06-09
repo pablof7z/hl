@@ -1507,7 +1507,7 @@ impl HighlighterCore {
         parent_event_id: Option<String>,
         content: String,
         limit: u32,
-    ) -> comments::CommentPublishSnapshotOutcome {
+    ) -> comments::CommentPublishSnapshot {
         let current_user = self.current_user_pubkey_hex();
         let base_snapshot = comments::comment_thread_snapshot(
             self.runtime.ndb(),
@@ -1516,7 +1516,7 @@ impl HighlighterCore {
             current_user.as_deref(),
         );
         if let Err(error) = self.require_user_pubkey() {
-            return comments::CommentPublishSnapshotOutcome {
+            return comments::CommentPublishSnapshot {
                 snapshot: base_snapshot,
                 error: error.to_string(),
             };
@@ -1530,7 +1530,7 @@ impl HighlighterCore {
         }
         .await;
         match result {
-            Ok(record) => comments::CommentPublishSnapshotOutcome {
+            Ok(record) => comments::CommentPublishSnapshot {
                 snapshot: comments::comment_thread_snapshot_with_comment(
                     self.runtime.ndb(),
                     base_snapshot,
@@ -1540,7 +1540,7 @@ impl HighlighterCore {
                 ),
                 error: String::new(),
             },
-            Err(error) => comments::CommentPublishSnapshotOutcome {
+            Err(error) => comments::CommentPublishSnapshot {
                 snapshot: base_snapshot,
                 error: error.to_string(),
             },
@@ -1556,7 +1556,7 @@ impl HighlighterCore {
         records: Vec<CommentRecord>,
         event_id: String,
         author_pubkey_hex: String,
-    ) -> comments::CommentInteractionMutationOutcome {
+    ) -> comments::CommentInteractionMutationSnapshot {
         let current_user = self.current_user_pubkey_hex();
         let base = comments::comment_interaction_snapshot(
             self.runtime.ndb(),
@@ -1567,13 +1567,13 @@ impl HighlighterCore {
             .toggle_comment_like_state(&event_id, &author_pubkey_hex)
             .await
         {
-            Ok(is_liked) => comments::CommentInteractionMutationOutcome {
+            Ok(is_liked) => comments::CommentInteractionMutationSnapshot {
                 interactions: comments::comment_interaction_snapshot_with_like_state(
                     base, &event_id, is_liked,
                 ),
                 error: String::new(),
             },
-            Err(error) => comments::CommentInteractionMutationOutcome {
+            Err(error) => comments::CommentInteractionMutationSnapshot {
                 interactions: base,
                 error: error.to_string(),
             },
@@ -1586,7 +1586,7 @@ impl HighlighterCore {
         &self,
         records: Vec<CommentRecord>,
         event_id_hex: String,
-    ) -> comments::CommentInteractionMutationOutcome {
+    ) -> comments::CommentInteractionMutationSnapshot {
         let current_user = self.current_user_pubkey_hex();
         let base = comments::comment_interaction_snapshot(
             self.runtime.ndb(),
@@ -1594,7 +1594,7 @@ impl HighlighterCore {
             current_user.as_deref(),
         );
         match self.toggle_event_bookmark_state(&event_id_hex).await {
-            Ok(is_bookmarked) => comments::CommentInteractionMutationOutcome {
+            Ok(is_bookmarked) => comments::CommentInteractionMutationSnapshot {
                 interactions: comments::comment_interaction_snapshot_with_bookmark_state(
                     base,
                     &event_id_hex,
@@ -1602,7 +1602,7 @@ impl HighlighterCore {
                 ),
                 error: String::new(),
             },
-            Err(error) => comments::CommentInteractionMutationOutcome {
+            Err(error) => comments::CommentInteractionMutationSnapshot {
                 interactions: base,
                 error: error.to_string(),
             },

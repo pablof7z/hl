@@ -1526,7 +1526,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Publish a NIP-22 comment and return the refreshed comments sheet
      * snapshot. Rust owns optimistic insertion and tree/interaction rebuild.
      */
-    func publishCommentForScopeSnapshot(scope: CommentScope, parentEventId: String?, content: String, limit: UInt32) async  -> CommentPublishSnapshotOutcome
+    func publishCommentForScopeSnapshot(scope: CommentScope, parentEventId: String?, content: String, limit: UInt32) async  -> CommentPublishSnapshot
 
     func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async  -> DiscussionPublishSnapshot
 
@@ -1825,13 +1825,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Toggle the current user's bookmark on a visible NIP-22 comment and
      * return the updated interaction snapshot for the current screen records.
      */
-    func toggleCommentBookmarkSnapshot(records: [CommentRecord], eventIdHex: String) async  -> CommentInteractionMutationOutcome
+    func toggleCommentBookmarkSnapshot(records: [CommentRecord], eventIdHex: String) async  -> CommentInteractionMutationSnapshot
 
     /**
      * Toggle the current user's like on a visible NIP-22 comment and return
      * the updated interaction snapshot for the current screen records.
      */
-    func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, authorPubkeyHex: String) async  -> CommentInteractionMutationOutcome
+    func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, authorPubkeyHex: String) async  -> CommentInteractionMutationSnapshot
 
     func toggleCommentLikeState(eventId: String, authorPubkeyHex: String) async throws  -> Bool
 
@@ -4416,7 +4416,7 @@ open func publishChatMessageSnapshot(groupId: String, content: String, replyToEv
      * Publish a NIP-22 comment and return the refreshed comments sheet
      * snapshot. Rust owns optimistic insertion and tree/interaction rebuild.
      */
-open func publishCommentForScopeSnapshot(scope: CommentScope, parentEventId: String?, content: String, limit: UInt32)async  -> CommentPublishSnapshotOutcome  {
+open func publishCommentForScopeSnapshot(scope: CommentScope, parentEventId: String?, content: String, limit: UInt32)async  -> CommentPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4428,7 +4428,7 @@ open func publishCommentForScopeSnapshot(scope: CommentScope, parentEventId: Str
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommentPublishSnapshotOutcome_lift,
+            liftFunc: FfiConverterTypeCommentPublishSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5474,7 +5474,7 @@ open func toggleArticleBookmarkSnapshot(address: String)async  -> ArticleBookmar
      * Toggle the current user's bookmark on a visible NIP-22 comment and
      * return the updated interaction snapshot for the current screen records.
      */
-open func toggleCommentBookmarkSnapshot(records: [CommentRecord], eventIdHex: String)async  -> CommentInteractionMutationOutcome  {
+open func toggleCommentBookmarkSnapshot(records: [CommentRecord], eventIdHex: String)async  -> CommentInteractionMutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5486,7 +5486,7 @@ open func toggleCommentBookmarkSnapshot(records: [CommentRecord], eventIdHex: St
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommentInteractionMutationOutcome_lift,
+            liftFunc: FfiConverterTypeCommentInteractionMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5496,7 +5496,7 @@ open func toggleCommentBookmarkSnapshot(records: [CommentRecord], eventIdHex: St
      * Toggle the current user's like on a visible NIP-22 comment and return
      * the updated interaction snapshot for the current screen records.
      */
-open func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, authorPubkeyHex: String)async  -> CommentInteractionMutationOutcome  {
+open func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, authorPubkeyHex: String)async  -> CommentInteractionMutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5508,7 +5508,7 @@ open func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, a
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommentInteractionMutationOutcome_lift,
+            liftFunc: FfiConverterTypeCommentInteractionMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -12147,7 +12147,7 @@ public func FfiConverterTypeCommentComposerProjectionInput_lower(_ value: Commen
 }
 
 
-public struct CommentInteractionMutationOutcome {
+public struct CommentInteractionMutationSnapshot {
     public var interactions: CommentInteractionSnapshot
     public var error: String
 
@@ -12160,12 +12160,12 @@ public struct CommentInteractionMutationOutcome {
 }
 
 #if compiler(>=6)
-extension CommentInteractionMutationOutcome: Sendable {}
+extension CommentInteractionMutationSnapshot: Sendable {}
 #endif
 
 
-extension CommentInteractionMutationOutcome: Equatable, Hashable {
-    public static func ==(lhs: CommentInteractionMutationOutcome, rhs: CommentInteractionMutationOutcome) -> Bool {
+extension CommentInteractionMutationSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CommentInteractionMutationSnapshot, rhs: CommentInteractionMutationSnapshot) -> Bool {
         if lhs.interactions != rhs.interactions {
             return false
         }
@@ -12186,16 +12186,16 @@ extension CommentInteractionMutationOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeCommentInteractionMutationOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentInteractionMutationOutcome {
+public struct FfiConverterTypeCommentInteractionMutationSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentInteractionMutationSnapshot {
         return
-            try CommentInteractionMutationOutcome(
+            try CommentInteractionMutationSnapshot(
                 interactions: FfiConverterTypeCommentInteractionSnapshot.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: CommentInteractionMutationOutcome, into buf: inout [UInt8]) {
+    public static func write(_ value: CommentInteractionMutationSnapshot, into buf: inout [UInt8]) {
         FfiConverterTypeCommentInteractionSnapshot.write(value.interactions, into: &buf)
         FfiConverterString.write(value.error, into: &buf)
     }
@@ -12205,15 +12205,15 @@ public struct FfiConverterTypeCommentInteractionMutationOutcome: FfiConverterRus
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCommentInteractionMutationOutcome_lift(_ buf: RustBuffer) throws -> CommentInteractionMutationOutcome {
-    return try FfiConverterTypeCommentInteractionMutationOutcome.lift(buf)
+public func FfiConverterTypeCommentInteractionMutationSnapshot_lift(_ buf: RustBuffer) throws -> CommentInteractionMutationSnapshot {
+    return try FfiConverterTypeCommentInteractionMutationSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCommentInteractionMutationOutcome_lower(_ value: CommentInteractionMutationOutcome) -> RustBuffer {
-    return FfiConverterTypeCommentInteractionMutationOutcome.lower(value)
+public func FfiConverterTypeCommentInteractionMutationSnapshot_lower(_ value: CommentInteractionMutationSnapshot) -> RustBuffer {
+    return FfiConverterTypeCommentInteractionMutationSnapshot.lower(value)
 }
 
 
@@ -12553,7 +12553,7 @@ public func FfiConverterTypeCommentNodeChromeProjectionInput_lower(_ value: Comm
 }
 
 
-public struct CommentPublishSnapshotOutcome {
+public struct CommentPublishSnapshot {
     public var snapshot: CommentThreadSnapshot
     public var error: String
 
@@ -12566,12 +12566,12 @@ public struct CommentPublishSnapshotOutcome {
 }
 
 #if compiler(>=6)
-extension CommentPublishSnapshotOutcome: Sendable {}
+extension CommentPublishSnapshot: Sendable {}
 #endif
 
 
-extension CommentPublishSnapshotOutcome: Equatable, Hashable {
-    public static func ==(lhs: CommentPublishSnapshotOutcome, rhs: CommentPublishSnapshotOutcome) -> Bool {
+extension CommentPublishSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CommentPublishSnapshot, rhs: CommentPublishSnapshot) -> Bool {
         if lhs.snapshot != rhs.snapshot {
             return false
         }
@@ -12592,16 +12592,16 @@ extension CommentPublishSnapshotOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeCommentPublishSnapshotOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentPublishSnapshotOutcome {
+public struct FfiConverterTypeCommentPublishSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentPublishSnapshot {
         return
-            try CommentPublishSnapshotOutcome(
+            try CommentPublishSnapshot(
                 snapshot: FfiConverterTypeCommentThreadSnapshot.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: CommentPublishSnapshotOutcome, into buf: inout [UInt8]) {
+    public static func write(_ value: CommentPublishSnapshot, into buf: inout [UInt8]) {
         FfiConverterTypeCommentThreadSnapshot.write(value.snapshot, into: &buf)
         FfiConverterString.write(value.error, into: &buf)
     }
@@ -12611,15 +12611,15 @@ public struct FfiConverterTypeCommentPublishSnapshotOutcome: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCommentPublishSnapshotOutcome_lift(_ buf: RustBuffer) throws -> CommentPublishSnapshotOutcome {
-    return try FfiConverterTypeCommentPublishSnapshotOutcome.lift(buf)
+public func FfiConverterTypeCommentPublishSnapshot_lift(_ buf: RustBuffer) throws -> CommentPublishSnapshot {
+    return try FfiConverterTypeCommentPublishSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCommentPublishSnapshotOutcome_lower(_ value: CommentPublishSnapshotOutcome) -> RustBuffer {
-    return FfiConverterTypeCommentPublishSnapshotOutcome.lower(value)
+public func FfiConverterTypeCommentPublishSnapshot_lower(_ value: CommentPublishSnapshot) -> RustBuffer {
+    return FfiConverterTypeCommentPublishSnapshot.lower(value)
 }
 
 
@@ -39103,7 +39103,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message_snapshot() != 19370) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_for_scope_snapshot() != 49852) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_for_scope_snapshot() != 38475) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 23544) {
@@ -39265,10 +39265,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark_snapshot() != 16959) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_comment_bookmark_snapshot() != 59864) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_comment_bookmark_snapshot() != 42710) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_comment_like_snapshot() != 15442) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_comment_like_snapshot() != 7174) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_comment_like_state() != 57062) {

@@ -318,7 +318,7 @@ actor SafeHighlighterCore {
         records: [CommentRecord],
         eventId: String,
         authorPubkeyHex: String
-    ) async -> CommentInteractionMutationOutcome {
+    ) async -> CommentInteractionMutationSnapshot {
         await core.toggleCommentLikeSnapshot(
             records: records,
             eventId: eventId,
@@ -329,7 +329,7 @@ actor SafeHighlighterCore {
     func toggleCommentBookmarkSnapshot(
         records: [CommentRecord],
         eventIdHex: String
-    ) async -> CommentInteractionMutationOutcome {
+    ) async -> CommentInteractionMutationSnapshot {
         await core.toggleCommentBookmarkSnapshot(records: records, eventIdHex: eventIdHex)
     }
 
@@ -991,7 +991,7 @@ actor SafeHighlighterCore {
         parentEventId: String? = nil,
         content: String,
         limit: UInt32 = 256
-    ) async -> CommentPublishSnapshotOutcome {
+    ) async -> CommentPublishSnapshot {
         await core.publishCommentForScopeSnapshot(
             scope: scope,
             parentEventId: parentEventId,

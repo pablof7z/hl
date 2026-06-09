@@ -94,9 +94,9 @@ pub use chat::{
 pub use client::HighlighterCore;
 pub use comments::{
     CommentActionChromeProjection, CommentActionChromeProjectionInput, CommentComposerProjection,
-    CommentComposerProjectionInput, CommentInteractionMutationOutcome, CommentInteractionRow,
+    CommentComposerProjectionInput, CommentInteractionMutationSnapshot, CommentInteractionRow,
     CommentInteractionSnapshot, CommentNodeChromeProjection, CommentNodeChromeProjectionInput,
-    CommentPublishSnapshotOutcome, CommentScopeSnapshot, CommentThreadSnapshot,
+    CommentPublishSnapshot, CommentScopeSnapshot, CommentThreadSnapshot,
     CommentThreadViewProjection, CommentThreadViewProjectionInput, CommentToolbarProjection,
     CommentToolbarProjectionInput,
 };
