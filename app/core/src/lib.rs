@@ -203,7 +203,7 @@ pub use room_invites::{
     RoomInviteResolvedCandidate, RoomInviteSelectionAction, RoomInviteSelectionChromeInput,
     RoomInviteSelectionChromeProjection, RoomInviteSelectionInput, RoomInviteSelectionProjection,
     RoomInviteSendResultProjection, RoomInviteSnapshot, RoomInviteSnapshotInput,
-    RoomInviteSuggestion,
+    RoomInviteSuggestion, RoomShareLinkSnapshot,
 };
 pub use room_library::{
     RoomLibraryArticleCardProjection, RoomLibraryArticleCardProjectionInput,

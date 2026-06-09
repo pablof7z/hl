@@ -3561,20 +3561,20 @@ impl HighlighterCore {
         string_outcome(result)
     }
 
-    /// Mint `count` single-use invite codes for `group_id` by publishing a
-    /// kind:9009 event. Must be signed by an admin — the relay rejects
-    /// non-admin attempts. Returns the minted codes in order.
-    pub async fn create_room_invite_codes(
+    /// Mint one invite code and project the public room share link. Rust owns
+    /// the URL format and failure labels; native shells render/copy/share the
+    /// returned snapshot.
+    pub async fn get_room_share_link_snapshot(
         &self,
         group_id: String,
-        count: u32,
-    ) -> StringListOutcome {
+    ) -> crate::room_invites::RoomShareLinkSnapshot {
+        let group_id = group_id.trim().to_string();
         let result: Result<Vec<String>, CoreError> = async {
             let _ = self.require_user_pubkey()?;
-            groups::create_invite_codes(&self.runtime, group_id.trim(), count).await
+            groups::create_invite_codes(&self.runtime, &group_id, 1).await
         }
         .await;
-        string_list_outcome(result)
+        crate::room_invites::share_link_snapshot(&group_id, result)
     }
 
     /// Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a

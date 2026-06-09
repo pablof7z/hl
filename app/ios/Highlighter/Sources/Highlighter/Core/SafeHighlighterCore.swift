@@ -1158,8 +1158,8 @@ actor SafeHighlighterCore {
         core.projectRoomLibraryGenericCard(input: input)
     }
 
-    func createRoomInviteCodes(groupId: String, count: UInt32) async -> StringListOutcome {
-        await core.createRoomInviteCodes(groupId: groupId, count: count)
+    func getRoomShareLinkSnapshot(groupId: String) async -> RoomShareLinkSnapshot {
+        await core.getRoomShareLinkSnapshot(groupId: groupId)
     }
 
     nonisolated func decodeNpub(_ input: String) -> StringOutcome {

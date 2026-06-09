@@ -20,8 +20,7 @@ struct RoomShareCard: View {
 
     @State private var qrShown = false
     @State private var copied = false
-    @State private var inviteCode: String?
-    @State private var mintError: String?
+    @State private var linkSnapshot: RoomShareLinkSnapshot?
     @State private var copiedResetTimer = OneShotUITimer()
 
     var body: some View {
@@ -99,7 +98,7 @@ struct RoomShareCard: View {
                     .accessibilityLabel(qrShown ? "Hide QR" : "Show QR")
                 }
 
-                if let mintError {
+                if let mintError, !mintError.isEmpty {
                     Text(mintError)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterAccent)
@@ -119,37 +118,26 @@ struct RoomShareCard: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .task(id: groupId) {
-            await mintInviteIfNeeded()
+            await loadShareLinkIfNeeded()
         }
     }
 
     private var shareURL: String? {
-        guard let code = inviteCode else { return nil }
-        return "https://highlighter.com/r/\(groupId)/join/\(code)"
+        guard let url = linkSnapshot?.shareUrl, !url.isEmpty else { return nil }
+        return url
     }
 
     private var linkLabel: String {
-        if let url = shareURL { return url }
-        if mintError != nil { return "Couldn't create invite link" }
-        return "Creating invite link…"
+        linkSnapshot?.linkLabel ?? "Creating invite link…"
     }
 
-    private func mintInviteIfNeeded() async {
-        guard inviteCode == nil else { return }
-        let outcome = await appStore.safeCore.createRoomInviteCodes(
-            groupId: groupId,
-            count: 1
-        )
-        if outcome.error.isEmpty {
-            await MainActor.run {
-                inviteCode = outcome.values.first
-                mintError = inviteCode == nil ? "No code returned." : nil
-            }
-        } else {
-            await MainActor.run {
-                mintError = "Couldn't mint invite link. Add people directly below."
-            }
-        }
+    private var mintError: String? {
+        linkSnapshot?.errorMessage
+    }
+
+    private func loadShareLinkIfNeeded() async {
+        let snapshot = await appStore.safeCore.getRoomShareLinkSnapshot(groupId: groupId)
+        await MainActor.run { linkSnapshot = snapshot }
     }
 
     private func copy() {

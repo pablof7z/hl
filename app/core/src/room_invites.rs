@@ -65,6 +65,13 @@ pub struct RoomInviteSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomShareLinkSnapshot {
+    pub share_url: String,
+    pub link_label: String,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RoomInviteChip {
     pub pubkey_hex: String,
     pub source: RoomInviteCandidateSource,
@@ -218,6 +225,42 @@ pub fn snapshot(
         profile_pubkeys_to_request: projection_profile_pubkeys(&projection),
         projection,
         error,
+    }
+}
+
+pub fn share_link_snapshot(
+    group_id: &str,
+    codes_result: Result<Vec<String>, CoreError>,
+) -> RoomShareLinkSnapshot {
+    match codes_result {
+        Ok(codes) => {
+            let Some(code) = codes.first() else {
+                return RoomShareLinkSnapshot {
+                    share_url: String::new(),
+                    link_label: "Couldn't create invite link".into(),
+                    error_message: "No code returned.".into(),
+                };
+            };
+            let group_id = group_id.trim();
+            if group_id.is_empty() {
+                return RoomShareLinkSnapshot {
+                    share_url: String::new(),
+                    link_label: "Couldn't create invite link".into(),
+                    error_message: "Couldn't mint invite link. Add people directly below.".into(),
+                };
+            }
+            let share_url = format!("https://highlighter.com/r/{group_id}/join/{code}");
+            RoomShareLinkSnapshot {
+                link_label: share_url.clone(),
+                share_url,
+                error_message: String::new(),
+            }
+        }
+        Err(_) => RoomShareLinkSnapshot {
+            share_url: String::new(),
+            link_label: "Couldn't create invite link".into(),
+            error_message: "Couldn't mint invite link. Add people directly below.".into(),
+        },
     }
 }
 
@@ -710,6 +753,28 @@ mod tests {
         assert_eq!(snapshot.error, "not authenticated");
         assert!(snapshot.projection.visible_follows.is_empty());
         assert!(snapshot.projection.show_empty_follow_message);
+    }
+
+    #[test]
+    fn share_link_snapshot_projects_url_empty_and_error_states() {
+        let success = share_link_snapshot("room", Ok(vec!["code123".into()]));
+        let empty = share_link_snapshot("room", Ok(Vec::new()));
+        let failure = share_link_snapshot("room", Err(CoreError::Relay("nope".into())));
+
+        assert_eq!(
+            success.share_url,
+            "https://highlighter.com/r/room/join/code123"
+        );
+        assert_eq!(success.link_label, success.share_url);
+        assert!(success.error_message.is_empty());
+        assert!(empty.share_url.is_empty());
+        assert_eq!(empty.link_label, "Couldn't create invite link");
+        assert_eq!(empty.error_message, "No code returned.");
+        assert!(failure.share_url.is_empty());
+        assert_eq!(
+            failure.error_message,
+            "Couldn't mint invite link. Add people directly below."
+        );
     }
 
     #[test]

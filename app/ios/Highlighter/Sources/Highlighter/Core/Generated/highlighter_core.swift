@@ -814,13 +814,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async  -> StringOutcome
 
-    /**
-     * Mint `count` single-use invite codes for `group_id` by publishing a
-     * kind:9009 event. Must be signed by an admin — the relay rejects
-     * non-admin attempts. Returns the minted codes in order.
-     */
-    func createRoomInviteCodes(groupId: String, count: UInt32) async  -> StringListOutcome
-
     func cropOcrLines(lines: [OcrLine], pageRect: OcrRect)  -> [OcrLine]
 
     func currentUser()  -> CurrentUser?
@@ -1149,6 +1142,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput)  -> RoomInviteAvatarProjection
 
     func getRoomInviteSnapshot(input: RoomInviteSnapshotInput) async  -> RoomInviteSnapshot
+
+    /**
+     * Mint one invite code and project the public room share link. Rust owns
+     * the URL format and failure labels; native shells render/copy/share the
+     * returned snapshot.
+     */
+    func getRoomShareLinkSnapshot(groupId: String) async  -> RoomShareLinkSnapshot
 
     /**
      * Article-only refresh for relay search deltas. Used after NIP-50 events
@@ -2197,29 +2197,6 @@ open func createRoom(name: String, about: String, picture: String, visibility: R
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeStringOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Mint `count` single-use invite codes for `group_id` by publishing a
-     * kind:9009 event. Must be signed by an admin — the relay rejects
-     * non-admin attempts. Returns the minted codes in order.
-     */
-open func createRoomInviteCodes(groupId: String, count: UInt32)async  -> StringListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_create_room_invite_codes(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(count)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringListOutcome_lift,
             errorHandler: nil
 
         )
@@ -3313,6 +3290,29 @@ open func getRoomInviteSnapshot(input: RoomInviteSnapshotInput)async  -> RoomInv
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRoomInviteSnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Mint one invite code and project the public room share link. Rust owns
+     * the URL format and failure labels; native shells render/copy/share the
+     * returned snapshot.
+     */
+open func getRoomShareLinkSnapshot(groupId: String)async  -> RoomShareLinkSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_room_share_link_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(groupId)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRoomShareLinkSnapshot_lift,
             errorHandler: nil
 
         )
@@ -29764,6 +29764,84 @@ public func FfiConverterTypeRoomRecommendationReasonProfile_lower(_ value: RoomR
 }
 
 
+public struct RoomShareLinkSnapshot {
+    public var shareUrl: String
+    public var linkLabel: String
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shareUrl: String, linkLabel: String, errorMessage: String) {
+        self.shareUrl = shareUrl
+        self.linkLabel = linkLabel
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension RoomShareLinkSnapshot: Sendable {}
+#endif
+
+
+extension RoomShareLinkSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RoomShareLinkSnapshot, rhs: RoomShareLinkSnapshot) -> Bool {
+        if lhs.shareUrl != rhs.shareUrl {
+            return false
+        }
+        if lhs.linkLabel != rhs.linkLabel {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shareUrl)
+        hasher.combine(linkLabel)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomShareLinkSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomShareLinkSnapshot {
+        return
+            try RoomShareLinkSnapshot(
+                shareUrl: FfiConverterString.read(from: &buf),
+                linkLabel: FfiConverterString.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomShareLinkSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.shareUrl, into: &buf)
+        FfiConverterString.write(value.linkLabel, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomShareLinkSnapshot_lift(_ buf: RustBuffer) throws -> RoomShareLinkSnapshot {
+    return try FfiConverterTypeRoomShareLinkSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomShareLinkSnapshot_lower(_ value: RoomShareLinkSnapshot) -> RustBuffer {
+    return FfiConverterTypeRoomShareLinkSnapshot.lower(value)
+}
+
+
 public struct SearchArticleResultsSnapshot {
     public var articles: [ArticleRecord]
 
@@ -38043,9 +38121,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 37226) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_create_room_invite_codes() != 46771) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_crop_ocr_lines() != 63723) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38257,6 +38332,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_snapshot() != 54503) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_share_link_snapshot() != 29701) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_article_results_snapshot() != 52032) {
