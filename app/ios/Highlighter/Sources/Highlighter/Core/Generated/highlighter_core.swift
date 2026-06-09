@@ -1251,8 +1251,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getRoomExplorerCuratorPubkey() async  -> StringOutcome
 
-    func getRoomInviteAddDecision(pubkeyHex: String, selectedPubkeys: [String], currentUserPubkey: String)  -> RoomInviteAddDecision
-
     func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput)  -> RoomInviteAvatarProjection
 
     func getRoomInviteProjection(input: RoomInviteProjectionInput)  -> RoomInviteProjection
@@ -1607,6 +1605,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectRelaySettings(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic])  -> RelaySettingsProjection
 
     func projectRoomAvatar(input: RoomAvatarProjectionInput)  -> RoomAvatarProjection
+
+    func projectRoomInviteSelection(input: RoomInviteSelectionInput)  -> RoomInviteSelectionProjection
 
     func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput)  -> RoomLibraryArticleCardProjection
 
@@ -3786,16 +3786,6 @@ open func getRoomExplorerCuratorPubkey()async  -> StringOutcome  {
         )
 }
 
-open func getRoomInviteAddDecision(pubkeyHex: String, selectedPubkeys: [String], currentUserPubkey: String) -> RoomInviteAddDecision  {
-    return try!  FfiConverterTypeRoomInviteAddDecision_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_add_decision(self.uniffiClonePointer(),
-        FfiConverterString.lower(pubkeyHex),
-        FfiConverterSequenceString.lower(selectedPubkeys),
-        FfiConverterString.lower(currentUserPubkey),$0
-    )
-})
-}
-
 open func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput) -> RoomInviteAvatarProjection  {
     return try!  FfiConverterTypeRoomInviteAvatarProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_avatar_projection(self.uniffiClonePointer(),
@@ -4905,6 +4895,14 @@ open func projectRoomAvatar(input: RoomAvatarProjectionInput) -> RoomAvatarProje
     return try!  FfiConverterTypeRoomAvatarProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_avatar(self.uniffiClonePointer(),
         FfiConverterTypeRoomAvatarProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomInviteSelection(input: RoomInviteSelectionInput) -> RoomInviteSelectionProjection  {
+    return try!  FfiConverterTypeRoomInviteSelectionProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_invite_selection(self.uniffiClonePointer(),
+        FfiConverterTypeRoomInviteSelectionInput_lower(input),$0
     )
 })
 }
@@ -25383,76 +25381,6 @@ public func FfiConverterTypeRoomAvatarProjectionInput_lower(_ value: RoomAvatarP
 }
 
 
-public struct RoomInviteAddDecision {
-    public var shouldAdd: Bool
-    public var errorMessage: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(shouldAdd: Bool, errorMessage: String) {
-        self.shouldAdd = shouldAdd
-        self.errorMessage = errorMessage
-    }
-}
-
-#if compiler(>=6)
-extension RoomInviteAddDecision: Sendable {}
-#endif
-
-
-extension RoomInviteAddDecision: Equatable, Hashable {
-    public static func ==(lhs: RoomInviteAddDecision, rhs: RoomInviteAddDecision) -> Bool {
-        if lhs.shouldAdd != rhs.shouldAdd {
-            return false
-        }
-        if lhs.errorMessage != rhs.errorMessage {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(shouldAdd)
-        hasher.combine(errorMessage)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomInviteAddDecision: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteAddDecision {
-        return
-            try RoomInviteAddDecision(
-                shouldAdd: FfiConverterBool.read(from: &buf),
-                errorMessage: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomInviteAddDecision, into buf: inout [UInt8]) {
-        FfiConverterBool.write(value.shouldAdd, into: &buf)
-        FfiConverterString.write(value.errorMessage, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomInviteAddDecision_lift(_ buf: RustBuffer) throws -> RoomInviteAddDecision {
-    return try FfiConverterTypeRoomInviteAddDecision.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomInviteAddDecision_lower(_ value: RoomInviteAddDecision) -> RustBuffer {
-    return FfiConverterTypeRoomInviteAddDecision.lower(value)
-}
-
-
 public struct RoomInviteAvatarProjection {
     public var pictureUrl: String
     public var displayInitial: String
@@ -26028,6 +25956,170 @@ public func FfiConverterTypeRoomInviteResolvedCandidate_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeRoomInviteResolvedCandidate_lower(_ value: RoomInviteResolvedCandidate) -> RustBuffer {
     return FfiConverterTypeRoomInviteResolvedCandidate.lower(value)
+}
+
+
+public struct RoomInviteSelectionInput {
+    public var selected: [RoomInviteCandidate]
+    public var candidate: RoomInviteCandidate
+    public var currentUserPubkey: String
+    public var action: RoomInviteSelectionAction
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(selected: [RoomInviteCandidate], candidate: RoomInviteCandidate, currentUserPubkey: String, action: RoomInviteSelectionAction) {
+        self.selected = selected
+        self.candidate = candidate
+        self.currentUserPubkey = currentUserPubkey
+        self.action = action
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteSelectionInput: Sendable {}
+#endif
+
+
+extension RoomInviteSelectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteSelectionInput, rhs: RoomInviteSelectionInput) -> Bool {
+        if lhs.selected != rhs.selected {
+            return false
+        }
+        if lhs.candidate != rhs.candidate {
+            return false
+        }
+        if lhs.currentUserPubkey != rhs.currentUserPubkey {
+            return false
+        }
+        if lhs.action != rhs.action {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(selected)
+        hasher.combine(candidate)
+        hasher.combine(currentUserPubkey)
+        hasher.combine(action)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteSelectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSelectionInput {
+        return
+            try RoomInviteSelectionInput(
+                selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf),
+                candidate: FfiConverterTypeRoomInviteCandidate.read(from: &buf),
+                currentUserPubkey: FfiConverterString.read(from: &buf),
+                action: FfiConverterTypeRoomInviteSelectionAction.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteSelectionInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRoomInviteCandidate.write(value.selected, into: &buf)
+        FfiConverterTypeRoomInviteCandidate.write(value.candidate, into: &buf)
+        FfiConverterString.write(value.currentUserPubkey, into: &buf)
+        FfiConverterTypeRoomInviteSelectionAction.write(value.action, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSelectionInput_lift(_ buf: RustBuffer) throws -> RoomInviteSelectionInput {
+    return try FfiConverterTypeRoomInviteSelectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSelectionInput_lower(_ value: RoomInviteSelectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomInviteSelectionInput.lower(value)
+}
+
+
+public struct RoomInviteSelectionProjection {
+    public var selected: [RoomInviteCandidate]
+    public var errorMessage: String
+    public var selectionChanged: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(selected: [RoomInviteCandidate], errorMessage: String, selectionChanged: Bool) {
+        self.selected = selected
+        self.errorMessage = errorMessage
+        self.selectionChanged = selectionChanged
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteSelectionProjection: Sendable {}
+#endif
+
+
+extension RoomInviteSelectionProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteSelectionProjection, rhs: RoomInviteSelectionProjection) -> Bool {
+        if lhs.selected != rhs.selected {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        if lhs.selectionChanged != rhs.selectionChanged {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(selected)
+        hasher.combine(errorMessage)
+        hasher.combine(selectionChanged)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteSelectionProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSelectionProjection {
+        return
+            try RoomInviteSelectionProjection(
+                selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf),
+                selectionChanged: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteSelectionProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRoomInviteCandidate.write(value.selected, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+        FfiConverterBool.write(value.selectionChanged, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSelectionProjection_lift(_ buf: RustBuffer) throws -> RoomInviteSelectionProjection {
+    return try FfiConverterTypeRoomInviteSelectionProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSelectionProjection_lower(_ value: RoomInviteSelectionProjection) -> RustBuffer {
+    return FfiConverterTypeRoomInviteSelectionProjection.lower(value)
 }
 
 
@@ -32475,6 +32567,83 @@ extension RoomInviteInputFormat: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum RoomInviteSelectionAction {
+
+    case add
+    case toggle
+    case remove
+}
+
+
+#if compiler(>=6)
+extension RoomInviteSelectionAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteSelectionAction: FfiConverterRustBuffer {
+    typealias SwiftType = RoomInviteSelectionAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSelectionAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .add
+
+        case 2: return .toggle
+
+        case 3: return .remove
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RoomInviteSelectionAction, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .add:
+            writeInt(&buf, Int32(1))
+
+
+        case .toggle:
+            writeInt(&buf, Int32(2))
+
+
+        case .remove:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSelectionAction_lift(_ buf: RustBuffer) throws -> RoomInviteSelectionAction {
+    return try FfiConverterTypeRoomInviteSelectionAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSelectionAction_lower(_ value: RoomInviteSelectionAction) -> RustBuffer {
+    return FfiConverterTypeRoomInviteSelectionAction.lower(value)
+}
+
+
+extension RoomInviteSelectionAction: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Why a room is being recommended on the explorer. Drives the subtitle under
  * a card ("Alice + 3 you follow are here" vs. "Posts by writers you read").
@@ -35311,9 +35480,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_explorer_curator_pubkey() != 6750) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_add_decision() != 25995) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_avatar_projection() != 27101) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -35594,6 +35760,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_avatar() != 27524) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_invite_selection() != 36933) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_article_card() != 56696) {

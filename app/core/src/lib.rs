@@ -175,10 +175,11 @@ pub use relays::{
     RelayRowProjection, RelayRowProjectionInput, RelaySettingsProjection, RelayStatusTone,
 };
 pub use room_invites::{
-    RoomInviteAddDecision, RoomInviteAvatarProjection, RoomInviteAvatarProjectionInput,
-    RoomInviteCandidate, RoomInviteCandidateSource, RoomInviteChip, RoomInviteInputFormat,
-    RoomInviteProjection, RoomInviteProjectionInput, RoomInviteResolvedCandidate,
-    RoomInviteSendResultProjection, RoomInviteSuggestion,
+    RoomInviteAvatarProjection, RoomInviteAvatarProjectionInput, RoomInviteCandidate,
+    RoomInviteCandidateSource, RoomInviteChip, RoomInviteInputFormat, RoomInviteProjection,
+    RoomInviteProjectionInput, RoomInviteResolvedCandidate, RoomInviteSelectionAction,
+    RoomInviteSelectionInput, RoomInviteSelectionProjection, RoomInviteSendResultProjection,
+    RoomInviteSuggestion,
 };
 pub use room_library::{
     RoomLibraryArticleCardProjection, RoomLibraryArticleCardProjectionInput,

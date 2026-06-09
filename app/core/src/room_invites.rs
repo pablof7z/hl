@@ -75,10 +75,32 @@ pub struct RoomInviteResolvedCandidate {
     pub is_selected: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RoomInviteAddDecision {
+    should_add: bool,
+    error_message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum RoomInviteSelectionAction {
+    Add,
+    Toggle,
+    Remove,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomInviteSelectionInput {
+    pub selected: Vec<RoomInviteCandidate>,
+    pub candidate: RoomInviteCandidate,
+    pub current_user_pubkey: String,
+    pub action: RoomInviteSelectionAction,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct RoomInviteAddDecision {
-    pub should_add: bool,
+pub struct RoomInviteSelectionProjection {
+    pub selected: Vec<RoomInviteCandidate>,
     pub error_message: String,
+    pub selection_changed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -176,7 +198,7 @@ pub fn avatar_projection(input: RoomInviteAvatarProjectionInput) -> RoomInviteAv
     }
 }
 
-pub fn add_decision(
+fn add_decision(
     pubkey_hex: &str,
     selected_pubkeys: &[String],
     current_user_pubkey: &str,
@@ -201,6 +223,71 @@ pub fn add_decision(
     RoomInviteAddDecision {
         should_add: true,
         error_message: String::new(),
+    }
+}
+
+pub fn project_selection(input: RoomInviteSelectionInput) -> RoomInviteSelectionProjection {
+    let mut selected = input.selected;
+    let candidate = input.candidate;
+    let candidate_key = candidate.pubkey_hex.to_ascii_lowercase();
+    let selected_pubkeys = selected
+        .iter()
+        .map(|candidate| candidate.pubkey_hex.clone())
+        .collect::<Vec<_>>();
+    let selected_index = selected.iter().position(|selected| {
+        selected
+            .pubkey_hex
+            .eq_ignore_ascii_case(&candidate.pubkey_hex)
+    });
+
+    match input.action {
+        RoomInviteSelectionAction::Remove => {
+            if let Some(index) = selected_index {
+                selected.remove(index);
+                RoomInviteSelectionProjection {
+                    selected,
+                    error_message: String::new(),
+                    selection_changed: true,
+                }
+            } else {
+                RoomInviteSelectionProjection {
+                    selected,
+                    error_message: String::new(),
+                    selection_changed: false,
+                }
+            }
+        }
+        RoomInviteSelectionAction::Toggle if selected_index.is_some() => {
+            selected.remove(selected_index.expect("checked"));
+            RoomInviteSelectionProjection {
+                selected,
+                error_message: String::new(),
+                selection_changed: true,
+            }
+        }
+        RoomInviteSelectionAction::Add | RoomInviteSelectionAction::Toggle => {
+            let decision = add_decision(
+                &candidate_key,
+                &selected_pubkeys,
+                &input.current_user_pubkey,
+            );
+            if !decision.should_add {
+                return RoomInviteSelectionProjection {
+                    selected,
+                    error_message: decision.error_message,
+                    selection_changed: false,
+                };
+            }
+            selected.push(RoomInviteCandidate {
+                pubkey_hex: candidate_key,
+                source: candidate.source,
+            });
+            RoomInviteSelectionProjection {
+                selected,
+                error_message: String::new(),
+                selection_changed: true,
+            }
+        }
     }
 }
 
@@ -529,6 +616,63 @@ mod tests {
             }
         );
         assert!(add_decision(&hex("03"), &selected, &hex("02")).should_add);
+    }
+
+    #[test]
+    fn selection_reducer_adds_toggles_removes_and_rejects_self() {
+        let current_user = hex("09");
+        let first = candidate("01", RoomInviteCandidateSource::Follow);
+
+        let added = project_selection(RoomInviteSelectionInput {
+            selected: Vec::new(),
+            candidate: first.clone(),
+            current_user_pubkey: current_user.clone(),
+            action: RoomInviteSelectionAction::Add,
+        });
+        assert!(added.selection_changed);
+        assert_eq!(added.selected, vec![first.clone()]);
+        assert!(added.error_message.is_empty());
+
+        let duplicate = project_selection(RoomInviteSelectionInput {
+            selected: added.selected.clone(),
+            candidate: first.clone(),
+            current_user_pubkey: current_user.clone(),
+            action: RoomInviteSelectionAction::Add,
+        });
+        assert!(!duplicate.selection_changed);
+        assert_eq!(duplicate.selected, vec![first.clone()]);
+        assert!(duplicate.error_message.is_empty());
+
+        let toggled_off = project_selection(RoomInviteSelectionInput {
+            selected: added.selected.clone(),
+            candidate: first.clone(),
+            current_user_pubkey: current_user.clone(),
+            action: RoomInviteSelectionAction::Toggle,
+        });
+        assert!(toggled_off.selection_changed);
+        assert!(toggled_off.selected.is_empty());
+
+        let self_add = project_selection(RoomInviteSelectionInput {
+            selected: Vec::new(),
+            candidate: RoomInviteCandidate {
+                pubkey_hex: current_user.clone(),
+                source: RoomInviteCandidateSource::Paste,
+            },
+            current_user_pubkey: current_user,
+            action: RoomInviteSelectionAction::Add,
+        });
+        assert!(!self_add.selection_changed);
+        assert!(self_add.selected.is_empty());
+        assert_eq!(self_add.error_message, "You're already in this room.");
+
+        let removed = project_selection(RoomInviteSelectionInput {
+            selected: added.selected,
+            candidate: first,
+            current_user_pubkey: String::new(),
+            action: RoomInviteSelectionAction::Remove,
+        });
+        assert!(removed.selection_changed);
+        assert!(removed.selected.is_empty());
     }
 
     #[test]

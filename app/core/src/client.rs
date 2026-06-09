@@ -3907,13 +3907,11 @@ impl HighlighterCore {
         crate::room_invites::avatar_projection(input)
     }
 
-    pub fn get_room_invite_add_decision(
+    pub fn project_room_invite_selection(
         &self,
-        pubkey_hex: String,
-        selected_pubkeys: Vec<String>,
-        current_user_pubkey: String,
-    ) -> crate::room_invites::RoomInviteAddDecision {
-        crate::room_invites::add_decision(&pubkey_hex, &selected_pubkeys, &current_user_pubkey)
+        input: crate::room_invites::RoomInviteSelectionInput,
+    ) -> crate::room_invites::RoomInviteSelectionProjection {
+        crate::room_invites::project_selection(input)
     }
 
     pub fn get_room_invite_send_result(

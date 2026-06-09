@@ -1343,16 +1343,10 @@ actor SafeHighlighterCore {
         core.getRoomInviteAvatarProjection(input: input)
     }
 
-    nonisolated func getRoomInviteAddDecision(
-        pubkeyHex: String,
-        selectedPubkeys: [String],
-        currentUserPubkey: String
-    ) -> RoomInviteAddDecision {
-        core.getRoomInviteAddDecision(
-            pubkeyHex: pubkeyHex,
-            selectedPubkeys: selectedPubkeys,
-            currentUserPubkey: currentUserPubkey
-        )
+    nonisolated func projectRoomInviteSelection(
+        input: RoomInviteSelectionInput
+    ) -> RoomInviteSelectionProjection {
+        core.projectRoomInviteSelection(input: input)
     }
 
     nonisolated func getRoomInviteSendResult(

@@ -128,7 +128,13 @@ struct RoomInviteView: View {
         if !selected.isEmpty {
             FlowChips(items: inviteProjection.selectedChips) { chip in
                 Chip(chip: chip, profile: profile(for: chip.pubkeyHex)) {
-                    removePubkey(chip.pubkeyHex)
+                    applySelection(
+                        candidate: RoomInviteCandidate(
+                            pubkeyHex: chip.pubkeyHex,
+                            source: chip.source
+                        ),
+                        action: .remove
+                    )
                 }
             }
         }
@@ -314,40 +320,34 @@ struct RoomInviteView: View {
         appStore.profileSnapshots[pubkey]
     }
 
-    private func isSelected(_ pubkey: String) -> Bool {
-        selected.contains(where: { $0.pubkeyHex == pubkey })
-    }
-
     private func toggle(_ candidate: Candidate) {
-        if isSelected(candidate.pubkeyHex) {
-            remove(candidate)
-        } else {
-            add(candidate)
-        }
+        applySelection(candidate: candidate.coreCandidate, action: .toggle)
     }
 
     private func add(_ candidate: Candidate) {
-        let decision = appStore.safeCore.getRoomInviteAddDecision(
-            pubkeyHex: candidate.pubkeyHex,
-            selectedPubkeys: selected.map(\.pubkeyHex),
-            currentUserPubkey: appStore.currentUser?.pubkey ?? ""
+        applySelection(candidate: candidate.coreCandidate, action: .add)
+    }
+
+    private func applySelection(
+        candidate: RoomInviteCandidate,
+        action: RoomInviteSelectionAction
+    ) {
+        let projection = appStore.safeCore.projectRoomInviteSelection(
+            input: RoomInviteSelectionInput(
+                selected: selected.map(\.coreCandidate),
+                candidate: candidate,
+                currentUserPubkey: appStore.currentUser?.pubkey ?? "",
+                action: action
+            )
         )
-        guard decision.shouldAdd else {
-            if !decision.errorMessage.isEmpty {
-                error = decision.errorMessage
-            }
-            return
+        let previousCount = selected.count
+        selected = projection.selected.map(Candidate.init(core:))
+        if !projection.errorMessage.isEmpty {
+            error = projection.errorMessage
         }
-        selected.append(candidate)
-        UISelectionFeedbackGenerator().selectionChanged()
-    }
-
-    private func remove(_ candidate: Candidate) {
-        selected.removeAll(where: { $0.pubkeyHex == candidate.pubkeyHex })
-    }
-
-    private func removePubkey(_ pubkeyHex: String) {
-        selected.removeAll(where: { $0.pubkeyHex == pubkeyHex })
+        if projection.selectionChanged, projection.selected.count > previousCount {
+            UISelectionFeedbackGenerator().selectionChanged()
+        }
     }
 
     private func acceptPasteIfAny() {
