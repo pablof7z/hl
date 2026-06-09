@@ -32,7 +32,7 @@ use crate::models::{
     HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
     OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
     PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
+    ProfileUpdateDraft, RelayDiagnostic, SubscriptionOutcome,
 };
 use crate::network_preferences;
 use crate::nip05;
@@ -102,19 +102,6 @@ fn mutation_outcome(result: Result<(), CoreError>) -> MutationOutcome {
         },
         Err(error) => MutationOutcome {
             applied: false,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn string_outcome(result: Result<String, CoreError>) -> StringOutcome {
-    match result {
-        Ok(value) => StringOutcome {
-            value,
-            error: String::new(),
-        },
-        Err(error) => StringOutcome {
-            value: String::new(),
             error: error.to_string(),
         },
     }
@@ -2330,7 +2317,7 @@ impl HighlighterCore {
     pub async fn publish_capture(
         &self,
         input: crate::capture::CapturePublishInput,
-    ) -> StringOutcome {
+    ) -> crate::capture::CapturePublishSnapshot {
         let result: Result<String, CoreError> = async {
             let _ = self.require_user_pubkey()?;
             let crate::capture::CapturePublishInput {
@@ -2428,7 +2415,7 @@ impl HighlighterCore {
             }
         }
         .await;
-        string_outcome(result)
+        crate::capture::publish_snapshot(result)
     }
 
     pub fn reconstruct_ocr_markdown(&self, lines: Vec<crate::ocr::OcrLine>) -> String {
@@ -3070,7 +3057,11 @@ impl HighlighterCore {
     /// Publish a NIP-29 kind:9021 join-request for `group_id`. Rust owns the
     /// pending-join state and emits app toast deltas for request sent,
     /// request failure, and later membership confirmation.
-    pub async fn request_join_room(&self, group_id: String, room_name: String) -> StringOutcome {
+    pub async fn request_join_room(
+        &self,
+        group_id: String,
+        room_name: String,
+    ) -> groups::JoinRoomRequestSnapshot {
         let group_id = group_id.trim().to_string();
         self.record_pending_join(&group_id, &room_name);
         let result: Result<String, CoreError> = async {
@@ -3088,7 +3079,7 @@ impl HighlighterCore {
                 self.emit_app_toast(error.to_string());
             }
         }
-        string_outcome(result)
+        groups::join_room_request_snapshot(&group_id, result)
     }
 
     /// Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
@@ -3151,7 +3142,7 @@ impl HighlighterCore {
         picture: String,
         visibility: groups::RoomVisibility,
         access: groups::RoomAccess,
-    ) -> StringOutcome {
+    ) -> groups::CreateRoomPublishSnapshot {
         let result: Result<String, CoreError> = async {
             let _ = self.require_user_pubkey()?;
             groups::create_room(
@@ -3165,7 +3156,7 @@ impl HighlighterCore {
             .await
         }
         .await;
-        string_outcome(result)
+        groups::create_room_publish_snapshot(result)
     }
 
     /// Mint one invite code and project the public room share link. Rust owns

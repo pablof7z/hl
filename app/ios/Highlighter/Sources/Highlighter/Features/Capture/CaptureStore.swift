@@ -275,7 +275,7 @@ final class CaptureStore {
                 )
             )
             if outcome.error.isEmpty {
-                self.phase = .done(outcome.value)
+                self.phase = .done(outcome.eventId)
             } else {
                 self.phase = .error(outcome.error)
             }

@@ -417,6 +417,19 @@ pub struct CreateRoomProjection {
     pub visibility_options: Vec<CreateRoomVisibilityOption>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct JoinRoomRequestSnapshot {
+    pub group_id: String,
+    pub event_id: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomPublishSnapshot {
+    pub group_id: String,
+    pub error: String,
+}
+
 impl RoomVisibility {
     fn marker(self) -> &'static str {
         match self {
@@ -510,6 +523,39 @@ fn create_room_visibility_options(
         },
     )
     .collect()
+}
+
+pub fn join_room_request_snapshot(
+    group_id: &str,
+    result: Result<String, CoreError>,
+) -> JoinRoomRequestSnapshot {
+    match result {
+        Ok(event_id) => JoinRoomRequestSnapshot {
+            group_id: group_id.trim().to_string(),
+            event_id,
+            error: String::new(),
+        },
+        Err(error) => JoinRoomRequestSnapshot {
+            group_id: group_id.trim().to_string(),
+            event_id: String::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+pub fn create_room_publish_snapshot(
+    result: Result<String, CoreError>,
+) -> CreateRoomPublishSnapshot {
+    match result {
+        Ok(group_id) => CreateRoomPublishSnapshot {
+            group_id,
+            error: String::new(),
+        },
+        Err(error) => CreateRoomPublishSnapshot {
+            group_id: String::new(),
+            error: error.to_string(),
+        },
+    }
 }
 
 /// Generate a fresh NIP-29 group identifier. Must match `[a-z0-9-_]+`. Uses
@@ -1282,6 +1328,33 @@ mod tests {
         assert_eq!(private.visibility_glyph, "lock");
         assert_eq!(private.visibility_summary, "Private · Invite only");
         assert!(private.visibility_options[2].is_selected);
+    }
+
+    #[test]
+    fn join_room_request_snapshot_projects_event_and_error_state() {
+        let ok = join_room_request_snapshot("  readers  ", Ok("event123".into()));
+        assert_eq!(ok.group_id, "readers");
+        assert_eq!(ok.event_id, "event123");
+        assert!(ok.error.is_empty());
+
+        let err = join_room_request_snapshot(
+            "readers",
+            Err(CoreError::InvalidInput("missing group".into())),
+        );
+        assert_eq!(err.group_id, "readers");
+        assert!(err.event_id.is_empty());
+        assert_eq!(err.error, "invalid input: missing group");
+    }
+
+    #[test]
+    fn create_room_publish_snapshot_projects_group_and_error_state() {
+        let ok = create_room_publish_snapshot(Ok("room123".into()));
+        assert_eq!(ok.group_id, "room123");
+        assert!(ok.error.is_empty());
+
+        let err = create_room_publish_snapshot(Err(CoreError::Relay("offline".into())));
+        assert!(err.group_id.is_empty());
+        assert_eq!(err.error, "relay error: offline");
     }
 
     #[test]

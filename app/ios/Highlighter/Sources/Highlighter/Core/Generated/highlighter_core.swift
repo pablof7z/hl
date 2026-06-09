@@ -814,7 +814,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func createCurationSetWithAddressSnapshot(title: String, address: String) async  -> CurationMenuSnapshot
 
-    func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async  -> StringOutcome
+    func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async  -> CreateRoomPublishSnapshot
 
     func cropOcrLines(lines: [OcrLine], pageRect: OcrRect)  -> [OcrLine]
 
@@ -1513,7 +1513,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
 
-    func publishCapture(input: CapturePublishInput) async  -> StringOutcome
+    func publishCapture(input: CapturePublishInput) async  -> CapturePublishSnapshot
 
     /**
      * Publish a NIP-29 kind:9 chat message and return the refreshed bounded
@@ -1599,7 +1599,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * pending-join state and emits app toast deltas for request sent,
      * request failure, and later membership confirmation.
      */
-    func requestJoinRoom(groupId: String, roomName: String) async  -> StringOutcome
+    func requestJoinRoom(groupId: String, roomName: String) async  -> JoinRoomRequestSnapshot
 
     /**
      * Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
@@ -2148,7 +2148,7 @@ open func createCurationSetWithAddressSnapshot(title: String, address: String)as
         )
 }
 
-open func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess)async  -> StringOutcome  {
+open func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess)async  -> CreateRoomPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2160,7 +2160,7 @@ open func createRoom(name: String, about: String, picture: String, visibility: R
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringOutcome_lift,
+            liftFunc: FfiConverterTypeCreateRoomPublishSnapshot_lift,
             errorHandler: nil
 
         )
@@ -4371,7 +4371,7 @@ open func publishArtifact(preview: ArtifactPreview, groupId: String, note: Strin
         )
 }
 
-open func publishCapture(input: CapturePublishInput)async  -> StringOutcome  {
+open func publishCapture(input: CapturePublishInput)async  -> CapturePublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4383,7 +4383,7 @@ open func publishCapture(input: CapturePublishInput)async  -> StringOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringOutcome_lift,
+            liftFunc: FfiConverterTypeCapturePublishSnapshot_lift,
             errorHandler: nil
 
         )
@@ -4703,7 +4703,7 @@ open func removeRelay(url: String)async  -> NetworkSettingsMutationSnapshot  {
      * pending-join state and emits app toast deltas for request sent,
      * request failure, and later membership confirmation.
      */
-open func requestJoinRoom(groupId: String, roomName: String)async  -> StringOutcome  {
+open func requestJoinRoom(groupId: String, roomName: String)async  -> JoinRoomRequestSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4715,7 +4715,7 @@ open func requestJoinRoom(groupId: String, roomName: String)async  -> StringOutc
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringOutcome_lift,
+            liftFunc: FfiConverterTypeJoinRoomRequestSnapshot_lift,
             errorHandler: nil
 
         )
@@ -10967,6 +10967,76 @@ public func FfiConverterTypeCapturePublishProjectionInput_lower(_ value: Capture
 }
 
 
+public struct CapturePublishSnapshot {
+    public var eventId: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, error: String) {
+        self.eventId = eventId
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CapturePublishSnapshot: Sendable {}
+#endif
+
+
+extension CapturePublishSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CapturePublishSnapshot, rhs: CapturePublishSnapshot) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCapturePublishSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapturePublishSnapshot {
+        return
+            try CapturePublishSnapshot(
+                eventId: FfiConverterString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CapturePublishSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapturePublishSnapshot_lift(_ buf: RustBuffer) throws -> CapturePublishSnapshot {
+    return try FfiConverterTypeCapturePublishSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapturePublishSnapshot_lower(_ value: CapturePublishSnapshot) -> RustBuffer {
+    return FfiConverterTypeCapturePublishSnapshot.lower(value)
+}
+
+
 public struct CaptureStashProjection {
     public var quote: String
     public var context: String
@@ -14037,6 +14107,76 @@ public func FfiConverterTypeCreateRoomProjectionInput_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeCreateRoomProjectionInput_lower(_ value: CreateRoomProjectionInput) -> RustBuffer {
     return FfiConverterTypeCreateRoomProjectionInput.lower(value)
+}
+
+
+public struct CreateRoomPublishSnapshot {
+    public var groupId: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(groupId: String, error: String) {
+        self.groupId = groupId
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CreateRoomPublishSnapshot: Sendable {}
+#endif
+
+
+extension CreateRoomPublishSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CreateRoomPublishSnapshot, rhs: CreateRoomPublishSnapshot) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateRoomPublishSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomPublishSnapshot {
+        return
+            try CreateRoomPublishSnapshot(
+                groupId: FfiConverterString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateRoomPublishSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomPublishSnapshot_lift(_ buf: RustBuffer) throws -> CreateRoomPublishSnapshot {
+    return try FfiConverterTypeCreateRoomPublishSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomPublishSnapshot_lower(_ value: CreateRoomPublishSnapshot) -> RustBuffer {
+    return FfiConverterTypeCreateRoomPublishSnapshot.lower(value)
 }
 
 
@@ -19291,6 +19431,84 @@ public func FfiConverterTypeIsbnPreviewRequestProjectionInput_lift(_ buf: RustBu
 #endif
 public func FfiConverterTypeIsbnPreviewRequestProjectionInput_lower(_ value: IsbnPreviewRequestProjectionInput) -> RustBuffer {
     return FfiConverterTypeIsbnPreviewRequestProjectionInput.lower(value)
+}
+
+
+public struct JoinRoomRequestSnapshot {
+    public var groupId: String
+    public var eventId: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(groupId: String, eventId: String, error: String) {
+        self.groupId = groupId
+        self.eventId = eventId
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension JoinRoomRequestSnapshot: Sendable {}
+#endif
+
+
+extension JoinRoomRequestSnapshot: Equatable, Hashable {
+    public static func ==(lhs: JoinRoomRequestSnapshot, rhs: JoinRoomRequestSnapshot) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(eventId)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeJoinRoomRequestSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JoinRoomRequestSnapshot {
+        return
+            try JoinRoomRequestSnapshot(
+                groupId: FfiConverterString.read(from: &buf),
+                eventId: FfiConverterString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: JoinRoomRequestSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinRoomRequestSnapshot_lift(_ buf: RustBuffer) throws -> JoinRoomRequestSnapshot {
+    return try FfiConverterTypeJoinRoomRequestSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinRoomRequestSnapshot_lower(_ value: JoinRoomRequestSnapshot) -> RustBuffer {
+    return FfiConverterTypeJoinRoomRequestSnapshot.lower(value)
 }
 
 
@@ -32176,76 +32394,6 @@ public func FfiConverterTypeShareWebReaderTargetSnapshot_lower(_ value: ShareWeb
 }
 
 
-public struct StringOutcome {
-    public var value: String
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: String, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension StringOutcome: Sendable {}
-#endif
-
-
-extension StringOutcome: Equatable, Hashable {
-    public static func ==(lhs: StringOutcome, rhs: StringOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeStringOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StringOutcome {
-        return
-            try StringOutcome(
-                value: FfiConverterString.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: StringOutcome, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeStringOutcome_lift(_ buf: RustBuffer) throws -> StringOutcome {
-    return try FfiConverterTypeStringOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeStringOutcome_lower(_ value: StringOutcome) -> RustBuffer {
-    return FfiConverterTypeStringOutcome.lower(value)
-}
-
-
 public struct SubscriptionOutcome {
     public var handle: UInt64
     public var error: String
@@ -38561,7 +38709,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set_with_address_snapshot() != 31730) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 37226) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 28154) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_crop_ocr_lines() != 63723) {
@@ -39089,7 +39237,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 1182) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_capture() != 51042) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_capture() != 12749) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message_snapshot() != 49134) {
@@ -39137,7 +39285,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 35958) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_request_join_room() != 5056) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_request_join_room() != 34809) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 31286) {

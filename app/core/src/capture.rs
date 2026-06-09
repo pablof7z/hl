@@ -1,3 +1,4 @@
+use crate::errors::CoreError;
 use crate::models::{
     ArtifactPreview, ArtifactRecord, BlossomUpload, CommunitySummary, HighlightDraft, PictureDraft,
 };
@@ -93,6 +94,12 @@ pub struct CapturePublishInput {
     pub target_group_id: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CapturePublishSnapshot {
+    pub event_id: String,
+    pub error: String,
+}
+
 /// Project book labels used by capture selection and search rows. Rust owns
 /// semantic fallback and optional metadata presence; native owns layout.
 pub fn book_display_projection(
@@ -151,6 +158,19 @@ pub fn publish_projection(input: CapturePublishProjectionInput) -> CapturePublis
     );
     CapturePublishProjection {
         can_publish: phase_allows_publish && input.has_upload,
+    }
+}
+
+pub fn publish_snapshot(result: Result<String, CoreError>) -> CapturePublishSnapshot {
+    match result {
+        Ok(event_id) => CapturePublishSnapshot {
+            event_id,
+            error: String::new(),
+        },
+        Err(error) => CapturePublishSnapshot {
+            event_id: String::new(),
+            error: error.to_string(),
+        },
     }
 }
 
@@ -316,6 +336,17 @@ mod tests {
         assert!(processing.can_publish);
         assert!(!no_upload.can_publish);
         assert!(!publishing.can_publish);
+    }
+
+    #[test]
+    fn publish_snapshot_projects_event_id_and_error_state() {
+        let ok = publish_snapshot(Ok("event123".into()));
+        assert_eq!(ok.event_id, "event123");
+        assert!(ok.error.is_empty());
+
+        let err = publish_snapshot(Err(CoreError::InvalidInput("bad capture".into())));
+        assert!(err.event_id.is_empty());
+        assert_eq!(err.error, "invalid input: bad capture");
     }
 
     #[test]

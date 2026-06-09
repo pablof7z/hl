@@ -516,7 +516,7 @@ actor SafeHighlighterCore {
         core.projectCapturePublish(input: input)
     }
 
-    func publishCapture(input: CapturePublishInput) async -> StringOutcome {
+    func publishCapture(input: CapturePublishInput) async -> CapturePublishSnapshot {
         await core.publishCapture(input: input)
     }
 
@@ -1022,7 +1022,7 @@ actor SafeHighlighterCore {
         await core.getRoomBrowseSnapshot(query: query, limit: limit)
     }
 
-    func requestJoinRoom(groupId: String, roomName: String) async -> StringOutcome {
+    func requestJoinRoom(groupId: String, roomName: String) async -> JoinRoomRequestSnapshot {
         await core.requestJoinRoom(groupId: groupId, roomName: roomName)
     }
 
@@ -1036,7 +1036,7 @@ actor SafeHighlighterCore {
         picture: String,
         visibility: RoomVisibility,
         access: RoomAccess
-    ) async -> StringOutcome {
+    ) async -> CreateRoomPublishSnapshot {
         await core.createRoom(
             name: name,
             about: about,

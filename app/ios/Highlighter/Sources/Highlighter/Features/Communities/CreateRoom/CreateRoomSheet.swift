@@ -323,7 +323,7 @@ struct CreateRoomSheet: View {
             if outcome.error.isEmpty {
                 let generator = UINotificationFeedbackGenerator()
                 generator.notificationOccurred(.success)
-                createdGroupId = outcome.value
+                createdGroupId = outcome.groupId
             } else {
                 self.error = "Couldn't publish: \(outcome.error)"
             }

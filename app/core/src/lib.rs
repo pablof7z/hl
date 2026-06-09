@@ -83,7 +83,8 @@ pub use capture::{
     CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput,
     CaptureCommunitySelectionProjection, CaptureCommunitySelectionProjectionInput,
     CapturePublishInput, CapturePublishPhase, CapturePublishProjection,
-    CapturePublishProjectionInput, CaptureStashProjection, CaptureStashProjectionInput,
+    CapturePublishProjectionInput, CapturePublishSnapshot, CaptureStashProjection,
+    CaptureStashProjectionInput,
 };
 pub use chat::{
     ChatComposerProjection, ChatComposerProjectionInput, ChatMessageRowProjection,
@@ -113,9 +114,9 @@ pub use feedback::{
 };
 pub use groups::{
     CommunityRowProjection, CommunityRowProjectionInput, CreateRoomProjection,
-    CreateRoomProjectionInput, CreateRoomVisibilityOption, RoomAccess, RoomAvatarProjection,
-    RoomAvatarProjectionInput, RoomCoverCardProjection, RoomCoverCardProjectionInput,
-    RoomVisibility,
+    CreateRoomProjectionInput, CreateRoomPublishSnapshot, CreateRoomVisibilityOption,
+    JoinRoomRequestSnapshot, RoomAccess, RoomAvatarProjection, RoomAvatarProjectionInput,
+    RoomCoverCardProjection, RoomCoverCardProjectionInput, RoomVisibility,
 };
 pub use highlights::{
     ArticleHighlightPublishProjection, ArticleHighlightPublishProjectionInput,
@@ -154,7 +155,7 @@ pub use models::{
     OnboardingInterest, OnboardingInterestChip, OnboardingInterestProjection,
     OnboardingInterestSelection, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
     ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RoomLane, RoomRecommendation,
-    RoomRecommendationReason, StringOutcome, SubscriptionOutcome, WebBookmarkRecord,
+    RoomRecommendationReason, SubscriptionOutcome, WebBookmarkRecord,
 };
 pub use nip05::{
     Nip05Availability, Nip05AvailabilitySnapshot, Nip05AvailabilityState,
