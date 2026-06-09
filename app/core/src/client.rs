@@ -2424,6 +2424,49 @@ impl HighlighterCore {
         ))
     }
 
+    pub fn project_comment_like_state(
+        &self,
+        input: crate::reactions::CommentLikeStateProjectionInput,
+    ) -> crate::reactions::CommentLikeStateProjection {
+        crate::reactions::comment_like_state_projection(input)
+    }
+
+    /// Toggle the current user's like on a NIP-22 comment. Rust queries the
+    /// current cached reaction summary to decide whether to publish a kind:7
+    /// like or delete the existing reaction via NIP-09, so native shells never
+    /// need to cache reaction event ids.
+    pub async fn toggle_comment_like(
+        &self,
+        event_id: String,
+        author_pubkey_hex: String,
+    ) -> BoolOutcome {
+        let result: Result<bool, CoreError> = async {
+            let current_user = self.require_user_pubkey()?;
+            let current_user_hex = current_user.to_hex();
+            let event_id = event_id.trim();
+            let summary = crate::reactions::query_like_summary_for_event(
+                self.runtime.ndb(),
+                event_id,
+                Some(current_user_hex.as_str()),
+                128,
+            )?;
+            if let Some(reaction_event_id) = summary.my_like_event_id {
+                crate::reactions::unpublish_reaction(&self.runtime, &reaction_event_id).await?;
+                Ok(false)
+            } else {
+                crate::reactions::publish_comment_like(
+                    &self.runtime,
+                    event_id,
+                    author_pubkey_hex.trim(),
+                )
+                .await?;
+                Ok(true)
+            }
+        }
+        .await;
+        bool_outcome(result)
+    }
+
     /// Publish a like targeting a NIP-22 comment. Rust owns both the target
     /// kind and the NIP-25 content marker for "like".
     pub async fn publish_comment_like(

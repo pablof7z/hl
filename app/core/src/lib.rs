@@ -159,7 +159,7 @@ pub use profile::{
     ProfileIdentityProjectionInput, ProfileRelationshipProjection,
     ProfileRelationshipProjectionInput, ProfileUpdateProjection, ProfileUpdateProjectionInput,
 };
-pub use reactions::ReactionRecord;
+pub use reactions::{CommentLikeStateProjection, CommentLikeStateProjectionInput, ReactionRecord};
 pub use reads::{
     ReadingFeedCardProjection, ReadingFeedCardProjectionInput, ReadingFeedInteractorProfile,
 };

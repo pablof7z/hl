@@ -1466,6 +1466,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectCommentComposer(input: CommentComposerProjectionInput)  -> CommentComposerProjection
 
+    func projectCommentLikeState(input: CommentLikeStateProjectionInput)  -> CommentLikeStateProjection
+
     func projectCommunityRow(input: CommunityRowProjectionInput)  -> CommunityRowProjection
 
     /**
@@ -2009,6 +2011,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * if it was removed.
      */
     func toggleArticleBookmark(address: String) async  -> BoolOutcome
+
+    /**
+     * Toggle the current user's like on a NIP-22 comment. Rust queries the
+     * current cached reaction summary to decide whether to publish a kind:7
+     * like or delete the existing reaction via NIP-09, so native shells never
+     * need to cache reaction event ids.
+     */
+    func toggleCommentLike(eventId: String, authorPubkeyHex: String) async  -> BoolOutcome
 
     /**
      * Toggle `event_id_hex` in the user's kind:10003 list (for comments
@@ -4550,6 +4560,14 @@ open func projectCommentComposer(input: CommentComposerProjectionInput) -> Comme
 })
 }
 
+open func projectCommentLikeState(input: CommentLikeStateProjectionInput) -> CommentLikeStateProjection  {
+    return try!  FfiConverterTypeCommentLikeStateProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_comment_like_state(self.uniffiClonePointer(),
+        FfiConverterTypeCommentLikeStateProjectionInput_lower(input),$0
+    )
+})
+}
+
 open func projectCommunityRow(input: CommunityRowProjectionInput) -> CommunityRowProjection  {
     return try!  FfiConverterTypeCommunityRowProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_community_row(self.uniffiClonePointer(),
@@ -6314,6 +6332,30 @@ open func toggleArticleBookmark(address: String)async  -> BoolOutcome  {
                 uniffi_highlighter_core_fn_method_highlightercore_toggle_article_bookmark(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(address)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBoolOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Toggle the current user's like on a NIP-22 comment. Rust queries the
+     * current cached reaction summary to decide whether to publish a kind:7
+     * like or delete the existing reaction via NIP-09, so native shells never
+     * need to cache reaction event ids.
+     */
+open func toggleCommentLike(eventId: String, authorPubkeyHex: String)async  -> BoolOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_toggle_comment_like(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(eventId),FfiConverterString.lower(authorPubkeyHex)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -11976,6 +12018,194 @@ public func FfiConverterTypeCommentComposerProjectionInput_lift(_ buf: RustBuffe
 #endif
 public func FfiConverterTypeCommentComposerProjectionInput_lower(_ value: CommentComposerProjectionInput) -> RustBuffer {
     return FfiConverterTypeCommentComposerProjectionInput.lower(value)
+}
+
+
+public struct CommentLikeStateProjection {
+    public var canonicalEventIdHex: String
+    public var isLiked: Bool
+    public var likeCount: UInt32
+    public var optimisticLikedEventIds: [String]
+    public var canApply: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(canonicalEventIdHex: String, isLiked: Bool, likeCount: UInt32, optimisticLikedEventIds: [String], canApply: Bool) {
+        self.canonicalEventIdHex = canonicalEventIdHex
+        self.isLiked = isLiked
+        self.likeCount = likeCount
+        self.optimisticLikedEventIds = optimisticLikedEventIds
+        self.canApply = canApply
+    }
+}
+
+#if compiler(>=6)
+extension CommentLikeStateProjection: Sendable {}
+#endif
+
+
+extension CommentLikeStateProjection: Equatable, Hashable {
+    public static func ==(lhs: CommentLikeStateProjection, rhs: CommentLikeStateProjection) -> Bool {
+        if lhs.canonicalEventIdHex != rhs.canonicalEventIdHex {
+            return false
+        }
+        if lhs.isLiked != rhs.isLiked {
+            return false
+        }
+        if lhs.likeCount != rhs.likeCount {
+            return false
+        }
+        if lhs.optimisticLikedEventIds != rhs.optimisticLikedEventIds {
+            return false
+        }
+        if lhs.canApply != rhs.canApply {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(canonicalEventIdHex)
+        hasher.combine(isLiked)
+        hasher.combine(likeCount)
+        hasher.combine(optimisticLikedEventIds)
+        hasher.combine(canApply)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentLikeStateProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentLikeStateProjection {
+        return
+            try CommentLikeStateProjection(
+                canonicalEventIdHex: FfiConverterString.read(from: &buf),
+                isLiked: FfiConverterBool.read(from: &buf),
+                likeCount: FfiConverterUInt32.read(from: &buf),
+                optimisticLikedEventIds: FfiConverterSequenceString.read(from: &buf),
+                canApply: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentLikeStateProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.canonicalEventIdHex, into: &buf)
+        FfiConverterBool.write(value.isLiked, into: &buf)
+        FfiConverterUInt32.write(value.likeCount, into: &buf)
+        FfiConverterSequenceString.write(value.optimisticLikedEventIds, into: &buf)
+        FfiConverterBool.write(value.canApply, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentLikeStateProjection_lift(_ buf: RustBuffer) throws -> CommentLikeStateProjection {
+    return try FfiConverterTypeCommentLikeStateProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentLikeStateProjection_lower(_ value: CommentLikeStateProjection) -> RustBuffer {
+    return FfiConverterTypeCommentLikeStateProjection.lower(value)
+}
+
+
+public struct CommentLikeStateProjectionInput {
+    public var likedEventIds: [String]
+    public var eventIdHex: String
+    public var likeCount: UInt32
+    public var desiredLiked: Bool?
+    public var adjustCount: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(likedEventIds: [String], eventIdHex: String, likeCount: UInt32, desiredLiked: Bool?, adjustCount: Bool) {
+        self.likedEventIds = likedEventIds
+        self.eventIdHex = eventIdHex
+        self.likeCount = likeCount
+        self.desiredLiked = desiredLiked
+        self.adjustCount = adjustCount
+    }
+}
+
+#if compiler(>=6)
+extension CommentLikeStateProjectionInput: Sendable {}
+#endif
+
+
+extension CommentLikeStateProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CommentLikeStateProjectionInput, rhs: CommentLikeStateProjectionInput) -> Bool {
+        if lhs.likedEventIds != rhs.likedEventIds {
+            return false
+        }
+        if lhs.eventIdHex != rhs.eventIdHex {
+            return false
+        }
+        if lhs.likeCount != rhs.likeCount {
+            return false
+        }
+        if lhs.desiredLiked != rhs.desiredLiked {
+            return false
+        }
+        if lhs.adjustCount != rhs.adjustCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(likedEventIds)
+        hasher.combine(eventIdHex)
+        hasher.combine(likeCount)
+        hasher.combine(desiredLiked)
+        hasher.combine(adjustCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentLikeStateProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentLikeStateProjectionInput {
+        return
+            try CommentLikeStateProjectionInput(
+                likedEventIds: FfiConverterSequenceString.read(from: &buf),
+                eventIdHex: FfiConverterString.read(from: &buf),
+                likeCount: FfiConverterUInt32.read(from: &buf),
+                desiredLiked: FfiConverterOptionBool.read(from: &buf),
+                adjustCount: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentLikeStateProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.likedEventIds, into: &buf)
+        FfiConverterString.write(value.eventIdHex, into: &buf)
+        FfiConverterUInt32.write(value.likeCount, into: &buf)
+        FfiConverterOptionBool.write(value.desiredLiked, into: &buf)
+        FfiConverterBool.write(value.adjustCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentLikeStateProjectionInput_lift(_ buf: RustBuffer) throws -> CommentLikeStateProjectionInput {
+    return try FfiConverterTypeCommentLikeStateProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentLikeStateProjectionInput_lower(_ value: CommentLikeStateProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCommentLikeStateProjectionInput.lower(value)
 }
 
 
@@ -36029,6 +36259,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_composer() != 35257) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_like_state() != 52827) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_community_row() != 45428) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -36384,6 +36617,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark() != 27334) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_comment_like() != 51507) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark() != 58235) {

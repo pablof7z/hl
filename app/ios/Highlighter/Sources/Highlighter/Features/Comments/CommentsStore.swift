@@ -19,9 +19,9 @@ final class CommentsStore {
     /// kind:7 like counts for any visible comment id. Updated optimistically
     /// on toggle and reconciled on refresh.
     private(set) var likeCounts: [String: Int] = [:]
-    /// Reaction event id for the current user's like on a given comment id
-    /// (allows quick "undo like" via NIP-09 deletion). Missing = not liked.
-    private(set) var myLikeEventIds: [String: String] = [:]
+    /// Comment event ids the current user has liked. Rust owns canonicalization,
+    /// dedupe, optimistic membership, and publish-vs-delete decisions.
+    private(set) var likedCommentIds: [String] = []
     /// Bookmark membership for any visible comment id. Rust owns event-id
     /// canonicalization, dedupe, and optimistic membership projection.
     private(set) var bookmarked: [String] = []
@@ -84,11 +84,13 @@ final class CommentsStore {
             }
             for await (id, summary, isBookmarked) in group {
                 if let summary {
-                    likeCounts[id] = Int(summary.likeCount)
-                    if let myLikeEventId = summary.myLikeEventId {
-                        myLikeEventIds[id] = myLikeEventId
-                    } else {
-                        myLikeEventIds.removeValue(forKey: id)
+                    if let projection = self.commentLikeStateProjection(
+                        eventIdHex: id,
+                        likeCount: summary.likeCount,
+                        desiredLiked: summary.myLikeEventId != nil
+                    ) {
+                        likeCounts[id] = Int(projection.likeCount)
+                        likedCommentIds = projection.optimisticLikedEventIds
                     }
                 }
                 if let isBookmarked {
@@ -151,7 +153,7 @@ final class CommentsStore {
     // MARK: - Like (kind:7)
 
     func isLiked(_ commentId: String) -> Bool {
-        myLikeEventIds[commentId] != nil
+        commentLikeStateProjection(eventIdHex: commentId)?.isLiked ?? false
     }
 
     func likeCount(_ commentId: String) -> Int {
@@ -163,38 +165,36 @@ final class CommentsStore {
     func toggleLike(_ comment: CommentRecord) async {
         guard let core else { return }
         let id = comment.eventId
-        let alreadyLiked = isLiked(id)
+        guard let projection = commentLikeStateProjection(eventIdHex: id),
+              projection.canApply else { return }
+        let wasLiked = projection.isLiked
+        likedCommentIds = projection.optimisticLikedEventIds
+        likeCounts[id] = Int(projection.likeCount)
 
-        // Optimistic
-        let prevCount = likeCount(id)
-        if alreadyLiked {
-            likeCounts[id] = max(0, prevCount - 1)
-        } else {
-            likeCounts[id] = prevCount + 1
-            myLikeEventIds[id] = "pending"
+        let outcome = await core.toggleCommentLike(
+            eventId: id,
+            authorPubkeyHex: comment.pubkey
+        )
+        if outcome.error.isEmpty {
+            if let confirmed = commentLikeStateProjection(
+                eventIdHex: projection.canonicalEventIdHex,
+                likeCount: UInt32(likeCount(id)),
+                desiredLiked: outcome.value
+            ) {
+                likedCommentIds = confirmed.optimisticLikedEventIds
+                likeCounts[id] = Int(confirmed.likeCount)
+            }
+            return
         }
 
-        if alreadyLiked, let myReactionId = myLikeEventIds[id], myReactionId != "pending" {
-            let outcome = await core.unpublishReaction(reactionEventId: myReactionId)
-            if outcome.error.isEmpty {
-                myLikeEventIds.removeValue(forKey: id)
-                return
-            }
-        } else {
-            let outcome = await core.publishCommentLike(
-                eventId: id,
-                authorPubkeyHex: comment.pubkey
-            )
-            if outcome.error.isEmpty, let reaction = outcome.value {
-                myLikeEventIds[id] = reaction.eventId
-                return
-            }
-        }
-
-        // Roll back on failure
-        likeCounts[id] = prevCount
-        if !alreadyLiked {
-            myLikeEventIds.removeValue(forKey: id)
+        if let rollback = commentLikeStateProjection(
+            eventIdHex: projection.canonicalEventIdHex,
+            likeCount: UInt32(likeCount(id)),
+            desiredLiked: wasLiked,
+            adjustCount: true
+        ) {
+            likedCommentIds = rollback.optimisticLikedEventIds
+            likeCounts[id] = Int(rollback.likeCount)
         }
     }
 
@@ -236,6 +236,22 @@ final class CommentsStore {
             eventIds: bookmarked,
             eventIdHex: eventIdHex,
             desiredMember: desiredMember
+        ))
+    }
+
+    private func commentLikeStateProjection(
+        eventIdHex: String,
+        likeCount: UInt32? = nil,
+        desiredLiked: Bool? = nil,
+        adjustCount: Bool = false
+    ) -> CommentLikeStateProjection? {
+        guard let core else { return nil }
+        return core.projectCommentLikeState(input: CommentLikeStateProjectionInput(
+            likedEventIds: likedCommentIds,
+            eventIdHex: eventIdHex,
+            likeCount: likeCount ?? UInt32(likeCounts[eventIdHex] ?? 0),
+            desiredLiked: desiredLiked,
+            adjustCount: adjustCount
         ))
     }
 }

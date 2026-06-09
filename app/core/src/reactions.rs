@@ -36,6 +36,24 @@ pub struct ReactionSummary {
     pub my_like_event_id: Option<String>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentLikeStateProjectionInput {
+    pub liked_event_ids: Vec<String>,
+    pub event_id_hex: String,
+    pub like_count: u32,
+    pub desired_liked: Option<bool>,
+    pub adjust_count: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentLikeStateProjection {
+    pub canonical_event_id_hex: String,
+    pub is_liked: bool,
+    pub like_count: u32,
+    pub optimistic_liked_event_ids: Vec<String>,
+    pub can_apply: bool,
+}
+
 /// All cached reactions on `target_event_id`, newest first. Counts and
 /// "did the current user react" predicates are computed from this list
 /// in the caller.
@@ -125,6 +143,51 @@ pub fn query_like_summary_for_event(
 ) -> Result<ReactionSummary, CoreError> {
     let records = query_reactions_for_event(ndb, target_event_id, limit)?;
     Ok(summarize_likes(&records, current_user_pubkey))
+}
+
+pub fn comment_like_state_projection(
+    input: CommentLikeStateProjectionInput,
+) -> CommentLikeStateProjection {
+    let Ok(event_id) = EventId::from_hex(input.event_id_hex.trim()) else {
+        return CommentLikeStateProjection {
+            canonical_event_id_hex: String::new(),
+            is_liked: false,
+            like_count: input.like_count,
+            optimistic_liked_event_ids: dedupe_event_ids(input.liked_event_ids),
+            can_apply: false,
+        };
+    };
+    let canonical = event_id.to_hex();
+    let mut liked = dedupe_event_ids(input.liked_event_ids);
+    let is_liked = liked.contains(&canonical);
+    let desired = input.desired_liked.unwrap_or(!is_liked);
+    let adjust_count = input.desired_liked.is_none() || input.adjust_count;
+
+    let like_count = if adjust_count {
+        match (is_liked, desired) {
+            (true, false) => input.like_count.saturating_sub(1),
+            (false, true) => input.like_count.saturating_add(1),
+            _ => input.like_count,
+        }
+    } else {
+        input.like_count
+    };
+    if desired {
+        if !liked.contains(&canonical) {
+            liked.push(canonical.clone());
+            liked.sort();
+        }
+    } else {
+        liked.retain(|event_id| event_id != &canonical);
+    }
+
+    CommentLikeStateProjection {
+        canonical_event_id_hex: canonical,
+        is_liked,
+        like_count,
+        optimistic_liked_event_ids: liked,
+        can_apply: true,
+    }
 }
 
 /// Publish a kind:7 reaction targeting `event_hex` authored by
@@ -219,6 +282,17 @@ pub async fn unpublish_reaction(
     Ok(event.id.to_hex())
 }
 
+fn dedupe_event_ids(event_ids: Vec<String>) -> Vec<String> {
+    let mut ids = event_ids
+        .into_iter()
+        .filter_map(|event_id| EventId::from_hex(event_id.trim()).ok())
+        .map(|event_id| event_id.to_hex())
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
 fn first_e_tag(event: &Event) -> Option<String> {
     for tag in event.tags.iter() {
         let slice = tag.as_slice();
@@ -279,5 +353,70 @@ mod tests {
                 my_like_event_id: None,
             }
         );
+    }
+
+    #[test]
+    fn comment_like_state_projection_toggles_and_applies_authoritative_state() {
+        let event_a = EventId::all_zeros().to_hex();
+        let event_b = EventId::from_slice(&[1u8; 32]).unwrap().to_hex();
+
+        let added = comment_like_state_projection(CommentLikeStateProjectionInput {
+            liked_event_ids: vec![event_b.clone(), event_b.clone()],
+            event_id_hex: event_a.clone(),
+            like_count: 2,
+            desired_liked: None,
+            adjust_count: false,
+        });
+        assert!(added.can_apply);
+        assert!(!added.is_liked);
+        assert_eq!(added.like_count, 3);
+        assert_eq!(
+            added.optimistic_liked_event_ids,
+            vec![event_a.clone(), event_b.clone()]
+        );
+
+        let removed = comment_like_state_projection(CommentLikeStateProjectionInput {
+            liked_event_ids: added.optimistic_liked_event_ids,
+            event_id_hex: event_a.clone(),
+            like_count: added.like_count,
+            desired_liked: None,
+            adjust_count: false,
+        });
+        assert!(removed.is_liked);
+        assert_eq!(removed.like_count, 2);
+        assert_eq!(removed.optimistic_liked_event_ids, vec![event_b.clone()]);
+
+        let confirmed = comment_like_state_projection(CommentLikeStateProjectionInput {
+            liked_event_ids: removed.optimistic_liked_event_ids,
+            event_id_hex: event_a.clone(),
+            like_count: removed.like_count,
+            desired_liked: Some(true),
+            adjust_count: true,
+        });
+        assert_eq!(confirmed.like_count, 3);
+        assert_eq!(
+            confirmed.optimistic_liked_event_ids,
+            vec![event_a.clone(), event_b]
+        );
+
+        let authoritative = comment_like_state_projection(CommentLikeStateProjectionInput {
+            liked_event_ids: Vec::new(),
+            event_id_hex: event_a.clone(),
+            like_count: 7,
+            desired_liked: Some(true),
+            adjust_count: false,
+        });
+        assert_eq!(authoritative.like_count, 7);
+        assert_eq!(authoritative.optimistic_liked_event_ids, vec![event_a]);
+
+        let invalid = comment_like_state_projection(CommentLikeStateProjectionInput {
+            liked_event_ids: Vec::new(),
+            event_id_hex: "not-hex".into(),
+            like_count: 4,
+            desired_liked: None,
+            adjust_count: false,
+        });
+        assert!(!invalid.can_apply);
+        assert_eq!(invalid.like_count, 4);
     }
 }

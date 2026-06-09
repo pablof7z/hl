@@ -363,12 +363,14 @@ actor SafeHighlighterCore {
         await core.getLikeSummaryForEvent(targetEventId: targetEventId, limit: limit)
     }
 
-    func publishCommentLike(eventId: String, authorPubkeyHex: String) async -> ReactionOutcome {
-        await core.publishCommentLike(eventId: eventId, authorPubkeyHex: authorPubkeyHex)
+    nonisolated func projectCommentLikeState(
+        input: CommentLikeStateProjectionInput
+    ) -> CommentLikeStateProjection {
+        core.projectCommentLikeState(input: input)
     }
 
-    func unpublishReaction(reactionEventId: String) async -> StringOutcome {
-        await core.unpublishReaction(reactionEventId: reactionEventId)
+    func toggleCommentLike(eventId: String, authorPubkeyHex: String) async -> BoolOutcome {
+        await core.toggleCommentLike(eventId: eventId, authorPubkeyHex: authorPubkeyHex)
     }
 
     // MARK: - Event bookmarks (kind:10003 note bookmarks)
