@@ -2,6 +2,7 @@
 pub enum RelativeTimeLabelStyle {
     Compact,
     Ago,
+    BookmarkCompact,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -28,22 +29,29 @@ pub fn relative_time_label_projection(
         return RelativeTimeLabelProjection { label: None };
     };
 
-    let base = match delta {
-        0..=59 => "just now".to_string(),
-        60..=3_599 => format!("{}m", delta / 60),
-        3_600..=86_399 => format!("{}h", delta / 3_600),
-        86_400..=604_799 => format!("{}d", delta / 86_400),
-        604_800..=2_591_999 => format!("{}w", delta / 604_800),
-        _ => format!("{}mo", delta / 2_592_000),
+    let base = match input.style {
+        RelativeTimeLabelStyle::BookmarkCompact => compact_label(delta, false),
+        RelativeTimeLabelStyle::Compact | RelativeTimeLabelStyle::Ago => compact_label(delta, true),
     };
 
     let label = match input.style {
-        RelativeTimeLabelStyle::Compact => base,
+        RelativeTimeLabelStyle::Compact | RelativeTimeLabelStyle::BookmarkCompact => base,
         RelativeTimeLabelStyle::Ago if base == "just now" => base,
         RelativeTimeLabelStyle::Ago => format!("{base} ago"),
     };
 
     RelativeTimeLabelProjection { label: Some(label) }
+}
+
+fn compact_label(delta_seconds: u64, just_now_under_minute: bool) -> String {
+    match delta_seconds {
+        0..=59 if just_now_under_minute => "just now".to_string(),
+        0..=3_599 => format!("{}m", delta_seconds / 60),
+        3_600..=86_399 => format!("{}h", delta_seconds / 3_600),
+        86_400..=604_799 => format!("{}d", delta_seconds / 86_400),
+        604_800..=2_591_999 => format!("{}w", delta_seconds / 604_800),
+        _ => format!("{}mo", delta_seconds / 2_592_000),
+    }
 }
 
 #[cfg(test)]
@@ -102,6 +110,32 @@ mod tests {
         assert_eq!(
             project(Some(now - 120), now, RelativeTimeLabelStyle::Ago),
             Some("2m ago".into())
+        );
+    }
+
+    #[test]
+    fn bookmark_compact_relative_time_preserves_zero_minute_badge() {
+        let now = 10_000_000;
+
+        assert_eq!(
+            project(Some(now - 30), now, RelativeTimeLabelStyle::BookmarkCompact),
+            Some("0m".into())
+        );
+        assert_eq!(
+            project(
+                Some(now - 3_599),
+                now,
+                RelativeTimeLabelStyle::BookmarkCompact
+            ),
+            Some("59m".into())
+        );
+        assert_eq!(
+            project(
+                Some(now - 3_600),
+                now,
+                RelativeTimeLabelStyle::BookmarkCompact
+            ),
+            Some("1h".into())
         );
     }
 

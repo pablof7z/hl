@@ -325,16 +325,12 @@ struct BookmarkedArticleRow: View {
 
     private var relativeDate: String? {
         let seconds = article.publishedAt ?? article.createdAt
-        guard let s = seconds, s > 0 else { return nil }
-        let delta = Date().timeIntervalSince1970 - TimeInterval(s)
-        guard delta >= 0 else { return nil }
-        switch delta {
-        case ..<3600:           return "\(Int(delta / 60))m"
-        case ..<86400:          return "\(Int(delta / 3600))h"
-        case ..<(86400 * 7):    return "\(Int(delta / 86400))d"
-        case ..<(86400 * 30):   return "\(Int(delta / (86400 * 7)))w"
-        default:                return "\(Int(delta / (86400 * 30)))mo"
-        }
+        return app.safeCore.projectRelativeTimeLabel(
+            input: RelativeTimeLabelInput(
+                unixSeconds: seconds,
+                style: .bookmarkCompact
+            )
+        ).label
     }
 }
 
@@ -425,6 +421,7 @@ struct CollectionRow: View {
 }
 
 struct WebBookmarkRow: View {
+    @Environment(HighlighterStore.self) private var app
     let bookmark: WebBookmarkRecord
 
     private var displayTitle: String {
@@ -491,15 +488,11 @@ struct WebBookmarkRow: View {
 
     private var relativeDate: String? {
         let seconds = bookmark.publishedAt ?? bookmark.createdAt
-        guard let s = seconds, s > 0 else { return nil }
-        let delta = Date().timeIntervalSince1970 - TimeInterval(s)
-        guard delta >= 0 else { return nil }
-        switch delta {
-        case ..<3600:           return "\(Int(delta / 60))m"
-        case ..<86400:          return "\(Int(delta / 3600))h"
-        case ..<(86400 * 7):    return "\(Int(delta / 86400))d"
-        case ..<(86400 * 30):   return "\(Int(delta / (86400 * 7)))w"
-        default:                return "\(Int(delta / (86400 * 30)))mo"
-        }
+        return app.safeCore.projectRelativeTimeLabel(
+            input: RelativeTimeLabelInput(
+                unixSeconds: seconds,
+                style: .bookmarkCompact
+            )
+        ).label
     }
 }

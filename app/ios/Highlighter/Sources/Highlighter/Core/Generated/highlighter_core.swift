@@ -22143,6 +22143,7 @@ public enum RelativeTimeLabelStyle {
 
     case compact
     case ago
+    case bookmarkCompact
 }
 
 
@@ -22164,6 +22165,8 @@ public struct FfiConverterTypeRelativeTimeLabelStyle: FfiConverterRustBuffer {
 
         case 2: return .ago
 
+        case 3: return .bookmarkCompact
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -22178,6 +22181,10 @@ public struct FfiConverterTypeRelativeTimeLabelStyle: FfiConverterRustBuffer {
 
         case .ago:
             writeInt(&buf, Int32(2))
+
+
+        case .bookmarkCompact:
+            writeInt(&buf, Int32(3))
 
         }
     }
