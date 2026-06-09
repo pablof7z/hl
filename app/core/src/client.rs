@@ -3943,6 +3943,15 @@ impl HighlighterCore {
 
     // -- Blossom (BUD-03, kind:10063) --
 
+    /// Project the add-Blossom-server sheet. Rust owns URL normalization,
+    /// scheme validity, and duplicate detection.
+    pub fn project_blossom_server_entry(
+        &self,
+        input: blossom::BlossomServerEntryProjectionInput,
+    ) -> blossom::BlossomServerEntryProjection {
+        blossom::blossom_server_entry_projection(input)
+    }
+
     /// Return the user's ordered Blossom server list from nostrdb. Empty if no
     /// kind:10063 has been cached yet (relay hasn't delivered it).
     pub async fn get_blossom_servers(&self) -> StringListOutcome {

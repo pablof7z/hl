@@ -27,6 +27,23 @@ pub const DEFAULT_SERVER: &str = "https://blossom.primal.net";
 /// Auth events expire 5 minutes after signing. The server enforces this.
 const AUTH_EXPIRATION_SECS: u64 = 300;
 
+/// Native add-server sheet input. Rust owns URL normalization and duplicate
+/// checks against the visible ordered server list.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BlossomServerEntryProjectionInput {
+    pub url: String,
+    pub existing_servers: Vec<String>,
+}
+
+/// Native add-server sheet projection. Rust owns validity and add eligibility.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BlossomServerEntryProjection {
+    pub submit_url: String,
+    pub is_valid: bool,
+    pub is_duplicate: bool,
+    pub can_add: bool,
+}
+
 // -- Reads --
 
 /// Return the newest kind:10063 event for `user_hex` from nostrdb.
@@ -89,6 +106,25 @@ pub fn query_blossom_servers(ndb: &Ndb, user_hex: &str) -> Result<Vec<String>, C
     match latest_server_list(ndb, user_hex)? {
         None => Ok(Vec::new()),
         Some(event) => Ok(extract_server_tags(&event)),
+    }
+}
+
+/// Project the add-server sheet for Blossom media settings. Native shells
+/// render the returned flags and pass `submit_url` to the add action.
+pub fn blossom_server_entry_projection(
+    input: BlossomServerEntryProjectionInput,
+) -> BlossomServerEntryProjection {
+    let submit_url = input.url.trim().to_string();
+    let is_valid = submit_url.starts_with("https://") || submit_url.starts_with("http://");
+    let is_duplicate = input
+        .existing_servers
+        .iter()
+        .any(|server| server.trim() == submit_url);
+    BlossomServerEntryProjection {
+        can_add: is_valid && !is_duplicate,
+        submit_url,
+        is_valid,
+        is_duplicate,
     }
 }
 
@@ -328,6 +364,31 @@ mod tests {
             .sign_with_keys(&keys)
             .expect("sign");
         assert!(extract_server_tags(&event).is_empty());
+    }
+
+    #[test]
+    fn blossom_server_entry_projection_trims_validates_and_rejects_duplicates() {
+        let projection = blossom_server_entry_projection(BlossomServerEntryProjectionInput {
+            url: "  https://media.example.com  ".into(),
+            existing_servers: vec!["https://blossom.primal.net".into()],
+        });
+        let invalid = blossom_server_entry_projection(BlossomServerEntryProjectionInput {
+            url: "wss://relay.example.com".into(),
+            existing_servers: Vec::new(),
+        });
+        let duplicate = blossom_server_entry_projection(BlossomServerEntryProjectionInput {
+            url: " https://blossom.primal.net ".into(),
+            existing_servers: vec!["https://blossom.primal.net".into()],
+        });
+
+        assert_eq!(projection.submit_url, "https://media.example.com");
+        assert!(projection.is_valid);
+        assert!(!projection.is_duplicate);
+        assert!(projection.can_add);
+        assert!(!invalid.is_valid);
+        assert!(!invalid.can_add);
+        assert!(duplicate.is_duplicate);
+        assert!(!duplicate.can_add);
     }
 
     #[test]

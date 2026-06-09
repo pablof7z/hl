@@ -55,11 +55,9 @@ struct MediaSettingsView: View {
             }
         }
         .sheet(isPresented: $showAddSheet) {
-            AddBlossomServerSheet { url in
-                if !servers.contains(url) {
-                    servers.append(url)
-                    Task { await save() }
-                }
+            AddBlossomServerSheet(existingServers: servers) { url in
+                servers.append(url)
+                Task { await save() }
             }
         }
         .task { await load() }
@@ -80,15 +78,12 @@ struct MediaSettingsView: View {
 }
 
 private struct AddBlossomServerSheet: View {
+    let existingServers: [String]
     let onAdd: (String) -> Void
 
+    @Environment(HighlighterStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var urlText = ""
-
-    private var isValid: Bool {
-        let t = urlText.trimmingCharacters(in: .whitespaces)
-        return t.hasPrefix("https://") || t.hasPrefix("http://")
-    }
 
     var body: some View {
         NavigationStack {
@@ -112,14 +107,22 @@ private struct AddBlossomServerSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Add") {
-                        let trimmed = urlText.trimmingCharacters(in: .whitespaces)
-                        onAdd(trimmed)
+                        onAdd(entryProjection.submitUrl)
                         dismiss()
                     }
-                    .disabled(!isValid)
+                    .disabled(!entryProjection.canAdd)
                 }
             }
         }
         .presentationDetents([.medium])
+    }
+
+    private var entryProjection: BlossomServerEntryProjection {
+        store.safeCore.projectBlossomServerEntry(
+            input: BlossomServerEntryProjectionInput(
+                url: urlText,
+                existingServers: existingServers
+            )
+        )
     }
 }

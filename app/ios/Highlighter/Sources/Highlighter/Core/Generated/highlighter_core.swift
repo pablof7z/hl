@@ -1418,6 +1418,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput)  -> ArticleReaderHeaderProjection
 
+    /**
+     * Project the add-Blossom-server sheet. Rust owns URL normalization,
+     * scheme validity, and duplicate detection.
+     */
+    func projectBlossomServerEntry(input: BlossomServerEntryProjectionInput)  -> BlossomServerEntryProjection
+
     func projectBookPickerQuery(input: BookPickerQueryProjectionInput)  -> BookPickerQueryProjection
 
     func projectBookmarkSetDetail(input: BookmarkSetDetailProjectionInput)  -> BookmarkSetDetailProjection
@@ -4331,6 +4337,18 @@ open func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput) 
     return try!  FfiConverterTypeArticleReaderHeaderProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_header(self.uniffiClonePointer(),
         FfiConverterTypeArticleReaderHeaderProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project the add-Blossom-server sheet. Rust owns URL normalization,
+     * scheme validity, and duplicate detection.
+     */
+open func projectBlossomServerEntry(input: BlossomServerEntryProjectionInput) -> BlossomServerEntryProjection  {
+    return try!  FfiConverterTypeBlossomServerEntryProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_blossom_server_entry(self.uniffiClonePointer(),
+        FfiConverterTypeBlossomServerEntryProjectionInput_lower(input),$0
     )
 })
 }
@@ -8412,6 +8430,169 @@ public func FfiConverterTypeArtifactReferenceTarget_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeArtifactReferenceTarget_lower(_ value: ArtifactReferenceTarget) -> RustBuffer {
     return FfiConverterTypeArtifactReferenceTarget.lower(value)
+}
+
+
+/**
+ * Native add-server sheet projection. Rust owns validity and add eligibility.
+ */
+public struct BlossomServerEntryProjection {
+    public var submitUrl: String
+    public var isValid: Bool
+    public var isDuplicate: Bool
+    public var canAdd: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(submitUrl: String, isValid: Bool, isDuplicate: Bool, canAdd: Bool) {
+        self.submitUrl = submitUrl
+        self.isValid = isValid
+        self.isDuplicate = isDuplicate
+        self.canAdd = canAdd
+    }
+}
+
+#if compiler(>=6)
+extension BlossomServerEntryProjection: Sendable {}
+#endif
+
+
+extension BlossomServerEntryProjection: Equatable, Hashable {
+    public static func ==(lhs: BlossomServerEntryProjection, rhs: BlossomServerEntryProjection) -> Bool {
+        if lhs.submitUrl != rhs.submitUrl {
+            return false
+        }
+        if lhs.isValid != rhs.isValid {
+            return false
+        }
+        if lhs.isDuplicate != rhs.isDuplicate {
+            return false
+        }
+        if lhs.canAdd != rhs.canAdd {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(submitUrl)
+        hasher.combine(isValid)
+        hasher.combine(isDuplicate)
+        hasher.combine(canAdd)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlossomServerEntryProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerEntryProjection {
+        return
+            try BlossomServerEntryProjection(
+                submitUrl: FfiConverterString.read(from: &buf),
+                isValid: FfiConverterBool.read(from: &buf),
+                isDuplicate: FfiConverterBool.read(from: &buf),
+                canAdd: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlossomServerEntryProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.submitUrl, into: &buf)
+        FfiConverterBool.write(value.isValid, into: &buf)
+        FfiConverterBool.write(value.isDuplicate, into: &buf)
+        FfiConverterBool.write(value.canAdd, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerEntryProjection_lift(_ buf: RustBuffer) throws -> BlossomServerEntryProjection {
+    return try FfiConverterTypeBlossomServerEntryProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerEntryProjection_lower(_ value: BlossomServerEntryProjection) -> RustBuffer {
+    return FfiConverterTypeBlossomServerEntryProjection.lower(value)
+}
+
+
+/**
+ * Native add-server sheet input. Rust owns URL normalization and duplicate
+ * checks against the visible ordered server list.
+ */
+public struct BlossomServerEntryProjectionInput {
+    public var url: String
+    public var existingServers: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, existingServers: [String]) {
+        self.url = url
+        self.existingServers = existingServers
+    }
+}
+
+#if compiler(>=6)
+extension BlossomServerEntryProjectionInput: Sendable {}
+#endif
+
+
+extension BlossomServerEntryProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: BlossomServerEntryProjectionInput, rhs: BlossomServerEntryProjectionInput) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.existingServers != rhs.existingServers {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(existingServers)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlossomServerEntryProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerEntryProjectionInput {
+        return
+            try BlossomServerEntryProjectionInput(
+                url: FfiConverterString.read(from: &buf),
+                existingServers: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlossomServerEntryProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterSequenceString.write(value.existingServers, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerEntryProjectionInput_lift(_ buf: RustBuffer) throws -> BlossomServerEntryProjectionInput {
+    return try FfiConverterTypeBlossomServerEntryProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerEntryProjectionInput_lower(_ value: BlossomServerEntryProjectionInput) -> RustBuffer {
+    return FfiConverterTypeBlossomServerEntryProjectionInput.lower(value)
 }
 
 
@@ -33073,6 +33254,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_header() != 55976) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_blossom_server_entry() != 9121) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_book_picker_query() != 18730) {

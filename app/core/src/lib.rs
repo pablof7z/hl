@@ -63,6 +63,7 @@ pub use articles::{
     ArticleReaderHeaderProjectionInput,
 };
 pub use artifact_detail::ArtifactDetailProjection;
+pub use blossom::{BlossomServerEntryProjection, BlossomServerEntryProjectionInput};
 pub use capture::{
     CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput,
     CaptureCommunitySelectionProjection, CaptureCommunitySelectionProjectionInput,

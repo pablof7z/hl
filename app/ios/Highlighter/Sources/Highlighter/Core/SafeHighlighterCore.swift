@@ -1472,6 +1472,12 @@ actor SafeHighlighterCore {
 
     // MARK: - Blossom (BUD-03, kind:10063)
 
+    nonisolated func projectBlossomServerEntry(
+        input: BlossomServerEntryProjectionInput
+    ) -> BlossomServerEntryProjection {
+        core.projectBlossomServerEntry(input: input)
+    }
+
     func getBlossomServers() async -> StringListOutcome {
         await core.getBlossomServers()
     }
