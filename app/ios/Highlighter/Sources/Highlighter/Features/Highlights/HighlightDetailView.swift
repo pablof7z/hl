@@ -340,15 +340,15 @@ struct HighlightDetailView: View {
     /// server-rendered with full Open Graph + Twitter Card meta so the
     /// link unfurls into a social card built around the quote.
     private func refreshShareURL() async {
-        let outcome = await app.safeCore.encodeHighlightShareNevent(
+        let snapshot = await app.safeCore.getHighlightShareUrlSnapshot(
             eventIdHex: highlight.eventId,
             authorPubkeyHex: highlight.pubkey
         )
-        guard outcome.error.isEmpty else {
+        guard snapshot.ready, let url = snapshot.shareUrl else {
             shareURL = nil
             return
         }
-        shareURL = URL(string: "https://beta.highlighter.com/highlight/\(outcome.value)")
+        shareURL = URL(string: url)
     }
 
     // MARK: - Resource projection

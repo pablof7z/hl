@@ -857,13 +857,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func downloadPodcastArtwork(url: String) async  -> DataOutcome
 
-    /**
-     * Mint a NIP-19 `nevent` for a kind:9802 highlight share link. The
-     * canonical relay hint is Rust policy; native shells provide only the
-     * event id and author hint they are already rendering.
-     */
-    func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String)  -> StringOutcome
-
     func extendPodcastClipToSegment(selection: PodcastClipSelection, segment: TranscriptSegment)  -> PodcastClipSelection
 
     func extractNostrEventRefs(content: String)  -> [NostrEntityRef]
@@ -1047,6 +1040,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * comment reads/writes.
      */
     func getHighlightCommentScope(eventIdHex: String)  -> CommentScopeSnapshot
+
+    /**
+     * Project the public highlight share URL. Rust owns the NIP-19 `nevent`
+     * encoding, relay hint, and beta route format; native shells render the
+     * returned URL only.
+     */
+    func getHighlightShareUrlSnapshot(eventIdHex: String, authorPubkeyHex: String)  -> HighlightShareUrlSnapshot
 
     /**
      * Classify a highlight source for native icon/label rendering. Rust owns
@@ -2370,20 +2370,6 @@ open func downloadPodcastArtwork(url: String)async  -> DataOutcome  {
         )
 }
 
-    /**
-     * Mint a NIP-19 `nevent` for a kind:9802 highlight share link. The
-     * canonical relay hint is Rust policy; native shells provide only the
-     * event id and author hint they are already rendering.
-     */
-open func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String) -> StringOutcome  {
-    return try!  FfiConverterTypeStringOutcome_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_encode_highlight_share_nevent(self.uniffiClonePointer(),
-        FfiConverterString.lower(eventIdHex),
-        FfiConverterString.lower(authorPubkeyHex),$0
-    )
-})
-}
-
 open func extendPodcastClipToSegment(selection: PodcastClipSelection, segment: TranscriptSegment) -> PodcastClipSelection  {
     return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_extend_podcast_clip_to_segment(self.uniffiClonePointer(),
@@ -2932,6 +2918,20 @@ open func getHighlightCommentScope(eventIdHex: String) -> CommentScopeSnapshot  
     return try!  FfiConverterTypeCommentScopeSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_highlight_comment_scope(self.uniffiClonePointer(),
         FfiConverterString.lower(eventIdHex),$0
+    )
+})
+}
+
+    /**
+     * Project the public highlight share URL. Rust owns the NIP-19 `nevent`
+     * encoding, relay hint, and beta route format; native shells render the
+     * returned URL only.
+     */
+open func getHighlightShareUrlSnapshot(eventIdHex: String, authorPubkeyHex: String) -> HighlightShareUrlSnapshot  {
+    return try!  FfiConverterTypeHighlightShareUrlSnapshot_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_highlight_share_url_snapshot(self.uniffiClonePointer(),
+        FfiConverterString.lower(eventIdHex),
+        FfiConverterString.lower(authorPubkeyHex),$0
     )
 })
 }
@@ -18843,6 +18843,84 @@ public func FfiConverterTypeHighlightResourceHeaderProjectionInput_lift(_ buf: R
 #endif
 public func FfiConverterTypeHighlightResourceHeaderProjectionInput_lower(_ value: HighlightResourceHeaderProjectionInput) -> RustBuffer {
     return FfiConverterTypeHighlightResourceHeaderProjectionInput.lower(value)
+}
+
+
+public struct HighlightShareUrlSnapshot {
+    public var shareUrl: String?
+    public var ready: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shareUrl: String?, ready: Bool, errorMessage: String) {
+        self.shareUrl = shareUrl
+        self.ready = ready
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension HighlightShareUrlSnapshot: Sendable {}
+#endif
+
+
+extension HighlightShareUrlSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlightShareUrlSnapshot, rhs: HighlightShareUrlSnapshot) -> Bool {
+        if lhs.shareUrl != rhs.shareUrl {
+            return false
+        }
+        if lhs.ready != rhs.ready {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shareUrl)
+        hasher.combine(ready)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightShareUrlSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightShareUrlSnapshot {
+        return
+            try HighlightShareUrlSnapshot(
+                shareUrl: FfiConverterOptionString.read(from: &buf),
+                ready: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightShareUrlSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.shareUrl, into: &buf)
+        FfiConverterBool.write(value.ready, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightShareUrlSnapshot_lift(_ buf: RustBuffer) throws -> HighlightShareUrlSnapshot {
+    return try FfiConverterTypeHighlightShareUrlSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightShareUrlSnapshot_lower(_ value: HighlightShareUrlSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlightShareUrlSnapshot.lower(value)
 }
 
 
@@ -39194,9 +39272,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_download_podcast_artwork() != 30059) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_encode_highlight_share_nevent() != 64061) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_extend_podcast_clip_to_segment() != 47481) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -39297,6 +39372,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_comment_scope() != 17710) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_share_url_snapshot() != 45402) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_source_kind() != 42257) {

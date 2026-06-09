@@ -126,7 +126,7 @@ pub use highlights::{
     HighlightGroupCardProjection, HighlightGroupCardProjectionInput,
     HighlightGroupHighlighterProfile, HighlightGroupHighlighterProjection,
     HighlightGroupLabelSegment, HighlightResourceAuthorProfile, HighlightResourceHeaderProjection,
-    HighlightResourceHeaderProjectionInput,
+    HighlightResourceHeaderProjectionInput, HighlightShareUrlSnapshot,
 };
 pub use home_feed::HomeFeedSnapshot;
 pub use isbn_lookup::{

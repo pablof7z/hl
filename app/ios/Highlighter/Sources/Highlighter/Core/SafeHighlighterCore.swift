@@ -745,13 +745,13 @@ actor SafeHighlighterCore {
         core.extractNostrEventRefs(content: content)
     }
 
-    /// Mint a NIP-19 `nevent` for a highlight share URL. Relay hints are
-    /// Rust-owned policy, not native view input.
-    func encodeHighlightShareNevent(
+    /// Project the public highlight share URL. Relay hints and route format
+    /// are Rust-owned policy, not native view input.
+    func getHighlightShareUrlSnapshot(
         eventIdHex: String,
         authorPubkeyHex: String
-    ) -> StringOutcome {
-        core.encodeHighlightShareNevent(
+    ) -> HighlightShareUrlSnapshot {
+        core.getHighlightShareUrlSnapshot(
             eventIdHex: eventIdHex,
             authorPubkeyHex: authorPubkeyHex
         )

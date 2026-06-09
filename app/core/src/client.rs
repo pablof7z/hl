@@ -3594,20 +3594,15 @@ impl HighlighterCore {
         crate::nostr_entities::extract_event_refs(&content)
     }
 
-    /// Mint a NIP-19 `nevent` for a kind:9802 highlight share link. The
-    /// canonical relay hint is Rust policy; native shells provide only the
-    /// event id and author hint they are already rendering.
-    pub fn encode_highlight_share_nevent(
+    /// Project the public highlight share URL. Rust owns the NIP-19 `nevent`
+    /// encoding, relay hint, and beta route format; native shells render the
+    /// returned URL only.
+    pub fn get_highlight_share_url_snapshot(
         &self,
         event_id_hex: String,
         author_pubkey_hex: String,
-    ) -> StringOutcome {
-        string_outcome(crate::nostr_entities::encode_event_to_nevent(
-            event_id_hex,
-            Some(author_pubkey_hex),
-            vec![crate::relays::highlighter_relay().to_string()],
-            Some(9802),
-        ))
+    ) -> highlights::HighlightShareUrlSnapshot {
+        highlights::highlight_share_url_snapshot(&event_id_hex, &author_pubkey_hex)
     }
 
     /// Best-effort cache lookup for a [`NostrEntityRef`]. Returns the

@@ -133,6 +133,13 @@ pub struct HighlightDetailContentProjection {
     pub share_message: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HighlightShareUrlSnapshot {
+    pub share_url: Option<String>,
+    pub ready: bool,
+    pub error_message: String,
+}
+
 /// Native article-reader highlight publish input. `error` is empty before
 /// publish and carries the Rust outcome error after publish.
 #[derive(Debug, Clone, uniffi::Record)]
@@ -456,6 +463,29 @@ pub fn highlight_detail_content_projection(
         },
         page_image_url: non_empty_trimmed(&highlight.image_url),
         share_message: quote_text,
+    }
+}
+
+pub fn highlight_share_url_snapshot(
+    event_id_hex: &str,
+    author_pubkey_hex: &str,
+) -> HighlightShareUrlSnapshot {
+    match crate::nostr_entities::encode_event_to_nevent(
+        event_id_hex.to_string(),
+        Some(author_pubkey_hex.to_string()),
+        vec![highlighter_relay().to_string()],
+        Some(KIND_HIGHLIGHT as u32),
+    ) {
+        Ok(nevent) => HighlightShareUrlSnapshot {
+            share_url: Some(format!("https://beta.highlighter.com/highlight/{nevent}")),
+            ready: true,
+            error_message: String::new(),
+        },
+        Err(error) => HighlightShareUrlSnapshot {
+            share_url: None,
+            ready: false,
+            error_message: error.to_string(),
+        },
     }
 }
 
@@ -2456,6 +2486,31 @@ mod tests {
             });
 
         assert_eq!(projection.note_text, Some(" Keep ".into()));
+    }
+
+    #[test]
+    fn highlight_share_url_snapshot_projects_final_public_url() {
+        let snapshot = highlight_share_url_snapshot(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        );
+
+        assert!(snapshot.ready);
+        assert!(snapshot.error_message.is_empty());
+        let share_url = snapshot.share_url.expect("share url");
+        assert!(share_url.starts_with("https://beta.highlighter.com/highlight/nevent1"));
+    }
+
+    #[test]
+    fn highlight_share_url_snapshot_surfaces_encode_error() {
+        let snapshot = highlight_share_url_snapshot(
+            "not-hex",
+            "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
+        );
+
+        assert!(!snapshot.ready);
+        assert!(snapshot.share_url.is_none());
+        assert!(snapshot.error_message.contains("invalid input: bad event id"));
     }
 
     #[test]
