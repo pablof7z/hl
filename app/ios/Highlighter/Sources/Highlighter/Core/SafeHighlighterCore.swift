@@ -800,6 +800,12 @@ actor SafeHighlighterCore {
         core.projectShareArtifactTarget(input: input)
     }
 
+    nonisolated func projectShareWebReaderTarget(
+        input: ShareWebReaderTargetProjectionInput
+    ) -> ShareArtifactTargetProjection {
+        core.projectShareWebReaderTarget(input: input)
+    }
+
     nonisolated func projectShareHighlightTarget(
         input: ShareHighlightTargetProjectionInput
     ) -> ShareHighlightTargetProjection {

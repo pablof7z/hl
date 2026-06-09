@@ -1526,6 +1526,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectShareHighlightTarget(input: ShareHighlightTargetProjectionInput)  -> ShareHighlightTargetProjection
 
+    func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput)  -> ShareArtifactTargetProjection
+
     func projectWebBookmarkRow(input: WebBookmarkRowProjectionInput)  -> WebBookmarkRowProjection
 
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
@@ -4602,6 +4604,14 @@ open func projectShareHighlightTarget(input: ShareHighlightTargetProjectionInput
     return try!  FfiConverterTypeShareHighlightTargetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_highlight_target(self.uniffiClonePointer(),
         FfiConverterTypeShareHighlightTargetProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput) -> ShareArtifactTargetProjection  {
+    return try!  FfiConverterTypeShareArtifactTargetProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_share_web_reader_target(self.uniffiClonePointer(),
+        FfiConverterTypeShareWebReaderTargetProjectionInput_lower(input),$0
     )
 })
 }
@@ -24232,6 +24242,76 @@ public func FfiConverterTypeShareHighlightTargetProjectionInput_lower(_ value: S
 }
 
 
+public struct ShareWebReaderTargetProjectionInput {
+    public var preview: ArtifactPreview
+    public var fallbackUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(preview: ArtifactPreview, fallbackUrl: String) {
+        self.preview = preview
+        self.fallbackUrl = fallbackUrl
+    }
+}
+
+#if compiler(>=6)
+extension ShareWebReaderTargetProjectionInput: Sendable {}
+#endif
+
+
+extension ShareWebReaderTargetProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ShareWebReaderTargetProjectionInput, rhs: ShareWebReaderTargetProjectionInput) -> Bool {
+        if lhs.preview != rhs.preview {
+            return false
+        }
+        if lhs.fallbackUrl != rhs.fallbackUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(preview)
+        hasher.combine(fallbackUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareWebReaderTargetProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareWebReaderTargetProjectionInput {
+        return
+            try ShareWebReaderTargetProjectionInput(
+                preview: FfiConverterTypeArtifactPreview.read(from: &buf),
+                fallbackUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareWebReaderTargetProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactPreview.write(value.preview, into: &buf)
+        FfiConverterString.write(value.fallbackUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareWebReaderTargetProjectionInput_lift(_ buf: RustBuffer) throws -> ShareWebReaderTargetProjectionInput {
+    return try FfiConverterTypeShareWebReaderTargetProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareWebReaderTargetProjectionInput_lower(_ value: ShareWebReaderTargetProjectionInput) -> RustBuffer {
+    return FfiConverterTypeShareWebReaderTargetProjectionInput.lower(value)
+}
+
+
 public struct StringListOutcome {
     public var values: [String]
     public var error: String
@@ -30552,6 +30632,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_highlight_target() != 26659) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_web_reader_target() != 11832) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_web_bookmark_row() != 39985) {

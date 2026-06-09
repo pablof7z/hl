@@ -1955,6 +1955,13 @@ impl HighlighterCore {
         share_targets::artifact_target_projection(input)
     }
 
+    pub fn project_share_web_reader_target(
+        &self,
+        input: share_targets::ShareWebReaderTargetProjectionInput,
+    ) -> share_targets::ShareArtifactTargetProjection {
+        share_targets::web_reader_target_projection(input)
+    }
+
     pub fn project_share_highlight_target(
         &self,
         input: share_targets::ShareHighlightTargetProjectionInput,

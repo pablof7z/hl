@@ -2,6 +2,7 @@ use crate::articles;
 use crate::models::{
     ArticleRecord, ArtifactPreview, ArtifactRecord, CommunitySummary, HighlightRecord,
 };
+use ::url::Url;
 
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ShareArticleTargetProjectionInput {
@@ -19,6 +20,12 @@ pub struct ShareArtifactTargetProjection {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ShareArtifactTargetProjectionInput {
     pub artifact: ArtifactRecord,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ShareWebReaderTargetProjectionInput {
+    pub preview: ArtifactPreview,
+    pub fallback_url: String,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -72,6 +79,22 @@ pub fn artifact_target_projection(
     let preview = input.artifact.preview;
     ShareArtifactTargetProjection {
         display_title: title_or_fallback(&preview.title),
+        display_subtitle: preview.description.clone(),
+        image_url: non_empty_string(&preview.image),
+        preview,
+    }
+}
+
+pub fn web_reader_target_projection(
+    input: ShareWebReaderTargetProjectionInput,
+) -> ShareArtifactTargetProjection {
+    let preview = input.preview;
+    ShareArtifactTargetProjection {
+        display_title: if preview.title.is_empty() {
+            web_reader_fallback_title(&input.fallback_url)
+        } else {
+            preview.title.clone()
+        },
         display_subtitle: preview.description.clone(),
         image_url: non_empty_string(&preview.image),
         preview,
@@ -143,6 +166,13 @@ fn non_empty_string(value: &str) -> Option<String> {
     }
 }
 
+fn web_reader_fallback_title(raw_url: &str) -> String {
+    Url::parse(raw_url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_string))
+        .unwrap_or_else(|| raw_url.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,6 +226,36 @@ mod tests {
             Some("https://example.com/artifact.jpg".into())
         );
         assert_eq!(projection.preview.title, "Artifact");
+    }
+
+    #[test]
+    fn web_reader_target_uses_title_or_url_host_fallback() {
+        let mut preview = artifact_record().preview;
+        preview.title.clear();
+        preview.description = "Description".into();
+        preview.image = "https://example.com/image.jpg".into();
+
+        let projection = web_reader_target_projection(ShareWebReaderTargetProjectionInput {
+            preview,
+            fallback_url: "https://example.com/article".into(),
+        });
+
+        assert_eq!(projection.display_title, "example.com");
+        assert_eq!(projection.display_subtitle, "Description");
+        assert_eq!(
+            projection.image_url,
+            Some("https://example.com/image.jpg".into())
+        );
+
+        let mut preview = projection.preview;
+        preview.title = "Page title".into();
+
+        let projection = web_reader_target_projection(ShareWebReaderTargetProjectionInput {
+            preview,
+            fallback_url: "not a url".into(),
+        });
+
+        assert_eq!(projection.display_title, "Page title");
     }
 
     #[test]

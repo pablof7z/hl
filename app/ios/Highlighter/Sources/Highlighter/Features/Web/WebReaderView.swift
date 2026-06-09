@@ -101,11 +101,17 @@ struct WebReaderView: View {
             return
         }
         await MainActor.run {
+            let projection = app.safeCore.projectShareWebReaderTarget(
+                input: ShareWebReaderTargetProjectionInput(
+                    preview: preview,
+                    fallbackUrl: target.url.absoluteString
+                )
+            )
             shareTarget = ShareToCommunityTarget(
-                payload: .artifactShare(preview: preview),
-                displayTitle: preview.title.isEmpty ? (target.url.host ?? target.url.absoluteString) : preview.title,
-                displaySubtitle: preview.description,
-                imageURL: preview.image.isEmpty ? nil : URL(string: preview.image)
+                payload: .artifactShare(preview: projection.preview),
+                displayTitle: projection.displayTitle,
+                displaySubtitle: projection.displaySubtitle,
+                imageURL: projection.imageUrl.flatMap { URL(string: $0) }
             )
         }
     }

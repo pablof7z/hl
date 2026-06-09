@@ -171,6 +171,7 @@ pub use share_targets::{
     ShareArtifactTargetProjectionInput, ShareCommunityRowProjection,
     ShareCommunityRowProjectionInput, ShareHighlightArticleTargetProjectionInput,
     ShareHighlightTargetProjection, ShareHighlightTargetProjectionInput,
+    ShareWebReaderTargetProjectionInput,
 };
 pub use time_labels::{
     RelativeTimeLabelInput, RelativeTimeLabelProjection, RelativeTimeLabelStyle,
