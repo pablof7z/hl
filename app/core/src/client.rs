@@ -3359,16 +3359,6 @@ impl HighlighterCore {
         crate::room_invites::share_link_snapshot(&group_id, result)
     }
 
-    /// Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
-    /// `nostr:` URI prefix) to a 64-char hex pubkey. Returns
-    /// `CoreError::InvalidInput` if the input isn't a recognised pubkey
-    /// reference. Used by the room-invite picker to resolve a pasted handle.
-    pub fn decode_npub(&self, input: String) -> StringOutcome {
-        let result =
-            crate::room_invites::decode_pubkey_reference(&input).map(|(pubkey_hex, _)| pubkey_hex);
-        string_outcome(result)
-    }
-
     pub async fn get_room_invite_snapshot(
         &self,
         input: crate::room_invites::RoomInviteSnapshotInput,

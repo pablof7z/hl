@@ -834,14 +834,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func decodeNostrEntity(input: String)  -> NostrEntityRefSnapshot
 
-    /**
-     * Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
-     * `nostr:` URI prefix) to a 64-char hex pubkey. Returns
-     * `CoreError::InvalidInput` if the input isn't a recognised pubkey
-     * reference. Used by the room-invite picker to resolve a pasted handle.
-     */
-    func decodeNpub(input: String)  -> StringOutcome
-
     func defaultAddRelayConfig()  -> RelayConfig
 
     func defaultHighlightCropBox(highlightBoxes: [OcrRect], imageWidth: Double, imageHeight: Double, marginFraction: Double)  -> OcrRect?
@@ -2248,20 +2240,6 @@ open func currentUser() -> CurrentUser?  {
 open func decodeNostrEntity(input: String) -> NostrEntityRefSnapshot  {
     return try!  FfiConverterTypeNostrEntityRefSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_decode_nostr_entity(self.uniffiClonePointer(),
-        FfiConverterString.lower(input),$0
-    )
-})
-}
-
-    /**
-     * Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
-     * `nostr:` URI prefix) to a 64-char hex pubkey. Returns
-     * `CoreError::InvalidInput` if the input isn't a recognised pubkey
-     * reference. Used by the room-invite picker to resolve a pasted handle.
-     */
-open func decodeNpub(input: String) -> StringOutcome  {
-    return try!  FfiConverterTypeStringOutcome_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_decode_npub(self.uniffiClonePointer(),
         FfiConverterString.lower(input),$0
     )
 })
@@ -38933,9 +38911,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_decode_nostr_entity() != 3321) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_decode_npub() != 65494) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_default_add_relay_config() != 9863) {

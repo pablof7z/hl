@@ -1142,10 +1142,6 @@ actor SafeHighlighterCore {
         await core.getRoomShareLinkSnapshot(groupId: groupId)
     }
 
-    nonisolated func decodeNpub(_ input: String) -> StringOutcome {
-        core.decodeNpub(input: input)
-    }
-
     func getRoomInviteSnapshot(
         input: RoomInviteSnapshotInput
     ) async -> RoomInviteSnapshot {
