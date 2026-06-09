@@ -1851,18 +1851,20 @@ impl HighlighterCore {
         )))
     }
 
-    /// Read book passages from a catalog id. Rust owns the NIP-73 ISBN
-    /// reference derivation used by the book detail screen.
-    pub async fn get_book_highlights(
+    /// Screen-shaped snapshot for the native book detail route. Rust owns
+    /// catalog-id canonicalization, ISBN route state, and passage lookup.
+    pub async fn get_book_detail_snapshot(
         &self,
         catalog_id: String,
         limit: u32,
-    ) -> HighlightListOutcome {
-        highlight_list_outcome(highlights::query_for_book_catalog(
-            self.runtime.ndb(),
-            catalog_id.trim(),
-            limit,
-        ))
+    ) -> crate::book_detail::BookDetailSnapshot {
+        let Some(route) = highlights::book_route_for_catalog(catalog_id.trim()) else {
+            return crate::book_detail::BookDetailSnapshot::empty();
+        };
+        match highlights::query_for_book_catalog(self.runtime.ndb(), &route.catalog_id, limit) {
+            Ok(highlights) => crate::book_detail::snapshot(route, highlights),
+            Err(error) => crate::book_detail::error_snapshot(Some(route), error),
+        }
     }
 
     /// Classify a subscription event kind into the exact profile slice that

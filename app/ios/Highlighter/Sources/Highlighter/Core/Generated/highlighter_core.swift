@@ -958,10 +958,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getBlossomServers() async  -> StringListOutcome
 
     /**
-     * Read book passages from a catalog id. Rust owns the NIP-73 ISBN
-     * reference derivation used by the book detail screen.
+     * Screen-shaped snapshot for the native book detail route. Rust owns
+     * catalog-id canonicalization, ISBN route state, and passage lookup.
      */
-    func getBookHighlights(catalogId: String, limit: UInt32) async  -> HighlightListOutcome
+    func getBookDetailSnapshot(catalogId: String, limit: UInt32) async  -> BookDetailSnapshot
 
     /**
      * Resolve a book catalog id into the canonical ISBN route used by native
@@ -2662,14 +2662,14 @@ open func getBlossomServers()async  -> StringListOutcome  {
 }
 
     /**
-     * Read book passages from a catalog id. Rust owns the NIP-73 ISBN
-     * reference derivation used by the book detail screen.
+     * Screen-shaped snapshot for the native book detail route. Rust owns
+     * catalog-id canonicalization, ISBN route state, and passage lookup.
      */
-open func getBookHighlights(catalogId: String, limit: UInt32)async  -> HighlightListOutcome  {
+open func getBookDetailSnapshot(catalogId: String, limit: UInt32)async  -> BookDetailSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_book_highlights(
+                uniffi_highlighter_core_fn_method_highlightercore_get_book_detail_snapshot(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(catalogId),FfiConverterUInt32.lower(limit)
                 )
@@ -2677,7 +2677,7 @@ open func getBookHighlights(catalogId: String, limit: UInt32)async  -> Highlight
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
+            liftFunc: FfiConverterTypeBookDetailSnapshot_lift,
             errorHandler: nil
 
         )
@@ -9381,6 +9381,84 @@ public func FfiConverterTypeBlossomUploadOutcome_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeBlossomUploadOutcome_lower(_ value: BlossomUploadOutcome) -> RustBuffer {
     return FfiConverterTypeBlossomUploadOutcome.lower(value)
+}
+
+
+public struct BookDetailSnapshot {
+    public var route: BookRoute?
+    public var highlights: [HighlightRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(route: BookRoute?, highlights: [HighlightRecord], error: String) {
+        self.route = route
+        self.highlights = highlights
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension BookDetailSnapshot: Sendable {}
+#endif
+
+
+extension BookDetailSnapshot: Equatable, Hashable {
+    public static func ==(lhs: BookDetailSnapshot, rhs: BookDetailSnapshot) -> Bool {
+        if lhs.route != rhs.route {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(route)
+        hasher.combine(highlights)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookDetailSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookDetailSnapshot {
+        return
+            try BookDetailSnapshot(
+                route: FfiConverterOptionTypeBookRoute.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookDetailSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeBookRoute.write(value.route, into: &buf)
+        FfiConverterSequenceTypeHighlightRecord.write(value.highlights, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookDetailSnapshot_lift(_ buf: RustBuffer) throws -> BookDetailSnapshot {
+    return try FfiConverterTypeBookDetailSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookDetailSnapshot_lower(_ value: BookDetailSnapshot) -> RustBuffer {
+    return FfiConverterTypeBookDetailSnapshot.lower(value)
 }
 
 
@@ -37900,7 +37978,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_servers() != 25689) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_highlights() != 13184) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_detail_snapshot() != 3058) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_route() != 28033) {

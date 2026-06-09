@@ -5,6 +5,7 @@ pub mod articles;
 pub mod artifact_detail;
 pub mod artifacts;
 pub mod blossom;
+pub mod book_detail;
 pub mod bookmarks;
 pub mod capture;
 pub mod chat;
@@ -72,6 +73,7 @@ pub use blossom::{
     BlossomServerEntryProjection, BlossomServerEntryProjectionInput, BlossomServerListProjection,
     BlossomServerListProjectionInput,
 };
+pub use book_detail::BookDetailSnapshot;
 pub use bookmarks::{
     ArticleBookmarkChromeProjection, ArticleBookmarkChromeProjectionInput,
     ArticleBookmarkStateProjection, ArticleBookmarkStateProjectionInput,

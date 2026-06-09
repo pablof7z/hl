@@ -5,10 +5,13 @@ struct BookView: View {
     let catalogId: String
 
     @Environment(HighlighterStore.self) private var app
+    @State private var loadedRoute: BookRoute?
     @State private var highlights: [HighlightRecord] = []
     @State private var descriptionExpanded = false
 
-    private var bookRoute: BookRoute? { app.core.getBookRoute(catalogId: catalogId).value }
+    private var bookRoute: BookRoute? {
+        loadedRoute ?? app.core.getBookRoute(catalogId: catalogId).value
+    }
 
     private var preview: ArtifactPreview? {
         guard let isbn = bookRoute?.isbn else { return nil }
@@ -243,14 +246,18 @@ struct BookView: View {
     // MARK: - Data loading
 
     private func load() async {
-        guard let route = bookRoute else {
-            await MainActor.run { highlights = [] }
+        let snapshot = await app.safeCore.getBookDetailSnapshot(catalogId: catalogId, limit: 64)
+        guard let route = snapshot.route else {
+            await MainActor.run {
+                loadedRoute = nil
+                highlights = []
+            }
             return
         }
         await app.requestIsbnPreview(isbn: route.isbn)
-        let outcome = await app.safeCore.getBookHighlights(catalogId: route.catalogId, limit: 64)
-        if outcome.error.isEmpty {
-            await MainActor.run { highlights = outcome.values }
+        await MainActor.run {
+            loadedRoute = route
+            highlights = snapshot.error.isEmpty ? snapshot.highlights : []
         }
     }
 

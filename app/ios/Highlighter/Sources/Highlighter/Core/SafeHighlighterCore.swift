@@ -940,8 +940,8 @@ actor SafeHighlighterCore {
         await core.getHighlightsForReference(tagName: tagName, tagValue: tagValue, limit: limit)
     }
 
-    func getBookHighlights(catalogId: String, limit: UInt32 = 64) async -> HighlightListOutcome {
-        await core.getBookHighlights(catalogId: catalogId, limit: limit)
+    func getBookDetailSnapshot(catalogId: String, limit: UInt32 = 64) async -> BookDetailSnapshot {
+        await core.getBookDetailSnapshot(catalogId: catalogId, limit: limit)
     }
 
     nonisolated func getProfileUpdateAction(kind: UInt32) -> ProfileUpdateAction {
