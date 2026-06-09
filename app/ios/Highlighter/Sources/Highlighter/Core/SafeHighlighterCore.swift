@@ -335,6 +335,12 @@ actor SafeHighlighterCore {
         core.projectArticleBookmarkState(input: input)
     }
 
+    nonisolated func projectArticleBookmarkChrome(
+        input: ArticleBookmarkChromeProjectionInput
+    ) -> ArticleBookmarkChromeProjection {
+        core.projectArticleBookmarkChrome(input: input)
+    }
+
     nonisolated func projectEventBookmarkState(
         input: EventBookmarkStateProjectionInput
     ) -> EventBookmarkStateProjection {

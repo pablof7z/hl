@@ -2752,6 +2752,14 @@ impl HighlighterCore {
         crate::bookmarks::article_bookmark_state_projection(input)
     }
 
+    /// Project article bookmark affordance copy and SF Symbols.
+    pub fn project_article_bookmark_chrome(
+        &self,
+        input: crate::bookmarks::ArticleBookmarkChromeProjectionInput,
+    ) -> crate::bookmarks::ArticleBookmarkChromeProjection {
+        crate::bookmarks::article_bookmark_chrome_projection(input)
+    }
+
     /// Project native event bookmark state. Rust owns event-id canonicalization,
     /// current membership, forced membership, and optimistic post-toggle state.
     pub fn project_event_bookmark_state(

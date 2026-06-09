@@ -30,12 +30,14 @@ struct BookmarkMenuButton: View {
                 Label("New collection…", systemImage: "plus")
             }
         } label: {
-            Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                .foregroundStyle(isBookmarked ? Color.highlighterAccent : Color.highlighterInkStrong)
+            Image(systemName: bookmarkChrome.toolbarSystemImage)
+                .foregroundStyle(
+                    bookmarkChrome.usesAccentColor ? Color.highlighterAccent : Color.highlighterInkStrong
+                )
         } primaryAction: {
             Task { await app.toggleBookmark(articleAddress: articleAddress) }
         }
-        .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Bookmark article")
+        .accessibilityLabel(bookmarkChrome.accessibilityLabel)
         .task { await loadCurations() }
         .sheet(isPresented: $newCollectionPresented) {
             NewCollectionSheet(
@@ -75,6 +77,12 @@ struct BookmarkMenuButton: View {
 
     private var isBookmarked: Bool {
         app.isBookmarked(articleAddress: articleAddress)
+    }
+
+    private var bookmarkChrome: ArticleBookmarkChromeProjection {
+        app.safeCore.projectArticleBookmarkChrome(
+            input: ArticleBookmarkChromeProjectionInput(isBookmarked: isBookmarked)
+        )
     }
 
     // MARK: - Actions

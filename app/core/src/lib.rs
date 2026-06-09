@@ -68,6 +68,7 @@ pub use blossom::{
     BlossomServerListProjectionInput,
 };
 pub use bookmarks::{
+    ArticleBookmarkChromeProjection, ArticleBookmarkChromeProjectionInput,
     ArticleBookmarkStateProjection, ArticleBookmarkStateProjectionInput,
     EventBookmarkStateProjection, EventBookmarkStateProjectionInput,
 };

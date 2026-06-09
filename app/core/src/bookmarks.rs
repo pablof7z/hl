@@ -75,6 +75,21 @@ pub struct EventBookmarkStateProjectionInput {
     pub desired_member: Option<bool>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleBookmarkChromeProjectionInput {
+    pub is_bookmarked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleBookmarkChromeProjection {
+    pub toolbar_system_image: String,
+    pub uses_accent_color: bool,
+    pub accessibility_label: String,
+    pub swipe_title: String,
+    pub menu_title: String,
+    pub action_system_image: String,
+}
+
 // -- Public API --------------------------------------------------------------
 
 pub fn article_bookmark_state_projection(
@@ -140,6 +155,30 @@ pub fn event_bookmark_state_projection(
         can_apply: true,
         is_bookmarked,
         optimistic_event_ids: event_ids.into_iter().collect(),
+    }
+}
+
+pub fn article_bookmark_chrome_projection(
+    input: ArticleBookmarkChromeProjectionInput,
+) -> ArticleBookmarkChromeProjection {
+    if input.is_bookmarked {
+        ArticleBookmarkChromeProjection {
+            toolbar_system_image: "bookmark.fill".into(),
+            uses_accent_color: true,
+            accessibility_label: "Remove bookmark".into(),
+            swipe_title: "Remove".into(),
+            menu_title: "Remove bookmark".into(),
+            action_system_image: "bookmark.slash".into(),
+        }
+    } else {
+        ArticleBookmarkChromeProjection {
+            toolbar_system_image: "bookmark".into(),
+            uses_accent_color: false,
+            accessibility_label: "Bookmark article".into(),
+            swipe_title: "Bookmark".into(),
+            menu_title: "Bookmark".into(),
+            action_system_image: "bookmark".into(),
+        }
     }
 }
 
@@ -445,6 +484,40 @@ mod tests {
         assert!(!blank.can_toggle);
         assert!(!blank.is_bookmarked);
         assert_eq!(blank.optimistic_addresses, vec!["30023:aa:essay"]);
+    }
+
+    #[test]
+    fn article_bookmark_chrome_projection_matches_bookmark_state() {
+        let unbookmarked =
+            article_bookmark_chrome_projection(ArticleBookmarkChromeProjectionInput {
+                is_bookmarked: false,
+            });
+        assert_eq!(
+            unbookmarked,
+            ArticleBookmarkChromeProjection {
+                toolbar_system_image: "bookmark".into(),
+                uses_accent_color: false,
+                accessibility_label: "Bookmark article".into(),
+                swipe_title: "Bookmark".into(),
+                menu_title: "Bookmark".into(),
+                action_system_image: "bookmark".into(),
+            }
+        );
+
+        let bookmarked = article_bookmark_chrome_projection(ArticleBookmarkChromeProjectionInput {
+            is_bookmarked: true,
+        });
+        assert_eq!(
+            bookmarked,
+            ArticleBookmarkChromeProjection {
+                toolbar_system_image: "bookmark.fill".into(),
+                uses_accent_color: true,
+                accessibility_label: "Remove bookmark".into(),
+                swipe_title: "Remove".into(),
+                menu_title: "Remove bookmark".into(),
+                action_system_image: "bookmark.slash".into(),
+            }
+        );
     }
 
     #[test]

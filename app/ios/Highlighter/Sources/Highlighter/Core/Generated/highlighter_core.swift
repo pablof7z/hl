@@ -1411,6 +1411,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
 
     /**
+     * Project article bookmark affordance copy and SF Symbols.
+     */
+    func projectArticleBookmarkChrome(input: ArticleBookmarkChromeProjectionInput)  -> ArticleBookmarkChromeProjection
+
+    /**
      * Project native article bookmark state. Rust owns address trimming,
      * membership, and the optimistic post-toggle set.
      */
@@ -4435,6 +4440,17 @@ open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelayS
 }
 
     /**
+     * Project article bookmark affordance copy and SF Symbols.
+     */
+open func projectArticleBookmarkChrome(input: ArticleBookmarkChromeProjectionInput) -> ArticleBookmarkChromeProjection  {
+    return try!  FfiConverterTypeArticleBookmarkChromeProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_article_bookmark_chrome(self.uniffiClonePointer(),
+        FfiConverterTypeArticleBookmarkChromeProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
      * Project native article bookmark state. Rust owns address trimming,
      * membership, and the optimistic post-toggle set.
      */
@@ -6988,6 +7004,170 @@ public func FfiConverterTypeAddRelaySheetProjectionInput_lift(_ buf: RustBuffer)
 #endif
 public func FfiConverterTypeAddRelaySheetProjectionInput_lower(_ value: AddRelaySheetProjectionInput) -> RustBuffer {
     return FfiConverterTypeAddRelaySheetProjectionInput.lower(value)
+}
+
+
+public struct ArticleBookmarkChromeProjection {
+    public var toolbarSystemImage: String
+    public var usesAccentColor: Bool
+    public var accessibilityLabel: String
+    public var swipeTitle: String
+    public var menuTitle: String
+    public var actionSystemImage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(toolbarSystemImage: String, usesAccentColor: Bool, accessibilityLabel: String, swipeTitle: String, menuTitle: String, actionSystemImage: String) {
+        self.toolbarSystemImage = toolbarSystemImage
+        self.usesAccentColor = usesAccentColor
+        self.accessibilityLabel = accessibilityLabel
+        self.swipeTitle = swipeTitle
+        self.menuTitle = menuTitle
+        self.actionSystemImage = actionSystemImage
+    }
+}
+
+#if compiler(>=6)
+extension ArticleBookmarkChromeProjection: Sendable {}
+#endif
+
+
+extension ArticleBookmarkChromeProjection: Equatable, Hashable {
+    public static func ==(lhs: ArticleBookmarkChromeProjection, rhs: ArticleBookmarkChromeProjection) -> Bool {
+        if lhs.toolbarSystemImage != rhs.toolbarSystemImage {
+            return false
+        }
+        if lhs.usesAccentColor != rhs.usesAccentColor {
+            return false
+        }
+        if lhs.accessibilityLabel != rhs.accessibilityLabel {
+            return false
+        }
+        if lhs.swipeTitle != rhs.swipeTitle {
+            return false
+        }
+        if lhs.menuTitle != rhs.menuTitle {
+            return false
+        }
+        if lhs.actionSystemImage != rhs.actionSystemImage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(toolbarSystemImage)
+        hasher.combine(usesAccentColor)
+        hasher.combine(accessibilityLabel)
+        hasher.combine(swipeTitle)
+        hasher.combine(menuTitle)
+        hasher.combine(actionSystemImage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleBookmarkChromeProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarkChromeProjection {
+        return
+            try ArticleBookmarkChromeProjection(
+                toolbarSystemImage: FfiConverterString.read(from: &buf),
+                usesAccentColor: FfiConverterBool.read(from: &buf),
+                accessibilityLabel: FfiConverterString.read(from: &buf),
+                swipeTitle: FfiConverterString.read(from: &buf),
+                menuTitle: FfiConverterString.read(from: &buf),
+                actionSystemImage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleBookmarkChromeProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.toolbarSystemImage, into: &buf)
+        FfiConverterBool.write(value.usesAccentColor, into: &buf)
+        FfiConverterString.write(value.accessibilityLabel, into: &buf)
+        FfiConverterString.write(value.swipeTitle, into: &buf)
+        FfiConverterString.write(value.menuTitle, into: &buf)
+        FfiConverterString.write(value.actionSystemImage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarkChromeProjection_lift(_ buf: RustBuffer) throws -> ArticleBookmarkChromeProjection {
+    return try FfiConverterTypeArticleBookmarkChromeProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarkChromeProjection_lower(_ value: ArticleBookmarkChromeProjection) -> RustBuffer {
+    return FfiConverterTypeArticleBookmarkChromeProjection.lower(value)
+}
+
+
+public struct ArticleBookmarkChromeProjectionInput {
+    public var isBookmarked: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(isBookmarked: Bool) {
+        self.isBookmarked = isBookmarked
+    }
+}
+
+#if compiler(>=6)
+extension ArticleBookmarkChromeProjectionInput: Sendable {}
+#endif
+
+
+extension ArticleBookmarkChromeProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ArticleBookmarkChromeProjectionInput, rhs: ArticleBookmarkChromeProjectionInput) -> Bool {
+        if lhs.isBookmarked != rhs.isBookmarked {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isBookmarked)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleBookmarkChromeProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarkChromeProjectionInput {
+        return
+            try ArticleBookmarkChromeProjectionInput(
+                isBookmarked: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleBookmarkChromeProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.isBookmarked, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarkChromeProjectionInput_lift(_ buf: RustBuffer) throws -> ArticleBookmarkChromeProjectionInput {
+    return try FfiConverterTypeArticleBookmarkChromeProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarkChromeProjectionInput_lower(_ value: ArticleBookmarkChromeProjectionInput) -> RustBuffer {
+    return FfiConverterTypeArticleBookmarkChromeProjectionInput.lower(value)
 }
 
 
@@ -37237,6 +37417,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_add_relay_sheet() != 14886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_bookmark_chrome() != 29518) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_bookmark_state() != 14884) {
