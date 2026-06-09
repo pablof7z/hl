@@ -1513,6 +1513,10 @@ actor SafeHighlighterCore {
         await core.disconnectAll()
     }
 
+    func refreshRelayConnectionsForForeground() async -> NetworkSettingsMutationSnapshot {
+        await core.refreshRelayConnectionsForForeground()
+    }
+
     func applyNetworkPathStatus(isWifi: Bool) async -> NetworkPathPolicySnapshot {
         await core.applyNetworkPathStatus(isWifi: isWifi)
     }

@@ -1642,6 +1642,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func recordRecentSearchSnapshot(query: String) async  -> SearchChromeSnapshot
 
+    /**
+     * Handle the app returning to foreground. iOS may suspend WebSockets
+     * while backgrounded; when Wi-Fi-only mode is off, force a fresh
+     * socket/subscription cycle. When Wi-Fi-only is on, the raw path update
+     * is the only authority allowed to reconnect.
+     */
+    func refreshRelayConnectionsForForeground() async  -> NetworkSettingsMutationSnapshot
+
     func registerNip05(name: String, domain: String) async  -> StringOutcome
 
     /**
@@ -4871,6 +4879,30 @@ open func recordRecentSearchSnapshot(query: String)async  -> SearchChromeSnapsho
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSearchChromeSnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Handle the app returning to foreground. iOS may suspend WebSockets
+     * while backgrounded; when Wi-Fi-only mode is off, force a fresh
+     * socket/subscription cycle. When Wi-Fi-only is on, the raw path update
+     * is the only authority allowed to reconnect.
+     */
+open func refreshRelayConnectionsForForeground()async  -> NetworkSettingsMutationSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_refresh_relay_connections_for_foreground(
+                    self.uniffiClonePointer()
+
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -39324,6 +39356,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_record_recent_search_snapshot() != 36017) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_refresh_relay_connections_for_foreground() != 19095) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_register_nip05() != 29734) {

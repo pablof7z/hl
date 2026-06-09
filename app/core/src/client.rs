@@ -4029,6 +4029,29 @@ impl HighlighterCore {
         crate::relays::network_settings_mutation_snapshot(Ok(()), false, "Couldn't disconnect")
     }
 
+    /// Handle the app returning to foreground. iOS may suspend WebSockets
+    /// while backgrounded; when Wi-Fi-only mode is off, force a fresh
+    /// socket/subscription cycle. When Wi-Fi-only is on, the raw path update
+    /// is the only authority allowed to reconnect.
+    pub async fn refresh_relay_connections_for_foreground(
+        &self,
+    ) -> crate::relays::NetworkSettingsMutationSnapshot {
+        if self.network_preferences.wifi_only_enabled() {
+            return crate::relays::network_settings_mutation_snapshot(
+                Ok(()),
+                false,
+                "Couldn't refresh relay connections",
+            );
+        }
+        self.runtime.client().disconnect().await;
+        self.runtime.client().connect().await;
+        crate::relays::network_settings_mutation_snapshot(
+            Ok(()),
+            false,
+            "Couldn't refresh relay connections",
+        )
+    }
+
     /// Apply a raw native network path update. Native reports only whether
     /// the current path is Wi-Fi; Rust owns the Wi-Fi-only preference lookup
     /// and relay connect/disconnect policy.
