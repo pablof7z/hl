@@ -17,11 +17,18 @@ struct RoomPreviewSheet: View {
     @State private var detent: PresentationDetent = .medium
     @State private var roomStore: RoomStore?
 
-    private var alreadyJoined: Bool {
-        appStore.joinedCommunities.contains(where: { $0.id == room.id })
-    }
-
     private var isExpanded: Bool { detent == .large }
+
+    private var actionProjection: RoomPreviewActionProjection {
+        appStore.safeCore.projectRoomPreviewAction(
+            input: RoomPreviewActionProjectionInput(
+                roomAccess: room.access,
+                roomId: room.id,
+                joinedRoomIds: appStore.joinedCommunities.map(\.id),
+                isExpanded: isExpanded
+            )
+        )
+    }
 
     var body: some View {
         ScrollView {
@@ -174,7 +181,8 @@ struct RoomPreviewSheet: View {
 
     @ViewBuilder
     private var actionStack: some View {
-        if alreadyJoined {
+        let projection = actionProjection
+        if projection.alreadyJoined {
             Button {
                 if let onOpenRoom {
                     onOpenRoom()
@@ -182,7 +190,7 @@ struct RoomPreviewSheet: View {
                     dismiss()
                 }
             } label: {
-                Text("Open room")
+                Text(projection.primaryLabel)
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
@@ -196,7 +204,7 @@ struct RoomPreviewSheet: View {
         } else {
             VStack(spacing: 10) {
                 Button(action: onJoin) {
-                    Text(room.access == "closed" ? "Request to join" : "Join room")
+                    Text(projection.primaryLabel)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -208,42 +216,43 @@ struct RoomPreviewSheet: View {
                 }
                 .buttonStyle(.plain)
 
-                if room.access == "open" {
-                    if isExpanded {
-                        Button {
-                            if let onOpenRoom {
-                                onOpenRoom()
-                            } else {
-                                dismiss()
-                            }
-                        } label: {
-                            Text("Open full room")
-                                .font(.subheadline.weight(.medium))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .foregroundStyle(Color.highlighterInkStrong)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(Color.highlighterRule, lineWidth: 1)
-                                )
+                switch projection.secondaryAction {
+                case .openFullRoom:
+                    Button {
+                        if let onOpenRoom {
+                            onOpenRoom()
+                        } else {
+                            dismiss()
                         }
-                        .buttonStyle(.plain)
-                    } else {
-                        Button {
-                            detent = .large
-                        } label: {
-                            Text("Peek inside")
-                                .font(.subheadline.weight(.medium))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .foregroundStyle(Color.highlighterInkStrong)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(Color.highlighterRule, lineWidth: 1)
-                                )
-                        }
-                        .buttonStyle(.plain)
+                    } label: {
+                        Text("Open full room")
+                            .font(.subheadline.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .foregroundStyle(Color.highlighterInkStrong)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Color.highlighterRule, lineWidth: 1)
+                            )
                     }
+                    .buttonStyle(.plain)
+                case .peekInside:
+                    Button {
+                        detent = .large
+                    } label: {
+                        Text("Peek inside")
+                            .font(.subheadline.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .foregroundStyle(Color.highlighterInkStrong)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Color.highlighterRule, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                case .none:
+                    EmptyView()
                 }
             }
         }

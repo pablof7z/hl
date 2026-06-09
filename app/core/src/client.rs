@@ -3881,6 +3881,13 @@ impl HighlighterCore {
         crate::room_preview::room_preview_artifacts_projection(input)
     }
 
+    pub fn project_room_preview_action(
+        &self,
+        input: crate::room_preview::RoomPreviewActionProjectionInput,
+    ) -> crate::room_preview::RoomPreviewActionProjection {
+        crate::room_preview::room_preview_action_projection(input)
+    }
+
     pub async fn create_room(
         &self,
         name: String,

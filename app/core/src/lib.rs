@@ -188,8 +188,9 @@ pub use room_library::{
     RoomLibraryPodcastCardProjection, RoomLibraryPodcastCardProjectionInput,
 };
 pub use room_preview::{
+    RoomPreviewActionProjection, RoomPreviewActionProjectionInput,
     RoomPreviewArtifactRowProjection, RoomPreviewArtifactsProjection,
-    RoomPreviewArtifactsProjectionInput,
+    RoomPreviewArtifactsProjectionInput, RoomPreviewSecondaryAction,
 };
 pub use search::{
     SearchHighlightRowProjection, SearchHighlightRowProjectionInput, SearchQueryProjection,

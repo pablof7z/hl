@@ -1299,6 +1299,12 @@ actor SafeHighlighterCore {
         core.projectRoomPreviewArtifacts(input: input)
     }
 
+    nonisolated func projectRoomPreviewAction(
+        input: RoomPreviewActionProjectionInput
+    ) -> RoomPreviewActionProjection {
+        core.projectRoomPreviewAction(input: input)
+    }
+
     nonisolated func projectRoomLibraryArticleCard(
         input: RoomLibraryArticleCardProjectionInput
     ) -> RoomLibraryArticleCardProjection {

@@ -20,6 +20,28 @@ pub struct RoomPreviewArtifactsProjection {
     pub rows: Vec<RoomPreviewArtifactRowProjection>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum RoomPreviewSecondaryAction {
+    None,
+    PeekInside,
+    OpenFullRoom,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomPreviewActionProjectionInput {
+    pub room_access: String,
+    pub room_id: String,
+    pub joined_room_ids: Vec<String>,
+    pub is_expanded: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomPreviewActionProjection {
+    pub already_joined: bool,
+    pub primary_label: String,
+    pub secondary_action: RoomPreviewSecondaryAction,
+}
+
 /// Projection for the room preview sheet's "Recent" rows. Rust owns the row
 /// cap, divider placement, and title/subtitle fallback policy.
 pub fn room_preview_artifacts_projection(
@@ -47,6 +69,38 @@ pub fn room_preview_artifacts_projection(
         .collect();
 
     RoomPreviewArtifactsProjection { rows }
+}
+
+/// Projection for the room preview sheet's action buttons. Rust owns joined
+/// membership, access-mode labels, and whether the secondary action peeks or
+/// opens the full room.
+pub fn room_preview_action_projection(
+    input: RoomPreviewActionProjectionInput,
+) -> RoomPreviewActionProjection {
+    let already_joined = input
+        .joined_room_ids
+        .iter()
+        .any(|id| id.trim() == input.room_id.trim());
+    let access = input.room_access.trim();
+    let secondary_action = if already_joined || access != "open" {
+        RoomPreviewSecondaryAction::None
+    } else if input.is_expanded {
+        RoomPreviewSecondaryAction::OpenFullRoom
+    } else {
+        RoomPreviewSecondaryAction::PeekInside
+    };
+
+    RoomPreviewActionProjection {
+        already_joined,
+        primary_label: if already_joined {
+            "Open room".into()
+        } else if access == "closed" {
+            "Request to join".into()
+        } else {
+            "Join room".into()
+        },
+        secondary_action,
+    }
 }
 
 fn row_title(artifact: &ArtifactRecord) -> String {
@@ -108,6 +162,51 @@ mod tests {
         assert_eq!(projection.rows[1].title, "Trimmed title");
         assert_eq!(projection.rows[1].subtitle, Some("example.org".into()));
         assert_eq!(projection.rows[2].subtitle, None);
+    }
+
+    #[test]
+    fn room_preview_action_projects_membership_and_access_labels() {
+        let joined = room_preview_action_projection(RoomPreviewActionProjectionInput {
+            room_access: "open".into(),
+            room_id: "room-a".into(),
+            joined_room_ids: vec!["room-a".into()],
+            is_expanded: false,
+        });
+        assert!(joined.already_joined);
+        assert_eq!(joined.primary_label, "Open room");
+        assert_eq!(joined.secondary_action, RoomPreviewSecondaryAction::None);
+
+        let closed = room_preview_action_projection(RoomPreviewActionProjectionInput {
+            room_access: "closed".into(),
+            room_id: "room-a".into(),
+            joined_room_ids: Vec::new(),
+            is_expanded: false,
+        });
+        assert_eq!(closed.primary_label, "Request to join");
+        assert_eq!(closed.secondary_action, RoomPreviewSecondaryAction::None);
+
+        let peek = room_preview_action_projection(RoomPreviewActionProjectionInput {
+            room_access: "open".into(),
+            room_id: "room-a".into(),
+            joined_room_ids: Vec::new(),
+            is_expanded: false,
+        });
+        assert_eq!(peek.primary_label, "Join room");
+        assert_eq!(
+            peek.secondary_action,
+            RoomPreviewSecondaryAction::PeekInside
+        );
+
+        let open = room_preview_action_projection(RoomPreviewActionProjectionInput {
+            room_access: "open".into(),
+            room_id: "room-a".into(),
+            joined_room_ids: Vec::new(),
+            is_expanded: true,
+        });
+        assert_eq!(
+            open.secondary_action,
+            RoomPreviewSecondaryAction::OpenFullRoom
+        );
     }
 
     fn artifact(id: &str, title: &str, author: &str, domain: &str) -> ArtifactRecord {

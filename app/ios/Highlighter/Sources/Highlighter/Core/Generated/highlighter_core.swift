@@ -1618,6 +1618,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomLibraryPodcastCard(input: RoomLibraryPodcastCardProjectionInput)  -> RoomLibraryPodcastCardProjection
 
+    func projectRoomPreviewAction(input: RoomPreviewActionProjectionInput)  -> RoomPreviewActionProjection
+
     func projectRoomPreviewArtifacts(input: RoomPreviewArtifactsProjectionInput)  -> RoomPreviewArtifactsProjection
 
     func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput)  -> RoomRecommendationCardProjection
@@ -4955,6 +4957,14 @@ open func projectRoomLibraryPodcastCard(input: RoomLibraryPodcastCardProjectionI
     return try!  FfiConverterTypeRoomLibraryPodcastCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_library_podcast_card(self.uniffiClonePointer(),
         FfiConverterTypeRoomLibraryPodcastCardProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomPreviewAction(input: RoomPreviewActionProjectionInput) -> RoomPreviewActionProjection  {
+    return try!  FfiConverterTypeRoomPreviewActionProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_preview_action(self.uniffiClonePointer(),
+        FfiConverterTypeRoomPreviewActionProjectionInput_lower(input),$0
     )
 })
 }
@@ -27338,6 +27348,170 @@ public func FfiConverterTypeRoomLibraryPodcastCardProjectionInput_lower(_ value:
 }
 
 
+public struct RoomPreviewActionProjection {
+    public var alreadyJoined: Bool
+    public var primaryLabel: String
+    public var secondaryAction: RoomPreviewSecondaryAction
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(alreadyJoined: Bool, primaryLabel: String, secondaryAction: RoomPreviewSecondaryAction) {
+        self.alreadyJoined = alreadyJoined
+        self.primaryLabel = primaryLabel
+        self.secondaryAction = secondaryAction
+    }
+}
+
+#if compiler(>=6)
+extension RoomPreviewActionProjection: Sendable {}
+#endif
+
+
+extension RoomPreviewActionProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomPreviewActionProjection, rhs: RoomPreviewActionProjection) -> Bool {
+        if lhs.alreadyJoined != rhs.alreadyJoined {
+            return false
+        }
+        if lhs.primaryLabel != rhs.primaryLabel {
+            return false
+        }
+        if lhs.secondaryAction != rhs.secondaryAction {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(alreadyJoined)
+        hasher.combine(primaryLabel)
+        hasher.combine(secondaryAction)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomPreviewActionProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewActionProjection {
+        return
+            try RoomPreviewActionProjection(
+                alreadyJoined: FfiConverterBool.read(from: &buf),
+                primaryLabel: FfiConverterString.read(from: &buf),
+                secondaryAction: FfiConverterTypeRoomPreviewSecondaryAction.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomPreviewActionProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.alreadyJoined, into: &buf)
+        FfiConverterString.write(value.primaryLabel, into: &buf)
+        FfiConverterTypeRoomPreviewSecondaryAction.write(value.secondaryAction, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomPreviewActionProjection_lift(_ buf: RustBuffer) throws -> RoomPreviewActionProjection {
+    return try FfiConverterTypeRoomPreviewActionProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomPreviewActionProjection_lower(_ value: RoomPreviewActionProjection) -> RustBuffer {
+    return FfiConverterTypeRoomPreviewActionProjection.lower(value)
+}
+
+
+public struct RoomPreviewActionProjectionInput {
+    public var roomAccess: String
+    public var roomId: String
+    public var joinedRoomIds: [String]
+    public var isExpanded: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(roomAccess: String, roomId: String, joinedRoomIds: [String], isExpanded: Bool) {
+        self.roomAccess = roomAccess
+        self.roomId = roomId
+        self.joinedRoomIds = joinedRoomIds
+        self.isExpanded = isExpanded
+    }
+}
+
+#if compiler(>=6)
+extension RoomPreviewActionProjectionInput: Sendable {}
+#endif
+
+
+extension RoomPreviewActionProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomPreviewActionProjectionInput, rhs: RoomPreviewActionProjectionInput) -> Bool {
+        if lhs.roomAccess != rhs.roomAccess {
+            return false
+        }
+        if lhs.roomId != rhs.roomId {
+            return false
+        }
+        if lhs.joinedRoomIds != rhs.joinedRoomIds {
+            return false
+        }
+        if lhs.isExpanded != rhs.isExpanded {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(roomAccess)
+        hasher.combine(roomId)
+        hasher.combine(joinedRoomIds)
+        hasher.combine(isExpanded)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomPreviewActionProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewActionProjectionInput {
+        return
+            try RoomPreviewActionProjectionInput(
+                roomAccess: FfiConverterString.read(from: &buf),
+                roomId: FfiConverterString.read(from: &buf),
+                joinedRoomIds: FfiConverterSequenceString.read(from: &buf),
+                isExpanded: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomPreviewActionProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.roomAccess, into: &buf)
+        FfiConverterString.write(value.roomId, into: &buf)
+        FfiConverterSequenceString.write(value.joinedRoomIds, into: &buf)
+        FfiConverterBool.write(value.isExpanded, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomPreviewActionProjectionInput_lift(_ buf: RustBuffer) throws -> RoomPreviewActionProjectionInput {
+    return try FfiConverterTypeRoomPreviewActionProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomPreviewActionProjectionInput_lower(_ value: RoomPreviewActionProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomPreviewActionProjectionInput.lower(value)
+}
+
+
 public struct RoomPreviewArtifactRowProjection {
     public var artifact: ArtifactRecord
     public var title: String
@@ -33196,6 +33370,83 @@ extension RoomInviteSelectionAction: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum RoomPreviewSecondaryAction {
+
+    case none
+    case peekInside
+    case openFullRoom
+}
+
+
+#if compiler(>=6)
+extension RoomPreviewSecondaryAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomPreviewSecondaryAction: FfiConverterRustBuffer {
+    typealias SwiftType = RoomPreviewSecondaryAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewSecondaryAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .none
+
+        case 2: return .peekInside
+
+        case 3: return .openFullRoom
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RoomPreviewSecondaryAction, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .none:
+            writeInt(&buf, Int32(1))
+
+
+        case .peekInside:
+            writeInt(&buf, Int32(2))
+
+
+        case .openFullRoom:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomPreviewSecondaryAction_lift(_ buf: RustBuffer) throws -> RoomPreviewSecondaryAction {
+    return try FfiConverterTypeRoomPreviewSecondaryAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomPreviewSecondaryAction_lower(_ value: RoomPreviewSecondaryAction) -> RustBuffer {
+    return FfiConverterTypeRoomPreviewSecondaryAction.lower(value)
+}
+
+
+extension RoomPreviewSecondaryAction: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Why a room is being recommended on the explorer. Drives the subtitle under
  * a card ("Alice + 3 you follow are here" vs. "Posts by writers you read").
@@ -36380,6 +36631,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_podcast_card() != 47926) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_preview_action() != 45992) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_preview_artifacts() != 32023) {
