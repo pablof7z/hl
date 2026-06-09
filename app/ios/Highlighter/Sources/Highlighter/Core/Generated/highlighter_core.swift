@@ -1433,6 +1433,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectFeedbackThreadPresentation(thread: FeedbackThreadRecord)  -> FeedbackThreadPresentationProjection
 
+    func projectHighlightDetailResource(input: HighlightDetailResourceProjectionInput)  -> HighlightDetailResourceProjection
+
     func projectHighlightGroupCard(input: HighlightGroupCardProjectionInput)  -> HighlightGroupCardProjection
 
     func projectHighlightResourceHeader(input: HighlightResourceHeaderProjectionInput)  -> HighlightResourceHeaderProjection
@@ -4252,6 +4254,14 @@ open func projectFeedbackThreadPresentation(thread: FeedbackThreadRecord) -> Fee
     return try!  FfiConverterTypeFeedbackThreadPresentationProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_feedback_thread_presentation(self.uniffiClonePointer(),
         FfiConverterTypeFeedbackThreadRecord_lower(thread),$0
+    )
+})
+}
+
+open func projectHighlightDetailResource(input: HighlightDetailResourceProjectionInput) -> HighlightDetailResourceProjection  {
+    return try!  FfiConverterTypeHighlightDetailResourceProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_highlight_detail_resource(self.uniffiClonePointer(),
+        FfiConverterTypeHighlightDetailResourceProjectionInput_lower(input),$0
     )
 })
 }
@@ -12041,6 +12051,186 @@ public func FfiConverterTypeGeneratedAccountOutcome_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeGeneratedAccountOutcome_lower(_ value: GeneratedAccountOutcome) -> RustBuffer {
     return FfiConverterTypeGeneratedAccountOutcome.lower(value)
+}
+
+
+public struct HighlightDetailResourceProjection {
+    public var sourceKind: HighlightSourceKind
+    public var kindLabel: String
+    public var title: String
+    public var author: String
+    public var coverUrl: String?
+    public var articleRoute: ArticleReaderRoute?
+    public var bookCatalogId: String?
+    public var webUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(sourceKind: HighlightSourceKind, kindLabel: String, title: String, author: String, coverUrl: String?, articleRoute: ArticleReaderRoute?, bookCatalogId: String?, webUrl: String?) {
+        self.sourceKind = sourceKind
+        self.kindLabel = kindLabel
+        self.title = title
+        self.author = author
+        self.coverUrl = coverUrl
+        self.articleRoute = articleRoute
+        self.bookCatalogId = bookCatalogId
+        self.webUrl = webUrl
+    }
+}
+
+#if compiler(>=6)
+extension HighlightDetailResourceProjection: Sendable {}
+#endif
+
+
+extension HighlightDetailResourceProjection: Equatable, Hashable {
+    public static func ==(lhs: HighlightDetailResourceProjection, rhs: HighlightDetailResourceProjection) -> Bool {
+        if lhs.sourceKind != rhs.sourceKind {
+            return false
+        }
+        if lhs.kindLabel != rhs.kindLabel {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.author != rhs.author {
+            return false
+        }
+        if lhs.coverUrl != rhs.coverUrl {
+            return false
+        }
+        if lhs.articleRoute != rhs.articleRoute {
+            return false
+        }
+        if lhs.bookCatalogId != rhs.bookCatalogId {
+            return false
+        }
+        if lhs.webUrl != rhs.webUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(sourceKind)
+        hasher.combine(kindLabel)
+        hasher.combine(title)
+        hasher.combine(author)
+        hasher.combine(coverUrl)
+        hasher.combine(articleRoute)
+        hasher.combine(bookCatalogId)
+        hasher.combine(webUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightDetailResourceProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightDetailResourceProjection {
+        return
+            try HighlightDetailResourceProjection(
+                sourceKind: FfiConverterTypeHighlightSourceKind.read(from: &buf),
+                kindLabel: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                coverUrl: FfiConverterOptionString.read(from: &buf),
+                articleRoute: FfiConverterOptionTypeArticleReaderRoute.read(from: &buf),
+                bookCatalogId: FfiConverterOptionString.read(from: &buf),
+                webUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightDetailResourceProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeHighlightSourceKind.write(value.sourceKind, into: &buf)
+        FfiConverterString.write(value.kindLabel, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.author, into: &buf)
+        FfiConverterOptionString.write(value.coverUrl, into: &buf)
+        FfiConverterOptionTypeArticleReaderRoute.write(value.articleRoute, into: &buf)
+        FfiConverterOptionString.write(value.bookCatalogId, into: &buf)
+        FfiConverterOptionString.write(value.webUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightDetailResourceProjection_lift(_ buf: RustBuffer) throws -> HighlightDetailResourceProjection {
+    return try FfiConverterTypeHighlightDetailResourceProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightDetailResourceProjection_lower(_ value: HighlightDetailResourceProjection) -> RustBuffer {
+    return FfiConverterTypeHighlightDetailResourceProjection.lower(value)
+}
+
+
+public struct HighlightDetailResourceProjectionInput {
+    public var item: HydratedHighlight
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(item: HydratedHighlight) {
+        self.item = item
+    }
+}
+
+#if compiler(>=6)
+extension HighlightDetailResourceProjectionInput: Sendable {}
+#endif
+
+
+extension HighlightDetailResourceProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: HighlightDetailResourceProjectionInput, rhs: HighlightDetailResourceProjectionInput) -> Bool {
+        if lhs.item != rhs.item {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(item)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightDetailResourceProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightDetailResourceProjectionInput {
+        return
+            try HighlightDetailResourceProjectionInput(
+                item: FfiConverterTypeHydratedHighlight.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightDetailResourceProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeHydratedHighlight.write(value.item, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightDetailResourceProjectionInput_lift(_ buf: RustBuffer) throws -> HighlightDetailResourceProjectionInput {
+    return try FfiConverterTypeHighlightDetailResourceProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightDetailResourceProjectionInput_lower(_ value: HighlightDetailResourceProjectionInput) -> RustBuffer {
+    return FfiConverterTypeHighlightDetailResourceProjectionInput.lower(value)
 }
 
 
@@ -28368,6 +28558,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_thread_presentation() != 19722) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_highlight_detail_resource() != 10751) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_highlight_group_card() != 49051) {

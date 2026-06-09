@@ -89,6 +89,23 @@ pub struct HighlightResourceHeaderProjection {
     pub web_metadata_url: Option<String>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightDetailResourceProjectionInput {
+    pub item: HydratedHighlight,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HighlightDetailResourceProjection {
+    pub source_kind: HighlightSourceKind,
+    pub kind_label: String,
+    pub title: String,
+    pub author: String,
+    pub cover_url: Option<String>,
+    pub article_route: Option<crate::models::ArticleReaderRoute>,
+    pub book_catalog_id: Option<String>,
+    pub web_url: Option<String>,
+}
+
 /// Presentation projection for a grouped highlight card. Rust owns unique
 /// highlighter order, strip visibility, avatar cap, overflow count, and the
 /// social byline text sequence; native shells only style the segments.
@@ -296,6 +313,48 @@ pub fn highlight_resource_header_projection(
     }
 }
 
+/// Project the compact resource header on the highlight detail screen. Rust
+/// owns the source label, title/author fallback order, and destination policy;
+/// native shells only construct platform navigation values and render.
+pub fn highlight_detail_resource_projection(
+    input: HighlightDetailResourceProjectionInput,
+) -> HighlightDetailResourceProjection {
+    let item = input.item;
+    let preview = item.artifact.as_ref().map(|artifact| &artifact.preview);
+    let source_kind = source_kind(
+        preview.map(|p| p.source.as_str()).unwrap_or_default(),
+        &item.highlight.external_reference,
+        &item.highlight.artifact_address,
+        &item.highlight.source_url,
+    );
+    let url_host = url_host(&item.highlight.source_url);
+    let article_route = article_route_for_highlight(&item.highlight.artifact_address);
+    let book_catalog_id = book_route_for_highlight(
+        &item.highlight.external_reference,
+        &item.highlight.artifact_address,
+    )
+    .map(|route| route.catalog_id);
+    let web_url = web_reader_url(&item.highlight.source_url);
+
+    HighlightDetailResourceProjection {
+        source_kind,
+        kind_label: detail_kind_label(source_kind).to_string(),
+        title: preview
+            .and_then(|p| non_empty(&p.title))
+            .or(url_host.clone())
+            .unwrap_or_else(|| "Untitled".into()),
+        author: preview
+            .and_then(|p| non_empty(&p.author))
+            .or_else(|| preview.and_then(|p| non_empty(&p.domain)))
+            .or(url_host)
+            .unwrap_or_default(),
+        cover_url: preview.and_then(|p| non_empty(&p.image)),
+        article_route,
+        book_catalog_id,
+        web_url,
+    }
+}
+
 fn is_isbn_reference(value: &str) -> bool {
     value.trim().to_ascii_lowercase().starts_with("isbn:")
 }
@@ -462,6 +521,12 @@ fn article_address_for_highlight(artifact_address: &str) -> Option<String> {
     }
 }
 
+fn article_route_for_highlight(
+    artifact_address: &str,
+) -> Option<crate::models::ArticleReaderRoute> {
+    articles::article_reader_route_from_address(artifact_address.trim())
+}
+
 fn article_author_pubkey(
     source_article: Option<&crate::models::ArticleRecord>,
     resolved_author_pubkey: &str,
@@ -493,6 +558,30 @@ fn url_host(raw_url: &str) -> Option<String> {
     Url::parse(trimmed)
         .ok()
         .and_then(|url| url.host_str().map(str::to_string))
+}
+
+fn web_reader_url(raw_url: &str) -> Option<String> {
+    let trimmed = raw_url.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let parsed = Url::parse(trimmed).ok()?;
+    match parsed.scheme().to_ascii_lowercase().as_str() {
+        "http" | "https" => Some(trimmed.to_string()),
+        _ => None,
+    }
+}
+
+fn detail_kind_label(source_kind: HighlightSourceKind) -> &'static str {
+    match source_kind {
+        HighlightSourceKind::Article => "Article",
+        HighlightSourceKind::Book => "Book",
+        HighlightSourceKind::Podcast => "Podcast",
+        HighlightSourceKind::Web => "Web",
+        HighlightSourceKind::Video => "Video",
+        HighlightSourceKind::Paper => "Paper",
+        HighlightSourceKind::Unknown => "Source",
+    }
 }
 
 fn non_empty(value: &str) -> Option<String> {
@@ -1731,6 +1820,115 @@ mod tests {
             Some("https://example.com/book.jpg".into())
         );
         assert_eq!(projection.book_isbn, Some("9780735211292".into()));
+    }
+
+    #[test]
+    fn highlight_detail_resource_projects_article_destination_and_header() {
+        let article_pubkey = "a".repeat(64);
+        let article_address = format!("30023:{article_pubkey}:essay");
+        let mut artifact = artifact_with_source("article");
+        artifact.preview.title = "Preview essay".into();
+        artifact.preview.domain = "example.com".into();
+        artifact.preview.image = "https://example.com/cover.jpg".into();
+
+        let projection =
+            highlight_detail_resource_projection(HighlightDetailResourceProjectionInput {
+                item: hydrated_highlight_with_artifact(
+                    highlight_for_source_key(
+                        "event-detail-article",
+                        &format!("a:{article_address}"),
+                        1,
+                    ),
+                    artifact,
+                ),
+            });
+
+        assert_eq!(projection.source_kind, HighlightSourceKind::Article);
+        assert_eq!(projection.kind_label, "Article");
+        assert_eq!(projection.title, "Preview essay");
+        assert_eq!(projection.author, "example.com");
+        assert_eq!(
+            projection.cover_url,
+            Some("https://example.com/cover.jpg".into())
+        );
+        assert_eq!(
+            projection
+                .article_route
+                .as_ref()
+                .map(|route| route.address.as_str()),
+            Some(article_address.as_str())
+        );
+        assert_eq!(projection.book_catalog_id, None);
+        assert_eq!(projection.web_url, None);
+    }
+
+    #[test]
+    fn highlight_detail_resource_projects_book_destination_without_artifact() {
+        let projection =
+            highlight_detail_resource_projection(HighlightDetailResourceProjectionInput {
+                item: HydratedHighlight {
+                    highlight: highlight_for_source_key(
+                        "event-detail-book",
+                        "i:isbn:9780735211292",
+                        1,
+                    ),
+                    artifact: None,
+                    shared_by_event_id: None,
+                    shared_by_pubkey: None,
+                },
+            });
+
+        assert_eq!(projection.source_kind, HighlightSourceKind::Book);
+        assert_eq!(projection.kind_label, "Book");
+        assert_eq!(projection.title, "Untitled");
+        assert_eq!(
+            projection.book_catalog_id,
+            Some("isbn:9780735211292".into())
+        );
+        assert_eq!(projection.article_route, None);
+    }
+
+    #[test]
+    fn highlight_detail_resource_projects_web_destination_and_host_fallbacks() {
+        let projection =
+            highlight_detail_resource_projection(HighlightDetailResourceProjectionInput {
+                item: HydratedHighlight {
+                    highlight: highlight_for_source_key(
+                        "event-detail-web",
+                        "r:https://example.com/read",
+                        1,
+                    ),
+                    artifact: None,
+                    shared_by_event_id: None,
+                    shared_by_pubkey: None,
+                },
+            });
+
+        assert_eq!(projection.source_kind, HighlightSourceKind::Web);
+        assert_eq!(projection.kind_label, "Web");
+        assert_eq!(projection.title, "example.com");
+        assert_eq!(projection.author, "example.com");
+        assert_eq!(projection.web_url, Some("https://example.com/read".into()));
+    }
+
+    #[test]
+    fn highlight_detail_resource_rejects_non_http_web_destination() {
+        let mut highlight =
+            highlight_for_source_key("event-detail-web", "r:mailto:a@example.com", 1);
+        highlight.source_url = "mailto:a@example.com".into();
+
+        let projection =
+            highlight_detail_resource_projection(HighlightDetailResourceProjectionInput {
+                item: HydratedHighlight {
+                    highlight,
+                    artifact: None,
+                    shared_by_event_id: None,
+                    shared_by_pubkey: None,
+                },
+            });
+
+        assert_eq!(projection.source_kind, HighlightSourceKind::Web);
+        assert_eq!(projection.web_url, None);
     }
 
     fn preview_for_podcast(url: &str) -> ArtifactPreview {

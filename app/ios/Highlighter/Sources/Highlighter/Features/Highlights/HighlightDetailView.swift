@@ -85,38 +85,49 @@ struct HighlightDetailView: View {
 
     @ViewBuilder
     private var resourceHeader: some View {
-        if let t = articleReaderTarget {
-            NavigationLink(value: t) { resourceHeaderCard(showsChevron: true) }
+        let resource = resourceProjection
+
+        if let route = resource.articleRoute {
+            NavigationLink(value: ArticleReaderTarget(route: route)) {
+                resourceHeaderCard(resource, showsChevron: true)
+            }
                 .buttonStyle(.plain)
-        } else if let t = bookReaderTarget {
-            NavigationLink(value: t) { resourceHeaderCard(showsChevron: true) }
+        } else if let catalogId = resource.bookCatalogId {
+            NavigationLink(value: BookTarget(catalogId: catalogId)) {
+                resourceHeaderCard(resource, showsChevron: true)
+            }
                 .buttonStyle(.plain)
-        } else if let t = webReaderTarget {
-            NavigationLink(value: t) { resourceHeaderCard(showsChevron: true) }
+        } else if let t = webReaderTarget(resource) {
+            NavigationLink(value: t) {
+                resourceHeaderCard(resource, showsChevron: true)
+            }
                 .buttonStyle(.plain)
         } else {
-            resourceHeaderCard(showsChevron: false)
+            resourceHeaderCard(resource, showsChevron: false)
         }
     }
 
-    private func resourceHeaderCard(showsChevron: Bool) -> some View {
+    private func resourceHeaderCard(
+        _ resource: HighlightDetailResourceProjection,
+        showsChevron: Bool
+    ) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            resourceCover
+            resourceCover(resource)
                 .frame(width: 40, height: 40)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(resourceKindLabel.uppercased())
+                Text(resource.kindLabel.uppercased())
                     .font(.caption2.weight(.bold))
                     .tracking(0.6)
                     .foregroundStyle(Color.highlighterInkMuted)
-                Text(resourceTitle)
+                Text(resource.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                if !resourceAuthor.isEmpty {
-                    Text(resourceAuthor)
+                if !resource.author.isEmpty {
+                    Text(resource.author)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(1)
@@ -138,21 +149,21 @@ struct HighlightDetailView: View {
     }
 
     @ViewBuilder
-    private var resourceCover: some View {
-        if let urlString = item.artifact?.preview.image,
+    private func resourceCover(_ resource: HighlightDetailResourceProjection) -> some View {
+        if let urlString = resource.coverUrl,
            !urlString.isEmpty,
            let url = URL(string: urlString) {
             KFImage(url)
-                .placeholder { coverFallback }
+                .placeholder { coverFallback(resource) }
                 .fade(duration: 0.15)
                 .resizable()
                 .scaledToFill()
         } else {
-            coverFallback
+            coverFallback(resource)
         }
     }
 
-    private var coverFallback: some View {
+    private func coverFallback(_ resource: HighlightDetailResourceProjection) -> some View {
         ZStack {
             LinearGradient(
                 colors: [
@@ -162,7 +173,7 @@ struct HighlightDetailView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: kindIconName)
+            Image(systemName: kindIconName(resource.sourceKind))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Color.highlighterInkStrong.opacity(0.55))
         }
@@ -337,40 +348,22 @@ struct HighlightDetailView: View {
         shareURL = URL(string: "https://beta.highlighter.com/highlight/\(outcome.value)")
     }
 
-    // MARK: - Reader-target dispatch (mirror of HighlightsTabView)
+    // MARK: - Resource projection
 
-    /// Article a-tag we can bookmark. Only NIP-23 articles are
-    /// bookmarkable today (the existing curation-set machinery is
-    /// addressable-only).
-    private var articleAddressForBookmark: String? {
-        articleReaderRoute?.address
-    }
-
-    private var articleReaderTarget: ArticleReaderTarget? {
-        articleReaderRoute.map { ArticleReaderTarget(route: $0) }
-    }
-
-    private var articleReaderRoute: ArticleReaderRoute? {
-        let addr = highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let outcome = app.core.getArticleReaderRoute(address: addr)
-        guard outcome.error.isEmpty else { return nil }
-        return outcome.value
-    }
-
-    private var bookReaderTarget: BookTarget? {
-        let route = app.core.getHighlightBookRoute(
-            externalReference: highlight.externalReference,
-            artifactAddress: highlight.artifactAddress
+    private var resourceProjection: HighlightDetailResourceProjection {
+        app.safeCore.projectHighlightDetailResource(
+            input: HighlightDetailResourceProjectionInput(item: item)
         )
-        return route.value.map { BookTarget(catalogId: $0.catalogId) }
     }
 
-    private var webReaderTarget: WebReaderTarget? {
-        let raw = highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty, let url = URL(string: raw) else { return nil }
-        guard let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else { return nil }
+    /// Article a-tag we can bookmark. Only NIP-23 articles are bookmarkable
+    /// today; Rust owns the address interpretation and returns the route.
+    private var articleAddressForBookmark: String? {
+        resourceProjection.articleRoute?.address
+    }
+
+    private func webReaderTarget(_ resource: HighlightDetailResourceProjection) -> WebReaderTarget? {
+        guard let raw = resource.webUrl, let url = URL(string: raw) else { return nil }
         return WebReaderTarget(url: url, highlightQuote: highlight.quote)
     }
 
@@ -382,32 +375,8 @@ struct HighlightDetailView: View {
         return URL(string: raw)
     }
 
-    private var resourceTitle: String {
-        if let t = item.artifact?.preview.title, !t.isEmpty { return t }
-        if let host = sourceURLHost { return host }
-        return "Untitled"
-    }
-
-    private var resourceAuthor: String {
-        if let a = item.artifact?.preview.author, !a.isEmpty { return a }
-        if let d = item.artifact?.preview.domain, !d.isEmpty { return d }
-        return sourceURLHost ?? ""
-    }
-
-    private var resourceKindLabel: String {
-        switch artifactKind {
-        case .article: return "Article"
-        case .book:    return "Book"
-        case .podcast: return "Podcast"
-        case .web:     return "Web"
-        case .video:   return "Video"
-        case .paper:   return "Paper"
-        case .unknown: return "Source"
-        }
-    }
-
-    private var kindIconName: String {
-        switch artifactKind {
+    private func kindIconName(_ kind: HighlightSourceKind) -> String {
+        switch kind {
         case .article: return "doc.text"
         case .web:     return "globe"
         case .podcast: return "waveform"
@@ -416,21 +385,6 @@ struct HighlightDetailView: View {
         case .paper:   return "doc.richtext"
         case .unknown: return "quote.bubble"
         }
-    }
-
-    private var artifactKind: HighlightSourceKind {
-        app.core.getHighlightSourceKind(
-            previewSource: item.artifact?.preview.source ?? "",
-            externalReference: highlight.externalReference,
-            artifactAddress: highlight.artifactAddress,
-            sourceUrl: highlight.sourceUrl
-        )
-    }
-
-    private var sourceURLHost: String? {
-        let raw = highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty, let url = URL(string: raw), let host = url.host else { return nil }
-        return host
     }
 
     // MARK: - Profile helpers
