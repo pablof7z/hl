@@ -21,6 +21,31 @@ use crate::models::{ArtifactPreview, ArtifactRecord};
 const OPEN_LIBRARY_TIMEOUT: Duration = Duration::from_secs(5);
 const CACHE_FILE_NAME: &str = "isbn-preview-cache-v1.json";
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookPickerQueryProjectionInput {
+    pub query: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookPickerQueryProjection {
+    pub search_query: String,
+    pub has_query: bool,
+    pub normalized_isbn: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct IsbnManualPreviewProjectionInput {
+    pub title: String,
+    pub author: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct IsbnManualPreviewProjection {
+    pub title: String,
+    pub author: String,
+    pub can_use: bool,
+}
+
 /// Rust-owned persistent ISBN preview cache.
 ///
 /// Native callers should not mirror this in `UserDefaults`; they ask Rust for
@@ -149,6 +174,32 @@ pub fn edited_book_preview(
     preview.title = title.trim().to_string();
     preview.author = author.trim().to_string();
     Ok(preview)
+}
+
+/// Project the book-picker search field. Rust owns query trimming and ISBN
+/// normalization; native shells render and debounce the returned query.
+pub fn book_picker_query_projection(
+    input: BookPickerQueryProjectionInput,
+) -> BookPickerQueryProjection {
+    let search_query = input.query.trim().to_string();
+    BookPickerQueryProjection {
+        has_query: !search_query.is_empty(),
+        normalized_isbn: normalize_isbn(&input.query).ok(),
+        search_query,
+    }
+}
+
+/// Project the manual ISBN preview form. Rust owns title/author normalization
+/// and whether the "Use" action can proceed.
+pub fn manual_preview_projection(
+    input: IsbnManualPreviewProjectionInput,
+) -> IsbnManualPreviewProjection {
+    let title = input.title.trim().to_string();
+    IsbnManualPreviewProjection {
+        can_use: !title.is_empty(),
+        title,
+        author: input.author.trim().to_string(),
+    }
 }
 
 pub fn existing_record_for_isbn(isbn: &str, records: &[ArtifactRecord]) -> Option<ArtifactRecord> {
@@ -635,6 +686,46 @@ mod tests {
         assert_eq!(edited.catalog_id, "isbn:9780735211292");
         assert_eq!(edited.highlight_reference_key, "i:isbn:9780735211292");
         assert!(edited.image.is_empty());
+    }
+
+    #[test]
+    fn book_picker_query_projection_trims_and_detects_isbn() {
+        let projection = book_picker_query_projection(BookPickerQueryProjectionInput {
+            query: "  0735211299  ".into(),
+        });
+        let blank = book_picker_query_projection(BookPickerQueryProjectionInput {
+            query: " \n\t ".into(),
+        });
+        let search = book_picker_query_projection(BookPickerQueryProjectionInput {
+            query: "  clean code  ".into(),
+        });
+
+        assert_eq!(projection.search_query, "0735211299");
+        assert!(projection.has_query);
+        assert_eq!(projection.normalized_isbn, Some("9780735211292".into()));
+        assert_eq!(blank.search_query, "");
+        assert!(!blank.has_query);
+        assert_eq!(blank.normalized_isbn, None);
+        assert_eq!(search.search_query, "clean code");
+        assert_eq!(search.normalized_isbn, None);
+    }
+
+    #[test]
+    fn manual_preview_projection_trims_and_requires_title() {
+        let projection = manual_preview_projection(IsbnManualPreviewProjectionInput {
+            title: "  Manual Title  ".into(),
+            author: "  Author Name  ".into(),
+        });
+        let blank = manual_preview_projection(IsbnManualPreviewProjectionInput {
+            title: " \n\t ".into(),
+            author: "Author".into(),
+        });
+
+        assert_eq!(projection.title, "Manual Title");
+        assert_eq!(projection.author, "Author Name");
+        assert!(projection.can_use);
+        assert_eq!(blank.title, "");
+        assert!(!blank.can_use);
     }
 
     #[test]

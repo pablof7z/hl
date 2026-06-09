@@ -2974,6 +2974,20 @@ impl HighlighterCore {
         isbn_lookup::normalize_isbn(&raw).ok()
     }
 
+    pub fn project_book_picker_query(
+        &self,
+        input: isbn_lookup::BookPickerQueryProjectionInput,
+    ) -> isbn_lookup::BookPickerQueryProjection {
+        isbn_lookup::book_picker_query_projection(input)
+    }
+
+    pub fn project_isbn_manual_preview(
+        &self,
+        input: isbn_lookup::IsbnManualPreviewProjectionInput,
+    ) -> isbn_lookup::IsbnManualPreviewProjection {
+        isbn_lookup::manual_preview_projection(input)
+    }
+
     /// Resolve an ISBN against the bounded recent-book projection already
     /// rendered by the native picker. Rust owns the canonical ISBN reference
     /// matching; native shells only decide how to present the selected record.

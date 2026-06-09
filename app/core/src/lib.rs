@@ -98,6 +98,10 @@ pub use highlights::{
     HighlightGroupLabelSegment, HighlightResourceAuthorProfile, HighlightResourceHeaderProjection,
     HighlightResourceHeaderProjectionInput,
 };
+pub use isbn_lookup::{
+    BookPickerQueryProjection, BookPickerQueryProjectionInput, IsbnManualPreviewProjection,
+    IsbnManualPreviewProjectionInput,
+};
 pub use lists::{
     BookmarkSetDetailProjection, BookmarkSetDetailProjectionInput, BookmarkSetRowProjection,
     BookmarkSetRowProjectionInput, BookmarkedArticleRowProjection,

@@ -39,7 +39,7 @@ struct BookPicker: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         searchScanBar
-                        if !query.isEmpty {
+                        if queryProjection.hasQuery {
                             searchResultsSection
                         } else {
                             recentsSection
@@ -309,7 +309,7 @@ struct BookPicker: View {
             Text("If you know the ISBN, scan the back cover or paste it into the search field.")
                 .font(.footnote)
                 .foregroundStyle(Color.highlighterInkMuted)
-            if let isbn = appStore.safeCore.normalizeIsbnInput(query) {
+            if let isbn = queryProjection.normalizedIsbn {
                 Button {
                     beginResolve(isbn)
                 } label: {
@@ -398,8 +398,14 @@ struct BookPicker: View {
 
     // MARK: - Actions
 
+    private var queryProjection: BookPickerQueryProjection {
+        appStore.safeCore.projectBookPickerQuery(
+            input: BookPickerQueryProjectionInput(query: query)
+        )
+    }
+
     private func handleSubmit() {
-        if let isbn = appStore.safeCore.normalizeIsbnInput(query) {
+        if let isbn = queryProjection.normalizedIsbn {
             beginResolve(isbn)
         }
     }
@@ -430,17 +436,17 @@ struct BookPicker: View {
     }
 
     private func runSearch() async {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        let projection = queryProjection
+        guard projection.hasQuery else {
             searchResults = []
             searching = false
             return
         }
         searching = true
-        guard !Task.isCancelled, query.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
-        let outcome = await appStore.safeCore.searchArtifacts(query: trimmed)
+        guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
+        let outcome = await appStore.safeCore.searchArtifacts(query: projection.searchQuery)
         let results = outcome.error.isEmpty ? outcome.values : []
-        guard !Task.isCancelled, query.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
+        guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
         searchResults = results
         searching = false
     }
@@ -493,7 +499,7 @@ private struct ISBNPreviewSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Use") { commit() }
                         .fontWeight(.semibold)
-                        .disabled(effectiveTitle.isEmpty)
+                        .disabled(!manualProjection.canUse)
                 }
             }
             .onAppear {
@@ -513,8 +519,13 @@ private struct ISBNPreviewSheet: View {
         }
     }
 
-    private var effectiveTitle: String {
-        manualTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var manualProjection: IsbnManualPreviewProjection {
+        appStore.safeCore.projectIsbnManualPreview(
+            input: IsbnManualPreviewProjectionInput(
+                title: manualTitle,
+                author: manualAuthor
+            )
+        )
     }
 
     @ViewBuilder
@@ -598,12 +609,13 @@ private struct ISBNPreviewSheet: View {
     }
 
     private func commit() {
-        guard !effectiveTitle.isEmpty else { return }
+        let projection = manualProjection
+        guard projection.canUse else { return }
         let outcome = appStore.safeCore.buildEditedBookPreview(
             isbn: isbn,
             basePreview: preview,
-            title: effectiveTitle,
-            author: manualAuthor
+            title: projection.title,
+            author: projection.author
         )
         guard let updated = outcome.value else { return }
         onEditTitle(updated)

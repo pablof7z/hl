@@ -430,6 +430,18 @@ actor SafeHighlighterCore {
         core.normalizeIsbnInput(raw: raw)
     }
 
+    nonisolated func projectBookPickerQuery(
+        input: BookPickerQueryProjectionInput
+    ) -> BookPickerQueryProjection {
+        core.projectBookPickerQuery(input: input)
+    }
+
+    nonisolated func projectIsbnManualPreview(
+        input: IsbnManualPreviewProjectionInput
+    ) -> IsbnManualPreviewProjection {
+        core.projectIsbnManualPreview(input: input)
+    }
+
     nonisolated func findExistingBookForIsbn(
         _ isbn: String,
         recents: [ArtifactRecord]

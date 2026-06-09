@@ -1412,6 +1412,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput)  -> ArticleReaderHeaderProjection
 
+    func projectBookPickerQuery(input: BookPickerQueryProjectionInput)  -> BookPickerQueryProjection
+
     func projectBookmarkSetDetail(input: BookmarkSetDetailProjectionInput)  -> BookmarkSetDetailProjection
 
     func projectBookmarkSetRow(input: BookmarkSetRowProjectionInput)  -> BookmarkSetRowProjection
@@ -1488,6 +1490,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectHighlightResourceHeader(input: HighlightResourceHeaderProjectionInput)  -> HighlightResourceHeaderProjection
 
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
+
+    func projectIsbnManualPreview(input: IsbnManualPreviewProjectionInput)  -> IsbnManualPreviewProjection
 
     func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput)  -> NostrEntityArticleCardProjection
 
@@ -4301,6 +4305,14 @@ open func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput) 
 })
 }
 
+open func projectBookPickerQuery(input: BookPickerQueryProjectionInput) -> BookPickerQueryProjection  {
+    return try!  FfiConverterTypeBookPickerQueryProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_book_picker_query(self.uniffiClonePointer(),
+        FfiConverterTypeBookPickerQueryProjectionInput_lower(input),$0
+    )
+})
+}
+
 open func projectBookmarkSetDetail(input: BookmarkSetDetailProjectionInput) -> BookmarkSetDetailProjection  {
     return try!  FfiConverterTypeBookmarkSetDetailProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_bookmark_set_detail(self.uniffiClonePointer(),
@@ -4506,6 +4518,14 @@ open func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelay
     return try!  FfiConverterTypeImportRelaysProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_import_relays(self.uniffiClonePointer(),
         FfiConverterTypeImportRelaysProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectIsbnManualPreview(input: IsbnManualPreviewProjectionInput) -> IsbnManualPreviewProjection  {
+    return try!  FfiConverterTypeIsbnManualPreviewProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_isbn_manual_preview(self.uniffiClonePointer(),
+        FfiConverterTypeIsbnManualPreviewProjectionInput_lower(input),$0
     )
 })
 }
@@ -8389,6 +8409,146 @@ public func FfiConverterTypeBlossomUploadOutcome_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeBlossomUploadOutcome_lower(_ value: BlossomUploadOutcome) -> RustBuffer {
     return FfiConverterTypeBlossomUploadOutcome.lower(value)
+}
+
+
+public struct BookPickerQueryProjection {
+    public var searchQuery: String
+    public var hasQuery: Bool
+    public var normalizedIsbn: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(searchQuery: String, hasQuery: Bool, normalizedIsbn: String?) {
+        self.searchQuery = searchQuery
+        self.hasQuery = hasQuery
+        self.normalizedIsbn = normalizedIsbn
+    }
+}
+
+#if compiler(>=6)
+extension BookPickerQueryProjection: Sendable {}
+#endif
+
+
+extension BookPickerQueryProjection: Equatable, Hashable {
+    public static func ==(lhs: BookPickerQueryProjection, rhs: BookPickerQueryProjection) -> Bool {
+        if lhs.searchQuery != rhs.searchQuery {
+            return false
+        }
+        if lhs.hasQuery != rhs.hasQuery {
+            return false
+        }
+        if lhs.normalizedIsbn != rhs.normalizedIsbn {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(searchQuery)
+        hasher.combine(hasQuery)
+        hasher.combine(normalizedIsbn)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookPickerQueryProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookPickerQueryProjection {
+        return
+            try BookPickerQueryProjection(
+                searchQuery: FfiConverterString.read(from: &buf),
+                hasQuery: FfiConverterBool.read(from: &buf),
+                normalizedIsbn: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookPickerQueryProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.searchQuery, into: &buf)
+        FfiConverterBool.write(value.hasQuery, into: &buf)
+        FfiConverterOptionString.write(value.normalizedIsbn, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookPickerQueryProjection_lift(_ buf: RustBuffer) throws -> BookPickerQueryProjection {
+    return try FfiConverterTypeBookPickerQueryProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookPickerQueryProjection_lower(_ value: BookPickerQueryProjection) -> RustBuffer {
+    return FfiConverterTypeBookPickerQueryProjection.lower(value)
+}
+
+
+public struct BookPickerQueryProjectionInput {
+    public var query: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(query: String) {
+        self.query = query
+    }
+}
+
+#if compiler(>=6)
+extension BookPickerQueryProjectionInput: Sendable {}
+#endif
+
+
+extension BookPickerQueryProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: BookPickerQueryProjectionInput, rhs: BookPickerQueryProjectionInput) -> Bool {
+        if lhs.query != rhs.query {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(query)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookPickerQueryProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookPickerQueryProjectionInput {
+        return
+            try BookPickerQueryProjectionInput(
+                query: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookPickerQueryProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.query, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookPickerQueryProjectionInput_lift(_ buf: RustBuffer) throws -> BookPickerQueryProjectionInput {
+    return try FfiConverterTypeBookPickerQueryProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookPickerQueryProjectionInput_lower(_ value: BookPickerQueryProjectionInput) -> RustBuffer {
+    return FfiConverterTypeBookPickerQueryProjectionInput.lower(value)
 }
 
 
@@ -16725,6 +16885,154 @@ public func FfiConverterTypeImportRelaysProjectionInput_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeImportRelaysProjectionInput_lower(_ value: ImportRelaysProjectionInput) -> RustBuffer {
     return FfiConverterTypeImportRelaysProjectionInput.lower(value)
+}
+
+
+public struct IsbnManualPreviewProjection {
+    public var title: String
+    public var author: String
+    public var canUse: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String, author: String, canUse: Bool) {
+        self.title = title
+        self.author = author
+        self.canUse = canUse
+    }
+}
+
+#if compiler(>=6)
+extension IsbnManualPreviewProjection: Sendable {}
+#endif
+
+
+extension IsbnManualPreviewProjection: Equatable, Hashable {
+    public static func ==(lhs: IsbnManualPreviewProjection, rhs: IsbnManualPreviewProjection) -> Bool {
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.author != rhs.author {
+            return false
+        }
+        if lhs.canUse != rhs.canUse {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(title)
+        hasher.combine(author)
+        hasher.combine(canUse)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIsbnManualPreviewProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnManualPreviewProjection {
+        return
+            try IsbnManualPreviewProjection(
+                title: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                canUse: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IsbnManualPreviewProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.author, into: &buf)
+        FfiConverterBool.write(value.canUse, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnManualPreviewProjection_lift(_ buf: RustBuffer) throws -> IsbnManualPreviewProjection {
+    return try FfiConverterTypeIsbnManualPreviewProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnManualPreviewProjection_lower(_ value: IsbnManualPreviewProjection) -> RustBuffer {
+    return FfiConverterTypeIsbnManualPreviewProjection.lower(value)
+}
+
+
+public struct IsbnManualPreviewProjectionInput {
+    public var title: String
+    public var author: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String, author: String) {
+        self.title = title
+        self.author = author
+    }
+}
+
+#if compiler(>=6)
+extension IsbnManualPreviewProjectionInput: Sendable {}
+#endif
+
+
+extension IsbnManualPreviewProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: IsbnManualPreviewProjectionInput, rhs: IsbnManualPreviewProjectionInput) -> Bool {
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.author != rhs.author {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(title)
+        hasher.combine(author)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIsbnManualPreviewProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnManualPreviewProjectionInput {
+        return
+            try IsbnManualPreviewProjectionInput(
+                title: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IsbnManualPreviewProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.author, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnManualPreviewProjectionInput_lift(_ buf: RustBuffer) throws -> IsbnManualPreviewProjectionInput {
+    return try FfiConverterTypeIsbnManualPreviewProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnManualPreviewProjectionInput_lower(_ value: IsbnManualPreviewProjectionInput) -> RustBuffer {
+    return FfiConverterTypeIsbnManualPreviewProjectionInput.lower(value)
 }
 
 
@@ -32260,6 +32568,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_header() != 55976) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_book_picker_query() != 18730) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_bookmark_set_detail() != 2420) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -32324,6 +32635,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_isbn_manual_preview() != 64480) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_nostr_entity_article_card() != 6476) {
