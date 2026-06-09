@@ -6,10 +6,10 @@ import Observation
 /// tab is even shown — we want to know without spinning up the full chat
 /// list view first.
 ///
-/// The probe peeks the cache (`getChatMessages(groupId, limit: 1)`) on
-/// `start` and installs the same room-chat subscription as `ChatStore`
-/// so that a freshly-arriving kind:9 unhides the tab live. Once activity
-/// is signalled the probe stays subscribed (cheap) until `stop`.
+/// The probe asks Rust for a tiny presence snapshot on `start` and installs
+/// the same room-chat subscription as `ChatStore` so that a freshly-arriving
+/// kind:9 unhides the tab live. Once activity is signalled the probe stays
+/// subscribed (cheap) until `stop`.
 @MainActor
 @Observable
 final class ChatPresenceProbe {
@@ -31,8 +31,8 @@ final class ChatPresenceProbe {
         self.onActivity = onActivity
 
         // Cache peek first — instant if any kind:9 is already locally cached.
-        let cachePeekOutcome = await core.getChatMessages(groupId: groupId, limit: 1)
-        if cachePeekOutcome.error.isEmpty, !cachePeekOutcome.values.isEmpty {
+        let presence = await core.getChatPresenceSnapshot(groupId: groupId)
+        if presence.hasActivity {
             onActivity()
         }
 
@@ -63,48 +63,33 @@ final class ChatPresenceProbe {
     }
 }
 
-/// View-scoped reactive state for a room's Chat tab. Mirrors
-/// `DiscussionStore.swift` — owns a per-view nostrdb read + subscription
-/// handle, and applies `ChatMessageUpserted` deltas routed by `EventBridge`.
-///
-/// Messages are kept in ascending `created_at` order so the chat view can
-/// render newest-at-bottom without re-sorting on each apply.
+/// View-scoped reactive state for a room's Chat tab. Rust owns the bounded
+/// chat snapshot; this store keeps only view lifecycle and scroll activity
+/// state around that snapshot.
 @MainActor
 @Observable
 final class ChatStore {
-    static let pageSize: UInt32 = 50
-
-    private(set) var messages: [ChatMessageRecord] = []
+    private(set) var rows: [ChatMessageRowProjection] = []
     private(set) var isLoading: Bool = true
     private(set) var isLoadingMore: Bool = false
-    /// True when the last page fetch returned a full page, implying older
-    /// messages exist in the DB beyond the current window.
     private(set) var hasMore: Bool = false
-    private(set) var loadError: String?
+    private(set) var activityRevision: UInt64 = 0
+    private(set) var activityDelta: Int = 0
     var sendError: String?
 
     @ObservationIgnored private var groupId: String?
     @ObservationIgnored private var core: SafeHighlighterCore?
     @ObservationIgnored private weak var bridge: EventBridge?
     @ObservationIgnored private var subscriptionHandle: UInt64?
-    @ObservationIgnored private var loadedLimit: UInt32 = ChatStore.pageSize
+    @ObservationIgnored private var loadedPageCount: UInt32 = 1
 
     func start(groupId: String, core: SafeHighlighterCore, bridge: EventBridge?) async {
         self.groupId = groupId
         self.core = core
         self.bridge = bridge
-        loadedLimit = ChatStore.pageSize
+        loadedPageCount = 1
         isLoading = true
-        loadError = nil
-
-        let batchOutcome = await core.getChatMessages(groupId: groupId, limit: loadedLimit)
-        if batchOutcome.error.isEmpty {
-            let batch = batchOutcome.values
-            messages = batch
-            hasMore = UInt32(batch.count) >= loadedLimit
-        } else {
-            loadError = batchOutcome.error
-        }
+        await reloadSnapshot(pageCount: loadedPageCount)
         isLoading = false
 
         let outcome = await core.subscribeRoomChat(groupId: groupId)
@@ -120,16 +105,9 @@ final class ChatStore {
     /// larger slice from the DB; the caller is responsible for restoring
     /// the scroll position to the previously-topmost visible message.
     func loadMore() async {
-        guard !isLoadingMore, hasMore, let groupId, let core else { return }
+        guard !isLoadingMore, hasMore else { return }
         isLoadingMore = true
-        let newLimit = loadedLimit + ChatStore.pageSize
-        let batchOutcome = await core.getChatMessages(groupId: groupId, limit: newLimit)
-        if batchOutcome.error.isEmpty {
-            let batch = batchOutcome.values
-            messages = batch
-            loadedLimit = newLimit
-            hasMore = UInt32(batch.count) >= newLimit
-        }
+        await reloadSnapshot(pageCount: loadedPageCount + 1)
         isLoadingMore = false
     }
 
@@ -141,37 +119,45 @@ final class ChatStore {
         subscriptionHandle = nil
     }
 
-    /// Called by `EventBridge` for each `ChatMessageUpserted` delta. Inserts
-    /// or replaces by `eventId`; keeps the array sorted ascending so the
-    /// view's reverse-stream renders newest-at-bottom for free.
-    func apply(message: ChatMessageRecord) {
-        guard let core else {
-            preconditionFailure("ChatStore.apply called before start")
+    func reloadFromCache(activityEventId: String? = nil) async {
+        let alreadyVisible = activityEventId.map { eventId in
+            rows.contains { $0.message.eventId == eventId }
+        } ?? true
+        await reloadSnapshot(pageCount: loadedPageCount)
+        if activityEventId != nil && !alreadyVisible {
+            activityDelta = 1
+            activityRevision += 1
         }
-        messages = core.upsertChatMessage(
-            messages: messages,
-            message: message
-        )
     }
 
-    /// Send a chat message into the room. Network publish; the live
-    /// subscription will deliver the relay echo as a `ChatMessageUpserted`
-    /// delta which `apply(message:)` upserts (so we don't need to insert
-    /// the returned record — the apply path is idempotent).
+    /// Send a chat message into the room. Rust publishes and returns the
+    /// refreshed bounded snapshot, including the signed record if the relay
+    /// echo has not landed locally yet.
     func send(text: String, replyTo: ChatMessageRecord? = nil) async {
         guard let groupId, let core else { return }
         sendError = nil
-        let outcome = await core.publishChatMessage(
+        let outcome = await core.publishChatMessageSnapshot(
             groupId: groupId,
             content: text,
-            replyToEventId: replyTo?.eventId
+            replyToEventId: replyTo?.eventId,
+            pageCount: loadedPageCount
         )
-        guard outcome.error.isEmpty, let record = outcome.value else {
+        guard outcome.error.isEmpty else {
             sendError = outcome.error
             return
         }
-        // Optimistic insert in case the relay echo is slow — apply is
-        // upsert by event id, so the eventual delta merges cleanly.
-        apply(message: record)
+        apply(snapshot: outcome.snapshot)
+    }
+
+    private func reloadSnapshot(pageCount: UInt32) async {
+        guard let groupId, let core else { return }
+        let snapshot = await core.getChatSnapshot(groupId: groupId, pageCount: pageCount)
+        apply(snapshot: snapshot)
+    }
+
+    private func apply(snapshot: ChatSnapshot) {
+        rows = snapshot.rows
+        hasMore = snapshot.hasMore
+        loadedPageCount = snapshot.pageCount
     }
 }

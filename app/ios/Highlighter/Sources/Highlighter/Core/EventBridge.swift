@@ -387,7 +387,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     private func dispatchChat(_ change: DataChangeType, store: ChatStore) {
         switch change {
         case .chatMessageUpserted(_, let message):
-            store.apply(message: message)
+            Task { await store.reloadFromCache(activityEventId: message.eventId) }
         default:
             break
         }

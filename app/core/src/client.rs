@@ -29,21 +29,21 @@ use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome, ArtifactPreview,
     ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute,
     BookRouteOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome,
-    ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord, CommentListOutcome,
-    CommentOutcome, CommentRecord, CommentReferenceBucket, CommentScope, CommentScopeOutcome,
-    CommentThreadNode, CommentThreadProjection, CommunityListOutcome, CommunitySummary,
-    CurationMenuItem, CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
-    DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome,
-    FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome,
-    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind, HomeFeedItem,
-    HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction, MutationOutcome,
-    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestProjection,
-    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem,
-    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebMetadataOutcome, WhatsNewEntriesOutcome,
+    CommentListOutcome, CommentOutcome, CommentRecord, CommentReferenceBucket, CommentScope,
+    CommentScopeOutcome, CommentThreadNode, CommentThreadProjection, CommunityListOutcome,
+    CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome, CurrentUser,
+    CurrentUserOutcome, DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
+    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
+    GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
+    HighlightSourceKind, HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome,
+    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
+    NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
+    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
+    ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
+    RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome, StringListOutcome,
+    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
+    WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -406,34 +406,6 @@ fn blossom_upload_outcome(result: Result<BlossomUpload, CoreError>) -> BlossomUp
         },
         Err(error) => BlossomUploadOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn chat_message_outcome(result: Result<ChatMessageRecord, CoreError>) -> ChatMessageOutcome {
-    match result {
-        Ok(value) => ChatMessageOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => ChatMessageOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn chat_message_list_outcome(
-    result: Result<Vec<ChatMessageRecord>, CoreError>,
-) -> ChatMessageListOutcome {
-    match result {
-        Ok(values) => ChatMessageListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => ChatMessageListOutcome {
-            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -2161,16 +2133,6 @@ impl HighlighterCore {
         crate::discussions::composer_projection(input)
     }
 
-    /// Upsert a live chat delta into a bounded room chat list. Rust owns
-    /// replacement identity and oldest-first ordering.
-    pub fn upsert_chat_message(
-        &self,
-        messages: Vec<ChatMessageRecord>,
-        message: ChatMessageRecord,
-    ) -> Vec<ChatMessageRecord> {
-        room_state::upsert_chat_message(&messages, &message)
-    }
-
     /// Comment composer projection. Rust owns draft normalization and submit
     /// eligibility; native shells render the composer affordance.
     pub fn project_comment_composer(
@@ -3183,15 +3145,22 @@ impl HighlighterCore {
         crate::discussions::query_room_discussion_snapshot(self.runtime.ndb(), &group_id)
     }
 
-    /// NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending
-    /// by `created_at`. UI can also peek with `limit=1` to detect chat
-    /// activity and decide whether to expose the chat tab at all.
-    pub async fn get_chat_messages(&self, group_id: String, limit: u32) -> ChatMessageListOutcome {
-        chat_message_list_outcome(crate::chat::query_chat_messages(
-            self.runtime.ndb(),
-            &group_id,
-            limit,
-        ))
+    /// Lightweight cache projection for whether a room has any chat activity.
+    pub async fn get_chat_presence_snapshot(
+        &self,
+        group_id: String,
+    ) -> crate::chat::ChatPresenceSnapshot {
+        crate::chat::query_chat_presence_snapshot(self.runtime.ndb(), &group_id)
+    }
+
+    /// Bounded room-chat read model. Rust owns page sizing, has-more policy,
+    /// row grouping, and reply-target projection; native shells render rows.
+    pub async fn get_chat_snapshot(
+        &self,
+        group_id: String,
+        page_count: u32,
+    ) -> crate::chat::ChatSnapshot {
+        crate::chat::query_chat_snapshot(self.runtime.ndb(), &group_id, page_count)
     }
 
     // -- Feedback (shake-to-share) --
@@ -3354,27 +3323,35 @@ impl HighlighterCore {
         crate::chat::chat_composer_projection(input)
     }
 
-    /// Publish a NIP-29 kind:9 chat message into `group_id`. When
-    /// `reply_to_event_id` is set, the published event carries a marked
-    /// NIP-10 `["e", <id>, "", "reply"]` tag.
-    pub async fn publish_chat_message(
+    /// Publish a NIP-29 kind:9 chat message and return the refreshed bounded
+    /// chat snapshot. Rust owns the optimistic merge of the signed record so
+    /// native shells never fabricate chat rows.
+    pub async fn publish_chat_message_snapshot(
         &self,
         group_id: String,
         content: String,
         reply_to_event_id: Option<String>,
-    ) -> ChatMessageOutcome {
-        let result: Result<ChatMessageRecord, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            crate::chat::publish_chat_message(
-                &self.runtime,
-                &group_id,
-                &content,
-                reply_to_event_id.as_deref(),
-            )
-            .await
+        page_count: u32,
+    ) -> crate::chat::ChatPublishSnapshotOutcome {
+        if let Err(error) = self.require_user_pubkey() {
+            return crate::chat::ChatPublishSnapshotOutcome {
+                snapshot: crate::chat::query_chat_snapshot(
+                    self.runtime.ndb(),
+                    &group_id,
+                    page_count,
+                ),
+                error: error.to_string(),
+            };
         }
-        .await;
-        chat_message_outcome(result)
+        crate::chat::publish_chat_message_snapshot(
+            &self.runtime,
+            self.runtime.ndb(),
+            &group_id,
+            &content,
+            reply_to_event_id.as_deref(),
+            page_count,
+        )
+        .await
     }
 
     /// Publish a feedback root note. Rust resolves the current project agent

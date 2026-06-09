@@ -34,9 +34,8 @@ struct ChatView: View {
             await store.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
         }
         .onDisappear { store.stop() }
-        .onChange(of: store.messages.count) { oldCount, newCount in
-            let added = max(0, newCount - oldCount)
-            guard added > 0 else { return }
+        .onChange(of: store.activityRevision) { _, _ in
+            let added = max(1, store.activityDelta)
             if isAtBottom {
                 scrollRevision += 1
             } else {
@@ -59,11 +58,11 @@ struct ChatView: View {
 
     @ViewBuilder
     private var messageList: some View {
-        if store.isLoading && store.messages.isEmpty {
+        if store.isLoading && store.rows.isEmpty {
             ProgressView()
                 .controlSize(.large)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if store.messages.isEmpty {
+        } else if store.rows.isEmpty {
             emptyState
         } else {
             ScrollViewReader { proxy in
@@ -82,22 +81,22 @@ struct ChatView: View {
                                         .frame(height: 1)
                                         .id("load-more-trigger")
                                         .onAppear {
-                                            loadMoreAnchorId = store.messages.first?.eventId
+                                            loadMoreAnchorId = store.rows.first?.message.eventId
                                             Task { await store.loadMore() }
                                         }
                                 }
                             }
                         }
 
-                        ForEach(Array(store.messages.enumerated()), id: \.element.eventId) { index, message in
-                            let replyMessage = parentMessage(for: message)
+                        ForEach(Array(store.rows.enumerated()), id: \.element.message.eventId) { index, row in
+                            let message = row.message
 
                             ChatMessageRow(
                                 message: message,
                                 authorDisplay: profileDisplay(for: message.authorPubkey),
-                                showHeader: shouldShowHeader(at: index),
-                                replyToMessage: replyMessage,
-                                replyToAuthorDisplay: replyMessage.map { profileDisplay(for: $0.authorPubkey) },
+                                showHeader: row.showHeader,
+                                replyToMessage: row.replyToMessage,
+                                replyToAuthorDisplay: row.replyToMessage.map { profileDisplay(for: $0.authorPubkey) },
                                 onReply: { replyTo = message; inputFocused = true }
                             )
                             .id(message.eventId)
@@ -105,13 +104,13 @@ struct ChatView: View {
                                 await app.requestProfile(pubkeyHex: message.authorPubkey)
                             }
                             .onAppear {
-                                if index == store.messages.count - 1 {
+                                if index == store.rows.count - 1 {
                                     isAtBottom = true
                                     pendingNewCount = 0
                                 }
                             }
                             .onDisappear {
-                                if index == store.messages.count - 1 {
+                                if index == store.rows.count - 1 {
                                     isAtBottom = false
                                 }
                             }
@@ -120,12 +119,12 @@ struct ChatView: View {
                     .padding(.vertical, 12)
                 }
                 .onAppear {
-                    if let last = store.messages.last {
+                    if let last = store.rows.last?.message {
                         proxy.scrollTo(last.eventId, anchor: .bottom)
                     }
                 }
                 .onChange(of: scrollRevision) { _, _ in
-                    guard let last = store.messages.last else { return }
+                    guard let last = store.rows.last?.message else { return }
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(last.eventId, anchor: .bottom)
                     }
@@ -275,20 +274,6 @@ struct ChatView: View {
         replyTo = nil
         await store.send(text: projection.submitBody, replyTo: reply)
         scrollRevision += 1
-    }
-
-    private func shouldShowHeader(at index: Int) -> Bool {
-        guard index > 0 else { return true }
-        let prev = store.messages[index - 1]
-        let curr = store.messages[index]
-        if prev.authorPubkey != curr.authorPubkey { return true }
-        if curr.createdAt > prev.createdAt + 300 { return true }
-        return false
-    }
-
-    private func parentMessage(for message: ChatMessageRecord) -> ChatMessageRecord? {
-        guard let id = message.replyToEventId else { return nil }
-        return store.messages.first { $0.eventId == id }
     }
 
     private func profileDisplay(for pubkey: String) -> ProfileDisplayProjection {

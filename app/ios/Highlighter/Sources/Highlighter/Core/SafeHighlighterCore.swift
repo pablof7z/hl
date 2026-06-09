@@ -558,8 +558,12 @@ actor SafeHighlighterCore {
 
     // MARK: - Chat (NIP-29 kind:9)
 
-    func getChatMessages(groupId: String, limit: UInt32 = 200) async -> ChatMessageListOutcome {
-        await core.getChatMessages(groupId: groupId, limit: limit)
+    func getChatPresenceSnapshot(groupId: String) async -> ChatPresenceSnapshot {
+        await core.getChatPresenceSnapshot(groupId: groupId)
+    }
+
+    func getChatSnapshot(groupId: String, pageCount: UInt32) async -> ChatSnapshot {
+        await core.getChatSnapshot(groupId: groupId, pageCount: pageCount)
     }
 
     nonisolated func projectChatComposer(
@@ -568,15 +572,17 @@ actor SafeHighlighterCore {
         core.projectChatComposer(input: input)
     }
 
-    func publishChatMessage(
+    func publishChatMessageSnapshot(
         groupId: String,
         content: String,
-        replyToEventId: String? = nil
-    ) async -> ChatMessageOutcome {
-        await core.publishChatMessage(
+        replyToEventId: String? = nil,
+        pageCount: UInt32
+    ) async -> ChatPublishSnapshotOutcome {
+        await core.publishChatMessageSnapshot(
             groupId: groupId,
             content: content,
-            replyToEventId: replyToEventId
+            replyToEventId: replyToEventId,
+            pageCount: pageCount
         )
     }
 
@@ -1026,16 +1032,6 @@ actor SafeHighlighterCore {
         input: DiscussionComposerProjectionInput
     ) -> DiscussionComposerProjection {
         core.projectDiscussionComposer(input: input)
-    }
-
-    nonisolated func upsertChatMessage(
-        messages: [ChatMessageRecord],
-        message: ChatMessageRecord
-    ) -> [ChatMessageRecord] {
-        core.upsertChatMessage(
-            messages: messages,
-            message: message
-        )
     }
 
     nonisolated func projectCommentComposer(

@@ -83,7 +83,10 @@ pub use capture::{
     CapturePublishInput, CapturePublishPhase, CapturePublishProjection,
     CapturePublishProjectionInput, CaptureStashProjection, CaptureStashProjectionInput,
 };
-pub use chat::{ChatComposerProjection, ChatComposerProjectionInput};
+pub use chat::{
+    ChatComposerProjection, ChatComposerProjectionInput, ChatMessageRowProjection,
+    ChatPresenceSnapshot, ChatPublishSnapshotOutcome, ChatSnapshot,
+};
 pub use client::HighlighterCore;
 pub use comments::{
     CommentActionChromeProjection, CommentActionChromeProjectionInput, CommentComposerProjection,
@@ -138,10 +141,10 @@ pub use models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactListOutcome, ArtifactOutcome,
     ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget,
     BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetOutcome,
-    BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome,
-    ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord, CommentReferenceBucket,
-    CommentThreadNode, CommentThreadProjection, CommunityListOutcome, CommunitySummary,
-    CurationMenuItem, CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
+    BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageRecord, CommentListOutcome,
+    CommentOutcome, CommentRecord, CommentReferenceBucket, CommentThreadNode,
+    CommentThreadProjection, CommunityListOutcome, CommunitySummary, CurationMenuItem,
+    CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
     DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
     FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome,
     FeedbackThreadRecord, GeneratedAccount, GeneratedAccountOutcome, HighlightListOutcome,

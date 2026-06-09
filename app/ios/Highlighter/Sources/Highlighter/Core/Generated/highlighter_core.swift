@@ -1017,11 +1017,15 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getCacheStats() async  -> CacheStatsOutcome
 
     /**
-     * NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending
-     * by `created_at`. UI can also peek with `limit=1` to detect chat
-     * activity and decide whether to expose the chat tab at all.
+     * Lightweight cache projection for whether a room has any chat activity.
      */
-    func getChatMessages(groupId: String, limit: UInt32) async  -> ChatMessageListOutcome
+    func getChatPresenceSnapshot(groupId: String) async  -> ChatPresenceSnapshot
+
+    /**
+     * Bounded room-chat read model. Rust owns page sizing, has-more policy,
+     * row grouping, and reply-target projection; native shells render rows.
+     */
+    func getChatSnapshot(groupId: String, pageCount: UInt32) async  -> ChatSnapshot
 
     /**
      * Interaction snapshot for the currently visible comment records. Rust
@@ -1663,11 +1667,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func publishCapture(input: CapturePublishInput) async  -> StringOutcome
 
     /**
-     * Publish a NIP-29 kind:9 chat message into `group_id`. When
-     * `reply_to_event_id` is set, the published event carries a marked
-     * NIP-10 `["e", <id>, "", "reply"]` tag.
+     * Publish a NIP-29 kind:9 chat message and return the refreshed bounded
+     * chat snapshot. Rust owns the optimistic merge of the signed record so
+     * native shells never fabricate chat rows.
      */
-    func publishChatMessage(groupId: String, content: String, replyToEventId: String?) async  -> ChatMessageOutcome
+    func publishChatMessageSnapshot(groupId: String, content: String, replyToEventId: String?, pageCount: UInt32) async  -> ChatPublishSnapshotOutcome
 
     /**
      * Publish a NIP-22 kind:1111 comment scoped to a Rust-owned root.
@@ -2040,12 +2044,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `alt` is the recognized OCR text, or empty if none.
      */
     func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async  -> BlossomUploadOutcome
-
-    /**
-     * Upsert a live chat delta into a bounded room chat list. Rust owns
-     * replacement identity and oldest-first ordering.
-     */
-    func upsertChatMessage(messages: [ChatMessageRecord], message: ChatMessageRecord)  -> [ChatMessageRecord]
 
     /**
      * Upsert a streamed feedback thread event into the open thread list.
@@ -2921,23 +2919,43 @@ open func getCacheStats()async  -> CacheStatsOutcome  {
 }
 
     /**
-     * NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending
-     * by `created_at`. UI can also peek with `limit=1` to detect chat
-     * activity and decide whether to expose the chat tab at all.
+     * Lightweight cache projection for whether a room has any chat activity.
      */
-open func getChatMessages(groupId: String, limit: UInt32)async  -> ChatMessageListOutcome  {
+open func getChatPresenceSnapshot(groupId: String)async  -> ChatPresenceSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_chat_messages(
+                uniffi_highlighter_core_fn_method_highlightercore_get_chat_presence_snapshot(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(limit)
+                    FfiConverterString.lower(groupId)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeChatMessageListOutcome_lift,
+            liftFunc: FfiConverterTypeChatPresenceSnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Bounded room-chat read model. Rust owns page sizing, has-more policy,
+     * row grouping, and reply-target projection; native shells render rows.
+     */
+open func getChatSnapshot(groupId: String, pageCount: UInt32)async  -> ChatSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_chat_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(pageCount)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeChatSnapshot_lift,
             errorHandler: nil
 
         )
@@ -4999,23 +5017,23 @@ open func publishCapture(input: CapturePublishInput)async  -> StringOutcome  {
 }
 
     /**
-     * Publish a NIP-29 kind:9 chat message into `group_id`. When
-     * `reply_to_event_id` is set, the published event carries a marked
-     * NIP-10 `["e", <id>, "", "reply"]` tag.
+     * Publish a NIP-29 kind:9 chat message and return the refreshed bounded
+     * chat snapshot. Rust owns the optimistic merge of the signed record so
+     * native shells never fabricate chat rows.
      */
-open func publishChatMessage(groupId: String, content: String, replyToEventId: String?)async  -> ChatMessageOutcome  {
+open func publishChatMessageSnapshot(groupId: String, content: String, replyToEventId: String?, pageCount: UInt32)async  -> ChatPublishSnapshotOutcome  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_chat_message(
+                uniffi_highlighter_core_fn_method_highlightercore_publish_chat_message_snapshot(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterString.lower(content),FfiConverterOptionString.lower(replyToEventId)
+                    FfiConverterString.lower(groupId),FfiConverterString.lower(content),FfiConverterOptionString.lower(replyToEventId),FfiConverterUInt32.lower(pageCount)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeChatMessageOutcome_lift,
+            liftFunc: FfiConverterTypeChatPublishSnapshotOutcome_lift,
             errorHandler: nil
 
         )
@@ -6291,19 +6309,6 @@ open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, 
             errorHandler: nil
 
         )
-}
-
-    /**
-     * Upsert a live chat delta into a bounded room chat list. Rust owns
-     * replacement identity and oldest-first ordering.
-     */
-open func upsertChatMessage(messages: [ChatMessageRecord], message: ChatMessageRecord) -> [ChatMessageRecord]  {
-    return try!  FfiConverterSequenceTypeChatMessageRecord.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_upsert_chat_message(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeChatMessageRecord.lower(messages),
-        FfiConverterTypeChatMessageRecord_lower(message),$0
-    )
-})
 }
 
     /**
@@ -12020,146 +12025,6 @@ public func FfiConverterTypeChatComposerProjectionInput_lower(_ value: ChatCompo
 }
 
 
-public struct ChatMessageListOutcome {
-    public var values: [ChatMessageRecord]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [ChatMessageRecord], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ChatMessageListOutcome: Sendable {}
-#endif
-
-
-extension ChatMessageListOutcome: Equatable, Hashable {
-    public static func ==(lhs: ChatMessageListOutcome, rhs: ChatMessageListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeChatMessageListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatMessageListOutcome {
-        return
-            try ChatMessageListOutcome(
-                values: FfiConverterSequenceTypeChatMessageRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ChatMessageListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeChatMessageRecord.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeChatMessageListOutcome_lift(_ buf: RustBuffer) throws -> ChatMessageListOutcome {
-    return try FfiConverterTypeChatMessageListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeChatMessageListOutcome_lower(_ value: ChatMessageListOutcome) -> RustBuffer {
-    return FfiConverterTypeChatMessageListOutcome.lower(value)
-}
-
-
-public struct ChatMessageOutcome {
-    public var value: ChatMessageRecord?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: ChatMessageRecord?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ChatMessageOutcome: Sendable {}
-#endif
-
-
-extension ChatMessageOutcome: Equatable, Hashable {
-    public static func ==(lhs: ChatMessageOutcome, rhs: ChatMessageOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeChatMessageOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatMessageOutcome {
-        return
-            try ChatMessageOutcome(
-                value: FfiConverterOptionTypeChatMessageRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ChatMessageOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeChatMessageRecord.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeChatMessageOutcome_lift(_ buf: RustBuffer) throws -> ChatMessageOutcome {
-    return try FfiConverterTypeChatMessageOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeChatMessageOutcome_lower(_ value: ChatMessageOutcome) -> RustBuffer {
-    return FfiConverterTypeChatMessageOutcome.lower(value)
-}
-
-
 /**
  * A NIP-29 kind:9 chat message inside a group. Flat conversation event —
  * distinct from kind:11 threaded discussions.
@@ -12277,6 +12142,302 @@ public func FfiConverterTypeChatMessageRecord_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeChatMessageRecord_lower(_ value: ChatMessageRecord) -> RustBuffer {
     return FfiConverterTypeChatMessageRecord.lower(value)
+}
+
+
+public struct ChatMessageRowProjection {
+    public var message: ChatMessageRecord
+    public var showHeader: Bool
+    public var replyToMessage: ChatMessageRecord?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(message: ChatMessageRecord, showHeader: Bool, replyToMessage: ChatMessageRecord?) {
+        self.message = message
+        self.showHeader = showHeader
+        self.replyToMessage = replyToMessage
+    }
+}
+
+#if compiler(>=6)
+extension ChatMessageRowProjection: Sendable {}
+#endif
+
+
+extension ChatMessageRowProjection: Equatable, Hashable {
+    public static func ==(lhs: ChatMessageRowProjection, rhs: ChatMessageRowProjection) -> Bool {
+        if lhs.message != rhs.message {
+            return false
+        }
+        if lhs.showHeader != rhs.showHeader {
+            return false
+        }
+        if lhs.replyToMessage != rhs.replyToMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(message)
+        hasher.combine(showHeader)
+        hasher.combine(replyToMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatMessageRowProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatMessageRowProjection {
+        return
+            try ChatMessageRowProjection(
+                message: FfiConverterTypeChatMessageRecord.read(from: &buf),
+                showHeader: FfiConverterBool.read(from: &buf),
+                replyToMessage: FfiConverterOptionTypeChatMessageRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatMessageRowProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeChatMessageRecord.write(value.message, into: &buf)
+        FfiConverterBool.write(value.showHeader, into: &buf)
+        FfiConverterOptionTypeChatMessageRecord.write(value.replyToMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageRowProjection_lift(_ buf: RustBuffer) throws -> ChatMessageRowProjection {
+    return try FfiConverterTypeChatMessageRowProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageRowProjection_lower(_ value: ChatMessageRowProjection) -> RustBuffer {
+    return FfiConverterTypeChatMessageRowProjection.lower(value)
+}
+
+
+public struct ChatPresenceSnapshot {
+    public var hasActivity: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(hasActivity: Bool) {
+        self.hasActivity = hasActivity
+    }
+}
+
+#if compiler(>=6)
+extension ChatPresenceSnapshot: Sendable {}
+#endif
+
+
+extension ChatPresenceSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ChatPresenceSnapshot, rhs: ChatPresenceSnapshot) -> Bool {
+        if lhs.hasActivity != rhs.hasActivity {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(hasActivity)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatPresenceSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatPresenceSnapshot {
+        return
+            try ChatPresenceSnapshot(
+                hasActivity: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatPresenceSnapshot, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.hasActivity, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatPresenceSnapshot_lift(_ buf: RustBuffer) throws -> ChatPresenceSnapshot {
+    return try FfiConverterTypeChatPresenceSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatPresenceSnapshot_lower(_ value: ChatPresenceSnapshot) -> RustBuffer {
+    return FfiConverterTypeChatPresenceSnapshot.lower(value)
+}
+
+
+public struct ChatPublishSnapshotOutcome {
+    public var snapshot: ChatSnapshot
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: ChatSnapshot, error: String) {
+        self.snapshot = snapshot
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ChatPublishSnapshotOutcome: Sendable {}
+#endif
+
+
+extension ChatPublishSnapshotOutcome: Equatable, Hashable {
+    public static func ==(lhs: ChatPublishSnapshotOutcome, rhs: ChatPublishSnapshotOutcome) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatPublishSnapshotOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatPublishSnapshotOutcome {
+        return
+            try ChatPublishSnapshotOutcome(
+                snapshot: FfiConverterTypeChatSnapshot.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatPublishSnapshotOutcome, into buf: inout [UInt8]) {
+        FfiConverterTypeChatSnapshot.write(value.snapshot, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatPublishSnapshotOutcome_lift(_ buf: RustBuffer) throws -> ChatPublishSnapshotOutcome {
+    return try FfiConverterTypeChatPublishSnapshotOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatPublishSnapshotOutcome_lower(_ value: ChatPublishSnapshotOutcome) -> RustBuffer {
+    return FfiConverterTypeChatPublishSnapshotOutcome.lower(value)
+}
+
+
+public struct ChatSnapshot {
+    public var rows: [ChatMessageRowProjection]
+    public var hasMore: Bool
+    public var pageCount: UInt32
+    public var hasActivity: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(rows: [ChatMessageRowProjection], hasMore: Bool, pageCount: UInt32, hasActivity: Bool) {
+        self.rows = rows
+        self.hasMore = hasMore
+        self.pageCount = pageCount
+        self.hasActivity = hasActivity
+    }
+}
+
+#if compiler(>=6)
+extension ChatSnapshot: Sendable {}
+#endif
+
+
+extension ChatSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ChatSnapshot, rhs: ChatSnapshot) -> Bool {
+        if lhs.rows != rhs.rows {
+            return false
+        }
+        if lhs.hasMore != rhs.hasMore {
+            return false
+        }
+        if lhs.pageCount != rhs.pageCount {
+            return false
+        }
+        if lhs.hasActivity != rhs.hasActivity {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rows)
+        hasher.combine(hasMore)
+        hasher.combine(pageCount)
+        hasher.combine(hasActivity)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatSnapshot {
+        return
+            try ChatSnapshot(
+                rows: FfiConverterSequenceTypeChatMessageRowProjection.read(from: &buf),
+                hasMore: FfiConverterBool.read(from: &buf),
+                pageCount: FfiConverterUInt32.read(from: &buf),
+                hasActivity: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeChatMessageRowProjection.write(value.rows, into: &buf)
+        FfiConverterBool.write(value.hasMore, into: &buf)
+        FfiConverterUInt32.write(value.pageCount, into: &buf)
+        FfiConverterBool.write(value.hasActivity, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatSnapshot_lift(_ buf: RustBuffer) throws -> ChatSnapshot {
+    return try FfiConverterTypeChatSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatSnapshot_lower(_ value: ChatSnapshot) -> RustBuffer {
+    return FfiConverterTypeChatSnapshot.lower(value)
 }
 
 
@@ -33654,8 +33815,8 @@ public enum DataChangeType {
     case discussionUpserted(groupId: String, discussion: DiscussionRecord
     )
     /**
-     * A NIP-29 kind:9 chat message arrived for `group_id`. The Swift
-     * chat store appends it to its message list (ordered by `created_at`).
+     * A NIP-29 kind:9 chat message arrived for `group_id`. Native chat
+     * stores re-read Rust's bounded chat snapshot for the open room.
      */
     case chatMessageUpserted(groupId: String, message: ChatMessageRecord
     )
@@ -37042,23 +37203,23 @@ fileprivate struct FfiConverterSequenceTypeChapter: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeChatMessageRecord: FfiConverterRustBuffer {
-    typealias SwiftType = [ChatMessageRecord]
+fileprivate struct FfiConverterSequenceTypeChatMessageRowProjection: FfiConverterRustBuffer {
+    typealias SwiftType = [ChatMessageRowProjection]
 
-    public static func write(_ value: [ChatMessageRecord], into buf: inout [UInt8]) {
+    public static func write(_ value: [ChatMessageRowProjection], into buf: inout [UInt8]) {
         let len = Int32(value.count)
         writeInt(&buf, len)
         for item in value {
-            FfiConverterTypeChatMessageRecord.write(item, into: &buf)
+            FfiConverterTypeChatMessageRowProjection.write(item, into: &buf)
         }
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ChatMessageRecord] {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ChatMessageRowProjection] {
         let len: Int32 = try readInt(&buf)
-        var seq = [ChatMessageRecord]()
+        var seq = [ChatMessageRowProjection]()
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeChatMessageRecord.read(from: &buf))
+            seq.append(try FfiConverterTypeChatMessageRowProjection.read(from: &buf))
         }
         return seq
     }
@@ -38440,7 +38601,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 59703) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_messages() != 59404) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_presence_snapshot() != 49713) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_snapshot() != 45542) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_comment_interaction_snapshot() != 61327) {
@@ -38938,7 +39102,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_capture() != 51042) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message() != 4279) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message_snapshot() != 49134) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_for_scope() != 51702) {
@@ -39140,9 +39304,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 28046) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_chat_message() != 4502) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_feedback_thread_event() != 41212) {

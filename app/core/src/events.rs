@@ -54,8 +54,8 @@ pub enum DataChangeType {
         group_id: String,
         discussion: DiscussionRecord,
     },
-    /// A NIP-29 kind:9 chat message arrived for `group_id`. The Swift
-    /// chat store appends it to its message list (ordered by `created_at`).
+    /// A NIP-29 kind:9 chat message arrived for `group_id`. Native chat
+    /// stores re-read Rust's bounded chat snapshot for the open room.
     ChatMessageUpserted {
         group_id: String,
         message: ChatMessageRecord,
