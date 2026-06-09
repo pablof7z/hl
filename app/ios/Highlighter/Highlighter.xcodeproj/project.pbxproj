@@ -41,7 +41,6 @@
 		3A1114ACF885FF7E0BE273C0 /* FootnotePreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A623EEA6EB4F2D39A64701F7 /* FootnotePreprocessor.swift */; };
 		3A55F2017CE7B802B233B91A /* RoomLanesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AE7500C044361E86AE1DA14 /* RoomLanesView.swift */; };
 		3A7B480951999555932623F9 /* EditProfileSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30449650DF82730BEB6A17F1 /* EditProfileSheet.swift */; };
-		3CD88577D0368259A071AC21 /* ClipTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8186C68BFC13E0B1D3294117 /* ClipTimelineView.swift */; };
 		3E179D53B89B007A4CC256D6 /* RoomLibraryArticleCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D28662EE9922264507B7668 /* RoomLibraryArticleCardView.swift */; };
 		3F58D451FCBBF48BCD25F16A /* HighlightFeedCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 252B933C4F13C7C50ED4157C /* HighlightFeedCardView.swift */; };
 		4046D6F0A67207C7FB6EE7A2 /* DiscussionComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A905FC9DC222BC30916596AD /* DiscussionComposerView.swift */; };
@@ -267,7 +266,6 @@
 		7AE7500C044361E86AE1DA14 /* RoomLanesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomLanesView.swift; sourceTree = "<group>"; };
 		7C2D225FA375DBAA3BDD6E14 /* CaptureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureStore.swift; sourceTree = "<group>"; };
 		7DE5E60FD0F0D0277E9EF990 /* ArticleRowActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleRowActions.swift; sourceTree = "<group>"; };
-		8186C68BFC13E0B1D3294117 /* ClipTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipTimelineView.swift; sourceTree = "<group>"; };
 		84B71B7545C83F89B94734AF /* ShareQueueProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareQueueProcessor.swift; sourceTree = "<group>"; };
 		84DEA23BB5B0B7EA6A148B2B /* SetDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetDetailView.swift; sourceTree = "<group>"; };
 		85C83513044F9EFD0E315310 /* BookTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookTarget.swift; sourceTree = "<group>"; };
@@ -692,7 +690,6 @@
 			children = (
 				E3223008859A47E91762B387 /* Rows */,
 				5D76568DD7E1EB7FB8E7E188 /* ClipComposerSheet.swift */,
-				8186C68BFC13E0B1D3294117 /* ClipTimelineView.swift */,
 				654DA26ECBFECF3667104114 /* MiniPlayerView.swift */,
 				A7F0195B501DEDB841E4B936 /* PodcastListeningView.swift */,
 				086CEFC46ADE095C2C280637 /* PodcastPlayerStore.swift */,
@@ -948,7 +945,6 @@
 				5418E6BFC39BF5AEAC9A178D /* ChatView.swift in Sources */,
 				0DA270BDB32582D8CAC09697 /* ClipComposerSheet.swift in Sources */,
 				6160B6C15B3AF58E2ACD2CBD /* ClipThreadView.swift in Sources */,
-				3CD88577D0368259A071AC21 /* ClipTimelineView.swift in Sources */,
 				2A7C8122C0DFE2FED18FFACC /* Color+Design.swift in Sources */,
 				79003172445BD29033D7A5F4 /* CommentComposer.swift in Sources */,
 				DF784373FE6F0996F8977D58 /* CommentRow.swift in Sources */,
