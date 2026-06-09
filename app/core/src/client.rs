@@ -33,14 +33,13 @@ use crate::models::{
     CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome, CurrentUser,
     CurrentUserOutcome, DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord,
     GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
-    HighlightSourceKind, HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome,
-    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
-    NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
-    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
-    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
-    RelayDiagnostic, RelayDiagnosticListOutcome, StringListOutcome, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    HighlightSourceKind, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
+    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
+    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
+    OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
+    ProfileUpdateAction, ProfileUpdateDraft, RelayConfigListOutcome, RelayDiagnostic,
+    RelayDiagnosticListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
+    TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -525,36 +524,6 @@ fn one_highlight_record(records: Vec<HighlightRecord>) -> Result<HighlightRecord
         .into_iter()
         .next()
         .ok_or_else(|| CoreError::Relay("No highlight returned from publish.".into()))
-}
-
-fn hydrated_highlight_list_outcome(
-    result: Result<Vec<HydratedHighlight>, CoreError>,
-) -> HydratedHighlightListOutcome {
-    match result {
-        Ok(values) => HydratedHighlightListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => HydratedHighlightListOutcome {
-            values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
-fn reading_feed_list_outcome(
-    result: Result<Vec<ReadingFeedItem>, CoreError>,
-) -> ReadingFeedListOutcome {
-    match result {
-        Ok(values) => ReadingFeedListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => ReadingFeedListOutcome {
-            values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
 }
 
 fn highlight_outcome(result: Result<HighlightRecord, CoreError>) -> HighlightOutcome {
@@ -1447,23 +1416,6 @@ impl HighlighterCore {
         })())
     }
 
-    /// Following Reads feed — articles surfaced through the user's follow
-    /// graph. See `reads::query_following_reads` for semantics. Returns an
-    /// empty list if the user isn't logged in or has no follows cached yet.
-    pub async fn get_following_reads(&self, limit: u32) -> ReadingFeedListOutcome {
-        let Some(user) = self.inner.read().session.current_user() else {
-            return ReadingFeedListOutcome {
-                values: Vec::new(),
-                error: CoreError::NotAuthenticated.to_string(),
-            };
-        };
-        reading_feed_list_outcome(reads::query_following_reads(
-            self.runtime.ndb(),
-            &user.pubkey,
-            limit,
-        ))
-    }
-
     pub fn project_reading_feed_card(
         &self,
         input: reads::ReadingFeedCardProjectionInput,
@@ -1471,25 +1423,31 @@ impl HighlighterCore {
         reads::reading_feed_card_projection(input)
     }
 
-    /// Highlights home feed — kind:9802 events authored by follows plus
-    /// highlights tagged into joined rooms. See
-    /// `highlights::query_following_highlights` for semantics.
-    pub async fn get_following_highlights(&self, limit: u32) -> HydratedHighlightListOutcome {
-        let result: Result<Vec<HydratedHighlight>, CoreError> = (|| {
+    /// Full highlights home feed snapshot. Rust owns the following-highlights
+    /// query, following-reads query, cross-feed dedupe, grouping, stable ids,
+    /// and merged ordering.
+    pub async fn get_home_feed_snapshot(
+        &self,
+        highlight_limit: u32,
+        read_limit: u32,
+    ) -> crate::home_feed::HomeFeedSnapshot {
+        let result: Result<crate::home_feed::HomeFeedSnapshot, CoreError> = (|| {
             let Some(user) = self.inner.read().session.current_user() else {
                 return Err(CoreError::NotAuthenticated);
             };
             let joined =
                 groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user.pubkey)?;
             let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
-            highlights::query_following_highlights(
+            let highlights = highlights::query_following_highlights(
                 self.runtime.ndb(),
                 &user.pubkey,
                 &group_ids,
-                limit,
-            )
+                highlight_limit,
+            )?;
+            let reads = reads::query_following_reads(self.runtime.ndb(), &user.pubkey, read_limit)?;
+            Ok(crate::home_feed::snapshot(highlights, reads))
         })();
-        hydrated_highlight_list_outcome(result)
+        result.unwrap_or_else(crate::home_feed::error_snapshot)
     }
 
     pub fn project_highlight_group_card(
@@ -1543,17 +1501,6 @@ impl HighlighterCore {
         input: highlights::ArticleHighlightPublishProjectionInput,
     ) -> highlights::ArticleHighlightPublishProjection {
         highlights::article_highlight_publish_projection(input)
-    }
-
-    /// Compose following highlights and following reads into the home feed.
-    /// Rust owns grouping, stable identity, duplicate suppression, and merged
-    /// ordering; native shells render the returned rows.
-    pub fn build_home_feed_items(
-        &self,
-        highlights: Vec<HydratedHighlight>,
-        reads: Vec<ReadingFeedItem>,
-    ) -> Vec<HomeFeedItem> {
-        crate::home_feed::build_items(&highlights, &reads)
     }
 
     // -- Profile reads (per-pubkey, no auth required) --

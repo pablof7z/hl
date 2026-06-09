@@ -124,6 +124,7 @@ pub use highlights::{
     HighlightGroupLabelSegment, HighlightResourceAuthorProfile, HighlightResourceHeaderProjection,
     HighlightResourceHeaderProjectionInput,
 };
+pub use home_feed::HomeFeedSnapshot;
 pub use isbn_lookup::{
     BookPickerQueryProjection, BookPickerQueryProjectionInput, IsbnManualPreviewProjection,
     IsbnManualPreviewProjectionInput, IsbnPreviewRequestProjection,
@@ -150,15 +151,14 @@ pub use models::{
     DiscussionOutcome, DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord,
     GeneratedAccount, GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome,
     HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind,
-    HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction,
-    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
-    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
-    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
-    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
-    RoomLane, RoomRecommendation, RoomRecommendationReason, StringListOutcome, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
+    HomeFeedItem, HydratedHighlight, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
+    Nip11DocumentOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
+    OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RelayConfigListOutcome,
+    RelayDiagnosticListOutcome, RoomLane, RoomRecommendation, RoomRecommendationReason,
+    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::{
     Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,

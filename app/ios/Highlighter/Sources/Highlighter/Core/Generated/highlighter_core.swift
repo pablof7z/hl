@@ -777,13 +777,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, title: String, author: String)  -> ArtifactPreviewOutcome
 
     /**
-     * Compose following highlights and following reads into the home feed.
-     * Rust owns grouping, stable identity, duplicate suppression, and merged
-     * ordering; native shells render the returned rows.
-     */
-    func buildHomeFeedItems(highlights: [HydratedHighlight], reads: [ReadingFeedItem])  -> [HomeFeedItem]
-
-    /**
      * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
      * Extension flow — the main app drains the share queue, normalizes each
      * URL through this, then calls `publish_artifact` to post the kind:11.
@@ -996,8 +989,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getBookmarkSetArticles(record: BookmarkSetRecord) async  -> ArticleListOutcome
 
     /**
-     * Project native event bookmark state. Rust owns event-id canonicalization,
-     * current membership, forced membership, and optimistic post-toggle state.
      * Return the set of article addresses the user has bookmarked in their
      * newest kind:10003 list (empty when not logged in or no list cached).
      */
@@ -1051,20 +1042,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getFeedbackThreadsSnapshot(coordinate: String) async  -> FeedbackThreadsSnapshot
 
     /**
-     * Highlights home feed — kind:9802 events authored by follows plus
-     * highlights tagged into joined rooms. See
-     * `highlights::query_following_highlights` for semantics.
-     */
-    func getFollowingHighlights(limit: UInt32) async  -> HydratedHighlightListOutcome
-
-    /**
-     * Following Reads feed — articles surfaced through the user's follow
-     * graph. See `reads::query_following_reads` for semantics. Returns an
-     * empty list if the user isn't logged in or has no follows cached yet.
-     */
-    func getFollowingReads(limit: UInt32) async  -> ReadingFeedListOutcome
-
-    /**
      * Pubkeys (hex) the current user follows per their cached kind:3 contact
      * list. Empty if the user isn't logged in or the cache hasn't seen a
      * kind:3 yet. Used by the room-invite picker to surface "people you know"
@@ -1103,6 +1080,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * podcasts. `tag_name` must be a single character.
      */
     func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32) async  -> HighlightListOutcome
+
+    /**
+     * Full highlights home feed snapshot. Rust owns the following-highlights
+     * query, following-reads query, cross-feed dedupe, grouping, stable ids,
+     * and merged ordering.
+     */
+    func getHomeFeedSnapshot(highlightLimit: UInt32, readLimit: UInt32) async  -> HomeFeedSnapshot
 
     func getJoinedCommunities() async  -> CommunityListOutcome
 
@@ -2112,20 +2096,6 @@ open func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, ti
 }
 
     /**
-     * Compose following highlights and following reads into the home feed.
-     * Rust owns grouping, stable identity, duplicate suppression, and merged
-     * ordering; native shells render the returned rows.
-     */
-open func buildHomeFeedItems(highlights: [HydratedHighlight], reads: [ReadingFeedItem]) -> [HomeFeedItem]  {
-    return try!  FfiConverterSequenceTypeHomeFeedItem.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_build_home_feed_items(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeHydratedHighlight.lower(highlights),
-        FfiConverterSequenceTypeReadingFeedItem.lower(reads),$0
-    )
-})
-}
-
-    /**
      * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
      * Extension flow — the main app drains the share queue, normalizes each
      * URL through this, then calls `publish_artifact` to post the kind:11.
@@ -2799,8 +2769,6 @@ open func getBookmarkSetArticles(record: BookmarkSetRecord)async  -> ArticleList
 }
 
     /**
-     * Project native event bookmark state. Rust owns event-id canonicalization,
-     * current membership, forced membership, and optimistic post-toggle state.
      * Return the set of article addresses the user has bookmarked in their
      * newest kind:10003 list (empty when not logged in or no list cached).
      */
@@ -2988,52 +2956,6 @@ open func getFeedbackThreadsSnapshot(coordinate: String)async  -> FeedbackThread
 }
 
     /**
-     * Highlights home feed — kind:9802 events authored by follows plus
-     * highlights tagged into joined rooms. See
-     * `highlights::query_following_highlights` for semantics.
-     */
-open func getFollowingHighlights(limit: UInt32)async  -> HydratedHighlightListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_following_highlights(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHydratedHighlightListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Following Reads feed — articles surfaced through the user's follow
-     * graph. See `reads::query_following_reads` for semantics. Returns an
-     * empty list if the user isn't logged in or has no follows cached yet.
-     */
-open func getFollowingReads(limit: UInt32)async  -> ReadingFeedListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_following_reads(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeReadingFeedListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Pubkeys (hex) the current user follows per their cached kind:3 contact
      * list. Empty if the user isn't logged in or the cache hasn't seen a
      * kind:3 yet. Used by the room-invite picker to surface "people you know"
@@ -3138,6 +3060,29 @@ open func getHighlightsForReference(tagName: String, tagValue: String, limit: UI
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeHighlightListOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Full highlights home feed snapshot. Rust owns the following-highlights
+     * query, following-reads query, cross-feed dedupe, grouping, stable ids,
+     * and merged ordering.
+     */
+open func getHomeFeedSnapshot(highlightLimit: UInt32, readLimit: UInt32)async  -> HomeFeedSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_home_feed_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterUInt32.lower(highlightLimit),FfiConverterUInt32.lower(readLimit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeHomeFeedSnapshot_lift,
             errorHandler: nil
 
         )
@@ -19028,6 +18973,76 @@ public func FfiConverterTypeHomeFeedItem_lower(_ value: HomeFeedItem) -> RustBuf
 }
 
 
+public struct HomeFeedSnapshot {
+    public var items: [HomeFeedItem]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(items: [HomeFeedItem], error: String) {
+        self.items = items
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension HomeFeedSnapshot: Sendable {}
+#endif
+
+
+extension HomeFeedSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HomeFeedSnapshot, rhs: HomeFeedSnapshot) -> Bool {
+        if lhs.items != rhs.items {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(items)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHomeFeedSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeFeedSnapshot {
+        return
+            try HomeFeedSnapshot(
+                items: FfiConverterSequenceTypeHomeFeedItem.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HomeFeedSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeHomeFeedItem.write(value.items, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeFeedSnapshot_lift(_ buf: RustBuffer) throws -> HomeFeedSnapshot {
+    return try FfiConverterTypeHomeFeedSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeFeedSnapshot_lower(_ value: HomeFeedSnapshot) -> RustBuffer {
+    return FfiConverterTypeHomeFeedSnapshot.lower(value)
+}
+
+
 /**
  * Highlight + its associated artifact (for feed rendering).
  */
@@ -19126,76 +19141,6 @@ public func FfiConverterTypeHydratedHighlight_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeHydratedHighlight_lower(_ value: HydratedHighlight) -> RustBuffer {
     return FfiConverterTypeHydratedHighlight.lower(value)
-}
-
-
-public struct HydratedHighlightListOutcome {
-    public var values: [HydratedHighlight]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [HydratedHighlight], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension HydratedHighlightListOutcome: Sendable {}
-#endif
-
-
-extension HydratedHighlightListOutcome: Equatable, Hashable {
-    public static func ==(lhs: HydratedHighlightListOutcome, rhs: HydratedHighlightListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHydratedHighlightListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HydratedHighlightListOutcome {
-        return
-            try HydratedHighlightListOutcome(
-                values: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: HydratedHighlightListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeHydratedHighlight.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHydratedHighlightListOutcome_lift(_ buf: RustBuffer) throws -> HydratedHighlightListOutcome {
-    return try FfiConverterTypeHydratedHighlightListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHydratedHighlightListOutcome_lower(_ value: HydratedHighlightListOutcome) -> RustBuffer {
-    return FfiConverterTypeHydratedHighlightListOutcome.lower(value)
 }
 
 
@@ -24794,76 +24739,6 @@ public func FfiConverterTypeReadingFeedItem_lift(_ buf: RustBuffer) throws -> Re
 #endif
 public func FfiConverterTypeReadingFeedItem_lower(_ value: ReadingFeedItem) -> RustBuffer {
     return FfiConverterTypeReadingFeedItem.lower(value)
-}
-
-
-public struct ReadingFeedListOutcome {
-    public var values: [ReadingFeedItem]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [ReadingFeedItem], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ReadingFeedListOutcome: Sendable {}
-#endif
-
-
-extension ReadingFeedListOutcome: Equatable, Hashable {
-    public static func ==(lhs: ReadingFeedListOutcome, rhs: ReadingFeedListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeReadingFeedListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadingFeedListOutcome {
-        return
-            try ReadingFeedListOutcome(
-                values: FfiConverterSequenceTypeReadingFeedItem.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ReadingFeedListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeReadingFeedItem.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeReadingFeedListOutcome_lift(_ buf: RustBuffer) throws -> ReadingFeedListOutcome {
-    return try FfiConverterTypeReadingFeedListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeReadingFeedListOutcome_lower(_ value: ReadingFeedListOutcome) -> RustBuffer {
-    return FfiConverterTypeReadingFeedListOutcome.lower(value)
 }
 
 
@@ -37331,31 +37206,6 @@ fileprivate struct FfiConverterSequenceTypeReadingFeedInteractorProfile: FfiConv
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeReadingFeedItem: FfiConverterRustBuffer {
-    typealias SwiftType = [ReadingFeedItem]
-
-    public static func write(_ value: [ReadingFeedItem], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeReadingFeedItem.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ReadingFeedItem] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [ReadingFeedItem]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeReadingFeedItem.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeRelayConfig: FfiConverterRustBuffer {
     typealias SwiftType = [RelayConfig]
 
@@ -37876,9 +37726,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_edited_book_preview() != 19782) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_build_home_feed_items() != 58786) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 40366) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38017,7 +37864,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmark_set_articles() != 58353) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmarked_article_addresses() != 6646) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmarked_article_addresses() != 46854) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 59703) {
@@ -38044,12 +37891,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_feedback_threads_snapshot() != 11029) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_highlights() != 55300) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_reads() != 64700) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_follows() != 13105) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38066,6 +37907,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_reference() != 12852) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_home_feed_snapshot() != 9098) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 28655) {

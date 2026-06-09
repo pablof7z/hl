@@ -260,18 +260,6 @@ pub enum HighlightSourceKind {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct HydratedHighlightListOutcome {
-    pub values: Vec<HydratedHighlight>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct ReadingFeedListOutcome {
-    pub values: Vec<ReadingFeedItem>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct HighlightOutcome {
     pub value: Option<HighlightRecord>,
     pub error: String,

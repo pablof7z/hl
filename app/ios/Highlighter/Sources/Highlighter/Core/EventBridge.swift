@@ -30,8 +30,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         var chatPresence: [UInt64: WeakBox<ChatPresenceProbe>] = [:]
         var profiles: [UInt64: WeakBox<ProfileStore>] = [:]
         var articles: [UInt64: WeakBox<ArticleReaderStore>] = [:]
-        var reads: [UInt64: WeakBox<ReadsStore>] = [:]
-        var highlights: [UInt64: WeakBox<HighlightsStore>] = [:]
+        var homeFeeds: [UInt64: WeakBox<HomeFeedStore>] = [:]
         var feedbackThreads: [UInt64: WeakBox<FeedbackStore>] = [:]
         var feedbackThreadDetails: [UInt64: WeakBox<FeedbackThreadStore>] = [:]
         var searches: [UInt64: WeakBox<SearchStore>] = [:]
@@ -53,8 +52,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             chatPresence = chatPresence.filter { $0.value.value != nil }
             profiles = profiles.filter { $0.value.value != nil }
             articles = articles.filter { $0.value.value != nil }
-            reads = reads.filter { $0.value.value != nil }
-            highlights = highlights.filter { $0.value.value != nil }
+            homeFeeds = homeFeeds.filter { $0.value.value != nil }
             feedbackThreads = feedbackThreads.filter { $0.value.value != nil }
             feedbackThreadDetails = feedbackThreadDetails.filter { $0.value.value != nil }
             searches = searches.filter { $0.value.value != nil }
@@ -112,16 +110,9 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         }
     }
 
-    func registerReads(_ store: ReadsStore, handle: UInt64) {
+    func registerHomeFeed(_ store: HomeFeedStore, handle: UInt64) {
         registry.withLock { reg in
-            reg.reads[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
-    func registerHighlights(_ store: HighlightsStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.highlights[handle] = WeakBox(store)
+            reg.homeFeeds[handle] = WeakBox(store)
             reg.prune()
         }
     }
@@ -188,8 +179,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             _ = reg.chatPresence.removeValue(forKey: handle)
             _ = reg.profiles.removeValue(forKey: handle)
             _ = reg.articles.removeValue(forKey: handle)
-            _ = reg.reads.removeValue(forKey: handle)
-            _ = reg.highlights.removeValue(forKey: handle)
+            _ = reg.homeFeeds.removeValue(forKey: handle)
             _ = reg.feedbackThreads.removeValue(forKey: handle)
             _ = reg.feedbackThreadDetails.removeValue(forKey: handle)
             _ = reg.searches.removeValue(forKey: handle)
@@ -219,8 +209,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                     chatPresence: reg.chatPresence[id]?.value,
                     profile: reg.profiles[id]?.value,
                     article: reg.articles[id]?.value,
-                    reads: reg.reads[id]?.value,
-                    highlights: reg.highlights[id]?.value,
+                    homeFeed: reg.homeFeeds[id]?.value,
                     feedback: reg.feedbackThreads[id]?.value,
                     feedbackThread: reg.feedbackThreadDetails[id]?.value,
                     search: reg.searches[id]?.value,
@@ -242,10 +231,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 self.dispatchProfile(change, store: store)
             } else if let store = routed.article {
                 self.dispatchArticle(change, store: store)
-            } else if let store = routed.reads {
-                self.dispatchReads(change, store: store)
-            } else if let store = routed.highlights {
-                self.dispatchHighlights(change, store: store)
+            } else if let store = routed.homeFeed {
+                self.dispatchHomeFeed(change, store: store)
             } else if let store = routed.feedback {
                 self.dispatchFeedbackThreads(change, store: store)
             } else if let store = routed.feedbackThread {
@@ -272,8 +259,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         let chatPresence: ChatPresenceProbe?
         let profile: ProfileStore?
         let article: ArticleReaderStore?
-        let reads: ReadsStore?
-        let highlights: HighlightsStore?
+        let homeFeed: HomeFeedStore?
         let feedback: FeedbackStore?
         let feedbackThread: FeedbackThreadStore?
         let search: SearchStore?
@@ -401,15 +387,10 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     }
 
     @MainActor
-    private func dispatchReads(_ change: DataChangeType, store: ReadsStore) {
+    private func dispatchHomeFeed(_ change: DataChangeType, store: HomeFeedStore) {
         if case .followingReadsUpdated = change {
             Task { await store.refresh() }
-        }
-    }
-
-    @MainActor
-    private func dispatchHighlights(_ change: DataChangeType, store: HighlightsStore) {
-        if case .followingHighlightsUpdated = change {
+        } else if case .followingHighlightsUpdated = change {
             Task { await store.refresh() }
         }
     }

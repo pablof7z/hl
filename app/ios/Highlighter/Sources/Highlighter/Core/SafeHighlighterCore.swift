@@ -1232,22 +1232,19 @@ actor SafeHighlighterCore {
         await core.setFollow(targetPubkeyHex: targetPubkeyHex, follow: follow)
     }
 
-    // MARK: - Following Reads
+    // MARK: - Home Feed
 
-    func getFollowingReads(limit: UInt32 = 40) async -> ReadingFeedListOutcome {
-        await core.getFollowingReads(limit: limit)
+    func getHomeFeedSnapshot(
+        highlightLimit: UInt32 = 120,
+        readLimit: UInt32 = 40
+    ) async -> HomeFeedSnapshot {
+        await core.getHomeFeedSnapshot(highlightLimit: highlightLimit, readLimit: readLimit)
     }
 
     nonisolated func projectReadingFeedCard(
         input: ReadingFeedCardProjectionInput
     ) -> ReadingFeedCardProjection {
         core.projectReadingFeedCard(input: input)
-    }
-
-    // MARK: - Following Highlights
-
-    func getFollowingHighlights(limit: UInt32 = 120) async -> HydratedHighlightListOutcome {
-        await core.getFollowingHighlights(limit: limit)
     }
 
     nonisolated func projectHighlightGroupCard(
@@ -1290,16 +1287,6 @@ actor SafeHighlighterCore {
         input: ArticleHighlightPublishProjectionInput
     ) -> ArticleHighlightPublishProjection {
         core.projectArticleHighlightPublish(input: input)
-    }
-
-    nonisolated func buildHomeFeedItems(
-        highlights: [HydratedHighlight],
-        reads: [ReadingFeedItem]
-    ) -> [HomeFeedItem] {
-        core.buildHomeFeedItems(
-            highlights: highlights,
-            reads: reads
-        )
     }
 
     // MARK: - Subscriptions

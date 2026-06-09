@@ -2,8 +2,8 @@ import Foundation
 import Observation
 
 /// Home feed — composes friend highlights and friend-surfaced reads into
-/// Rust-owned screen rows. This store owns child-store lifetimes and
-/// observation; Rust owns grouping, dedupe, stable ids, and ordering.
+/// Rust-owned screen rows. Rust owns source queries, grouping, dedupe, stable
+/// ids, and ordering; Swift owns subscription handles and rendering state.
 @MainActor
 @Observable
 final class HomeFeedStore {
@@ -11,64 +11,56 @@ final class HomeFeedStore {
 
     var items: [Item] = []
     var isLoadingInitial: Bool = true
+    var loadError: String?
 
     @ObservationIgnored private let core: SafeHighlighterCore
-    @ObservationIgnored let highlights: HighlightsStore
-    @ObservationIgnored let reads: ReadsStore
-
-    @ObservationIgnored private var observing: Bool = false
+    @ObservationIgnored weak var eventBridge: EventBridge?
+    @ObservationIgnored private var subscriptionHandles: [UInt64] = []
 
     init(safeCore: SafeHighlighterCore, eventBridge: EventBridge?) {
         self.core = safeCore
-        self.highlights = HighlightsStore(safeCore: safeCore, eventBridge: eventBridge)
-        self.reads = ReadsStore(safeCore: safeCore, eventBridge: eventBridge)
+        self.eventBridge = eventBridge
     }
 
     func start() async {
-        async let h: Void = highlights.start()
-        async let r: Void = reads.start()
-        _ = await (h, r)
-        recompute()
+        await refresh()
         isLoadingInitial = false
-        observing = true
-        observeHighlights()
-        observeReads()
+        await installSubscriptions()
     }
 
     func stop() {
-        observing = false
-        highlights.stop()
-        reads.stop()
-    }
-
-    private func observeHighlights() {
-        withObservationTracking {
-            _ = highlights.items
-        } onChange: { [weak self] in
-            Task { @MainActor in
-                guard let self, self.observing else { return }
-                self.recompute()
-                self.observeHighlights()
-            }
+        let handles = subscriptionHandles
+        subscriptionHandles = []
+        for handle in handles {
+            Task { [core] in await core.unsubscribe(handle) }
+            eventBridge?.unregister(handle: handle)
         }
     }
 
-    private func observeReads() {
-        withObservationTracking {
-            _ = reads.items
-        } onChange: { [weak self] in
-            Task { @MainActor in
-                guard let self, self.observing else { return }
-                self.recompute()
-                self.observeReads()
-            }
+    func refresh() async {
+        let snapshot = await core.getHomeFeedSnapshot()
+        if snapshot.error.isEmpty {
+            items = snapshot.items
+            loadError = nil
+        } else {
+            items = snapshot.items
+            loadError = snapshot.error
         }
     }
 
-    private func recompute() {
-        items = core.buildHomeFeedItems(
-            highlights: highlights.items,
-            reads: reads.items
-        )
+    private func installSubscriptions() async {
+        guard subscriptionHandles.isEmpty, let bridge = eventBridge else { return }
+
+        let reads = await core.subscribeFollowingReads()
+        if reads.error.isEmpty {
+            subscriptionHandles.append(reads.handle)
+            bridge.registerHomeFeed(self, handle: reads.handle)
+        }
+
+        let highlights = await core.subscribeFollowingHighlights()
+        if highlights.error.isEmpty {
+            subscriptionHandles.append(highlights.handle)
+            bridge.registerHomeFeed(self, handle: highlights.handle)
+        }
     }
 }

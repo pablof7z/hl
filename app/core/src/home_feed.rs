@@ -8,6 +8,29 @@ use std::collections::{HashMap, HashSet};
 
 use crate::models::{HomeFeedItem, HydratedHighlight, ReadingFeedItem};
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HomeFeedSnapshot {
+    pub items: Vec<HomeFeedItem>,
+    pub error: String,
+}
+
+pub fn snapshot(
+    highlights: Vec<HydratedHighlight>,
+    reads: Vec<ReadingFeedItem>,
+) -> HomeFeedSnapshot {
+    HomeFeedSnapshot {
+        items: build_items(&highlights, &reads),
+        error: String::new(),
+    }
+}
+
+pub fn error_snapshot(error: impl ToString) -> HomeFeedSnapshot {
+    HomeFeedSnapshot {
+        items: Vec::new(),
+        error: error.to_string(),
+    }
+}
+
 pub fn build_items(
     highlights: &[HydratedHighlight],
     reads: &[ReadingFeedItem],
