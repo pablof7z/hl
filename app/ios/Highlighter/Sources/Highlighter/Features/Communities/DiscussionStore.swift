@@ -9,7 +9,6 @@ import Observation
 final class DiscussionStore {
     private(set) var discussions: [DiscussionRecord] = []
     private(set) var isLoading: Bool = true
-    private(set) var loadError: String?
 
     @ObservationIgnored private var groupId: String?
     @ObservationIgnored private var core: SafeHighlighterCore?
@@ -21,14 +20,7 @@ final class DiscussionStore {
         self.core = core
         self.bridge = bridge
         isLoading = true
-        loadError = nil
-
-        let discussionsOutcome = await core.getDiscussions(groupId: groupId)
-        if discussionsOutcome.error.isEmpty {
-            discussions = discussionsOutcome.values
-        } else {
-            loadError = discussionsOutcome.error
-        }
+        await reloadSnapshot()
         isLoading = false
 
         let outcome = await core.subscribeRoomDiscussions(groupId: groupId)
@@ -48,13 +40,13 @@ final class DiscussionStore {
         subscriptionHandle = nil
     }
 
-    func apply(discussion: DiscussionRecord) {
-        guard let core else {
-            preconditionFailure("DiscussionStore.apply called before start")
-        }
-        discussions = core.upsertRoomDiscussion(
-            discussions: discussions,
-            discussion: discussion
-        )
+    func reloadFromCache() async {
+        await reloadSnapshot()
+    }
+
+    private func reloadSnapshot() async {
+        guard let groupId, let core else { return }
+        let snapshot = await core.getRoomDiscussionSnapshot(groupId: groupId)
+        discussions = snapshot.discussions
     }
 }

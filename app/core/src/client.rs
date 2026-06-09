@@ -33,18 +33,17 @@ use crate::models::{
     CommentOutcome, CommentRecord, CommentReferenceBucket, CommentScope, CommentScopeOutcome,
     CommentThreadNode, CommentThreadProjection, CommunityListOutcome, CommunitySummary,
     CurationMenuItem, CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
-    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
-    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
-    GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
-    HighlightSourceKind, HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome,
-    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
-    NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
-    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
-    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
-    RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome, StringListOutcome,
-    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
+    DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome,
+    FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome,
+    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind, HomeFeedItem,
+    HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction, MutationOutcome,
+    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
+    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestProjection,
+    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem,
+    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome,
+    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -560,21 +559,6 @@ fn discussion_outcome(result: Result<DiscussionRecord, CoreError>) -> Discussion
         },
         Err(error) => DiscussionOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn discussion_list_outcome(
-    result: Result<Vec<DiscussionRecord>, CoreError>,
-) -> DiscussionListOutcome {
-    match result {
-        Ok(values) => DiscussionListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => DiscussionListOutcome {
-            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -2161,16 +2145,6 @@ impl HighlighterCore {
         room_state::artifact_comment_count(&artifact, &comments_by_reference)
     }
 
-    /// Upsert a live discussion delta into a bounded room discussion list.
-    /// Rust owns replacement identity and newest-first ordering.
-    pub fn upsert_room_discussion(
-        &self,
-        discussions: Vec<DiscussionRecord>,
-        discussion: DiscussionRecord,
-    ) -> Vec<DiscussionRecord> {
-        room_state::upsert_room_discussion(&discussions, &discussion)
-    }
-
     pub fn project_discussion_attachment(
         &self,
         input: crate::discussions::DiscussionAttachmentProjectionInput,
@@ -3202,12 +3176,11 @@ impl HighlighterCore {
         web_metadata_outcome(web_metadata::get_or_fetch(self.web_metadata.clone(), &url).await)
     }
 
-    pub async fn get_discussions(&self, group_id: String, limit: u32) -> DiscussionListOutcome {
-        discussion_list_outcome(crate::discussions::query_for_group(
-            self.runtime.ndb(),
-            &group_id,
-            limit,
-        ))
+    pub async fn get_room_discussion_snapshot(
+        &self,
+        group_id: String,
+    ) -> crate::discussions::RoomDiscussionSnapshot {
+        crate::discussions::query_room_discussion_snapshot(self.runtime.ndb(), &group_id)
     }
 
     /// NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending

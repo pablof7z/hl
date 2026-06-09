@@ -17,6 +17,12 @@ use crate::nostr_runtime::NostrRuntime;
 
 pub const KIND_DISCUSSION: u16 = 11;
 pub const DISCUSSION_MARKER_TAG: &str = "discussion";
+pub const ROOM_DISCUSSION_LIMIT: u32 = 64;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomDiscussionSnapshot {
+    pub discussions: Vec<DiscussionRecord>,
+}
 
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct DiscussionAttachmentProjectionInput {
@@ -132,6 +138,25 @@ pub fn query_for_group(
 
     records.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(records)
+}
+
+/// Full discussion-tab read model for a room. Cache errors become an empty
+/// list so native shells render the same cold-cache state consistently.
+pub fn query_room_discussion_snapshot(ndb: &Ndb, group_id: &str) -> RoomDiscussionSnapshot {
+    let group_id = group_id.trim();
+    if group_id.is_empty() {
+        return RoomDiscussionSnapshot {
+            discussions: Vec::new(),
+        };
+    }
+    let discussions = match query_for_group(ndb, group_id, ROOM_DISCUSSION_LIMIT) {
+        Ok(values) => values,
+        Err(error) => {
+            tracing::warn!(error = %error, "room discussion snapshot failed");
+            Vec::new()
+        }
+    };
+    RoomDiscussionSnapshot { discussions }
 }
 
 /// Build and publish a composer submission. Rust owns the optional URL
@@ -383,7 +408,6 @@ fn non_empty(value: String) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[derive(Debug)]
     struct FixedClock(u64);
 
@@ -398,6 +422,11 @@ mod tests {
             .tags(tags)
             .sign_with_keys(keys)
             .expect("sign")
+    }
+
+    fn process(ndb: &Ndb, event: &Event) {
+        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
+        ndb.process_event(&line).unwrap();
     }
 
     #[test]
@@ -429,6 +458,50 @@ mod tests {
         );
         assert_eq!(projection.author, None);
         assert_eq!(projection.image_url, None);
+    }
+
+    #[test]
+    fn room_discussion_snapshot_reads_discussions_for_room() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().to_str().unwrap().to_owned();
+        let cfg = nostrdb::Config::new().set_mapsize(64 * 1024 * 1024);
+        let keys = Keys::generate();
+        let matching = sign(
+            &keys,
+            vec![
+                Tag::parse(vec!["h".to_string(), "room-a".to_string()]).unwrap(),
+                Tag::parse(vec!["t".to_string(), DISCUSSION_MARKER_TAG.to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Room topic".to_string()]).unwrap(),
+            ],
+            "body",
+        );
+        let other_room = sign(
+            &keys,
+            vec![
+                Tag::parse(vec!["h".to_string(), "room-b".to_string()]).unwrap(),
+                Tag::parse(vec!["t".to_string(), DISCUSSION_MARKER_TAG.to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Other".to_string()]).unwrap(),
+            ],
+            "body",
+        );
+        let artifact_share = sign(
+            &keys,
+            vec![Tag::parse(vec!["h".to_string(), "room-a".to_string()]).unwrap()],
+            "not a discussion",
+        );
+
+        {
+            let ndb = Ndb::new(&db_path, &cfg).unwrap();
+            for event in [&matching, &other_room, &artifact_share] {
+                process(&ndb, event);
+            }
+        }
+
+        let ndb = Ndb::new(&db_path, &cfg).unwrap();
+        let snapshot = query_room_discussion_snapshot(&ndb, "room-a");
+
+        assert_eq!(snapshot.discussions.len(), 1);
+        assert_eq!(snapshot.discussions[0].title, "Room topic");
     }
 
     #[test]

@@ -552,8 +552,8 @@ actor SafeHighlighterCore {
         await core.getWebMetadata(url: url)
     }
 
-    func getDiscussions(groupId: String, limit: UInt32 = 64) async -> DiscussionListOutcome {
-        await core.getDiscussions(groupId: groupId, limit: limit)
+    func getRoomDiscussionSnapshot(groupId: String) async -> RoomDiscussionSnapshot {
+        await core.getRoomDiscussionSnapshot(groupId: groupId)
     }
 
     // MARK: - Chat (NIP-29 kind:9)
@@ -1013,16 +1013,6 @@ actor SafeHighlighterCore {
         core.countArtifactComments(
             artifact: artifact,
             commentsByReference: commentsByReference
-        )
-    }
-
-    nonisolated func upsertRoomDiscussion(
-        discussions: [DiscussionRecord],
-        discussion: DiscussionRecord
-    ) -> [DiscussionRecord] {
-        core.upsertRoomDiscussion(
-            discussions: discussions,
-            discussion: discussion
         )
     }
 

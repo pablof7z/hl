@@ -42,8 +42,8 @@ struct DiscussionListView: View {
         }
         .onDisappear { store.stop() }
         .sheet(isPresented: $composerPresented) {
-            DiscussionComposerView(groupId: groupId) { discussion in
-                store.apply(discussion: discussion)
+            DiscussionComposerView(groupId: groupId) {
+                Task { await store.reloadFromCache() }
             }
         }
     }

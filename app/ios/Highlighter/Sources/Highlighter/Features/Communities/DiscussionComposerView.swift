@@ -3,14 +3,14 @@ import SwiftUI
 /// New-discussion composer. A discussion is a kind:11 thread with the
 /// `t=discussion` marker, optionally carrying an attached URL (rendered as
 /// an artifact preview chip). Publishing is synchronous from the user's
-/// POV — we hold the sheet open until the core returns a signed record so
-/// the caller can optimistically insert it into the list.
+/// POV — we hold the sheet open until the core confirms the publish so
+/// callers can refresh their Rust-backed projection.
 struct DiscussionComposerView: View {
     let groupId: String
     let navigationTitle: String
-    let onPublished: (DiscussionRecord) -> Void
+    let onPublished: () -> Void
 
-    init(groupId: String, navigationTitle: String = "New discussion", onPublished: @escaping (DiscussionRecord) -> Void) {
+    init(groupId: String, navigationTitle: String = "New discussion", onPublished: @escaping () -> Void) {
         self.groupId = groupId
         self.navigationTitle = navigationTitle
         self.onPublished = onPublished
@@ -100,11 +100,11 @@ struct DiscussionComposerView: View {
                 attachmentUrl: projection.submitAttachmentUrl
             )
         )
-        guard outcome.error.isEmpty, let record = outcome.value else {
+        guard outcome.error.isEmpty, outcome.value != nil else {
             errorMessage = outcome.error.isEmpty ? "Failed to publish." : outcome.error
             return
         }
-        onPublished(record)
+        onPublished()
         dismiss()
     }
 }

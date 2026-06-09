@@ -89,7 +89,7 @@ struct RoomHomeView: View {
                 DiscussionComposerView(
                     groupId: groupId,
                     navigationTitle: "Suggest an artifact"
-                ) { _ in }
+                ) {}
                 .presentationDetents([.medium, .large])
             }
     }

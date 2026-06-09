@@ -376,8 +376,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     @MainActor
     private func dispatchDiscussions(_ change: DataChangeType, store: DiscussionStore) {
         switch change {
-        case .discussionUpserted(_, let discussion):
-            store.apply(discussion: discussion)
+        case .discussionUpserted:
+            Task { await store.reloadFromCache() }
         default:
             break
         }

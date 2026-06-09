@@ -1047,8 +1047,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getDiscussionCommentScope(eventIdHex: String)  -> CommentScopeOutcome
 
-    func getDiscussions(groupId: String, limit: UInt32) async  -> DiscussionListOutcome
-
     /**
      * Every message in a feedback thread, ordered ascending by `created_at`.
      */
@@ -1172,6 +1170,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * when neither has been cached yet (first login).
      */
     func getRelays() async  -> RelayConfigListOutcome
+
+    func getRoomDiscussionSnapshot(groupId: String) async  -> RoomDiscussionSnapshot
 
     /**
      * Snapshot for the room explorer shelves. Rust owns curator lookup,
@@ -2059,12 +2059,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * the live relay pool so the change takes effect immediately.
      */
     func upsertRelay(cfg: RelayConfig) async  -> MutationOutcome
-
-    /**
-     * Upsert a live discussion delta into a bounded room discussion list.
-     * Rust owns replacement identity and newest-first ordering.
-     */
-    func upsertRoomDiscussion(discussions: [DiscussionRecord], discussion: DiscussionRecord)  -> [DiscussionRecord]
 
 }
 open class HighlighterCore: HighlighterCoreProtocol, @unchecked Sendable {
@@ -3027,24 +3021,6 @@ open func getDiscussionCommentScope(eventIdHex: String) -> CommentScopeOutcome  
 })
 }
 
-open func getDiscussions(groupId: String, limit: UInt32)async  -> DiscussionListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_discussions(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeDiscussionListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
     /**
      * Every message in a feedback thread, ordered ascending by `created_at`.
      */
@@ -3484,6 +3460,24 @@ open func getRelays()async  -> RelayConfigListOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRelayConfigListOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func getRoomDiscussionSnapshot(groupId: String)async  -> RoomDiscussionSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_room_discussion_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(groupId)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRoomDiscussionSnapshot_lift,
             errorHandler: nil
 
         )
@@ -6346,19 +6340,6 @@ open func upsertRelay(cfg: RelayConfig)async  -> MutationOutcome  {
             errorHandler: nil
 
         )
-}
-
-    /**
-     * Upsert a live discussion delta into a bounded room discussion list.
-     * Rust owns replacement identity and newest-first ordering.
-     */
-open func upsertRoomDiscussion(discussions: [DiscussionRecord], discussion: DiscussionRecord) -> [DiscussionRecord]  {
-    return try!  FfiConverterSequenceTypeDiscussionRecord.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_upsert_room_discussion(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeDiscussionRecord.lower(discussions),
-        FfiConverterTypeDiscussionRecord_lower(discussion),$0
-    )
-})
 }
 
 
@@ -26888,6 +26869,68 @@ public func FfiConverterTypeRoomCoverCardProjectionInput_lower(_ value: RoomCove
 }
 
 
+public struct RoomDiscussionSnapshot {
+    public var discussions: [DiscussionRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(discussions: [DiscussionRecord]) {
+        self.discussions = discussions
+    }
+}
+
+#if compiler(>=6)
+extension RoomDiscussionSnapshot: Sendable {}
+#endif
+
+
+extension RoomDiscussionSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RoomDiscussionSnapshot, rhs: RoomDiscussionSnapshot) -> Bool {
+        if lhs.discussions != rhs.discussions {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(discussions)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomDiscussionSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomDiscussionSnapshot {
+        return
+            try RoomDiscussionSnapshot(
+                discussions: FfiConverterSequenceTypeDiscussionRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomDiscussionSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeDiscussionRecord.write(value.discussions, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomDiscussionSnapshot_lift(_ buf: RustBuffer) throws -> RoomDiscussionSnapshot {
+    return try FfiConverterTypeRoomDiscussionSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomDiscussionSnapshot_lower(_ value: RoomDiscussionSnapshot) -> RustBuffer {
+    return FfiConverterTypeRoomDiscussionSnapshot.lower(value)
+}
+
+
 public struct RoomExplorerSnapshot {
     public var featured: [CommunitySummary]
     public var newNoteworthy: [CommunitySummary]
@@ -38412,9 +38455,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussion_comment_scope() != 65057) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 7889) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_feedback_thread_events() != 52617) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38497,6 +38537,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relays() != 2197) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_discussion_snapshot() != 35341) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_explorer_snapshot() != 45699) {
@@ -39106,9 +39149,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 53820) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_room_discussion() != 40134) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_constructor_highlightercore_new() != 37739) {
