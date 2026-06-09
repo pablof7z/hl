@@ -22600,6 +22600,11 @@ public struct PodcastClipComposerProjection {
     public var excerpt: String
     public var speaker: String
     public var durationSeconds: Double
+    public var clipStartLabel: String
+    public var clipEndLabel: String
+    public var durationLabel: String
+    public var subtitleLabel: String
+    public var timeOnlyMessage: String
     public var hasTranscript: Bool
     public var canPublish: Bool
     public var communityName: String
@@ -22609,11 +22614,16 @@ public struct PodcastClipComposerProjection {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(matchingSegments: [TranscriptSegment], excerpt: String, speaker: String, durationSeconds: Double, hasTranscript: Bool, canPublish: Bool, communityName: String, communityDisplayName: String, hasCommunity: Bool, selectedSegmentIds: [String]) {
+    public init(matchingSegments: [TranscriptSegment], excerpt: String, speaker: String, durationSeconds: Double, clipStartLabel: String, clipEndLabel: String, durationLabel: String, subtitleLabel: String, timeOnlyMessage: String, hasTranscript: Bool, canPublish: Bool, communityName: String, communityDisplayName: String, hasCommunity: Bool, selectedSegmentIds: [String]) {
         self.matchingSegments = matchingSegments
         self.excerpt = excerpt
         self.speaker = speaker
         self.durationSeconds = durationSeconds
+        self.clipStartLabel = clipStartLabel
+        self.clipEndLabel = clipEndLabel
+        self.durationLabel = durationLabel
+        self.subtitleLabel = subtitleLabel
+        self.timeOnlyMessage = timeOnlyMessage
         self.hasTranscript = hasTranscript
         self.canPublish = canPublish
         self.communityName = communityName
@@ -22642,6 +22652,21 @@ extension PodcastClipComposerProjection: Equatable, Hashable {
         if lhs.durationSeconds != rhs.durationSeconds {
             return false
         }
+        if lhs.clipStartLabel != rhs.clipStartLabel {
+            return false
+        }
+        if lhs.clipEndLabel != rhs.clipEndLabel {
+            return false
+        }
+        if lhs.durationLabel != rhs.durationLabel {
+            return false
+        }
+        if lhs.subtitleLabel != rhs.subtitleLabel {
+            return false
+        }
+        if lhs.timeOnlyMessage != rhs.timeOnlyMessage {
+            return false
+        }
         if lhs.hasTranscript != rhs.hasTranscript {
             return false
         }
@@ -22668,6 +22693,11 @@ extension PodcastClipComposerProjection: Equatable, Hashable {
         hasher.combine(excerpt)
         hasher.combine(speaker)
         hasher.combine(durationSeconds)
+        hasher.combine(clipStartLabel)
+        hasher.combine(clipEndLabel)
+        hasher.combine(durationLabel)
+        hasher.combine(subtitleLabel)
+        hasher.combine(timeOnlyMessage)
         hasher.combine(hasTranscript)
         hasher.combine(canPublish)
         hasher.combine(communityName)
@@ -22690,6 +22720,11 @@ public struct FfiConverterTypePodcastClipComposerProjection: FfiConverterRustBuf
                 excerpt: FfiConverterString.read(from: &buf),
                 speaker: FfiConverterString.read(from: &buf),
                 durationSeconds: FfiConverterDouble.read(from: &buf),
+                clipStartLabel: FfiConverterString.read(from: &buf),
+                clipEndLabel: FfiConverterString.read(from: &buf),
+                durationLabel: FfiConverterString.read(from: &buf),
+                subtitleLabel: FfiConverterString.read(from: &buf),
+                timeOnlyMessage: FfiConverterString.read(from: &buf),
                 hasTranscript: FfiConverterBool.read(from: &buf),
                 canPublish: FfiConverterBool.read(from: &buf),
                 communityName: FfiConverterString.read(from: &buf),
@@ -22704,6 +22739,11 @@ public struct FfiConverterTypePodcastClipComposerProjection: FfiConverterRustBuf
         FfiConverterString.write(value.excerpt, into: &buf)
         FfiConverterString.write(value.speaker, into: &buf)
         FfiConverterDouble.write(value.durationSeconds, into: &buf)
+        FfiConverterString.write(value.clipStartLabel, into: &buf)
+        FfiConverterString.write(value.clipEndLabel, into: &buf)
+        FfiConverterString.write(value.durationLabel, into: &buf)
+        FfiConverterString.write(value.subtitleLabel, into: &buf)
+        FfiConverterString.write(value.timeOnlyMessage, into: &buf)
         FfiConverterBool.write(value.hasTranscript, into: &buf)
         FfiConverterBool.write(value.canPublish, into: &buf)
         FfiConverterString.write(value.communityName, into: &buf)

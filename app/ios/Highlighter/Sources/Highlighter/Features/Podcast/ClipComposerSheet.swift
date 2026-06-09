@@ -31,23 +31,8 @@ struct ClipComposerSheet: View {
         )
     }
 
-    private var duration: Double { composerProjection.durationSeconds }
-
     private var extractedFragment: String {
         composerProjection.excerpt
-    }
-
-    private var durationLabel: String {
-        let total = Int(duration)
-        let m = total / 60
-        let s = total % 60
-        if m > 0 { return "\(m)m \(s)s" }
-        return "\(s)s"
-    }
-
-    private var subtitleLabel: String {
-        let dl = durationLabel
-        return composerProjection.hasTranscript ? "\(dl) · with transcript" : "\(dl) · time-only clip"
     }
 
     private var canPublish: Bool {
@@ -119,9 +104,11 @@ struct ClipComposerSheet: View {
     }
 
     private var rangeRow: some View {
-        VStack(spacing: 6) {
+        let projection = composerProjection
+
+        return VStack(spacing: 6) {
             HStack(spacing: 0) {
-                timeEditor(seconds: $startSeconds, direction: .leading) { delta in
+                timeEditor(label: projection.clipStartLabel, direction: .leading) { delta in
                     let proposed = startSeconds + delta
                     startSeconds = max(0, min(endSeconds - 5, proposed))
                 }
@@ -134,13 +121,13 @@ struct ClipComposerSheet: View {
 
                 Spacer(minLength: 0)
 
-                timeEditor(seconds: $endSeconds, direction: .trailing) { delta in
+                timeEditor(label: projection.clipEndLabel, direction: .trailing) { delta in
                     let proposed = endSeconds + delta
                     endSeconds = max(startSeconds + 5, min(player.duration > 0 ? player.duration : proposed, proposed))
                 }
             }
 
-            Text(subtitleLabel)
+            Text(projection.subtitleLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -150,7 +137,7 @@ struct ClipComposerSheet: View {
     private enum NudgeAlignment { case leading, trailing }
 
     private func timeEditor(
-        seconds: Binding<Double>,
+        label: String,
         direction: NudgeAlignment,
         onNudge: @escaping (Double) -> Void
     ) -> some View {
@@ -159,7 +146,7 @@ struct ClipComposerSheet: View {
                 nudgeButton(label: "-5s", delta: -5, onNudge: onNudge)
             }
 
-            Text(formatTimestamp(seconds.wrappedValue))
+            Text(label)
                 .font(.system(size: 24, weight: .semibold).monospacedDigit())
                 .foregroundStyle(.primary)
 
@@ -209,7 +196,7 @@ struct ClipComposerSheet: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
 
-                Text("Time-only clip · \(durationLabel). Add a note for the room below.")
+                Text(composerProjection.timeOnlyMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -344,16 +331,4 @@ struct ClipComposerSheet: View {
             }
         }
     }
-}
-
-// MARK: - Timestamp formatter
-
-private func formatTimestamp(_ seconds: Double) -> String {
-    guard seconds.isFinite, seconds >= 0 else { return "0:00" }
-    let total = Int(seconds)
-    let h = total / 3600
-    let m = (total % 3600) / 60
-    let s = total % 60
-    if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
-    return String(format: "%d:%02d", m, s)
 }

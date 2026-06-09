@@ -43,6 +43,11 @@ pub struct PodcastClipComposerProjection {
     pub excerpt: String,
     pub speaker: String,
     pub duration_seconds: f64,
+    pub clip_start_label: String,
+    pub clip_end_label: String,
+    pub duration_label: String,
+    pub subtitle_label: String,
+    pub time_only_message: String,
     pub has_transcript: bool,
     pub can_publish: bool,
     pub community_name: String,
@@ -302,6 +307,16 @@ pub fn clip_composer_projection(input: PodcastClipComposerInput) -> PodcastClipC
         excerpt,
         speaker,
         duration_seconds: input.clip_end_seconds - input.clip_start_seconds,
+        clip_start_label: format_timestamp(input.clip_start_seconds),
+        clip_end_label: format_timestamp(input.clip_end_seconds),
+        duration_label: clip_duration_label(input.clip_end_seconds - input.clip_start_seconds),
+        subtitle_label: clip_composer_subtitle_label(
+            input.clip_end_seconds - input.clip_start_seconds,
+            !selected_segment_ids.is_empty(),
+        ),
+        time_only_message: clip_composer_time_only_message(
+            input.clip_end_seconds - input.clip_start_seconds,
+        ),
         has_transcript: !selected_segment_ids.is_empty(),
         can_publish: input.clip_start_seconds.is_finite()
             && input.clip_end_seconds.is_finite()
@@ -637,6 +652,33 @@ fn clip_range_label(clip: &HighlightRecord) -> String {
         (Some(start), None) => start,
         _ => "—".into(),
     }
+}
+
+fn clip_duration_label(duration_seconds: f64) -> String {
+    let total = duration_seconds as i64;
+    let minutes = total / 60;
+    let seconds = total % 60;
+    if minutes > 0 {
+        format!("{minutes}m {seconds}s")
+    } else {
+        format!("{seconds}s")
+    }
+}
+
+fn clip_composer_subtitle_label(duration_seconds: f64, has_transcript: bool) -> String {
+    let suffix = if has_transcript {
+        "with transcript"
+    } else {
+        "time-only clip"
+    };
+    format!("{} · {suffix}", clip_duration_label(duration_seconds))
+}
+
+fn clip_composer_time_only_message(duration_seconds: f64) -> String {
+    format!(
+        "Time-only clip · {}. Add a note for the room below.",
+        clip_duration_label(duration_seconds)
+    )
 }
 
 fn format_optional_clip_timestamp(seconds: f64) -> Option<String> {
@@ -1315,6 +1357,14 @@ HOST: Segment text.
         ));
 
         assert_eq!(projection.duration_seconds, 8.0);
+        assert_eq!(projection.clip_start_label, "0:10");
+        assert_eq!(projection.clip_end_label, "0:18");
+        assert_eq!(projection.duration_label, "8s");
+        assert_eq!(projection.subtitle_label, "8s · with transcript");
+        assert_eq!(
+            projection.time_only_message,
+            "Time-only clip · 8s. Add a note for the room below."
+        );
         assert_eq!(projection.excerpt, "alpha beta");
         assert_eq!(projection.speaker, "Ada");
         assert!(projection.has_transcript);
@@ -1352,6 +1402,14 @@ HOST: Segment text.
 
         assert_eq!(projection.excerpt, "");
         assert_eq!(projection.speaker, "");
+        assert_eq!(projection.clip_start_label, "0:10");
+        assert_eq!(projection.clip_end_label, "0:14");
+        assert_eq!(projection.duration_label, "4s");
+        assert_eq!(projection.subtitle_label, "4s · time-only clip");
+        assert_eq!(
+            projection.time_only_message,
+            "Time-only clip · 4s. Add a note for the room below."
+        );
         assert!(!projection.has_transcript);
         assert!(!projection.can_publish);
         assert_eq!(projection.community_name, "missing-room");
@@ -1370,6 +1428,8 @@ HOST: Segment text.
         ));
         assert_eq!(personal.community_name, "");
         assert_eq!(personal.community_display_name, "Personal");
+        assert_eq!(personal.duration_label, "6s");
+        assert_eq!(personal.subtitle_label, "6s · with transcript");
         assert!(!personal.has_community);
     }
 
