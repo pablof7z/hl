@@ -1650,6 +1650,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput)  -> RoomLibraryBookCardProjection
 
+    func projectRoomLibraryCardKind(input: RoomLibraryCardKindProjectionInput)  -> RoomLibraryCardKindProjection
+
     func projectRoomLibraryGenericCard(input: RoomLibraryGenericCardProjectionInput)  -> RoomLibraryGenericCardProjection
 
     func projectRoomLibraryPodcastCard(input: RoomLibraryPodcastCardProjectionInput)  -> RoomLibraryPodcastCardProjection
@@ -5055,6 +5057,14 @@ open func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput) 
     return try!  FfiConverterTypeRoomLibraryBookCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_library_book_card(self.uniffiClonePointer(),
         FfiConverterTypeRoomLibraryBookCardProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomLibraryCardKind(input: RoomLibraryCardKindProjectionInput) -> RoomLibraryCardKindProjection  {
+    return try!  FfiConverterTypeRoomLibraryCardKindProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_library_card_kind(self.uniffiClonePointer(),
+        FfiConverterTypeRoomLibraryCardKindProjectionInput_lower(input),$0
     )
 })
 }
@@ -28550,6 +28560,130 @@ public func FfiConverterTypeRoomLibraryBookCardProjectionInput_lower(_ value: Ro
 }
 
 
+public struct RoomLibraryCardKindProjection {
+    public var cardKind: RoomLibraryCardKind
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(cardKind: RoomLibraryCardKind) {
+        self.cardKind = cardKind
+    }
+}
+
+#if compiler(>=6)
+extension RoomLibraryCardKindProjection: Sendable {}
+#endif
+
+
+extension RoomLibraryCardKindProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomLibraryCardKindProjection, rhs: RoomLibraryCardKindProjection) -> Bool {
+        if lhs.cardKind != rhs.cardKind {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(cardKind)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLibraryCardKindProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryCardKindProjection {
+        return
+            try RoomLibraryCardKindProjection(
+                cardKind: FfiConverterTypeRoomLibraryCardKind.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLibraryCardKindProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeRoomLibraryCardKind.write(value.cardKind, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryCardKindProjection_lift(_ buf: RustBuffer) throws -> RoomLibraryCardKindProjection {
+    return try FfiConverterTypeRoomLibraryCardKindProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryCardKindProjection_lower(_ value: RoomLibraryCardKindProjection) -> RustBuffer {
+    return FfiConverterTypeRoomLibraryCardKindProjection.lower(value)
+}
+
+
+public struct RoomLibraryCardKindProjectionInput {
+    public var artifact: ArtifactRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifact: ArtifactRecord) {
+        self.artifact = artifact
+    }
+}
+
+#if compiler(>=6)
+extension RoomLibraryCardKindProjectionInput: Sendable {}
+#endif
+
+
+extension RoomLibraryCardKindProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomLibraryCardKindProjectionInput, rhs: RoomLibraryCardKindProjectionInput) -> Bool {
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifact)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLibraryCardKindProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryCardKindProjectionInput {
+        return
+            try RoomLibraryCardKindProjectionInput(
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLibraryCardKindProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryCardKindProjectionInput_lift(_ buf: RustBuffer) throws -> RoomLibraryCardKindProjectionInput {
+    return try FfiConverterTypeRoomLibraryCardKindProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryCardKindProjectionInput_lower(_ value: RoomLibraryCardKindProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomLibraryCardKindProjectionInput.lower(value)
+}
+
+
 public struct RoomLibraryGenericCardProjection {
     public var title: String
 
@@ -35116,6 +35250,90 @@ extension RoomInviteSelectionAction: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum RoomLibraryCardKind {
+
+    case article
+    case book
+    case podcast
+    case generic
+}
+
+
+#if compiler(>=6)
+extension RoomLibraryCardKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLibraryCardKind: FfiConverterRustBuffer {
+    typealias SwiftType = RoomLibraryCardKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryCardKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .article
+
+        case 2: return .book
+
+        case 3: return .podcast
+
+        case 4: return .generic
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RoomLibraryCardKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .article:
+            writeInt(&buf, Int32(1))
+
+
+        case .book:
+            writeInt(&buf, Int32(2))
+
+
+        case .podcast:
+            writeInt(&buf, Int32(3))
+
+
+        case .generic:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryCardKind_lift(_ buf: RustBuffer) throws -> RoomLibraryCardKind {
+    return try FfiConverterTypeRoomLibraryCardKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryCardKind_lower(_ value: RoomLibraryCardKind) -> RustBuffer {
+    return FfiConverterTypeRoomLibraryCardKind.lower(value)
+}
+
+
+extension RoomLibraryCardKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum RoomPreviewSecondaryAction {
 
     case none
@@ -38490,6 +38708,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_book_card() != 17129) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_card_kind() != 7758) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_generic_card() != 61708) {

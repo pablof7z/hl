@@ -1347,6 +1347,12 @@ actor SafeHighlighterCore {
         core.projectRoomLibraryArticleCard(input: input)
     }
 
+    nonisolated func projectRoomLibraryCardKind(
+        input: RoomLibraryCardKindProjectionInput
+    ) -> RoomLibraryCardKindProjection {
+        core.projectRoomLibraryCardKind(input: input)
+    }
+
     nonisolated func projectRoomLibraryBookCard(
         input: RoomLibraryBookCardProjectionInput
     ) -> RoomLibraryBookCardProjection {

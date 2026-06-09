@@ -221,14 +221,18 @@ struct RoomHomeView: View {
 
     @ViewBuilder
     private func artifactRow(_ a: ArtifactRecord, commentCount: Int) -> some View {
-        switch a.preview.source {
-        case "article":
+        let projection = app.safeCore.projectRoomLibraryCardKind(
+            input: RoomLibraryCardKindProjectionInput(artifact: a)
+        )
+
+        switch projection.cardKind {
+        case .article:
             RoomLibraryArticleCardView(artifact: a, commentCount: commentCount)
-        case "book":
+        case .book:
             RoomLibraryBookCardView(artifact: a, commentCount: commentCount)
-        case "podcast":
+        case .podcast:
             RoomLibraryPodcastCardView(artifact: a, commentCount: commentCount)
-        default:
+        case .generic:
             genericArtifactRow(a)
         }
     }

@@ -2244,6 +2244,13 @@ impl HighlighterCore {
         room_library::article_card_projection(input)
     }
 
+    pub fn project_room_library_card_kind(
+        &self,
+        input: room_library::RoomLibraryCardKindProjectionInput,
+    ) -> room_library::RoomLibraryCardKindProjection {
+        room_library::card_kind_projection(input)
+    }
+
     pub fn project_room_library_book_card(
         &self,
         input: room_library::RoomLibraryBookCardProjectionInput,

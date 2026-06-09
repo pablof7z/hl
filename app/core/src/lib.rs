@@ -195,7 +195,8 @@ pub use room_invites::{
 };
 pub use room_library::{
     RoomLibraryArticleCardProjection, RoomLibraryArticleCardProjectionInput,
-    RoomLibraryBookCardProjection, RoomLibraryBookCardProjectionInput,
+    RoomLibraryBookCardProjection, RoomLibraryBookCardProjectionInput, RoomLibraryCardKind,
+    RoomLibraryCardKindProjection, RoomLibraryCardKindProjectionInput,
     RoomLibraryGenericCardProjection, RoomLibraryGenericCardProjectionInput,
     RoomLibraryPodcastCardProjection, RoomLibraryPodcastCardProjectionInput,
 };

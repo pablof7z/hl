@@ -1,6 +1,24 @@
 use crate::artifact_detail;
 use crate::models::{ArtifactDetailTarget, ArtifactRecord};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum RoomLibraryCardKind {
+    Article,
+    Book,
+    Podcast,
+    Generic,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomLibraryCardKindProjectionInput {
+    pub artifact: ArtifactRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomLibraryCardKindProjection {
+    pub card_kind: RoomLibraryCardKind,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct RoomLibraryArticleCardProjectionInput {
     pub artifact: ArtifactRecord,
@@ -63,6 +81,16 @@ pub struct RoomLibraryGenericCardProjectionInput {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RoomLibraryGenericCardProjection {
     pub title: String,
+}
+
+/// Select the native room-library card component for an artifact. Rust owns
+/// source normalization; native shells only dispatch to the visual component.
+pub fn card_kind_projection(
+    input: RoomLibraryCardKindProjectionInput,
+) -> RoomLibraryCardKindProjection {
+    RoomLibraryCardKindProjection {
+        card_kind: card_kind_for_artifact(&input.artifact),
+    }
 }
 
 /// Presentation projection for an article artifact in a room library. Rust
@@ -215,10 +243,35 @@ fn duration_label(duration_seconds: Option<i64>) -> Option<String> {
     }
 }
 
+fn card_kind_for_artifact(artifact: &ArtifactRecord) -> RoomLibraryCardKind {
+    match artifact.preview.source.trim().to_ascii_lowercase().as_str() {
+        "article" => RoomLibraryCardKind::Article,
+        "book" => RoomLibraryCardKind::Book,
+        "podcast" => RoomLibraryCardKind::Podcast,
+        _ => RoomLibraryCardKind::Generic,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::ArtifactPreview;
+
+    #[test]
+    fn card_kind_projection_normalizes_room_library_sources() {
+        for (source, expected) in [
+            ("article", RoomLibraryCardKind::Article),
+            (" book ", RoomLibraryCardKind::Book),
+            ("Podcast", RoomLibraryCardKind::Podcast),
+            ("web", RoomLibraryCardKind::Generic),
+            ("", RoomLibraryCardKind::Generic),
+        ] {
+            let projection = card_kind_projection(RoomLibraryCardKindProjectionInput {
+                artifact: artifact_record(source),
+            });
+            assert_eq!(projection.card_kind, expected);
+        }
+    }
 
     #[test]
     fn article_card_projection_uses_article_author_and_meta_bits() {
