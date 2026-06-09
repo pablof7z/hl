@@ -138,10 +138,13 @@ struct RoomPreviewSheet: View {
                 .foregroundStyle(Color.highlighterInkMuted)
 
             if let store = roomStore, !store.artifacts.isEmpty {
+                let projection = appStore.safeCore.projectRoomPreviewArtifacts(
+                    input: RoomPreviewArtifactsProjectionInput(artifacts: store.artifacts)
+                )
                 VStack(spacing: 0) {
-                    ForEach(Array(store.artifacts.prefix(8)), id: \.shareEventId) { artifact in
-                        InsideArtifactRow(artifact: artifact)
-                        if artifact.shareEventId != store.artifacts.prefix(8).last?.shareEventId {
+                    ForEach(projection.rows, id: \.artifact.shareEventId) { row in
+                        InsideArtifactRow(row: row)
+                        if row.showsDivider {
                             Divider().overlay(Color.highlighterRule)
                         }
                     }
@@ -276,7 +279,9 @@ struct RoomPreviewSheet: View {
 /// Compact artifact row used inside the peek sheet. Just the essentials —
 /// title, source, author. Full detail is a tap-through on the room page.
 private struct InsideArtifactRow: View {
-    let artifact: ArtifactRecord
+    let row: RoomPreviewArtifactRowProjection
+
+    private var artifact: ArtifactRecord { row.artifact }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -285,19 +290,14 @@ private struct InsideArtifactRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayTitle)
+                Text(row.title)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
-                if !artifact.preview.author.isEmpty {
-                    Text(artifact.preview.author)
-                        .font(.caption)
-                        .foregroundStyle(Color.highlighterInkMuted)
-                        .lineLimit(1)
-                } else if !artifact.preview.domain.isEmpty {
-                    Text(artifact.preview.domain)
+                if let subtitle = row.subtitle {
+                    Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(1)
@@ -307,11 +307,6 @@ private struct InsideArtifactRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-    }
-
-    private var displayTitle: String {
-        let t = artifact.preview.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? "Untitled" : t
     }
 
     @ViewBuilder

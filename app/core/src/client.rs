@@ -3399,6 +3399,13 @@ impl HighlighterCore {
         recommendations::room_recommendation_card_projection(input)
     }
 
+    pub fn project_room_preview_artifacts(
+        &self,
+        input: crate::room_preview::RoomPreviewArtifactsProjectionInput,
+    ) -> crate::room_preview::RoomPreviewArtifactsProjection {
+        crate::room_preview::room_preview_artifacts_projection(input)
+    }
+
     pub async fn create_room(
         &self,
         name: String,
