@@ -1243,6 +1243,13 @@ impl HighlighterCore {
         podcast_transcript::listening_projection(input)
     }
 
+    pub fn get_podcast_now_playing_projection(
+        &self,
+        input: podcast_transcript::PodcastNowPlayingProjectionInput,
+    ) -> podcast_transcript::PodcastNowPlayingProjection {
+        podcast_transcript::now_playing_projection(input)
+    }
+
     pub fn get_podcast_clip_reference(&self, artifact: ArtifactRecord) -> PodcastClipReference {
         podcast_transcript::podcast_clip_reference(&artifact)
     }

@@ -1198,6 +1198,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getPodcastListeningProjection(input: PodcastListeningProjectionInput)  -> PodcastListeningProjection
 
+    func getPodcastNowPlayingProjection(input: PodcastNowPlayingProjectionInput)  -> PodcastNowPlayingProjection
+
     func getPodcastPosition()  -> PodcastPositionRecord?
 
     func getPodcastPositionSeconds(guid: String)  -> Double?
@@ -3427,6 +3429,14 @@ open func getPodcastListeningProjection(input: PodcastListeningProjectionInput) 
     return try!  FfiConverterTypePodcastListeningProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_podcast_listening_projection(self.uniffiClonePointer(),
         FfiConverterTypePodcastListeningProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func getPodcastNowPlayingProjection(input: PodcastNowPlayingProjectionInput) -> PodcastNowPlayingProjection  {
+    return try!  FfiConverterTypePodcastNowPlayingProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_now_playing_projection(self.uniffiClonePointer(),
+        FfiConverterTypePodcastNowPlayingProjectionInput_lower(input),$0
     )
 })
 }
@@ -16938,6 +16948,146 @@ public func FfiConverterTypePodcastListeningProjectionInput_lower(_ value: Podca
 }
 
 
+public struct PodcastNowPlayingProjection {
+    public var showTitle: String
+    public var episodeTitle: String
+    public var imageUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(showTitle: String, episodeTitle: String, imageUrl: String) {
+        self.showTitle = showTitle
+        self.episodeTitle = episodeTitle
+        self.imageUrl = imageUrl
+    }
+}
+
+#if compiler(>=6)
+extension PodcastNowPlayingProjection: Sendable {}
+#endif
+
+
+extension PodcastNowPlayingProjection: Equatable, Hashable {
+    public static func ==(lhs: PodcastNowPlayingProjection, rhs: PodcastNowPlayingProjection) -> Bool {
+        if lhs.showTitle != rhs.showTitle {
+            return false
+        }
+        if lhs.episodeTitle != rhs.episodeTitle {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(showTitle)
+        hasher.combine(episodeTitle)
+        hasher.combine(imageUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastNowPlayingProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastNowPlayingProjection {
+        return
+            try PodcastNowPlayingProjection(
+                showTitle: FfiConverterString.read(from: &buf),
+                episodeTitle: FfiConverterString.read(from: &buf),
+                imageUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastNowPlayingProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.showTitle, into: &buf)
+        FfiConverterString.write(value.episodeTitle, into: &buf)
+        FfiConverterString.write(value.imageUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastNowPlayingProjection_lift(_ buf: RustBuffer) throws -> PodcastNowPlayingProjection {
+    return try FfiConverterTypePodcastNowPlayingProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastNowPlayingProjection_lower(_ value: PodcastNowPlayingProjection) -> RustBuffer {
+    return FfiConverterTypePodcastNowPlayingProjection.lower(value)
+}
+
+
+public struct PodcastNowPlayingProjectionInput {
+    public var artifact: ArtifactRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifact: ArtifactRecord) {
+        self.artifact = artifact
+    }
+}
+
+#if compiler(>=6)
+extension PodcastNowPlayingProjectionInput: Sendable {}
+#endif
+
+
+extension PodcastNowPlayingProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: PodcastNowPlayingProjectionInput, rhs: PodcastNowPlayingProjectionInput) -> Bool {
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifact)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastNowPlayingProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastNowPlayingProjectionInput {
+        return
+            try PodcastNowPlayingProjectionInput(
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastNowPlayingProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastNowPlayingProjectionInput_lift(_ buf: RustBuffer) throws -> PodcastNowPlayingProjectionInput {
+    return try FfiConverterTypePodcastNowPlayingProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastNowPlayingProjectionInput_lower(_ value: PodcastNowPlayingProjectionInput) -> RustBuffer {
+    return FfiConverterTypePodcastNowPlayingProjectionInput.lower(value)
+}
+
+
 /**
  * Last podcast playback position persisted by the Rust core. Native shells
  * own AV playback handles, but durable playback state and the cold-launch
@@ -29118,6 +29268,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_listening_projection() != 20038) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_now_playing_projection() != 17405) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_position() != 36439) {

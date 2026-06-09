@@ -595,11 +595,12 @@ final class PodcastPlayerStore {
             return
         }
 
+        let projection = core.getPodcastNowPlayingProjection(
+            input: PodcastNowPlayingProjectionInput(artifact: artifact)
+        )
         var info: [String: Any] = [:]
-        info[MPMediaItemPropertyTitle] = artifact.preview.title.isEmpty ? "Untitled episode" : artifact.preview.title
-        info[MPMediaItemPropertyArtist] = artifact.preview.podcastShowTitle.isEmpty
-            ? artifact.preview.author
-            : artifact.preview.podcastShowTitle
+        info[MPMediaItemPropertyTitle] = projection.episodeTitle
+        info[MPMediaItemPropertyArtist] = projection.showTitle
         info[MPMediaItemPropertyMediaType] = MPMediaType.podcast.rawValue
 
         if duration > 0 {

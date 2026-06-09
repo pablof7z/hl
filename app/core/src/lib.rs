@@ -112,7 +112,8 @@ pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
 pub use podcast_transcript::{
     PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipReference,
     PodcastClipSelection, PodcastListeningProjection, PodcastListeningProjectionInput,
-    PodcastTimelineRow, PodcastTimelineRowKind, PodcastTimelineRowState, TranscriptSegment,
+    PodcastNowPlayingProjection, PodcastNowPlayingProjectionInput, PodcastTimelineRow,
+    PodcastTimelineRowKind, PodcastTimelineRowState, TranscriptSegment,
 };
 pub use profile::{
     ProfileDisplayFallback, ProfileDisplayProjection, ProfileDisplayProjectionInput,

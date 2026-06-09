@@ -114,6 +114,18 @@ pub struct PodcastListeningProjection {
     pub current_speaker_or_timestamp: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastNowPlayingProjectionInput {
+    pub artifact: ArtifactRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PodcastNowPlayingProjection {
+    pub show_title: String,
+    pub episode_title: String,
+    pub image_url: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct PodcastClipReference {
     pub tag_name: String,
@@ -334,33 +346,11 @@ pub fn clip_composer_highlight_draft(
 
 pub fn listening_projection(input: PodcastListeningProjectionInput) -> PodcastListeningProjection {
     let clip_count = input.clips.len() as u64;
-    let show_title = input
+    let now_playing = input
         .artifact
         .as_ref()
-        .map(|artifact| {
-            if artifact.preview.podcast_show_title.is_empty() {
-                artifact.preview.author.clone()
-            } else {
-                artifact.preview.podcast_show_title.clone()
-            }
-        })
-        .unwrap_or_default();
-    let episode_title = input
-        .artifact
-        .as_ref()
-        .map(|artifact| {
-            if artifact.preview.title.is_empty() {
-                "Untitled episode".to_string()
-            } else {
-                artifact.preview.title.clone()
-            }
-        })
-        .unwrap_or_else(|| "Untitled episode".to_string());
-    let image_url = input
-        .artifact
-        .as_ref()
-        .map(|artifact| artifact.preview.image.clone())
-        .unwrap_or_default();
+        .map(now_playing_projection_for_artifact)
+        .unwrap_or_else(default_now_playing_projection);
     let has_chapters = input
         .artifact
         .as_ref()
@@ -391,9 +381,9 @@ pub fn listening_projection(input: PodcastListeningProjectionInput) -> PodcastLi
     }
 
     PodcastListeningProjection {
-        show_title,
-        episode_title,
-        image_url,
+        show_title: now_playing.show_title,
+        episode_title: now_playing.episode_title,
+        image_url: now_playing.image_url,
         episode_meta,
         has_chapters,
         clip_count,
@@ -404,6 +394,38 @@ pub fn listening_projection(input: PodcastListeningProjectionInput) -> PodcastLi
             input.transcript_available,
             input.current_time_seconds,
         ),
+    }
+}
+
+/// Project episode metadata for mini-player and system Now Playing surfaces.
+/// Rust owns episode title/show fallback parity across platform shells.
+pub fn now_playing_projection(
+    input: PodcastNowPlayingProjectionInput,
+) -> PodcastNowPlayingProjection {
+    now_playing_projection_for_artifact(&input.artifact)
+}
+
+fn now_playing_projection_for_artifact(artifact: &ArtifactRecord) -> PodcastNowPlayingProjection {
+    PodcastNowPlayingProjection {
+        show_title: if artifact.preview.podcast_show_title.is_empty() {
+            artifact.preview.author.clone()
+        } else {
+            artifact.preview.podcast_show_title.clone()
+        },
+        episode_title: if artifact.preview.title.is_empty() {
+            "Untitled episode".to_string()
+        } else {
+            artifact.preview.title.clone()
+        },
+        image_url: artifact.preview.image.clone(),
+    }
+}
+
+fn default_now_playing_projection() -> PodcastNowPlayingProjection {
+    PodcastNowPlayingProjection {
+        show_title: String::new(),
+        episode_title: "Untitled episode".to_string(),
+        image_url: String::new(),
     }
 }
 
@@ -1389,6 +1411,40 @@ HOST: Segment text.
         assert_eq!(projection.rows[4].state, PodcastTimelineRowState::Active);
         assert_eq!(projection.rows[5].state, PodcastTimelineRowState::Future);
         assert_eq!(projection.rows[6].id, "chapter-90.5");
+    }
+
+    #[test]
+    fn now_playing_projection_matches_episode_and_show_fallbacks() {
+        let artifact = podcast_artifact(
+            "share-1",
+            "",
+            "Author fallback",
+            "",
+            "guid-1",
+            Some(3700),
+            Vec::new(),
+        );
+
+        let projection = now_playing_projection(PodcastNowPlayingProjectionInput { artifact });
+
+        assert_eq!(projection.episode_title, "Untitled episode");
+        assert_eq!(projection.show_title, "Author fallback");
+        assert_eq!(projection.image_url, "https://img.example/cover.jpg");
+
+        let artifact = podcast_artifact(
+            "share-1",
+            "Episode title",
+            "Author fallback",
+            "Show title",
+            "guid-1",
+            Some(3700),
+            Vec::new(),
+        );
+
+        let projection = now_playing_projection(PodcastNowPlayingProjectionInput { artifact });
+
+        assert_eq!(projection.episode_title, "Episode title");
+        assert_eq!(projection.show_title, "Show title");
     }
 
     #[test]
