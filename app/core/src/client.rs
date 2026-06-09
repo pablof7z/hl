@@ -2604,6 +2604,15 @@ impl HighlighterCore {
         crate::bookmarks::article_bookmark_state_projection(input)
     }
 
+    /// Project native event bookmark state. Rust owns event-id canonicalization,
+    /// current membership, forced membership, and optimistic post-toggle state.
+    pub fn project_event_bookmark_state(
+        &self,
+        input: crate::bookmarks::EventBookmarkStateProjectionInput,
+    ) -> crate::bookmarks::EventBookmarkStateProjection {
+        crate::bookmarks::event_bookmark_state_projection(input)
+    }
+
     /// Return the set of article addresses the user has bookmarked in their
     /// newest kind:10003 list (empty when not logged in or no list cached).
     pub async fn get_bookmarked_article_addresses(&self) -> StringListOutcome {

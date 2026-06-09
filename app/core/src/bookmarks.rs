@@ -56,6 +56,25 @@ pub struct ArticleBookmarkStateProjectionInput {
     pub address: String,
 }
 
+/// Native event bookmark state projection. Used for comment bookmarks and
+/// other event-id-addressed NIP-51 entries.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct EventBookmarkStateProjection {
+    pub canonical_event_id_hex: String,
+    pub can_apply: bool,
+    pub is_bookmarked: bool,
+    pub optimistic_event_ids: Vec<String>,
+}
+
+/// Native event bookmark state input. `desired_member == None` toggles;
+/// `Some(true/false)` projects an authoritative member/non-member state.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct EventBookmarkStateProjectionInput {
+    pub event_ids: Vec<String>,
+    pub event_id_hex: String,
+    pub desired_member: Option<bool>,
+}
+
 // -- Public API --------------------------------------------------------------
 
 pub fn article_bookmark_state_projection(
@@ -83,6 +102,49 @@ pub fn article_bookmark_state_projection(
         is_bookmarked,
         optimistic_addresses: addresses.into_iter().collect(),
     }
+}
+
+pub fn event_bookmark_state_projection(
+    input: EventBookmarkStateProjectionInput,
+) -> EventBookmarkStateProjection {
+    let mut event_ids = input
+        .event_ids
+        .into_iter()
+        .filter_map(|event_id| canonical_event_id_hex(&event_id))
+        .collect::<BTreeSet<_>>();
+    let Some(canonical_event_id_hex) = canonical_event_id_hex(&input.event_id_hex) else {
+        return EventBookmarkStateProjection {
+            canonical_event_id_hex: String::new(),
+            can_apply: false,
+            is_bookmarked: false,
+            optimistic_event_ids: event_ids.into_iter().collect(),
+        };
+    };
+    let is_bookmarked = event_ids.contains(&canonical_event_id_hex);
+    match input.desired_member {
+        Some(true) => {
+            event_ids.insert(canonical_event_id_hex.clone());
+        }
+        Some(false) => {
+            event_ids.remove(&canonical_event_id_hex);
+        }
+        None if is_bookmarked => {
+            event_ids.remove(&canonical_event_id_hex);
+        }
+        None => {
+            event_ids.insert(canonical_event_id_hex.clone());
+        }
+    }
+    EventBookmarkStateProjection {
+        canonical_event_id_hex,
+        can_apply: true,
+        is_bookmarked,
+        optimistic_event_ids: event_ids.into_iter().collect(),
+    }
+}
+
+fn canonical_event_id_hex(value: &str) -> Option<String> {
+    EventId::from_hex(value.trim()).ok().map(|id| id.to_hex())
 }
 
 /// Read the newest cached kind:10003 for `user_hex` and return the set of
@@ -383,5 +445,60 @@ mod tests {
         assert!(!blank.can_toggle);
         assert!(!blank.is_bookmarked);
         assert_eq!(blank.optimistic_addresses, vec!["30023:aa:essay"]);
+    }
+
+    #[test]
+    fn event_bookmark_state_projection_toggles_and_applies_authoritative_state() {
+        let event_a = "a".repeat(64);
+        let event_b = "b".repeat(64);
+        let added = event_bookmark_state_projection(EventBookmarkStateProjectionInput {
+            event_ids: vec![format!(" {event_a} "), event_a.to_uppercase()],
+            event_id_hex: format!(" {event_b}\n"),
+            desired_member: None,
+        });
+        let removed = event_bookmark_state_projection(EventBookmarkStateProjectionInput {
+            event_ids: vec![event_a.clone(), event_b.clone()],
+            event_id_hex: event_a.clone(),
+            desired_member: None,
+        });
+        let forced_member = event_bookmark_state_projection(EventBookmarkStateProjectionInput {
+            event_ids: vec![event_a.clone()],
+            event_id_hex: event_b.clone(),
+            desired_member: Some(true),
+        });
+        let forced_non_member =
+            event_bookmark_state_projection(EventBookmarkStateProjectionInput {
+                event_ids: vec![event_a.clone(), event_b.clone()],
+                event_id_hex: event_b.clone(),
+                desired_member: Some(false),
+            });
+        let invalid = event_bookmark_state_projection(EventBookmarkStateProjectionInput {
+            event_ids: vec![event_a.clone()],
+            event_id_hex: "not an event".into(),
+            desired_member: None,
+        });
+
+        assert_eq!(added.canonical_event_id_hex, event_b);
+        assert!(added.can_apply);
+        assert!(!added.is_bookmarked);
+        assert_eq!(
+            added.optimistic_event_ids,
+            vec![event_a.clone(), event_b.clone()]
+        );
+
+        assert!(removed.is_bookmarked);
+        assert_eq!(removed.optimistic_event_ids, vec![event_b.clone()]);
+        assert_eq!(
+            forced_member.optimistic_event_ids,
+            vec![event_a.clone(), event_b.clone()]
+        );
+        assert_eq!(
+            forced_non_member.optimistic_event_ids,
+            vec![event_a.clone()]
+        );
+
+        assert_eq!(invalid.canonical_event_id_hex, "");
+        assert!(!invalid.can_apply);
+        assert_eq!(invalid.optimistic_event_ids, vec![event_a]);
     }
 }

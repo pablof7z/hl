@@ -1483,6 +1483,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectDiscussionComposer(input: DiscussionComposerProjectionInput)  -> DiscussionComposerProjection
 
     /**
+     * Project native event bookmark state. Rust owns event-id canonicalization,
+     * current membership, forced membership, and optimistic post-toggle state.
+     */
+    func projectEventBookmarkState(input: EventBookmarkStateProjectionInput)  -> EventBookmarkStateProjection
+
+    /**
      * Feedback composer projection shared by new-thread and reply surfaces.
      * Rust owns submit trimming and send eligibility so each platform shell
      * renders the same enabled/disabled state.
@@ -4523,6 +4529,18 @@ open func projectDiscussionComposer(input: DiscussionComposerProjectionInput) ->
     return try!  FfiConverterTypeDiscussionComposerProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_discussion_composer(self.uniffiClonePointer(),
         FfiConverterTypeDiscussionComposerProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project native event bookmark state. Rust owns event-id canonicalization,
+     * current membership, forced membership, and optimistic post-toggle state.
+     */
+open func projectEventBookmarkState(input: EventBookmarkStateProjectionInput) -> EventBookmarkStateProjection  {
+    return try!  FfiConverterTypeEventBookmarkStateProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_event_bookmark_state(self.uniffiClonePointer(),
+        FfiConverterTypeEventBookmarkStateProjectionInput_lower(input),$0
     )
 })
 }
@@ -14335,6 +14353,178 @@ public func FfiConverterTypeDiscussionRecord_lift(_ buf: RustBuffer) throws -> D
 #endif
 public func FfiConverterTypeDiscussionRecord_lower(_ value: DiscussionRecord) -> RustBuffer {
     return FfiConverterTypeDiscussionRecord.lower(value)
+}
+
+
+/**
+ * Native event bookmark state projection. Used for comment bookmarks and
+ * other event-id-addressed NIP-51 entries.
+ */
+public struct EventBookmarkStateProjection {
+    public var canonicalEventIdHex: String
+    public var canApply: Bool
+    public var isBookmarked: Bool
+    public var optimisticEventIds: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(canonicalEventIdHex: String, canApply: Bool, isBookmarked: Bool, optimisticEventIds: [String]) {
+        self.canonicalEventIdHex = canonicalEventIdHex
+        self.canApply = canApply
+        self.isBookmarked = isBookmarked
+        self.optimisticEventIds = optimisticEventIds
+    }
+}
+
+#if compiler(>=6)
+extension EventBookmarkStateProjection: Sendable {}
+#endif
+
+
+extension EventBookmarkStateProjection: Equatable, Hashable {
+    public static func ==(lhs: EventBookmarkStateProjection, rhs: EventBookmarkStateProjection) -> Bool {
+        if lhs.canonicalEventIdHex != rhs.canonicalEventIdHex {
+            return false
+        }
+        if lhs.canApply != rhs.canApply {
+            return false
+        }
+        if lhs.isBookmarked != rhs.isBookmarked {
+            return false
+        }
+        if lhs.optimisticEventIds != rhs.optimisticEventIds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(canonicalEventIdHex)
+        hasher.combine(canApply)
+        hasher.combine(isBookmarked)
+        hasher.combine(optimisticEventIds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEventBookmarkStateProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EventBookmarkStateProjection {
+        return
+            try EventBookmarkStateProjection(
+                canonicalEventIdHex: FfiConverterString.read(from: &buf),
+                canApply: FfiConverterBool.read(from: &buf),
+                isBookmarked: FfiConverterBool.read(from: &buf),
+                optimisticEventIds: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: EventBookmarkStateProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.canonicalEventIdHex, into: &buf)
+        FfiConverterBool.write(value.canApply, into: &buf)
+        FfiConverterBool.write(value.isBookmarked, into: &buf)
+        FfiConverterSequenceString.write(value.optimisticEventIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEventBookmarkStateProjection_lift(_ buf: RustBuffer) throws -> EventBookmarkStateProjection {
+    return try FfiConverterTypeEventBookmarkStateProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEventBookmarkStateProjection_lower(_ value: EventBookmarkStateProjection) -> RustBuffer {
+    return FfiConverterTypeEventBookmarkStateProjection.lower(value)
+}
+
+
+/**
+ * Native event bookmark state input. `desired_member == None` toggles;
+ * `Some(true/false)` projects an authoritative member/non-member state.
+ */
+public struct EventBookmarkStateProjectionInput {
+    public var eventIds: [String]
+    public var eventIdHex: String
+    public var desiredMember: Bool?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventIds: [String], eventIdHex: String, desiredMember: Bool?) {
+        self.eventIds = eventIds
+        self.eventIdHex = eventIdHex
+        self.desiredMember = desiredMember
+    }
+}
+
+#if compiler(>=6)
+extension EventBookmarkStateProjectionInput: Sendable {}
+#endif
+
+
+extension EventBookmarkStateProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: EventBookmarkStateProjectionInput, rhs: EventBookmarkStateProjectionInput) -> Bool {
+        if lhs.eventIds != rhs.eventIds {
+            return false
+        }
+        if lhs.eventIdHex != rhs.eventIdHex {
+            return false
+        }
+        if lhs.desiredMember != rhs.desiredMember {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventIds)
+        hasher.combine(eventIdHex)
+        hasher.combine(desiredMember)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEventBookmarkStateProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EventBookmarkStateProjectionInput {
+        return
+            try EventBookmarkStateProjectionInput(
+                eventIds: FfiConverterSequenceString.read(from: &buf),
+                eventIdHex: FfiConverterString.read(from: &buf),
+                desiredMember: FfiConverterOptionBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: EventBookmarkStateProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.eventIds, into: &buf)
+        FfiConverterString.write(value.eventIdHex, into: &buf)
+        FfiConverterOptionBool.write(value.desiredMember, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEventBookmarkStateProjectionInput_lift(_ buf: RustBuffer) throws -> EventBookmarkStateProjectionInput {
+    return try FfiConverterTypeEventBookmarkStateProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEventBookmarkStateProjectionInput_lower(_ value: EventBookmarkStateProjectionInput) -> RustBuffer {
+    return FfiConverterTypeEventBookmarkStateProjectionInput.lower(value)
 }
 
 
@@ -31239,6 +31429,30 @@ fileprivate struct FfiConverterOptionDouble: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionBool: FfiConverterRustBuffer {
+    typealias SwiftType = Bool?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterBool.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterBool.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -33958,6 +34172,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_discussion_composer() != 16585) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_event_bookmark_state() != 7192) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_composer() != 43880) {

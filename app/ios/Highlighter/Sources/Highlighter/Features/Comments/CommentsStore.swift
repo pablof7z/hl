@@ -91,8 +91,12 @@ final class CommentsStore {
                     }
                 }
                 if let isBookmarked {
-                    if isBookmarked { self.bookmarked.insert(id) }
-                    else { self.bookmarked.remove(id) }
+                    if let projection = self.eventBookmarkStateProjection(
+                        eventIdHex: id,
+                        desiredMember: isBookmarked
+                    ) {
+                        self.bookmarked = Set(projection.optimisticEventIds)
+                    }
                 }
             }
         }
@@ -196,22 +200,42 @@ final class CommentsStore {
     // MARK: - Bookmark (kind:10003)
 
     func isBookmarked(_ commentId: String) -> Bool {
-        bookmarked.contains(commentId)
+        eventBookmarkStateProjection(eventIdHex: commentId)?.isBookmarked ?? false
     }
 
     func toggleBookmark(_ comment: CommentRecord) async {
         guard let core else { return }
-        let id = comment.eventId
-        let was = bookmarked.contains(id)
-        if was { bookmarked.remove(id) } else { bookmarked.insert(id) }
-        let outcome = await core.toggleEventBookmark(eventIdHex: id)
+        guard let projection = eventBookmarkStateProjection(eventIdHex: comment.eventId),
+              projection.canApply else { return }
+        bookmarked = Set(projection.optimisticEventIds)
+        let outcome = await core.toggleEventBookmark(eventIdHex: projection.canonicalEventIdHex)
         if outcome.error.isEmpty {
-            let now = outcome.value
-            if now { bookmarked.insert(id) } else { bookmarked.remove(id) }
+            if let confirmed = eventBookmarkStateProjection(
+                eventIdHex: projection.canonicalEventIdHex,
+                desiredMember: outcome.value
+            ) {
+                bookmarked = Set(confirmed.optimisticEventIds)
+            }
         } else {
-            // Roll back
-            if was { bookmarked.insert(id) } else { bookmarked.remove(id) }
+            if let rollback = eventBookmarkStateProjection(
+                eventIdHex: projection.canonicalEventIdHex,
+                desiredMember: projection.isBookmarked
+            ) {
+                bookmarked = Set(rollback.optimisticEventIds)
+            }
         }
+    }
+
+    private func eventBookmarkStateProjection(
+        eventIdHex: String,
+        desiredMember: Bool? = nil
+    ) -> EventBookmarkStateProjection? {
+        guard let core else { return nil }
+        return core.projectEventBookmarkState(input: EventBookmarkStateProjectionInput(
+            eventIds: Array(bookmarked),
+            eventIdHex: eventIdHex,
+            desiredMember: desiredMember
+        ))
     }
 }
 

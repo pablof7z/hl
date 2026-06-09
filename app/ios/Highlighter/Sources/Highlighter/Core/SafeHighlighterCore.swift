@@ -304,6 +304,12 @@ actor SafeHighlighterCore {
         core.projectArticleBookmarkState(input: input)
     }
 
+    nonisolated func projectEventBookmarkState(
+        input: EventBookmarkStateProjectionInput
+    ) -> EventBookmarkStateProjection {
+        core.projectEventBookmarkState(input: input)
+    }
+
     func getBookmarkedArticleAddresses() async -> StringListOutcome {
         await core.getBookmarkedArticleAddresses()
     }
