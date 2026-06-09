@@ -144,7 +144,8 @@ pub use podcast_transcript::{
 pub use profile::{
     ProfileDisplayFallback, ProfileDisplayProjection, ProfileDisplayProjectionInput,
     ProfileDisplayWithLabelProjectionInput, ProfileIdentityProjection,
-    ProfileIdentityProjectionInput, ProfileUpdateProjection, ProfileUpdateProjectionInput,
+    ProfileIdentityProjectionInput, ProfileRelationshipProjection,
+    ProfileRelationshipProjectionInput, ProfileUpdateProjection, ProfileUpdateProjectionInput,
 };
 pub use reactions::ReactionRecord;
 pub use reads::{

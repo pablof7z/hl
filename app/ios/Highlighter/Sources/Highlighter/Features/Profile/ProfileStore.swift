@@ -31,8 +31,16 @@ final class ProfileStore {
     @ObservationIgnored private var subscriptionHandle: UInt64?
 
     var isOwnProfile: Bool {
-        guard let viewerPubkey else { return false }
-        return viewerPubkey.lowercased() == pubkey.lowercased()
+        relationshipProjection.isOwnProfile
+    }
+
+    var relationshipProjection: ProfileRelationshipProjection {
+        safeCore.projectProfileRelationship(
+            input: ProfileRelationshipProjectionInput(
+                profilePubkey: pubkey,
+                viewerPubkey: viewerPubkey
+            )
+        )
     }
 
     init(
@@ -67,6 +75,7 @@ final class ProfileStore {
     // MARK: - Loads
 
     func loadAll() async {
+        let relationship = relationshipProjection
         async let profileTask: ProfileMetadata? = {
             let outcome = await safeCore.getUserProfile(pubkeyHex: pubkey)
             return outcome.error.isEmpty ? outcome.value : nil
@@ -84,10 +93,10 @@ final class ProfileStore {
             return outcome.error.isEmpty ? outcome.values : []
         }()
         async let followTask: Bool = {
-            guard let viewer = viewerPubkey, viewer.lowercased() != pubkey.lowercased() else {
+            guard relationship.shouldRefreshFollowState else {
                 return false
             }
-            let outcome = await safeCore.isFollowing(targetPubkeyHex: pubkey)
+            let outcome = await safeCore.isFollowing(targetPubkeyHex: relationship.targetPubkey)
             return outcome.error.isEmpty ? outcome.value : false
         }()
 
@@ -111,10 +120,9 @@ final class ProfileStore {
                 self.profile = p
             }
         case .refreshFollowState:
-            // A contact list changed. If it's ours, refresh isFollowing.
-            if let viewer = viewerPubkey,
-               viewer.lowercased() != pubkey.lowercased() {
-                let outcome = await safeCore.isFollowing(targetPubkeyHex: pubkey)
+            let relationship = relationshipProjection
+            if relationship.shouldRefreshFollowState {
+                let outcome = await safeCore.isFollowing(targetPubkeyHex: relationship.targetPubkey)
                 if outcome.error.isEmpty {
                     self.isFollowing = outcome.value
                 }
@@ -142,16 +150,15 @@ final class ProfileStore {
     // MARK: - Follow
 
     func toggleFollow() async {
-        guard let viewer = viewerPubkey, viewer.lowercased() != pubkey.lowercased() else {
-            return
-        }
+        let relationship = relationshipProjection
+        guard relationship.canShowFollowAction else { return }
         guard !isMutatingFollow else { return }
         isMutatingFollow = true
         followError = nil
         let wasFollowing = isFollowing
         isFollowing = !wasFollowing
         let outcome = await safeCore.setFollow(
-            targetPubkeyHex: pubkey,
+            targetPubkeyHex: relationship.targetPubkey,
             follow: !wasFollowing
         )
         if !outcome.error.isEmpty {

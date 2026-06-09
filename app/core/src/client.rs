@@ -1832,6 +1832,15 @@ impl HighlighterCore {
         profile::profile_identity_projection(input)
     }
 
+    /// Profile relationship projection. Rust owns own-profile detection and
+    /// follow-action visibility; native shells render and execute taps only.
+    pub fn project_profile_relationship(
+        &self,
+        input: profile::ProfileRelationshipProjectionInput,
+    ) -> profile::ProfileRelationshipProjection {
+        profile::profile_relationship_projection(input)
+    }
+
     /// Profile edit-form projection. Rust owns draft normalization and save
     /// eligibility; native shells bind controls to the returned projection.
     pub fn project_profile_update(

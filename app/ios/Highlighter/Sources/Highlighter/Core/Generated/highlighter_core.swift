@@ -1521,6 +1521,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectProfileIdentity(input: ProfileIdentityProjectionInput)  -> ProfileIdentityProjection
 
     /**
+     * Profile relationship projection. Rust owns own-profile detection and
+     * follow-action visibility; native shells render and execute taps only.
+     */
+    func projectProfileRelationship(input: ProfileRelationshipProjectionInput)  -> ProfileRelationshipProjection
+
+    /**
      * Profile edit-form projection. Rust owns draft normalization and save
      * eligibility; native shells bind controls to the returned projection.
      */
@@ -4583,6 +4589,18 @@ open func projectProfileIdentity(input: ProfileIdentityProjectionInput) -> Profi
     return try!  FfiConverterTypeProfileIdentityProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_profile_identity(self.uniffiClonePointer(),
         FfiConverterTypeProfileIdentityProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Profile relationship projection. Rust owns own-profile detection and
+     * follow-action visibility; native shells render and execute taps only.
+     */
+open func projectProfileRelationship(input: ProfileRelationshipProjectionInput) -> ProfileRelationshipProjection  {
+    return try!  FfiConverterTypeProfileRelationshipProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_profile_relationship(self.uniffiClonePointer(),
+        FfiConverterTypeProfileRelationshipProjectionInput_lower(input),$0
     )
 })
 }
@@ -20644,6 +20662,162 @@ public func FfiConverterTypeProfileOutcome_lower(_ value: ProfileOutcome) -> Rus
 }
 
 
+public struct ProfileRelationshipProjection {
+    public var targetPubkey: String
+    public var isOwnProfile: Bool
+    public var canShowFollowAction: Bool
+    public var shouldRefreshFollowState: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(targetPubkey: String, isOwnProfile: Bool, canShowFollowAction: Bool, shouldRefreshFollowState: Bool) {
+        self.targetPubkey = targetPubkey
+        self.isOwnProfile = isOwnProfile
+        self.canShowFollowAction = canShowFollowAction
+        self.shouldRefreshFollowState = shouldRefreshFollowState
+    }
+}
+
+#if compiler(>=6)
+extension ProfileRelationshipProjection: Sendable {}
+#endif
+
+
+extension ProfileRelationshipProjection: Equatable, Hashable {
+    public static func ==(lhs: ProfileRelationshipProjection, rhs: ProfileRelationshipProjection) -> Bool {
+        if lhs.targetPubkey != rhs.targetPubkey {
+            return false
+        }
+        if lhs.isOwnProfile != rhs.isOwnProfile {
+            return false
+        }
+        if lhs.canShowFollowAction != rhs.canShowFollowAction {
+            return false
+        }
+        if lhs.shouldRefreshFollowState != rhs.shouldRefreshFollowState {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(targetPubkey)
+        hasher.combine(isOwnProfile)
+        hasher.combine(canShowFollowAction)
+        hasher.combine(shouldRefreshFollowState)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileRelationshipProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileRelationshipProjection {
+        return
+            try ProfileRelationshipProjection(
+                targetPubkey: FfiConverterString.read(from: &buf),
+                isOwnProfile: FfiConverterBool.read(from: &buf),
+                canShowFollowAction: FfiConverterBool.read(from: &buf),
+                shouldRefreshFollowState: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileRelationshipProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.targetPubkey, into: &buf)
+        FfiConverterBool.write(value.isOwnProfile, into: &buf)
+        FfiConverterBool.write(value.canShowFollowAction, into: &buf)
+        FfiConverterBool.write(value.shouldRefreshFollowState, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileRelationshipProjection_lift(_ buf: RustBuffer) throws -> ProfileRelationshipProjection {
+    return try FfiConverterTypeProfileRelationshipProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileRelationshipProjection_lower(_ value: ProfileRelationshipProjection) -> RustBuffer {
+    return FfiConverterTypeProfileRelationshipProjection.lower(value)
+}
+
+
+public struct ProfileRelationshipProjectionInput {
+    public var profilePubkey: String
+    public var viewerPubkey: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(profilePubkey: String, viewerPubkey: String?) {
+        self.profilePubkey = profilePubkey
+        self.viewerPubkey = viewerPubkey
+    }
+}
+
+#if compiler(>=6)
+extension ProfileRelationshipProjectionInput: Sendable {}
+#endif
+
+
+extension ProfileRelationshipProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ProfileRelationshipProjectionInput, rhs: ProfileRelationshipProjectionInput) -> Bool {
+        if lhs.profilePubkey != rhs.profilePubkey {
+            return false
+        }
+        if lhs.viewerPubkey != rhs.viewerPubkey {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(profilePubkey)
+        hasher.combine(viewerPubkey)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileRelationshipProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileRelationshipProjectionInput {
+        return
+            try ProfileRelationshipProjectionInput(
+                profilePubkey: FfiConverterString.read(from: &buf),
+                viewerPubkey: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileRelationshipProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.profilePubkey, into: &buf)
+        FfiConverterOptionString.write(value.viewerPubkey, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileRelationshipProjectionInput_lift(_ buf: RustBuffer) throws -> ProfileRelationshipProjectionInput {
+    return try FfiConverterTypeProfileRelationshipProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileRelationshipProjectionInput_lower(_ value: ProfileRelationshipProjectionInput) -> RustBuffer {
+    return FfiConverterTypeProfileRelationshipProjectionInput.lower(value)
+}
+
+
 /**
  * Draft profile metadata written by the platform shell. Rust owns the
  * trimming, clear-vs-set behavior, event merge, signing, and relay publish.
@@ -32653,6 +32827,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_identity() != 18652) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_relationship() != 24727) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_update() != 16047) {

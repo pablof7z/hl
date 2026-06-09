@@ -201,7 +201,7 @@ private struct ActionRow: View {
         HStack(spacing: 12) {
             if store.isOwnProfile {
                 editButton
-            } else if store.viewerPubkey != nil {
+            } else if store.relationshipProjection.canShowFollowAction {
                 followButton
             }
             if let website = store.profile?.website, !website.isEmpty,

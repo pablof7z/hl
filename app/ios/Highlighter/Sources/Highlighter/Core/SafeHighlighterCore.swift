@@ -703,6 +703,12 @@ actor SafeHighlighterCore {
         core.projectProfileIdentity(input: input)
     }
 
+    nonisolated func projectProfileRelationship(
+        input: ProfileRelationshipProjectionInput
+    ) -> ProfileRelationshipProjection {
+        core.projectProfileRelationship(input: input)
+    }
+
     nonisolated func projectProfileUpdate(
         input: ProfileUpdateProjectionInput
     ) -> ProfileUpdateProjection {

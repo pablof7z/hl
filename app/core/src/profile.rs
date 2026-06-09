@@ -162,6 +162,20 @@ pub struct ProfileIdentityProjection {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileRelationshipProjectionInput {
+    pub profile_pubkey: String,
+    pub viewer_pubkey: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProfileRelationshipProjection {
+    pub target_pubkey: String,
+    pub is_own_profile: bool,
+    pub can_show_follow_action: bool,
+    pub should_refresh_follow_state: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct ProfileUpdateProjectionInput {
     pub initial: Option<ProfileMetadata>,
     pub name: String,
@@ -301,6 +315,30 @@ pub fn profile_identity_projection(
         picture_url: display.picture_url,
         bio,
         verified_nip05,
+    }
+}
+
+/// Profile relationship projection. Rust owns pubkey normalization, own-profile
+/// detection, and whether native shells should show or refresh follow state.
+pub fn profile_relationship_projection(
+    input: ProfileRelationshipProjectionInput,
+) -> ProfileRelationshipProjection {
+    let target_pubkey = input.profile_pubkey.trim().to_string();
+    let viewer_pubkey = input
+        .viewer_pubkey
+        .as_deref()
+        .map(str::trim)
+        .filter(|viewer| !viewer.is_empty());
+    let has_target = !target_pubkey.is_empty();
+    let is_own_profile = viewer_pubkey
+        .is_some_and(|viewer| has_target && viewer.eq_ignore_ascii_case(&target_pubkey));
+    let can_show_follow_action = viewer_pubkey.is_some() && has_target && !is_own_profile;
+
+    ProfileRelationshipProjection {
+        target_pubkey,
+        is_own_profile,
+        can_show_follow_action,
+        should_refresh_follow_state: can_show_follow_action,
     }
 }
 
@@ -835,6 +873,37 @@ mod tests {
 
         assert_eq!(projection.verified_nip05, None);
         assert!(projection.bio.is_empty());
+    }
+
+    #[test]
+    fn profile_relationship_projection_detects_own_profile_case_insensitive() {
+        let projection = profile_relationship_projection(ProfileRelationshipProjectionInput {
+            profile_pubkey: "  ABCDEF  ".into(),
+            viewer_pubkey: Some("abcdef".into()),
+        });
+
+        assert_eq!(projection.target_pubkey, "ABCDEF");
+        assert!(projection.is_own_profile);
+        assert!(!projection.can_show_follow_action);
+        assert!(!projection.should_refresh_follow_state);
+    }
+
+    #[test]
+    fn profile_relationship_projection_requires_logged_in_distinct_viewer() {
+        let logged_out = profile_relationship_projection(ProfileRelationshipProjectionInput {
+            profile_pubkey: "abcdef".into(),
+            viewer_pubkey: None,
+        });
+        let distinct = profile_relationship_projection(ProfileRelationshipProjectionInput {
+            profile_pubkey: "abcdef".into(),
+            viewer_pubkey: Some("123456".into()),
+        });
+
+        assert!(!logged_out.is_own_profile);
+        assert!(!logged_out.can_show_follow_action);
+        assert!(!logged_out.should_refresh_follow_state);
+        assert!(distinct.can_show_follow_action);
+        assert!(distinct.should_refresh_follow_state);
     }
 
     #[test]
