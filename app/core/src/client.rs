@@ -3024,6 +3024,13 @@ impl HighlighterCore {
         isbn_lookup::manual_preview_projection(input)
     }
 
+    pub fn project_isbn_preview_request(
+        &self,
+        input: isbn_lookup::IsbnPreviewRequestProjectionInput,
+    ) -> isbn_lookup::IsbnPreviewRequestProjection {
+        isbn_lookup::isbn_preview_request_projection(input)
+    }
+
     /// Resolve an ISBN against the bounded recent-book projection already
     /// rendered by the native picker. Rust owns the canonical ISBN reference
     /// matching; native shells only decide how to present the selected record.
@@ -3157,6 +3164,15 @@ impl HighlighterCore {
     /// URL through this, then calls `publish_artifact` to post the kind:11.
     pub async fn build_preview_from_url(&self, url: String) -> ArtifactPreviewOutcome {
         artifact_preview_outcome(crate::artifacts::build_preview(&url))
+    }
+
+    /// Project native web metadata request state. Rust owns URL validity,
+    /// canonical fetch URL, and mirror cache keys.
+    pub fn project_web_metadata_request(
+        &self,
+        input: web_metadata::WebMetadataRequestProjectionInput,
+    ) -> web_metadata::WebMetadataRequestProjection {
+        web_metadata::web_metadata_request_projection(input)
     }
 
     /// Fetch OpenGraph + favicon metadata for a web URL. Backed by a

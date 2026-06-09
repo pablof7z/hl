@@ -1523,6 +1523,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectIsbnManualPreview(input: IsbnManualPreviewProjectionInput)  -> IsbnManualPreviewProjection
 
+    func projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput)  -> IsbnPreviewRequestProjection
+
     func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput)  -> NostrEntityArticleCardProjection
 
     /**
@@ -1603,6 +1605,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput)  -> ShareArtifactTargetProjection
 
     func projectWebBookmarkRow(input: WebBookmarkRowProjectionInput)  -> WebBookmarkRowProjection
+
+    /**
+     * Project native web metadata request state. Rust owns URL validity,
+     * canonical fetch URL, and mirror cache keys.
+     */
+    func projectWebMetadataRequest(input: WebMetadataRequestProjectionInput)  -> WebMetadataRequestProjection
 
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
 
@@ -4626,6 +4634,14 @@ open func projectIsbnManualPreview(input: IsbnManualPreviewProjectionInput) -> I
 })
 }
 
+open func projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput) -> IsbnPreviewRequestProjection  {
+    return try!  FfiConverterTypeIsbnPreviewRequestProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_isbn_preview_request(self.uniffiClonePointer(),
+        FfiConverterTypeIsbnPreviewRequestProjectionInput_lower(input),$0
+    )
+})
+}
+
 open func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput) -> NostrEntityArticleCardProjection  {
     return try!  FfiConverterTypeNostrEntityArticleCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_nostr_entity_article_card(self.uniffiClonePointer(),
@@ -4872,6 +4888,18 @@ open func projectWebBookmarkRow(input: WebBookmarkRowProjectionInput) -> WebBook
     return try!  FfiConverterTypeWebBookmarkRowProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_web_bookmark_row(self.uniffiClonePointer(),
         FfiConverterTypeWebBookmarkRowProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project native web metadata request state. Rust owns URL validity,
+     * canonical fetch URL, and mirror cache keys.
+     */
+open func projectWebMetadataRequest(input: WebMetadataRequestProjectionInput) -> WebMetadataRequestProjection  {
+    return try!  FfiConverterTypeWebMetadataRequestProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_web_metadata_request(self.uniffiClonePointer(),
+        FfiConverterTypeWebMetadataRequestProjectionInput_lower(input),$0
     )
 })
 }
@@ -17911,6 +17939,138 @@ public func FfiConverterTypeIsbnManualPreviewProjectionInput_lower(_ value: Isbn
 }
 
 
+public struct IsbnPreviewRequestProjection {
+    public var normalizedIsbn: String
+    public var canRequest: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(normalizedIsbn: String, canRequest: Bool) {
+        self.normalizedIsbn = normalizedIsbn
+        self.canRequest = canRequest
+    }
+}
+
+#if compiler(>=6)
+extension IsbnPreviewRequestProjection: Sendable {}
+#endif
+
+
+extension IsbnPreviewRequestProjection: Equatable, Hashable {
+    public static func ==(lhs: IsbnPreviewRequestProjection, rhs: IsbnPreviewRequestProjection) -> Bool {
+        if lhs.normalizedIsbn != rhs.normalizedIsbn {
+            return false
+        }
+        if lhs.canRequest != rhs.canRequest {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(normalizedIsbn)
+        hasher.combine(canRequest)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIsbnPreviewRequestProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnPreviewRequestProjection {
+        return
+            try IsbnPreviewRequestProjection(
+                normalizedIsbn: FfiConverterString.read(from: &buf),
+                canRequest: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IsbnPreviewRequestProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.normalizedIsbn, into: &buf)
+        FfiConverterBool.write(value.canRequest, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnPreviewRequestProjection_lift(_ buf: RustBuffer) throws -> IsbnPreviewRequestProjection {
+    return try FfiConverterTypeIsbnPreviewRequestProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnPreviewRequestProjection_lower(_ value: IsbnPreviewRequestProjection) -> RustBuffer {
+    return FfiConverterTypeIsbnPreviewRequestProjection.lower(value)
+}
+
+
+public struct IsbnPreviewRequestProjectionInput {
+    public var isbn: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(isbn: String) {
+        self.isbn = isbn
+    }
+}
+
+#if compiler(>=6)
+extension IsbnPreviewRequestProjectionInput: Sendable {}
+#endif
+
+
+extension IsbnPreviewRequestProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: IsbnPreviewRequestProjectionInput, rhs: IsbnPreviewRequestProjectionInput) -> Bool {
+        if lhs.isbn != rhs.isbn {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isbn)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIsbnPreviewRequestProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnPreviewRequestProjectionInput {
+        return
+            try IsbnPreviewRequestProjectionInput(
+                isbn: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IsbnPreviewRequestProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.isbn, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnPreviewRequestProjectionInput_lift(_ buf: RustBuffer) throws -> IsbnPreviewRequestProjectionInput {
+    return try FfiConverterTypeIsbnPreviewRequestProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnPreviewRequestProjectionInput_lower(_ value: IsbnPreviewRequestProjectionInput) -> RustBuffer {
+    return FfiConverterTypeIsbnPreviewRequestProjectionInput.lower(value)
+}
+
+
 public struct MutationOutcome {
     public var applied: Bool
     public var error: String
@@ -28185,6 +28345,153 @@ public func FfiConverterTypeWebMetadataOutcome_lower(_ value: WebMetadataOutcome
 }
 
 
+/**
+ * Native web metadata request projection. Rust owns URL validity,
+ * canonicalization, and the mirror keys native shells should hydrate.
+ */
+public struct WebMetadataRequestProjection {
+    public var canonicalUrl: String
+    public var canRequest: Bool
+    public var cacheKeys: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(canonicalUrl: String, canRequest: Bool, cacheKeys: [String]) {
+        self.canonicalUrl = canonicalUrl
+        self.canRequest = canRequest
+        self.cacheKeys = cacheKeys
+    }
+}
+
+#if compiler(>=6)
+extension WebMetadataRequestProjection: Sendable {}
+#endif
+
+
+extension WebMetadataRequestProjection: Equatable, Hashable {
+    public static func ==(lhs: WebMetadataRequestProjection, rhs: WebMetadataRequestProjection) -> Bool {
+        if lhs.canonicalUrl != rhs.canonicalUrl {
+            return false
+        }
+        if lhs.canRequest != rhs.canRequest {
+            return false
+        }
+        if lhs.cacheKeys != rhs.cacheKeys {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(canonicalUrl)
+        hasher.combine(canRequest)
+        hasher.combine(cacheKeys)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWebMetadataRequestProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebMetadataRequestProjection {
+        return
+            try WebMetadataRequestProjection(
+                canonicalUrl: FfiConverterString.read(from: &buf),
+                canRequest: FfiConverterBool.read(from: &buf),
+                cacheKeys: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WebMetadataRequestProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.canonicalUrl, into: &buf)
+        FfiConverterBool.write(value.canRequest, into: &buf)
+        FfiConverterSequenceString.write(value.cacheKeys, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebMetadataRequestProjection_lift(_ buf: RustBuffer) throws -> WebMetadataRequestProjection {
+    return try FfiConverterTypeWebMetadataRequestProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebMetadataRequestProjection_lower(_ value: WebMetadataRequestProjection) -> RustBuffer {
+    return FfiConverterTypeWebMetadataRequestProjection.lower(value)
+}
+
+
+/**
+ * Native web metadata request input.
+ */
+public struct WebMetadataRequestProjectionInput {
+    public var url: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String) {
+        self.url = url
+    }
+}
+
+#if compiler(>=6)
+extension WebMetadataRequestProjectionInput: Sendable {}
+#endif
+
+
+extension WebMetadataRequestProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: WebMetadataRequestProjectionInput, rhs: WebMetadataRequestProjectionInput) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWebMetadataRequestProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebMetadataRequestProjectionInput {
+        return
+            try WebMetadataRequestProjectionInput(
+                url: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WebMetadataRequestProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebMetadataRequestProjectionInput_lift(_ buf: RustBuffer) throws -> WebMetadataRequestProjectionInput {
+    return try FfiConverterTypeWebMetadataRequestProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebMetadataRequestProjectionInput_lower(_ value: WebMetadataRequestProjectionInput) -> RustBuffer {
+    return FfiConverterTypeWebMetadataRequestProjectionInput.lower(value)
+}
+
+
 public struct WhatsNewEntriesOutcome {
     public var entries: [WhatsNewEntry]
     public var error: String
@@ -33686,6 +33993,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_isbn_manual_preview() != 64480) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_isbn_preview_request() != 19235) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_nostr_entity_article_card() != 6476) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -33768,6 +34078,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_web_bookmark_row() != 39985) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_web_metadata_request() != 53856) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 1182) {

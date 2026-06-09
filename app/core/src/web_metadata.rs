@@ -56,6 +56,21 @@ pub struct WebMetadata {
     pub fetched_at: u64,
 }
 
+/// Native web metadata request projection. Rust owns URL validity,
+/// canonicalization, and the mirror keys native shells should hydrate.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WebMetadataRequestProjection {
+    pub canonical_url: String,
+    pub can_request: bool,
+    pub cache_keys: Vec<String>,
+}
+
+/// Native web metadata request input.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct WebMetadataRequestProjectionInput {
+    pub url: String,
+}
+
 impl WebMetadata {
     fn empty(url: String) -> Self {
         Self {
@@ -75,6 +90,29 @@ impl WebMetadata {
             && self.title.is_empty()
             && self.image.is_empty()
             && self.favicon.is_empty()
+    }
+}
+
+pub fn web_metadata_request_projection(
+    input: WebMetadataRequestProjectionInput,
+) -> WebMetadataRequestProjection {
+    let raw_url = input.url.trim().to_string();
+    let Some(canonical_url) = crate::artifacts::normalize_artifact_url(&input.url) else {
+        return WebMetadataRequestProjection {
+            canonical_url: String::new(),
+            can_request: false,
+            cache_keys: Vec::new(),
+        };
+    };
+
+    let mut cache_keys = vec![canonical_url.clone()];
+    if !raw_url.is_empty() && raw_url != canonical_url {
+        cache_keys.push(raw_url);
+    }
+    WebMetadataRequestProjection {
+        canonical_url,
+        can_request: true,
+        cache_keys,
     }
 }
 
@@ -696,6 +734,30 @@ mod tests {
         // caller treat it as NotFound without re-fetching.
         let read = store.get("https://example.com/dead").expect("hit");
         assert!(read.is_negative());
+    }
+
+    #[test]
+    fn web_metadata_request_projection_canonicalizes_and_exposes_cache_keys() {
+        let projected = web_metadata_request_projection(WebMetadataRequestProjectionInput {
+            url: " https://Example.com/post/?utm_source=x&b=2&a=1#frag ".into(),
+        });
+        let invalid = web_metadata_request_projection(WebMetadataRequestProjectionInput {
+            url: "ftp://example.com/post".into(),
+        });
+
+        assert_eq!(projected.canonical_url, "https://example.com/post?a=1&b=2");
+        assert!(projected.can_request);
+        assert_eq!(
+            projected.cache_keys,
+            vec![
+                "https://example.com/post?a=1&b=2",
+                "https://Example.com/post/?utm_source=x&b=2&a=1#frag"
+            ]
+        );
+
+        assert_eq!(invalid.canonical_url, "");
+        assert!(!invalid.can_request);
+        assert!(invalid.cache_keys.is_empty());
     }
 
     #[test]

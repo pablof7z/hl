@@ -103,7 +103,8 @@ pub use highlights::{
 };
 pub use isbn_lookup::{
     BookPickerQueryProjection, BookPickerQueryProjectionInput, IsbnManualPreviewProjection,
-    IsbnManualPreviewProjectionInput,
+    IsbnManualPreviewProjectionInput, IsbnPreviewRequestProjection,
+    IsbnPreviewRequestProjectionInput,
 };
 pub use lists::{
     BookmarkSetDetailProjection, BookmarkSetDetailProjectionInput, BookmarkSetRowProjection,
@@ -195,5 +196,7 @@ pub use share_targets::{
 pub use time_labels::{
     RelativeTimeLabelInput, RelativeTimeLabelProjection, RelativeTimeLabelStyle,
 };
-pub use web_metadata::WebMetadata;
+pub use web_metadata::{
+    WebMetadata, WebMetadataRequestProjection, WebMetadataRequestProjectionInput,
+};
 pub use whats_new::WhatsNewEntry;

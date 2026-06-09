@@ -454,6 +454,12 @@ actor SafeHighlighterCore {
         core.projectIsbnManualPreview(input: input)
     }
 
+    nonisolated func projectIsbnPreviewRequest(
+        input: IsbnPreviewRequestProjectionInput
+    ) -> IsbnPreviewRequestProjection {
+        core.projectIsbnPreviewRequest(input: input)
+    }
+
     nonisolated func findExistingBookForIsbn(
         _ isbn: String,
         recents: [ArtifactRecord]
@@ -555,6 +561,12 @@ actor SafeHighlighterCore {
 
     func buildPreviewFromUrl(_ url: String) async -> ArtifactPreviewOutcome {
         await core.buildPreviewFromUrl(url: url)
+    }
+
+    nonisolated func projectWebMetadataRequest(
+        input: WebMetadataRequestProjectionInput
+    ) -> WebMetadataRequestProjection {
+        core.projectWebMetadataRequest(input: input)
     }
 
     func getWebMetadata(url: String) async -> WebMetadataOutcome {

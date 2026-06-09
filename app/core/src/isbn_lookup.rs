@@ -46,6 +46,17 @@ pub struct IsbnManualPreviewProjection {
     pub can_use: bool,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct IsbnPreviewRequestProjectionInput {
+    pub isbn: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct IsbnPreviewRequestProjection {
+    pub normalized_isbn: String,
+    pub can_request: bool,
+}
+
 /// Rust-owned persistent ISBN preview cache.
 ///
 /// Native callers should not mirror this in `UserDefaults`; they ask Rust for
@@ -199,6 +210,23 @@ pub fn manual_preview_projection(
         can_use: !title.is_empty(),
         title,
         author: input.author.trim().to_string(),
+    }
+}
+
+/// Project an ISBN preview request. Rust owns ISBN-13 normalization and
+/// whether the native shell should fetch/cache a preview.
+pub fn isbn_preview_request_projection(
+    input: IsbnPreviewRequestProjectionInput,
+) -> IsbnPreviewRequestProjection {
+    match normalize_isbn(&input.isbn) {
+        Ok(normalized_isbn) => IsbnPreviewRequestProjection {
+            normalized_isbn,
+            can_request: true,
+        },
+        Err(_) => IsbnPreviewRequestProjection {
+            normalized_isbn: String::new(),
+            can_request: false,
+        },
     }
 }
 
@@ -726,6 +754,21 @@ mod tests {
         assert!(projection.can_use);
         assert_eq!(blank.title, "");
         assert!(!blank.can_use);
+    }
+
+    #[test]
+    fn isbn_preview_request_projection_normalizes_and_blocks_invalid_input() {
+        let projection = isbn_preview_request_projection(IsbnPreviewRequestProjectionInput {
+            isbn: " 0735211299 ".into(),
+        });
+        let invalid = isbn_preview_request_projection(IsbnPreviewRequestProjectionInput {
+            isbn: "not an isbn".into(),
+        });
+
+        assert_eq!(projection.normalized_isbn, "9780735211292");
+        assert!(projection.can_request);
+        assert_eq!(invalid.normalized_isbn, "");
+        assert!(!invalid.can_request);
     }
 
     #[test]

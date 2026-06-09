@@ -227,33 +227,60 @@ final class HighlighterStore {
     /// map deduplicates Swift-side, the Rust store deduplicates HTTP-side.
     /// No-op when the URL is already cached in `webMetadataCache`.
     func requestWebMetadata(url: String) async {
-        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        if webMetadataCache[trimmed] != nil { return }
-        if let existing = webMetadataInflight[trimmed] {
-            await existing.value
+        let projection = safeCore.projectWebMetadataRequest(input: WebMetadataRequestProjectionInput(url: url))
+        guard projection.canRequest else { return }
+        let canonicalUrl = projection.canonicalUrl
+        let cacheKeys = projection.cacheKeys
+        if let metadata = cachedWebMetadata(for: cacheKeys) {
+            applyWebMetadata(metadata, cacheKeys: cacheKeys)
             return
         }
-        let task = Task { [weak self] in
+        if let existing = webMetadataInflight[canonicalUrl] {
+            await existing.value
+            if let metadata = cachedWebMetadata(for: cacheKeys) {
+                applyWebMetadata(metadata, cacheKeys: cacheKeys)
+            }
+            return
+        }
+        let task = Task { [weak self, canonicalUrl, cacheKeys] in
             guard let self else { return }
-            let outcome = await self.safeCore.getWebMetadata(url: trimmed)
+            let outcome = await self.safeCore.getWebMetadata(url: canonicalUrl)
             await MainActor.run {
                 if outcome.error.isEmpty, let metadata = outcome.value {
-                    self.webMetadataCache[trimmed] = metadata
+                    self.applyWebMetadata(metadata, cacheKeys: cacheKeys)
                 }
-                self.webMetadataInflight.removeValue(forKey: trimmed)
+                self.webMetadataInflight.removeValue(forKey: canonicalUrl)
             }
         }
-        webMetadataInflight[trimmed] = task
+        webMetadataInflight[canonicalUrl] = task
         await task.value
+    }
+
+    private func cachedWebMetadata(for cacheKeys: [String]) -> WebMetadata? {
+        for key in cacheKeys {
+            if let metadata = webMetadataCache[key] {
+                return metadata
+            }
+        }
+        return nil
+    }
+
+    private func applyWebMetadata(_ metadata: WebMetadata, cacheKeys: [String]) {
+        for key in cacheKeys {
+            webMetadataCache[key] = metadata
+        }
+        if !metadata.url.isEmpty {
+            webMetadataCache[metadata.url] = metadata
+        }
     }
 
     /// Fetch + cache an ISBN preview. Concurrent callers for the same ISBN
     /// coalesce onto one in-flight Task. No-op when already cached.
-    /// `isbn` must be the bare 13-digit string (no "isbn:" prefix).
+    /// Rust canonicalizes the input to ISBN-13 before lookup.
     func requestIsbnPreview(isbn: String) async {
-        let key = isbn.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
+        let projection = safeCore.projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput(isbn: isbn))
+        guard projection.canRequest else { return }
+        let key = projection.normalizedIsbn
         if isbnPreviewCache[key] != nil { return }
         if let existing = isbnInflight[key] {
             await existing.value
