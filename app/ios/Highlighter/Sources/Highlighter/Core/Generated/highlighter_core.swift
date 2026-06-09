@@ -19417,7 +19417,10 @@ public func FfiConverterTypeReactionSummaryOutcome_lower(_ value: ReactionSummar
 
 
 public struct ReadingFeedCardProjection {
-    public var metaBits: [String]
+    public var displayTitle: String
+    public var titleIsFallback: Bool
+    public var imageUrl: String?
+    public var metaText: String?
     public var showSocialSignal: Bool
     public var visibleInteractorPubkeys: [String]
     public var primaryInteractorPubkey: String?
@@ -19426,8 +19429,11 @@ public struct ReadingFeedCardProjection {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(metaBits: [String], showSocialSignal: Bool, visibleInteractorPubkeys: [String], primaryInteractorPubkey: String?, socialText: String, relativeUnixSeconds: UInt64?) {
-        self.metaBits = metaBits
+    public init(displayTitle: String, titleIsFallback: Bool, imageUrl: String?, metaText: String?, showSocialSignal: Bool, visibleInteractorPubkeys: [String], primaryInteractorPubkey: String?, socialText: String, relativeUnixSeconds: UInt64?) {
+        self.displayTitle = displayTitle
+        self.titleIsFallback = titleIsFallback
+        self.imageUrl = imageUrl
+        self.metaText = metaText
         self.showSocialSignal = showSocialSignal
         self.visibleInteractorPubkeys = visibleInteractorPubkeys
         self.primaryInteractorPubkey = primaryInteractorPubkey
@@ -19443,7 +19449,16 @@ extension ReadingFeedCardProjection: Sendable {}
 
 extension ReadingFeedCardProjection: Equatable, Hashable {
     public static func ==(lhs: ReadingFeedCardProjection, rhs: ReadingFeedCardProjection) -> Bool {
-        if lhs.metaBits != rhs.metaBits {
+        if lhs.displayTitle != rhs.displayTitle {
+            return false
+        }
+        if lhs.titleIsFallback != rhs.titleIsFallback {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        if lhs.metaText != rhs.metaText {
             return false
         }
         if lhs.showSocialSignal != rhs.showSocialSignal {
@@ -19465,7 +19480,10 @@ extension ReadingFeedCardProjection: Equatable, Hashable {
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(metaBits)
+        hasher.combine(displayTitle)
+        hasher.combine(titleIsFallback)
+        hasher.combine(imageUrl)
+        hasher.combine(metaText)
         hasher.combine(showSocialSignal)
         hasher.combine(visibleInteractorPubkeys)
         hasher.combine(primaryInteractorPubkey)
@@ -19483,7 +19501,10 @@ public struct FfiConverterTypeReadingFeedCardProjection: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadingFeedCardProjection {
         return
             try ReadingFeedCardProjection(
-                metaBits: FfiConverterSequenceString.read(from: &buf),
+                displayTitle: FfiConverterString.read(from: &buf),
+                titleIsFallback: FfiConverterBool.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                metaText: FfiConverterOptionString.read(from: &buf),
                 showSocialSignal: FfiConverterBool.read(from: &buf),
                 visibleInteractorPubkeys: FfiConverterSequenceString.read(from: &buf),
                 primaryInteractorPubkey: FfiConverterOptionString.read(from: &buf),
@@ -19493,7 +19514,10 @@ public struct FfiConverterTypeReadingFeedCardProjection: FfiConverterRustBuffer 
     }
 
     public static func write(_ value: ReadingFeedCardProjection, into buf: inout [UInt8]) {
-        FfiConverterSequenceString.write(value.metaBits, into: &buf)
+        FfiConverterString.write(value.displayTitle, into: &buf)
+        FfiConverterBool.write(value.titleIsFallback, into: &buf)
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
+        FfiConverterOptionString.write(value.metaText, into: &buf)
         FfiConverterBool.write(value.showSocialSignal, into: &buf)
         FfiConverterSequenceString.write(value.visibleInteractorPubkeys, into: &buf)
         FfiConverterOptionString.write(value.primaryInteractorPubkey, into: &buf)
@@ -22196,20 +22220,26 @@ public func FfiConverterTypeRoomLane_lower(_ value: RoomLane) -> RustBuffer {
 
 
 public struct RoomLibraryArticleCardProjection {
+    public var displayTitle: String
+    public var titleIsFallback: Bool
+    public var imageUrl: String?
     public var articleAuthorPubkey: String?
     public var avatarPubkey: String
     public var authorProfilePubkey: String
     public var relativeUnixSeconds: UInt64?
-    public var metaBits: [String]
+    public var metaText: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(articleAuthorPubkey: String?, avatarPubkey: String, authorProfilePubkey: String, relativeUnixSeconds: UInt64?, metaBits: [String]) {
+    public init(displayTitle: String, titleIsFallback: Bool, imageUrl: String?, articleAuthorPubkey: String?, avatarPubkey: String, authorProfilePubkey: String, relativeUnixSeconds: UInt64?, metaText: String?) {
+        self.displayTitle = displayTitle
+        self.titleIsFallback = titleIsFallback
+        self.imageUrl = imageUrl
         self.articleAuthorPubkey = articleAuthorPubkey
         self.avatarPubkey = avatarPubkey
         self.authorProfilePubkey = authorProfilePubkey
         self.relativeUnixSeconds = relativeUnixSeconds
-        self.metaBits = metaBits
+        self.metaText = metaText
     }
 }
 
@@ -22220,6 +22250,15 @@ extension RoomLibraryArticleCardProjection: Sendable {}
 
 extension RoomLibraryArticleCardProjection: Equatable, Hashable {
     public static func ==(lhs: RoomLibraryArticleCardProjection, rhs: RoomLibraryArticleCardProjection) -> Bool {
+        if lhs.displayTitle != rhs.displayTitle {
+            return false
+        }
+        if lhs.titleIsFallback != rhs.titleIsFallback {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
         if lhs.articleAuthorPubkey != rhs.articleAuthorPubkey {
             return false
         }
@@ -22232,18 +22271,21 @@ extension RoomLibraryArticleCardProjection: Equatable, Hashable {
         if lhs.relativeUnixSeconds != rhs.relativeUnixSeconds {
             return false
         }
-        if lhs.metaBits != rhs.metaBits {
+        if lhs.metaText != rhs.metaText {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayTitle)
+        hasher.combine(titleIsFallback)
+        hasher.combine(imageUrl)
         hasher.combine(articleAuthorPubkey)
         hasher.combine(avatarPubkey)
         hasher.combine(authorProfilePubkey)
         hasher.combine(relativeUnixSeconds)
-        hasher.combine(metaBits)
+        hasher.combine(metaText)
     }
 }
 
@@ -22256,20 +22298,26 @@ public struct FfiConverterTypeRoomLibraryArticleCardProjection: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryArticleCardProjection {
         return
             try RoomLibraryArticleCardProjection(
+                displayTitle: FfiConverterString.read(from: &buf),
+                titleIsFallback: FfiConverterBool.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
                 articleAuthorPubkey: FfiConverterOptionString.read(from: &buf),
                 avatarPubkey: FfiConverterString.read(from: &buf),
                 authorProfilePubkey: FfiConverterString.read(from: &buf),
                 relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
-                metaBits: FfiConverterSequenceString.read(from: &buf)
+                metaText: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: RoomLibraryArticleCardProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayTitle, into: &buf)
+        FfiConverterBool.write(value.titleIsFallback, into: &buf)
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
         FfiConverterOptionString.write(value.articleAuthorPubkey, into: &buf)
         FfiConverterString.write(value.avatarPubkey, into: &buf)
         FfiConverterString.write(value.authorProfilePubkey, into: &buf)
         FfiConverterOptionUInt64.write(value.relativeUnixSeconds, into: &buf)
-        FfiConverterSequenceString.write(value.metaBits, into: &buf)
+        FfiConverterOptionString.write(value.metaText, into: &buf)
     }
 }
 

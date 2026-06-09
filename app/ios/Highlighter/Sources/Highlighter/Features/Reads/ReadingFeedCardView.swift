@@ -13,13 +13,14 @@ struct ReadingFeedCardView: View {
         let projection = cardProjection
 
         ReadingCard(
-            title: item.article.title,
+            title: projection.displayTitle,
+            titleIsFallback: projection.titleIsFallback,
             summary: item.article.summary,
-            imageURL: coverURL,
+            imageURL: projection.imageUrl.flatMap { URL(string: $0) },
             authorName: author.displayName,
             authorPubkey: item.article.pubkey,
             relativeDate: relativeDate(projection.relativeUnixSeconds),
-            metaBits: projection.metaBits,
+            metaText: projection.metaText,
             showTrailing: projection.showSocialSignal,
             avatar: {
                 AuthorAvatar(
@@ -86,11 +87,6 @@ struct ReadingFeedCardView: View {
     }
 
     // MARK: - Derived bits
-
-    private var coverURL: URL? {
-        guard !item.article.image.isEmpty else { return nil }
-        return URL(string: item.article.image)
-    }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
         guard let seconds else { return nil }

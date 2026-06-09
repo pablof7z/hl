@@ -9,11 +9,14 @@ pub struct RoomLibraryArticleCardProjectionInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RoomLibraryArticleCardProjection {
+    pub display_title: String,
+    pub title_is_fallback: bool,
+    pub image_url: Option<String>,
     pub article_author_pubkey: Option<String>,
     pub avatar_pubkey: String,
     pub author_profile_pubkey: String,
     pub relative_unix_seconds: Option<u64>,
-    pub meta_bits: Vec<String>,
+    pub meta_text: Option<String>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -69,6 +72,8 @@ pub fn article_card_projection(
     input: RoomLibraryArticleCardProjectionInput,
 ) -> RoomLibraryArticleCardProjection {
     let artifact = input.artifact;
+    let (display_title, title_is_fallback) = title_or_fallback(&artifact);
+    let meta_bits = article_meta_bits(&artifact, input.comment_count);
     let route = artifact_detail::route_for_artifact(&artifact);
     let article_author_pubkey =
         if route.target == ArtifactDetailTarget::Article && !route.article_pubkey.is_empty() {
@@ -82,11 +87,14 @@ pub fn article_card_projection(
         .unwrap_or_else(|| artifact.pubkey.clone());
 
     RoomLibraryArticleCardProjection {
+        display_title,
+        title_is_fallback,
+        image_url: non_empty_string(&artifact.preview.image),
         article_author_pubkey,
         avatar_pubkey,
         author_profile_pubkey,
         relative_unix_seconds: artifact.created_at.filter(|seconds| *seconds > 0),
-        meta_bits: article_meta_bits(&artifact, input.comment_count),
+        meta_text: joined_meta_text(&meta_bits),
     }
 }
 
@@ -160,6 +168,14 @@ fn article_meta_bits(artifact: &ArtifactRecord, comment_count: u32) -> Vec<Strin
     out
 }
 
+fn joined_meta_text(bits: &[String]) -> Option<String> {
+    if bits.is_empty() {
+        None
+    } else {
+        Some(bits.join(" · "))
+    }
+}
+
 fn title_or_fallback(artifact: &ArtifactRecord) -> (String, bool) {
     if artifact.preview.title.is_empty() {
         ("Untitled".into(), true)
@@ -207,6 +223,8 @@ mod tests {
     #[test]
     fn article_card_projection_uses_article_author_and_meta_bits() {
         let mut artifact = artifact_record("article");
+        artifact.preview.title = "Article title".into();
+        artifact.preview.image = "https://example.com/article.jpg".into();
         artifact.preview.reference_tag_name = "a".into();
         artifact.preview.reference_tag_value = "30023:authorpubkey:essay".into();
         artifact.preview.domain = "example.com".into();
@@ -217,6 +235,12 @@ mod tests {
             comment_count: 2,
         });
 
+        assert_eq!(projection.display_title, "Article title");
+        assert!(!projection.title_is_fallback);
+        assert_eq!(
+            projection.image_url,
+            Some("https://example.com/article.jpg".into())
+        );
         assert_eq!(
             projection.article_author_pubkey,
             Some("authorpubkey".into())
@@ -225,14 +249,15 @@ mod tests {
         assert_eq!(projection.author_profile_pubkey, "authorpubkey");
         assert_eq!(projection.relative_unix_seconds, Some(123));
         assert_eq!(
-            projection.meta_bits,
-            vec!["example.com".to_string(), "2 comments".to_string()]
+            projection.meta_text,
+            Some("example.com · 2 comments".to_string())
         );
     }
 
     #[test]
     fn article_card_projection_preserves_fallbacks_without_article_route() {
         let mut artifact = artifact_record("web");
+        artifact.preview.title.clear();
         artifact.pubkey = "sharerpubkey".into();
         artifact.created_at = Some(0);
 
@@ -241,11 +266,14 @@ mod tests {
             comment_count: 1,
         });
 
+        assert_eq!(projection.display_title, "Untitled");
+        assert!(projection.title_is_fallback);
+        assert_eq!(projection.image_url, None);
         assert_eq!(projection.article_author_pubkey, None);
         assert_eq!(projection.avatar_pubkey, "sharerpubkey");
         assert_eq!(projection.author_profile_pubkey, "");
         assert_eq!(projection.relative_unix_seconds, None);
-        assert_eq!(projection.meta_bits, vec!["1 comment".to_string()]);
+        assert_eq!(projection.meta_text, Some("1 comment".to_string()));
     }
 
     #[test]

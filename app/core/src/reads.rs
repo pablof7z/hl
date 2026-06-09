@@ -57,7 +57,10 @@ pub struct ReadingFeedCardProjectionInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ReadingFeedCardProjection {
-    pub meta_bits: Vec<String>,
+    pub display_title: String,
+    pub title_is_fallback: bool,
+    pub image_url: Option<String>,
+    pub meta_text: Option<String>,
     pub show_social_signal: bool,
     pub visible_interactor_pubkeys: Vec<String>,
     pub primary_interactor_pubkey: Option<String>,
@@ -72,6 +75,8 @@ pub fn reading_feed_card_projection(
     input: ReadingFeedCardProjectionInput,
 ) -> ReadingFeedCardProjection {
     let item = input.item;
+    let (display_title, title_is_fallback) = article_title_or_fallback(&item.article);
+    let meta_bits = reading_meta_bits(&item.article);
     let interactor_count = item.interactor_pubkeys.len();
     let primary_interactor_pubkey = item.interactor_pubkeys.first().cloned();
     let primary_name = primary_interactor_pubkey
@@ -92,7 +97,10 @@ pub fn reading_feed_card_projection(
     };
 
     ReadingFeedCardProjection {
-        meta_bits: reading_meta_bits(&item.article),
+        display_title,
+        title_is_fallback,
+        image_url: non_empty_string(&item.article.image),
+        meta_text: joined_meta_text(&meta_bits),
         show_social_signal: !item.interactor_pubkeys.is_empty()
             || (item.author_followed && item.interactor_pubkeys.is_empty()),
         visible_interactor_pubkeys: item.interactor_pubkeys.into_iter().take(3).collect(),
@@ -106,6 +114,14 @@ pub fn reading_feed_card_projection(
     }
 }
 
+fn article_title_or_fallback(article: &ArticleRecord) -> (String, bool) {
+    if article.title.is_empty() {
+        ("Untitled".into(), true)
+    } else {
+        (article.title.clone(), false)
+    }
+}
+
 fn reading_meta_bits(article: &ArticleRecord) -> Vec<String> {
     let mut out = Vec::new();
     if let Some(minutes) = read_time_minutes(&article.content) {
@@ -115,6 +131,22 @@ fn reading_meta_bits(article: &ArticleRecord) -> Vec<String> {
         out.push(format!("#{tag}"));
     }
     out
+}
+
+fn joined_meta_text(bits: &[String]) -> Option<String> {
+    if bits.is_empty() {
+        None
+    } else {
+        Some(bits.join(" · "))
+    }
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
 }
 
 fn read_time_minutes(content: &str) -> Option<usize> {
@@ -659,7 +691,8 @@ mod tests {
 
     #[test]
     fn reading_feed_card_projection_matches_social_signal_policy() {
-        let article = article_record("A title", repeated_words(480), vec!["nostr".into()]);
+        let mut article = article_record("A title", repeated_words(480), vec!["nostr".into()]);
+        article.image = "https://example.com/cover.jpg".into();
         let item = ReadingFeedItem {
             article,
             author_followed: false,
@@ -680,9 +713,15 @@ mod tests {
             }],
         });
 
+        assert_eq!(projection.display_title, "A title");
+        assert!(!projection.title_is_fallback);
         assert_eq!(
-            projection.meta_bits,
-            vec!["2 min read".to_string(), "#nostr".to_string()]
+            projection.image_url,
+            Some("https://example.com/cover.jpg".into())
+        );
+        assert_eq!(
+            projection.meta_text,
+            Some("2 min read · #nostr".to_string())
         );
         assert!(projection.show_social_signal);
         assert_eq!(
@@ -729,7 +768,27 @@ mod tests {
             one_interactor.social_text,
             "alice and the author liked this"
         );
-        assert_eq!(one_interactor.meta_bits, vec!["1 min read".to_string()]);
+        assert_eq!(one_interactor.meta_text, Some("1 min read".to_string()));
+    }
+
+    #[test]
+    fn reading_feed_card_projection_preserves_title_fallback() {
+        let item = ReadingFeedItem {
+            article: article_record("", "short body".into(), Vec::new()),
+            author_followed: false,
+            interactor_pubkeys: Vec::new(),
+            latest_activity_at: 500,
+        };
+
+        let projection = reading_feed_card_projection(ReadingFeedCardProjectionInput {
+            item,
+            interactor_profiles: Vec::new(),
+        });
+
+        assert_eq!(projection.display_title, "Untitled");
+        assert!(projection.title_is_fallback);
+        assert_eq!(projection.image_url, None);
+        assert_eq!(projection.meta_text, None);
     }
 
     fn article_record(title: &str, content: String, hashtags: Vec<String>) -> ArticleRecord {

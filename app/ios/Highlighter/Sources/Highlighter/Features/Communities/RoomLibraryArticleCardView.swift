@@ -15,13 +15,14 @@ struct RoomLibraryArticleCardView: View {
         let author = authorDisplay(projection)
 
         ReadingCard(
-            title: artifact.preview.title,
+            title: projection.displayTitle,
+            titleIsFallback: projection.titleIsFallback,
             summary: artifact.preview.description,
-            imageURL: coverURL,
+            imageURL: projection.imageUrl.flatMap { URL(string: $0) },
             authorName: author.displayName,
             authorPubkey: projection.articleAuthorPubkey,
             relativeDate: relativeDate(projection.relativeUnixSeconds),
-            metaBits: projection.metaBits,
+            metaText: projection.metaText,
             showTrailing: false,
             avatar: {
                 AuthorAvatar(
@@ -40,11 +41,6 @@ struct RoomLibraryArticleCardView: View {
     }
 
     // MARK: - Derived bits
-
-    private var coverURL: URL? {
-        guard !artifact.preview.image.isEmpty else { return nil }
-        return URL(string: artifact.preview.image)
-    }
 
     private var cardProjection: RoomLibraryArticleCardProjection {
         app.safeCore.projectRoomLibraryArticleCard(
