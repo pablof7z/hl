@@ -1158,10 +1158,6 @@ actor SafeHighlighterCore {
         core.projectRoomLibraryGenericCard(input: input)
     }
 
-    func addRoomMember(groupId: String, pubkeyHex: String) async -> StringOutcome {
-        await core.addRoomMember(groupId: groupId, pubkeyHex: pubkeyHex)
-    }
-
     func createRoomInviteCodes(groupId: String, count: UInt32) async -> StringListOutcome {
         await core.createRoomInviteCodes(groupId: groupId, count: count)
     }
@@ -1194,14 +1190,11 @@ actor SafeHighlighterCore {
         core.projectRoomInviteSelectionChrome(input: input)
     }
 
-    nonisolated func getRoomInviteSendResult(
+    func sendRoomInvites(
+        groupId: String,
         selected: [RoomInviteCandidate],
-        failedPubkeys: [String]
-    ) -> RoomInviteSendResultProjection {
-        core.getRoomInviteSendResult(
-            selected: selected,
-            failedPubkeys: failedPubkeys
-        )
+    ) async -> RoomInviteSendResultProjection {
+        await core.sendRoomInvites(groupId: groupId, selected: selected)
     }
 
     // MARK: - Home Feed

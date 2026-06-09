@@ -420,21 +420,11 @@ struct RoomInviteView: View {
         let toAdd = selected
         Task {
             defer { Task { @MainActor in sending = false } }
-            var failedPubkeys: [String] = []
-            for candidate in toAdd {
-                let outcome = await appStore.safeCore.addRoomMember(
-                    groupId: groupId,
-                    pubkeyHex: candidate.pubkeyHex
-                )
-                if !outcome.error.isEmpty {
-                    failedPubkeys.append(candidate.pubkeyHex)
-                }
-            }
+            let result = await appStore.safeCore.sendRoomInvites(
+                groupId: groupId,
+                selected: toAdd.map(\.coreCandidate)
+            )
             await MainActor.run {
-                let result = appStore.safeCore.getRoomInviteSendResult(
-                    selected: toAdd.map(\.coreCandidate),
-                    failedPubkeys: failedPubkeys
-                )
                 if result.allSucceeded {
                     selected.removeAll()
                     sentToast = result.successToast

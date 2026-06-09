@@ -3561,18 +3561,6 @@ impl HighlighterCore {
         string_outcome(result)
     }
 
-    /// Add a Nostr user (by hex pubkey) to a room as a member. Must be
-    /// signed by a room admin — the relay enforces this. Returns the
-    /// kind:9000 event id on success.
-    pub async fn add_room_member(&self, group_id: String, pubkey_hex: String) -> StringOutcome {
-        let result: Result<String, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            groups::add_member(&self.runtime, group_id.trim(), pubkey_hex.trim()).await
-        }
-        .await;
-        string_outcome(result)
-    }
-
     /// Mint `count` single-use invite codes for `group_id` by publishing a
     /// kind:9009 event. Must be signed by an admin — the relay rejects
     /// non-admin attempts. Returns the minted codes in order.
@@ -3631,12 +3619,33 @@ impl HighlighterCore {
         crate::room_invites::project_selection_chrome(input)
     }
 
-    pub fn get_room_invite_send_result(
+    pub async fn send_room_invites(
         &self,
+        group_id: String,
         selected: Vec<crate::room_invites::RoomInviteCandidate>,
-        failed_pubkeys: Vec<String>,
     ) -> crate::room_invites::RoomInviteSendResultProjection {
-        crate::room_invites::project_send_result(&selected, &failed_pubkeys)
+        let result: Result<Vec<String>, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            let group_id = group_id.trim().to_string();
+            let mut failed_pubkeys = Vec::new();
+            for candidate in &selected {
+                if groups::add_member(&self.runtime, &group_id, candidate.pubkey_hex.trim())
+                    .await
+                    .is_err()
+                {
+                    failed_pubkeys.push(candidate.pubkey_hex.clone());
+                }
+            }
+            Ok(failed_pubkeys)
+        }
+        .await;
+
+        match result {
+            Ok(failed_pubkeys) => {
+                crate::room_invites::project_send_result(&selected, &failed_pubkeys)
+            }
+            Err(error) => crate::room_invites::project_send_error(&selected, error),
+        }
     }
 
     /// Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,

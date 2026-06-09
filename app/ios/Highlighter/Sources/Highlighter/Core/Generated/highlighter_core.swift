@@ -761,13 +761,6 @@ public func FfiConverterTypeEventCallback_lower(_ value: EventCallback) -> Unsaf
 public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     /**
-     * Add a Nostr user (by hex pubkey) to a room as a member. Must be
-     * signed by a room admin — the relay enforces this. Returns the
-     * kind:9000 event id on success.
-     */
-    func addRoomMember(groupId: String, pubkeyHex: String) async  -> StringOutcome
-
-    /**
      * Publish the Rust-projected profile follow mutation and return the
      * post-action screen state. Rust owns rollback on error; the shell only
      * applies the returned snapshot.
@@ -1154,8 +1147,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getRoomHomeSnapshot(groupId: String) async  -> RoomHomeSnapshot
 
     func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput)  -> RoomInviteAvatarProjection
-
-    func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String])  -> RoomInviteSendResultProjection
 
     func getRoomInviteSnapshot(input: RoomInviteSnapshotInput) async  -> RoomInviteSnapshot
 
@@ -1679,6 +1670,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func selectableOcrWords(lines: [OcrLine])  -> [OcrWord]
 
+    func sendRoomInvites(groupId: String, selected: [RoomInviteCandidate]) async  -> RoomInviteSendResultProjection
+
     /**
      * Replace the user's Blossom server list with `servers` (must be
      * non-empty). Order is preserved — first server is the upload default.
@@ -2004,29 +1997,6 @@ public convenience init() {
 
 
 
-
-    /**
-     * Add a Nostr user (by hex pubkey) to a room as a member. Must be
-     * signed by a room admin — the relay enforces this. Returns the
-     * kind:9000 event id on success.
-     */
-open func addRoomMember(groupId: String, pubkeyHex: String)async  -> StringOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_add_room_member(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterString.lower(pubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringOutcome_lift,
-            errorHandler: nil
-
-        )
-}
 
     /**
      * Publish the Rust-projected profile follow mutation and return the
@@ -3326,15 +3296,6 @@ open func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput) 
     return try!  FfiConverterTypeRoomInviteAvatarProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_avatar_projection(self.uniffiClonePointer(),
         FfiConverterTypeRoomInviteAvatarProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String]) -> RoomInviteSendResultProjection  {
-    return try!  FfiConverterTypeRoomInviteSendResultProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_send_result(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeRoomInviteCandidate.lower(selected),
-        FfiConverterSequenceString.lower(failedPubkeys),$0
     )
 })
 }
@@ -5036,6 +4997,24 @@ open func selectableOcrWords(lines: [OcrLine]) -> [OcrWord]  {
         FfiConverterSequenceTypeOcrLine.lower(lines),$0
     )
 })
+}
+
+open func sendRoomInvites(groupId: String, selected: [RoomInviteCandidate])async  -> RoomInviteSendResultProjection  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_send_room_invites(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(groupId),FfiConverterSequenceTypeRoomInviteCandidate.lower(selected)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRoomInviteSendResultProjection_lift,
+            errorHandler: nil
+
+        )
 }
 
     /**
@@ -38025,9 +38004,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_eventcallback_on_data_changed() != 54279) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_add_room_member() != 15527) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_apply_profile_follow_mutation() != 50949) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38278,9 +38254,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_avatar_projection() != 27101) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_send_result() != 64450) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_snapshot() != 54503) {
@@ -38698,6 +38671,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_selectable_ocr_words() != 2832) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_send_room_invites() != 44945) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_blossom_servers() != 36821) {

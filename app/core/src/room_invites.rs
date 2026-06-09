@@ -389,6 +389,20 @@ pub fn project_send_result(
     }
 }
 
+pub fn project_send_error(
+    selected: &[RoomInviteCandidate],
+    error: CoreError,
+) -> RoomInviteSendResultProjection {
+    RoomInviteSendResultProjection {
+        all_succeeded: false,
+        all_failed: !selected.is_empty(),
+        added_count: 0,
+        success_toast: String::new(),
+        error_message: error.to_string(),
+        remaining_selected: selected.to_vec(),
+    }
+}
+
 fn invite_add_button_label(count: u64) -> String {
     if count == 1 {
         "Add 1 person".into()
@@ -846,6 +860,19 @@ mod tests {
             total.error_message,
             "Couldn't add anyone. Are you a moderator of this room?"
         );
+    }
+
+    #[test]
+    fn send_error_projection_preserves_selection_and_surfaces_error() {
+        let selected = vec![candidate("01", RoomInviteCandidateSource::Follow)];
+        let projection = project_send_error(&selected, CoreError::NotAuthenticated);
+
+        assert!(!projection.all_succeeded);
+        assert!(projection.all_failed);
+        assert_eq!(projection.added_count, 0);
+        assert!(projection.success_toast.is_empty());
+        assert_eq!(projection.error_message, "not authenticated");
+        assert_eq!(projection.remaining_selected, selected);
     }
 
     fn candidate(suffix: &str, source: RoomInviteCandidateSource) -> RoomInviteCandidate {
