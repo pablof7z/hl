@@ -26,19 +26,19 @@ use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
-    ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome, ArtifactPreview,
-    ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute,
-    BookRouteOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, CommentRecord,
-    CommentReferenceBucket, CommentScope, CommentScopeOutcome, CommunityListOutcome,
-    CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightListOutcome,
-    HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome,
-    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestProjection,
-    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayConfigListOutcome,
-    RelayDiagnostic, RelayDiagnosticListOutcome, StringListOutcome, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome,
+    ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome,
+    BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, CommentRecord, CommentReferenceBucket,
+    CommentScope, CommentScopeOutcome, CommunityListOutcome, CommunitySummary, CurrentUser,
+    CurrentUserOutcome, DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord,
+    GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
+    HighlightSourceKind, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
+    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
+    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
+    OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
+    ProfileUpdateAction, ProfileUpdateDraft, RelayConfigListOutcome, RelayDiagnostic,
+    RelayDiagnosticListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
+    TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -334,19 +334,6 @@ fn artifact_preview_outcome(result: Result<ArtifactPreview, CoreError>) -> Artif
         },
         Err(error) => ArtifactPreviewOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn artifact_list_outcome(result: Result<Vec<ArtifactRecord>, CoreError>) -> ArtifactListOutcome {
-    match result {
-        Ok(values) => ArtifactListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => ArtifactListOutcome {
-            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -2204,24 +2191,50 @@ impl HighlighterCore {
         optional_string_outcome(result)
     }
 
-    /// Recent books across the user's joined communities — drives the
-    /// capture-flow book picker. Returns `[]` if no books are cached or the
-    /// user isn't logged in.
-    pub async fn get_recent_books(&self, limit: u32) -> ArtifactListOutcome {
-        artifact_list_outcome((|| {
-            let Some(user) = self.inner.read().session.current_user() else {
-                return Ok(Vec::new());
-            };
-            crate::recent_books::query_recent_books(self.runtime.ndb(), &user.pubkey, limit)
-        })())
-    }
-
-    pub async fn search_artifacts(&self, query: String, limit: u32) -> ArtifactListOutcome {
-        artifact_list_outcome(crate::artifacts::search_cached(
+    /// Screen-shaped snapshot for the capture book picker. Rust owns recent
+    /// book lookup, local artifact search, query normalization, and error
+    /// semantics; native shells render rows and transient loading affordances.
+    pub async fn get_book_picker_snapshot(
+        &self,
+        query: String,
+        recent_limit: u32,
+        search_limit: u32,
+    ) -> isbn_lookup::BookPickerSnapshot {
+        let projection = isbn_lookup::book_picker_query_projection(
+            isbn_lookup::BookPickerQueryProjectionInput { query },
+        );
+        let user_hex = self.current_user_pubkey_hex().unwrap_or_default();
+        let mut error = String::new();
+        let recents = match crate::recent_books::query_recent_books(
             self.runtime.ndb(),
-            &query,
-            limit,
-        ))
+            &user_hex,
+            recent_limit,
+        ) {
+            Ok(records) => records,
+            Err(err) => {
+                error = err.to_string();
+                Vec::new()
+            }
+        };
+        let search_results = if projection.has_query && search_limit > 0 {
+            match crate::artifacts::search_cached(
+                self.runtime.ndb(),
+                &projection.search_query,
+                search_limit,
+            ) {
+                Ok(records) => records,
+                Err(err) => {
+                    if !error.is_empty() {
+                        error.push('\n');
+                    }
+                    error.push_str(&err.to_string());
+                    Vec::new()
+                }
+            }
+        } else {
+            Vec::new()
+        };
+        isbn_lookup::book_picker_snapshot(projection, recents, search_results, error)
     }
 
     // -- Search: across local nostrdb (all four surfaces) + NIP-50 relay ---

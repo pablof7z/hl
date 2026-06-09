@@ -219,12 +219,16 @@ actor SafeHighlighterCore {
         await core.getRoomHomeSnapshot(groupId: groupId)
     }
 
-    func getRecentBooks(limit: UInt32 = 24) async -> ArtifactListOutcome {
-        await core.getRecentBooks(limit: limit)
-    }
-
-    func searchArtifacts(query: String, limit: UInt32 = 20) async -> ArtifactListOutcome {
-        await core.searchArtifacts(query: query, limit: limit)
+    func getBookPickerSnapshot(
+        query: String,
+        recentLimit: UInt32 = 24,
+        searchLimit: UInt32 = 20
+    ) async -> BookPickerSnapshot {
+        await core.getBookPickerSnapshot(
+            query: query,
+            recentLimit: recentLimit,
+            searchLimit: searchLimit
+        )
     }
 
     // MARK: - Search (local ndb + NIP-50 relay)

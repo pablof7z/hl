@@ -964,6 +964,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getBookDetailSnapshot(catalogId: String, limit: UInt32) async  -> BookDetailSnapshot
 
     /**
+     * Screen-shaped snapshot for the capture book picker. Rust owns recent
+     * book lookup, local artifact search, query normalization, and error
+     * semantics; native shells render rows and transient loading affordances.
+     */
+    func getBookPickerSnapshot(query: String, recentLimit: UInt32, searchLimit: UInt32) async  -> BookPickerSnapshot
+
+    /**
      * Resolve a book catalog id into the canonical ISBN route used by native
      * book screens. Accepts raw ISBNs and `isbn:<digits>` values.
      */
@@ -1117,13 +1124,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * native shells should refresh.
      */
     func getProfileUpdateAction(kind: UInt32)  -> ProfileUpdateAction
-
-    /**
-     * Recent books across the user's joined communities — drives the
-     * capture-flow book picker. Returns `[]` if no books are cached or the
-     * user isn't logged in.
-     */
-    func getRecentBooks(limit: UInt32) async  -> ArtifactListOutcome
 
     func getRecentSearches() async  -> StringListOutcome
 
@@ -1692,8 +1692,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?)  -> OcrRect
 
     func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)  -> MutationOutcome
-
-    func searchArtifacts(query: String, limit: UInt32) async  -> ArtifactListOutcome
 
     func selectableOcrWords(lines: [OcrLine])  -> [OcrWord]
 
@@ -2673,6 +2671,29 @@ open func getBookDetailSnapshot(catalogId: String, limit: UInt32)async  -> BookD
 }
 
     /**
+     * Screen-shaped snapshot for the capture book picker. Rust owns recent
+     * book lookup, local artifact search, query normalization, and error
+     * semantics; native shells render rows and transient loading affordances.
+     */
+open func getBookPickerSnapshot(query: String, recentLimit: UInt32, searchLimit: UInt32)async  -> BookPickerSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_book_picker_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(query),FfiConverterUInt32.lower(recentLimit),FfiConverterUInt32.lower(searchLimit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBookPickerSnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
      * Resolve a book catalog id into the canonical ISBN route used by native
      * book screens. Accepts raw ISBNs and `isbn:<digits>` values.
      */
@@ -3205,29 +3226,6 @@ open func getProfileUpdateAction(kind: UInt32) -> ProfileUpdateAction  {
         FfiConverterUInt32.lower(kind),$0
     )
 })
-}
-
-    /**
-     * Recent books across the user's joined communities — drives the
-     * capture-flow book picker. Returns `[]` if no books are cached or the
-     * user isn't logged in.
-     */
-open func getRecentBooks(limit: UInt32)async  -> ArtifactListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_recent_books(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactListOutcome_lift,
-            errorHandler: nil
-
-        )
 }
 
 open func getRecentSearches()async  -> StringListOutcome  {
@@ -5107,24 +5105,6 @@ open func savePodcastPosition(guid: String, positionSeconds: Double, artifact: A
         FfiConverterTypeArtifactRecord_lower(artifact),$0
     )
 })
-}
-
-open func searchArtifacts(query: String, limit: UInt32)async  -> ArtifactListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_search_artifacts(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactListOutcome_lift,
-            errorHandler: nil
-
-        )
 }
 
 open func selectableOcrWords(lines: [OcrLine]) -> [OcrWord]  {
@@ -8071,76 +8051,6 @@ public func FfiConverterTypeArtifactDetailRoute_lower(_ value: ArtifactDetailRou
 }
 
 
-public struct ArtifactListOutcome {
-    public var values: [ArtifactRecord]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [ArtifactRecord], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ArtifactListOutcome: Sendable {}
-#endif
-
-
-extension ArtifactListOutcome: Equatable, Hashable {
-    public static func ==(lhs: ArtifactListOutcome, rhs: ArtifactListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeArtifactListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactListOutcome {
-        return
-            try ArtifactListOutcome(
-                values: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ArtifactListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeArtifactRecord.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArtifactListOutcome_lift(_ buf: RustBuffer) throws -> ArtifactListOutcome {
-    return try FfiConverterTypeArtifactListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArtifactListOutcome_lower(_ value: ArtifactListOutcome) -> RustBuffer {
-    return FfiConverterTypeArtifactListOutcome.lower(value)
-}
-
-
 public struct ArtifactOutcome {
     public var value: ArtifactRecord?
     public var error: String
@@ -9555,6 +9465,92 @@ public func FfiConverterTypeBookPickerQueryProjectionInput_lift(_ buf: RustBuffe
 #endif
 public func FfiConverterTypeBookPickerQueryProjectionInput_lower(_ value: BookPickerQueryProjectionInput) -> RustBuffer {
     return FfiConverterTypeBookPickerQueryProjectionInput.lower(value)
+}
+
+
+public struct BookPickerSnapshot {
+    public var query: BookPickerQueryProjection
+    public var recents: [ArtifactRecord]
+    public var searchResults: [ArtifactRecord]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(query: BookPickerQueryProjection, recents: [ArtifactRecord], searchResults: [ArtifactRecord], error: String) {
+        self.query = query
+        self.recents = recents
+        self.searchResults = searchResults
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension BookPickerSnapshot: Sendable {}
+#endif
+
+
+extension BookPickerSnapshot: Equatable, Hashable {
+    public static func ==(lhs: BookPickerSnapshot, rhs: BookPickerSnapshot) -> Bool {
+        if lhs.query != rhs.query {
+            return false
+        }
+        if lhs.recents != rhs.recents {
+            return false
+        }
+        if lhs.searchResults != rhs.searchResults {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(query)
+        hasher.combine(recents)
+        hasher.combine(searchResults)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookPickerSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookPickerSnapshot {
+        return
+            try BookPickerSnapshot(
+                query: FfiConverterTypeBookPickerQueryProjection.read(from: &buf),
+                recents: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
+                searchResults: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookPickerSnapshot, into buf: inout [UInt8]) {
+        FfiConverterTypeBookPickerQueryProjection.write(value.query, into: &buf)
+        FfiConverterSequenceTypeArtifactRecord.write(value.recents, into: &buf)
+        FfiConverterSequenceTypeArtifactRecord.write(value.searchResults, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookPickerSnapshot_lift(_ buf: RustBuffer) throws -> BookPickerSnapshot {
+    return try FfiConverterTypeBookPickerSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookPickerSnapshot_lower(_ value: BookPickerSnapshot) -> RustBuffer {
+    return FfiConverterTypeBookPickerSnapshot.lower(value)
 }
 
 
@@ -37805,6 +37801,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_detail_snapshot() != 3058) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_picker_snapshot() != 51510) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_route() != 28033) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -37902,9 +37901,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_profile_update_action() != 16735) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 59174) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_searches() != 49802) {
@@ -38349,9 +38345,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_save_podcast_position() != 15916) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_artifacts() != 20123) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_selectable_ocr_words() != 2832) {

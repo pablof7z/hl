@@ -34,6 +34,14 @@ pub struct BookPickerQueryProjection {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct BookPickerSnapshot {
+    pub query: BookPickerQueryProjection,
+    pub recents: Vec<ArtifactRecord>,
+    pub search_results: Vec<ArtifactRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct IsbnManualPreviewProjectionInput {
     pub title: String,
     pub author: String,
@@ -197,6 +205,23 @@ pub fn book_picker_query_projection(
         has_query: !search_query.is_empty(),
         normalized_isbn: normalize_isbn(&input.query).ok(),
         search_query,
+    }
+}
+
+/// Build the capture book-picker snapshot from Rust-owned query policy and
+/// cache reads. Native shells render the returned rows and keep only transient
+/// loading affordances.
+pub fn book_picker_snapshot(
+    query: BookPickerQueryProjection,
+    recents: Vec<ArtifactRecord>,
+    search_results: Vec<ArtifactRecord>,
+    error: impl ToString,
+) -> BookPickerSnapshot {
+    BookPickerSnapshot {
+        query,
+        recents,
+        search_results,
+        error: error.to_string(),
     }
 }
 
@@ -736,6 +761,30 @@ mod tests {
         assert_eq!(blank.normalized_isbn, None);
         assert_eq!(search.search_query, "clean code");
         assert_eq!(search.normalized_isbn, None);
+    }
+
+    #[test]
+    fn book_picker_snapshot_preserves_projection_rows_and_error() {
+        let query = book_picker_query_projection(BookPickerQueryProjectionInput {
+            query: "  clean code  ".into(),
+        });
+        let mut recent_preview = partial_preview("9780735211292");
+        recent_preview.title = "Recent".into();
+        let mut result_preview = partial_preview("9780593099322");
+        result_preview.title = "Result".into();
+
+        let snapshot = book_picker_snapshot(
+            query,
+            vec![record_with_preview(recent_preview)],
+            vec![record_with_preview(result_preview)],
+            "cache unavailable",
+        );
+
+        assert!(snapshot.query.has_query);
+        assert_eq!(snapshot.query.search_query, "clean code");
+        assert_eq!(snapshot.recents[0].preview.title, "Recent");
+        assert_eq!(snapshot.search_results[0].preview.title, "Result");
+        assert_eq!(snapshot.error, "cache unavailable");
     }
 
     #[test]

@@ -128,8 +128,8 @@ pub use highlights::{
 };
 pub use home_feed::HomeFeedSnapshot;
 pub use isbn_lookup::{
-    BookPickerQueryProjection, BookPickerQueryProjectionInput, IsbnManualPreviewProjection,
-    IsbnManualPreviewProjectionInput, IsbnPreviewRequestProjection,
+    BookPickerQueryProjection, BookPickerQueryProjectionInput, BookPickerSnapshot,
+    IsbnManualPreviewProjection, IsbnManualPreviewProjectionInput, IsbnPreviewRequestProjection,
     IsbnPreviewRequestProjectionInput,
 };
 pub use lists::{
@@ -142,20 +142,20 @@ pub use lists::{
 };
 pub use models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
-    ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactListOutcome, ArtifactOutcome,
-    ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget,
-    BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetRecord,
-    BoolOutcome, CacheStatsOutcome, ChatMessageRecord, CommentRecord, CommentReferenceBucket,
-    CommentThreadNode, CommentThreadProjection, CommunityListOutcome, CommunitySummary,
-    CurationMenuItem, CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionAttachment,
-    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventRecord,
-    FeedbackThreadRecord, GeneratedAccount, GeneratedAccountOutcome, HighlightListOutcome,
-    HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
-    HighlightSourceKind, HomeFeedItem, HydratedHighlight, LoginInputAction, MutationOutcome,
-    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome,
-    OnboardingInterest, OnboardingInterestChip, OnboardingInterestProjection,
-    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome,
-    ProfileMetadata, ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RelayConfigListOutcome,
+    ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactOutcome, ArtifactPreview,
+    ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget, BlossomUpload,
+    BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetRecord, BoolOutcome,
+    CacheStatsOutcome, ChatMessageRecord, CommentRecord, CommentReferenceBucket, CommentThreadNode,
+    CommentThreadProjection, CommunityListOutcome, CommunitySummary, CurationMenuItem, CurrentUser,
+    CurrentUserOutcome, DataOutcome, DiscussionAttachment, DiscussionListOutcome,
+    DiscussionOutcome, DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord,
+    GeneratedAccount, GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome,
+    HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind,
+    HomeFeedItem, HydratedHighlight, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
+    Nip11DocumentOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
+    OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RelayConfigListOutcome,
     RelayDiagnosticListOutcome, RoomLane, RoomRecommendation, RoomRecommendationReason,
     StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
     WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,

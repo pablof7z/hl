@@ -60,8 +60,7 @@ struct BookPicker: View {
             }
             .task {
                 if loadingRecents {
-                    let outcome = await appStore.safeCore.getRecentBooks(limit: 24)
-                    recents = outcome.error.isEmpty ? outcome.values : []
+                    apply(await appStore.safeCore.getBookPickerSnapshot(query: ""))
                     loadingRecents = false
                 }
             }
@@ -444,11 +443,15 @@ struct BookPicker: View {
         }
         searching = true
         guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
-        let outcome = await appStore.safeCore.searchArtifacts(query: projection.searchQuery)
-        let results = outcome.error.isEmpty ? outcome.values : []
+        let snapshot = await appStore.safeCore.getBookPickerSnapshot(query: projection.searchQuery)
         guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
-        searchResults = results
+        apply(snapshot)
         searching = false
+    }
+
+    private func apply(_ snapshot: BookPickerSnapshot) {
+        recents = snapshot.recents
+        searchResults = snapshot.searchResults
     }
 }
 
