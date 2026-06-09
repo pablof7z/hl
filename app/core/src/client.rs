@@ -1890,6 +1890,13 @@ impl HighlighterCore {
         articles::article_reader_header_projection(input)
     }
 
+    pub fn project_article_profile_card(
+        &self,
+        input: articles::ArticleProfileCardProjectionInput,
+    ) -> articles::ArticleProfileCardProjection {
+        articles::article_profile_card_projection(input)
+    }
+
     /// Project a cached NIP-23 article into the artifact preview shape used by
     /// kind:11 sharing. Rust owns the `a`/`k`/highlight reference fields.
     pub fn get_article_artifact_preview(&self, article: ArticleRecord) -> ArtifactPreviewOutcome {

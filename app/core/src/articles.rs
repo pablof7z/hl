@@ -24,6 +24,19 @@ pub struct ArticleReaderHeaderProjection {
     pub read_time_minutes: Option<u32>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleProfileCardProjectionInput {
+    pub article: ArticleRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleProfileCardProjection {
+    pub title: String,
+    pub title_is_fallback: bool,
+    pub display_unix_seconds: Option<u64>,
+    pub hashtag_summary: Option<String>,
+}
+
 /// Presentation projection for the article reader header. Rust owns title
 /// fallback, visible hashtag cap, timestamp source selection, and read-time
 /// estimate; native shells render and apply localized date formatting.
@@ -48,6 +61,40 @@ pub fn article_reader_header_projection(
             .or(article.created_at)
             .filter(|seconds| *seconds > 0),
         read_time_minutes: read_time_minutes(&article.content),
+    }
+}
+
+/// Presentation projection for the profile Writing tab article row. Rust owns
+/// fallback title state, timestamp source selection, and two-tag summary.
+pub fn article_profile_card_projection(
+    input: ArticleProfileCardProjectionInput,
+) -> ArticleProfileCardProjection {
+    let article = input.article;
+    let title_is_fallback = article.title.is_empty();
+    ArticleProfileCardProjection {
+        title: if title_is_fallback {
+            "Untitled".to_string()
+        } else {
+            article.title
+        },
+        title_is_fallback,
+        display_unix_seconds: article
+            .published_at
+            .or(article.created_at)
+            .filter(|seconds| *seconds > 0),
+        hashtag_summary: if article.hashtags.is_empty() {
+            None
+        } else {
+            Some(
+                article
+                    .hashtags
+                    .iter()
+                    .take(2)
+                    .map(|tag| format!("#{tag}"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            )
+        },
     }
 }
 
@@ -556,6 +603,37 @@ mod tests {
         assert_eq!(projection.hashtag_labels, vec!["#nostr".to_string()]);
         assert_eq!(projection.display_unix_seconds, None);
         assert_eq!(projection.read_time_minutes, None);
+    }
+
+    #[test]
+    fn article_profile_card_projection_preserves_row_policy() {
+        let projection = article_profile_card_projection(ArticleProfileCardProjectionInput {
+            article: article_record(
+                "",
+                String::new(),
+                vec!["nostr".into(), "rust".into(), "swift".into()],
+            ),
+        });
+
+        assert_eq!(projection.title, "Untitled");
+        assert!(projection.title_is_fallback);
+        assert_eq!(projection.display_unix_seconds, Some(123));
+        assert_eq!(projection.hashtag_summary, Some("#nostr #rust".into()));
+    }
+
+    #[test]
+    fn article_profile_card_projection_hides_empty_tags_and_invalid_time() {
+        let mut article = article_record("A title", String::new(), Vec::new());
+        article.published_at = None;
+        article.created_at = Some(0);
+
+        let projection =
+            article_profile_card_projection(ArticleProfileCardProjectionInput { article });
+
+        assert_eq!(projection.title, "A title");
+        assert!(!projection.title_is_fallback);
+        assert_eq!(projection.display_unix_seconds, None);
+        assert_eq!(projection.hashtag_summary, None);
     }
 
     #[test]

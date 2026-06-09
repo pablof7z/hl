@@ -740,6 +740,12 @@ actor SafeHighlighterCore {
         core.projectArticleReaderHeader(input: input)
     }
 
+    nonisolated func projectArticleProfileCard(
+        input: ArticleProfileCardProjectionInput
+    ) -> ArticleProfileCardProjection {
+        core.projectArticleProfileCard(input: input)
+    }
+
     nonisolated func getArticleArtifactPreview(article: ArticleRecord) -> ArtifactPreviewOutcome {
         core.getArticleArtifactPreview(article: article)
     }

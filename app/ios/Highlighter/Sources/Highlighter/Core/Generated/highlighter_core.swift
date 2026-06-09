@@ -1400,6 +1400,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
 
+    func projectArticleProfileCard(input: ArticleProfileCardProjectionInput)  -> ArticleProfileCardProjection
+
     func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput)  -> ArticleReaderHeaderProjection
 
     /**
@@ -4169,6 +4171,14 @@ open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelayS
 })
 }
 
+open func projectArticleProfileCard(input: ArticleProfileCardProjectionInput) -> ArticleProfileCardProjection  {
+    return try!  FfiConverterTypeArticleProfileCardProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_article_profile_card(self.uniffiClonePointer(),
+        FfiConverterTypeArticleProfileCardProjectionInput_lower(input),$0
+    )
+})
+}
+
 open func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput) -> ArticleReaderHeaderProjection  {
     return try!  FfiConverterTypeArticleReaderHeaderProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_header(self.uniffiClonePointer(),
@@ -6270,6 +6280,154 @@ public func FfiConverterTypeArticleOutcome_lift(_ buf: RustBuffer) throws -> Art
 #endif
 public func FfiConverterTypeArticleOutcome_lower(_ value: ArticleOutcome) -> RustBuffer {
     return FfiConverterTypeArticleOutcome.lower(value)
+}
+
+
+public struct ArticleProfileCardProjection {
+    public var title: String
+    public var titleIsFallback: Bool
+    public var displayUnixSeconds: UInt64?
+    public var hashtagSummary: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String, titleIsFallback: Bool, displayUnixSeconds: UInt64?, hashtagSummary: String?) {
+        self.title = title
+        self.titleIsFallback = titleIsFallback
+        self.displayUnixSeconds = displayUnixSeconds
+        self.hashtagSummary = hashtagSummary
+    }
+}
+
+#if compiler(>=6)
+extension ArticleProfileCardProjection: Sendable {}
+#endif
+
+
+extension ArticleProfileCardProjection: Equatable, Hashable {
+    public static func ==(lhs: ArticleProfileCardProjection, rhs: ArticleProfileCardProjection) -> Bool {
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.titleIsFallback != rhs.titleIsFallback {
+            return false
+        }
+        if lhs.displayUnixSeconds != rhs.displayUnixSeconds {
+            return false
+        }
+        if lhs.hashtagSummary != rhs.hashtagSummary {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(title)
+        hasher.combine(titleIsFallback)
+        hasher.combine(displayUnixSeconds)
+        hasher.combine(hashtagSummary)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleProfileCardProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleProfileCardProjection {
+        return
+            try ArticleProfileCardProjection(
+                title: FfiConverterString.read(from: &buf),
+                titleIsFallback: FfiConverterBool.read(from: &buf),
+                displayUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
+                hashtagSummary: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleProfileCardProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterBool.write(value.titleIsFallback, into: &buf)
+        FfiConverterOptionUInt64.write(value.displayUnixSeconds, into: &buf)
+        FfiConverterOptionString.write(value.hashtagSummary, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleProfileCardProjection_lift(_ buf: RustBuffer) throws -> ArticleProfileCardProjection {
+    return try FfiConverterTypeArticleProfileCardProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleProfileCardProjection_lower(_ value: ArticleProfileCardProjection) -> RustBuffer {
+    return FfiConverterTypeArticleProfileCardProjection.lower(value)
+}
+
+
+public struct ArticleProfileCardProjectionInput {
+    public var article: ArticleRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(article: ArticleRecord) {
+        self.article = article
+    }
+}
+
+#if compiler(>=6)
+extension ArticleProfileCardProjectionInput: Sendable {}
+#endif
+
+
+extension ArticleProfileCardProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ArticleProfileCardProjectionInput, rhs: ArticleProfileCardProjectionInput) -> Bool {
+        if lhs.article != rhs.article {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(article)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleProfileCardProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleProfileCardProjectionInput {
+        return
+            try ArticleProfileCardProjectionInput(
+                article: FfiConverterTypeArticleRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleProfileCardProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArticleRecord.write(value.article, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleProfileCardProjectionInput_lift(_ buf: RustBuffer) throws -> ArticleProfileCardProjectionInput {
+    return try FfiConverterTypeArticleProfileCardProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleProfileCardProjectionInput_lower(_ value: ArticleProfileCardProjectionInput) -> RustBuffer {
+    return FfiConverterTypeArticleProfileCardProjectionInput.lower(value)
 }
 
 
@@ -26781,6 +26939,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_add_relay_sheet() != 14886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_profile_card() != 51383) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_header() != 55976) {
