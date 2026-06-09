@@ -79,6 +79,17 @@ pub struct PodcastClipPublishInput {
     pub clip_speaker: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastClipComposerPublishInput {
+    pub artifact: ArtifactRecord,
+    pub segments: Vec<TranscriptSegment>,
+    pub transcript_available: bool,
+    pub context: String,
+    pub clip_start_seconds: f64,
+    pub clip_end_seconds: f64,
+    pub target_group_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum PodcastTimelineRowKind {
     Chapter,

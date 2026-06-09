@@ -685,6 +685,13 @@ fn highlight_list_outcome(result: Result<Vec<HighlightRecord>, CoreError>) -> Hi
     }
 }
 
+fn one_highlight_record(records: Vec<HighlightRecord>) -> Result<HighlightRecord, CoreError> {
+    records
+        .into_iter()
+        .next()
+        .ok_or_else(|| CoreError::Relay("No highlight returned from publish.".into()))
+}
+
 fn hydrated_highlight_list_outcome(
     result: Result<Vec<HydratedHighlight>, CoreError>,
 ) -> HydratedHighlightListOutcome {
@@ -3657,10 +3664,41 @@ impl HighlighterCore {
                 &input.target_group_id,
             )
             .await?;
-            records
-                .into_iter()
-                .next()
-                .ok_or_else(|| CoreError::Relay("No highlight returned from publish.".into()))
+            one_highlight_record(records)
+        }
+        .await;
+        highlight_outcome(result)
+    }
+
+    /// Publish a podcast clip from the composer sheet. Rust owns draft
+    /// construction and whether the clip is solo-published or also reposted
+    /// into a NIP-29 room.
+    pub async fn publish_podcast_composer_clip(
+        &self,
+        input: podcast_transcript::PodcastClipComposerPublishInput,
+    ) -> HighlightOutcome {
+        let result: Result<HighlightRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            let draft = podcast_transcript::clip_composer_highlight_draft(
+                &input.segments,
+                input.transcript_available,
+                input.context,
+                input.clip_start_seconds,
+                input.clip_end_seconds,
+            );
+            let target_group_id = input.target_group_id.unwrap_or_default();
+            if target_group_id.trim().is_empty() {
+                crate::highlights::publish(&self.runtime, draft, input.artifact).await
+            } else {
+                let records = crate::highlights::publish_and_share(
+                    &self.runtime,
+                    input.artifact,
+                    vec![draft],
+                    &target_group_id,
+                )
+                .await?;
+                one_highlight_record(records)
+            }
         }
         .await;
         highlight_outcome(result)

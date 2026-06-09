@@ -299,31 +299,22 @@ struct ClipComposerSheet: View {
         isPublishing = true
         publishError = nil
 
-        let draft = app.safeCore.getPodcastClipComposerDraft(
-            segments: player.transcriptSegments,
-            transcriptAvailable: player.transcriptAvailability == .available,
-            context: note,
-            clipStartSeconds: startSeconds,
-            clipEndSeconds: endSeconds
-        )
-
         Task {
-            let publishErrorMessage: String?
-            if let groupId = selectedGroupId, !groupId.isEmpty {
-                let outcome = await app.safeCore.publishHighlightsAndShare(
+            let outcome = await app.safeCore.publishPodcastComposerClip(
+                input: PodcastClipComposerPublishInput(
                     artifact: artifact,
-                    drafts: [draft],
-                    targetGroupId: groupId
+                    segments: player.transcriptSegments,
+                    transcriptAvailable: player.transcriptAvailability == .available,
+                    context: note,
+                    clipStartSeconds: startSeconds,
+                    clipEndSeconds: endSeconds,
+                    targetGroupId: selectedGroupId
                 )
-                publishErrorMessage = outcome.error.isEmpty ? nil : outcome.error
-            } else {
-                let outcome = await app.safeCore.publishHighlight(draft: draft, artifact: artifact)
-                publishErrorMessage = outcome.error.isEmpty ? nil : outcome.error
-            }
+            )
             await MainActor.run {
                 isPublishing = false
-                if let publishErrorMessage {
-                    publishError = publishErrorMessage
+                if !outcome.error.isEmpty {
+                    publishError = outcome.error
                 } else {
                     app.shareToast = "Clip shared"
                     dismiss()

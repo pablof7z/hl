@@ -139,22 +139,6 @@ actor SafeHighlighterCore {
         )
     }
 
-    nonisolated func getPodcastClipComposerDraft(
-        segments: [TranscriptSegment],
-        transcriptAvailable: Bool,
-        context: String,
-        clipStartSeconds: Double,
-        clipEndSeconds: Double
-    ) -> HighlightDraft {
-        core.getPodcastClipComposerDraft(
-            segments: segments,
-            transcriptAvailable: transcriptAvailable,
-            context: context,
-            clipStartSeconds: clipStartSeconds,
-            clipEndSeconds: clipEndSeconds
-        )
-    }
-
     nonisolated func getPodcastListeningProjection(
         input: PodcastListeningProjectionInput
     ) -> PodcastListeningProjection {
@@ -1597,6 +1581,12 @@ actor SafeHighlighterCore {
         input: PodcastClipPublishInput
     ) async -> HighlightOutcome {
         await core.publishPodcastClipHighlight(input: input)
+    }
+
+    func publishPodcastComposerClip(
+        input: PodcastClipComposerPublishInput
+    ) async -> HighlightOutcome {
+        await core.publishPodcastComposerClip(input: input)
     }
 
     func publishHighlight(

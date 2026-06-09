@@ -1787,6 +1787,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func publishPodcastClipHighlight(input: PodcastClipPublishInput) async  -> HighlightOutcome
 
     /**
+     * Publish a podcast clip from the composer sheet. Rust owns draft
+     * construction and whether the clip is solo-published or also reposted
+     * into a NIP-29 room.
+     */
+    func publishPodcastComposerClip(input: PodcastClipComposerPublishInput) async  -> HighlightOutcome
+
+    /**
      * Nudge the relay pool to attempt a reconnect on every disconnected
      * relay. `Client::connect` is idempotent — already-connected relays
      * are unaffected; disconnected / terminated / banned relays get a
@@ -5542,6 +5549,29 @@ open func publishPodcastClipHighlight(input: PodcastClipPublishInput)async  -> H
                 uniffi_highlighter_core_fn_method_highlightercore_publish_podcast_clip_highlight(
                     self.uniffiClonePointer(),
                     FfiConverterTypePodcastClipPublishInput_lower(input)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeHighlightOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Publish a podcast clip from the composer sheet. Rust owns draft
+     * construction and whether the clip is solo-published or also reposted
+     * into a NIP-29 room.
+     */
+open func publishPodcastComposerClip(input: PodcastClipComposerPublishInput)async  -> HighlightOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_podcast_composer_clip(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePodcastClipComposerPublishInput_lower(input)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -22885,6 +22915,116 @@ public func FfiConverterTypePodcastClipComposerProjection_lower(_ value: Podcast
 }
 
 
+public struct PodcastClipComposerPublishInput {
+    public var artifact: ArtifactRecord
+    public var segments: [TranscriptSegment]
+    public var transcriptAvailable: Bool
+    public var context: String
+    public var clipStartSeconds: Double
+    public var clipEndSeconds: Double
+    public var targetGroupId: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifact: ArtifactRecord, segments: [TranscriptSegment], transcriptAvailable: Bool, context: String, clipStartSeconds: Double, clipEndSeconds: Double, targetGroupId: String?) {
+        self.artifact = artifact
+        self.segments = segments
+        self.transcriptAvailable = transcriptAvailable
+        self.context = context
+        self.clipStartSeconds = clipStartSeconds
+        self.clipEndSeconds = clipEndSeconds
+        self.targetGroupId = targetGroupId
+    }
+}
+
+#if compiler(>=6)
+extension PodcastClipComposerPublishInput: Sendable {}
+#endif
+
+
+extension PodcastClipComposerPublishInput: Equatable, Hashable {
+    public static func ==(lhs: PodcastClipComposerPublishInput, rhs: PodcastClipComposerPublishInput) -> Bool {
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        if lhs.segments != rhs.segments {
+            return false
+        }
+        if lhs.transcriptAvailable != rhs.transcriptAvailable {
+            return false
+        }
+        if lhs.context != rhs.context {
+            return false
+        }
+        if lhs.clipStartSeconds != rhs.clipStartSeconds {
+            return false
+        }
+        if lhs.clipEndSeconds != rhs.clipEndSeconds {
+            return false
+        }
+        if lhs.targetGroupId != rhs.targetGroupId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifact)
+        hasher.combine(segments)
+        hasher.combine(transcriptAvailable)
+        hasher.combine(context)
+        hasher.combine(clipStartSeconds)
+        hasher.combine(clipEndSeconds)
+        hasher.combine(targetGroupId)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastClipComposerPublishInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipComposerPublishInput {
+        return
+            try PodcastClipComposerPublishInput(
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                transcriptAvailable: FfiConverterBool.read(from: &buf),
+                context: FfiConverterString.read(from: &buf),
+                clipStartSeconds: FfiConverterDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterDouble.read(from: &buf),
+                targetGroupId: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastClipComposerPublishInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterSequenceTypeTranscriptSegment.write(value.segments, into: &buf)
+        FfiConverterBool.write(value.transcriptAvailable, into: &buf)
+        FfiConverterString.write(value.context, into: &buf)
+        FfiConverterDouble.write(value.clipStartSeconds, into: &buf)
+        FfiConverterDouble.write(value.clipEndSeconds, into: &buf)
+        FfiConverterOptionString.write(value.targetGroupId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipComposerPublishInput_lift(_ buf: RustBuffer) throws -> PodcastClipComposerPublishInput {
+    return try FfiConverterTypePodcastClipComposerPublishInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipComposerPublishInput_lower(_ value: PodcastClipComposerPublishInput) -> RustBuffer {
+    return FfiConverterTypePodcastClipComposerPublishInput.lower(value)
+}
+
+
 public struct PodcastClipPublishInput {
     public var artifact: ArtifactRecord
     public var targetGroupId: String
@@ -39663,6 +39803,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_clip_highlight() != 12471) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_composer_clip() != 62896) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 432) {
