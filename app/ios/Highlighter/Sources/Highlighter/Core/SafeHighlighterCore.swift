@@ -1559,6 +1559,12 @@ actor SafeHighlighterCore {
         core.projectBlossomServerEntry(input: input)
     }
 
+    nonisolated func projectBlossomServerList(
+        input: BlossomServerListProjectionInput
+    ) -> BlossomServerListProjection {
+        core.projectBlossomServerList(input: input)
+    }
+
     func getBlossomServers() async -> StringListOutcome {
         await core.getBlossomServers()
     }

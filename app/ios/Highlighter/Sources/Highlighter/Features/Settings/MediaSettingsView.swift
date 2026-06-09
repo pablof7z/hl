@@ -25,9 +25,17 @@ struct MediaSettingsView: View {
                         Task { await save() }
                     }
                     .onDelete { indices in
-                        guard servers.count > indices.count else { return }
-                        servers.remove(atOffsets: indices)
-                        Task { await save() }
+                        let projection = store.safeCore.projectBlossomServerList(
+                            input: BlossomServerListProjectionInput(
+                                servers: servers,
+                                addUrl: nil,
+                                removeIndexes: indices.map(UInt64.init)
+                            )
+                        )
+                        servers = projection.servers
+                        if projection.canSave {
+                            Task { await save() }
+                        }
                     }
                 }
             } header: {
@@ -56,8 +64,17 @@ struct MediaSettingsView: View {
         }
         .sheet(isPresented: $showAddSheet) {
             AddBlossomServerSheet(existingServers: servers) { url in
-                servers.append(url)
-                Task { await save() }
+                let projection = store.safeCore.projectBlossomServerList(
+                    input: BlossomServerListProjectionInput(
+                        servers: servers,
+                        addUrl: url,
+                        removeIndexes: []
+                    )
+                )
+                servers = projection.servers
+                if projection.canSave {
+                    Task { await save() }
+                }
             }
         }
         .task { await load() }
@@ -70,7 +87,15 @@ struct MediaSettingsView: View {
     }
 
     private func save() async {
-        guard !servers.isEmpty else { return }
+        let projection = store.safeCore.projectBlossomServerList(
+            input: BlossomServerListProjectionInput(
+                servers: servers,
+                addUrl: nil,
+                removeIndexes: []
+            )
+        )
+        guard projection.canSave else { return }
+        servers = projection.servers
         isSaving = true
         _ = await store.safeCore.setBlossomServers(servers)
         isSaving = false

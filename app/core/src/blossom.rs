@@ -44,6 +44,19 @@ pub struct BlossomServerEntryProjection {
     pub can_add: bool,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BlossomServerListProjectionInput {
+    pub servers: Vec<String>,
+    pub add_url: Option<String>,
+    pub remove_indexes: Vec<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BlossomServerListProjection {
+    pub servers: Vec<String>,
+    pub can_save: bool,
+}
+
 // -- Reads --
 
 /// Return the newest kind:10063 event for `user_hex` from nostrdb.
@@ -126,6 +139,57 @@ pub fn blossom_server_entry_projection(
         is_valid,
         is_duplicate,
     }
+}
+
+/// Project edits to the ordered Blossom server list. Native shells own the
+/// platform list control; Rust owns URL normalization, duplicate filtering,
+/// delete-last protection, and save eligibility.
+pub fn blossom_server_list_projection(
+    input: BlossomServerListProjectionInput,
+) -> BlossomServerListProjection {
+    let mut servers = normalize_server_list(input.servers);
+
+    if let Some(url) = input.add_url {
+        let entry = blossom_server_entry_projection(BlossomServerEntryProjectionInput {
+            url,
+            existing_servers: servers.clone(),
+        });
+        if entry.can_add {
+            servers.push(entry.submit_url);
+        }
+    }
+
+    let mut remove_indexes: Vec<usize> = input
+        .remove_indexes
+        .into_iter()
+        .filter_map(|index| usize::try_from(index).ok())
+        .filter(|index| *index < servers.len())
+        .collect();
+    remove_indexes.sort_unstable();
+    remove_indexes.dedup();
+    if !remove_indexes.is_empty() && servers.len() > remove_indexes.len() {
+        for index in remove_indexes.into_iter().rev() {
+            if index < servers.len() {
+                servers.remove(index);
+            }
+        }
+    }
+
+    BlossomServerListProjection {
+        can_save: !servers.is_empty(),
+        servers,
+    }
+}
+
+fn normalize_server_list(servers: Vec<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    for server in servers {
+        let trimmed = server.trim();
+        if !trimmed.is_empty() && !out.iter().any(|existing| existing == trimmed) {
+            out.push(trimmed.to_string());
+        }
+    }
+    out
 }
 
 // -- Writes --
@@ -389,6 +453,52 @@ mod tests {
         assert!(!invalid.can_add);
         assert!(duplicate.is_duplicate);
         assert!(!duplicate.can_add);
+    }
+
+    #[test]
+    fn blossom_server_list_projection_adds_deletes_and_protects_last_server() {
+        let added = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec![" https://blossom.primal.net ".into()],
+            add_url: Some(" https://media.example.com ".into()),
+            remove_indexes: Vec::new(),
+        });
+        assert_eq!(
+            added.servers,
+            vec!["https://blossom.primal.net", "https://media.example.com"]
+        );
+        assert!(added.can_save);
+
+        let duplicate = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: added.servers.clone(),
+            add_url: Some("https://media.example.com".into()),
+            remove_indexes: Vec::new(),
+        });
+        assert_eq!(duplicate.servers, added.servers);
+
+        let removed = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: duplicate.servers,
+            add_url: None,
+            remove_indexes: vec![0],
+        });
+        assert_eq!(removed.servers, vec!["https://media.example.com"]);
+
+        let protected = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: removed.servers.clone(),
+            add_url: None,
+            remove_indexes: vec![0, 99],
+        });
+        assert_eq!(protected.servers, removed.servers);
+        assert!(protected.can_save);
+
+        let malformed = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec![
+                "https://one.example.com".into(),
+                "https://two.example.com".into(),
+            ],
+            add_url: None,
+            remove_indexes: vec![0, 99],
+        });
+        assert_eq!(malformed.servers, vec!["https://two.example.com"]);
     }
 
     #[test]

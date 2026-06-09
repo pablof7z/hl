@@ -4112,6 +4112,15 @@ impl HighlighterCore {
         blossom::blossom_server_entry_projection(input)
     }
 
+    /// Project Blossom server list edits. Rust owns URL normalization,
+    /// duplicate filtering, delete protection, and save eligibility.
+    pub fn project_blossom_server_list(
+        &self,
+        input: blossom::BlossomServerListProjectionInput,
+    ) -> blossom::BlossomServerListProjection {
+        blossom::blossom_server_list_projection(input)
+    }
+
     /// Return the user's ordered Blossom server list from nostrdb. Empty if no
     /// kind:10063 has been cached yet (relay hasn't delivered it).
     pub async fn get_blossom_servers(&self) -> StringListOutcome {

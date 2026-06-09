@@ -1438,6 +1438,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectBlossomServerEntry(input: BlossomServerEntryProjectionInput)  -> BlossomServerEntryProjection
 
+    /**
+     * Project Blossom server list edits. Rust owns URL normalization,
+     * duplicate filtering, delete protection, and save eligibility.
+     */
+    func projectBlossomServerList(input: BlossomServerListProjectionInput)  -> BlossomServerListProjection
+
     func projectBookPickerQuery(input: BookPickerQueryProjectionInput)  -> BookPickerQueryProjection
 
     func projectBookmarkSetDetail(input: BookmarkSetDetailProjectionInput)  -> BookmarkSetDetailProjection
@@ -4470,6 +4476,18 @@ open func projectBlossomServerEntry(input: BlossomServerEntryProjectionInput) ->
     return try!  FfiConverterTypeBlossomServerEntryProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_blossom_server_entry(self.uniffiClonePointer(),
         FfiConverterTypeBlossomServerEntryProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project Blossom server list edits. Rust owns URL normalization,
+     * duplicate filtering, delete protection, and save eligibility.
+     */
+open func projectBlossomServerList(input: BlossomServerListProjectionInput) -> BlossomServerListProjection  {
+    return try!  FfiConverterTypeBlossomServerListProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_blossom_server_list(self.uniffiClonePointer(),
+        FfiConverterTypeBlossomServerListProjectionInput_lower(input),$0
     )
 })
 }
@@ -9216,6 +9234,154 @@ public func FfiConverterTypeBlossomServerEntryProjectionInput_lift(_ buf: RustBu
 #endif
 public func FfiConverterTypeBlossomServerEntryProjectionInput_lower(_ value: BlossomServerEntryProjectionInput) -> RustBuffer {
     return FfiConverterTypeBlossomServerEntryProjectionInput.lower(value)
+}
+
+
+public struct BlossomServerListProjection {
+    public var servers: [String]
+    public var canSave: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(servers: [String], canSave: Bool) {
+        self.servers = servers
+        self.canSave = canSave
+    }
+}
+
+#if compiler(>=6)
+extension BlossomServerListProjection: Sendable {}
+#endif
+
+
+extension BlossomServerListProjection: Equatable, Hashable {
+    public static func ==(lhs: BlossomServerListProjection, rhs: BlossomServerListProjection) -> Bool {
+        if lhs.servers != rhs.servers {
+            return false
+        }
+        if lhs.canSave != rhs.canSave {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(servers)
+        hasher.combine(canSave)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlossomServerListProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerListProjection {
+        return
+            try BlossomServerListProjection(
+                servers: FfiConverterSequenceString.read(from: &buf),
+                canSave: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlossomServerListProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.servers, into: &buf)
+        FfiConverterBool.write(value.canSave, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerListProjection_lift(_ buf: RustBuffer) throws -> BlossomServerListProjection {
+    return try FfiConverterTypeBlossomServerListProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerListProjection_lower(_ value: BlossomServerListProjection) -> RustBuffer {
+    return FfiConverterTypeBlossomServerListProjection.lower(value)
+}
+
+
+public struct BlossomServerListProjectionInput {
+    public var servers: [String]
+    public var addUrl: String?
+    public var removeIndexes: [UInt64]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(servers: [String], addUrl: String?, removeIndexes: [UInt64]) {
+        self.servers = servers
+        self.addUrl = addUrl
+        self.removeIndexes = removeIndexes
+    }
+}
+
+#if compiler(>=6)
+extension BlossomServerListProjectionInput: Sendable {}
+#endif
+
+
+extension BlossomServerListProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: BlossomServerListProjectionInput, rhs: BlossomServerListProjectionInput) -> Bool {
+        if lhs.servers != rhs.servers {
+            return false
+        }
+        if lhs.addUrl != rhs.addUrl {
+            return false
+        }
+        if lhs.removeIndexes != rhs.removeIndexes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(servers)
+        hasher.combine(addUrl)
+        hasher.combine(removeIndexes)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlossomServerListProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerListProjectionInput {
+        return
+            try BlossomServerListProjectionInput(
+                servers: FfiConverterSequenceString.read(from: &buf),
+                addUrl: FfiConverterOptionString.read(from: &buf),
+                removeIndexes: FfiConverterSequenceUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlossomServerListProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.servers, into: &buf)
+        FfiConverterOptionString.write(value.addUrl, into: &buf)
+        FfiConverterSequenceUInt64.write(value.removeIndexes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerListProjectionInput_lift(_ buf: RustBuffer) throws -> BlossomServerListProjectionInput {
+    return try FfiConverterTypeBlossomServerListProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerListProjectionInput_lower(_ value: BlossomServerListProjectionInput) -> RustBuffer {
+    return FfiConverterTypeBlossomServerListProjectionInput.lower(value)
 }
 
 
@@ -34660,6 +34826,31 @@ fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceUInt64: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt64]
+
+    public static func write(_ value: [UInt64], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterUInt64.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UInt64] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UInt64]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterUInt64.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -36478,6 +36669,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_blossom_server_entry() != 9121) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_blossom_server_list() != 5131) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_book_picker_query() != 18730) {
