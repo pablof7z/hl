@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 
+use ::url::Url;
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
@@ -14,12 +15,60 @@ use crate::articles;
 use crate::artifacts::first_tag_value;
 use crate::clock::Clock;
 use crate::errors::CoreError;
-use crate::models::{BookmarkSetRecord, CurationMenuItem, WebBookmarkRecord};
+use crate::models::{ArticleRecord, BookmarkSetRecord, CurationMenuItem, WebBookmarkRecord};
 use crate::nostr_runtime::NostrRuntime;
 
 pub const KIND_BOOKMARK_SETS: u16 = 30003;
 pub const KIND_CURATION_SETS: u16 = 30004;
 pub const KIND_WEB_BOOKMARK: u16 = 39701;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkedArticleRowProjectionInput {
+    pub article: ArticleRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkedArticleRowProjection {
+    pub title: String,
+    pub summary: Option<String>,
+    pub image_url: Option<String>,
+    pub display_unix_seconds: Option<u64>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkSetRowProjectionInput {
+    pub record: BookmarkSetRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkSetRowProjection {
+    pub display_title: String,
+    pub kind_label: String,
+    pub item_count_label: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkSetDetailProjectionInput {
+    pub record: BookmarkSetRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkSetDetailProjection {
+    pub display_title: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct WebBookmarkRowProjectionInput {
+    pub bookmark: WebBookmarkRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WebBookmarkRowProjection {
+    pub display_title: String,
+    pub host: Option<String>,
+    pub description: Option<String>,
+    pub display_unix_seconds: Option<u64>,
+}
 
 // -- Public query API --------------------------------------------------------
 
@@ -184,6 +233,65 @@ pub fn curation_menu_items_for_address(
         .collect()
 }
 
+pub fn bookmarked_article_row_projection(
+    input: BookmarkedArticleRowProjectionInput,
+) -> BookmarkedArticleRowProjection {
+    let article = input.article;
+    BookmarkedArticleRowProjection {
+        title: title_or_untitled(article.title),
+        summary: non_empty_string(article.summary),
+        image_url: non_empty_string(article.image),
+        display_unix_seconds: article.published_at.or(article.created_at),
+    }
+}
+
+pub fn bookmark_set_row_projection(
+    input: BookmarkSetRowProjectionInput,
+) -> BookmarkSetRowProjection {
+    let record = input.record;
+    let item_count = record.article_addresses.len() + record.note_ids.len();
+    BookmarkSetRowProjection {
+        display_title: bookmark_set_display_title(&record, "Untitled"),
+        kind_label: if record.kind == KIND_BOOKMARK_SETS as u32 {
+            "Bookmarks".to_string()
+        } else {
+            "Curation".to_string()
+        },
+        item_count_label: if item_count == 0 {
+            None
+        } else {
+            Some(format!(
+                "{item_count} item{}",
+                if item_count == 1 { "" } else { "s" }
+            ))
+        },
+    }
+}
+
+pub fn bookmark_set_detail_projection(
+    input: BookmarkSetDetailProjectionInput,
+) -> BookmarkSetDetailProjection {
+    BookmarkSetDetailProjection {
+        display_title: bookmark_set_display_title(&input.record, "Collection"),
+    }
+}
+
+pub fn web_bookmark_row_projection(
+    input: WebBookmarkRowProjectionInput,
+) -> WebBookmarkRowProjection {
+    let bookmark = input.bookmark;
+    WebBookmarkRowProjection {
+        display_title: if bookmark.title.is_empty() {
+            bookmark.url.clone()
+        } else {
+            bookmark.title
+        },
+        host: web_bookmark_host(&bookmark.url),
+        description: non_empty_string(bookmark.description),
+        display_unix_seconds: bookmark.published_at.or(bookmark.created_at),
+    }
+}
+
 /// Keep only curation sets that can render a visible Explore row.
 ///
 /// Note-backed sets are visible even when no article is cached. Address-only
@@ -221,13 +329,39 @@ where
 }
 
 fn curation_set_display_title(set: &BookmarkSetRecord) -> String {
+    bookmark_set_display_title(set, "Untitled")
+}
+
+fn bookmark_set_display_title(set: &BookmarkSetRecord, empty_fallback: &str) -> String {
     if !set.title.is_empty() {
         return set.title.clone();
     }
     if !set.id.is_empty() {
         return set.id.clone();
     }
-    "Untitled".to_string()
+    empty_fallback.to_string()
+}
+
+fn title_or_untitled(title: String) -> String {
+    if title.is_empty() {
+        "Untitled".to_string()
+    } else {
+        title
+    }
+}
+
+fn non_empty_string(value: String) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+fn web_bookmark_host(url: &str) -> Option<String> {
+    Url::parse(url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(str::to_string))
 }
 
 // -- Publish API (curation sets) --------------------------------------------
@@ -538,10 +672,15 @@ fn parse_web_bookmark_event(event: Event) -> WebBookmarkRecord {
 #[cfg(test)]
 mod tests {
     use super::{
-        curation_menu_items_for_address, filter_explorable_curation_sets,
-        next_curation_address_membership, CurationMembershipChange, KIND_CURATION_SETS,
+        bookmark_set_detail_projection, bookmark_set_row_projection,
+        bookmarked_article_row_projection, curation_menu_items_for_address,
+        filter_explorable_curation_sets, next_curation_address_membership,
+        web_bookmark_row_projection, BookmarkSetDetailProjectionInput,
+        BookmarkSetRowProjectionInput, BookmarkedArticleRowProjectionInput,
+        CurationMembershipChange, WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS,
+        KIND_CURATION_SETS,
     };
-    use crate::models::BookmarkSetRecord;
+    use crate::models::{ArticleRecord, BookmarkSetRecord, WebBookmarkRecord};
 
     fn set(id: &str, title: &str, article_addresses: Vec<&str>) -> BookmarkSetRecord {
         set_with_notes(id, title, article_addresses, Vec::new())
@@ -631,6 +770,87 @@ mod tests {
     }
 
     #[test]
+    fn bookmark_article_rows_project_display_fallbacks() {
+        let projection = bookmarked_article_row_projection(BookmarkedArticleRowProjectionInput {
+            article: article("", "", "", None, Some(42)),
+        });
+
+        assert_eq!(projection.title, "Untitled");
+        assert_eq!(projection.summary, None);
+        assert_eq!(projection.image_url, None);
+        assert_eq!(projection.display_unix_seconds, Some(42));
+
+        let projection = bookmarked_article_row_projection(BookmarkedArticleRowProjectionInput {
+            article: article(
+                "Essay",
+                "Summary",
+                "https://img.example/essay.jpg",
+                Some(100),
+                Some(42),
+            ),
+        });
+
+        assert_eq!(projection.title, "Essay");
+        assert_eq!(projection.summary, Some("Summary".into()));
+        assert_eq!(
+            projection.image_url,
+            Some("https://img.example/essay.jpg".into())
+        );
+        assert_eq!(projection.display_unix_seconds, Some(100));
+    }
+
+    #[test]
+    fn bookmark_set_rows_project_title_kind_and_count() {
+        let mut record = set("with-id", "", vec!["30023:author:one"]);
+        record.kind = KIND_BOOKMARK_SETS as u32;
+
+        let projection = bookmark_set_row_projection(BookmarkSetRowProjectionInput { record });
+
+        assert_eq!(projection.display_title, "with-id");
+        assert_eq!(projection.kind_label, "Bookmarks");
+        assert_eq!(projection.item_count_label, Some("1 item".into()));
+
+        let mut record = set_with_notes("", "", Vec::new(), vec!["note-1", "note-2"]);
+        record.kind = KIND_CURATION_SETS as u32;
+
+        let projection = bookmark_set_row_projection(BookmarkSetRowProjectionInput { record });
+
+        assert_eq!(projection.display_title, "Untitled");
+        assert_eq!(projection.kind_label, "Curation");
+        assert_eq!(projection.item_count_label, Some("2 items".into()));
+    }
+
+    #[test]
+    fn bookmark_set_detail_uses_collection_empty_fallback() {
+        let projection = bookmark_set_detail_projection(BookmarkSetDetailProjectionInput {
+            record: set("", "", Vec::new()),
+        });
+
+        assert_eq!(projection.display_title, "Collection");
+    }
+
+    #[test]
+    fn web_bookmark_rows_project_title_host_description_and_date() {
+        let projection = web_bookmark_row_projection(WebBookmarkRowProjectionInput {
+            bookmark: web_bookmark("", "", "https://example.com/path", Some(5), Some(4)),
+        });
+
+        assert_eq!(projection.display_title, "https://example.com/path");
+        assert_eq!(projection.host, Some("example.com".into()));
+        assert_eq!(projection.description, None);
+        assert_eq!(projection.display_unix_seconds, Some(5));
+
+        let projection = web_bookmark_row_projection(WebBookmarkRowProjectionInput {
+            bookmark: web_bookmark("Page title", "Description", "not a url", None, Some(4)),
+        });
+
+        assert_eq!(projection.display_title, "Page title");
+        assert_eq!(projection.host, None);
+        assert_eq!(projection.description, Some("Description".into()));
+        assert_eq!(projection.display_unix_seconds, Some(4));
+    }
+
+    #[test]
     fn explorable_curation_sets_keep_only_visible_explore_rows() {
         let sets = vec![
             set("empty", "Empty", Vec::new()),
@@ -643,5 +863,45 @@ mod tests {
         let ids = rows.into_iter().map(|set| set.id).collect::<Vec<_>>();
 
         assert_eq!(ids, vec!["notes", "article"]);
+    }
+
+    fn article(
+        title: &str,
+        summary: &str,
+        image: &str,
+        published_at: Option<u64>,
+        created_at: Option<u64>,
+    ) -> ArticleRecord {
+        ArticleRecord {
+            event_id: "article".into(),
+            address: "30023:author:d".into(),
+            pubkey: "author".into(),
+            identifier: "d".into(),
+            title: title.into(),
+            summary: summary.into(),
+            image: image.into(),
+            content: String::new(),
+            hashtags: Vec::new(),
+            published_at,
+            created_at,
+        }
+    }
+
+    fn web_bookmark(
+        title: &str,
+        description: &str,
+        url: &str,
+        published_at: Option<u64>,
+        created_at: Option<u64>,
+    ) -> WebBookmarkRecord {
+        WebBookmarkRecord {
+            url: url.into(),
+            pubkey: "author".into(),
+            title: title.into(),
+            description: description.into(),
+            topics: Vec::new(),
+            published_at,
+            created_at,
+        }
     }
 }

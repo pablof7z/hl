@@ -242,20 +242,22 @@ struct BookmarkedArticleRow: View {
     let article: ArticleRecord
 
     var body: some View {
+        let projection = rowProjection
+
         HStack(alignment: .top, spacing: 12) {
-            coverImage
+            coverImage(imageURL: projection.imageUrl)
                 .frame(width: 56, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(article.title.isEmpty ? "Untitled" : article.title)
+                Text(projection.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
-                if !article.summary.isEmpty {
-                    Text(article.summary)
+                if let summary = projection.summary {
+                    Text(summary)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(2)
@@ -266,7 +268,7 @@ struct BookmarkedArticleRow: View {
                     Text(authorDisplay.displayName)
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(Color.highlighterInkMuted)
-                    if let date = relativeDate {
+                    if let date = relativeDate(projection.displayUnixSeconds) {
                         Text("·")
                             .font(.caption2)
                             .foregroundStyle(Color.highlighterInkMuted)
@@ -289,8 +291,8 @@ struct BookmarkedArticleRow: View {
     }
 
     @ViewBuilder
-    private var coverImage: some View {
-        if !article.image.isEmpty, let url = URL(string: article.image) {
+    private func coverImage(imageURL: String?) -> some View {
+        if let imageURL, let url = URL(string: imageURL) {
             KFImage(url)
                 .placeholder { coverFallback }
                 .fade(duration: 0.15)
@@ -323,8 +325,13 @@ struct BookmarkedArticleRow: View {
         )
     }
 
-    private var relativeDate: String? {
-        let seconds = article.publishedAt ?? article.createdAt
+    private var rowProjection: BookmarkedArticleRowProjection {
+        app.safeCore.projectBookmarkedArticleRow(
+            input: BookmarkedArticleRowProjectionInput(article: article)
+        )
+    }
+
+    private func relativeDate(_ seconds: UInt64?) -> String? {
         return app.safeCore.projectRelativeTimeLabel(
             input: RelativeTimeLabelInput(
                 unixSeconds: seconds,
@@ -338,20 +345,9 @@ struct CollectionRow: View {
     @Environment(HighlighterStore.self) private var app
     let record: BookmarkSetRecord
 
-    private var displayTitle: String {
-        record.title.isEmpty ? (record.id.isEmpty ? "Untitled" : record.id) : record.title
-    }
-
-    private var kindLabel: String {
-        record.kind == 30003 ? "Bookmarks" : "Curation"
-    }
-
-    private var itemCount: Int {
-        record.articleAddresses.count + record.noteIds.count
-    }
-
     var body: some View {
         let curator = curatorDisplay
+        let projection = rowProjection
 
         HStack(spacing: 12) {
             ZStack {
@@ -364,7 +360,7 @@ struct CollectionRow: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(displayTitle)
+                Text(projection.displayTitle)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
@@ -383,15 +379,15 @@ struct CollectionRow: View {
                 }
 
                 HStack(spacing: 4) {
-                    Text(kindLabel)
+                    Text(projection.kindLabel)
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(Color.highlighterAccent.opacity(0.8))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(Color.highlighterAccent.opacity(0.1), in: Capsule())
 
-                    if itemCount > 0 {
-                        Text("\(itemCount) item\(itemCount == 1 ? "" : "s")")
+                    if let itemCountLabel = projection.itemCountLabel {
+                        Text(itemCountLabel)
                             .font(.caption2)
                             .foregroundStyle(Color.highlighterInkMuted)
                     }
@@ -418,28 +414,28 @@ struct CollectionRow: View {
             )
         )
     }
+
+    private var rowProjection: BookmarkSetRowProjection {
+        app.safeCore.projectBookmarkSetRow(
+            input: BookmarkSetRowProjectionInput(record: record)
+        )
+    }
 }
 
 struct WebBookmarkRow: View {
     @Environment(HighlighterStore.self) private var app
     let bookmark: WebBookmarkRecord
 
-    private var displayTitle: String {
-        bookmark.title.isEmpty ? bookmark.url : bookmark.title
-    }
-
-    private var host: String? {
-        URL(string: bookmark.url)?.host
-    }
-
     var body: some View {
+        let projection = rowProjection
+
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: "globe")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.highlighterAccent)
 
-                if let host {
+                if let host = projection.host {
                     Text(host)
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(Color.highlighterInkMuted)
@@ -447,21 +443,21 @@ struct WebBookmarkRow: View {
 
                 Spacer(minLength: 0)
 
-                if let date = relativeDate {
+                if let date = relativeDate(projection.displayUnixSeconds) {
                     Text(date)
                         .font(.caption2)
                         .foregroundStyle(Color.highlighterInkMuted)
                 }
             }
 
-            Text(displayTitle)
+            Text(projection.displayTitle)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
 
-            if !bookmark.description.isEmpty {
-                Text(bookmark.description)
+            if let description = projection.description {
+                Text(description)
                     .font(.caption)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(2)
@@ -486,8 +482,13 @@ struct WebBookmarkRow: View {
         }
     }
 
-    private var relativeDate: String? {
-        let seconds = bookmark.publishedAt ?? bookmark.createdAt
+    private var rowProjection: WebBookmarkRowProjection {
+        app.safeCore.projectWebBookmarkRow(
+            input: WebBookmarkRowProjectionInput(bookmark: bookmark)
+        )
+    }
+
+    private func relativeDate(_ seconds: UInt64?) -> String? {
         return app.safeCore.projectRelativeTimeLabel(
             input: RelativeTimeLabelInput(
                 unixSeconds: seconds,

@@ -1406,6 +1406,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput)  -> ArticleReaderHeaderProjection
 
+    func projectBookmarkSetDetail(input: BookmarkSetDetailProjectionInput)  -> BookmarkSetDetailProjection
+
+    func projectBookmarkSetRow(input: BookmarkSetRowProjectionInput)  -> BookmarkSetRowProjection
+
+    func projectBookmarkedArticleRow(input: BookmarkedArticleRowProjectionInput)  -> BookmarkedArticleRowProjection
+
     func projectCaptureBookDisplay(input: CaptureBookDisplayProjectionInput)  -> CaptureBookDisplayProjection
 
     /**
@@ -1515,6 +1521,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectShareHighlightArticleTarget(input: ShareHighlightArticleTargetProjectionInput)  -> ShareArtifactTargetProjection?
 
     func projectShareHighlightTarget(input: ShareHighlightTargetProjectionInput)  -> ShareHighlightTargetProjection
+
+    func projectWebBookmarkRow(input: WebBookmarkRowProjectionInput)  -> WebBookmarkRowProjection
 
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
 
@@ -4227,6 +4235,30 @@ open func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput) 
 })
 }
 
+open func projectBookmarkSetDetail(input: BookmarkSetDetailProjectionInput) -> BookmarkSetDetailProjection  {
+    return try!  FfiConverterTypeBookmarkSetDetailProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_bookmark_set_detail(self.uniffiClonePointer(),
+        FfiConverterTypeBookmarkSetDetailProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectBookmarkSetRow(input: BookmarkSetRowProjectionInput) -> BookmarkSetRowProjection  {
+    return try!  FfiConverterTypeBookmarkSetRowProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_bookmark_set_row(self.uniffiClonePointer(),
+        FfiConverterTypeBookmarkSetRowProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectBookmarkedArticleRow(input: BookmarkedArticleRowProjectionInput) -> BookmarkedArticleRowProjection  {
+    return try!  FfiConverterTypeBookmarkedArticleRowProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_bookmarked_article_row(self.uniffiClonePointer(),
+        FfiConverterTypeBookmarkedArticleRowProjectionInput_lower(input),$0
+    )
+})
+}
+
 open func projectCaptureBookDisplay(input: CaptureBookDisplayProjectionInput) -> CaptureBookDisplayProjection  {
     return try!  FfiConverterTypeCaptureBookDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_capture_book_display(self.uniffiClonePointer(),
@@ -4550,6 +4582,14 @@ open func projectShareHighlightTarget(input: ShareHighlightTargetProjectionInput
     return try!  FfiConverterTypeShareHighlightTargetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_highlight_target(self.uniffiClonePointer(),
         FfiConverterTypeShareHighlightTargetProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectWebBookmarkRow(input: WebBookmarkRowProjectionInput) -> WebBookmarkRowProjection  {
+    return try!  FfiConverterTypeWebBookmarkRowProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_web_bookmark_row(self.uniffiClonePointer(),
+        FfiConverterTypeWebBookmarkRowProjectionInput_lower(input),$0
     )
 })
 }
@@ -8250,6 +8290,130 @@ public func FfiConverterTypeBookRouteOutcome_lower(_ value: BookRouteOutcome) ->
 }
 
 
+public struct BookmarkSetDetailProjection {
+    public var displayTitle: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayTitle: String) {
+        self.displayTitle = displayTitle
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkSetDetailProjection: Sendable {}
+#endif
+
+
+extension BookmarkSetDetailProjection: Equatable, Hashable {
+    public static func ==(lhs: BookmarkSetDetailProjection, rhs: BookmarkSetDetailProjection) -> Bool {
+        if lhs.displayTitle != rhs.displayTitle {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayTitle)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkSetDetailProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetDetailProjection {
+        return
+            try BookmarkSetDetailProjection(
+                displayTitle: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkSetDetailProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayTitle, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetDetailProjection_lift(_ buf: RustBuffer) throws -> BookmarkSetDetailProjection {
+    return try FfiConverterTypeBookmarkSetDetailProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetDetailProjection_lower(_ value: BookmarkSetDetailProjection) -> RustBuffer {
+    return FfiConverterTypeBookmarkSetDetailProjection.lower(value)
+}
+
+
+public struct BookmarkSetDetailProjectionInput {
+    public var record: BookmarkSetRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(record: BookmarkSetRecord) {
+        self.record = record
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkSetDetailProjectionInput: Sendable {}
+#endif
+
+
+extension BookmarkSetDetailProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: BookmarkSetDetailProjectionInput, rhs: BookmarkSetDetailProjectionInput) -> Bool {
+        if lhs.record != rhs.record {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(record)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkSetDetailProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetDetailProjectionInput {
+        return
+            try BookmarkSetDetailProjectionInput(
+                record: FfiConverterTypeBookmarkSetRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkSetDetailProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeBookmarkSetRecord.write(value.record, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetDetailProjectionInput_lift(_ buf: RustBuffer) throws -> BookmarkSetDetailProjectionInput {
+    return try FfiConverterTypeBookmarkSetDetailProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetDetailProjectionInput_lower(_ value: BookmarkSetDetailProjectionInput) -> RustBuffer {
+    return FfiConverterTypeBookmarkSetDetailProjectionInput.lower(value)
+}
+
+
 public struct BookmarkSetListOutcome {
     public var values: [BookmarkSetRecord]
     public var error: String
@@ -8541,6 +8705,294 @@ public func FfiConverterTypeBookmarkSetRecord_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeBookmarkSetRecord_lower(_ value: BookmarkSetRecord) -> RustBuffer {
     return FfiConverterTypeBookmarkSetRecord.lower(value)
+}
+
+
+public struct BookmarkSetRowProjection {
+    public var displayTitle: String
+    public var kindLabel: String
+    public var itemCountLabel: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayTitle: String, kindLabel: String, itemCountLabel: String?) {
+        self.displayTitle = displayTitle
+        self.kindLabel = kindLabel
+        self.itemCountLabel = itemCountLabel
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkSetRowProjection: Sendable {}
+#endif
+
+
+extension BookmarkSetRowProjection: Equatable, Hashable {
+    public static func ==(lhs: BookmarkSetRowProjection, rhs: BookmarkSetRowProjection) -> Bool {
+        if lhs.displayTitle != rhs.displayTitle {
+            return false
+        }
+        if lhs.kindLabel != rhs.kindLabel {
+            return false
+        }
+        if lhs.itemCountLabel != rhs.itemCountLabel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayTitle)
+        hasher.combine(kindLabel)
+        hasher.combine(itemCountLabel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkSetRowProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetRowProjection {
+        return
+            try BookmarkSetRowProjection(
+                displayTitle: FfiConverterString.read(from: &buf),
+                kindLabel: FfiConverterString.read(from: &buf),
+                itemCountLabel: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkSetRowProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayTitle, into: &buf)
+        FfiConverterString.write(value.kindLabel, into: &buf)
+        FfiConverterOptionString.write(value.itemCountLabel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetRowProjection_lift(_ buf: RustBuffer) throws -> BookmarkSetRowProjection {
+    return try FfiConverterTypeBookmarkSetRowProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetRowProjection_lower(_ value: BookmarkSetRowProjection) -> RustBuffer {
+    return FfiConverterTypeBookmarkSetRowProjection.lower(value)
+}
+
+
+public struct BookmarkSetRowProjectionInput {
+    public var record: BookmarkSetRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(record: BookmarkSetRecord) {
+        self.record = record
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkSetRowProjectionInput: Sendable {}
+#endif
+
+
+extension BookmarkSetRowProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: BookmarkSetRowProjectionInput, rhs: BookmarkSetRowProjectionInput) -> Bool {
+        if lhs.record != rhs.record {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(record)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkSetRowProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetRowProjectionInput {
+        return
+            try BookmarkSetRowProjectionInput(
+                record: FfiConverterTypeBookmarkSetRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkSetRowProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeBookmarkSetRecord.write(value.record, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetRowProjectionInput_lift(_ buf: RustBuffer) throws -> BookmarkSetRowProjectionInput {
+    return try FfiConverterTypeBookmarkSetRowProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetRowProjectionInput_lower(_ value: BookmarkSetRowProjectionInput) -> RustBuffer {
+    return FfiConverterTypeBookmarkSetRowProjectionInput.lower(value)
+}
+
+
+public struct BookmarkedArticleRowProjection {
+    public var title: String
+    public var summary: String?
+    public var imageUrl: String?
+    public var displayUnixSeconds: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String, summary: String?, imageUrl: String?, displayUnixSeconds: UInt64?) {
+        self.title = title
+        self.summary = summary
+        self.imageUrl = imageUrl
+        self.displayUnixSeconds = displayUnixSeconds
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkedArticleRowProjection: Sendable {}
+#endif
+
+
+extension BookmarkedArticleRowProjection: Equatable, Hashable {
+    public static func ==(lhs: BookmarkedArticleRowProjection, rhs: BookmarkedArticleRowProjection) -> Bool {
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.summary != rhs.summary {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        if lhs.displayUnixSeconds != rhs.displayUnixSeconds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(title)
+        hasher.combine(summary)
+        hasher.combine(imageUrl)
+        hasher.combine(displayUnixSeconds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkedArticleRowProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkedArticleRowProjection {
+        return
+            try BookmarkedArticleRowProjection(
+                title: FfiConverterString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                displayUnixSeconds: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkedArticleRowProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.summary, into: &buf)
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
+        FfiConverterOptionUInt64.write(value.displayUnixSeconds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkedArticleRowProjection_lift(_ buf: RustBuffer) throws -> BookmarkedArticleRowProjection {
+    return try FfiConverterTypeBookmarkedArticleRowProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkedArticleRowProjection_lower(_ value: BookmarkedArticleRowProjection) -> RustBuffer {
+    return FfiConverterTypeBookmarkedArticleRowProjection.lower(value)
+}
+
+
+public struct BookmarkedArticleRowProjectionInput {
+    public var article: ArticleRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(article: ArticleRecord) {
+        self.article = article
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkedArticleRowProjectionInput: Sendable {}
+#endif
+
+
+extension BookmarkedArticleRowProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: BookmarkedArticleRowProjectionInput, rhs: BookmarkedArticleRowProjectionInput) -> Bool {
+        if lhs.article != rhs.article {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(article)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkedArticleRowProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkedArticleRowProjectionInput {
+        return
+            try BookmarkedArticleRowProjectionInput(
+                article: FfiConverterTypeArticleRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkedArticleRowProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArticleRecord.write(value.article, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkedArticleRowProjectionInput_lift(_ buf: RustBuffer) throws -> BookmarkedArticleRowProjectionInput {
+    return try FfiConverterTypeBookmarkedArticleRowProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkedArticleRowProjectionInput_lower(_ value: BookmarkedArticleRowProjectionInput) -> RustBuffer {
+    return FfiConverterTypeBookmarkedArticleRowProjectionInput.lower(value)
 }
 
 
@@ -24110,6 +24562,154 @@ public func FfiConverterTypeWebBookmarkRecord_lower(_ value: WebBookmarkRecord) 
 }
 
 
+public struct WebBookmarkRowProjection {
+    public var displayTitle: String
+    public var host: String?
+    public var description: String?
+    public var displayUnixSeconds: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayTitle: String, host: String?, description: String?, displayUnixSeconds: UInt64?) {
+        self.displayTitle = displayTitle
+        self.host = host
+        self.description = description
+        self.displayUnixSeconds = displayUnixSeconds
+    }
+}
+
+#if compiler(>=6)
+extension WebBookmarkRowProjection: Sendable {}
+#endif
+
+
+extension WebBookmarkRowProjection: Equatable, Hashable {
+    public static func ==(lhs: WebBookmarkRowProjection, rhs: WebBookmarkRowProjection) -> Bool {
+        if lhs.displayTitle != rhs.displayTitle {
+            return false
+        }
+        if lhs.host != rhs.host {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.displayUnixSeconds != rhs.displayUnixSeconds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayTitle)
+        hasher.combine(host)
+        hasher.combine(description)
+        hasher.combine(displayUnixSeconds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWebBookmarkRowProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebBookmarkRowProjection {
+        return
+            try WebBookmarkRowProjection(
+                displayTitle: FfiConverterString.read(from: &buf),
+                host: FfiConverterOptionString.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf),
+                displayUnixSeconds: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WebBookmarkRowProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayTitle, into: &buf)
+        FfiConverterOptionString.write(value.host, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterOptionUInt64.write(value.displayUnixSeconds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebBookmarkRowProjection_lift(_ buf: RustBuffer) throws -> WebBookmarkRowProjection {
+    return try FfiConverterTypeWebBookmarkRowProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebBookmarkRowProjection_lower(_ value: WebBookmarkRowProjection) -> RustBuffer {
+    return FfiConverterTypeWebBookmarkRowProjection.lower(value)
+}
+
+
+public struct WebBookmarkRowProjectionInput {
+    public var bookmark: WebBookmarkRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(bookmark: WebBookmarkRecord) {
+        self.bookmark = bookmark
+    }
+}
+
+#if compiler(>=6)
+extension WebBookmarkRowProjectionInput: Sendable {}
+#endif
+
+
+extension WebBookmarkRowProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: WebBookmarkRowProjectionInput, rhs: WebBookmarkRowProjectionInput) -> Bool {
+        if lhs.bookmark != rhs.bookmark {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(bookmark)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWebBookmarkRowProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebBookmarkRowProjectionInput {
+        return
+            try WebBookmarkRowProjectionInput(
+                bookmark: FfiConverterTypeWebBookmarkRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WebBookmarkRowProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeWebBookmarkRecord.write(value.bookmark, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebBookmarkRowProjectionInput_lift(_ buf: RustBuffer) throws -> WebBookmarkRowProjectionInput {
+    return try FfiConverterTypeWebBookmarkRowProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebBookmarkRowProjectionInput_lower(_ value: WebBookmarkRowProjectionInput) -> RustBuffer {
+    return FfiConverterTypeWebBookmarkRowProjectionInput.lower(value)
+}
+
+
 /**
  * Public record exposed via UniFFI. Empty strings fill missing fields so
  * Swift call sites don't have to handle `Option` everywhere.
@@ -29585,6 +30185,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_header() != 55976) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_bookmark_set_detail() != 2420) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_bookmark_set_row() != 19007) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_bookmarked_article_row() != 18903) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_book_display() != 26332) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29691,6 +30300,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_highlight_target() != 26659) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_web_bookmark_row() != 39985) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 1182) {

@@ -2730,6 +2730,34 @@ impl HighlighterCore {
         })())
     }
 
+    pub fn project_bookmarked_article_row(
+        &self,
+        input: crate::lists::BookmarkedArticleRowProjectionInput,
+    ) -> crate::lists::BookmarkedArticleRowProjection {
+        crate::lists::bookmarked_article_row_projection(input)
+    }
+
+    pub fn project_bookmark_set_row(
+        &self,
+        input: crate::lists::BookmarkSetRowProjectionInput,
+    ) -> crate::lists::BookmarkSetRowProjection {
+        crate::lists::bookmark_set_row_projection(input)
+    }
+
+    pub fn project_bookmark_set_detail(
+        &self,
+        input: crate::lists::BookmarkSetDetailProjectionInput,
+    ) -> crate::lists::BookmarkSetDetailProjection {
+        crate::lists::bookmark_set_detail_projection(input)
+    }
+
+    pub fn project_web_bookmark_row(
+        &self,
+        input: crate::lists::WebBookmarkRowProjectionInput,
+    ) -> crate::lists::WebBookmarkRowProjection {
+        crate::lists::web_bookmark_row_projection(input)
+    }
+
     /// Create a new empty kind:30004 curation set with `title`. Returns
     /// the freshly published record so the UI can immediately use its
     /// `id` (d-tag) to add items.

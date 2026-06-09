@@ -386,6 +386,30 @@ actor SafeHighlighterCore {
         await core.getMyWebBookmarks()
     }
 
+    nonisolated func projectBookmarkedArticleRow(
+        input: BookmarkedArticleRowProjectionInput
+    ) -> BookmarkedArticleRowProjection {
+        core.projectBookmarkedArticleRow(input: input)
+    }
+
+    nonisolated func projectBookmarkSetRow(
+        input: BookmarkSetRowProjectionInput
+    ) -> BookmarkSetRowProjection {
+        core.projectBookmarkSetRow(input: input)
+    }
+
+    nonisolated func projectBookmarkSetDetail(
+        input: BookmarkSetDetailProjectionInput
+    ) -> BookmarkSetDetailProjection {
+        core.projectBookmarkSetDetail(input: input)
+    }
+
+    nonisolated func projectWebBookmarkRow(
+        input: WebBookmarkRowProjectionInput
+    ) -> WebBookmarkRowProjection {
+        core.projectWebBookmarkRow(input: input)
+    }
+
     func subscribeBookmarkSets() async -> SubscriptionOutcome {
         await core.subscribeBookmarkSets()
     }

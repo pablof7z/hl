@@ -84,6 +84,11 @@ pub use highlights::{
     HighlightGroupLabelSegment, HighlightResourceAuthorProfile, HighlightResourceHeaderProjection,
     HighlightResourceHeaderProjectionInput,
 };
+pub use lists::{
+    BookmarkSetDetailProjection, BookmarkSetDetailProjectionInput, BookmarkSetRowProjection,
+    BookmarkSetRowProjectionInput, BookmarkedArticleRowProjection,
+    BookmarkedArticleRowProjectionInput, WebBookmarkRowProjection, WebBookmarkRowProjectionInput,
+};
 pub use models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactListOutcome, ArtifactOutcome,

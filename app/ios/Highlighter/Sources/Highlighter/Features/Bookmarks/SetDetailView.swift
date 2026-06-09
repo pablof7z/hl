@@ -8,7 +8,9 @@ struct SetDetailView: View {
     @State private var isLoading = false
 
     private var displayTitle: String {
-        record.title.isEmpty ? (record.id.isEmpty ? "Collection" : record.id) : record.title
+        app.safeCore.projectBookmarkSetDetail(
+            input: BookmarkSetDetailProjectionInput(record: record)
+        ).displayTitle
     }
 
     var body: some View {
