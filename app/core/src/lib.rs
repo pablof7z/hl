@@ -71,7 +71,8 @@ pub use articles::{
 pub use artifact_detail::ArtifactDetailProjection;
 pub use blossom::{
     BlossomServerEntryProjection, BlossomServerEntryProjectionInput, BlossomServerListProjection,
-    BlossomServerListProjectionInput,
+    BlossomServerListProjectionInput, BlossomServerSettingsMutationSnapshot,
+    BlossomServerSettingsSnapshot,
 };
 pub use book_detail::BookDetailSnapshot;
 pub use bookmarks::{

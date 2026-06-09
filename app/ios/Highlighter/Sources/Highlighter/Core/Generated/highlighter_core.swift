@@ -952,10 +952,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
 
     /**
-     * Return the user's ordered Blossom server list from nostrdb. Empty if no
-     * kind:10063 has been cached yet (relay hasn't delivered it).
+     * Return the screen-shaped media settings snapshot. Rust owns error
+     * semantics and server-list normalization; native shells render the list.
      */
-    func getBlossomServers() async  -> StringListOutcome
+    func getBlossomServerSettingsSnapshot() async  -> BlossomServerSettingsSnapshot
 
     /**
      * Screen-shaped snapshot for the native book detail route. Rust owns
@@ -1673,10 +1673,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func sendRoomInvites(groupId: String, selected: [RoomInviteCandidate]) async  -> RoomInviteSendResultProjection
 
     /**
-     * Replace the user's Blossom server list with `servers` (must be
-     * non-empty). Order is preserved — first server is the upload default.
+     * Replace the user's Blossom server list with the normalized ordered
+     * settings projection. Rust blocks invalid empty saves and returns the
+     * mutation state instead of a raw event-id outcome.
      */
-    func setBlossomServers(servers: [String]) async  -> StringOutcome
+    func setBlossomServerSettings(servers: [String]) async  -> BlossomServerSettingsMutationSnapshot
 
     func setEventCallback(callback: EventCallback)
 
@@ -2596,14 +2597,14 @@ open func getArtifactDetailRoute(artifact: ArtifactRecord) -> ArtifactDetailRout
 }
 
     /**
-     * Return the user's ordered Blossom server list from nostrdb. Empty if no
-     * kind:10063 has been cached yet (relay hasn't delivered it).
+     * Return the screen-shaped media settings snapshot. Rust owns error
+     * semantics and server-list normalization; native shells render the list.
      */
-open func getBlossomServers()async  -> StringListOutcome  {
+open func getBlossomServerSettingsSnapshot()async  -> BlossomServerSettingsSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_blossom_servers(
+                uniffi_highlighter_core_fn_method_highlightercore_get_blossom_server_settings_snapshot(
                     self.uniffiClonePointer()
 
                 )
@@ -2611,7 +2612,7 @@ open func getBlossomServers()async  -> StringListOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringListOutcome_lift,
+            liftFunc: FfiConverterTypeBlossomServerSettingsSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5018,14 +5019,15 @@ open func sendRoomInvites(groupId: String, selected: [RoomInviteCandidate])async
 }
 
     /**
-     * Replace the user's Blossom server list with `servers` (must be
-     * non-empty). Order is preserved — first server is the upload default.
+     * Replace the user's Blossom server list with the normalized ordered
+     * settings projection. Rust blocks invalid empty saves and returns the
+     * mutation state instead of a raw event-id outcome.
      */
-open func setBlossomServers(servers: [String])async  -> StringOutcome  {
+open func setBlossomServerSettings(servers: [String])async  -> BlossomServerSettingsMutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_set_blossom_servers(
+                uniffi_highlighter_core_fn_method_highlightercore_set_blossom_server_settings(
                     self.uniffiClonePointer(),
                     FfiConverterSequenceString.lower(servers)
                 )
@@ -5033,7 +5035,7 @@ open func setBlossomServers(servers: [String])async  -> StringOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringOutcome_lift,
+            liftFunc: FfiConverterTypeBlossomServerSettingsMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -8988,6 +8990,154 @@ public func FfiConverterTypeBlossomServerListProjectionInput_lift(_ buf: RustBuf
 #endif
 public func FfiConverterTypeBlossomServerListProjectionInput_lower(_ value: BlossomServerListProjectionInput) -> RustBuffer {
     return FfiConverterTypeBlossomServerListProjectionInput.lower(value)
+}
+
+
+public struct BlossomServerSettingsMutationSnapshot {
+    public var servers: [String]
+    public var eventId: String
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(servers: [String], eventId: String, errorMessage: String) {
+        self.servers = servers
+        self.eventId = eventId
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension BlossomServerSettingsMutationSnapshot: Sendable {}
+#endif
+
+
+extension BlossomServerSettingsMutationSnapshot: Equatable, Hashable {
+    public static func ==(lhs: BlossomServerSettingsMutationSnapshot, rhs: BlossomServerSettingsMutationSnapshot) -> Bool {
+        if lhs.servers != rhs.servers {
+            return false
+        }
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(servers)
+        hasher.combine(eventId)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlossomServerSettingsMutationSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerSettingsMutationSnapshot {
+        return
+            try BlossomServerSettingsMutationSnapshot(
+                servers: FfiConverterSequenceString.read(from: &buf),
+                eventId: FfiConverterString.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlossomServerSettingsMutationSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.servers, into: &buf)
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerSettingsMutationSnapshot_lift(_ buf: RustBuffer) throws -> BlossomServerSettingsMutationSnapshot {
+    return try FfiConverterTypeBlossomServerSettingsMutationSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerSettingsMutationSnapshot_lower(_ value: BlossomServerSettingsMutationSnapshot) -> RustBuffer {
+    return FfiConverterTypeBlossomServerSettingsMutationSnapshot.lower(value)
+}
+
+
+public struct BlossomServerSettingsSnapshot {
+    public var servers: [String]
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(servers: [String], errorMessage: String) {
+        self.servers = servers
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension BlossomServerSettingsSnapshot: Sendable {}
+#endif
+
+
+extension BlossomServerSettingsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: BlossomServerSettingsSnapshot, rhs: BlossomServerSettingsSnapshot) -> Bool {
+        if lhs.servers != rhs.servers {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(servers)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlossomServerSettingsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerSettingsSnapshot {
+        return
+            try BlossomServerSettingsSnapshot(
+                servers: FfiConverterSequenceString.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlossomServerSettingsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.servers, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerSettingsSnapshot_lift(_ buf: RustBuffer) throws -> BlossomServerSettingsSnapshot {
+    return try FfiConverterTypeBlossomServerSettingsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlossomServerSettingsSnapshot_lower(_ value: BlossomServerSettingsSnapshot) -> RustBuffer {
+    return FfiConverterTypeBlossomServerSettingsSnapshot.lower(value)
 }
 
 
@@ -38211,7 +38361,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_route() != 10925) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_servers() != 25689) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_server_settings_snapshot() != 30223) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_book_detail_snapshot() != 3058) {
@@ -38754,7 +38904,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_send_room_invites() != 44945) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_blossom_servers() != 36821) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_blossom_server_settings() != 6642) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_event_callback() != 16901) {

@@ -3779,10 +3779,12 @@ impl HighlighterCore {
         blossom::blossom_server_list_projection(input)
     }
 
-    /// Return the user's ordered Blossom server list from nostrdb. Empty if no
-    /// kind:10063 has been cached yet (relay hasn't delivered it).
-    pub async fn get_blossom_servers(&self) -> StringListOutcome {
-        string_list_outcome((|| {
+    /// Return the screen-shaped media settings snapshot. Rust owns error
+    /// semantics and server-list normalization; native shells render the list.
+    pub async fn get_blossom_server_settings_snapshot(
+        &self,
+    ) -> blossom::BlossomServerSettingsSnapshot {
+        let result = (|| {
             let user = self
                 .inner
                 .read()
@@ -3790,18 +3792,37 @@ impl HighlighterCore {
                 .current_user()
                 .ok_or(CoreError::NotAuthenticated)?;
             blossom::query_blossom_servers(self.runtime.ndb(), &user.pubkey)
-        })())
+        })();
+        blossom::blossom_server_settings_snapshot(result)
     }
 
-    /// Replace the user's Blossom server list with `servers` (must be
-    /// non-empty). Order is preserved — first server is the upload default.
-    pub async fn set_blossom_servers(&self, servers: Vec<String>) -> StringOutcome {
+    /// Replace the user's Blossom server list with the normalized ordered
+    /// settings projection. Rust blocks invalid empty saves and returns the
+    /// mutation state instead of a raw event-id outcome.
+    pub async fn set_blossom_server_settings(
+        &self,
+        servers: Vec<String>,
+    ) -> blossom::BlossomServerSettingsMutationSnapshot {
+        let projection =
+            blossom::blossom_server_list_projection(blossom::BlossomServerListProjectionInput {
+                servers,
+                add_url: None,
+                remove_indexes: Vec::new(),
+                move_indexes: Vec::new(),
+                move_to_index: None,
+            });
+        let normalized_servers = projection.servers.clone();
         let result: Result<String, CoreError> = async {
             let _ = self.require_user_pubkey()?;
-            blossom::publish_blossom_servers(&self.runtime, servers).await
+            if !projection.can_save {
+                return Err(CoreError::InvalidInput(
+                    "at least one blossom server required".into(),
+                ));
+            }
+            blossom::publish_blossom_servers(&self.runtime, projection.servers).await
         }
         .await;
-        string_outcome(result)
+        blossom::blossom_server_settings_mutation_snapshot(normalized_servers, result)
     }
 
     /// Publish the default Blossom server list only if the user has no cached

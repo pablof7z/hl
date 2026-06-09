@@ -59,6 +59,19 @@ pub struct BlossomServerListProjection {
     pub can_save: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BlossomServerSettingsSnapshot {
+    pub servers: Vec<String>,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BlossomServerSettingsMutationSnapshot {
+    pub servers: Vec<String>,
+    pub event_id: String,
+    pub error_message: String,
+}
+
 // -- Reads --
 
 /// Return the newest kind:10063 event for `user_hex` from nostrdb.
@@ -124,6 +137,30 @@ pub fn query_blossom_servers(ndb: &Ndb, user_hex: &str) -> Result<Vec<String>, C
     }
 }
 
+pub fn blossom_server_settings_snapshot(
+    result: Result<Vec<String>, CoreError>,
+) -> BlossomServerSettingsSnapshot {
+    match result {
+        Ok(servers) => {
+            let projection = blossom_server_list_projection(BlossomServerListProjectionInput {
+                servers,
+                add_url: None,
+                remove_indexes: Vec::new(),
+                move_indexes: Vec::new(),
+                move_to_index: None,
+            });
+            BlossomServerSettingsSnapshot {
+                servers: projection.servers,
+                error_message: String::new(),
+            }
+        }
+        Err(error) => BlossomServerSettingsSnapshot {
+            servers: Vec::new(),
+            error_message: error.to_string(),
+        },
+    }
+}
+
 /// Project the add-server sheet for Blossom media settings. Native shells
 /// render the returned flags and pass `submit_url` to the add action.
 pub fn blossom_server_entry_projection(
@@ -184,6 +221,31 @@ pub fn blossom_server_list_projection(
     BlossomServerListProjection {
         can_save: !servers.is_empty(),
         servers,
+    }
+}
+
+pub fn blossom_server_settings_mutation_snapshot(
+    requested_servers: Vec<String>,
+    result: Result<String, CoreError>,
+) -> BlossomServerSettingsMutationSnapshot {
+    let projection = blossom_server_list_projection(BlossomServerListProjectionInput {
+        servers: requested_servers,
+        add_url: None,
+        remove_indexes: Vec::new(),
+        move_indexes: Vec::new(),
+        move_to_index: None,
+    });
+    match result {
+        Ok(event_id) => BlossomServerSettingsMutationSnapshot {
+            servers: projection.servers,
+            event_id,
+            error_message: String::new(),
+        },
+        Err(error) => BlossomServerSettingsMutationSnapshot {
+            servers: projection.servers,
+            event_id: String::new(),
+            error_message: error.to_string(),
+        },
     }
 }
 
@@ -593,6 +655,49 @@ mod tests {
             move_to_index: Some(5),
         });
         assert_eq!(moved_multiple.servers, vec!["a", "c", "e", "b", "d"]);
+    }
+
+    #[test]
+    fn blossom_server_settings_snapshot_normalizes_and_surfaces_errors() {
+        let snapshot = blossom_server_settings_snapshot(Ok(vec![
+            " https://one.example.com ".into(),
+            "https://one.example.com".into(),
+            "https://two.example.com".into(),
+        ]));
+        assert_eq!(
+            snapshot.servers,
+            vec!["https://one.example.com", "https://two.example.com"]
+        );
+        assert!(snapshot.error_message.is_empty());
+
+        let failure = blossom_server_settings_snapshot(Err(CoreError::NotAuthenticated));
+        assert!(failure.servers.is_empty());
+        assert_eq!(failure.error_message, "not authenticated");
+    }
+
+    #[test]
+    fn blossom_server_settings_mutation_snapshot_preserves_requested_order_and_error_state() {
+        let success = blossom_server_settings_mutation_snapshot(
+            vec![
+                " https://one.example.com ".into(),
+                "https://two.example.com".into(),
+            ],
+            Ok("event123".into()),
+        );
+        assert_eq!(
+            success.servers,
+            vec!["https://one.example.com", "https://two.example.com"]
+        );
+        assert_eq!(success.event_id, "event123");
+        assert!(success.error_message.is_empty());
+
+        let failure = blossom_server_settings_mutation_snapshot(
+            vec!["https://one.example.com".into()],
+            Err(CoreError::Relay("offline".into())),
+        );
+        assert_eq!(failure.servers, vec!["https://one.example.com"]);
+        assert!(failure.event_id.is_empty());
+        assert_eq!(failure.error_message, "relay error: offline");
     }
 
     #[test]

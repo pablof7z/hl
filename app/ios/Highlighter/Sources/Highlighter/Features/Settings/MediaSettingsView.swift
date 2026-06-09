@@ -96,8 +96,8 @@ struct MediaSettingsView: View {
     }
 
     private func load() async {
-        let outcome = await store.safeCore.getBlossomServers()
-        servers = outcome.error.isEmpty ? outcome.values : []
+        let snapshot = await store.safeCore.getBlossomServerSettingsSnapshot()
+        servers = snapshot.servers
         isLoading = false
     }
 
@@ -114,7 +114,8 @@ struct MediaSettingsView: View {
         guard projection.canSave else { return }
         servers = projection.servers
         isSaving = true
-        _ = await store.safeCore.setBlossomServers(servers)
+        let snapshot = await store.safeCore.setBlossomServerSettings(servers)
+        servers = snapshot.servers
         isSaving = false
     }
 }

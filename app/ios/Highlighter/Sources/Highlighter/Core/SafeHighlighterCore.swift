@@ -1379,12 +1379,12 @@ actor SafeHighlighterCore {
         core.projectBlossomServerList(input: input)
     }
 
-    func getBlossomServers() async -> StringListOutcome {
-        await core.getBlossomServers()
+    func getBlossomServerSettingsSnapshot() async -> BlossomServerSettingsSnapshot {
+        await core.getBlossomServerSettingsSnapshot()
     }
 
-    func setBlossomServers(_ servers: [String]) async -> StringOutcome {
-        await core.setBlossomServers(servers: servers)
+    func setBlossomServerSettings(_ servers: [String]) async -> BlossomServerSettingsMutationSnapshot {
+        await core.setBlossomServerSettings(servers: servers)
     }
 
     func initDefaultBlossomServers() async -> MutationOutcome {
