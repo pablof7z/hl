@@ -41,9 +41,9 @@ use crate::models::{
     NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
     OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
     PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem,
-    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome,
-    RoomLane, StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
+    RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome, RoomLane,
+    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
     WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
@@ -752,21 +752,6 @@ fn reaction_outcome(
             error: String::new(),
         },
         Err(error) => ReactionOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn reaction_summary_outcome(
-    result: Result<crate::reactions::ReactionSummary, CoreError>,
-) -> ReactionSummaryOutcome {
-    match result {
-        Ok(value) => ReactionSummaryOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => ReactionSummaryOutcome {
             value: None,
             error: error.to_string(),
         },
@@ -2316,6 +2301,26 @@ impl HighlighterCore {
         comment_list_outcome(comments::query_for_scope(self.runtime.ndb(), &scope, limit))
     }
 
+    /// Interaction snapshot for the currently visible comment records. Rust
+    /// owns reaction summary reads, current-user like membership, and event
+    /// bookmark membership.
+    pub async fn get_comment_interaction_snapshot(
+        &self,
+        records: Vec<CommentRecord>,
+    ) -> comments::CommentInteractionSnapshot {
+        let current_user = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|user| user.pubkey);
+        comments::comment_interaction_snapshot(
+            self.runtime.ndb(),
+            &records,
+            current_user.as_deref(),
+        )
+    }
+
     /// Publish a NIP-22 kind:1111 comment scoped to a Rust-owned root.
     /// `parent_event_id` is `None` for top-level comments and `Some(id)` for
     /// replies (the parent kind:1111 comment).
@@ -2338,27 +2343,6 @@ impl HighlighterCore {
     }
 
     // -- Reactions (NIP-25 kind:7) ---------------------------------------
-
-    /// Rust-owned like summary for a target event. The core classifies the
-    /// NIP-25 reaction content and resolves the current user's own like.
-    pub async fn get_like_summary_for_event(
-        &self,
-        target_event_id: String,
-        limit: u32,
-    ) -> ReactionSummaryOutcome {
-        let current_user = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|user| user.pubkey);
-        reaction_summary_outcome(crate::reactions::query_like_summary_for_event(
-            self.runtime.ndb(),
-            target_event_id.trim(),
-            current_user.as_deref(),
-            limit,
-        ))
-    }
 
     pub fn project_comment_like_state(
         &self,
@@ -2720,26 +2704,6 @@ impl HighlighterCore {
             None => return bool_outcome(Err(CoreError::NotInitialized)),
         };
         bool_outcome(crate::bookmarks::toggle_bookmark(&self.runtime, &user_hex, &address).await)
-    }
-
-    /// Read-only predicate: is `event_id_hex` currently bookmarked for
-    /// the logged-in user? Always `false` when no user is logged in.
-    pub async fn is_event_bookmarked(&self, event_id_hex: String) -> BoolOutcome {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .unwrap_or_default();
-        if user_hex.is_empty() {
-            return bool_outcome(Ok(false));
-        }
-        bool_outcome(crate::bookmarks::is_event_bookmarked(
-            self.runtime.ndb(),
-            &user_hex,
-            &event_id_hex,
-        ))
     }
 
     /// Toggle `event_id_hex` in the user's kind:10003 list (for comments

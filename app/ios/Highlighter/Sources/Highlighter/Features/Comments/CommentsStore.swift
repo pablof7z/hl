@@ -67,42 +67,15 @@ final class CommentsStore {
     }
 
     /// Reaction counts + my-bookmark predicates for every visible comment.
-    /// Runs in parallel; failures leave previous state in place.
+    /// Rust owns the per-row cache reads and section fallback policy.
     private func refreshReactionsAndBookmarks(for records: [CommentRecord]) async {
         guard let core else { return }
-        let captured = core
-        await withTaskGroup(of: (String, ReactionSummary?, Bool?).self) { group in
-            for r in records {
-                let id = r.eventId
-                group.addTask {
-                    let reactionOutcome = await captured.getLikeSummaryForEvent(targetEventId: id, limit: 128)
-                    let summary = reactionOutcome.error.isEmpty ? reactionOutcome.value : nil
-                    let bookmarkOutcome = await captured.isEventBookmarked(eventIdHex: id)
-                    let bookmarked = bookmarkOutcome.error.isEmpty ? bookmarkOutcome.value : nil
-                    return (id, summary, bookmarked)
-                }
-            }
-            for await (id, summary, isBookmarked) in group {
-                if let summary {
-                    if let projection = self.commentLikeStateProjection(
-                        eventIdHex: id,
-                        likeCount: summary.likeCount,
-                        desiredLiked: summary.myLikeEventId != nil
-                    ) {
-                        likeCounts[id] = Int(projection.likeCount)
-                        likedCommentIds = projection.optimisticLikedEventIds
-                    }
-                }
-                if let isBookmarked {
-                    if let projection = self.eventBookmarkStateProjection(
-                        eventIdHex: id,
-                        desiredMember: isBookmarked
-                    ) {
-                        self.bookmarked = projection.optimisticEventIds
-                    }
-                }
-            }
-        }
+        let snapshot = await core.getCommentInteractionSnapshot(records: records)
+        likeCounts = Dictionary(
+            uniqueKeysWithValues: snapshot.rows.map { ($0.eventId, Int($0.likeCount)) }
+        )
+        likedCommentIds = snapshot.likedEventIds
+        bookmarked = snapshot.bookmarkedEventIds
     }
 
     // MARK: - Drafts

@@ -98,6 +98,21 @@ pub struct CommentActionChromeProjection {
     pub bookmark_system_image: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentInteractionRow {
+    pub event_id: String,
+    pub like_count: u32,
+    pub is_liked: bool,
+    pub is_bookmarked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentInteractionSnapshot {
+    pub rows: Vec<CommentInteractionRow>,
+    pub liked_event_ids: Vec<String>,
+    pub bookmarked_event_ids: Vec<String>,
+}
+
 /// Comment composer projection. Rust owns draft normalization and submit
 /// eligibility; native shells render the composer affordance.
 pub fn comment_composer_projection(
@@ -248,6 +263,84 @@ pub fn comment_thread_view_projection(
         reply_count_label: reply_count_label(reply_count),
         focused,
         children,
+    }
+}
+
+/// Project per-comment interaction state for the visible bounded comment
+/// record set. Rust owns NIP-25 summary queries, current-user like
+/// resolution, bookmark-list membership, and per-row cache failure fallback.
+pub fn comment_interaction_snapshot(
+    ndb: &Ndb,
+    records: &[CommentRecord],
+    current_user_pubkey: Option<&str>,
+) -> CommentInteractionSnapshot {
+    let current_user_pubkey = current_user_pubkey
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let bookmarked_ids = match current_user_pubkey {
+        Some(user_hex) => match crate::bookmarks::query_bookmarks(ndb, user_hex) {
+            Ok(list) => list.event_ids,
+            Err(error) => {
+                tracing::warn!(error = %error, "failed to query comment bookmark state");
+                Vec::new()
+            }
+        },
+        None => Vec::new(),
+    };
+
+    let mut rows = Vec::with_capacity(records.len());
+    let mut liked_event_ids = HashSet::new();
+    let mut bookmarked_event_ids = HashSet::new();
+    for record in records {
+        let event_id = record.event_id.trim();
+        let summary = match crate::reactions::query_like_summary_for_event(
+            ndb,
+            event_id,
+            current_user_pubkey,
+            128,
+        ) {
+            Ok(summary) => summary,
+            Err(error) => {
+                tracing::warn!(
+                    event_id = %event_id,
+                    error = %error,
+                    "failed to query comment like summary"
+                );
+                crate::reactions::ReactionSummary {
+                    like_count: 0,
+                    my_like_event_id: None,
+                }
+            }
+        };
+        let is_liked = summary.my_like_event_id.is_some();
+        let is_bookmarked = bookmarked_ids.iter().any(|id| id == event_id);
+        if is_liked {
+            if let Ok(canonical) = EventId::from_hex(event_id) {
+                liked_event_ids.insert(canonical.to_hex());
+            }
+        }
+        if is_bookmarked {
+            if let Ok(canonical) = EventId::from_hex(event_id) {
+                bookmarked_event_ids.insert(canonical.to_hex());
+            }
+        }
+        rows.push(CommentInteractionRow {
+            event_id: event_id.to_string(),
+            like_count: summary.like_count,
+            is_liked,
+            is_bookmarked,
+        });
+    }
+
+    let mut liked_event_ids: Vec<String> = liked_event_ids.into_iter().collect();
+    liked_event_ids.sort();
+    let mut bookmarked_event_ids: Vec<String> = bookmarked_event_ids.into_iter().collect();
+    bookmarked_event_ids.sort();
+
+    CommentInteractionSnapshot {
+        rows,
+        liked_event_ids,
+        bookmarked_event_ids,
     }
 }
 
@@ -732,6 +825,20 @@ pub async fn publish_comment_for_scope(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nostrdb::{Config, Ndb};
+    use tempfile::TempDir;
+
+    fn fresh_ndb() -> (Ndb, TempDir) {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = Config::new();
+        let ndb = Ndb::new(tmp.path().to_str().unwrap(), &cfg).unwrap();
+        (ndb, tmp)
+    }
+
+    fn process(ndb: &Ndb, event: &Event) {
+        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
+        ndb.process_event(&line).unwrap();
+    }
 
     #[test]
     fn article_scope_uses_address_kind() {
@@ -1033,6 +1140,45 @@ mod tests {
                 bookmark_system_image: "bookmark.slash".into(),
             }
         );
+    }
+
+    #[test]
+    fn comment_interaction_snapshot_reads_likes_and_bookmarks() {
+        let (ndb, _tmp) = fresh_ndb();
+        let user = Keys::generate();
+        let author = Keys::generate();
+        let target = EventBuilder::new(Kind::Custom(KIND_NIP22_COMMENT), "comment")
+            .sign_with_keys(&author)
+            .unwrap();
+        let target_id = target.id.to_hex();
+        let reaction = EventBuilder::new(Kind::Custom(crate::reactions::KIND_REACTION), "+")
+            .tags([
+                Tag::parse(vec!["e".to_string(), target_id.clone()]).unwrap(),
+                Tag::parse(vec!["p".to_string(), author.public_key().to_hex()]).unwrap(),
+                Tag::parse(vec!["k".to_string(), KIND_NIP22_COMMENT.to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&user)
+            .unwrap();
+        let bookmarks = EventBuilder::new(Kind::Custom(crate::bookmarks::KIND_BOOKMARKS), "")
+            .tags([Tag::parse(vec!["e".to_string(), target_id.clone()]).unwrap()])
+            .sign_with_keys(&user)
+            .unwrap();
+        process(&ndb, &target);
+        process(&ndb, &reaction);
+        process(&ndb, &bookmarks);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        let record = comment(&target_id, "root", Some(1));
+        let snapshot =
+            comment_interaction_snapshot(&ndb, &[record], Some(&user.public_key().to_hex()));
+
+        assert_eq!(snapshot.rows.len(), 1);
+        assert_eq!(snapshot.rows[0].event_id, target_id);
+        assert_eq!(snapshot.rows[0].like_count, 1);
+        assert!(snapshot.rows[0].is_liked);
+        assert!(snapshot.rows[0].is_bookmarked);
+        assert_eq!(snapshot.liked_event_ids, vec![target_id.clone()]);
+        assert_eq!(snapshot.bookmarked_event_ids, vec![target_id]);
     }
 
     #[test]

@@ -1040,6 +1040,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getChatMessages(groupId: String, limit: UInt32) async  -> ChatMessageListOutcome
 
     /**
+     * Interaction snapshot for the currently visible comment records. Rust
+     * owns reaction summary reads, current-user like membership, and event
+     * bookmark membership.
+     */
+    func getCommentInteractionSnapshot(records: [CommentRecord]) async  -> CommentInteractionSnapshot
+
+    /**
      * Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
      */
     func getCommentsForScope(scope: CommentScope, limit: UInt32) async  -> CommentListOutcome
@@ -1134,12 +1141,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getJoinedCommunities() async  -> CommunityListOutcome
 
     func getJoinedRoomNamesForRelay(url: String) async  -> StringListOutcome
-
-    /**
-     * Rust-owned like summary for a target event. The core classifies the
-     * NIP-25 reaction content and resolves the current user's own like.
-     */
-    func getLikeSummaryForEvent(targetEventId: String, limit: UInt32) async  -> ReactionSummaryOutcome
 
     func getMyHighlights(limit: UInt32) async  -> HighlightListOutcome
 
@@ -1284,12 +1285,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * user? Always `false` when no user is logged in.
      */
     func isArticleBookmarked(address: String) async  -> BoolOutcome
-
-    /**
-     * Read-only predicate: is `event_id_hex` currently bookmarked for
-     * the logged-in user? Always `false` when no user is logged in.
-     */
-    func isEventBookmarked(eventIdHex: String) async  -> BoolOutcome
 
     /**
      * Returns true if the logged-in user's cached contact list currently
@@ -3021,6 +3016,29 @@ open func getChatMessages(groupId: String, limit: UInt32)async  -> ChatMessageLi
 }
 
     /**
+     * Interaction snapshot for the currently visible comment records. Rust
+     * owns reaction summary reads, current-user like membership, and event
+     * bookmark membership.
+     */
+open func getCommentInteractionSnapshot(records: [CommentRecord])async  -> CommentInteractionSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_comment_interaction_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterSequenceTypeCommentRecord.lower(records)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCommentInteractionSnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
      * Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
      */
 open func getCommentsForScope(scope: CommentScope, limit: UInt32)async  -> CommentListOutcome  {
@@ -3353,28 +3371,6 @@ open func getJoinedRoomNamesForRelay(url: String)async  -> StringListOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeStringListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Rust-owned like summary for a target event. The core classifies the
-     * NIP-25 reaction content and resolves the current user's own like.
-     */
-open func getLikeSummaryForEvent(targetEventId: String, limit: UInt32)async  -> ReactionSummaryOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_like_summary_for_event(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(targetEventId),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeReactionSummaryOutcome_lift,
             errorHandler: nil
 
         )
@@ -3889,28 +3885,6 @@ open func isArticleBookmarked(address: String)async  -> BoolOutcome  {
                 uniffi_highlighter_core_fn_method_highlightercore_is_article_bookmarked(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(address)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBoolOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Read-only predicate: is `event_id_hex` currently bookmarked for
-     * the logged-in user? Always `false` when no user is logged in.
-     */
-open func isEventBookmarked(eventIdHex: String)async  -> BoolOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_is_event_bookmarked(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(eventIdHex)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -12678,6 +12652,170 @@ public func FfiConverterTypeCommentComposerProjectionInput_lift(_ buf: RustBuffe
 #endif
 public func FfiConverterTypeCommentComposerProjectionInput_lower(_ value: CommentComposerProjectionInput) -> RustBuffer {
     return FfiConverterTypeCommentComposerProjectionInput.lower(value)
+}
+
+
+public struct CommentInteractionRow {
+    public var eventId: String
+    public var likeCount: UInt32
+    public var isLiked: Bool
+    public var isBookmarked: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, likeCount: UInt32, isLiked: Bool, isBookmarked: Bool) {
+        self.eventId = eventId
+        self.likeCount = likeCount
+        self.isLiked = isLiked
+        self.isBookmarked = isBookmarked
+    }
+}
+
+#if compiler(>=6)
+extension CommentInteractionRow: Sendable {}
+#endif
+
+
+extension CommentInteractionRow: Equatable, Hashable {
+    public static func ==(lhs: CommentInteractionRow, rhs: CommentInteractionRow) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.likeCount != rhs.likeCount {
+            return false
+        }
+        if lhs.isLiked != rhs.isLiked {
+            return false
+        }
+        if lhs.isBookmarked != rhs.isBookmarked {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(likeCount)
+        hasher.combine(isLiked)
+        hasher.combine(isBookmarked)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentInteractionRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentInteractionRow {
+        return
+            try CommentInteractionRow(
+                eventId: FfiConverterString.read(from: &buf),
+                likeCount: FfiConverterUInt32.read(from: &buf),
+                isLiked: FfiConverterBool.read(from: &buf),
+                isBookmarked: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentInteractionRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterUInt32.write(value.likeCount, into: &buf)
+        FfiConverterBool.write(value.isLiked, into: &buf)
+        FfiConverterBool.write(value.isBookmarked, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentInteractionRow_lift(_ buf: RustBuffer) throws -> CommentInteractionRow {
+    return try FfiConverterTypeCommentInteractionRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentInteractionRow_lower(_ value: CommentInteractionRow) -> RustBuffer {
+    return FfiConverterTypeCommentInteractionRow.lower(value)
+}
+
+
+public struct CommentInteractionSnapshot {
+    public var rows: [CommentInteractionRow]
+    public var likedEventIds: [String]
+    public var bookmarkedEventIds: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(rows: [CommentInteractionRow], likedEventIds: [String], bookmarkedEventIds: [String]) {
+        self.rows = rows
+        self.likedEventIds = likedEventIds
+        self.bookmarkedEventIds = bookmarkedEventIds
+    }
+}
+
+#if compiler(>=6)
+extension CommentInteractionSnapshot: Sendable {}
+#endif
+
+
+extension CommentInteractionSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CommentInteractionSnapshot, rhs: CommentInteractionSnapshot) -> Bool {
+        if lhs.rows != rhs.rows {
+            return false
+        }
+        if lhs.likedEventIds != rhs.likedEventIds {
+            return false
+        }
+        if lhs.bookmarkedEventIds != rhs.bookmarkedEventIds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rows)
+        hasher.combine(likedEventIds)
+        hasher.combine(bookmarkedEventIds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentInteractionSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentInteractionSnapshot {
+        return
+            try CommentInteractionSnapshot(
+                rows: FfiConverterSequenceTypeCommentInteractionRow.read(from: &buf),
+                likedEventIds: FfiConverterSequenceString.read(from: &buf),
+                bookmarkedEventIds: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentInteractionSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommentInteractionRow.write(value.rows, into: &buf)
+        FfiConverterSequenceString.write(value.likedEventIds, into: &buf)
+        FfiConverterSequenceString.write(value.bookmarkedEventIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentInteractionSnapshot_lift(_ buf: RustBuffer) throws -> CommentInteractionSnapshot {
+    return try FfiConverterTypeCommentInteractionSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentInteractionSnapshot_lower(_ value: CommentInteractionSnapshot) -> RustBuffer {
+    return FfiConverterTypeCommentInteractionSnapshot.lower(value)
 }
 
 
@@ -24525,76 +24663,6 @@ public func FfiConverterTypeReactionSummary_lift(_ buf: RustBuffer) throws -> Re
 #endif
 public func FfiConverterTypeReactionSummary_lower(_ value: ReactionSummary) -> RustBuffer {
     return FfiConverterTypeReactionSummary.lower(value)
-}
-
-
-public struct ReactionSummaryOutcome {
-    public var value: ReactionSummary?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: ReactionSummary?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ReactionSummaryOutcome: Sendable {}
-#endif
-
-
-extension ReactionSummaryOutcome: Equatable, Hashable {
-    public static func ==(lhs: ReactionSummaryOutcome, rhs: ReactionSummaryOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeReactionSummaryOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReactionSummaryOutcome {
-        return
-            try ReactionSummaryOutcome(
-                value: FfiConverterOptionTypeReactionSummary.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ReactionSummaryOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeReactionSummary.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeReactionSummaryOutcome_lift(_ buf: RustBuffer) throws -> ReactionSummaryOutcome {
-    return try FfiConverterTypeReactionSummaryOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeReactionSummaryOutcome_lower(_ value: ReactionSummaryOutcome) -> RustBuffer {
-    return FfiConverterTypeReactionSummaryOutcome.lower(value)
 }
 
 
@@ -36487,30 +36555,6 @@ fileprivate struct FfiConverterOptionTypeReactionRecord: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeReactionSummary: FfiConverterRustBuffer {
-    typealias SwiftType = ReactionSummary?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeReactionSummary.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeReactionSummary.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeReadingFeedItem: FfiConverterRustBuffer {
     typealias SwiftType = ReadingFeedItem?
 
@@ -36921,6 +36965,31 @@ fileprivate struct FfiConverterSequenceTypeChatMessageRecord: FfiConverterRustBu
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeChatMessageRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCommentInteractionRow: FfiConverterRustBuffer {
+    typealias SwiftType = [CommentInteractionRow]
+
+    public static func write(_ value: [CommentInteractionRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCommentInteractionRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommentInteractionRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CommentInteractionRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCommentInteractionRow.read(from: &buf))
         }
         return seq
     }
@@ -38289,6 +38358,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_messages() != 59404) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_comment_interaction_snapshot() != 61327) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_scope() != 40070) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38341,9 +38413,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_room_names_for_relay() != 42927) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_like_summary_for_event() != 35956) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_highlights() != 57472) {
@@ -38446,9 +38515,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_article_bookmarked() != 17349) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_is_event_bookmarked() != 16944) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_following() != 423) {

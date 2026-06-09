@@ -329,10 +329,6 @@ actor SafeHighlighterCore {
 
     // MARK: - Reactions (kind:7)
 
-    func getLikeSummaryForEvent(targetEventId: String, limit: UInt32) async -> ReactionSummaryOutcome {
-        await core.getLikeSummaryForEvent(targetEventId: targetEventId, limit: limit)
-    }
-
     nonisolated func projectCommentLikeState(
         input: CommentLikeStateProjectionInput
     ) -> CommentLikeStateProjection {
@@ -344,10 +340,6 @@ actor SafeHighlighterCore {
     }
 
     // MARK: - Event bookmarks (kind:10003 note bookmarks)
-
-    func isEventBookmarked(eventIdHex: String) async -> BoolOutcome {
-        await core.isEventBookmarked(eventIdHex: eventIdHex)
-    }
 
     func toggleEventBookmark(eventIdHex: String) async -> BoolOutcome {
         await core.toggleEventBookmark(eventIdHex: eventIdHex)
@@ -1155,6 +1147,10 @@ actor SafeHighlighterCore {
 
     func getCommentsForScope(scope: CommentScope, limit: UInt32 = 128) async -> CommentListOutcome {
         await core.getCommentsForScope(scope: scope, limit: limit)
+    }
+
+    func getCommentInteractionSnapshot(records: [CommentRecord]) async -> CommentInteractionSnapshot {
+        await core.getCommentInteractionSnapshot(records: records)
     }
 
     func publishCommentForScope(

@@ -66,12 +66,17 @@ fn query_reactions_for_event(
     if target.is_empty() {
         return Ok(Vec::new());
     }
+    let target_event_id = match EventId::from_hex(target) {
+        Ok(event_id) => event_id,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let target_bytes = target_event_id.to_bytes();
 
     let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let cap = limit.max(64) as i32;
     let filter = NdbFilter::new()
         .kinds([KIND_REACTION as u64])
-        .tags([target], 'e')
+        .event(&target_bytes)
         .build();
     let results = ndb
         .query(&txn, &[filter], cap)

@@ -83,9 +83,9 @@ pub use chat::{ChatComposerProjection, ChatComposerProjectionInput};
 pub use client::HighlighterCore;
 pub use comments::{
     CommentActionChromeProjection, CommentActionChromeProjectionInput, CommentComposerProjection,
-    CommentComposerProjectionInput, CommentNodeChromeProjection, CommentNodeChromeProjectionInput,
-    CommentThreadViewProjection, CommentThreadViewProjectionInput, CommentToolbarProjection,
-    CommentToolbarProjectionInput,
+    CommentComposerProjectionInput, CommentInteractionRow, CommentInteractionSnapshot,
+    CommentNodeChromeProjection, CommentNodeChromeProjectionInput, CommentThreadViewProjection,
+    CommentThreadViewProjectionInput, CommentToolbarProjection, CommentToolbarProjectionInput,
 };
 pub use discussions::{
     DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput,
@@ -147,10 +147,10 @@ pub use models::{
     NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
     OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
     PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
-    ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome,
-    RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomLane, RoomRecommendation,
-    RoomRecommendationReason, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
+    RelayDiagnosticListOutcome, RoomLane, RoomRecommendation, RoomRecommendationReason,
+    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::{
     Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,

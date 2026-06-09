@@ -229,12 +229,6 @@ pub fn is_bookmarked(ndb: &Ndb, user_hex: &str, address: &str) -> Result<bool, C
     Ok(list.addresses.iter().any(|a| a == address))
 }
 
-/// Fast predicate: is `event_hex` currently bookmarked for `user_hex`?
-pub fn is_event_bookmarked(ndb: &Ndb, user_hex: &str, event_hex: &str) -> Result<bool, CoreError> {
-    let list = query_bookmarks(ndb, user_hex)?;
-    Ok(list.event_ids.iter().any(|e| e == event_hex))
-}
-
 /// Toggle `address` in the user's kind:10003 bookmark list. Reads the newest
 /// cached list, flips membership, re-publishes. Returns the new membership
 /// state (`true` = now bookmarked, `false` = removed).
