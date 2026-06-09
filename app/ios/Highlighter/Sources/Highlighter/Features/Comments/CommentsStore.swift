@@ -22,8 +22,9 @@ final class CommentsStore {
     /// Reaction event id for the current user's like on a given comment id
     /// (allows quick "undo like" via NIP-09 deletion). Missing = not liked.
     private(set) var myLikeEventIds: [String: String] = [:]
-    /// Bookmark membership for any visible comment id.
-    private(set) var bookmarked: Set<String> = []
+    /// Bookmark membership for any visible comment id. Rust owns event-id
+    /// canonicalization, dedupe, and optimistic membership projection.
+    private(set) var bookmarked: [String] = []
 
     /// Drafts keyed by `parentEventId ?? "root"`. In-memory only — survives
     /// detent transitions but not view recreation. (Persistent drafts are
@@ -95,7 +96,7 @@ final class CommentsStore {
                         eventIdHex: id,
                         desiredMember: isBookmarked
                     ) {
-                        self.bookmarked = Set(projection.optimisticEventIds)
+                        self.bookmarked = projection.optimisticEventIds
                     }
                 }
             }
@@ -207,21 +208,21 @@ final class CommentsStore {
         guard let core else { return }
         guard let projection = eventBookmarkStateProjection(eventIdHex: comment.eventId),
               projection.canApply else { return }
-        bookmarked = Set(projection.optimisticEventIds)
+        bookmarked = projection.optimisticEventIds
         let outcome = await core.toggleEventBookmark(eventIdHex: projection.canonicalEventIdHex)
         if outcome.error.isEmpty {
             if let confirmed = eventBookmarkStateProjection(
                 eventIdHex: projection.canonicalEventIdHex,
                 desiredMember: outcome.value
             ) {
-                bookmarked = Set(confirmed.optimisticEventIds)
+                bookmarked = confirmed.optimisticEventIds
             }
         } else {
             if let rollback = eventBookmarkStateProjection(
                 eventIdHex: projection.canonicalEventIdHex,
                 desiredMember: projection.isBookmarked
             ) {
-                bookmarked = Set(rollback.optimisticEventIds)
+                bookmarked = rollback.optimisticEventIds
             }
         }
     }
@@ -232,7 +233,7 @@ final class CommentsStore {
     ) -> EventBookmarkStateProjection? {
         guard let core else { return nil }
         return core.projectEventBookmarkState(input: EventBookmarkStateProjectionInput(
-            eventIds: Array(bookmarked),
+            eventIds: bookmarked,
             eventIdHex: eventIdHex,
             desiredMember: desiredMember
         ))

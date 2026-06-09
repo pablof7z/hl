@@ -40,10 +40,11 @@ final class HighlighterStore {
     var webMetadataCache: [String: WebMetadata] = [:]
     /// ArtifactPreview cache for ISBN lookups, keyed by bare ISBN-13 (e.g. "9780593716717").
     var isbnPreviewCache: [String: ArtifactPreview] = [:]
-    /// NIP-51 kind:10003 article bookmarks — set of `30023:<pubkey>:<d>`
-    /// addresses. Reactive so every row showing a bookmark affordance updates
-    /// when the user toggles one anywhere.
-    var bookmarkedArticleAddresses: Set<String> = []
+    /// NIP-51 kind:10003 article bookmark addresses. Reactive so every row
+    /// showing a bookmark affordance updates when the user toggles one
+    /// anywhere. Rust owns canonicalization, dedupe, and optimistic membership
+    /// projection; Swift keeps the ordered list it receives from the core.
+    var bookmarkedArticleAddresses: [String] = []
 
     // Internal plumbing
     @ObservationIgnored let core: HighlighterCore
@@ -162,7 +163,7 @@ final class HighlighterStore {
     func toggleBookmark(articleAddress: String) async {
         let projection = articleBookmarkStateProjection(articleAddress: articleAddress)
         guard projection.canToggle else { return }
-        bookmarkedArticleAddresses = Set(projection.optimisticAddresses)
+        bookmarkedArticleAddresses = projection.optimisticAddresses
         // Authoritative toggle + publish.
         let outcome = await safeCore.toggleArticleBookmark(address: projection.canonicalAddress)
         if !outcome.error.isEmpty {
@@ -176,7 +177,7 @@ final class HighlighterStore {
     func refreshBookmarks() async {
         let outcome = await safeCore.getBookmarkedArticleAddresses()
         if outcome.error.isEmpty {
-            bookmarkedArticleAddresses = Set(outcome.values)
+            bookmarkedArticleAddresses = outcome.values
         }
     }
 
@@ -186,7 +187,7 @@ final class HighlighterStore {
 
     private func articleBookmarkStateProjection(articleAddress: String) -> ArticleBookmarkStateProjection {
         safeCore.projectArticleBookmarkState(input: ArticleBookmarkStateProjectionInput(
-            addresses: Array(bookmarkedArticleAddresses),
+            addresses: bookmarkedArticleAddresses,
             address: articleAddress
         ))
     }

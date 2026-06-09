@@ -27,7 +27,7 @@ final class BookmarkStore {
     private weak var bridge: EventBridge?
     private var core: SafeHighlighterCore?
 
-    func start(addresses: Set<String>, core: SafeHighlighterCore, bridge: EventBridge) async {
+    func start(addresses: [String], core: SafeHighlighterCore, bridge: EventBridge) async {
         self.core = core
         self.bridge = bridge
 
@@ -80,12 +80,12 @@ final class BookmarkStore {
         followingCurationSets = following.error.isEmpty ? following.values : []
     }
 
-    func loadArticles(addresses: Set<String>) async {
+    func loadArticles(addresses: [String]) async {
         guard let core, !addresses.isEmpty else {
             myArticles = []
             return
         }
-        let outcome = await core.getBookmarkedArticles(addresses: Array(addresses))
+        let outcome = await core.getBookmarkedArticles(addresses: addresses)
         myArticles = outcome.error.isEmpty ? outcome.values : []
     }
 }
