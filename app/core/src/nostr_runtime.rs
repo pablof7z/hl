@@ -71,7 +71,8 @@ pub struct NostrRuntime {
     current_relays: Arc<parking_lot::RwLock<Vec<RelayConfig>>>,
     /// Live per-relay diagnostics, keyed by URL. Updated every
     /// `DIAGNOSTICS_POLL_INTERVAL` by the poller spawned at construction.
-    /// Swift reads via `get_relay_diagnostics`.
+    /// Swift reads first paint through `get_network_settings_snapshot` and
+    /// later applies `RelayDiagnosticsUpdated` event payloads.
     relay_diagnostics: Arc<parking_lot::RwLock<HashMap<String, RelayDiagnostic>>>,
     /// Path the LMDB-backed nostrdb was opened at. Used by features that
     /// need to size the on-disk cache.

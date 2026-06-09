@@ -218,6 +218,22 @@ pub struct NetworkSettingsMutationSnapshot {
     pub error_message: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NetworkSettingsSnapshot {
+    pub relays: Vec<RelayConfig>,
+    pub diagnostics: Vec<RelayDiagnostic>,
+    pub projection: RelaySettingsProjection,
+    pub wifi_only_enabled: bool,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NetworkDiagnosticsSnapshot {
+    pub diagnostics: Vec<RelayDiagnostic>,
+    pub projection: RelaySettingsProjection,
+    pub error_message: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct RelayRemoveProjectionInput {
     pub url: String,
@@ -542,6 +558,38 @@ pub fn network_settings_mutation_snapshot(
             should_reload: false,
             error_message: format!("{error_prefix} — {error}"),
         },
+    }
+}
+
+pub fn network_settings_snapshot(
+    relays_result: Result<Vec<RelayConfig>, CoreError>,
+    previous_relays: Vec<RelayConfig>,
+    diagnostics: Vec<RelayDiagnostic>,
+    wifi_only_enabled: bool,
+) -> NetworkSettingsSnapshot {
+    let (relays, error_message) = match relays_result {
+        Ok(relays) => (relays, String::new()),
+        Err(error) => (previous_relays, error.to_string()),
+    };
+    let projection = settings_projection(&relays, &diagnostics);
+    NetworkSettingsSnapshot {
+        relays,
+        diagnostics,
+        projection,
+        wifi_only_enabled,
+        error_message,
+    }
+}
+
+pub fn network_diagnostics_snapshot(
+    configured_relays: Vec<RelayConfig>,
+    diagnostics: Vec<RelayDiagnostic>,
+) -> NetworkDiagnosticsSnapshot {
+    let projection = settings_projection(&configured_relays, &diagnostics);
+    NetworkDiagnosticsSnapshot {
+        diagnostics,
+        projection,
+        error_message: String::new(),
     }
 }
 
@@ -1540,6 +1588,51 @@ mod tests {
         assert_eq!(
             failure.error_message,
             "Couldn't remove relay — relay error: offline"
+        );
+    }
+
+    #[test]
+    fn network_settings_snapshot_projects_load_and_preserves_previous_on_error() {
+        let relays = vec![RelayConfig::read_write("wss://relay.example.com")];
+        let diagnostics = vec![diagnostic(
+            "wss://relay.example.com",
+            RelayStatus::Connected,
+        )];
+        let snapshot =
+            network_settings_snapshot(Ok(relays.clone()), Vec::new(), diagnostics.clone(), true);
+        assert_eq!(snapshot.relays, relays);
+        assert_eq!(snapshot.diagnostics, diagnostics);
+        assert!(snapshot.wifi_only_enabled);
+        assert!(snapshot.error_message.is_empty());
+        assert_eq!(snapshot.projection.total_visible_relays, 1);
+        assert_eq!(snapshot.projection.connected_count, 1);
+
+        let previous = vec![RelayConfig::read_write("wss://previous.example.com")];
+        let failure = network_settings_snapshot(
+            Err(CoreError::NotAuthenticated),
+            previous.clone(),
+            Vec::new(),
+            false,
+        );
+        assert_eq!(failure.relays, previous);
+        assert_eq!(failure.error_message, "not authenticated");
+        assert_eq!(failure.projection.total_visible_relays, 1);
+    }
+
+    #[test]
+    fn network_diagnostics_snapshot_projects_live_rows() {
+        let configured = vec![RelayConfig::read_write("wss://relay.example.com")];
+        let diagnostics = vec![diagnostic(
+            "wss://relay.example.com",
+            RelayStatus::Connected,
+        )];
+        let snapshot = network_diagnostics_snapshot(configured, diagnostics.clone());
+        assert_eq!(snapshot.diagnostics, diagnostics);
+        assert!(snapshot.error_message.is_empty());
+        assert_eq!(snapshot.projection.connected_count, 1);
+        assert_eq!(
+            snapshot.projection.aggregate_state_label,
+            "Online — 1 of 1"
         );
     }
 

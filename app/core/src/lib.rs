@@ -156,10 +156,9 @@ pub use models::{
     Nip11DocumentOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
     OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
     OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RelayConfigListOutcome,
-    RelayDiagnosticListOutcome, RoomLane, RoomRecommendation, RoomRecommendationReason,
-    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkRecord,
-    WebMetadataOutcome, WhatsNewEntriesOutcome,
+    ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RelayConfigListOutcome, RoomLane,
+    RoomRecommendation, RoomRecommendationReason, StringOutcome, SubscriptionOutcome,
+    TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::{
     Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,
@@ -192,9 +191,10 @@ pub use recommendations::{
 pub use relays::{
     AddRelayProbeStatus, AddRelaySheetProjection, AddRelaySheetProjectionInput, ImportRelayRow,
     ImportRelaysProjection, ImportRelaysProjectionInput, ImportRelaysSourceProjection,
-    ImportRelaysSourceProjectionInput, NetworkSettingsMutationSnapshot, RelayAvatarProjection,
-    RelayConfig, RelayDetailProjection, RelayDetailProjectionInput, RelayHostedRoomsSnapshot,
-    RelayRemoveProjection, RelayRemoveProjectionInput, RelayRowProjection, RelayRowProjectionInput,
+    ImportRelaysSourceProjectionInput, NetworkDiagnosticsSnapshot, NetworkSettingsMutationSnapshot,
+    NetworkSettingsSnapshot, RelayAvatarProjection, RelayConfig, RelayDetailProjection,
+    RelayDetailProjectionInput, RelayHostedRoomsSnapshot, RelayRemoveProjection,
+    RelayRemoveProjectionInput, RelayRowProjection, RelayRowProjectionInput,
     RelaySettingsProjection, RelayStatusTone,
 };
 pub use room_explorer::{RoomBrowseSnapshot, RoomExplorerSnapshot};

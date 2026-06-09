@@ -67,10 +67,6 @@ actor SafeHighlighterCore {
         await core.completeOnboardingInterests(selectedIds: selectedIds)
     }
 
-    func isWifiOnlyEnabled() -> Bool {
-        core.isWifiOnlyEnabled()
-    }
-
     func setWifiOnlyEnabled(_ enabled: Bool) -> NetworkSettingsMutationSnapshot {
         core.setWifiOnlyEnabled(enabled: enabled)
     }
@@ -1411,8 +1407,8 @@ actor SafeHighlighterCore {
 
     // MARK: - Relay config (NIP-65 read/write + NIP-78 rooms/indexer)
 
-    func getRelays() async -> RelayConfigListOutcome {
-        await core.getRelays()
+    func getNetworkSettingsSnapshot(previousRelays: [RelayConfig]) async -> NetworkSettingsSnapshot {
+        await core.getNetworkSettingsSnapshot(previousRelays: previousRelays)
     }
 
     func upsertRelay(_ cfg: RelayConfig) async -> NetworkSettingsMutationSnapshot {
@@ -1441,8 +1437,14 @@ actor SafeHighlighterCore {
 
     // MARK: - Relay telemetry (PR 4)
 
-    func getRelayDiagnostics() async -> RelayDiagnosticListOutcome {
-        await core.getRelayDiagnostics()
+    nonisolated func projectNetworkDiagnosticsSnapshot(
+        configuredRelays: [RelayConfig],
+        diagnostics: [RelayDiagnostic]
+    ) -> NetworkDiagnosticsSnapshot {
+        core.projectNetworkDiagnosticsSnapshot(
+            configuredRelays: configuredRelays,
+            diagnostics: diagnostics
+        )
     }
 
     func autoConnectedRelayConfig(url: String) -> RelayConfig {
@@ -1451,16 +1453,6 @@ actor SafeHighlighterCore {
 
     nonisolated func defaultAddRelayConfig() -> RelayConfig {
         core.defaultAddRelayConfig()
-    }
-
-    nonisolated func projectRelaySettings(
-        configuredRelays: [RelayConfig],
-        diagnostics: [RelayDiagnostic]
-    ) -> RelaySettingsProjection {
-        core.projectRelaySettings(
-            configuredRelays: configuredRelays,
-            diagnostics: diagnostics
-        )
     }
 
     nonisolated func projectRelayRow(input: RelayRowProjectionInput) -> RelayRowProjection {

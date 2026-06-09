@@ -183,12 +183,6 @@ pub struct RelayConfigListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct RelayDiagnosticListOutcome {
-    pub values: Vec<RelayDiagnostic>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct Nip11DocumentOutcome {
     pub value: Option<Nip11Document>,
     pub error: String,
@@ -814,7 +808,7 @@ pub enum RelayStatus {
 
 /// Live diagnostic snapshot for a single relay, polled from the nostr-sdk
 /// connection pool. Updated by `NostrRuntime`'s diagnostics poller every
-/// second; Swift reads via `get_relay_diagnostics` for first paint and
+/// second; Swift receives first paint through `NetworkSettingsSnapshot` and
 /// listens for `RelayDiagnosticsUpdated` deltas to render changes.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RelayDiagnostic {

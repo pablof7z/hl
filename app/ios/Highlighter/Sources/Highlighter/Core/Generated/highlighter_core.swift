@@ -1071,6 +1071,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getMyHighlights(limit: UInt32) async  -> HighlightListOutcome
 
+    /**
+     * Return the screen-shaped Network Settings snapshot: configured relays,
+     * live diagnostics, derived header/auto-connected projection, Wi-Fi-only
+     * preference, and error state.
+     */
+    func getNetworkSettingsSnapshot(previousRelays: [RelayConfig]) async  -> NetworkSettingsSnapshot
+
     func getOnboardingInterestProjection(selectedIds: [String])  -> OnboardingInterestProjection
 
     func getOnboardingInterestSelection(selectedIds: [String])  -> OnboardingInterestSelection
@@ -1101,21 +1108,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getProfileUpdateAction(kind: UInt32)  -> ProfileUpdateAction
 
-    /**
-     * Snapshot of the live per-relay diagnostics map. One row per URL
-     * currently in the client's pool. Refreshed by the background
-     * diagnostics poller at least once per second.
-     */
-    func getRelayDiagnostics() async  -> RelayDiagnosticListOutcome
-
     func getRelayHostedRoomsSnapshot(url: String) async  -> RelayHostedRoomsSnapshot
-
-    /**
-     * Return the user's effective relay list, merging NIP-65 (read/write)
-     * with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
-     * when neither has been cached yet (first login).
-     */
-    func getRelays() async  -> RelayConfigListOutcome
 
     /**
      * Screen-shaped snapshot for the explorer's "Browse all" grid. Rust owns
@@ -1217,8 +1210,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func isNip05UsernameValid(input: String)  -> Bool
 
     func isOnboardingComplete()  -> Bool
-
-    func isWifiOnlyEnabled()  -> Bool
 
     func joinOcrQuote(words: [OcrWord])  -> String
 
@@ -1425,6 +1416,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput)  -> IsbnPreviewRequestProjection
 
+    /**
+     * Project a live diagnostics payload plus the derived Network Settings
+     * header/auto-connected state for the current configured relay rows.
+     */
+    func projectNetworkDiagnosticsSnapshot(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic])  -> NetworkDiagnosticsSnapshot
+
     func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput)  -> NostrEntityArticleCardProjection
 
     /**
@@ -1493,8 +1490,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectRelayRemove(input: RelayRemoveProjectionInput)  -> RelayRemoveProjection
 
     func projectRelayRow(input: RelayRowProjectionInput)  -> RelayRowProjection
-
-    func projectRelaySettings(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic])  -> RelaySettingsProjection
 
     func projectRoomAvatar(input: RoomAvatarProjectionInput)  -> RoomAvatarProjection
 
@@ -3006,6 +3001,29 @@ open func getMyHighlights(limit: UInt32)async  -> HighlightListOutcome  {
         )
 }
 
+    /**
+     * Return the screen-shaped Network Settings snapshot: configured relays,
+     * live diagnostics, derived header/auto-connected projection, Wi-Fi-only
+     * preference, and error state.
+     */
+open func getNetworkSettingsSnapshot(previousRelays: [RelayConfig])async  -> NetworkSettingsSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_network_settings_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterSequenceTypeRelayConfig.lower(previousRelays)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNetworkSettingsSnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+
 open func getOnboardingInterestProjection(selectedIds: [String]) -> OnboardingInterestProjection  {
     return try!  FfiConverterTypeOnboardingInterestProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_onboarding_interest_projection(self.uniffiClonePointer(),
@@ -3120,29 +3138,6 @@ open func getProfileUpdateAction(kind: UInt32) -> ProfileUpdateAction  {
 })
 }
 
-    /**
-     * Snapshot of the live per-relay diagnostics map. One row per URL
-     * currently in the client's pool. Refreshed by the background
-     * diagnostics poller at least once per second.
-     */
-open func getRelayDiagnostics()async  -> RelayDiagnosticListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_relay_diagnostics(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRelayDiagnosticListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
 open func getRelayHostedRoomsSnapshot(url: String)async  -> RelayHostedRoomsSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -3156,29 +3151,6 @@ open func getRelayHostedRoomsSnapshot(url: String)async  -> RelayHostedRoomsSnap
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRelayHostedRoomsSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Return the user's effective relay list, merging NIP-65 (read/write)
-     * with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
-     * when neither has been cached yet (first login).
-     */
-open func getRelays()async  -> RelayConfigListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_relays(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRelayConfigListOutcome_lift,
             errorHandler: nil
 
         )
@@ -3566,13 +3538,6 @@ open func isNip05UsernameValid(input: String) -> Bool  {
 open func isOnboardingComplete() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_is_onboarding_complete(self.uniffiClonePointer(),$0
-    )
-})
-}
-
-open func isWifiOnlyEnabled() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_is_wifi_only_enabled(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -4190,6 +4155,19 @@ open func projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput) ->
 })
 }
 
+    /**
+     * Project a live diagnostics payload plus the derived Network Settings
+     * header/auto-connected state for the current configured relay rows.
+     */
+open func projectNetworkDiagnosticsSnapshot(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic]) -> NetworkDiagnosticsSnapshot  {
+    return try!  FfiConverterTypeNetworkDiagnosticsSnapshot_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_network_diagnostics_snapshot(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeRelayConfig.lower(configuredRelays),
+        FfiConverterSequenceTypeRelayDiagnostic.lower(diagnostics),$0
+    )
+})
+}
+
 open func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput) -> NostrEntityArticleCardProjection  {
     return try!  FfiConverterTypeNostrEntityArticleCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_nostr_entity_article_card(self.uniffiClonePointer(),
@@ -4352,15 +4330,6 @@ open func projectRelayRow(input: RelayRowProjectionInput) -> RelayRowProjection 
     return try!  FfiConverterTypeRelayRowProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_relay_row(self.uniffiClonePointer(),
         FfiConverterTypeRelayRowProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func projectRelaySettings(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic]) -> RelaySettingsProjection  {
-    return try!  FfiConverterTypeRelaySettingsProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_relay_settings(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeRelayConfig.lower(configuredRelays),
-        FfiConverterSequenceTypeRelayDiagnostic.lower(diagnostics),$0
     )
 })
 }
@@ -19822,6 +19791,84 @@ public func FfiConverterTypeMutationOutcome_lower(_ value: MutationOutcome) -> R
 }
 
 
+public struct NetworkDiagnosticsSnapshot {
+    public var diagnostics: [RelayDiagnostic]
+    public var projection: RelaySettingsProjection
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(diagnostics: [RelayDiagnostic], projection: RelaySettingsProjection, errorMessage: String) {
+        self.diagnostics = diagnostics
+        self.projection = projection
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension NetworkDiagnosticsSnapshot: Sendable {}
+#endif
+
+
+extension NetworkDiagnosticsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: NetworkDiagnosticsSnapshot, rhs: NetworkDiagnosticsSnapshot) -> Bool {
+        if lhs.diagnostics != rhs.diagnostics {
+            return false
+        }
+        if lhs.projection != rhs.projection {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(diagnostics)
+        hasher.combine(projection)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkDiagnosticsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkDiagnosticsSnapshot {
+        return
+            try NetworkDiagnosticsSnapshot(
+                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
+                projection: FfiConverterTypeRelaySettingsProjection.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkDiagnosticsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRelayDiagnostic.write(value.diagnostics, into: &buf)
+        FfiConverterTypeRelaySettingsProjection.write(value.projection, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkDiagnosticsSnapshot_lift(_ buf: RustBuffer) throws -> NetworkDiagnosticsSnapshot {
+    return try FfiConverterTypeNetworkDiagnosticsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkDiagnosticsSnapshot_lower(_ value: NetworkDiagnosticsSnapshot) -> RustBuffer {
+    return FfiConverterTypeNetworkDiagnosticsSnapshot.lower(value)
+}
+
+
 public struct NetworkSettingsMutationSnapshot {
     public var applied: Bool
     public var shouldReload: Bool
@@ -19897,6 +19944,100 @@ public func FfiConverterTypeNetworkSettingsMutationSnapshot_lift(_ buf: RustBuff
 #endif
 public func FfiConverterTypeNetworkSettingsMutationSnapshot_lower(_ value: NetworkSettingsMutationSnapshot) -> RustBuffer {
     return FfiConverterTypeNetworkSettingsMutationSnapshot.lower(value)
+}
+
+
+public struct NetworkSettingsSnapshot {
+    public var relays: [RelayConfig]
+    public var diagnostics: [RelayDiagnostic]
+    public var projection: RelaySettingsProjection
+    public var wifiOnlyEnabled: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(relays: [RelayConfig], diagnostics: [RelayDiagnostic], projection: RelaySettingsProjection, wifiOnlyEnabled: Bool, errorMessage: String) {
+        self.relays = relays
+        self.diagnostics = diagnostics
+        self.projection = projection
+        self.wifiOnlyEnabled = wifiOnlyEnabled
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension NetworkSettingsSnapshot: Sendable {}
+#endif
+
+
+extension NetworkSettingsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: NetworkSettingsSnapshot, rhs: NetworkSettingsSnapshot) -> Bool {
+        if lhs.relays != rhs.relays {
+            return false
+        }
+        if lhs.diagnostics != rhs.diagnostics {
+            return false
+        }
+        if lhs.projection != rhs.projection {
+            return false
+        }
+        if lhs.wifiOnlyEnabled != rhs.wifiOnlyEnabled {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(relays)
+        hasher.combine(diagnostics)
+        hasher.combine(projection)
+        hasher.combine(wifiOnlyEnabled)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkSettingsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkSettingsSnapshot {
+        return
+            try NetworkSettingsSnapshot(
+                relays: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
+                projection: FfiConverterTypeRelaySettingsProjection.read(from: &buf),
+                wifiOnlyEnabled: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkSettingsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRelayConfig.write(value.relays, into: &buf)
+        FfiConverterSequenceTypeRelayDiagnostic.write(value.diagnostics, into: &buf)
+        FfiConverterTypeRelaySettingsProjection.write(value.projection, into: &buf)
+        FfiConverterBool.write(value.wifiOnlyEnabled, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsSnapshot_lift(_ buf: RustBuffer) throws -> NetworkSettingsSnapshot {
+    return try FfiConverterTypeNetworkSettingsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsSnapshot_lower(_ value: NetworkSettingsSnapshot) -> RustBuffer {
+    return FfiConverterTypeNetworkSettingsSnapshot.lower(value)
 }
 
 
@@ -25623,7 +25764,7 @@ public func FfiConverterTypeRelayDetailProjectionInput_lower(_ value: RelayDetai
 /**
  * Live diagnostic snapshot for a single relay, polled from the nostr-sdk
  * connection pool. Updated by `NostrRuntime`'s diagnostics poller every
- * second; Swift reads via `get_relay_diagnostics` for first paint and
+ * second; Swift receives first paint through `NetworkSettingsSnapshot` and
  * listens for `RelayDiagnosticsUpdated` deltas to render changes.
  */
 public struct RelayDiagnostic {
@@ -25757,76 +25898,6 @@ public func FfiConverterTypeRelayDiagnostic_lift(_ buf: RustBuffer) throws -> Re
 #endif
 public func FfiConverterTypeRelayDiagnostic_lower(_ value: RelayDiagnostic) -> RustBuffer {
     return FfiConverterTypeRelayDiagnostic.lower(value)
-}
-
-
-public struct RelayDiagnosticListOutcome {
-    public var values: [RelayDiagnostic]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [RelayDiagnostic], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension RelayDiagnosticListOutcome: Sendable {}
-#endif
-
-
-extension RelayDiagnosticListOutcome: Equatable, Hashable {
-    public static func ==(lhs: RelayDiagnosticListOutcome, rhs: RelayDiagnosticListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRelayDiagnosticListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayDiagnosticListOutcome {
-        return
-            try RelayDiagnosticListOutcome(
-                values: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RelayDiagnosticListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeRelayDiagnostic.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRelayDiagnosticListOutcome_lift(_ buf: RustBuffer) throws -> RelayDiagnosticListOutcome {
-    return try FfiConverterTypeRelayDiagnosticListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRelayDiagnosticListOutcome_lower(_ value: RelayDiagnosticListOutcome) -> RustBuffer {
-    return FfiConverterTypeRelayDiagnosticListOutcome.lower(value)
 }
 
 
@@ -33914,9 +33985,9 @@ public enum DataChangeType {
     case bunkerSignRequest(requestId: String
     )
     /**
-     * A relay in the user's pool changed connection state. Swift re-reads
-     * `get_relay_diagnostics` on receipt to refresh per-row status dots,
-     * latency, and traffic counters.
+     * A relay in the user's pool changed connection state. Swift projects the
+     * updated diagnostics through `NetworkDiagnosticsSnapshot` to refresh
+     * per-row status dots, latency, and traffic counters.
      */
     case relayStatusChanged(url: String, state: RelayStatus
     )
@@ -38502,6 +38573,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_highlights() != 57472) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_network_settings_snapshot() != 60252) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_onboarding_interest_projection() != 3646) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38535,13 +38609,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_profile_update_action() != 16735) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_relay_diagnostics() != 36575) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relay_hosted_rooms_snapshot() != 43219) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_relays() != 2197) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_browse_snapshot() != 45616) {
@@ -38605,9 +38673,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_onboarding_complete() != 27446) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_is_wifi_only_enabled() != 51997) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_join_ocr_quote() != 34615) {
@@ -38784,6 +38849,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_isbn_preview_request() != 19235) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_network_diagnostics_snapshot() != 27417) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_nostr_entity_article_card() != 6476) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38830,9 +38898,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_row() != 29116) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_settings() != 62661) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_avatar() != 27524) {

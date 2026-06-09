@@ -142,9 +142,9 @@ pub enum DataChangeType {
     BunkerSignRequest {
         request_id: String,
     },
-    /// A relay in the user's pool changed connection state. Swift re-reads
-    /// `get_relay_diagnostics` on receipt to refresh per-row status dots,
-    /// latency, and traffic counters.
+    /// A relay in the user's pool changed connection state. Swift projects the
+    /// updated diagnostics through `NetworkDiagnosticsSnapshot` to refresh
+    /// per-row status dots, latency, and traffic counters.
     RelayStatusChanged {
         url: String,
         state: RelayStatus,

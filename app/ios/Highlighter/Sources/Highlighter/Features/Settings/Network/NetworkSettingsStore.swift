@@ -103,16 +103,8 @@ final class NetworkSettingsStore {
     // MARK: - Lifecycle
 
     func load() async {
-        wifiOnlyEnabled = await core.isWifiOnlyEnabled()
-        let outcome = await core.getRelays()
-        if outcome.error.isEmpty {
-            relays = outcome.values
-            applyRelaySettingsProjection(rows: Array(diagnostics.values))
-            await refreshDiagnostics()
-            lastError = nil
-        } else {
-            lastError = outcome.error
-        }
+        let snapshot = await core.getNetworkSettingsSnapshot(previousRelays: relays)
+        applyNetworkSettingsSnapshot(snapshot)
         isLoading = false
         // Fire-and-forget NIP-11 probes for every relay we don't already
         // have cached. Each probe updates `nip11ByUrl` as it resolves, so
@@ -252,30 +244,45 @@ final class NetworkSettingsStore {
                 connectedSinceTs: nil
             )
         }
-        applyRelaySettingsProjection(rows: Array(diagnostics.values))
+        let rows = Array(diagnostics.values)
+        let snapshot = core.projectNetworkDiagnosticsSnapshot(
+            configuredRelays: relays,
+            diagnostics: rows
+        )
+        applyNetworkDiagnosticsSnapshot(snapshot)
     }
 
     /// Called by `EventBridge` on `RelayDiagnosticsUpdated`. Applies the
     /// Rust-owned bounded diagnostics projection without a native polling
     /// loop.
     func applyDiagnostics(_ rows: [RelayDiagnostic]) async {
-        applyRelaySettingsProjection(rows: rows)
+        let snapshot = core.projectNetworkDiagnosticsSnapshot(
+            configuredRelays: relays,
+            diagnostics: rows
+        )
+        applyNetworkDiagnosticsSnapshot(snapshot)
     }
 
     // MARK: - Private
 
-    private func refreshDiagnostics() async {
-        let outcome = await core.getRelayDiagnostics()
-        if outcome.error.isEmpty {
-            await applyDiagnostics(outcome.values)
+    private func applyNetworkSettingsSnapshot(_ snapshot: NetworkSettingsSnapshot) {
+        relays = snapshot.relays
+        wifiOnlyEnabled = snapshot.wifiOnlyEnabled
+        applyRelaySettingsProjection(snapshot.projection, rows: snapshot.diagnostics)
+        lastError = snapshot.errorMessage.isEmpty ? nil : snapshot.errorMessage
+    }
+
+    private func applyNetworkDiagnosticsSnapshot(_ snapshot: NetworkDiagnosticsSnapshot) {
+        applyRelaySettingsProjection(snapshot.projection, rows: snapshot.diagnostics)
+        if !snapshot.errorMessage.isEmpty {
+            lastError = snapshot.errorMessage
         }
     }
 
-    private func applyRelaySettingsProjection(rows: [RelayDiagnostic]) {
-        let projection = core.projectRelaySettings(
-            configuredRelays: relays,
-            diagnostics: rows
-        )
+    private func applyRelaySettingsProjection(
+        _ projection: RelaySettingsProjection,
+        rows: [RelayDiagnostic]
+    ) {
         diagnostics = Dictionary(uniqueKeysWithValues: rows.map { ($0.url, $0) })
         autoConnectedUrls = projection.autoConnectedUrls
         autoConnectedConfigs = Dictionary(

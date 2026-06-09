@@ -37,8 +37,8 @@ use crate::models::{
     OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
     OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
     ProfileUpdateAction, ProfileUpdateDraft, RelayConfigListOutcome, RelayDiagnostic,
-    RelayDiagnosticListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebMetadataOutcome, WhatsNewEntriesOutcome,
+    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
+    WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -375,21 +375,6 @@ fn relay_config_list_outcome(
             error: String::new(),
         },
         Err(error) => RelayConfigListOutcome {
-            values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
-fn relay_diagnostic_list_outcome(
-    result: Result<Vec<crate::models::RelayDiagnostic>, CoreError>,
-) -> RelayDiagnosticListOutcome {
-    match result {
-        Ok(values) => RelayDiagnosticListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => RelayDiagnosticListOutcome {
             values: Vec::new(),
             error: error.to_string(),
         },
@@ -853,10 +838,6 @@ impl HighlighterCore {
         }
         .await;
         mutation_outcome(result)
-    }
-
-    pub fn is_wifi_only_enabled(&self) -> bool {
-        self.network_preferences.wifi_only_enabled()
     }
 
     pub fn set_wifi_only_enabled(
@@ -3874,11 +3855,16 @@ impl HighlighterCore {
 
     // -- Relay config (NIP-65 read/write + NIP-78 rooms/indexer) --
 
-    /// Return the user's effective relay list, merging NIP-65 (read/write)
-    /// with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
-    /// when neither has been cached yet (first login).
-    pub async fn get_relays(&self) -> RelayConfigListOutcome {
-        relay_config_list_outcome((|| {
+    /// Return the screen-shaped Network Settings snapshot: configured relays,
+    /// live diagnostics, derived header/auto-connected projection, Wi-Fi-only
+    /// preference, and error state.
+    pub async fn get_network_settings_snapshot(
+        &self,
+        previous_relays: Vec<crate::relays::RelayConfig>,
+    ) -> crate::relays::NetworkSettingsSnapshot {
+        let diagnostics = self.runtime.relay_diagnostics_snapshot();
+        let wifi_only_enabled = self.network_preferences.wifi_only_enabled();
+        let result = (|| {
             let user = self
                 .inner
                 .read()
@@ -3886,7 +3872,13 @@ impl HighlighterCore {
                 .current_user()
                 .ok_or(CoreError::NotAuthenticated)?;
             crate::relays::query_relays(self.runtime.ndb(), &user.pubkey)
-        })())
+        })();
+        crate::relays::network_settings_snapshot(
+            result,
+            previous_relays,
+            diagnostics,
+            wifi_only_enabled,
+        )
     }
 
     /// Insert-or-update a single relay. Replaces the row with matching URL or
@@ -3966,23 +3958,18 @@ impl HighlighterCore {
 
     // -- Relay telemetry --
 
-    /// Snapshot of the live per-relay diagnostics map. One row per URL
-    /// currently in the client's pool. Refreshed by the background
-    /// diagnostics poller at least once per second.
-    pub async fn get_relay_diagnostics(&self) -> RelayDiagnosticListOutcome {
-        relay_diagnostic_list_outcome(Ok(self.runtime.relay_diagnostics_snapshot()))
+    /// Project a live diagnostics payload plus the derived Network Settings
+    /// header/auto-connected state for the current configured relay rows.
+    pub fn project_network_diagnostics_snapshot(
+        &self,
+        configured_relays: Vec<crate::relays::RelayConfig>,
+        diagnostics: Vec<RelayDiagnostic>,
+    ) -> crate::relays::NetworkDiagnosticsSnapshot {
+        crate::relays::network_diagnostics_snapshot(configured_relays, diagnostics)
     }
 
     pub fn auto_connected_relay_config(&self, url: String) -> crate::relays::RelayConfig {
         crate::relays::auto_connected_display_config(url)
-    }
-
-    pub fn project_relay_settings(
-        &self,
-        configured_relays: Vec<crate::relays::RelayConfig>,
-        diagnostics: Vec<RelayDiagnostic>,
-    ) -> crate::relays::RelaySettingsProjection {
-        crate::relays::settings_projection(&configured_relays, &diagnostics)
     }
 
     pub fn project_relay_row(
