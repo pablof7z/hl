@@ -75,9 +75,8 @@ pub use bookmarks::{
 pub use capture::{
     CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput,
     CaptureCommunitySelectionProjection, CaptureCommunitySelectionProjectionInput,
-    CaptureHighlightDraftInput, CaptureHighlightDraftProjection, CapturePictureDraftInput,
-    CapturePublishPhase, CapturePublishProjection, CapturePublishProjectionInput,
-    CaptureStashProjection, CaptureStashProjectionInput,
+    CapturePublishInput, CapturePublishPhase, CapturePublishProjection,
+    CapturePublishProjectionInput, CaptureStashProjection, CaptureStashProjectionInput,
 };
 pub use chat::{ChatComposerProjection, ChatComposerProjectionInput};
 pub use client::HighlighterCore;
@@ -141,18 +140,17 @@ pub use models::{
     CurrentUserOutcome, DataOutcome, DiscussionAttachment, DiscussionListOutcome,
     DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome,
     FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccount,
-    GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind,
-    HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction,
-    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
-    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome, PictureDraft,
-    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem,
-    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomLane,
-    RoomRecommendation, RoomRecommendationListOutcome, RoomRecommendationReason, StringListOutcome,
-    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome,
-    WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
+    HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem,
+    HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction, MutationOutcome,
+    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome,
+    OnboardingInterest, OnboardingInterestChip, OnboardingInterestProjection,
+    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome,
+    ProfileMetadata, ProfileOutcome, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome,
+    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
+    RoomLane, RoomRecommendation, RoomRecommendationListOutcome, RoomRecommendationReason,
+    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::{
     Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,

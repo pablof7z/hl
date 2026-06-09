@@ -112,6 +112,10 @@ struct CommentComposer: View {
                 content: projection.submitBody,
                 parentEventId: parentEventId
             )
+            guard let outcome else {
+                isPublishing = false
+                return
+            }
             if outcome.error.isEmpty {
                 isPublishing = false
                 focused = false

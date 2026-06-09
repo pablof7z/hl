@@ -121,6 +121,7 @@ struct FeedbackThreadDetailView: View {
 
         sendError = nil
         let outcome = await detailStore.sendReply(body: projection.submitBody)
+        guard let outcome else { return }
         if outcome.error.isEmpty {
             draft = ""
             await listStore.refreshThreads()

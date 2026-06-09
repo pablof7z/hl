@@ -381,12 +381,6 @@ pub struct ReactionOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct PictureOutcome {
-    pub value: Option<PictureRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct WhatsNewEntriesOutcome {
     pub entries: Vec<crate::whats_new::WhatsNewEntry>,
     pub error: String,
@@ -682,7 +676,7 @@ pub struct HydratedHighlight {
 }
 
 /// A pending highlight to publish — text + optional context/note.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct HighlightDraft {
     pub quote: String,
     pub context: String,
@@ -719,7 +713,7 @@ pub struct BlossomUpload {
 /// A pending NIP-68 picture (kind:20) to publish into a community.
 /// Used as the OCR-fallback path: when the user couldn't or didn't want to
 /// extract a highlight quote from the captured photo.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct PictureDraft {
     /// The Blossom upload to attach (must already have been uploaded).
     pub image: BlossomUpload,
@@ -734,7 +728,7 @@ pub struct PictureDraft {
 }
 
 /// Published kind:20 picture event record returned to the client.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct PictureRecord {
     pub event_id: String,
     pub pubkey: String,

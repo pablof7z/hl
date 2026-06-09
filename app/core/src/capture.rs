@@ -60,7 +60,7 @@ pub struct CapturePublishProjection {
     pub can_publish: bool,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct CaptureHighlightDraftInput {
     pub quote: String,
     pub context: String,
@@ -68,17 +68,28 @@ pub struct CaptureHighlightDraftInput {
     pub image: BlossomUpload,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct CaptureHighlightDraftProjection {
     pub draft: Option<HighlightDraft>,
     pub has_highlight: bool,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct CapturePictureDraftInput {
     pub image: BlossomUpload,
     pub note: String,
     pub artifact: Option<ArtifactRecord>,
+    pub target_group_id: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CapturePublishInput {
+    pub image: BlossomUpload,
+    pub quote: String,
+    pub context: String,
+    pub note: String,
+    pub existing_artifact: Option<ArtifactRecord>,
+    pub pending_preview: Option<ArtifactPreview>,
     pub target_group_id: Option<String>,
 }
 

@@ -99,24 +99,6 @@ actor SafeHighlighterCore {
         await core.loadPodcastTranscript(url: url)
     }
 
-    nonisolated func getPodcastClipHighlightDraft(
-        segments: [TranscriptSegment],
-        selectedSegmentIds: [String],
-        note: String,
-        clipStartSeconds: Double?,
-        clipEndSeconds: Double?,
-        clipSpeaker: String
-    ) -> HighlightDraft {
-        core.getPodcastClipHighlightDraft(
-            segments: segments,
-            selectedSegmentIds: selectedSegmentIds,
-            note: note,
-            clipStartSeconds: clipStartSeconds,
-            clipEndSeconds: clipEndSeconds,
-            clipSpeaker: clipSpeaker
-        )
-    }
-
     nonisolated func getPodcastClipComposerProjection(
         segments: [TranscriptSegment],
         transcriptAvailable: Bool,
@@ -588,16 +570,8 @@ actor SafeHighlighterCore {
         core.projectCapturePublish(input: input)
     }
 
-    nonisolated func buildCaptureHighlightDraft(
-        input: CaptureHighlightDraftInput
-    ) -> CaptureHighlightDraftProjection {
-        core.buildCaptureHighlightDraft(input: input)
-    }
-
-    nonisolated func buildCapturePictureDraft(
-        input: CapturePictureDraftInput
-    ) -> PictureDraft {
-        core.buildCapturePictureDraft(input: input)
+    func publishCapture(input: CapturePublishInput) async -> StringOutcome {
+        await core.publishCapture(input: input)
     }
 
     func buildPreviewFromUrl(_ url: String) async -> ArtifactPreviewOutcome {
@@ -1565,18 +1539,6 @@ actor SafeHighlighterCore {
         await core.publishDiscussionFromComposer(input: input)
     }
 
-    func publishHighlightsAndShare(
-        artifact: ArtifactRecord,
-        drafts: [HighlightDraft],
-        targetGroupId: String
-    ) async -> HighlightListOutcome {
-        await core.publishHighlightsAndShare(
-            artifact: artifact,
-            drafts: drafts,
-            targetGroupId: targetGroupId
-        )
-    }
-
     func publishPodcastClipHighlight(
         input: PodcastClipPublishInput
     ) async -> HighlightOutcome {
@@ -1587,13 +1549,6 @@ actor SafeHighlighterCore {
         input: PodcastClipComposerPublishInput
     ) async -> HighlightOutcome {
         await core.publishPodcastComposerClip(input: input)
-    }
-
-    func publishHighlight(
-        draft: HighlightDraft,
-        artifact: ArtifactRecord
-    ) async -> HighlightOutcome {
-        await core.publishHighlight(draft: draft, artifact: artifact)
     }
 
     func publishArticleReaderHighlight(
@@ -1669,10 +1624,6 @@ actor SafeHighlighterCore {
             height: height,
             alt: alt
         )
-    }
-
-    func publishPicture(_ draft: PictureDraft) async -> PictureOutcome {
-        await core.publishPicture(draft: draft)
     }
 
     // MARK: - Relay config (NIP-65 read/write + NIP-78 rooms/indexer)

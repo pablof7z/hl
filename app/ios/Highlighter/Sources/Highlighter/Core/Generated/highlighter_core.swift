@@ -769,10 +769,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func autoConnectedRelayConfig(url: String)  -> RelayConfig
 
-    func buildCaptureHighlightDraft(input: CaptureHighlightDraftInput)  -> CaptureHighlightDraftProjection
-
-    func buildCapturePictureDraft(input: CapturePictureDraftInput)  -> PictureDraft
-
     /**
      * Build the visible NIP-22 comment thread from a bounded screen record
      * set. Rust owns parent resolution, orphan promotion, and chronological
@@ -1191,16 +1187,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getOnboardingInterests()  -> [OnboardingInterest]
 
-    func getPodcastClipComposerDraft(segments: [TranscriptSegment], transcriptAvailable: Bool, context: String, clipStartSeconds: Double, clipEndSeconds: Double)  -> HighlightDraft
-
     func getPodcastClipComposerProjection(input: PodcastClipComposerInput)  -> PodcastClipComposerProjection
-
-    /**
-     * Build a podcast clip highlight draft from transcript selection inputs.
-     * Rust owns selected segment matching, chronological quote assembly, and
-     * protocol payload fields.
-     */
-    func getPodcastClipHighlightDraft(segments: [TranscriptSegment], selectedSegmentIds: [String], note: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String)  -> HighlightDraft
 
     func getPodcastClipReference(artifact: ArtifactRecord)  -> PodcastClipReference
 
@@ -1729,6 +1716,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
 
+    func publishCapture(input: CapturePublishInput) async  -> StringOutcome
+
     /**
      * Publish a NIP-29 kind:9 chat message into `group_id`. When
      * `reply_to_event_id` is set, the published event carries a marked
@@ -1761,23 +1750,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * just without a `p` tag).
      */
     func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEventId: String?, body: String) async  -> FeedbackEventOutcome
-
-    /**
-     * Publish a solo NIP-84 highlight without a NIP-29 repost. Used by the
-     * article reader's text-selection flow: user highlights → event lands in
-     * their vault; sharing into a community is a later explicit action.
-     */
-    func publishHighlight(draft: HighlightDraft, artifact: ArtifactRecord) async  -> HighlightOutcome
-
-    func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [HighlightDraft], targetGroupId: String) async  -> HighlightListOutcome
-
-    /**
-     * Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
-     * Used by the capture flow when the user opts not to (or can't) extract
-     * a highlight quote — the photo still ships to the community with all
-     * the imeta metadata.
-     */
-    func publishPicture(draft: PictureDraft) async  -> PictureOutcome
 
     /**
      * Publish and share one podcast clip highlight. Rust owns clip draft
@@ -2268,22 +2240,6 @@ open func autoConnectedRelayConfig(url: String) -> RelayConfig  {
     return try!  FfiConverterTypeRelayConfig_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_auto_connected_relay_config(self.uniffiClonePointer(),
         FfiConverterString.lower(url),$0
-    )
-})
-}
-
-open func buildCaptureHighlightDraft(input: CaptureHighlightDraftInput) -> CaptureHighlightDraftProjection  {
-    return try!  FfiConverterTypeCaptureHighlightDraftProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_build_capture_highlight_draft(self.uniffiClonePointer(),
-        FfiConverterTypeCaptureHighlightDraftInput_lower(input),$0
-    )
-})
-}
-
-open func buildCapturePictureDraft(input: CapturePictureDraftInput) -> PictureDraft  {
-    return try!  FfiConverterTypePictureDraft_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_build_capture_picture_draft(self.uniffiClonePointer(),
-        FfiConverterTypeCapturePictureDraftInput_lower(input),$0
     )
 })
 }
@@ -3653,40 +3609,10 @@ open func getOnboardingInterests() -> [OnboardingInterest]  {
 })
 }
 
-open func getPodcastClipComposerDraft(segments: [TranscriptSegment], transcriptAvailable: Bool, context: String, clipStartSeconds: Double, clipEndSeconds: Double) -> HighlightDraft  {
-    return try!  FfiConverterTypeHighlightDraft_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_clip_composer_draft(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeTranscriptSegment.lower(segments),
-        FfiConverterBool.lower(transcriptAvailable),
-        FfiConverterString.lower(context),
-        FfiConverterDouble.lower(clipStartSeconds),
-        FfiConverterDouble.lower(clipEndSeconds),$0
-    )
-})
-}
-
 open func getPodcastClipComposerProjection(input: PodcastClipComposerInput) -> PodcastClipComposerProjection  {
     return try!  FfiConverterTypePodcastClipComposerProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_podcast_clip_composer_projection(self.uniffiClonePointer(),
         FfiConverterTypePodcastClipComposerInput_lower(input),$0
-    )
-})
-}
-
-    /**
-     * Build a podcast clip highlight draft from transcript selection inputs.
-     * Rust owns selected segment matching, chronological quote assembly, and
-     * protocol payload fields.
-     */
-open func getPodcastClipHighlightDraft(segments: [TranscriptSegment], selectedSegmentIds: [String], note: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String) -> HighlightDraft  {
-    return try!  FfiConverterTypeHighlightDraft_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_clip_highlight_draft(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeTranscriptSegment.lower(segments),
-        FfiConverterSequenceString.lower(selectedSegmentIds),
-        FfiConverterString.lower(note),
-        FfiConverterOptionDouble.lower(clipStartSeconds),
-        FfiConverterOptionDouble.lower(clipEndSeconds),
-        FfiConverterString.lower(clipSpeaker),$0
     )
 })
 }
@@ -5343,6 +5269,24 @@ open func publishArtifact(preview: ArtifactPreview, groupId: String, note: Strin
         )
 }
 
+open func publishCapture(input: CapturePublishInput)async  -> StringOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_capture(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeCapturePublishInput_lower(input)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeStringOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
     /**
      * Publish a NIP-29 kind:9 chat message into `group_id`. When
      * `reply_to_event_id` is set, the published event carries a marked
@@ -5467,71 +5411,6 @@ open func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEv
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFeedbackEventOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Publish a solo NIP-84 highlight without a NIP-29 repost. Used by the
-     * article reader's text-selection flow: user highlights → event lands in
-     * their vault; sharing into a community is a later explicit action.
-     */
-open func publishHighlight(draft: HighlightDraft, artifact: ArtifactRecord)async  -> HighlightOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_highlight(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeHighlightDraft_lower(draft),FfiConverterTypeArtifactRecord_lower(artifact)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-open func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [HighlightDraft], targetGroupId: String)async  -> HighlightListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_highlights_and_share(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeArtifactRecord_lower(artifact),FfiConverterSequenceTypeHighlightDraft.lower(drafts),FfiConverterString.lower(targetGroupId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
-     * Used by the capture flow when the user opts not to (or can't) extract
-     * a highlight quote — the photo still ships to the community with all
-     * the imeta metadata.
-     */
-open func publishPicture(draft: PictureDraft)async  -> PictureOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_picture(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypePictureDraft_lower(draft)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePictureOutcome_lift,
             errorHandler: nil
 
         )
@@ -11865,29 +11744,38 @@ public func FfiConverterTypeCaptureCommunitySelectionProjectionInput_lower(_ val
 }
 
 
-public struct CaptureHighlightDraftInput {
+public struct CapturePublishInput {
+    public var image: BlossomUpload
     public var quote: String
     public var context: String
     public var note: String
-    public var image: BlossomUpload
+    public var existingArtifact: ArtifactRecord?
+    public var pendingPreview: ArtifactPreview?
+    public var targetGroupId: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(quote: String, context: String, note: String, image: BlossomUpload) {
+    public init(image: BlossomUpload, quote: String, context: String, note: String, existingArtifact: ArtifactRecord?, pendingPreview: ArtifactPreview?, targetGroupId: String?) {
+        self.image = image
         self.quote = quote
         self.context = context
         self.note = note
-        self.image = image
+        self.existingArtifact = existingArtifact
+        self.pendingPreview = pendingPreview
+        self.targetGroupId = targetGroupId
     }
 }
 
 #if compiler(>=6)
-extension CaptureHighlightDraftInput: Sendable {}
+extension CapturePublishInput: Sendable {}
 #endif
 
 
-extension CaptureHighlightDraftInput: Equatable, Hashable {
-    public static func ==(lhs: CaptureHighlightDraftInput, rhs: CaptureHighlightDraftInput) -> Bool {
+extension CapturePublishInput: Equatable, Hashable {
+    public static func ==(lhs: CapturePublishInput, rhs: CapturePublishInput) -> Bool {
+        if lhs.image != rhs.image {
+            return false
+        }
         if lhs.quote != rhs.quote {
             return false
         }
@@ -11897,160 +11785,10 @@ extension CaptureHighlightDraftInput: Equatable, Hashable {
         if lhs.note != rhs.note {
             return false
         }
-        if lhs.image != rhs.image {
+        if lhs.existingArtifact != rhs.existingArtifact {
             return false
         }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(quote)
-        hasher.combine(context)
-        hasher.combine(note)
-        hasher.combine(image)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCaptureHighlightDraftInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureHighlightDraftInput {
-        return
-            try CaptureHighlightDraftInput(
-                quote: FfiConverterString.read(from: &buf),
-                context: FfiConverterString.read(from: &buf),
-                note: FfiConverterString.read(from: &buf),
-                image: FfiConverterTypeBlossomUpload.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CaptureHighlightDraftInput, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.quote, into: &buf)
-        FfiConverterString.write(value.context, into: &buf)
-        FfiConverterString.write(value.note, into: &buf)
-        FfiConverterTypeBlossomUpload.write(value.image, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCaptureHighlightDraftInput_lift(_ buf: RustBuffer) throws -> CaptureHighlightDraftInput {
-    return try FfiConverterTypeCaptureHighlightDraftInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCaptureHighlightDraftInput_lower(_ value: CaptureHighlightDraftInput) -> RustBuffer {
-    return FfiConverterTypeCaptureHighlightDraftInput.lower(value)
-}
-
-
-public struct CaptureHighlightDraftProjection {
-    public var draft: HighlightDraft?
-    public var hasHighlight: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(draft: HighlightDraft?, hasHighlight: Bool) {
-        self.draft = draft
-        self.hasHighlight = hasHighlight
-    }
-}
-
-#if compiler(>=6)
-extension CaptureHighlightDraftProjection: Sendable {}
-#endif
-
-
-extension CaptureHighlightDraftProjection: Equatable, Hashable {
-    public static func ==(lhs: CaptureHighlightDraftProjection, rhs: CaptureHighlightDraftProjection) -> Bool {
-        if lhs.draft != rhs.draft {
-            return false
-        }
-        if lhs.hasHighlight != rhs.hasHighlight {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(draft)
-        hasher.combine(hasHighlight)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCaptureHighlightDraftProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureHighlightDraftProjection {
-        return
-            try CaptureHighlightDraftProjection(
-                draft: FfiConverterOptionTypeHighlightDraft.read(from: &buf),
-                hasHighlight: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CaptureHighlightDraftProjection, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeHighlightDraft.write(value.draft, into: &buf)
-        FfiConverterBool.write(value.hasHighlight, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCaptureHighlightDraftProjection_lift(_ buf: RustBuffer) throws -> CaptureHighlightDraftProjection {
-    return try FfiConverterTypeCaptureHighlightDraftProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCaptureHighlightDraftProjection_lower(_ value: CaptureHighlightDraftProjection) -> RustBuffer {
-    return FfiConverterTypeCaptureHighlightDraftProjection.lower(value)
-}
-
-
-public struct CapturePictureDraftInput {
-    public var image: BlossomUpload
-    public var note: String
-    public var artifact: ArtifactRecord?
-    public var targetGroupId: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(image: BlossomUpload, note: String, artifact: ArtifactRecord?, targetGroupId: String?) {
-        self.image = image
-        self.note = note
-        self.artifact = artifact
-        self.targetGroupId = targetGroupId
-    }
-}
-
-#if compiler(>=6)
-extension CapturePictureDraftInput: Sendable {}
-#endif
-
-
-extension CapturePictureDraftInput: Equatable, Hashable {
-    public static func ==(lhs: CapturePictureDraftInput, rhs: CapturePictureDraftInput) -> Bool {
-        if lhs.image != rhs.image {
-            return false
-        }
-        if lhs.note != rhs.note {
-            return false
-        }
-        if lhs.artifact != rhs.artifact {
+        if lhs.pendingPreview != rhs.pendingPreview {
             return false
         }
         if lhs.targetGroupId != rhs.targetGroupId {
@@ -12061,8 +11799,11 @@ extension CapturePictureDraftInput: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(image)
+        hasher.combine(quote)
+        hasher.combine(context)
         hasher.combine(note)
-        hasher.combine(artifact)
+        hasher.combine(existingArtifact)
+        hasher.combine(pendingPreview)
         hasher.combine(targetGroupId)
     }
 }
@@ -12072,21 +11813,27 @@ extension CapturePictureDraftInput: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeCapturePictureDraftInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapturePictureDraftInput {
+public struct FfiConverterTypeCapturePublishInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapturePublishInput {
         return
-            try CapturePictureDraftInput(
+            try CapturePublishInput(
                 image: FfiConverterTypeBlossomUpload.read(from: &buf),
+                quote: FfiConverterString.read(from: &buf),
+                context: FfiConverterString.read(from: &buf),
                 note: FfiConverterString.read(from: &buf),
-                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
+                existingArtifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
+                pendingPreview: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
                 targetGroupId: FfiConverterOptionString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: CapturePictureDraftInput, into buf: inout [UInt8]) {
+    public static func write(_ value: CapturePublishInput, into buf: inout [UInt8]) {
         FfiConverterTypeBlossomUpload.write(value.image, into: &buf)
+        FfiConverterString.write(value.quote, into: &buf)
+        FfiConverterString.write(value.context, into: &buf)
         FfiConverterString.write(value.note, into: &buf)
-        FfiConverterOptionTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterOptionTypeArtifactRecord.write(value.existingArtifact, into: &buf)
+        FfiConverterOptionTypeArtifactPreview.write(value.pendingPreview, into: &buf)
         FfiConverterOptionString.write(value.targetGroupId, into: &buf)
     }
 }
@@ -12095,15 +11842,15 @@ public struct FfiConverterTypeCapturePictureDraftInput: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCapturePictureDraftInput_lift(_ buf: RustBuffer) throws -> CapturePictureDraftInput {
-    return try FfiConverterTypeCapturePictureDraftInput.lift(buf)
+public func FfiConverterTypeCapturePublishInput_lift(_ buf: RustBuffer) throws -> CapturePublishInput {
+    return try FfiConverterTypeCapturePublishInput.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCapturePictureDraftInput_lower(_ value: CapturePictureDraftInput) -> RustBuffer {
-    return FfiConverterTypeCapturePictureDraftInput.lower(value)
+public func FfiConverterTypeCapturePublishInput_lower(_ value: CapturePublishInput) -> RustBuffer {
+    return FfiConverterTypeCapturePublishInput.lower(value)
 }
 
 
@@ -18092,155 +17839,6 @@ public func FfiConverterTypeHighlightDetailResourceProjectionInput_lower(_ value
 }
 
 
-/**
- * A pending highlight to publish — text + optional context/note.
- */
-public struct HighlightDraft {
-    public var quote: String
-    public var context: String
-    public var note: String
-    /**
-     * Optional clip bounds for audio/video (seconds).
-     */
-    public var clipStartSeconds: Double?
-    public var clipEndSeconds: Double?
-    /**
-     * Speaker name for audio clips — empty if unknown or N/A.
-     */
-    public var clipSpeaker: String
-    /**
-     * Transcript segment IDs that the clip spans. Empty for non-clip highlights.
-     */
-    public var clipTranscriptSegmentIds: [String]
-    /**
-     * Optional photo accompanying the highlight (e.g. the page captured for an
-     * OCR'd book quote). When set, the published kind:9802 carries an
-     * `imeta` tag (NIP-92) referencing the Blossom-hosted blob.
-     */
-    public var image: BlossomUpload?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(quote: String, context: String, note: String,
-        /**
-         * Optional clip bounds for audio/video (seconds).
-         */clipStartSeconds: Double?, clipEndSeconds: Double?,
-        /**
-         * Speaker name for audio clips — empty if unknown or N/A.
-         */clipSpeaker: String,
-        /**
-         * Transcript segment IDs that the clip spans. Empty for non-clip highlights.
-         */clipTranscriptSegmentIds: [String],
-        /**
-         * Optional photo accompanying the highlight (e.g. the page captured for an
-         * OCR'd book quote). When set, the published kind:9802 carries an
-         * `imeta` tag (NIP-92) referencing the Blossom-hosted blob.
-         */image: BlossomUpload?) {
-        self.quote = quote
-        self.context = context
-        self.note = note
-        self.clipStartSeconds = clipStartSeconds
-        self.clipEndSeconds = clipEndSeconds
-        self.clipSpeaker = clipSpeaker
-        self.clipTranscriptSegmentIds = clipTranscriptSegmentIds
-        self.image = image
-    }
-}
-
-#if compiler(>=6)
-extension HighlightDraft: Sendable {}
-#endif
-
-
-extension HighlightDraft: Equatable, Hashable {
-    public static func ==(lhs: HighlightDraft, rhs: HighlightDraft) -> Bool {
-        if lhs.quote != rhs.quote {
-            return false
-        }
-        if lhs.context != rhs.context {
-            return false
-        }
-        if lhs.note != rhs.note {
-            return false
-        }
-        if lhs.clipStartSeconds != rhs.clipStartSeconds {
-            return false
-        }
-        if lhs.clipEndSeconds != rhs.clipEndSeconds {
-            return false
-        }
-        if lhs.clipSpeaker != rhs.clipSpeaker {
-            return false
-        }
-        if lhs.clipTranscriptSegmentIds != rhs.clipTranscriptSegmentIds {
-            return false
-        }
-        if lhs.image != rhs.image {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(quote)
-        hasher.combine(context)
-        hasher.combine(note)
-        hasher.combine(clipStartSeconds)
-        hasher.combine(clipEndSeconds)
-        hasher.combine(clipSpeaker)
-        hasher.combine(clipTranscriptSegmentIds)
-        hasher.combine(image)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHighlightDraft: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightDraft {
-        return
-            try HighlightDraft(
-                quote: FfiConverterString.read(from: &buf),
-                context: FfiConverterString.read(from: &buf),
-                note: FfiConverterString.read(from: &buf),
-                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf),
-                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf),
-                clipSpeaker: FfiConverterString.read(from: &buf),
-                clipTranscriptSegmentIds: FfiConverterSequenceString.read(from: &buf),
-                image: FfiConverterOptionTypeBlossomUpload.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: HighlightDraft, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.quote, into: &buf)
-        FfiConverterString.write(value.context, into: &buf)
-        FfiConverterString.write(value.note, into: &buf)
-        FfiConverterOptionDouble.write(value.clipStartSeconds, into: &buf)
-        FfiConverterOptionDouble.write(value.clipEndSeconds, into: &buf)
-        FfiConverterString.write(value.clipSpeaker, into: &buf)
-        FfiConverterSequenceString.write(value.clipTranscriptSegmentIds, into: &buf)
-        FfiConverterOptionTypeBlossomUpload.write(value.image, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHighlightDraft_lift(_ buf: RustBuffer) throws -> HighlightDraft {
-    return try FfiConverterTypeHighlightDraft.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHighlightDraft_lower(_ value: HighlightDraft) -> RustBuffer {
-    return FfiConverterTypeHighlightDraft.lower(value)
-}
-
-
 public struct HighlightFeedContentProjection {
     public var quoteText: String
     public var noteText: String?
@@ -22310,324 +21908,6 @@ public func FfiConverterTypeOptionalStringOutcome_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeOptionalStringOutcome_lower(_ value: OptionalStringOutcome) -> RustBuffer {
     return FfiConverterTypeOptionalStringOutcome.lower(value)
-}
-
-
-/**
- * A pending NIP-68 picture (kind:20) to publish into a community.
- * Used as the OCR-fallback path: when the user couldn't or didn't want to
- * extract a highlight quote from the captured photo.
- */
-public struct PictureDraft {
-    /**
-     * The Blossom upload to attach (must already have been uploaded).
-     */
-    public var image: BlossomUpload
-    /**
-     * Free-form note from the user — populates event content.
-     */
-    public var note: String
-    /**
-     * Optional book/article context. When present, an `a`/`e`/`i` reference
-     * tag is included so the picture is discoverable next to that artifact.
-     */
-    public var artifact: ArtifactRecord?
-    /**
-     * NIP-29 group id this picture is being shared into. `None` publishes the
-     * picture as a standalone event (no `h` tag, not scoped to any community).
-     */
-    public var targetGroupId: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(
-        /**
-         * The Blossom upload to attach (must already have been uploaded).
-         */image: BlossomUpload,
-        /**
-         * Free-form note from the user — populates event content.
-         */note: String,
-        /**
-         * Optional book/article context. When present, an `a`/`e`/`i` reference
-         * tag is included so the picture is discoverable next to that artifact.
-         */artifact: ArtifactRecord?,
-        /**
-         * NIP-29 group id this picture is being shared into. `None` publishes the
-         * picture as a standalone event (no `h` tag, not scoped to any community).
-         */targetGroupId: String?) {
-        self.image = image
-        self.note = note
-        self.artifact = artifact
-        self.targetGroupId = targetGroupId
-    }
-}
-
-#if compiler(>=6)
-extension PictureDraft: Sendable {}
-#endif
-
-
-extension PictureDraft: Equatable, Hashable {
-    public static func ==(lhs: PictureDraft, rhs: PictureDraft) -> Bool {
-        if lhs.image != rhs.image {
-            return false
-        }
-        if lhs.note != rhs.note {
-            return false
-        }
-        if lhs.artifact != rhs.artifact {
-            return false
-        }
-        if lhs.targetGroupId != rhs.targetGroupId {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(image)
-        hasher.combine(note)
-        hasher.combine(artifact)
-        hasher.combine(targetGroupId)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePictureDraft: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PictureDraft {
-        return
-            try PictureDraft(
-                image: FfiConverterTypeBlossomUpload.read(from: &buf),
-                note: FfiConverterString.read(from: &buf),
-                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
-                targetGroupId: FfiConverterOptionString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: PictureDraft, into buf: inout [UInt8]) {
-        FfiConverterTypeBlossomUpload.write(value.image, into: &buf)
-        FfiConverterString.write(value.note, into: &buf)
-        FfiConverterOptionTypeArtifactRecord.write(value.artifact, into: &buf)
-        FfiConverterOptionString.write(value.targetGroupId, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePictureDraft_lift(_ buf: RustBuffer) throws -> PictureDraft {
-    return try FfiConverterTypePictureDraft.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePictureDraft_lower(_ value: PictureDraft) -> RustBuffer {
-    return FfiConverterTypePictureDraft.lower(value)
-}
-
-
-public struct PictureOutcome {
-    public var value: PictureRecord?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: PictureRecord?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension PictureOutcome: Sendable {}
-#endif
-
-
-extension PictureOutcome: Equatable, Hashable {
-    public static func ==(lhs: PictureOutcome, rhs: PictureOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePictureOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PictureOutcome {
-        return
-            try PictureOutcome(
-                value: FfiConverterOptionTypePictureRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: PictureOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypePictureRecord.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePictureOutcome_lift(_ buf: RustBuffer) throws -> PictureOutcome {
-    return try FfiConverterTypePictureOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePictureOutcome_lower(_ value: PictureOutcome) -> RustBuffer {
-    return FfiConverterTypePictureOutcome.lower(value)
-}
-
-
-/**
- * Published kind:20 picture event record returned to the client.
- */
-public struct PictureRecord {
-    public var eventId: String
-    public var pubkey: String
-    public var groupId: String
-    public var note: String
-    public var imageUrl: String
-    public var imageSha256: String
-    /**
-     * Address/id/url of the artifact this picture references — empty when
-     * the picture stands alone.
-     */
-    public var artifactReferenceKey: String
-    public var createdAt: UInt64?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(eventId: String, pubkey: String, groupId: String, note: String, imageUrl: String, imageSha256: String,
-        /**
-         * Address/id/url of the artifact this picture references — empty when
-         * the picture stands alone.
-         */artifactReferenceKey: String, createdAt: UInt64?) {
-        self.eventId = eventId
-        self.pubkey = pubkey
-        self.groupId = groupId
-        self.note = note
-        self.imageUrl = imageUrl
-        self.imageSha256 = imageSha256
-        self.artifactReferenceKey = artifactReferenceKey
-        self.createdAt = createdAt
-    }
-}
-
-#if compiler(>=6)
-extension PictureRecord: Sendable {}
-#endif
-
-
-extension PictureRecord: Equatable, Hashable {
-    public static func ==(lhs: PictureRecord, rhs: PictureRecord) -> Bool {
-        if lhs.eventId != rhs.eventId {
-            return false
-        }
-        if lhs.pubkey != rhs.pubkey {
-            return false
-        }
-        if lhs.groupId != rhs.groupId {
-            return false
-        }
-        if lhs.note != rhs.note {
-            return false
-        }
-        if lhs.imageUrl != rhs.imageUrl {
-            return false
-        }
-        if lhs.imageSha256 != rhs.imageSha256 {
-            return false
-        }
-        if lhs.artifactReferenceKey != rhs.artifactReferenceKey {
-            return false
-        }
-        if lhs.createdAt != rhs.createdAt {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(eventId)
-        hasher.combine(pubkey)
-        hasher.combine(groupId)
-        hasher.combine(note)
-        hasher.combine(imageUrl)
-        hasher.combine(imageSha256)
-        hasher.combine(artifactReferenceKey)
-        hasher.combine(createdAt)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePictureRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PictureRecord {
-        return
-            try PictureRecord(
-                eventId: FfiConverterString.read(from: &buf),
-                pubkey: FfiConverterString.read(from: &buf),
-                groupId: FfiConverterString.read(from: &buf),
-                note: FfiConverterString.read(from: &buf),
-                imageUrl: FfiConverterString.read(from: &buf),
-                imageSha256: FfiConverterString.read(from: &buf),
-                artifactReferenceKey: FfiConverterString.read(from: &buf),
-                createdAt: FfiConverterOptionUInt64.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: PictureRecord, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.eventId, into: &buf)
-        FfiConverterString.write(value.pubkey, into: &buf)
-        FfiConverterString.write(value.groupId, into: &buf)
-        FfiConverterString.write(value.note, into: &buf)
-        FfiConverterString.write(value.imageUrl, into: &buf)
-        FfiConverterString.write(value.imageSha256, into: &buf)
-        FfiConverterString.write(value.artifactReferenceKey, into: &buf)
-        FfiConverterOptionUInt64.write(value.createdAt, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePictureRecord_lift(_ buf: RustBuffer) throws -> PictureRecord {
-    return try FfiConverterTypePictureRecord.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePictureRecord_lower(_ value: PictureRecord) -> RustBuffer {
-    return FfiConverterTypePictureRecord.lower(value)
 }
 
 
@@ -37132,30 +36412,6 @@ fileprivate struct FfiConverterOptionTypeGeneratedAccount: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeHighlightDraft: FfiConverterRustBuffer {
-    typealias SwiftType = HighlightDraft?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeHighlightDraft.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeHighlightDraft.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeHighlightRecord: FfiConverterRustBuffer {
     typealias SwiftType = HighlightRecord?
 
@@ -37316,30 +36572,6 @@ fileprivate struct FfiConverterOptionTypeOcrRect: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeOcrRect.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionTypePictureRecord: FfiConverterRustBuffer {
-    typealias SwiftType = PictureRecord?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypePictureRecord.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypePictureRecord.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -38079,31 +37311,6 @@ fileprivate struct FfiConverterSequenceTypeFeedbackThreadRecord: FfiConverterRus
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeFeedbackThreadRecord.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeHighlightDraft: FfiConverterRustBuffer {
-    typealias SwiftType = [HighlightDraft]
-
-    public static func write(_ value: [HighlightDraft], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeHighlightDraft.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlightDraft] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [HighlightDraft]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeHighlightDraft.read(from: &buf))
         }
         return seq
     }
@@ -39079,12 +38286,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_auto_connected_relay_config() != 62438) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_build_capture_highlight_draft() != 30333) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_build_capture_picture_draft() != 11505) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_comment_thread() != 31980) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -39340,13 +38541,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_onboarding_interests() != 50053) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_composer_draft() != 47494) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_composer_projection() != 10657) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_highlight_draft() != 43495) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_clip_reference() != 12637) {
@@ -39775,6 +38970,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 1182) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_capture() != 51042) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message() != 4279) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -39791,15 +38989,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_note() != 47994) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_highlight() != 52107) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_highlights_and_share() != 20162) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_picture() != 49633) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_clip_highlight() != 12471) {

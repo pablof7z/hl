@@ -127,9 +127,9 @@ final class CommentsStore {
     /// kind:1111 comment. Optimistically inserts the new record and
     /// rebuilds the tree.
     @discardableResult
-    func publish(content: String, parentEventId: String?) async -> CommentOutcome {
+    func publish(content: String, parentEventId: String?) async -> CommentOutcome? {
         guard let core, let scope else {
-            return CommentOutcome(value: nil, error: "store not started")
+            return nil
         }
 
         let outcome = await core.publishCommentForScope(

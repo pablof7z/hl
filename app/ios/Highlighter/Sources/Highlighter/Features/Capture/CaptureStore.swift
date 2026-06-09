@@ -226,18 +226,25 @@ final class CaptureStore {
         }
     }
 
-    /// Publish the capture. If `stashedQuote` is set AND a book is picked,
-    /// goes via the highlight (kind:9802) path; otherwise publishes a kind:20
-    /// picture event. When `selectedGroupId` is set, the highlight is also
-    /// shared into the room via a kind:16 repost.
-    ///
-    /// For a `.pending` book with a room, the kind:11 artifact share is
-    /// auto-published first. Without a room, an `ArtifactRecord` is synthesised
-    /// from the preview so the highlight still carries the reference tags.
+    /// Publish the capture. Rust owns the highlight-vs-picture decision,
+    /// artifact-share creation, and final event id projection.
     func publish() {
         guard let upload else { return }
         let selection = selectedBook
         let groupId = selectedGroupId
+        let existingArtifact: ArtifactRecord?
+        let pendingPreview: ArtifactPreview?
+        switch selection {
+        case .existing(let record):
+            existingArtifact = record
+            pendingPreview = nil
+        case .pending(let preview):
+            existingArtifact = nil
+            pendingPreview = preview
+        case nil:
+            existingArtifact = nil
+            pendingPreview = nil
+        }
 
         // Refresh the imeta alt to reflect the current (possibly edited) OCR.
         let imageWithAlt = BlossomUpload(
@@ -249,105 +256,24 @@ final class CaptureStore {
             height: upload.height,
             alt: safeCore.ocrAltText(from: ocrMarkdown)
         )
-        let highlightDraftProjection = safeCore.buildCaptureHighlightDraft(
-            input: CaptureHighlightDraftInput(
-                quote: stashedQuote ?? "",
-                context: stashedContext,
-                note: note,
-                image: imageWithAlt
-            )
-        )
 
         phase = .publishing
         Task {
-            if let draft = highlightDraftProjection.draft, let selection {
-                let artifactOutcome = await resolveArtifact(selection, groupId: groupId)
-                guard artifactOutcome.error.isEmpty, let artifact = artifactOutcome.value else {
-                    self.phase = .error(artifactOutcome.error)
-                    return
-                }
-                if let groupId {
-                    let outcome = await safeCore.publishHighlightsAndShare(
-                        artifact: artifact,
-                        drafts: [draft],
-                        targetGroupId: groupId
-                    )
-                    guard outcome.error.isEmpty else {
-                        self.phase = .error(outcome.error)
-                        return
-                    }
-                    self.phase = .done(outcome.values.first?.eventId)
-                } else {
-                    let outcome = await safeCore.publishHighlight(draft: draft, artifact: artifact)
-                    guard outcome.error.isEmpty, let record = outcome.value else {
-                        self.phase = .error(outcome.error)
-                        return
-                    }
-                    self.phase = .done(record.eventId)
-                }
-            } else {
-                let artifactForPicture: ArtifactRecord?
-                switch selection {
-                case .existing(let record):
-                    artifactForPicture = record
-                case .pending(let preview):
-                    if let groupId {
-                        let outcome = await safeCore.publishArtifact(
-                            preview: preview,
-                            groupId: groupId,
-                            note: nil
-                        )
-                        guard outcome.error.isEmpty, let artifact = outcome.value else {
-                            self.phase = .error(outcome.error)
-                            return
-                        }
-                        artifactForPicture = artifact
-                    } else {
-                        let outcome = safeCore.getUnpublishedArtifactRecord(preview: preview)
-                        guard outcome.error.isEmpty, let artifact = outcome.value else {
-                            self.phase = .error(outcome.error)
-                            return
-                        }
-                        artifactForPicture = artifact
-                    }
-                case nil:
-                    artifactForPicture = nil
-                }
-                let draft = safeCore.buildCapturePictureDraft(
-                    input: CapturePictureDraftInput(
-                        image: imageWithAlt,
-                        note: note,
-                        artifact: artifactForPicture,
-                        targetGroupId: groupId
-                    )
+            let outcome = await safeCore.publishCapture(
+                input: CapturePublishInput(
+                    image: imageWithAlt,
+                    quote: stashedQuote ?? "",
+                    context: stashedContext,
+                    note: note,
+                    existingArtifact: existingArtifact,
+                    pendingPreview: pendingPreview,
+                    targetGroupId: groupId
                 )
-                let outcome = await safeCore.publishPicture(draft)
-                guard outcome.error.isEmpty, let record = outcome.value else {
-                    self.phase = .error(outcome.error)
-                    return
-                }
-                self.phase = .done(record.eventId)
-            }
-        }
-    }
-
-    /// Produce an `ArtifactRecord` for the given selection.
-    /// For `.existing`, returns as-is. For `.pending` with a group, publishes
-    /// the kind:11 artifact share first; without a group, synthesises a record
-    /// from the preview so the highlight event can carry the reference tags.
-    private func resolveArtifact(_ selection: BookSelection, groupId: String?) async -> ArtifactOutcome {
-        switch selection {
-        case .existing(let record):
-            return ArtifactOutcome(value: record, error: "")
-        case .pending(let preview):
-            if let groupId {
-                return await safeCore.publishArtifact(
-                    preview: preview,
-                    groupId: groupId,
-                    note: nil
-                )
+            )
+            if outcome.error.isEmpty {
+                self.phase = .done(outcome.value)
             } else {
-                return safeCore.getUnpublishedArtifactRecord(preview: preview)
+                self.phase = .error(outcome.error)
             }
         }
     }

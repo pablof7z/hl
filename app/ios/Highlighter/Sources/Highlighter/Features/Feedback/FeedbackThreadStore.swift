@@ -70,9 +70,9 @@ final class FeedbackThreadStore {
     /// agent pubkey at send time; replies publish without a `p` tag when the
     /// project event isn't available.
     @discardableResult
-    func sendReply(body: String) async -> FeedbackEventOutcome {
+    func sendReply(body: String) async -> FeedbackEventOutcome? {
         guard let core, let coordinate, let rootEventId else {
-            return FeedbackEventOutcome(value: nil, error: FeedbackError.notReady.localizedDescription)
+            return nil
         }
         let agentOutcome = await core.getProjectFirstAgentPubkey(coordinate: coordinate)
         let agent = agentOutcome.error.isEmpty ? agentOutcome.value : nil

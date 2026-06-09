@@ -35,14 +35,13 @@ use crate::models::{
     CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
     DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
     FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
-    GeneratedAccountOutcome, HighlightDraft, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind,
-    HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction,
-    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
-    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
-    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome, PictureDraft,
-    PictureOutcome, PictureRecord, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
+    GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
+    HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem,
+    HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction, MutationOutcome,
+    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
+    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestProjection,
+    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome,
+    ProfileMetadata, ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
     ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
     RelayDiagnostic, RelayDiagnosticListOutcome, RoomLane, RoomRecommendation,
     RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
@@ -834,19 +833,6 @@ fn reaction_summary_outcome(
     }
 }
 
-fn picture_outcome(result: Result<PictureRecord, CoreError>) -> PictureOutcome {
-    match result {
-        Ok(value) => PictureOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => PictureOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
 fn whats_new_entries_outcome(
     result: Result<Vec<whats_new::WhatsNewEntry>, CoreError>,
 ) -> WhatsNewEntriesOutcome {
@@ -1205,50 +1191,11 @@ impl HighlighterCore {
         transcript_segment_list_outcome(podcast_transcript::fetch_transcript(&url).await)
     }
 
-    /// Build a podcast clip highlight draft from transcript selection inputs.
-    /// Rust owns selected segment matching, chronological quote assembly, and
-    /// protocol payload fields.
-    pub fn get_podcast_clip_highlight_draft(
-        &self,
-        segments: Vec<TranscriptSegment>,
-        selected_segment_ids: Vec<String>,
-        note: String,
-        clip_start_seconds: Option<f64>,
-        clip_end_seconds: Option<f64>,
-        clip_speaker: String,
-    ) -> HighlightDraft {
-        podcast_transcript::clip_highlight_draft(
-            &segments,
-            &selected_segment_ids,
-            note,
-            clip_start_seconds,
-            clip_end_seconds,
-            clip_speaker,
-        )
-    }
-
     pub fn get_podcast_clip_composer_projection(
         &self,
         input: PodcastClipComposerInput,
     ) -> PodcastClipComposerProjection {
         podcast_transcript::clip_composer_projection(input)
-    }
-
-    pub fn get_podcast_clip_composer_draft(
-        &self,
-        segments: Vec<TranscriptSegment>,
-        transcript_available: bool,
-        context: String,
-        clip_start_seconds: f64,
-        clip_end_seconds: f64,
-    ) -> HighlightDraft {
-        podcast_transcript::clip_composer_highlight_draft(
-            &segments,
-            transcript_available,
-            context,
-            clip_start_seconds,
-            clip_end_seconds,
-        )
     }
 
     pub fn get_podcast_listening_projection(
@@ -3291,18 +3238,108 @@ impl HighlighterCore {
         crate::capture::publish_projection(input)
     }
 
-    pub fn build_capture_highlight_draft(
+    pub async fn publish_capture(
         &self,
-        input: crate::capture::CaptureHighlightDraftInput,
-    ) -> crate::capture::CaptureHighlightDraftProjection {
-        crate::capture::highlight_draft_projection(input)
-    }
+        input: crate::capture::CapturePublishInput,
+    ) -> StringOutcome {
+        let result: Result<String, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            let crate::capture::CapturePublishInput {
+                image,
+                quote,
+                context,
+                note,
+                existing_artifact,
+                pending_preview,
+                target_group_id,
+            } = input;
 
-    pub fn build_capture_picture_draft(
-        &self,
-        input: crate::capture::CapturePictureDraftInput,
-    ) -> PictureDraft {
-        crate::capture::picture_draft(input)
+            if existing_artifact.is_some() && pending_preview.is_some() {
+                return Err(CoreError::InvalidInput(
+                    "Capture publish received both existing and pending artifacts.".into(),
+                ));
+            }
+
+            let target_group_id = target_group_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            let has_artifact = existing_artifact.is_some() || pending_preview.is_some();
+            let highlight_projection = crate::capture::highlight_draft_projection(
+                crate::capture::CaptureHighlightDraftInput {
+                    quote,
+                    context,
+                    note: note.clone(),
+                    image: image.clone(),
+                },
+            );
+
+            if highlight_projection.has_highlight && has_artifact {
+                let artifact = match (existing_artifact, pending_preview) {
+                    (Some(record), None) => record,
+                    (None, Some(preview)) => {
+                        if let Some(group_id) = target_group_id.as_deref() {
+                            crate::artifacts::publish(&self.runtime, preview, group_id, None)
+                                .await?
+                        } else {
+                            crate::artifacts::unpublished_record(preview)
+                        }
+                    }
+                    _ => {
+                        return Err(CoreError::InvalidInput(
+                            "Capture highlight requires one artifact selection.".into(),
+                        ))
+                    }
+                };
+                let draft = highlight_projection.draft.ok_or_else(|| {
+                    CoreError::InvalidInput("Capture highlight draft was empty.".into())
+                })?;
+
+                if let Some(group_id) = target_group_id.as_deref() {
+                    let records = crate::highlights::publish_and_share(
+                        &self.runtime,
+                        artifact,
+                        vec![draft],
+                        group_id,
+                    )
+                    .await?;
+                    Ok(one_highlight_record(records)?.event_id)
+                } else {
+                    Ok(crate::highlights::publish(&self.runtime, draft, artifact)
+                        .await?
+                        .event_id)
+                }
+            } else {
+                let artifact = match (existing_artifact, pending_preview) {
+                    (Some(record), None) => Some(record),
+                    (None, Some(preview)) => {
+                        if let Some(group_id) = target_group_id.as_deref() {
+                            Some(
+                                crate::artifacts::publish(&self.runtime, preview, group_id, None)
+                                    .await?,
+                            )
+                        } else {
+                            Some(crate::artifacts::unpublished_record(preview))
+                        }
+                    }
+                    (None, None) => None,
+                    (Some(_), Some(_)) => unreachable!("conflicting capture artifact checked"),
+                };
+                let draft =
+                    crate::capture::picture_draft(crate::capture::CapturePictureDraftInput {
+                        image,
+                        note,
+                        artifact,
+                        target_group_id,
+                    });
+                Ok(crate::pictures::publish_picture(&self.runtime, draft)
+                    .await?
+                    .event_id)
+            }
+        }
+        .await;
+        string_outcome(result)
     }
 
     pub fn reconstruct_ocr_markdown(&self, lines: Vec<crate::ocr::OcrLine>) -> String {
@@ -3624,22 +3661,6 @@ impl HighlighterCore {
         feedback_event_outcome(result)
     }
 
-    pub async fn publish_highlights_and_share(
-        &self,
-        artifact: ArtifactRecord,
-        drafts: Vec<HighlightDraft>,
-        target_group_id: String,
-    ) -> HighlightListOutcome {
-        let result: Result<Vec<HighlightRecord>, CoreError> = async {
-            // Guard: user must be logged in.
-            let _ = self.require_user_pubkey()?;
-            crate::highlights::publish_and_share(&self.runtime, artifact, drafts, &target_group_id)
-                .await
-        }
-        .await;
-        highlight_list_outcome(result)
-    }
-
     /// Publish and share one podcast clip highlight. Rust owns clip draft
     /// construction, NIP-29 repost publication, and single-record outcome
     /// collapse for native player controls.
@@ -3731,22 +3752,6 @@ impl HighlighterCore {
         }
         .await;
         mutation_outcome(result)
-    }
-
-    /// Publish a solo NIP-84 highlight without a NIP-29 repost. Used by the
-    /// article reader's text-selection flow: user highlights → event lands in
-    /// their vault; sharing into a community is a later explicit action.
-    pub async fn publish_highlight(
-        &self,
-        draft: HighlightDraft,
-        artifact: ArtifactRecord,
-    ) -> HighlightOutcome {
-        let result: Result<HighlightRecord, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            crate::highlights::publish(&self.runtime, draft, artifact).await
-        }
-        .await;
-        highlight_outcome(result)
     }
 
     /// Publish a solo NIP-84 highlight from an article reader selection.
@@ -4373,19 +4378,6 @@ impl HighlighterCore {
         }
         .await;
         blossom_upload_outcome(result)
-    }
-
-    /// Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
-    /// Used by the capture flow when the user opts not to (or can't) extract
-    /// a highlight quote — the photo still ships to the community with all
-    /// the imeta metadata.
-    pub async fn publish_picture(&self, draft: PictureDraft) -> PictureOutcome {
-        let result: Result<PictureRecord, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            crate::pictures::publish_picture(&self.runtime, draft).await
-        }
-        .await;
-        picture_outcome(result)
     }
 
     // -- Relay config (NIP-65 read/write + NIP-78 rooms/indexer) --
