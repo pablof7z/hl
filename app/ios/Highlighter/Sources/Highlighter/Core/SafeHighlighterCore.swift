@@ -56,6 +56,13 @@ actor SafeHighlighterCore {
         core.getOnboardingInterestProjection(selectedIds: selectedIds)
     }
 
+    nonisolated func toggleOnboardingInterestSelection(
+        selectedIds: [String],
+        interestId: String
+    ) -> [String] {
+        core.toggleOnboardingInterestSelection(selectedIds: selectedIds, interestId: interestId)
+    }
+
     func completeOnboardingInterests(selectedIds: [String]) async -> MutationOutcome {
         await core.completeOnboardingInterests(selectedIds: selectedIds)
     }

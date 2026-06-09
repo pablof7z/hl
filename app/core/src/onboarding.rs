@@ -164,12 +164,12 @@ pub fn interest_catalog() -> Vec<OnboardingInterest> {
 }
 
 pub fn interest_selection(selected_ids: Vec<String>) -> OnboardingInterestSelection {
-    let selected: HashSet<&str> = selected_ids.iter().map(String::as_str).collect();
+    let selected = selected_interest_set(&selected_ids);
     interest_selection_for_set(&selected)
 }
 
 pub fn interest_projection(selected_ids: Vec<String>) -> OnboardingInterestProjection {
-    let selected: HashSet<&str> = selected_ids.iter().map(String::as_str).collect();
+    let selected = selected_interest_set(&selected_ids);
     OnboardingInterestProjection {
         interests: INTERESTS
             .iter()
@@ -182,6 +182,44 @@ pub fn interest_projection(selected_ids: Vec<String>) -> OnboardingInterestProje
             .collect(),
         selection: interest_selection_for_set(&selected),
     }
+}
+
+pub fn toggle_interest_selection(selected_ids: Vec<String>, interest_id: String) -> Vec<String> {
+    let mut selected = selected_interest_set(&selected_ids);
+    if !is_known_interest(&interest_id) {
+        return selected_ids_for_set(&selected);
+    }
+
+    if selected.contains(interest_id.as_str()) {
+        selected.remove(interest_id.as_str());
+    } else {
+        selected.insert(interest_id.as_str());
+    }
+
+    selected_ids_for_set(&selected)
+}
+
+fn selected_interest_set(selected_ids: &[String]) -> HashSet<&str> {
+    let requested: HashSet<&str> = selected_ids.iter().map(String::as_str).collect();
+    INTERESTS
+        .iter()
+        .filter_map(|interest| requested.contains(interest.id).then_some(interest.id))
+        .collect()
+}
+
+fn selected_ids_for_set(selected: &HashSet<&str>) -> Vec<String> {
+    INTERESTS
+        .iter()
+        .filter_map(|interest| {
+            selected
+                .contains(interest.id)
+                .then_some(interest.id.to_string())
+        })
+        .collect()
+}
+
+fn is_known_interest(interest_id: &str) -> bool {
+    INTERESTS.iter().any(|interest| interest.id == interest_id)
 }
 
 fn interest_selection_for_set(selected: &HashSet<&str>) -> OnboardingInterestSelection {
@@ -325,6 +363,11 @@ mod tests {
         assert_eq!(incomplete.remaining, 2);
         assert!(!incomplete.can_continue);
         assert!(incomplete.follow_pubkeys.is_empty());
+
+        let invalid =
+            interest_selection(vec!["unknown".into(), "science".into(), "unknown".into()]);
+        assert_eq!(invalid.selected_count, 1);
+        assert_eq!(invalid.remaining, 2);
     }
 
     #[test]
@@ -352,6 +395,21 @@ mod tests {
             projection.selection.follow_pubkeys,
             vec![FIATJAF_PUBKEY.to_string(), JACK_PUBKEY.to_string()]
         );
+    }
+
+    #[test]
+    fn toggle_interest_selection_canonicalizes_and_rejects_unknowns() {
+        let selected = toggle_interest_selection(
+            vec!["technology".into(), "unknown".into(), "technology".into()],
+            "bitcoin".into(),
+        );
+        assert_eq!(selected, vec!["technology", "bitcoin"]);
+
+        let selected = toggle_interest_selection(selected, "technology".into());
+        assert_eq!(selected, vec!["bitcoin"]);
+
+        let selected = toggle_interest_selection(selected, "unknown".into());
+        assert_eq!(selected, vec!["bitcoin"]);
     }
 
     #[test]

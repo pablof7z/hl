@@ -5,11 +5,11 @@ struct OnboardingInterestsView: View {
 
     @Environment(HighlighterStore.self) private var store
 
-    @State private var selected: Set<String> = []
+    @State private var selectedIds: [String] = []
     @State private var isWorking = false
 
     private var projection: OnboardingInterestProjection {
-        store.safeCore.getOnboardingInterestProjection(selectedIds: Array(selected))
+        store.safeCore.getOnboardingInterestProjection(selectedIds: selectedIds)
     }
 
     var body: some View {
@@ -84,7 +84,7 @@ struct OnboardingInterestsView: View {
             }
         }
         .navigationBarBackButtonHidden(true)
-        .animation(.easeInOut(duration: 0.1), value: selected)
+        .animation(.easeInOut(duration: 0.1), value: selectedIds)
     }
 
     private func chipGrid(projection: OnboardingInterestProjection) -> some View {
@@ -98,11 +98,10 @@ struct OnboardingInterestsView: View {
     private func chip(_ interest: OnboardingInterestChip) -> some View {
         let active = interest.isSelected
         return Button {
-            if active {
-                selected.remove(interest.id)
-            } else {
-                selected.insert(interest.id)
-            }
+            selectedIds = store.safeCore.toggleOnboardingInterestSelection(
+                selectedIds: selectedIds,
+                interestId: interest.id
+            )
         } label: {
             HStack(spacing: 6) {
                 Text(interest.emoji)
@@ -122,7 +121,7 @@ struct OnboardingInterestsView: View {
     private func finish() {
         guard !isWorking else { return }
         isWorking = true
-        let chosenIds = Array(selected)
+        let chosenIds = selectedIds
 
         Task {
             await store.completeLogin(user: account.user)

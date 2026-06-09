@@ -1999,6 +1999,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func toggleEventBookmark(eventIdHex: String) async  -> BoolOutcome
 
+    func toggleOnboardingInterestSelection(selectedIds: [String], interestId: String)  -> [String]
+
     func tokenizeNostrContent(content: String)  -> [NostrContentRun]
 
     func tokenizeNostrMarkdownInline(content: String)  -> [NostrContentRun]
@@ -6277,6 +6279,15 @@ open func toggleEventBookmark(eventIdHex: String)async  -> BoolOutcome  {
             errorHandler: nil
 
         )
+}
+
+open func toggleOnboardingInterestSelection(selectedIds: [String], interestId: String) -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_toggle_onboarding_interest_selection(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(selectedIds),
+        FfiConverterString.lower(interestId),$0
+    )
+})
 }
 
 open func tokenizeNostrContent(content: String) -> [NostrContentRun]  {
@@ -35228,6 +35239,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark() != 58235) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_onboarding_interest_selection() != 9632) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_tokenize_nostr_content() != 57009) {

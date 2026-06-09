@@ -1133,6 +1133,14 @@ impl HighlighterCore {
         onboarding::interest_projection(selected_ids)
     }
 
+    pub fn toggle_onboarding_interest_selection(
+        &self,
+        selected_ids: Vec<String>,
+        interest_id: String,
+    ) -> Vec<String> {
+        onboarding::toggle_interest_selection(selected_ids, interest_id)
+    }
+
     pub async fn complete_onboarding_interests(
         &self,
         selected_ids: Vec<String>,
