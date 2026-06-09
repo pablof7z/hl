@@ -15,13 +15,14 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use nostr_ndb::NdbDatabase;
 use nostr_sdk::prelude::*;
 use nostrdb::{Config as NdbConfig, Ndb};
 use tokio::runtime::Runtime;
+use tokio::task::JoinHandle;
 
 use crate::errors::CoreError;
 use crate::events::{DataChangeType, Delta, EventCallback};
@@ -38,16 +39,14 @@ use crate::relays::{
 };
 
 /// Shared pointer to the app's event-callback slot. `HighlighterCore` owns
-/// the slot; `NostrRuntime`'s diagnostics poller borrows it (via this type
-/// alias) to dispatch `RelayStatusChanged` deltas without holding a direct
+/// the slot; `NostrRuntime`'s relay diagnostics watchers borrow it (via this
+/// type alias) to dispatch app-scope deltas without holding a direct
 /// reference back to the core.
 pub type EventCallbackSlot = Arc<parking_lot::RwLock<Option<Arc<dyn EventCallback>>>>;
-
-/// Cadence for the relay diagnostics poller. Cheap — just walks the pool
-/// and compares atomic values. 1s is fast enough that a flicker from
-/// "Connecting" to "Connected" is visible on the UI without overloading
-/// the runtime.
-const DIAGNOSTICS_POLL_INTERVAL: Duration = Duration::from_secs(1);
+type DiagnosticsCallbackSlot = Arc<parking_lot::RwLock<Option<EventCallbackSlot>>>;
+type DiagnosticsEventsEnabled = Arc<AtomicBool>;
+type RelayDiagnosticsMap = Arc<parking_lot::RwLock<HashMap<String, RelayDiagnostic>>>;
+type RelayDiagnosticsWatchers = Arc<parking_lot::RwLock<HashMap<String, JoinHandle<()>>>>;
 
 /// LMDB map size for the iOS cache. 2 GiB gives plenty of headroom for a
 /// highlights/artifacts cache while staying well below iOS's per-app storage
@@ -69,11 +68,13 @@ pub struct NostrRuntime {
     /// so per-role subscription routing can pick the right subset without
     /// re-querying nostrdb.
     current_relays: Arc<parking_lot::RwLock<Vec<RelayConfig>>>,
-    /// Live per-relay diagnostics, keyed by URL. Updated every
-    /// `DIAGNOSTICS_POLL_INTERVAL` by the poller spawned at construction.
-    /// Swift reads first paint through `get_network_settings_snapshot` and
-    /// later applies `RelayDiagnosticsUpdated` event payloads.
-    relay_diagnostics: Arc<parking_lot::RwLock<HashMap<String, RelayDiagnostic>>>,
+    /// Live per-relay diagnostics, keyed by URL. Seeded from nostr-sdk's
+    /// relay pool whenever the pool is reconciled or the Network Settings
+    /// screen asks for a snapshot, then updated by SDK relay status events.
+    relay_diagnostics: RelayDiagnosticsMap,
+    diagnostics_watchers: RelayDiagnosticsWatchers,
+    diagnostics_callback_slot: DiagnosticsCallbackSlot,
+    diagnostics_events_enabled: DiagnosticsEventsEnabled,
     /// Path the LMDB-backed nostrdb was opened at. Used by features that
     /// need to size the on-disk cache.
     data_dir: PathBuf,
@@ -128,6 +129,9 @@ impl NostrRuntime {
             rt: Some(rt),
             current_relays: Arc::new(parking_lot::RwLock::new(Vec::new())),
             relay_diagnostics: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            diagnostics_watchers: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            diagnostics_callback_slot: Arc::new(parking_lot::RwLock::new(None)),
+            diagnostics_events_enabled: Arc::new(AtomicBool::new(false)),
             data_dir,
         };
 
@@ -317,6 +321,11 @@ impl NostrRuntime {
         let client = self.client.clone();
         let ndb = self.ndb.clone();
         let cache = self.current_relays.clone();
+        let diagnostics = self.relay_diagnostics.clone();
+        let watchers = self.diagnostics_watchers.clone();
+        let callback_slot = self.diagnostics_callback_slot.clone();
+        let events_enabled = self.diagnostics_events_enabled.clone();
+        let runtime_handle = self.runtime_handle();
         let user_hex = user_pubkey.to_hex();
         let urls = self.indexer_urls();
         self.rt().spawn(async move {
@@ -370,7 +379,25 @@ impl NostrRuntime {
             apply_relay_config(&client, &rows).await;
             pin_relay_for_read(&client, purple_pages_relay()).await;
             pin_relay_for_read(&client, highlighter_relay()).await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics.clone(),
+                watchers.clone(),
+                callback_slot.clone(),
+                events_enabled.clone(),
+                runtime_handle.clone(),
+            )
+            .await;
             client.connect().await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics,
+                watchers,
+                callback_slot,
+                events_enabled,
+                runtime_handle,
+            )
+            .await;
             *cache.write() = rows.clone();
             tracing::info!(
                 user = %user_hex,
@@ -555,11 +582,34 @@ impl NostrRuntime {
     pub fn spawn_apply_relay_config(&self, rows: Vec<RelayConfig>) {
         let client = self.client.clone();
         let cache = self.current_relays.clone();
+        let diagnostics = self.relay_diagnostics.clone();
+        let watchers = self.diagnostics_watchers.clone();
+        let callback_slot = self.diagnostics_callback_slot.clone();
+        let events_enabled = self.diagnostics_events_enabled.clone();
+        let runtime_handle = self.runtime_handle();
         self.rt().spawn(async move {
             apply_relay_config(&client, &rows).await;
             pin_relay_for_read(&client, purple_pages_relay()).await;
             pin_relay_for_read(&client, highlighter_relay()).await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics.clone(),
+                watchers.clone(),
+                callback_slot.clone(),
+                events_enabled.clone(),
+                runtime_handle.clone(),
+            )
+            .await;
             client.connect().await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics,
+                watchers,
+                callback_slot,
+                events_enabled,
+                runtime_handle,
+            )
+            .await;
             *cache.write() = rows;
         });
     }
@@ -573,6 +623,11 @@ impl NostrRuntime {
         let client = self.client.clone();
         let ndb = self.ndb.clone();
         let cache = self.current_relays.clone();
+        let diagnostics = self.relay_diagnostics.clone();
+        let watchers = self.diagnostics_watchers.clone();
+        let callback_slot = self.diagnostics_callback_slot.clone();
+        let events_enabled = self.diagnostics_events_enabled.clone();
+        let runtime_handle = self.runtime_handle();
         self.rt().spawn(async move {
             let rows = match query_relays(&ndb, &user_hex) {
                 Ok(rows) => rows,
@@ -584,7 +639,25 @@ impl NostrRuntime {
             apply_relay_config(&client, &rows).await;
             pin_relay_for_read(&client, purple_pages_relay()).await;
             pin_relay_for_read(&client, highlighter_relay()).await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics.clone(),
+                watchers.clone(),
+                callback_slot.clone(),
+                events_enabled.clone(),
+                runtime_handle.clone(),
+            )
+            .await;
             client.connect().await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics,
+                watchers,
+                callback_slot,
+                events_enabled,
+                runtime_handle,
+            )
+            .await;
             *cache.write() = rows;
         });
     }
@@ -651,95 +724,229 @@ impl NostrRuntime {
             .collect()
     }
 
-    /// Current per-relay diagnostics snapshot, one row per URL in the
-    /// client's pool. Maintained by the runtime diagnostics task.
-    pub fn relay_diagnostics_snapshot(&self) -> Vec<RelayDiagnostic> {
-        let map = self.relay_diagnostics.read();
-        map.values().cloned().collect()
+    /// Register the app callback used for relay diagnostics deltas and seed
+    /// watchers for any relays already present in the SDK pool.
+    pub fn install_diagnostics_callback(&self, callback_slot: EventCallbackSlot) {
+        *self.diagnostics_callback_slot.write() = Some(callback_slot);
+        let client = self.client.clone();
+        let diagnostics = self.relay_diagnostics.clone();
+        let watchers = self.diagnostics_watchers.clone();
+        let callback_slot = self.diagnostics_callback_slot.clone();
+        let events_enabled = self.diagnostics_events_enabled.clone();
+        let runtime_handle = self.runtime_handle();
+        self.rt().spawn(async move {
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics,
+                watchers,
+                callback_slot,
+                events_enabled,
+                runtime_handle,
+            )
+            .await;
+        });
     }
 
-    /// Start the diagnostics watcher. It samples nostr-sdk's relay pool on a
-    /// bounded interval, owns the canonical diagnostics map, and emits an
-    /// app-scope diagnostics projection only when that map changes. Safe to
-    /// call more than once — each call spawns an independent loop, but
-    /// `HighlighterCore::assemble` calls it exactly once.
-    pub fn spawn_diagnostics_poller(&self, callback_slot: EventCallbackSlot) {
-        let client = self.client.clone();
-        let map = self.relay_diagnostics.clone();
-        self.rt().spawn(async move {
-            let mut ticker = tokio::time::interval(DIAGNOSTICS_POLL_INTERVAL);
-            ticker.tick().await; // first tick fires immediately; skip so we settle a beat before polling
-            loop {
-                ticker.tick().await;
-                let relays = client.relays().await;
-                let mut next: HashMap<String, RelayDiagnostic> =
-                    HashMap::with_capacity(relays.len());
-                let mut changed_urls: Vec<(String, AppRelayStatus)> = Vec::new();
-                let mut changed_rows: Vec<RelayDiagnostic> = Vec::new();
+    /// Enable app-scope diagnostics deltas for the Network Settings view.
+    /// The bounded map/watchers may already be warm; this only authorizes
+    /// future relay diagnostics changes to cross the callback bus.
+    pub async fn enable_relay_diagnostics_events(&self) {
+        self.diagnostics_events_enabled
+            .store(true, Ordering::SeqCst);
+        self.sync_relay_diagnostics().await;
+    }
 
-                {
-                    let previous = map.read();
-                    for (url, relay) in relays.iter() {
-                        let url_str = url.to_string();
-                        let stats = relay.stats();
-                        let state = map_relay_status(relay.status());
-                        let connected_since_ts = if matches!(state, AppRelayStatus::Connected) {
-                            Some(stats.connected_at().as_secs())
-                        } else {
-                            None
-                        };
-                        let diag = RelayDiagnostic {
-                            url: url_str.clone(),
-                            state,
-                            rtt_ms: stats.latency().map(|d| d.as_millis() as u32),
-                            bytes_sent: stats.bytes_sent() as u64,
-                            bytes_received: stats.bytes_received() as u64,
-                            connected_since_ts,
-                        };
+    /// Refresh the bounded relay diagnostics projection from the current SDK
+    /// pool and ensure each relay has a status watcher installed.
+    pub async fn sync_relay_diagnostics(&self) {
+        sync_relay_diagnostics_from_pool(
+            &self.client,
+            self.relay_diagnostics.clone(),
+            self.diagnostics_watchers.clone(),
+            self.diagnostics_callback_slot.clone(),
+            self.diagnostics_events_enabled.clone(),
+            self.runtime_handle(),
+        )
+        .await;
+    }
 
-                        match previous.get(&url_str) {
-                            Some(prev) if prev.state == state => {}
-                            _ => changed_urls.push((url_str.clone(), state)),
-                        }
+    /// Current per-relay diagnostics snapshot, one row per URL in the
+    /// client's pool. Synchronized on demand before the rows cross FFI.
+    pub async fn relay_diagnostics_snapshot(&self) -> Vec<RelayDiagnostic> {
+        self.sync_relay_diagnostics().await;
+        let map = self.relay_diagnostics.read();
+        let mut rows: Vec<RelayDiagnostic> = map.values().cloned().collect();
+        rows.sort_by(|a, b| a.url.cmp(&b.url));
+        rows
+    }
+}
 
-                        next.insert(url_str, diag);
-                    }
+async fn sync_relay_diagnostics_from_pool(
+    client: &Client,
+    diagnostics: RelayDiagnosticsMap,
+    watchers: RelayDiagnosticsWatchers,
+    callback_slot: DiagnosticsCallbackSlot,
+    events_enabled: DiagnosticsEventsEnabled,
+    runtime_handle: tokio::runtime::Handle,
+) {
+    let relays = client.relays().await;
+    let mut next = HashMap::with_capacity(relays.len());
+    let mut relay_rows = Vec::with_capacity(relays.len());
+    let mut current_urls = HashSet::with_capacity(relays.len());
 
-                    for url in previous.keys() {
-                        if !next.contains_key(url) {
-                            changed_urls.push((url.clone(), AppRelayStatus::Terminated));
-                        }
-                    }
+    for (url, relay) in relays.iter() {
+        let url = url.to_string();
+        current_urls.insert(url.clone());
+        next.insert(url.clone(), relay_diagnostic(url.clone(), relay));
+        relay_rows.push((url, relay.clone()));
+    }
 
-                    if *previous != next {
-                        changed_rows = next.values().cloned().collect();
-                        changed_rows.sort_by(|a, b| a.url.cmp(&b.url));
-                    }
-                }
+    publish_relay_diagnostics_snapshot(&diagnostics, next, &callback_slot, &events_enabled);
 
-                *map.write() = next;
+    let mut active = watchers.write();
+    active.retain(|url, handle| {
+        let keep = current_urls.contains(url) && !handle.is_finished();
+        if !keep {
+            handle.abort();
+        }
+        keep
+    });
 
-                if !changed_urls.is_empty() || !changed_rows.is_empty() {
-                    let cb = callback_slot.read().clone();
-                    if let Some(cb) = cb {
-                        if !changed_rows.is_empty() {
-                            cb.on_data_changed(Delta {
-                                subscription_id: 0,
-                                change: DataChangeType::RelayDiagnosticsUpdated {
-                                    diagnostics: changed_rows,
-                                },
-                            });
-                        }
-                        for (url, state) in changed_urls {
-                            cb.on_data_changed(Delta {
-                                subscription_id: 0,
-                                change: DataChangeType::RelayStatusChanged { url, state },
-                            });
-                        }
-                    }
-                }
-            }
+    for (url, relay) in relay_rows {
+        if active.contains_key(&url) {
+            continue;
+        }
+        let diagnostics = diagnostics.clone();
+        let callback_slot = callback_slot.clone();
+        let events_enabled = events_enabled.clone();
+        let url_for_task = url.clone();
+        let handle = runtime_handle.spawn(async move {
+            watch_relay_diagnostics(
+                url_for_task,
+                relay,
+                diagnostics,
+                callback_slot,
+                events_enabled,
+            )
+            .await;
         });
+        active.insert(url, handle);
+    }
+}
+
+async fn watch_relay_diagnostics(
+    url: String,
+    relay: Relay,
+    diagnostics: RelayDiagnosticsMap,
+    callback_slot: DiagnosticsCallbackSlot,
+    events_enabled: DiagnosticsEventsEnabled,
+) {
+    let mut notifications = relay.notifications();
+    while let Ok(notification) = notifications.recv().await {
+        match notification {
+            RelayNotification::RelayStatus { .. } => {
+                publish_relay_diagnostics_row(
+                    relay_diagnostic(url.clone(), &relay),
+                    &diagnostics,
+                    &callback_slot,
+                    &events_enabled,
+                );
+            }
+            RelayNotification::Shutdown => {
+                publish_relay_diagnostics_row(
+                    relay_diagnostic(url.clone(), &relay),
+                    &diagnostics,
+                    &callback_slot,
+                    &events_enabled,
+                );
+                break;
+            }
+            _ => {}
+        }
+    }
+}
+
+fn publish_relay_diagnostics_row(
+    row: RelayDiagnostic,
+    diagnostics: &RelayDiagnosticsMap,
+    callback_slot: &DiagnosticsCallbackSlot,
+    events_enabled: &DiagnosticsEventsEnabled,
+) {
+    let mut next = diagnostics.read().clone();
+    next.insert(row.url.clone(), row);
+    publish_relay_diagnostics_snapshot(diagnostics, next, callback_slot, events_enabled);
+}
+
+fn publish_relay_diagnostics_snapshot(
+    diagnostics: &RelayDiagnosticsMap,
+    next: HashMap<String, RelayDiagnostic>,
+    callback_slot: &DiagnosticsCallbackSlot,
+    events_enabled: &DiagnosticsEventsEnabled,
+) {
+    let (changed_rows, changed_statuses) = {
+        let mut current = diagnostics.write();
+        if *current == next {
+            return;
+        }
+
+        let mut changed_statuses = Vec::new();
+        for (url, row) in next.iter() {
+            match current.get(url) {
+                Some(previous) if previous.state == row.state => {}
+                _ => changed_statuses.push((url.clone(), row.state)),
+            }
+        }
+
+        let mut changed_rows: Vec<RelayDiagnostic> = next.values().cloned().collect();
+        changed_rows.sort_by(|a, b| a.url.cmp(&b.url));
+        *current = next;
+        (changed_rows, changed_statuses)
+    };
+
+    if changed_rows.is_empty() && changed_statuses.is_empty() {
+        return;
+    }
+    if !events_enabled.load(Ordering::SeqCst) {
+        return;
+    }
+
+    let cb = callback_slot
+        .read()
+        .as_ref()
+        .and_then(|slot| slot.read().clone());
+    if let Some(cb) = cb {
+        if !changed_rows.is_empty() {
+            cb.on_data_changed(Delta {
+                subscription_id: 0,
+                change: DataChangeType::RelayDiagnosticsUpdated {
+                    diagnostics: changed_rows,
+                },
+            });
+        }
+        for (url, state) in changed_statuses {
+            cb.on_data_changed(Delta {
+                subscription_id: 0,
+                change: DataChangeType::RelayStatusChanged { url, state },
+            });
+        }
+    }
+}
+
+fn relay_diagnostic(url: String, relay: &Relay) -> RelayDiagnostic {
+    let stats = relay.stats();
+    let state = map_relay_status(relay.status());
+    let connected_since_ts = if matches!(state, AppRelayStatus::Connected) {
+        Some(stats.connected_at().as_secs())
+    } else {
+        None
+    };
+    RelayDiagnostic {
+        url,
+        state,
+        rtt_ms: stats.latency().map(|d| d.as_millis() as u32),
+        bytes_sent: stats.bytes_sent() as u64,
+        bytes_received: stats.bytes_received() as u64,
+        connected_since_ts,
     }
 }
 
@@ -1132,6 +1339,58 @@ mod tests {
             .expect("two in pool");
         assert!(two2.flags().has_write());
         assert!(!two2.flags().has_read());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn relay_diagnostics_sync_tracks_current_pool_without_polling() {
+        let client = Client::builder().build();
+        let diagnostics: RelayDiagnosticsMap = Arc::new(parking_lot::RwLock::new(HashMap::new()));
+        let watchers: RelayDiagnosticsWatchers = Arc::new(parking_lot::RwLock::new(HashMap::new()));
+        let callback_slot: DiagnosticsCallbackSlot = Arc::new(parking_lot::RwLock::new(None));
+        let events_enabled: DiagnosticsEventsEnabled = Arc::new(AtomicBool::new(false));
+
+        let initial = vec![
+            RelayConfig::read_write("wss://one.example"),
+            RelayConfig::read_write("wss://two.example"),
+        ];
+        apply_relay_config(&client, &initial).await;
+        sync_relay_diagnostics_from_pool(
+            &client,
+            diagnostics.clone(),
+            watchers.clone(),
+            callback_slot.clone(),
+            events_enabled.clone(),
+            tokio::runtime::Handle::current(),
+        )
+        .await;
+
+        let rows = diagnostics.read().clone();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(watchers.read().len(), 2);
+        assert!(rows
+            .values()
+            .all(|row| matches!(row.state, AppRelayStatus::Connecting)));
+
+        let next = vec![RelayConfig::read_write("wss://two.example")];
+        apply_relay_config(&client, &next).await;
+        sync_relay_diagnostics_from_pool(
+            &client,
+            diagnostics.clone(),
+            watchers.clone(),
+            callback_slot,
+            events_enabled,
+            tokio::runtime::Handle::current(),
+        )
+        .await;
+
+        let rows = diagnostics.read().clone();
+        assert_eq!(rows.len(), 1);
+        assert!(rows.contains_key("wss://two.example"));
+        assert_eq!(watchers.read().len(), 1);
+
+        for (_, handle) in watchers.write().drain() {
+            handle.abort();
+        }
     }
 
     fn runtime_with_config(rows: Vec<RelayConfig>) -> (NostrRuntime, tempfile::TempDir) {

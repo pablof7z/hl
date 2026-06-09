@@ -632,10 +632,11 @@ pub enum RelayStatus {
     Banned,
 }
 
-/// Live diagnostic snapshot for a single relay, polled from the nostr-sdk
-/// connection pool. Updated by `NostrRuntime`'s diagnostics poller every
-/// second; Swift receives first paint through `NetworkSettingsSnapshot` and
-/// listens for `RelayDiagnosticsUpdated` deltas to render changes.
+/// Live diagnostic snapshot for a single relay in the nostr-sdk connection
+/// pool. `NostrRuntime` refreshes the bounded map from the pool on demand
+/// and updates it from relay status notifications; Swift receives first
+/// paint through `NetworkSettingsSnapshot` and listens for diagnostics
+/// deltas to render changes.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RelayDiagnostic {
     pub url: String,

@@ -25824,10 +25824,11 @@ public func FfiConverterTypeRelayDetailProjectionInput_lower(_ value: RelayDetai
 
 
 /**
- * Live diagnostic snapshot for a single relay, polled from the nostr-sdk
- * connection pool. Updated by `NostrRuntime`'s diagnostics poller every
- * second; Swift receives first paint through `NetworkSettingsSnapshot` and
- * listens for `RelayDiagnosticsUpdated` deltas to render changes.
+ * Live diagnostic snapshot for a single relay in the nostr-sdk connection
+ * pool. `NostrRuntime` refreshes the bounded map from the pool on demand
+ * and updates it from relay status notifications; Swift receives first
+ * paint through `NetworkSettingsSnapshot` and listens for diagnostics
+ * deltas to render changes.
  */
 public struct RelayDiagnostic {
     public var url: String
@@ -34328,9 +34329,8 @@ public enum DataChangeType {
     case relayStatusChanged(url: String, state: RelayStatus
     )
     /**
-     * Bounded app-scope relay diagnostics projection. Emitted by the Rust
-     * diagnostics task when any relay row changes, including RTT / traffic
-     * counters that do not necessarily alter connection state.
+     * Bounded app-scope relay diagnostics projection. Emitted by Rust when
+     * the SDK pool or a relay status notification changes a diagnostics row.
      */
     case relayDiagnosticsUpdated(diagnostics: [RelayDiagnostic]
     )

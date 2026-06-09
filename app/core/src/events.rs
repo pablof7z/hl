@@ -149,9 +149,8 @@ pub enum DataChangeType {
         url: String,
         state: RelayStatus,
     },
-    /// Bounded app-scope relay diagnostics projection. Emitted by the Rust
-    /// diagnostics task when any relay row changes, including RTT / traffic
-    /// counters that do not necessarily alter connection state.
+    /// Bounded app-scope relay diagnostics projection. Emitted by Rust when
+    /// the SDK pool or a relay status notification changes a diagnostics row.
     RelayDiagnosticsUpdated {
         diagnostics: Vec<RelayDiagnostic>,
     },

@@ -3460,7 +3460,7 @@ impl HighlighterCore {
         &self,
         previous_relays: Vec<crate::relays::RelayConfig>,
     ) -> crate::relays::NetworkSettingsSnapshot {
-        let diagnostics = self.runtime.relay_diagnostics_snapshot();
+        let diagnostics = self.runtime.relay_diagnostics_snapshot().await;
         let wifi_only_enabled = self.network_preferences.wifi_only_enabled();
         let result = (|| {
             let user = self
@@ -3647,6 +3647,7 @@ impl HighlighterCore {
     /// `subscription_id == 0`, so this returns `0` unconditionally — the
     /// value is a stable contract, not a unique sub id.
     pub async fn subscribe_relay_status(&self) -> SubscriptionStartSnapshot {
+        self.runtime.enable_relay_diagnostics_events().await;
         subscription_start_snapshot(Ok(0))
     }
 
@@ -3656,6 +3657,7 @@ impl HighlighterCore {
     /// fresh WebSocket attempt.
     pub async fn reconnect_all(&self) -> crate::relays::NetworkSettingsMutationSnapshot {
         self.runtime.client().connect().await;
+        self.runtime.sync_relay_diagnostics().await;
         crate::relays::network_settings_mutation_snapshot(Ok(()), false, "Couldn't reconnect")
     }
 
@@ -3664,6 +3666,7 @@ impl HighlighterCore {
     /// `apply_network_path_status`.
     pub async fn disconnect_all(&self) -> crate::relays::NetworkSettingsMutationSnapshot {
         self.runtime.client().disconnect().await;
+        self.runtime.sync_relay_diagnostics().await;
         crate::relays::network_settings_mutation_snapshot(Ok(()), false, "Couldn't disconnect")
     }
 
@@ -3683,6 +3686,7 @@ impl HighlighterCore {
         }
         self.runtime.client().disconnect().await;
         self.runtime.client().connect().await;
+        self.runtime.sync_relay_diagnostics().await;
         crate::relays::network_settings_mutation_snapshot(
             Ok(()),
             false,
@@ -3705,9 +3709,11 @@ impl HighlighterCore {
             crate::relays::NetworkRelayConnectionPolicyAction::None => {}
             crate::relays::NetworkRelayConnectionPolicyAction::ReconnectAll => {
                 self.runtime.client().connect().await;
+                self.runtime.sync_relay_diagnostics().await;
             }
             crate::relays::NetworkRelayConnectionPolicyAction::DisconnectAll => {
                 self.runtime.client().disconnect().await;
+                self.runtime.sync_relay_diagnostics().await;
             }
         }
         snapshot
@@ -3887,11 +3893,10 @@ impl HighlighterCore {
         let callback_slot: Arc<RwLock<Option<Arc<dyn EventCallback>>>> =
             Arc::new(RwLock::new(None));
         let subscriptions = Arc::new(SubscriptionRegistry::new(callback_slot.clone()));
-        // Start the diagnostics poller before handing out the Arc<Self>.
-        // The callback slot starts empty; the poller updates its in-memory
-        // map regardless, and fires deltas once Swift installs a callback
-        // via `set_event_callback`.
-        runtime.spawn_diagnostics_poller(callback_slot.clone());
+        // Register relay diagnostics with the app event bus before handing
+        // out the Arc<Self>. The runtime seeds its bounded diagnostics map
+        // from the SDK pool and then reacts to relay status notifications.
+        runtime.install_diagnostics_callback(callback_slot.clone());
         let web_metadata = Arc::new(WebMetadataStore::open_with_clock(
             runtime.data_dir(),
             clock.clone(),

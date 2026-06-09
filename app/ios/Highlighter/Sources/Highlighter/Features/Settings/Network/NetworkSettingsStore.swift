@@ -130,7 +130,13 @@ final class NetworkSettingsStore {
     }
 
     func startLiveUpdates() {
-        Task { await self.refreshCacheStats() }
+        Task {
+            let snapshot = await self.core.subscribeRelayStatus()
+            if !snapshot.error.isEmpty {
+                self.lastError = snapshot.error
+            }
+            await self.refreshCacheStats()
+        }
     }
 
     // MARK: - Cache
