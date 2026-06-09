@@ -99,18 +99,17 @@ struct ClipThreadView: View {
                 isSending = false
                 return
             }
-            let outcome = await app.safeCore.publishCommentForScope(
+            let outcome = await app.safeCore.publishCommentForScopeSnapshot(
                 scope: scope,
-                content: projection.submitBody
+                content: projection.submitBody,
+                limit: 200
             )
-            guard outcome.error.isEmpty, let record = outcome.value else {
+            guard outcome.error.isEmpty else {
                 sendError = outcome.error
                 isSending = false
                 return
             }
-            var existing = app.podcastPlayer.comments[id] ?? []
-            existing.append(record)
-            app.podcastPlayer.comments[id] = existing
+            app.podcastPlayer.comments[id] = outcome.snapshot.records
             replyText = ""
             isSending = false
         }

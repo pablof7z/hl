@@ -29,19 +29,19 @@ use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome, ArtifactPreview,
     ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute,
     BookRouteOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome,
-    CommentListOutcome, CommentOutcome, CommentRecord, CommentReferenceBucket, CommentScope,
-    CommentScopeOutcome, CommunityListOutcome, CommunitySummary, CurationMenuItem,
-    CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightListOutcome,
-    HighlightOutcome, HighlightRecord, HighlightSourceKind, HomeFeedItem, HydratedHighlight,
-    HydratedHighlightListOutcome, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
-    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
-    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
-    OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
-    ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem,
-    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebMetadataOutcome, WhatsNewEntriesOutcome,
+    CommentRecord, CommentReferenceBucket, CommentScope, CommentScopeOutcome, CommunityListOutcome,
+    CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome, CurrentUser,
+    CurrentUserOutcome, DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord,
+    GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
+    HighlightSourceKind, HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome,
+    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
+    NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
+    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
+    ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
+    RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome, StringListOutcome,
+    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
+    WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -404,32 +404,6 @@ fn blossom_upload_outcome(result: Result<BlossomUpload, CoreError>) -> BlossomUp
         },
         Err(error) => BlossomUploadOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn comment_outcome(result: Result<CommentRecord, CoreError>) -> CommentOutcome {
-    match result {
-        Ok(value) => CommentOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => CommentOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn comment_list_outcome(result: Result<Vec<CommentRecord>, CoreError>) -> CommentListOutcome {
-    match result {
-        Ok(values) => CommentListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => CommentListOutcome {
-            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -2100,15 +2074,6 @@ impl HighlighterCore {
         comments::comment_action_chrome_projection(input)
     }
 
-    /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
-    pub async fn get_comments_for_scope(
-        &self,
-        scope: CommentScope,
-        limit: u32,
-    ) -> CommentListOutcome {
-        comment_list_outcome(comments::query_for_scope(self.runtime.ndb(), &scope, limit))
-    }
-
     /// Full comments sheet snapshot for a Rust-owned NIP-22 scope. Rust owns
     /// record query, tree build, reaction summary, and bookmark membership.
     pub async fn get_comment_thread_snapshot(
@@ -2122,27 +2087,6 @@ impl HighlighterCore {
             limit,
             self.current_user_pubkey_hex().as_deref(),
         )
-    }
-
-    /// Publish a NIP-22 kind:1111 comment scoped to a Rust-owned root.
-    /// `parent_event_id` is `None` for top-level comments and `Some(id)` for
-    /// replies (the parent kind:1111 comment).
-    pub async fn publish_comment_for_scope(
-        &self,
-        scope: CommentScope,
-        parent_event_id: Option<String>,
-        content: String,
-    ) -> CommentOutcome {
-        let result: Result<CommentRecord, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            let parent = parent_event_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|s| !s.is_empty());
-            comments::publish_comment_for_scope(&self.runtime, &scope, parent, content.trim()).await
-        }
-        .await;
-        comment_outcome(result)
     }
 
     /// Publish a NIP-22 comment and return the refreshed comments sheet

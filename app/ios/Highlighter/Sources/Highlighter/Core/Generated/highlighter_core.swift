@@ -1025,11 +1025,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getCommentThreadSnapshot(scope: CommentScope, limit: UInt32) async  -> CommentThreadSnapshot
 
     /**
-     * Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
-     */
-    func getCommentsForScope(scope: CommentScope, limit: UInt32) async  -> CommentListOutcome
-
-    /**
      * Return current user's curation sets projected for the bookmark menu.
      * Rust owns display fallback, current membership, and ordering.
      */
@@ -1645,13 +1640,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * native shells never fabricate chat rows.
      */
     func publishChatMessageSnapshot(groupId: String, content: String, replyToEventId: String?, pageCount: UInt32) async  -> ChatPublishSnapshotOutcome
-
-    /**
-     * Publish a NIP-22 kind:1111 comment scoped to a Rust-owned root.
-     * `parent_event_id` is `None` for top-level comments and `Some(id)` for
-     * replies (the parent kind:1111 comment).
-     */
-    func publishCommentForScope(scope: CommentScope, parentEventId: String?, content: String) async  -> CommentOutcome
 
     /**
      * Publish a NIP-22 comment and return the refreshed comments sheet
@@ -2930,27 +2918,6 @@ open func getCommentThreadSnapshot(scope: CommentScope, limit: UInt32)async  -> 
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCommentThreadSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
-     */
-open func getCommentsForScope(scope: CommentScope, limit: UInt32)async  -> CommentListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_comments_for_scope(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeCommentScope_lower(scope),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommentListOutcome_lift,
             errorHandler: nil
 
         )
@@ -4946,29 +4913,6 @@ open func publishChatMessageSnapshot(groupId: String, content: String, replyToEv
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeChatPublishSnapshotOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Publish a NIP-22 kind:1111 comment scoped to a Rust-owned root.
-     * `parent_event_id` is `None` for top-level comments and `Some(id)` for
-     * replies (the parent kind:1111 comment).
-     */
-open func publishCommentForScope(scope: CommentScope, parentEventId: String?, content: String)async  -> CommentOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_comment_for_scope(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeCommentScope_lower(scope),FfiConverterOptionString.lower(parentEventId),FfiConverterString.lower(content)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommentOutcome_lift,
             errorHandler: nil
 
         )
@@ -13137,76 +13081,6 @@ public func FfiConverterTypeCommentLikeStateProjectionInput_lower(_ value: Comme
 }
 
 
-public struct CommentListOutcome {
-    public var values: [CommentRecord]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [CommentRecord], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension CommentListOutcome: Sendable {}
-#endif
-
-
-extension CommentListOutcome: Equatable, Hashable {
-    public static func ==(lhs: CommentListOutcome, rhs: CommentListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCommentListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentListOutcome {
-        return
-            try CommentListOutcome(
-                values: FfiConverterSequenceTypeCommentRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CommentListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeCommentRecord.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommentListOutcome_lift(_ buf: RustBuffer) throws -> CommentListOutcome {
-    return try FfiConverterTypeCommentListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommentListOutcome_lower(_ value: CommentListOutcome) -> RustBuffer {
-    return FfiConverterTypeCommentListOutcome.lower(value)
-}
-
-
 public struct CommentNodeChromeProjection {
     public var replyCount: UInt32
     public var showsReplyChevron: Bool
@@ -13376,76 +13250,6 @@ public func FfiConverterTypeCommentNodeChromeProjectionInput_lift(_ buf: RustBuf
 #endif
 public func FfiConverterTypeCommentNodeChromeProjectionInput_lower(_ value: CommentNodeChromeProjectionInput) -> RustBuffer {
     return FfiConverterTypeCommentNodeChromeProjectionInput.lower(value)
-}
-
-
-public struct CommentOutcome {
-    public var value: CommentRecord?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: CommentRecord?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension CommentOutcome: Sendable {}
-#endif
-
-
-extension CommentOutcome: Equatable, Hashable {
-    public static func ==(lhs: CommentOutcome, rhs: CommentOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCommentOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentOutcome {
-        return
-            try CommentOutcome(
-                value: FfiConverterOptionTypeCommentRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CommentOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeCommentRecord.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommentOutcome_lift(_ buf: RustBuffer) throws -> CommentOutcome {
-    return try FfiConverterTypeCommentOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommentOutcome_lower(_ value: CommentOutcome) -> RustBuffer {
-    return FfiConverterTypeCommentOutcome.lower(value)
 }
 
 
@@ -36696,30 +36500,6 @@ fileprivate struct FfiConverterOptionTypeChatMessageRecord: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeCommentRecord: FfiConverterRustBuffer {
-    typealias SwiftType = CommentRecord?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeCommentRecord.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeCommentRecord.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeCommentScope: FfiConverterRustBuffer {
     typealias SwiftType = CommentScope?
 
@@ -38874,9 +38654,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_comment_thread_snapshot() != 50818) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_scope() != 40070) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_curation_menu_items() != 34499) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -39358,9 +39135,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message_snapshot() != 49134) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_for_scope() != 51702) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_for_scope_snapshot() != 49852) {

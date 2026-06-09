@@ -1024,23 +1024,11 @@ actor SafeHighlighterCore {
         core.getWebCommentScope(url: url)
     }
 
-    func getCommentsForScope(scope: CommentScope, limit: UInt32 = 128) async -> CommentListOutcome {
-        await core.getCommentsForScope(scope: scope, limit: limit)
-    }
-
     func getCommentThreadSnapshot(
         scope: CommentScope,
         limit: UInt32 = 256
     ) async -> CommentThreadSnapshot {
         await core.getCommentThreadSnapshot(scope: scope, limit: limit)
-    }
-
-    func publishCommentForScope(
-        scope: CommentScope,
-        parentEventId: String? = nil,
-        content: String
-    ) async -> CommentOutcome {
-        await core.publishCommentForScope(scope: scope, parentEventId: parentEventId, content: content)
     }
 
     func publishCommentForScopeSnapshot(

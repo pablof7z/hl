@@ -114,8 +114,8 @@ struct MemberClipRow: View {
                     app.podcastPlayer.comments[id] = []
                     return
                 }
-                let outcome = await app.safeCore.getCommentsForScope(scope: scope, limit: 200)
-                app.podcastPlayer.comments[id] = outcome.error.isEmpty ? outcome.values : []
+                let snapshot = await app.safeCore.getCommentThreadSnapshot(scope: scope, limit: 200)
+                app.podcastPlayer.comments[id] = snapshot.error.isEmpty ? snapshot.records : []
             }
         }
     }
