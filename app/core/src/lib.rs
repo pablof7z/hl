@@ -62,6 +62,7 @@ pub use articles::{
     ArticleProfileCardProjection, ArticleProfileCardProjectionInput, ArticleReaderHeaderProjection,
     ArticleReaderHeaderProjectionInput,
 };
+pub use artifact_detail::ArtifactDetailProjection;
 pub use capture::{CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput};
 pub use client::HighlighterCore;
 pub use discussions::{DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput};

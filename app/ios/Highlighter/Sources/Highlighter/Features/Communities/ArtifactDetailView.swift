@@ -13,7 +13,8 @@ struct ArtifactDetailView: View {
     @Environment(HighlighterStore.self) private var app
 
     var body: some View {
-        let route = app.core.getArtifactDetailRoute(artifact: artifact)
+        let projection = app.core.getArtifactDetailProjection(artifact: artifact)
+        let route = projection.route
 
         Group {
             switch route.target {
@@ -38,7 +39,7 @@ struct ArtifactDetailView: View {
                 missingReferenceView
             }
         }
-        .navigationTitle(artifact.preview.title.isEmpty ? "Artifact" : artifact.preview.title)
+        .navigationTitle(projection.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
     }
 

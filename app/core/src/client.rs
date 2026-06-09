@@ -1307,6 +1307,13 @@ impl HighlighterCore {
         crate::artifact_detail::route_for_artifact(&artifact)
     }
 
+    pub fn get_artifact_detail_projection(
+        &self,
+        artifact: ArtifactRecord,
+    ) -> crate::artifact_detail::ArtifactDetailProjection {
+        crate::artifact_detail::projection_for_artifact(&artifact)
+    }
+
     pub fn share_extension_communities_snapshot(
         &self,
         communities: Vec<CommunitySummary>,

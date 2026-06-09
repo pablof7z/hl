@@ -6,6 +6,19 @@ use crate::articles::article_address;
 use crate::artifacts::normalize_artifact_url;
 use crate::models::{ArtifactDetailRoute, ArtifactDetailTarget, ArtifactPreview, ArtifactRecord};
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArtifactDetailProjection {
+    pub route: ArtifactDetailRoute,
+    pub navigation_title: String,
+}
+
+pub fn projection_for_artifact(artifact: &ArtifactRecord) -> ArtifactDetailProjection {
+    ArtifactDetailProjection {
+        route: route_for_artifact(artifact),
+        navigation_title: navigation_title(&artifact.preview.title),
+    }
+}
+
 pub fn route_for_artifact(artifact: &ArtifactRecord) -> ArtifactDetailRoute {
     let preview = &artifact.preview;
     match preview.source.trim().to_ascii_lowercase().as_str() {
@@ -152,6 +165,14 @@ fn first_non_empty(values: &[&str]) -> String {
         .to_string()
 }
 
+fn navigation_title(title: &str) -> String {
+    if title.is_empty() {
+        "Artifact".to_string()
+    } else {
+        title.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,6 +247,24 @@ mod tests {
         preview.highlight_tag_value = String::new();
         let route = route_for_artifact(&record(preview));
         assert_eq!(route.target, ArtifactDetailTarget::Unavailable);
+    }
+
+    #[test]
+    fn projection_preserves_route_and_navigation_title_fallback() {
+        let mut artifact = record(preview("book"));
+        artifact.preview.catalog_id = "isbn:9780593716717".into();
+        artifact.preview.title = String::new();
+
+        let projection = projection_for_artifact(&artifact);
+
+        assert_eq!(projection.route.target, ArtifactDetailTarget::Book);
+        assert_eq!(projection.navigation_title, "Artifact");
+
+        artifact.preview.title = "Book title".into();
+
+        let projection = projection_for_artifact(&artifact);
+
+        assert_eq!(projection.navigation_title, "Book title");
     }
 
     fn preview(source: &str) -> ArtifactPreview {

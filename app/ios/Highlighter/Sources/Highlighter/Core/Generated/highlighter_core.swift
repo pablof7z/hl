@@ -978,6 +978,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getArtifactCommentScope(preview: ArtifactPreview)  -> CommentScopeOutcome
 
+    func getArtifactDetailProjection(artifact: ArtifactRecord)  -> ArtifactDetailProjection
+
     func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
 
     /**
@@ -2647,6 +2649,14 @@ open func getArtifactCommentScope(preview: ArtifactPreview) -> CommentScopeOutco
     return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_artifact_comment_scope(self.uniffiClonePointer(),
         FfiConverterTypeArtifactPreview_lower(preview),$0
+    )
+})
+}
+
+open func getArtifactDetailProjection(artifact: ArtifactRecord) -> ArtifactDetailProjection  {
+    return try!  FfiConverterTypeArtifactDetailProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_artifact_detail_projection(self.uniffiClonePointer(),
+        FfiConverterTypeArtifactRecord_lower(artifact),$0
     )
 })
 }
@@ -7099,6 +7109,76 @@ public func FfiConverterTypeArticleRecord_lift(_ buf: RustBuffer) throws -> Arti
 #endif
 public func FfiConverterTypeArticleRecord_lower(_ value: ArticleRecord) -> RustBuffer {
     return FfiConverterTypeArticleRecord.lower(value)
+}
+
+
+public struct ArtifactDetailProjection {
+    public var route: ArtifactDetailRoute
+    public var navigationTitle: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(route: ArtifactDetailRoute, navigationTitle: String) {
+        self.route = route
+        self.navigationTitle = navigationTitle
+    }
+}
+
+#if compiler(>=6)
+extension ArtifactDetailProjection: Sendable {}
+#endif
+
+
+extension ArtifactDetailProjection: Equatable, Hashable {
+    public static func ==(lhs: ArtifactDetailProjection, rhs: ArtifactDetailProjection) -> Bool {
+        if lhs.route != rhs.route {
+            return false
+        }
+        if lhs.navigationTitle != rhs.navigationTitle {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(route)
+        hasher.combine(navigationTitle)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArtifactDetailProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactDetailProjection {
+        return
+            try ArtifactDetailProjection(
+                route: FfiConverterTypeArtifactDetailRoute.read(from: &buf),
+                navigationTitle: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArtifactDetailProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactDetailRoute.write(value.route, into: &buf)
+        FfiConverterString.write(value.navigationTitle, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactDetailProjection_lift(_ buf: RustBuffer) throws -> ArtifactDetailProjection {
+    return try FfiConverterTypeArtifactDetailProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactDetailProjection_lower(_ value: ArtifactDetailProjection) -> RustBuffer {
+    return FfiConverterTypeArtifactDetailProjection.lower(value)
 }
 
 
@@ -29883,6 +29963,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_comment_scope() != 41998) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_projection() != 56154) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_route() != 10925) {
