@@ -75,6 +75,10 @@ actor SafeHighlighterCore {
         await core.setWifiOnlyEnabled(enabled: enabled)
     }
 
+    nonisolated func getNetworkWifiOnlyPreferenceSnapshot() -> NetworkWifiOnlyPreferenceSnapshot {
+        core.getNetworkWifiOnlyPreferenceSnapshot()
+    }
+
     func getPodcastPosition() -> PodcastPositionRecord? {
         core.getPodcastPosition()
     }

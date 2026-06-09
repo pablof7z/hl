@@ -1,5 +1,4 @@
 import Foundation
-import Network
 import Observation
 
 /// App-scope store for the Network Settings screen. Owns the user's relay
@@ -30,11 +29,12 @@ final class NetworkSettingsStore {
     private(set) var wifiOnlyEnabled: Bool = false
 
     @ObservationIgnored private let core: SafeHighlighterCore
-    @ObservationIgnored private var pathMonitor: NWPathMonitor?
+    @ObservationIgnored private weak var appStore: HighlighterStore?
     @ObservationIgnored private var inFlightNip11: [String] = []
 
-    init(core: SafeHighlighterCore) {
+    init(core: SafeHighlighterCore, appStore: HighlighterStore) {
         self.core = core
+        self.appStore = appStore
     }
 
     /// Index diagnostics by URL for O(1) lookup from row views.
@@ -85,8 +85,9 @@ final class NetworkSettingsStore {
         }
     }
 
-    /// Toggle Wi-Fi-only mode. Swift owns the `NWPathMonitor` capability;
-    /// Rust owns the durable preference and relay connection policy.
+    /// Toggle Wi-Fi-only mode. The app store owns the `NWPathMonitor`
+    /// capability; Rust owns the durable preference and relay connection
+    /// policy.
     func setWifiOnly(_ on: Bool) async {
         wifiOnlyEnabled = on
         let snapshot = await core.setWifiOnlyEnabled(on)
@@ -129,15 +130,7 @@ final class NetworkSettingsStore {
     }
 
     func startLiveUpdates() {
-        if wifiOnlyEnabled && pathMonitor == nil {
-            startPathMonitor()
-        }
         Task { await self.refreshCacheStats() }
-    }
-
-    func stopLiveUpdates() {
-        // Leave the path monitor running — Wi-Fi-only enforcement should
-        // keep working after the user leaves the Network screen.
     }
 
     // MARK: - Cache
@@ -147,32 +140,6 @@ final class NetworkSettingsStore {
         if let stats = snapshot.stats {
             cacheStats = stats
         }
-    }
-
-    // MARK: - NWPathMonitor
-
-    private func applyPathMonitor(_ enabled: Bool) {
-        if enabled {
-            startPathMonitor()
-        } else {
-            pathMonitor?.cancel()
-            pathMonitor = nil
-        }
-    }
-
-    private func startPathMonitor() {
-        guard pathMonitor == nil else { return }
-        let monitor = NWPathMonitor()
-        monitor.pathUpdateHandler = { [weak self] path in
-            guard let self else { return }
-            let isWifi = path.usesInterfaceType(.wifi)
-            Task { @MainActor in
-                let snapshot = await self.core.applyNetworkPathStatus(isWifi: isWifi)
-                self.applyNetworkPathPolicySnapshot(snapshot)
-            }
-        }
-        monitor.start(queue: .global(qos: .utility))
-        pathMonitor = monitor
     }
 
     // MARK: - Writes
@@ -256,22 +223,14 @@ final class NetworkSettingsStore {
     private func applyNetworkSettingsSnapshot(_ snapshot: NetworkSettingsSnapshot) {
         relays = snapshot.relays
         wifiOnlyEnabled = snapshot.wifiOnlyEnabled
-        applyPathMonitor(snapshot.wifiOnlyEnabled)
+        appStore?.applyNetworkPathMonitorEnabled(snapshot.wifiOnlyEnabled)
         applyRelaySettingsProjection(snapshot.projection, rows: snapshot.diagnostics)
         lastError = snapshot.errorMessage.isEmpty ? nil : snapshot.errorMessage
     }
 
     private func applyWifiOnlyPreferenceSnapshot(_ snapshot: NetworkWifiOnlyPreferenceSnapshot) {
         wifiOnlyEnabled = snapshot.wifiOnlyEnabled
-        applyPathMonitor(snapshot.pathMonitorEnabled)
-        if !snapshot.errorMessage.isEmpty {
-            lastError = snapshot.errorMessage
-        }
-    }
-
-    private func applyNetworkPathPolicySnapshot(_ snapshot: NetworkPathPolicySnapshot) {
-        wifiOnlyEnabled = snapshot.wifiOnlyEnabled
-        applyPathMonitor(snapshot.pathMonitorEnabled)
+        appStore?.applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
         if !snapshot.errorMessage.isEmpty {
             lastError = snapshot.errorMessage
         }

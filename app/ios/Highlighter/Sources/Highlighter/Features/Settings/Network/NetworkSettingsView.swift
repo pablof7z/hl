@@ -76,14 +76,11 @@ struct NetworkSettingsView: View {
         }
         .task {
             if store == nil {
-                store = NetworkSettingsStore(core: appStore.safeCore)
+                store = NetworkSettingsStore(core: appStore.safeCore, appStore: appStore)
                 appStore.eventBridge?.registerNetworkStore(store!)
             }
             await store?.load()
             store?.startLiveUpdates()
-        }
-        .onDisappear {
-            store?.stopLiveUpdates()
         }
     }
 

@@ -626,6 +626,15 @@ pub fn network_wifi_only_preference_snapshot(
     }
 }
 
+pub fn network_wifi_only_current_snapshot(enabled: bool) -> NetworkWifiOnlyPreferenceSnapshot {
+    NetworkWifiOnlyPreferenceSnapshot {
+        applied: true,
+        wifi_only_enabled: enabled,
+        path_monitor_enabled: enabled,
+        error_message: String::new(),
+    }
+}
+
 pub fn network_path_policy_snapshot(
     wifi_only_enabled: bool,
     is_wifi: bool,
@@ -1750,6 +1759,21 @@ mod tests {
             failure.error_message,
             "Couldn't update Wi-Fi-only mode — cache error: readonly"
         );
+    }
+
+    #[test]
+    fn network_wifi_only_current_snapshot_projects_monitor_policy() {
+        let enabled = network_wifi_only_current_snapshot(true);
+        assert!(enabled.applied);
+        assert!(enabled.wifi_only_enabled);
+        assert!(enabled.path_monitor_enabled);
+        assert!(enabled.error_message.is_empty());
+
+        let disabled = network_wifi_only_current_snapshot(false);
+        assert!(disabled.applied);
+        assert!(!disabled.wifi_only_enabled);
+        assert!(!disabled.path_monitor_enabled);
+        assert!(disabled.error_message.is_empty());
     }
 
     #[test]

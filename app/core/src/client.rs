@@ -518,6 +518,14 @@ impl HighlighterCore {
         snapshot
     }
 
+    pub fn get_network_wifi_only_preference_snapshot(
+        &self,
+    ) -> crate::relays::NetworkWifiOnlyPreferenceSnapshot {
+        crate::relays::network_wifi_only_current_snapshot(
+            self.network_preferences.wifi_only_enabled(),
+        )
+    }
+
     pub fn get_podcast_position(&self) -> Option<PodcastPositionRecord> {
         self.podcast_position.current()
     }

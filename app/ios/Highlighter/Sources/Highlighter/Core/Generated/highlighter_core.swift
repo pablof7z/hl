@@ -1025,6 +1025,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getNetworkSettingsSnapshot(previousRelays: [RelayConfig]) async  -> NetworkSettingsSnapshot
 
+    func getNetworkWifiOnlyPreferenceSnapshot()  -> NetworkWifiOnlyPreferenceSnapshot
+
     func getOnboardingInterestProjection(selectedIds: [String])  -> OnboardingInterestProjection
 
     func getOnboardingInterestSelection(selectedIds: [String])  -> OnboardingInterestSelection
@@ -2846,6 +2848,13 @@ open func getNetworkSettingsSnapshot(previousRelays: [RelayConfig])async  -> Net
             errorHandler: nil
 
         )
+}
+
+open func getNetworkWifiOnlyPreferenceSnapshot() -> NetworkWifiOnlyPreferenceSnapshot  {
+    return try!  FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_network_wifi_only_preference_snapshot(self.uniffiClonePointer(),$0
+    )
+})
 }
 
 open func getOnboardingInterestProjection(selectedIds: [String]) -> OnboardingInterestProjection  {
@@ -39189,6 +39198,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_network_settings_snapshot() != 60252) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_network_wifi_only_preference_snapshot() != 11814) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_onboarding_interest_projection() != 3646) {

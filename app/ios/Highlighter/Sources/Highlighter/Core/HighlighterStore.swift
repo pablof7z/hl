@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 
 /// App-scoped reactive state. Only holds data that's genuinely global:
@@ -53,6 +54,7 @@ final class HighlighterStore {
     @ObservationIgnored private var joinedCommunitiesHandle: UInt64?
     @ObservationIgnored private var bookmarksHandle: UInt64?
     @ObservationIgnored private var profileSnapshotHandles: [String: UInt64] = [:]
+    @ObservationIgnored private var networkPathMonitor: NWPathMonitor?
     /// In-flight `requestWebMetadata` calls coalesce here so multiple rows
     /// referencing the same URL share a single Task. Cleared once the
     /// fetch completes (success or failure).
@@ -127,6 +129,7 @@ final class HighlighterStore {
         webMetadataInflight.removeAll()
         webMetadataCache.removeAll()
         bookmarkedArticleAddresses.removeAll()
+        applyNetworkPathMonitorEnabled(false)
         core.logout()
         eventBridge = nil
         AppSessionStore.shared.clear()
@@ -310,6 +313,20 @@ final class HighlighterStore {
         SharedCommunitiesSnapshot.save(snapshot)
     }
 
+    func refreshNetworkPathCapabilityPreference() {
+        let snapshot = safeCore.getNetworkWifiOnlyPreferenceSnapshot()
+        applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
+    }
+
+    func applyNetworkPathMonitorEnabled(_ enabled: Bool) {
+        if enabled {
+            startNetworkPathMonitor()
+        } else {
+            networkPathMonitor?.cancel()
+            networkPathMonitor = nil
+        }
+    }
+
     // MARK: - Private
 
     private func registerEventBridge() {
@@ -327,6 +344,8 @@ final class HighlighterStore {
     }
 
     private func loadAppScopeData() async {
+        refreshNetworkPathCapabilityPreference()
+
         // Immediate read from nostrdb via the Rust core. Non-blocking on
         // relays — the cache answers first, subscriptions catch up later.
         let communitiesSnapshot = await safeCore.getJoinedCommunities()
@@ -371,5 +390,23 @@ final class HighlighterStore {
                 bookmarksHandle = bookmarksStart.handle
             }
         }
+    }
+
+    private func startNetworkPathMonitor() {
+        guard networkPathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            let isWifi = path.status == .satisfied && path.usesInterfaceType(.wifi)
+            Task { @MainActor [weak self] in
+                await self?.applyNetworkPathStatus(isWifi: isWifi)
+            }
+        }
+        monitor.start(queue: .global(qos: .utility))
+        networkPathMonitor = monitor
+    }
+
+    private func applyNetworkPathStatus(isWifi: Bool) async {
+        let snapshot = await safeCore.applyNetworkPathStatus(isWifi: isWifi)
+        applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
     }
 }
