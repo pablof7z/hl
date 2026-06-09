@@ -881,12 +881,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func generateAccount()  -> GeneratedAccountOutcome
 
     /**
-     * Every cached room, newest first, truncated to `limit`. Powers the
-     * explorer's "Browse all" grid.
-     */
-    func getAllRooms(limit: UInt32) async  -> CommunityListOutcome
-
-    /**
      * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
      * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
      * backfills via relays, and a later call returns `Some`.
@@ -1146,6 +1140,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * when neither has been cached yet (first login).
      */
     func getRelays() async  -> RelayConfigListOutcome
+
+    /**
+     * Screen-shaped snapshot for the explorer's "Browse all" grid. Rust owns
+     * the cache query, limit, query normalization, and matched fields.
+     */
+    func getRoomBrowseSnapshot(query: String, limit: UInt32) async  -> RoomBrowseSnapshot
 
     func getRoomDiscussionSnapshot(groupId: String) async  -> RoomDiscussionSnapshot
 
@@ -1696,12 +1696,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)  -> MutationOutcome
 
     func searchArtifacts(query: String, limit: UInt32) async  -> ArtifactListOutcome
-
-    /**
-     * Filter already-projected rooms by user query. Rust owns the search
-     * normalization and match fields for the browse-all room grid.
-     */
-    func searchRooms(rooms: [CommunitySummary], query: String)  -> [CommunitySummary]
 
     func selectableOcrWords(lines: [OcrLine])  -> [OcrWord]
 
@@ -2453,28 +2447,6 @@ open func generateAccount() -> GeneratedAccountOutcome  {
     uniffi_highlighter_core_fn_method_highlightercore_generate_account(self.uniffiClonePointer(),$0
     )
 })
-}
-
-    /**
-     * Every cached room, newest first, truncated to `limit`. Powers the
-     * explorer's "Browse all" grid.
-     */
-open func getAllRooms(limit: UInt32)async  -> CommunityListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_all_rooms(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommunityListOutcome_lift,
-            errorHandler: nil
-
-        )
 }
 
     /**
@@ -3328,6 +3300,28 @@ open func getRelays()async  -> RelayConfigListOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRelayConfigListOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Screen-shaped snapshot for the explorer's "Browse all" grid. Rust owns
+     * the cache query, limit, query normalization, and matched fields.
+     */
+open func getRoomBrowseSnapshot(query: String, limit: UInt32)async  -> RoomBrowseSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_room_browse_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRoomBrowseSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5150,19 +5144,6 @@ open func searchArtifacts(query: String, limit: UInt32)async  -> ArtifactListOut
             errorHandler: nil
 
         )
-}
-
-    /**
-     * Filter already-projected rooms by user query. Rust owns the search
-     * normalization and match fields for the browse-all room grid.
-     */
-open func searchRooms(rooms: [CommunitySummary], query: String) -> [CommunitySummary]  {
-    return try!  FfiConverterSequenceTypeCommunitySummary.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_search_rooms(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeCommunitySummary.lower(rooms),
-        FfiConverterString.lower(query),$0
-    )
-})
 }
 
 open func selectableOcrWords(lines: [OcrLine]) -> [OcrWord]  {
@@ -26307,6 +26288,76 @@ public func FfiConverterTypeRoomAvatarProjectionInput_lower(_ value: RoomAvatarP
 }
 
 
+public struct RoomBrowseSnapshot {
+    public var rooms: [CommunitySummary]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(rooms: [CommunitySummary], error: String) {
+        self.rooms = rooms
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension RoomBrowseSnapshot: Sendable {}
+#endif
+
+
+extension RoomBrowseSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RoomBrowseSnapshot, rhs: RoomBrowseSnapshot) -> Bool {
+        if lhs.rooms != rhs.rooms {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rooms)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomBrowseSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomBrowseSnapshot {
+        return
+            try RoomBrowseSnapshot(
+                rooms: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomBrowseSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommunitySummary.write(value.rooms, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomBrowseSnapshot_lift(_ buf: RustBuffer) throws -> RoomBrowseSnapshot {
+    return try FfiConverterTypeRoomBrowseSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomBrowseSnapshot_lower(_ value: RoomBrowseSnapshot) -> RustBuffer {
+    return FfiConverterTypeRoomBrowseSnapshot.lower(value)
+}
+
+
 public struct RoomCoverCardProjection {
     public var subtitle: String
 
@@ -37807,9 +37858,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 356) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_all_rooms() != 8628) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article() != 62635) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -37964,6 +38012,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relays() != 2197) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_browse_snapshot() != 45616) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_discussion_snapshot() != 35341) {
@@ -38402,9 +38453,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_artifacts() != 20123) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_rooms() != 42451) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_selectable_ocr_words() != 2832) {

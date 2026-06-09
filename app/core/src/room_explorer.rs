@@ -7,3 +7,79 @@ pub struct RoomExplorerSnapshot {
     pub friends_shelf: Vec<RoomRecommendation>,
     pub authors_shelf: Vec<RoomRecommendation>,
 }
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomBrowseSnapshot {
+    pub rooms: Vec<CommunitySummary>,
+    pub error: String,
+}
+
+pub fn room_browse_snapshot(rooms: &[CommunitySummary], query: &str) -> RoomBrowseSnapshot {
+    RoomBrowseSnapshot {
+        rooms: crate::discovery::search_rooms(rooms, query),
+        error: String::new(),
+    }
+}
+
+pub fn room_browse_error_snapshot(error: impl ToString) -> RoomBrowseSnapshot {
+    RoomBrowseSnapshot {
+        rooms: Vec::new(),
+        error: error.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn room(id: &str, name: &str, about: &str, created_at: u64) -> CommunitySummary {
+        CommunitySummary {
+            id: id.to_string(),
+            name: name.to_string(),
+            about: about.to_string(),
+            picture: String::new(),
+            access: "open".to_string(),
+            visibility: "public".to_string(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: "wss://relay.example".to_string(),
+            metadata_event_id: format!("{id}-event"),
+            created_at: Some(created_at),
+        }
+    }
+
+    #[test]
+    fn room_browse_snapshot_filters_by_query() {
+        let rooms = vec![
+            room("one", "Bitcoin Readers", "Money and books", 3),
+            room("two", "Design Shelf", "Typography", 2),
+            room("three", "Rust Notes", "Systems programming", 1),
+        ];
+
+        let snapshot = room_browse_snapshot(&rooms, "  shelf ");
+
+        assert!(snapshot.error.is_empty());
+        assert_eq!(snapshot.rooms.len(), 1);
+        assert_eq!(snapshot.rooms[0].id, "two");
+    }
+
+    #[test]
+    fn room_browse_snapshot_keeps_empty_query_order() {
+        let rooms = vec![
+            room("one", "Bitcoin Readers", "Money and books", 3),
+            room("two", "Design Shelf", "Typography", 2),
+        ];
+
+        let snapshot = room_browse_snapshot(&rooms, "");
+
+        assert!(snapshot.error.is_empty());
+        assert_eq!(
+            snapshot
+                .rooms
+                .iter()
+                .map(|room| room.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["one", "two"]
+        );
+    }
+}

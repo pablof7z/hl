@@ -194,7 +194,7 @@ pub use relays::{
     RelayDetailProjectionInput, RelayRemoveProjection, RelayRemoveProjectionInput,
     RelayRowProjection, RelayRowProjectionInput, RelaySettingsProjection, RelayStatusTone,
 };
-pub use room_explorer::RoomExplorerSnapshot;
+pub use room_explorer::{RoomBrowseSnapshot, RoomExplorerSnapshot};
 pub use room_home::RoomHomeSnapshot;
 pub use room_invites::{
     RoomInviteAvatarProjection, RoomInviteAvatarProjectionInput, RoomInviteCandidate,

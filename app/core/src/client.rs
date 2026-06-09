@@ -3510,23 +3510,17 @@ impl HighlighterCore {
         }
     }
 
-    /// Every cached room, newest first, truncated to `limit`. Powers the
-    /// explorer's "Browse all" grid.
-    pub async fn get_all_rooms(&self, limit: u32) -> CommunityListOutcome {
-        community_list_outcome(discovery::query_all_rooms_from_ndb(
-            self.runtime.ndb(),
-            limit,
-        ))
-    }
-
-    /// Filter already-projected rooms by user query. Rust owns the search
-    /// normalization and match fields for the browse-all room grid.
-    pub fn search_rooms(
+    /// Screen-shaped snapshot for the explorer's "Browse all" grid. Rust owns
+    /// the cache query, limit, query normalization, and matched fields.
+    pub async fn get_room_browse_snapshot(
         &self,
-        rooms: Vec<CommunitySummary>,
         query: String,
-    ) -> Vec<CommunitySummary> {
-        discovery::search_rooms(&rooms, &query)
+        limit: u32,
+    ) -> crate::room_explorer::RoomBrowseSnapshot {
+        match discovery::query_all_rooms_from_ndb(self.runtime.ndb(), limit) {
+            Ok(rooms) => crate::room_explorer::room_browse_snapshot(&rooms, &query),
+            Err(error) => crate::room_explorer::room_browse_error_snapshot(error),
+        }
     }
 
     /// Publish a NIP-29 kind:9021 join-request for `group_id`. Rust owns the

@@ -15,14 +15,10 @@ struct RoomBrowseAllView: View {
         GridItem(.flexible(), spacing: 14),
     ]
 
-    private var visible: [CommunitySummary] {
-        appStore.safeCore.searchRooms(rooms: rooms, query: search)
-    }
-
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 18) {
-                ForEach(visible, id: \.id) { room in
+                ForEach(rooms, id: \.id) { room in
                     Button {
                         previewRoom = room
                     } label: {
@@ -39,12 +35,15 @@ struct RoomBrowseAllView: View {
         .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always))
         .task {
             await appStore.safeCore.startRoomDiscovery()
-            let outcome = await appStore.safeCore.getAllRooms(limit: 200)
-            rooms = outcome.error.isEmpty ? outcome.values : []
+            await loadRooms()
+        }
+        .onChange(of: search) { _, _ in
+            Task {
+                await loadRooms()
+            }
         }
         .refreshable {
-            let outcome = await appStore.safeCore.getAllRooms(limit: 200)
-            rooms = outcome.error.isEmpty ? outcome.values : []
+            await loadRooms()
         }
         .sheet(item: $previewRoom) { room in
             NavigationStack {
@@ -59,6 +58,14 @@ struct RoomBrowseAllView: View {
                 )
             }
             .environment(appStore)
+        }
+    }
+
+    private func loadRooms() async {
+        let query = search
+        let snapshot = await appStore.safeCore.getRoomBrowseSnapshot(query: query, limit: 200)
+        if query == search {
+            rooms = snapshot.error.isEmpty ? snapshot.rooms : []
         }
     }
 }

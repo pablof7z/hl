@@ -1068,18 +1068,8 @@ actor SafeHighlighterCore {
         await core.getRoomExplorerSnapshot(joined: joined)
     }
 
-    func getAllRooms(limit: UInt32 = 120) async -> CommunityListOutcome {
-        await core.getAllRooms(limit: limit)
-    }
-
-    nonisolated func searchRooms(
-        rooms: [CommunitySummary],
-        query: String
-    ) -> [CommunitySummary] {
-        core.searchRooms(
-            rooms: rooms,
-            query: query
-        )
+    func getRoomBrowseSnapshot(query: String, limit: UInt32 = 120) async -> RoomBrowseSnapshot {
+        await core.getRoomBrowseSnapshot(query: query, limit: limit)
     }
 
     func requestJoinRoom(groupId: String, roomName: String) async -> StringOutcome {
