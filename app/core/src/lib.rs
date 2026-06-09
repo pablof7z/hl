@@ -234,8 +234,9 @@ pub use search::{
     SearchTextMatchSpan, SearchTextMatchesProjection, SearchTextMatchesProjectionInput,
 };
 pub use session::{
-    AccountGenerationSnapshot, AuthSessionSnapshot, PublicKeyDisplayProjection,
-    PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection, SecretKeyDisplayProjectionInput,
+    AccountGenerationSnapshot, AuthSessionRestoreSnapshot, AuthSessionSnapshot,
+    PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,
+    SecretKeyDisplayProjectionInput,
 };
 pub use share_extension::{
     ShareQueueAttempt, ShareQueueDrainProjection, ShareQueueDrainProjectionInput, ShareQueueItem,

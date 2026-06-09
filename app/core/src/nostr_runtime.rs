@@ -177,6 +177,16 @@ impl NostrRuntime {
         });
     }
 
+    /// Async signer install for UniFFI async entrypoints already running on
+    /// Tokio. The sync wrapper above cannot be called from those contexts
+    /// because `Runtime::block_on` would try to start a nested runtime.
+    pub async fn set_signer_async<T>(&self, signer: T)
+    where
+        T: IntoNostrSigner,
+    {
+        self.client.set_signer(signer).await;
+    }
+
     /// Remove the active signer. Called from `session::logout`.
     pub fn unset_signer(&self) {
         self.rt().block_on(async {

@@ -74,6 +74,45 @@ pub fn auth_session_snapshot(result: Result<CurrentUser, CoreError>) -> AuthSess
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AuthSessionRestoreSnapshot {
+    pub user: Option<CurrentUser>,
+    pub is_authenticated: bool,
+    pub error_message: String,
+    pub clear_nsec: bool,
+    pub clear_bunker_uri: bool,
+}
+
+pub fn auth_session_restore_snapshot(
+    result: Result<Option<CurrentUser>, CoreError>,
+    clear_nsec: bool,
+    clear_bunker_uri: bool,
+) -> AuthSessionRestoreSnapshot {
+    match result {
+        Ok(Some(user)) => AuthSessionRestoreSnapshot {
+            user: Some(user),
+            is_authenticated: true,
+            error_message: String::new(),
+            clear_nsec,
+            clear_bunker_uri,
+        },
+        Ok(None) => AuthSessionRestoreSnapshot {
+            user: None,
+            is_authenticated: false,
+            error_message: String::new(),
+            clear_nsec,
+            clear_bunker_uri,
+        },
+        Err(error) => AuthSessionRestoreSnapshot {
+            user: None,
+            is_authenticated: false,
+            error_message: error.to_string(),
+            clear_nsec,
+            clear_bunker_uri,
+        },
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct AccountGenerationSnapshot {
     pub account: Option<GeneratedAccount>,
     pub succeeded: bool,
@@ -422,6 +461,38 @@ mod tests {
         assert_eq!(failure.user, None);
         assert!(!failure.is_authenticated);
         assert_eq!(failure.error_message, "invalid input: bad key");
+    }
+
+    #[test]
+    fn auth_session_restore_snapshot_projects_cleanup_policy() {
+        let user = CurrentUser {
+            pubkey: "abc123".into(),
+            npub: "npub1abc".into(),
+        };
+        let success = auth_session_restore_snapshot(Ok(Some(user.clone())), true, false);
+        assert_eq!(success.user, Some(user));
+        assert!(success.is_authenticated);
+        assert!(success.error_message.is_empty());
+        assert!(success.clear_nsec);
+        assert!(!success.clear_bunker_uri);
+
+        let no_credentials = auth_session_restore_snapshot(Ok(None), false, false);
+        assert_eq!(no_credentials.user, None);
+        assert!(!no_credentials.is_authenticated);
+        assert!(no_credentials.error_message.is_empty());
+        assert!(!no_credentials.clear_nsec);
+        assert!(!no_credentials.clear_bunker_uri);
+
+        let failure = auth_session_restore_snapshot(
+            Err(CoreError::InvalidInput("bad key".into())),
+            true,
+            true,
+        );
+        assert_eq!(failure.user, None);
+        assert!(!failure.is_authenticated);
+        assert_eq!(failure.error_message, "invalid input: bad key");
+        assert!(failure.clear_nsec);
+        assert!(failure.clear_bunker_uri);
     }
 
     #[test]

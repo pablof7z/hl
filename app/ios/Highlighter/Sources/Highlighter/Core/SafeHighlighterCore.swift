@@ -24,6 +24,10 @@ actor SafeHighlighterCore {
         await core.startDefaultNostrConnect(callback: callback)
     }
 
+    func restoreSessionSnapshot(nsec: String?, bunkerUri: String?) async -> AuthSessionRestoreSnapshot {
+        await core.restoreSessionSnapshot(nsec: nsec, bunkerUri: bunkerUri)
+    }
+
     func pairBunker(_ uri: String) async -> AuthSessionSnapshot {
         await core.pairBunker(uri: uri)
     }

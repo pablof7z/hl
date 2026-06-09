@@ -2,7 +2,9 @@
 //! keypair, encode as nsec, hand it to login_nsec, and verify the returned
 //! pubkey matches what we started with.
 
-use highlighter_core::{AuthSessionSnapshot, CurrentUser, HighlighterCore};
+use highlighter_core::{
+    AuthSessionRestoreSnapshot, AuthSessionSnapshot, CurrentUser, HighlighterCore,
+};
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -22,6 +24,17 @@ fn expect_user(outcome: AuthSessionSnapshot) -> CurrentUser {
         outcome.error_message
     );
     outcome.user.expect("login_nsec returned no user")
+}
+
+fn expect_restored_user(outcome: AuthSessionRestoreSnapshot) -> CurrentUser {
+    assert!(
+        outcome.is_authenticated,
+        "restore_session_snapshot: {}",
+        outcome.error_message
+    );
+    outcome
+        .user
+        .expect("restore_session_snapshot returned no user")
 }
 
 #[test]
@@ -85,4 +98,45 @@ fn nsec_login_trims_surrounding_whitespace() {
     let (core, _tmp) = isolated_core();
     let user = expect_user(core.login_nsec(padded));
     assert_eq!(user.pubkey, keys.public_key().to_hex());
+}
+
+#[tokio::test]
+async fn restore_session_with_no_credentials_is_idle() {
+    let (core, _tmp) = isolated_core();
+    let snapshot = core.restore_session_snapshot(None, None).await;
+
+    assert!(snapshot.user.is_none());
+    assert!(!snapshot.is_authenticated);
+    assert!(snapshot.error_message.is_empty());
+    assert!(!snapshot.clear_nsec);
+    assert!(!snapshot.clear_bunker_uri);
+}
+
+#[tokio::test]
+async fn restore_session_uses_valid_nsec_without_cleanup() {
+    let keys = Keys::generate();
+    let nsec = keys.secret_key().to_bech32().unwrap();
+
+    let (core, _tmp) = isolated_core();
+    let user = expect_restored_user(core.restore_session_snapshot(Some(nsec), None).await);
+
+    assert_eq!(user.pubkey, keys.public_key().to_hex());
+    assert_eq!(
+        core.current_user().expect("current user").pubkey,
+        user.pubkey
+    );
+}
+
+#[tokio::test]
+async fn restore_session_clears_invalid_nsec() {
+    let (core, _tmp) = isolated_core();
+    let snapshot = core
+        .restore_session_snapshot(Some("not a real nsec".into()), None)
+        .await;
+
+    assert!(snapshot.user.is_none());
+    assert!(!snapshot.is_authenticated);
+    assert!(!snapshot.error_message.is_empty());
+    assert!(snapshot.clear_nsec);
+    assert!(!snapshot.clear_bunker_uri);
 }

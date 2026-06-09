@@ -1,8 +1,7 @@
 import Foundation
 
-/// Auto-login state machine. On app bootstrap, attempts to restore the saved
-/// session (nsec first, bunker URI second). Mirrors TENEX's
-/// `AppSessionStore.attemptAutoLogin` but simpler.
+/// Keychain-backed session capability. Rust owns restore policy; iOS only
+/// supplies saved secrets and executes explicit cleanup instructions.
 @MainActor
 final class AppSessionStore {
     static let shared = AppSessionStore()
@@ -10,24 +9,19 @@ final class AppSessionStore {
 
     /// Returns the logged-in user if a saved credential succeeds, nil otherwise.
     func restoreSession(into core: SafeHighlighterCore) async -> CurrentUser? {
-        if let nsec = KeychainService.loadNsec() {
-            let snapshot = await core.loginNsec(nsec)
-            if snapshot.isAuthenticated, let user = snapshot.user {
-                return user
-            }
-            // Stale/invalid nsec — clear so we don't keep retrying.
+        let snapshot = await core.restoreSessionSnapshot(
+            nsec: KeychainService.loadNsec(),
+            bunkerUri: KeychainService.loadBunkerURI()
+        )
+
+        if snapshot.clearNsec {
             KeychainService.deleteNsec()
         }
-
-        if let uri = KeychainService.loadBunkerURI() {
-            let snapshot = await core.pairBunker(uri)
-            if snapshot.isAuthenticated, let user = snapshot.user {
-                return user
-            }
+        if snapshot.clearBunkerUri {
             KeychainService.deleteBunkerURI()
         }
 
-        return nil
+        return snapshot.isAuthenticated ? snapshot.user : nil
     }
 
     func persistNsec(_ nsec: String) {

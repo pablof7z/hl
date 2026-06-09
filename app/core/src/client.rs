@@ -136,69 +136,127 @@ fn one_highlight_record(records: Vec<HighlightRecord>) -> Result<HighlightRecord
 }
 
 impl HighlighterCore {
-    fn login_nsec_result(&self, nsec: &str) -> Result<CurrentUser, CoreError> {
+    fn record_nsec_login(&self, nsec: &str) -> Result<(CurrentUser, Option<Keys>), CoreError> {
         // Do the session mutation + keys extraction in a single write-guard
         // scope. Binding both values to locals ensures the guard drops
         // before the subsequent `self.inner.write()` call — without this,
         // Rust keeps the guard alive for the whole expression chain and
         // parking_lot deadlocks on re-entry.
-        let (user, keys) = {
-            let mut guard = self.inner.write();
-            let user = guard.session.login_nsec(nsec)?;
-            let keys = guard.session.keys().cloned();
-            (user, keys)
-        };
+        let mut guard = self.inner.write();
+        let user = guard.session.login_nsec(nsec)?;
+        let keys = guard.session.keys().cloned();
+        Ok((user, keys))
+    }
+
+    fn login_nsec_result(&self, nsec: &str) -> Result<CurrentUser, CoreError> {
+        let (user, keys) = self.record_nsec_login(nsec)?;
 
         if let Some(keys) = keys {
             self.runtime.set_signer(keys.clone());
-            let pubkey = keys.public_key();
-            // First-pass: apply whatever's in cache so subscriptions have a
-            // pool to talk to immediately. The bootstrap below races to
-            // fetch the user's actual NIP-65 from the network and re-apply
-            // — without it, a fresh install with cold cache stays on
-            // seed_defaults forever.
-            self.runtime.spawn_apply_user_relay_config(pubkey.to_hex());
-            let user_relay_config_id = self.runtime.spawn_user_relay_config_bootstrap(pubkey);
-            let sub_id = self.runtime.spawn_membership_subscription(pubkey);
-            let contacts_id = self.runtime.spawn_contacts_subscription(pubkey);
-            // Eagerly fetch 39000 metadata for any groups already in the
-            // nostrdb cache. Without this, the first `getJoinedCommunities`
-            // call on a warm cache would return summaries with name=id because
-            // the stage-2 metadata sub would only be installed after the pump
-            // sees a live membership delta.
-            let cached_ids =
-                crate::subscriptions::collect_cached_group_ids(self.runtime.ndb(), &pubkey);
-            if !cached_ids.is_empty() {
-                self.runtime
-                    .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
-            }
-            // Best-effort outbox bootstrap: fetch follows' kind:10002 so the
-            // home-feed planner has data to work with. Empty on first login
-            // (no kind:3 cached yet) — `subscribe_following_*` will re-arm
-            // this whenever it's called, picking up follows discovered since.
-            //
-            // Also kick off a NIP-77 negentropy sync against purplepag.es
-            // for the social trio (kind:0/3/10002) of the same set. Live
-            // subscriptions catch incremental updates; negentropy sync is
-            // the cheap cold-start path that closes the "no kind:10002
-            // cached" gap so the planner stops dumping authors into the
-            // fallback shard.
-            let cached_follows = current_followed_pubkeys(self.runtime.ndb(), &pubkey);
-            self.runtime
-                .spawn_negentropy_sync_for_follows(cached_follows.clone());
-            let follows_nip65_id = self
-                .runtime
-                .spawn_follows_relay_lists_subscription(cached_follows);
+            self.bootstrap_nsec_pubkey(keys.public_key());
+        }
 
+        Ok(user)
+    }
+
+    async fn login_nsec_result_async(&self, nsec: &str) -> Result<CurrentUser, CoreError> {
+        let (user, keys) = self.record_nsec_login(nsec)?;
+
+        if let Some(keys) = keys {
+            self.runtime.set_signer_async(keys.clone()).await;
+            self.bootstrap_nsec_pubkey(keys.public_key());
+        }
+
+        Ok(user)
+    }
+
+    fn bootstrap_nsec_pubkey(&self, pubkey: PublicKey) {
+        // First-pass: apply whatever's in cache so subscriptions have a
+        // pool to talk to immediately. The bootstrap below races to
+        // fetch the user's actual NIP-65 from the network and re-apply
+        // — without it, a fresh install with cold cache stays on
+        // seed_defaults forever.
+        self.runtime.spawn_apply_user_relay_config(pubkey.to_hex());
+        let user_relay_config_id = self.runtime.spawn_user_relay_config_bootstrap(pubkey);
+        let sub_id = self.runtime.spawn_membership_subscription(pubkey);
+        let contacts_id = self.runtime.spawn_contacts_subscription(pubkey);
+        // Eagerly fetch 39000 metadata for any groups already in the
+        // nostrdb cache. Without this, the first `getJoinedCommunities`
+        // call on a warm cache would return summaries with name=id because
+        // the stage-2 metadata sub would only be installed after the pump
+        // sees a live membership delta.
+        let cached_ids =
+            crate::subscriptions::collect_cached_group_ids(self.runtime.ndb(), &pubkey);
+        if !cached_ids.is_empty() {
+            self.runtime
+                .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
+        }
+        // Best-effort outbox bootstrap: fetch follows' kind:10002 so the
+        // home-feed planner has data to work with. Empty on first login
+        // (no kind:3 cached yet) — `subscribe_following_*` will re-arm
+        // this whenever it's called, picking up follows discovered since.
+        //
+        // Also kick off a NIP-77 negentropy sync against purplepag.es
+        // for the social trio (kind:0/3/10002) of the same set. Live
+        // subscriptions catch incremental updates; negentropy sync is
+        // the cheap cold-start path that closes the "no kind:10002
+        // cached" gap so the planner stops dumping authors into the
+        // fallback shard.
+        let cached_follows = current_followed_pubkeys(self.runtime.ndb(), &pubkey);
+        self.runtime
+            .spawn_negentropy_sync_for_follows(cached_follows.clone());
+        let follows_nip65_id = self
+            .runtime
+            .spawn_follows_relay_lists_subscription(cached_follows);
+
+        let mut guard = self.inner.write();
+        guard.session.set_membership_subscription(sub_id);
+        guard.session.set_contacts_subscription(contacts_id);
+        guard
+            .session
+            .set_user_relay_config_subscription(user_relay_config_id);
+        if let Some(id) = follows_nip65_id {
+            guard.session.set_follows_nip65_subscription(id);
+        }
+    }
+
+    async fn pair_bunker_result(&self, uri: &str) -> Result<CurrentUser, CoreError> {
+        let normalized = normalize_bunker_uri(uri);
+        if normalized.is_empty() {
+            return Err(CoreError::InvalidInput("empty bunker URI".into()));
+        }
+
+        let client = self.runtime.client().clone();
+        let (signer, user_pubkey) =
+            BunkerSigner::pair_with_clock(client, &normalized, self.clock.clone()).await?;
+        let user = current_user_from_pubkey(&user_pubkey)?;
+
+        let signer = Arc::new(signer);
+        self.runtime.set_signer_async((*signer).clone()).await;
+        self.runtime
+            .spawn_apply_user_relay_config(user_pubkey.to_hex());
+
+        let sub_id = self.runtime.spawn_membership_subscription(user_pubkey);
+        let contacts_id = self.runtime.spawn_contacts_subscription(user_pubkey);
+        let cached_ids =
+            crate::subscriptions::collect_cached_group_ids(self.runtime.ndb(), &user_pubkey);
+        if !cached_ids.is_empty() {
+            self.runtime
+                .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
+        }
+        {
             let mut guard = self.inner.write();
+            guard.session.set_bunker(signer, user.clone());
             guard.session.set_membership_subscription(sub_id);
             guard.session.set_contacts_subscription(contacts_id);
-            guard
-                .session
-                .set_user_relay_config_subscription(user_relay_config_id);
-            if let Some(id) = follows_nip65_id {
-                guard.session.set_follows_nip65_subscription(id);
-            }
+        }
+
+        let cb = { self.callback_slot.read().clone() };
+        if let Some(cb) = cb {
+            cb.on_data_changed(Delta {
+                subscription_id: 0,
+                change: DataChangeType::SignerConnected { user: user.clone() },
+            });
         }
 
         Ok(user)
@@ -629,49 +687,71 @@ impl HighlighterCore {
         nip46::start_snapshot(result)
     }
 
-    pub async fn pair_bunker(&self, uri: String) -> crate::session::AuthSessionSnapshot {
-        let result: Result<CurrentUser, CoreError> = async {
-            let normalized = normalize_bunker_uri(&uri);
-            if normalized.is_empty() {
-                Err(CoreError::InvalidInput("empty bunker URI".into()))?;
+    pub async fn restore_session_snapshot(
+        &self,
+        nsec: Option<String>,
+        bunker_uri: Option<String>,
+    ) -> crate::session::AuthSessionRestoreSnapshot {
+        let mut clear_nsec = false;
+        let mut clear_bunker_uri = false;
+        let mut last_error = None;
+
+        if let Some(saved_nsec) = nsec
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            match self.login_nsec_result_async(saved_nsec).await {
+                Ok(user) => {
+                    return crate::session::auth_session_restore_snapshot(
+                        Ok(Some(user)),
+                        clear_nsec,
+                        clear_bunker_uri,
+                    );
+                }
+                Err(error) => {
+                    clear_nsec = true;
+                    last_error = Some(error);
+                }
             }
-
-            let client = self.runtime.client().clone();
-            let (signer, user_pubkey) =
-                BunkerSigner::pair_with_clock(client, &normalized, self.clock.clone()).await?;
-            let user = current_user_from_pubkey(&user_pubkey)?;
-
-            let signer = Arc::new(signer);
-            self.runtime.set_signer((*signer).clone());
-            self.runtime
-                .spawn_apply_user_relay_config(user_pubkey.to_hex());
-
-            let sub_id = self.runtime.spawn_membership_subscription(user_pubkey);
-            let contacts_id = self.runtime.spawn_contacts_subscription(user_pubkey);
-            let cached_ids =
-                crate::subscriptions::collect_cached_group_ids(self.runtime.ndb(), &user_pubkey);
-            if !cached_ids.is_empty() {
-                self.runtime
-                    .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
-            }
-            {
-                let mut guard = self.inner.write();
-                guard.session.set_bunker(signer, user.clone());
-                guard.session.set_membership_subscription(sub_id);
-                guard.session.set_contacts_subscription(contacts_id);
-            }
-
-            let cb = { self.callback_slot.read().clone() };
-            if let Some(cb) = cb {
-                cb.on_data_changed(Delta {
-                    subscription_id: 0,
-                    change: DataChangeType::SignerConnected { user: user.clone() },
-                });
-            }
-
-            Ok(user)
         }
-        .await;
+
+        if let Some(saved_bunker_uri) = bunker_uri
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            match self.pair_bunker_result(saved_bunker_uri).await {
+                Ok(user) => {
+                    return crate::session::auth_session_restore_snapshot(
+                        Ok(Some(user)),
+                        clear_nsec,
+                        clear_bunker_uri,
+                    );
+                }
+                Err(error) => {
+                    clear_bunker_uri = true;
+                    last_error = Some(error);
+                }
+            }
+        }
+
+        match last_error {
+            Some(error) => crate::session::auth_session_restore_snapshot(
+                Err(error),
+                clear_nsec,
+                clear_bunker_uri,
+            ),
+            None => crate::session::auth_session_restore_snapshot(
+                Ok(None),
+                clear_nsec,
+                clear_bunker_uri,
+            ),
+        }
+    }
+
+    pub async fn pair_bunker(&self, uri: String) -> crate::session::AuthSessionSnapshot {
+        let result = self.pair_bunker_result(&uri).await;
         crate::session::auth_session_snapshot(result)
     }
 

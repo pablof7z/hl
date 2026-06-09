@@ -1609,6 +1609,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func resolveNostrEntity(entity: NostrEntityRef) async  -> NostrEntityResolutionSnapshot
 
+    func restoreSessionSnapshot(nsec: String?, bunkerUri: String?) async  -> AuthSessionRestoreSnapshot
+
     func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?)  -> OcrRect
 
     func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)  -> MutationSnapshot
@@ -4736,6 +4738,24 @@ open func resolveNostrEntity(entity: NostrEntityRef)async  -> NostrEntityResolut
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNostrEntityResolutionSnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func restoreSessionSnapshot(nsec: String?, bunkerUri: String?)async  -> AuthSessionRestoreSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_restore_session_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterOptionString.lower(nsec),FfiConverterOptionString.lower(bunkerUri)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeAuthSessionRestoreSnapshot_lift,
             errorHandler: nil
 
         )
@@ -8205,6 +8225,100 @@ public func FfiConverterTypeArtifactReferenceTarget_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeArtifactReferenceTarget_lower(_ value: ArtifactReferenceTarget) -> RustBuffer {
     return FfiConverterTypeArtifactReferenceTarget.lower(value)
+}
+
+
+public struct AuthSessionRestoreSnapshot {
+    public var user: CurrentUser?
+    public var isAuthenticated: Bool
+    public var errorMessage: String
+    public var clearNsec: Bool
+    public var clearBunkerUri: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(user: CurrentUser?, isAuthenticated: Bool, errorMessage: String, clearNsec: Bool, clearBunkerUri: Bool) {
+        self.user = user
+        self.isAuthenticated = isAuthenticated
+        self.errorMessage = errorMessage
+        self.clearNsec = clearNsec
+        self.clearBunkerUri = clearBunkerUri
+    }
+}
+
+#if compiler(>=6)
+extension AuthSessionRestoreSnapshot: Sendable {}
+#endif
+
+
+extension AuthSessionRestoreSnapshot: Equatable, Hashable {
+    public static func ==(lhs: AuthSessionRestoreSnapshot, rhs: AuthSessionRestoreSnapshot) -> Bool {
+        if lhs.user != rhs.user {
+            return false
+        }
+        if lhs.isAuthenticated != rhs.isAuthenticated {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        if lhs.clearNsec != rhs.clearNsec {
+            return false
+        }
+        if lhs.clearBunkerUri != rhs.clearBunkerUri {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(user)
+        hasher.combine(isAuthenticated)
+        hasher.combine(errorMessage)
+        hasher.combine(clearNsec)
+        hasher.combine(clearBunkerUri)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthSessionRestoreSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthSessionRestoreSnapshot {
+        return
+            try AuthSessionRestoreSnapshot(
+                user: FfiConverterOptionTypeCurrentUser.read(from: &buf),
+                isAuthenticated: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf),
+                clearNsec: FfiConverterBool.read(from: &buf),
+                clearBunkerUri: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AuthSessionRestoreSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeCurrentUser.write(value.user, into: &buf)
+        FfiConverterBool.write(value.isAuthenticated, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+        FfiConverterBool.write(value.clearNsec, into: &buf)
+        FfiConverterBool.write(value.clearBunkerUri, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthSessionRestoreSnapshot_lift(_ buf: RustBuffer) throws -> AuthSessionRestoreSnapshot {
+    return try FfiConverterTypeAuthSessionRestoreSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthSessionRestoreSnapshot_lower(_ value: AuthSessionRestoreSnapshot) -> RustBuffer {
+    return FfiConverterTypeAuthSessionRestoreSnapshot.lower(value)
 }
 
 
@@ -39111,6 +39225,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 31286) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_restore_session_snapshot() != 3319) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_sanitize_highlight_crop_box() != 64518) {
