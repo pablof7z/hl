@@ -12,6 +12,8 @@ struct DiscussionDetailView: View {
     }
 
     var body: some View {
+        let projection = rootThreadProjection
+
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -23,14 +25,14 @@ struct DiscussionDetailView: View {
                         .fill(Color.highlighterRule.opacity(0.5))
                         .frame(height: 0.5)
 
-                    repliesSection
+                    repliesSection(projection)
                 }
             }
             .scrollDismissesKeyboard(.interactively)
 
             CommentComposer(
                 parentEventId: nil,
-                placeholder: "Add to the conversation",
+                placeholder: projection.composerPlaceholder,
                 store: store
             )
         }
@@ -47,7 +49,7 @@ struct DiscussionDetailView: View {
         .navigationDestination(item: $focusedNode) { node in
             if let commentScope {
                 ThreadView(
-                    focused: ThreadView.locate(eventId: node.record.eventId, in: store.tree) ?? node,
+                    focused: focusedThreadNode(node),
                     artifactHeader: nil,
                     store: store,
                     scope: commentScope,
@@ -164,24 +166,24 @@ struct DiscussionDetailView: View {
     // MARK: - Replies section
 
     @ViewBuilder
-    private var repliesSection: some View {
+    private func repliesSection(_ projection: CommentThreadViewProjection) -> some View {
         if store.isLoading && store.tree.isEmpty {
             ProgressView()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
-        } else if store.tree.isEmpty {
+        } else if projection.children.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.system(size: 28, weight: .light))
                     .foregroundStyle(Color.highlighterInkMuted)
-                Text("Start the conversation.")
+                Text(projection.emptyStateLabel)
                     .font(.subheadline)
                     .foregroundStyle(Color.highlighterInkMuted)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 48)
         } else {
-            ForEach(store.tree) { node in
+            ForEach(projection.children) { node in
                 VStack(spacing: 0) {
                     CommentRow(
                         node: node,
@@ -232,6 +234,24 @@ struct DiscussionDetailView: View {
     }
 
     // MARK: - Helpers
+
+    private var rootThreadProjection: CommentThreadViewProjection {
+        app.safeCore.projectCommentThreadView(
+            input: CommentThreadViewProjectionInput(
+                tree: store.tree,
+                focused: nil
+            )
+        )
+    }
+
+    private func focusedThreadNode(_ node: CommentNode) -> CommentNode {
+        app.safeCore.projectCommentThreadView(
+            input: CommentThreadViewProjectionInput(
+                tree: store.tree,
+                focused: node
+            )
+        ).focused ?? node
+    }
 
     private var authorDisplay: ProfileDisplayProjection {
         app.safeCore.projectProfileDisplay(

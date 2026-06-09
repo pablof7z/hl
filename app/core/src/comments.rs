@@ -33,6 +33,22 @@ pub struct CommentComposerProjection {
     pub can_submit: bool,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentThreadViewProjectionInput {
+    pub tree: Vec<CommentThreadNode>,
+    pub focused: Option<CommentThreadNode>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentThreadViewProjection {
+    pub focused: Option<CommentThreadNode>,
+    pub children: Vec<CommentThreadNode>,
+    pub nav_title: String,
+    pub empty_state_label: String,
+    pub composer_placeholder: String,
+    pub reply_count_label: String,
+}
+
 /// Comment composer projection. Rust owns draft normalization and submit
 /// eligibility; native shells render the composer affordance.
 pub fn comment_composer_projection(
@@ -43,6 +59,82 @@ pub fn comment_composer_projection(
         can_submit: !submit_body.is_empty() && !input.is_publishing,
         submit_body,
     }
+}
+
+/// Project the visible comment thread screen from the Rust-built tree.
+/// Native shells own navigation selection; Rust owns focused-node lookup,
+/// child selection, and user-visible thread labels.
+pub fn comment_thread_view_projection(
+    input: CommentThreadViewProjectionInput,
+) -> CommentThreadViewProjection {
+    let focused = input.focused.map(|node| {
+        find_node(&input.tree, &node.record.event_id)
+            .cloned()
+            .unwrap_or(node)
+    });
+    let children = focused
+        .as_ref()
+        .map(|node| node.children.clone())
+        .unwrap_or_else(|| input.tree.clone());
+    let reply_count = focused
+        .as_ref()
+        .map(|node| node.children.len())
+        .unwrap_or(0);
+
+    CommentThreadViewProjection {
+        nav_title: comment_nav_title(focused.is_some(), count_nodes(&input.tree)),
+        empty_state_label: if focused.is_some() {
+            "Be the first to reply.".into()
+        } else {
+            "Start the conversation.".into()
+        },
+        composer_placeholder: if focused.is_some() {
+            "Reply…".into()
+        } else {
+            "Add to the conversation".into()
+        },
+        reply_count_label: reply_count_label(reply_count),
+        focused,
+        children,
+    }
+}
+
+fn comment_nav_title(is_focused: bool, total_count: usize) -> String {
+    if is_focused {
+        return "Reply thread".into();
+    }
+    match total_count {
+        0 => "Comments".into(),
+        1 => "1 comment".into(),
+        count => format!("{count} comments"),
+    }
+}
+
+fn reply_count_label(count: usize) -> String {
+    match count {
+        0 => "Be the first to reply".into(),
+        1 => "1 reply".into(),
+        count => format!("{count} replies"),
+    }
+}
+
+fn count_nodes(nodes: &[CommentThreadNode]) -> usize {
+    nodes
+        .iter()
+        .map(|node| 1 + count_nodes(&node.children))
+        .sum()
+}
+
+fn find_node<'a>(nodes: &'a [CommentThreadNode], event_id: &str) -> Option<&'a CommentThreadNode> {
+    for node in nodes {
+        if node.record.event_id == event_id {
+            return Some(node);
+        }
+        if let Some(hit) = find_node(&node.children, event_id) {
+            return Some(hit);
+        }
+    }
+    None
 }
 
 /// Project a NIP-23 address into the NIP-22 root scope used for comment
@@ -606,6 +698,68 @@ mod tests {
 
         assert_eq!(tree.len(), 1);
         assert!(tree[0].children.is_empty());
+    }
+
+    #[test]
+    fn comment_thread_view_projection_returns_root_children_and_labels() {
+        let root = "root";
+        let top = comment("top", root, Some(1));
+        let reply = comment("reply", "top", Some(2));
+        let tree = build_thread(&[top, reply], root);
+
+        let projection = comment_thread_view_projection(CommentThreadViewProjectionInput {
+            tree,
+            focused: None,
+        });
+
+        assert!(projection.focused.is_none());
+        assert_eq!(
+            projection
+                .children
+                .iter()
+                .map(|node| node.record.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["top"]
+        );
+        assert_eq!(projection.nav_title, "2 comments");
+        assert_eq!(projection.empty_state_label, "Start the conversation.");
+        assert_eq!(projection.composer_placeholder, "Add to the conversation");
+        assert_eq!(projection.reply_count_label, "Be the first to reply");
+    }
+
+    #[test]
+    fn comment_thread_view_projection_locates_focused_node_in_current_tree() {
+        let root = "root";
+        let stale_top = CommentThreadNode {
+            record: comment("top", root, Some(1)),
+            children: Vec::new(),
+        };
+        let top = comment("top", root, Some(1));
+        let first_reply = comment("first-reply", "top", Some(2));
+        let second_reply = comment("second-reply", "top", Some(3));
+        let tree = build_thread(&[top, first_reply, second_reply], root);
+
+        let projection = comment_thread_view_projection(CommentThreadViewProjectionInput {
+            tree,
+            focused: Some(stale_top),
+        });
+
+        assert_eq!(
+            projection.focused.as_ref().map(|node| node.children.len()),
+            Some(2)
+        );
+        assert_eq!(
+            projection
+                .children
+                .iter()
+                .map(|node| node.record.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first-reply", "second-reply"]
+        );
+        assert_eq!(projection.nav_title, "Reply thread");
+        assert_eq!(projection.empty_state_label, "Be the first to reply.");
+        assert_eq!(projection.composer_placeholder, "Reply…");
+        assert_eq!(projection.reply_count_label, "2 replies");
     }
 
     #[test]

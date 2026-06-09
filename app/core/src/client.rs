@@ -2371,6 +2371,15 @@ impl HighlighterCore {
         comments::comment_composer_projection(input)
     }
 
+    /// Project a comment thread screen. Rust owns focused-node lookup,
+    /// visible child selection, and thread chrome labels.
+    pub fn project_comment_thread_view(
+        &self,
+        input: comments::CommentThreadViewProjectionInput,
+    ) -> comments::CommentThreadViewProjection {
+        comments::comment_thread_view_projection(input)
+    }
+
     /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
     pub async fn get_comments_for_scope(
         &self,

@@ -1161,6 +1161,12 @@ actor SafeHighlighterCore {
         core.projectCommentComposer(input: input)
     }
 
+    nonisolated func projectCommentThreadView(
+        input: CommentThreadViewProjectionInput
+    ) -> CommentThreadViewProjection {
+        core.projectCommentThreadView(input: input)
+    }
+
     nonisolated func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome {
         core.getHighlightCommentScope(eventIdHex: eventIdHex)
     }

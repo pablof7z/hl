@@ -14,25 +14,28 @@ struct ThreadView: View {
     let scope: CommentScope
     let artifactAuthorPubkey: String?
 
+    @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var focusedNode: CommentNode? = nil
 
     var body: some View {
+        let projection = threadProjection
+
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    if let focused {
-                        focusedHeader(focused)
+                    if let focused = projection.focused {
+                        focusedHeader(focused, replyCountLabel: projection.replyCountLabel)
                             .padding(.bottom, 4)
                     } else if let artifactHeader {
                         artifactHeader
                             .padding(.bottom, 4)
                     }
 
-                    if children.isEmpty {
-                        emptyState
+                    if projection.children.isEmpty {
+                        emptyState(label: projection.emptyStateLabel)
                     } else {
-                        ForEach(children) { child in
+                        ForEach(projection.children) { child in
                             VStack(spacing: 0) {
                                 CommentRow(
                                     node: child,
@@ -52,8 +55,8 @@ struct ThreadView: View {
             .scrollDismissesKeyboard(.interactively)
 
             CommentComposer(
-                parentEventId: focused?.record.eventId,
-                placeholder: composerPlaceholder,
+                parentEventId: projection.focused?.record.eventId,
+                placeholder: projection.composerPlaceholder,
                 store: store
             )
         }
@@ -61,14 +64,14 @@ struct ThreadView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text(navTitle)
+                Text(projection.navTitle)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
             }
         }
         .navigationDestination(item: $focusedNode) { node in
             ThreadView(
-                focused: Self.locate(eventId: node.record.eventId, in: store.tree) ?? node,
+                focused: node,
                 artifactHeader: nil,
                 store: store,
                 scope: scope,
@@ -77,22 +80,15 @@ struct ThreadView: View {
         }
     }
 
-    // MARK: - Children resolution
+    // MARK: - Projection
 
-    private var children: [CommentNode] {
-        if let focused {
-            return Self.locate(eventId: focused.record.eventId, in: store.tree)?.children
-                ?? focused.children
-        }
-        return store.tree
-    }
-
-    static func locate(eventId: String, in nodes: [CommentNode]) -> CommentNode? {
-        for n in nodes {
-            if n.record.eventId == eventId { return n }
-            if let hit = locate(eventId: eventId, in: n.children) { return hit }
-        }
-        return nil
+    private var threadProjection: CommentThreadViewProjection {
+        app.safeCore.projectCommentThreadView(
+            input: CommentThreadViewProjectionInput(
+                tree: store.tree,
+                focused: focused
+            )
+        )
     }
 
     // MARK: - Inline reply preview
@@ -142,7 +138,7 @@ struct ThreadView: View {
     // MARK: - Focused-comment header
 
     @ViewBuilder
-    private func focusedHeader(_ node: CommentNode) -> some View {
+    private func focusedHeader(_ node: CommentNode, replyCountLabel: String) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             CommentRow(
                 node: node,
@@ -156,7 +152,7 @@ struct ThreadView: View {
                 Image(systemName: "arrow.turn.down.right")
                     .font(.caption)
                     .foregroundStyle(Color.highlighterInkMuted)
-                Text(replyCountLabel(for: node))
+                Text(replyCountLabel)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Color.highlighterInkMuted)
                     .textCase(.uppercase)
@@ -171,22 +167,14 @@ struct ThreadView: View {
         }
     }
 
-    private func replyCountLabel(for node: CommentNode) -> String {
-        let count = (Self.locate(eventId: node.record.eventId, in: store.tree)?.children.count)
-            ?? node.children.count
-        if count == 0 { return "Be the first to reply" }
-        if count == 1 { return "1 reply" }
-        return "\(count) replies"
-    }
-
     // MARK: - Empty state
 
-    private var emptyState: some View {
+    private func emptyState(label: String) -> some View {
         VStack(spacing: 8) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(Color.highlighterInkMuted)
-            Text(emptyStateLabel)
+            Text(label)
                 .font(.subheadline)
                 .foregroundStyle(Color.highlighterInkMuted)
         }
@@ -194,23 +182,7 @@ struct ThreadView: View {
         .padding(.vertical, 60)
     }
 
-    private var emptyStateLabel: String {
-        focused == nil ? "Start the conversation." : "Be the first to reply."
-    }
-
     // MARK: - Helpers
-
-    private var navTitle: String {
-        if focused != nil { return "Reply thread" }
-        let count = store.totalCount
-        if count == 0 { return "Comments" }
-        if count == 1 { return "1 comment" }
-        return "\(count) comments"
-    }
-
-    private var composerPlaceholder: String {
-        focused == nil ? "Add to the conversation" : "Reply…"
-    }
 
     private func focusOn(_ node: CommentNode) {
         focusedNode = node

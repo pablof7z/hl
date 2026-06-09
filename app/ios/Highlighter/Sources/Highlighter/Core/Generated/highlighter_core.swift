@@ -1474,6 +1474,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectCommentLikeState(input: CommentLikeStateProjectionInput)  -> CommentLikeStateProjection
 
+    /**
+     * Project a comment thread screen. Rust owns focused-node lookup,
+     * visible child selection, and thread chrome labels.
+     */
+    func projectCommentThreadView(input: CommentThreadViewProjectionInput)  -> CommentThreadViewProjection
+
     func projectCommunityRow(input: CommunityRowProjectionInput)  -> CommunityRowProjection
 
     /**
@@ -4584,6 +4590,18 @@ open func projectCommentLikeState(input: CommentLikeStateProjectionInput) -> Com
     return try!  FfiConverterTypeCommentLikeStateProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_comment_like_state(self.uniffiClonePointer(),
         FfiConverterTypeCommentLikeStateProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project a comment thread screen. Rust owns focused-node lookup,
+     * visible child selection, and thread chrome labels.
+     */
+open func projectCommentThreadView(input: CommentThreadViewProjectionInput) -> CommentThreadViewProjection  {
+    return try!  FfiConverterTypeCommentThreadViewProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_comment_thread_view(self.uniffiClonePointer(),
+        FfiConverterTypeCommentThreadViewProjectionInput_lower(input),$0
     )
 })
 }
@@ -13040,6 +13058,178 @@ public func FfiConverterTypeCommentThreadProjection_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeCommentThreadProjection_lower(_ value: CommentThreadProjection) -> RustBuffer {
     return FfiConverterTypeCommentThreadProjection.lower(value)
+}
+
+
+public struct CommentThreadViewProjection {
+    public var focused: CommentThreadNode?
+    public var children: [CommentThreadNode]
+    public var navTitle: String
+    public var emptyStateLabel: String
+    public var composerPlaceholder: String
+    public var replyCountLabel: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(focused: CommentThreadNode?, children: [CommentThreadNode], navTitle: String, emptyStateLabel: String, composerPlaceholder: String, replyCountLabel: String) {
+        self.focused = focused
+        self.children = children
+        self.navTitle = navTitle
+        self.emptyStateLabel = emptyStateLabel
+        self.composerPlaceholder = composerPlaceholder
+        self.replyCountLabel = replyCountLabel
+    }
+}
+
+#if compiler(>=6)
+extension CommentThreadViewProjection: Sendable {}
+#endif
+
+
+extension CommentThreadViewProjection: Equatable, Hashable {
+    public static func ==(lhs: CommentThreadViewProjection, rhs: CommentThreadViewProjection) -> Bool {
+        if lhs.focused != rhs.focused {
+            return false
+        }
+        if lhs.children != rhs.children {
+            return false
+        }
+        if lhs.navTitle != rhs.navTitle {
+            return false
+        }
+        if lhs.emptyStateLabel != rhs.emptyStateLabel {
+            return false
+        }
+        if lhs.composerPlaceholder != rhs.composerPlaceholder {
+            return false
+        }
+        if lhs.replyCountLabel != rhs.replyCountLabel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(focused)
+        hasher.combine(children)
+        hasher.combine(navTitle)
+        hasher.combine(emptyStateLabel)
+        hasher.combine(composerPlaceholder)
+        hasher.combine(replyCountLabel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentThreadViewProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadViewProjection {
+        return
+            try CommentThreadViewProjection(
+                focused: FfiConverterOptionTypeCommentThreadNode.read(from: &buf),
+                children: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf),
+                navTitle: FfiConverterString.read(from: &buf),
+                emptyStateLabel: FfiConverterString.read(from: &buf),
+                composerPlaceholder: FfiConverterString.read(from: &buf),
+                replyCountLabel: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentThreadViewProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeCommentThreadNode.write(value.focused, into: &buf)
+        FfiConverterSequenceTypeCommentThreadNode.write(value.children, into: &buf)
+        FfiConverterString.write(value.navTitle, into: &buf)
+        FfiConverterString.write(value.emptyStateLabel, into: &buf)
+        FfiConverterString.write(value.composerPlaceholder, into: &buf)
+        FfiConverterString.write(value.replyCountLabel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadViewProjection_lift(_ buf: RustBuffer) throws -> CommentThreadViewProjection {
+    return try FfiConverterTypeCommentThreadViewProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadViewProjection_lower(_ value: CommentThreadViewProjection) -> RustBuffer {
+    return FfiConverterTypeCommentThreadViewProjection.lower(value)
+}
+
+
+public struct CommentThreadViewProjectionInput {
+    public var tree: [CommentThreadNode]
+    public var focused: CommentThreadNode?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(tree: [CommentThreadNode], focused: CommentThreadNode?) {
+        self.tree = tree
+        self.focused = focused
+    }
+}
+
+#if compiler(>=6)
+extension CommentThreadViewProjectionInput: Sendable {}
+#endif
+
+
+extension CommentThreadViewProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CommentThreadViewProjectionInput, rhs: CommentThreadViewProjectionInput) -> Bool {
+        if lhs.tree != rhs.tree {
+            return false
+        }
+        if lhs.focused != rhs.focused {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(tree)
+        hasher.combine(focused)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentThreadViewProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadViewProjectionInput {
+        return
+            try CommentThreadViewProjectionInput(
+                tree: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf),
+                focused: FfiConverterOptionTypeCommentThreadNode.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentThreadViewProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommentThreadNode.write(value.tree, into: &buf)
+        FfiConverterOptionTypeCommentThreadNode.write(value.focused, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadViewProjectionInput_lift(_ buf: RustBuffer) throws -> CommentThreadViewProjectionInput {
+    return try FfiConverterTypeCommentThreadViewProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadViewProjectionInput_lower(_ value: CommentThreadViewProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCommentThreadViewProjectionInput.lower(value)
 }
 
 
@@ -34217,6 +34407,30 @@ fileprivate struct FfiConverterOptionTypeCommentScope: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeCommentThreadNode: FfiConverterRustBuffer {
+    typealias SwiftType = CommentThreadNode?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCommentThreadNode.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCommentThreadNode.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeCurrentUser: FfiConverterRustBuffer {
     typealias SwiftType = CurrentUser?
 
@@ -36721,6 +36935,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_like_state() != 52827) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_thread_view() != 58541) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_community_row() != 45428) {
