@@ -789,6 +789,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func buildPreviewFromUrl(url: String) async  -> ArtifactPreviewOutcome
 
+    func buildWebReaderShareTarget(url: String) async  -> ShareWebReaderTargetSnapshot
+
     func checkNip05Availability(name: String) async  -> Nip05AvailabilitySnapshot
 
     func classifyLoginInput(input: String)  -> LoginInputAction
@@ -2100,6 +2102,24 @@ open func buildPreviewFromUrl(url: String)async  -> ArtifactPreviewOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeArtifactPreviewOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func buildWebReaderShareTarget(url: String)async  -> ShareWebReaderTargetSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_build_web_reader_share_target(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(url)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeShareWebReaderTargetSnapshot_lift,
             errorHandler: nil
 
         )
@@ -32631,6 +32651,84 @@ public func FfiConverterTypeShareWebReaderTargetProjectionInput_lower(_ value: S
 }
 
 
+public struct ShareWebReaderTargetSnapshot {
+    public var target: ShareArtifactTargetProjection?
+    public var ready: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(target: ShareArtifactTargetProjection?, ready: Bool, errorMessage: String) {
+        self.target = target
+        self.ready = ready
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension ShareWebReaderTargetSnapshot: Sendable {}
+#endif
+
+
+extension ShareWebReaderTargetSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ShareWebReaderTargetSnapshot, rhs: ShareWebReaderTargetSnapshot) -> Bool {
+        if lhs.target != rhs.target {
+            return false
+        }
+        if lhs.ready != rhs.ready {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(target)
+        hasher.combine(ready)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareWebReaderTargetSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareWebReaderTargetSnapshot {
+        return
+            try ShareWebReaderTargetSnapshot(
+                target: FfiConverterOptionTypeShareArtifactTargetProjection.read(from: &buf),
+                ready: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareWebReaderTargetSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeShareArtifactTargetProjection.write(value.target, into: &buf)
+        FfiConverterBool.write(value.ready, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareWebReaderTargetSnapshot_lift(_ buf: RustBuffer) throws -> ShareWebReaderTargetSnapshot {
+    return try FfiConverterTypeShareWebReaderTargetSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareWebReaderTargetSnapshot_lower(_ value: ShareWebReaderTargetSnapshot) -> RustBuffer {
+    return FfiConverterTypeShareWebReaderTargetSnapshot.lower(value)
+}
+
+
 public struct StringOutcome {
     public var value: String
     public var error: String
@@ -39029,6 +39127,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 17097) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_build_web_reader_share_target() != 53169) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 31035) {

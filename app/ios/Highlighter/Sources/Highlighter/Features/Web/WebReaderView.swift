@@ -85,28 +85,19 @@ struct WebReaderView: View {
         .modifier(WebCommentsScopeModifier(url: target.url))
     }
 
-    /// Build an `ArtifactPreview` from the URL via the Rust core (which
-    /// fetches the page metadata) and hand it to the share sheet.
-    /// Falls back to a bare URL-only preview if the fetch fails so
-    /// the user can still share the link without a title.
+    /// Build the web-reader share target through Rust and hand it to the
+    /// native share sheet.
     private func prepareShare() async {
         sharePreparing = true
         defer { sharePreparing = false }
-        let outcome = await app.safeCore.buildPreviewFromUrl(target.url.absoluteString)
-        guard outcome.error.isEmpty, let preview = outcome.value else {
+        let snapshot = await app.safeCore.buildWebReaderShareTarget(url: target.url.absoluteString)
+        guard snapshot.ready, let projection = snapshot.target else {
             await MainActor.run {
-                let message = outcome.error.isEmpty ? "Unknown error" : outcome.error
-                shareError = "Couldn't build a preview: \(message)"
+                shareError = snapshot.errorMessage
             }
             return
         }
         await MainActor.run {
-            let projection = app.safeCore.projectShareWebReaderTarget(
-                input: ShareWebReaderTargetProjectionInput(
-                    preview: preview,
-                    fallbackUrl: target.url.absoluteString
-                )
-            )
             shareTarget = ShareToCommunityTarget(
                 payload: .artifactShare(preview: projection.preview),
                 displayTitle: projection.displayTitle,

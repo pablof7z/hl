@@ -882,6 +882,10 @@ actor SafeHighlighterCore {
         core.projectShareWebReaderTarget(input: input)
     }
 
+    func buildWebReaderShareTarget(url: String) async -> ShareWebReaderTargetSnapshot {
+        await core.buildWebReaderShareTarget(url: url)
+    }
+
     nonisolated func projectShareHighlightTarget(
         input: ShareHighlightTargetProjectionInput
     ) -> ShareHighlightTargetProjection {

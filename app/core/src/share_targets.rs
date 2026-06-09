@@ -1,4 +1,5 @@
 use crate::articles;
+use crate::errors::CoreError;
 use crate::models::{ArticleRecord, ArtifactPreview, ArtifactRecord, HighlightRecord};
 use ::url::Url;
 
@@ -24,6 +25,13 @@ pub struct ShareArtifactTargetProjectionInput {
 pub struct ShareWebReaderTargetProjectionInput {
     pub preview: ArtifactPreview,
     pub fallback_url: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ShareWebReaderTargetSnapshot {
+    pub target: Option<ShareArtifactTargetProjection>,
+    pub ready: bool,
+    pub error_message: String,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -88,6 +96,29 @@ pub fn web_reader_target_projection(
     }
 }
 
+pub fn web_reader_target_snapshot(
+    result: Result<ArtifactPreview, CoreError>,
+    fallback_url: &str,
+) -> ShareWebReaderTargetSnapshot {
+    match result {
+        Ok(preview) => ShareWebReaderTargetSnapshot {
+            target: Some(web_reader_target_projection(
+                ShareWebReaderTargetProjectionInput {
+                    preview,
+                    fallback_url: fallback_url.to_string(),
+                },
+            )),
+            ready: true,
+            error_message: String::new(),
+        },
+        Err(error) => ShareWebReaderTargetSnapshot {
+            target: None,
+            ready: false,
+            error_message: share_preview_error_message(error),
+        },
+    }
+}
+
 pub fn highlight_target_projection(
     input: ShareHighlightTargetProjectionInput,
 ) -> ShareHighlightTargetProjection {
@@ -144,6 +175,15 @@ fn web_reader_fallback_title(raw_url: &str) -> String {
         .ok()
         .and_then(|url| url.host_str().map(str::to_string))
         .unwrap_or_else(|| raw_url.to_string())
+}
+
+fn share_preview_error_message(error: CoreError) -> String {
+    let reason = error.to_string();
+    if reason.is_empty() {
+        "Couldn't build a preview: Unknown error".into()
+    } else {
+        format!("Couldn't build a preview: {reason}")
+    }
 }
 
 #[cfg(test)]
@@ -229,6 +269,34 @@ mod tests {
         });
 
         assert_eq!(projection.display_title, "Page title");
+    }
+
+    #[test]
+    fn web_reader_target_snapshot_projects_success_and_error_copy() {
+        let mut preview = artifact_record().preview;
+        preview.title.clear();
+
+        let snapshot = web_reader_target_snapshot(Ok(preview), "https://example.com/post");
+        assert!(snapshot.ready);
+        assert!(snapshot.error_message.is_empty());
+        assert_eq!(
+            snapshot
+                .target
+                .as_ref()
+                .map(|target| target.display_title.as_str()),
+            Some("example.com")
+        );
+
+        let snapshot = web_reader_target_snapshot(
+            Err(CoreError::InvalidInput("invalid URL".into())),
+            "not a url",
+        );
+        assert!(!snapshot.ready);
+        assert!(snapshot.target.is_none());
+        assert_eq!(
+            snapshot.error_message,
+            "Couldn't build a preview: invalid input: invalid URL"
+        );
     }
 
     #[test]

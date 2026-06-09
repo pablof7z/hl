@@ -243,7 +243,7 @@ pub use share_targets::{
     ShareArticleTargetProjectionInput, ShareArtifactTargetProjection,
     ShareArtifactTargetProjectionInput, ShareHighlightArticleTargetProjectionInput,
     ShareHighlightTargetProjection, ShareHighlightTargetProjectionInput,
-    ShareWebReaderTargetProjectionInput,
+    ShareWebReaderTargetProjectionInput, ShareWebReaderTargetSnapshot,
 };
 pub use time_labels::{
     RelativeTimeLabelInput, RelativeTimeLabelProjection, RelativeTimeLabelStyle,

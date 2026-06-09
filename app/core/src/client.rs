@@ -1576,6 +1576,13 @@ impl HighlighterCore {
         share_targets::web_reader_target_projection(input)
     }
 
+    pub async fn build_web_reader_share_target(
+        &self,
+        url: String,
+    ) -> share_targets::ShareWebReaderTargetSnapshot {
+        share_targets::web_reader_target_snapshot(crate::artifacts::build_preview(&url), &url)
+    }
+
     pub fn project_share_highlight_target(
         &self,
         input: share_targets::ShareHighlightTargetProjectionInput,
