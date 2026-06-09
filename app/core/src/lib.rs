@@ -62,6 +62,7 @@ pub use articles::{
     ArticleReaderHeaderProjectionInput,
 };
 pub use client::HighlighterCore;
+pub use discussions::{DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput};
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
 pub use feedback::{

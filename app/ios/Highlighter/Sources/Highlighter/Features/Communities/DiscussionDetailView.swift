@@ -108,10 +108,12 @@ struct DiscussionDetailView: View {
 
     @ViewBuilder
     private func attachmentCard(_ a: DiscussionAttachment) -> some View {
-        let title = a.title.isEmpty ? a.url : a.title
-        if !title.isEmpty {
+        let projection = app.safeCore.projectDiscussionAttachment(
+            input: DiscussionAttachmentProjectionInput(attachment: a)
+        )
+        if let title = projection.label {
             HStack(spacing: 10) {
-                if !a.image.isEmpty, let url = URL(string: a.image) {
+                if let image = projection.imageUrl, let url = URL(string: image) {
                     AsyncImage(url: url) { phase in
                         if let img = phase.image {
                             img.resizable().scaledToFill()
@@ -137,8 +139,8 @@ struct DiscussionDetailView: View {
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Color.highlighterInkStrong)
                         .lineLimit(2)
-                    if !a.author.isEmpty {
-                        Text(a.author)
+                    if let author = projection.author {
+                        Text(author)
                             .font(.caption)
                             .foregroundStyle(Color.highlighterInkMuted)
                             .lineLimit(1)

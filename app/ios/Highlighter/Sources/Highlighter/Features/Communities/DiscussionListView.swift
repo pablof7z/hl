@@ -80,7 +80,7 @@ private struct DiscussionRow: View {
                         .multilineTextAlignment(.leading)
                 }
 
-                if let attachment = discussion.attachment, !attachment.title.isEmpty || !attachment.url.isEmpty {
+                if let attachment = discussion.attachment {
                     attachmentChip(attachment)
                 }
 
@@ -127,8 +127,10 @@ private struct DiscussionRow: View {
 
     @ViewBuilder
     private func attachmentChip(_ a: DiscussionAttachment) -> some View {
-        let label = a.title.isEmpty ? a.url : a.title
-        if !label.isEmpty {
+        let projection = app.safeCore.projectDiscussionAttachment(
+            input: DiscussionAttachmentProjectionInput(attachment: a)
+        )
+        if let label = projection.label {
             HStack(spacing: 5) {
                 Image(systemName: "link")
                     .font(.caption2.weight(.medium))

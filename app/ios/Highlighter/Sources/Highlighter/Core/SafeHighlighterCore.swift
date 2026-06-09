@@ -940,6 +940,12 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func projectDiscussionAttachment(
+        input: DiscussionAttachmentProjectionInput
+    ) -> DiscussionAttachmentProjection {
+        core.projectDiscussionAttachment(input: input)
+    }
+
     nonisolated func upsertChatMessage(
         messages: [ChatMessageRecord],
         message: ChatMessageRecord

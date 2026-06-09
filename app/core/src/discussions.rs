@@ -17,6 +17,36 @@ use crate::nostr_runtime::NostrRuntime;
 pub const KIND_DISCUSSION: u16 = 11;
 pub const DISCUSSION_MARKER_TAG: &str = "discussion";
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DiscussionAttachmentProjectionInput {
+    pub attachment: DiscussionAttachment,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DiscussionAttachmentProjection {
+    pub label: Option<String>,
+    pub image_url: Option<String>,
+    pub author: Option<String>,
+}
+
+/// Project a discussion attachment for native list/detail rendering. Rust owns
+/// the title->URL label fallback and optional metadata presence.
+pub fn attachment_projection(
+    input: DiscussionAttachmentProjectionInput,
+) -> DiscussionAttachmentProjection {
+    let attachment = input.attachment;
+    let label = if attachment.title.is_empty() {
+        attachment.url
+    } else {
+        attachment.title
+    };
+    DiscussionAttachmentProjection {
+        label: non_empty(label),
+        image_url: non_empty(attachment.image),
+        author: non_empty(attachment.author),
+    }
+}
+
 /// Query cached discussions for a room from nostrdb. Filters kind:11 by
 /// `#h=group_id`, then keeps only events whose `t` tags contain
 /// `"discussion"`. Sorted most-recent first.
@@ -272,6 +302,14 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
     None
 }
 
+fn non_empty(value: String) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,6 +328,37 @@ mod tests {
             .tags(tags)
             .sign_with_keys(keys)
             .expect("sign")
+    }
+
+    #[test]
+    fn attachment_projection_uses_title_or_url_and_optional_metadata() {
+        let mut attachment = discussion_attachment();
+        attachment.title = "Episode".into();
+        attachment.url = "https://example.com/episode".into();
+        attachment.author = "Host".into();
+        attachment.image = "https://example.com/image.jpg".into();
+
+        let projection = attachment_projection(DiscussionAttachmentProjectionInput { attachment });
+
+        assert_eq!(projection.label, Some("Episode".into()));
+        assert_eq!(projection.author, Some("Host".into()));
+        assert_eq!(
+            projection.image_url,
+            Some("https://example.com/image.jpg".into())
+        );
+
+        let mut attachment = discussion_attachment();
+        attachment.title.clear();
+        attachment.url = "https://example.com/fallback".into();
+
+        let projection = attachment_projection(DiscussionAttachmentProjectionInput { attachment });
+
+        assert_eq!(
+            projection.label,
+            Some("https://example.com/fallback".into())
+        );
+        assert_eq!(projection.author, None);
+        assert_eq!(projection.image_url, None);
     }
 
     #[test]
@@ -352,6 +421,19 @@ mod tests {
         assert_eq!(att.reference_tag_value, "podcast:guid:abc");
         assert_eq!(att.reference_kind, "30054");
         assert_eq!(att.url, "https://example.com/ep");
+    }
+
+    fn discussion_attachment() -> DiscussionAttachment {
+        DiscussionAttachment {
+            reference_tag_name: "r".into(),
+            reference_tag_value: "https://example.com".into(),
+            reference_kind: String::new(),
+            url: String::new(),
+            title: String::new(),
+            author: String::new(),
+            image: String::new(),
+            summary: String::new(),
+        }
     }
 
     #[test]

@@ -2246,6 +2246,13 @@ impl HighlighterCore {
         room_state::upsert_room_discussion(&discussions, &discussion)
     }
 
+    pub fn project_discussion_attachment(
+        &self,
+        input: crate::discussions::DiscussionAttachmentProjectionInput,
+    ) -> crate::discussions::DiscussionAttachmentProjection {
+        crate::discussions::attachment_projection(input)
+    }
+
     /// Upsert a live chat delta into a bounded room chat list. Rust owns
     /// replacement identity and oldest-first ordering.
     pub fn upsert_chat_message(

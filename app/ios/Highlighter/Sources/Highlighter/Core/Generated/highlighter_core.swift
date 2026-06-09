@@ -1412,6 +1412,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectCreateRoom(input: CreateRoomProjectionInput)  -> CreateRoomProjection
 
+    func projectDiscussionAttachment(input: DiscussionAttachmentProjectionInput)  -> DiscussionAttachmentProjection
+
     /**
      * Feedback composer projection shared by new-thread and reply surfaces.
      * Rust owns submit trimming and send eligibility so each platform shell
@@ -4223,6 +4225,14 @@ open func projectCreateRoom(input: CreateRoomProjectionInput) -> CreateRoomProje
     return try!  FfiConverterTypeCreateRoomProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_create_room(self.uniffiClonePointer(),
         FfiConverterTypeCreateRoomProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectDiscussionAttachment(input: DiscussionAttachmentProjectionInput) -> DiscussionAttachmentProjection  {
+    return try!  FfiConverterTypeDiscussionAttachmentProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_discussion_attachment(self.uniffiClonePointer(),
+        FfiConverterTypeDiscussionAttachmentProjectionInput_lower(input),$0
     )
 })
 }
@@ -10804,6 +10814,146 @@ public func FfiConverterTypeDiscussionAttachment_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeDiscussionAttachment_lower(_ value: DiscussionAttachment) -> RustBuffer {
     return FfiConverterTypeDiscussionAttachment.lower(value)
+}
+
+
+public struct DiscussionAttachmentProjection {
+    public var label: String?
+    public var imageUrl: String?
+    public var author: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(label: String?, imageUrl: String?, author: String?) {
+        self.label = label
+        self.imageUrl = imageUrl
+        self.author = author
+    }
+}
+
+#if compiler(>=6)
+extension DiscussionAttachmentProjection: Sendable {}
+#endif
+
+
+extension DiscussionAttachmentProjection: Equatable, Hashable {
+    public static func ==(lhs: DiscussionAttachmentProjection, rhs: DiscussionAttachmentProjection) -> Bool {
+        if lhs.label != rhs.label {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        if lhs.author != rhs.author {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(label)
+        hasher.combine(imageUrl)
+        hasher.combine(author)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscussionAttachmentProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionAttachmentProjection {
+        return
+            try DiscussionAttachmentProjection(
+                label: FfiConverterOptionString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                author: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscussionAttachmentProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.label, into: &buf)
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
+        FfiConverterOptionString.write(value.author, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionAttachmentProjection_lift(_ buf: RustBuffer) throws -> DiscussionAttachmentProjection {
+    return try FfiConverterTypeDiscussionAttachmentProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionAttachmentProjection_lower(_ value: DiscussionAttachmentProjection) -> RustBuffer {
+    return FfiConverterTypeDiscussionAttachmentProjection.lower(value)
+}
+
+
+public struct DiscussionAttachmentProjectionInput {
+    public var attachment: DiscussionAttachment
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(attachment: DiscussionAttachment) {
+        self.attachment = attachment
+    }
+}
+
+#if compiler(>=6)
+extension DiscussionAttachmentProjectionInput: Sendable {}
+#endif
+
+
+extension DiscussionAttachmentProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: DiscussionAttachmentProjectionInput, rhs: DiscussionAttachmentProjectionInput) -> Bool {
+        if lhs.attachment != rhs.attachment {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(attachment)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscussionAttachmentProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionAttachmentProjectionInput {
+        return
+            try DiscussionAttachmentProjectionInput(
+                attachment: FfiConverterTypeDiscussionAttachment.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscussionAttachmentProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeDiscussionAttachment.write(value.attachment, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionAttachmentProjectionInput_lift(_ buf: RustBuffer) throws -> DiscussionAttachmentProjectionInput {
+    return try FfiConverterTypeDiscussionAttachmentProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionAttachmentProjectionInput_lower(_ value: DiscussionAttachmentProjectionInput) -> RustBuffer {
+    return FfiConverterTypeDiscussionAttachmentProjectionInput.lower(value)
 }
 
 
@@ -29133,6 +29283,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room() != 12904) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_discussion_attachment() != 2804) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_composer() != 43880) {
