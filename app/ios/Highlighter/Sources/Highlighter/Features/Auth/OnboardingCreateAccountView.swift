@@ -200,25 +200,29 @@ struct OnboardingCreateAccountView: View {
     private func scheduleCheck(for name: String) {
         usernameCheckTask?.cancel()
         usernameState = .idle
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        let projection = store.safeCore.projectOnboardingUsernameCheck(username: name)
+        guard projection.hasUsername else { return }
 
-        guard store.safeCore.isNip05UsernameValid(trimmed) else {
+        guard projection.valid else {
             usernameState = .invalid
             return
         }
 
         usernameState = .checking
+        let checkName = projection.username
 
         usernameCheckTask = Task {
-            guard !Task.isCancelled, username == trimmed else { return }
-            await checkAvailability(name: trimmed)
+            guard !Task.isCancelled else { return }
+            let current = store.safeCore.projectOnboardingUsernameCheck(username: username)
+            guard current.username == checkName else { return }
+            await checkAvailability(name: checkName)
         }
     }
 
     private func checkAvailability(name: String) async {
         let outcome = await store.safeCore.checkNip05Availability(name: name)
-        guard username == name else { return }
+        let current = store.safeCore.projectOnboardingUsernameCheck(username: username)
+        guard current.username == name else { return }
         guard outcome.error.isEmpty, let decoded = outcome.value else {
             usernameState = .idle
             return

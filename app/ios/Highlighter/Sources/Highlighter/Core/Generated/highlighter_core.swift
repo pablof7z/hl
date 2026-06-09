@@ -1540,6 +1540,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectionInput)  -> OnboardingCreateAccountProjection
 
     /**
+     * Project username availability-check state. Rust owns canonical trim
+     * and username validity for the onboarding flow.
+     */
+    func projectOnboardingUsernameCheck(username: String)  -> OnboardingUsernameCheckProjection
+
+    /**
      * Profile/avatar presentation projection. Rust owns profile-name
      * precedence, pubkey fallback, and avatar URL selection; native shells
      * render the resulting values without reimplementing business rules.
@@ -4700,6 +4706,18 @@ open func projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectio
     return try!  FfiConverterTypeOnboardingCreateAccountProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_onboarding_create_account(self.uniffiClonePointer(),
         FfiConverterTypeOnboardingCreateAccountProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project username availability-check state. Rust owns canonical trim
+     * and username validity for the onboarding flow.
+     */
+open func projectOnboardingUsernameCheck(username: String) -> OnboardingUsernameCheckProjection  {
+    return try!  FfiConverterTypeOnboardingUsernameCheckProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_onboarding_username_check(self.uniffiClonePointer(),
+        FfiConverterString.lower(username),$0
     )
 })
 }
@@ -19993,6 +20011,84 @@ public func FfiConverterTypeOnboardingInterestSelection_lower(_ value: Onboardin
 }
 
 
+public struct OnboardingUsernameCheckProjection {
+    public var username: String
+    public var hasUsername: Bool
+    public var valid: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(username: String, hasUsername: Bool, valid: Bool) {
+        self.username = username
+        self.hasUsername = hasUsername
+        self.valid = valid
+    }
+}
+
+#if compiler(>=6)
+extension OnboardingUsernameCheckProjection: Sendable {}
+#endif
+
+
+extension OnboardingUsernameCheckProjection: Equatable, Hashable {
+    public static func ==(lhs: OnboardingUsernameCheckProjection, rhs: OnboardingUsernameCheckProjection) -> Bool {
+        if lhs.username != rhs.username {
+            return false
+        }
+        if lhs.hasUsername != rhs.hasUsername {
+            return false
+        }
+        if lhs.valid != rhs.valid {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(username)
+        hasher.combine(hasUsername)
+        hasher.combine(valid)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOnboardingUsernameCheckProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingUsernameCheckProjection {
+        return
+            try OnboardingUsernameCheckProjection(
+                username: FfiConverterString.read(from: &buf),
+                hasUsername: FfiConverterBool.read(from: &buf),
+                valid: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: OnboardingUsernameCheckProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.username, into: &buf)
+        FfiConverterBool.write(value.hasUsername, into: &buf)
+        FfiConverterBool.write(value.valid, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingUsernameCheckProjection_lift(_ buf: RustBuffer) throws -> OnboardingUsernameCheckProjection {
+    return try FfiConverterTypeOnboardingUsernameCheckProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOnboardingUsernameCheckProjection_lower(_ value: OnboardingUsernameCheckProjection) -> RustBuffer {
+    return FfiConverterTypeOnboardingUsernameCheckProjection.lower(value)
+}
+
+
 public struct OptionalStringOutcome {
     public var value: String?
     public var error: String
@@ -34841,6 +34937,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_onboarding_create_account() != 11608) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_onboarding_username_check() != 9841) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_display() != 29583) {

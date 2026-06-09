@@ -1895,6 +1895,15 @@ impl HighlighterCore {
         nip05::onboarding_create_account_projection(input)
     }
 
+    /// Project username availability-check state. Rust owns canonical trim
+    /// and username validity for the onboarding flow.
+    pub fn project_onboarding_username_check(
+        &self,
+        username: String,
+    ) -> nip05::OnboardingUsernameCheckProjection {
+        nip05::onboarding_username_check_projection(&username)
+    }
+
     pub async fn check_nip05_availability(&self, name: String) -> Nip05AvailabilityOutcome {
         nip05_availability_outcome(nip05::check_availability(&name).await)
     }

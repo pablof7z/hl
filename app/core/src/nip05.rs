@@ -38,6 +38,13 @@ pub struct OnboardingCreateAccountProjection {
     pub can_continue: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OnboardingUsernameCheckProjection {
+    pub username: String,
+    pub has_username: bool,
+    pub valid: bool,
+}
+
 #[derive(Debug, Deserialize)]
 struct AvailabilityResponse {
     available: bool,
@@ -98,6 +105,17 @@ pub fn onboarding_create_account_projection(
         can_continue: !input.is_working && !display_name.is_empty() && username_allows_continue,
         display_name,
         username,
+    }
+}
+
+pub fn onboarding_username_check_projection(input: &str) -> OnboardingUsernameCheckProjection {
+    let username = input.trim().to_string();
+    let has_username = !username.is_empty();
+    let valid = has_username && is_valid_username(&username);
+    OnboardingUsernameCheckProjection {
+        username,
+        has_username,
+        valid,
     }
 }
 
@@ -278,5 +296,22 @@ mod tests {
         assert!(available.can_continue);
         assert!(!unavailable.can_continue);
         assert!(!working.can_continue);
+    }
+
+    #[test]
+    fn onboarding_username_check_projection_trims_and_validates() {
+        let blank = onboarding_username_check_projection(" ");
+        let valid = onboarding_username_check_projection(" alice ");
+        let invalid = onboarding_username_check_projection(" Alice ");
+
+        assert_eq!(blank.username, "");
+        assert!(!blank.has_username);
+        assert!(!blank.valid);
+        assert_eq!(valid.username, "alice");
+        assert!(valid.has_username);
+        assert!(valid.valid);
+        assert_eq!(invalid.username, "Alice");
+        assert!(invalid.has_username);
+        assert!(!invalid.valid);
     }
 }
