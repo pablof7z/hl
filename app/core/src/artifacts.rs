@@ -194,9 +194,9 @@ fn podcast_item_guid_from_catalog_value(value: &str) -> String {
 }
 
 /// Publish a kind:11 artifact share into a NIP-29 group. Port of
-/// `publishArtifact` (`web/src/lib/ndk/artifacts.ts:468-507`), minus the
-/// "existing artifact" merge path — that's an MVP-later concern; if a
-/// duplicate kind:11 with the same `d` tag exists the relay will upsert.
+/// `publishArtifact` (`web/src/lib/ndk/artifacts.ts:468-507`). The relay
+/// replaceable-event upsert is the canonical duplicate path for a matching
+/// kind:11 `d` tag.
 pub async fn publish(
     runtime: &NostrRuntime,
     preview: ArtifactPreview,

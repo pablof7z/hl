@@ -133,6 +133,18 @@ actor SafeHighlighterCore {
         core.getPodcastNowPlayingProjection(input: input)
     }
 
+    nonisolated func projectWaveformCacheKey(
+        input: WaveformCacheKeyProjectionInput
+    ) -> WaveformCacheKeyProjection {
+        core.projectWaveformCacheKey(input: input)
+    }
+
+    nonisolated func planWaveformPeaks(
+        input: WaveformPeaksPlanInput
+    ) -> WaveformPeaksPlan {
+        core.planWaveformPeaks(input: input)
+    }
+
     func getPodcastListeningClipsSnapshot(
         artifact: ArtifactRecord?,
         limit: UInt32 = 128

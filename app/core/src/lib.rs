@@ -62,6 +62,7 @@ pub mod subscriptions;
 #[cfg(test)]
 pub mod test_ndb;
 pub mod time_labels;
+pub mod waveform;
 pub mod web_metadata;
 pub mod whats_new;
 
@@ -251,6 +252,10 @@ pub use share_targets::{
 };
 pub use time_labels::{
     RelativeTimeLabelInput, RelativeTimeLabelProjection, RelativeTimeLabelStyle,
+};
+pub use waveform::{
+    WaveformCacheKeyProjection, WaveformCacheKeyProjectionInput, WaveformPeaksPlan,
+    WaveformPeaksPlanInput, WaveformWifiStatus,
 };
 pub use web_metadata::{
     WebMetadata, WebMetadataRequestProjection, WebMetadataRequestProjectionInput,

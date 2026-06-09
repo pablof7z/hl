@@ -565,6 +565,20 @@ impl HighlighterCore {
         podcast_transcript::now_playing_projection(input)
     }
 
+    pub fn project_waveform_cache_key(
+        &self,
+        input: crate::waveform::WaveformCacheKeyProjectionInput,
+    ) -> crate::waveform::WaveformCacheKeyProjection {
+        crate::waveform::cache_key_projection(input)
+    }
+
+    pub fn plan_waveform_peaks(
+        &self,
+        input: crate::waveform::WaveformPeaksPlanInput,
+    ) -> crate::waveform::WaveformPeaksPlan {
+        crate::waveform::peaks_plan(input)
+    }
+
     pub async fn get_podcast_listening_clips_snapshot(
         &self,
         artifact: Option<ArtifactRecord>,

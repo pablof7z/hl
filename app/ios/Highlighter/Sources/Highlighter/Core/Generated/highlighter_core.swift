@@ -1183,6 +1183,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func planRelayNip11Probes(input: RelayNip11ProbePlanInput)  -> RelayNip11ProbePlan
 
+    func planWaveformPeaks(input: WaveformPeaksPlanInput)  -> WaveformPeaksPlan
+
     func prepareWhatsNew() async  -> WhatsNewPresentationSnapshot
 
     /**
@@ -1495,6 +1497,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectShareQueueDrain(input: ShareQueueDrainProjectionInput)  -> ShareQueueDrainProjection
 
     func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput)  -> ShareArtifactTargetProjection
+
+    func projectWaveformCacheKey(input: WaveformCacheKeyProjectionInput)  -> WaveformCacheKeyProjection
 
     func projectWebBookmarkRow(input: WebBookmarkRowProjectionInput)  -> WebBookmarkRowProjection
 
@@ -3469,6 +3473,14 @@ open func planRelayNip11Probes(input: RelayNip11ProbePlanInput) -> RelayNip11Pro
 })
 }
 
+open func planWaveformPeaks(input: WaveformPeaksPlanInput) -> WaveformPeaksPlan  {
+    return try!  FfiConverterTypeWaveformPeaksPlan_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_plan_waveform_peaks(self.uniffiClonePointer(),
+        FfiConverterTypeWaveformPeaksPlanInput_lower(input),$0
+    )
+})
+}
+
 open func prepareWhatsNew()async  -> WhatsNewPresentationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -4304,6 +4316,14 @@ open func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput
     return try!  FfiConverterTypeShareArtifactTargetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_web_reader_target(self.uniffiClonePointer(),
         FfiConverterTypeShareWebReaderTargetProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectWaveformCacheKey(input: WaveformCacheKeyProjectionInput) -> WaveformCacheKeyProjection  {
+    return try!  FfiConverterTypeWaveformCacheKeyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_waveform_cache_key(self.uniffiClonePointer(),
+        FfiConverterTypeWaveformCacheKeyProjectionInput_lower(input),$0
     )
 })
 }
@@ -32494,6 +32514,326 @@ public func FfiConverterTypeTranscriptSegment_lower(_ value: TranscriptSegment) 
 }
 
 
+public struct WaveformCacheKeyProjection {
+    public var cacheKey: String
+    public var isUsable: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(cacheKey: String, isUsable: Bool) {
+        self.cacheKey = cacheKey
+        self.isUsable = isUsable
+    }
+}
+
+#if compiler(>=6)
+extension WaveformCacheKeyProjection: Sendable {}
+#endif
+
+
+extension WaveformCacheKeyProjection: Equatable, Hashable {
+    public static func ==(lhs: WaveformCacheKeyProjection, rhs: WaveformCacheKeyProjection) -> Bool {
+        if lhs.cacheKey != rhs.cacheKey {
+            return false
+        }
+        if lhs.isUsable != rhs.isUsable {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(cacheKey)
+        hasher.combine(isUsable)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWaveformCacheKeyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaveformCacheKeyProjection {
+        return
+            try WaveformCacheKeyProjection(
+                cacheKey: FfiConverterString.read(from: &buf),
+                isUsable: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WaveformCacheKeyProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cacheKey, into: &buf)
+        FfiConverterBool.write(value.isUsable, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWaveformCacheKeyProjection_lift(_ buf: RustBuffer) throws -> WaveformCacheKeyProjection {
+    return try FfiConverterTypeWaveformCacheKeyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWaveformCacheKeyProjection_lower(_ value: WaveformCacheKeyProjection) -> RustBuffer {
+    return FfiConverterTypeWaveformCacheKeyProjection.lower(value)
+}
+
+
+public struct WaveformCacheKeyProjectionInput {
+    public var audioUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(audioUrl: String) {
+        self.audioUrl = audioUrl
+    }
+}
+
+#if compiler(>=6)
+extension WaveformCacheKeyProjectionInput: Sendable {}
+#endif
+
+
+extension WaveformCacheKeyProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: WaveformCacheKeyProjectionInput, rhs: WaveformCacheKeyProjectionInput) -> Bool {
+        if lhs.audioUrl != rhs.audioUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(audioUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWaveformCacheKeyProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaveformCacheKeyProjectionInput {
+        return
+            try WaveformCacheKeyProjectionInput(
+                audioUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WaveformCacheKeyProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.audioUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWaveformCacheKeyProjectionInput_lift(_ buf: RustBuffer) throws -> WaveformCacheKeyProjectionInput {
+    return try FfiConverterTypeWaveformCacheKeyProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWaveformCacheKeyProjectionInput_lower(_ value: WaveformCacheKeyProjectionInput) -> RustBuffer {
+    return FfiConverterTypeWaveformCacheKeyProjectionInput.lower(value)
+}
+
+
+public struct WaveformPeaksPlan {
+    public var cacheKey: String
+    public var shouldUseCachedPeaks: Bool
+    public var shouldCheckWifiStatus: Bool
+    public var shouldExtractPeaks: Bool
+    public var bucketCount: UInt32
+    public var skipReason: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(cacheKey: String, shouldUseCachedPeaks: Bool, shouldCheckWifiStatus: Bool, shouldExtractPeaks: Bool, bucketCount: UInt32, skipReason: String) {
+        self.cacheKey = cacheKey
+        self.shouldUseCachedPeaks = shouldUseCachedPeaks
+        self.shouldCheckWifiStatus = shouldCheckWifiStatus
+        self.shouldExtractPeaks = shouldExtractPeaks
+        self.bucketCount = bucketCount
+        self.skipReason = skipReason
+    }
+}
+
+#if compiler(>=6)
+extension WaveformPeaksPlan: Sendable {}
+#endif
+
+
+extension WaveformPeaksPlan: Equatable, Hashable {
+    public static func ==(lhs: WaveformPeaksPlan, rhs: WaveformPeaksPlan) -> Bool {
+        if lhs.cacheKey != rhs.cacheKey {
+            return false
+        }
+        if lhs.shouldUseCachedPeaks != rhs.shouldUseCachedPeaks {
+            return false
+        }
+        if lhs.shouldCheckWifiStatus != rhs.shouldCheckWifiStatus {
+            return false
+        }
+        if lhs.shouldExtractPeaks != rhs.shouldExtractPeaks {
+            return false
+        }
+        if lhs.bucketCount != rhs.bucketCount {
+            return false
+        }
+        if lhs.skipReason != rhs.skipReason {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(cacheKey)
+        hasher.combine(shouldUseCachedPeaks)
+        hasher.combine(shouldCheckWifiStatus)
+        hasher.combine(shouldExtractPeaks)
+        hasher.combine(bucketCount)
+        hasher.combine(skipReason)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWaveformPeaksPlan: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaveformPeaksPlan {
+        return
+            try WaveformPeaksPlan(
+                cacheKey: FfiConverterString.read(from: &buf),
+                shouldUseCachedPeaks: FfiConverterBool.read(from: &buf),
+                shouldCheckWifiStatus: FfiConverterBool.read(from: &buf),
+                shouldExtractPeaks: FfiConverterBool.read(from: &buf),
+                bucketCount: FfiConverterUInt32.read(from: &buf),
+                skipReason: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WaveformPeaksPlan, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cacheKey, into: &buf)
+        FfiConverterBool.write(value.shouldUseCachedPeaks, into: &buf)
+        FfiConverterBool.write(value.shouldCheckWifiStatus, into: &buf)
+        FfiConverterBool.write(value.shouldExtractPeaks, into: &buf)
+        FfiConverterUInt32.write(value.bucketCount, into: &buf)
+        FfiConverterString.write(value.skipReason, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWaveformPeaksPlan_lift(_ buf: RustBuffer) throws -> WaveformPeaksPlan {
+    return try FfiConverterTypeWaveformPeaksPlan.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWaveformPeaksPlan_lower(_ value: WaveformPeaksPlan) -> RustBuffer {
+    return FfiConverterTypeWaveformPeaksPlan.lower(value)
+}
+
+
+public struct WaveformPeaksPlanInput {
+    public var audioUrl: String
+    public var durationSeconds: Double
+    public var cachedPeaksAvailable: Bool
+    public var wifiStatus: WaveformWifiStatus
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(audioUrl: String, durationSeconds: Double, cachedPeaksAvailable: Bool, wifiStatus: WaveformWifiStatus) {
+        self.audioUrl = audioUrl
+        self.durationSeconds = durationSeconds
+        self.cachedPeaksAvailable = cachedPeaksAvailable
+        self.wifiStatus = wifiStatus
+    }
+}
+
+#if compiler(>=6)
+extension WaveformPeaksPlanInput: Sendable {}
+#endif
+
+
+extension WaveformPeaksPlanInput: Equatable, Hashable {
+    public static func ==(lhs: WaveformPeaksPlanInput, rhs: WaveformPeaksPlanInput) -> Bool {
+        if lhs.audioUrl != rhs.audioUrl {
+            return false
+        }
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return false
+        }
+        if lhs.cachedPeaksAvailable != rhs.cachedPeaksAvailable {
+            return false
+        }
+        if lhs.wifiStatus != rhs.wifiStatus {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(audioUrl)
+        hasher.combine(durationSeconds)
+        hasher.combine(cachedPeaksAvailable)
+        hasher.combine(wifiStatus)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWaveformPeaksPlanInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaveformPeaksPlanInput {
+        return
+            try WaveformPeaksPlanInput(
+                audioUrl: FfiConverterString.read(from: &buf),
+                durationSeconds: FfiConverterDouble.read(from: &buf),
+                cachedPeaksAvailable: FfiConverterBool.read(from: &buf),
+                wifiStatus: FfiConverterTypeWaveformWifiStatus.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WaveformPeaksPlanInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.audioUrl, into: &buf)
+        FfiConverterDouble.write(value.durationSeconds, into: &buf)
+        FfiConverterBool.write(value.cachedPeaksAvailable, into: &buf)
+        FfiConverterTypeWaveformWifiStatus.write(value.wifiStatus, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWaveformPeaksPlanInput_lift(_ buf: RustBuffer) throws -> WaveformPeaksPlanInput {
+    return try FfiConverterTypeWaveformPeaksPlanInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWaveformPeaksPlanInput_lower(_ value: WaveformPeaksPlanInput) -> RustBuffer {
+    return FfiConverterTypeWaveformPeaksPlanInput.lower(value)
+}
+
+
 /**
  * One NIP-B0 web bookmark (kind:39701). The `d` tag is the URL without
  * scheme; we always prepend `https://` when surfacing it to Swift.
@@ -36327,6 +36667,83 @@ extension RoomVisibility: Equatable, Hashable {}
 
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum WaveformWifiStatus {
+
+    case unknown
+    case available
+    case unavailable
+}
+
+
+#if compiler(>=6)
+extension WaveformWifiStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWaveformWifiStatus: FfiConverterRustBuffer {
+    typealias SwiftType = WaveformWifiStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaveformWifiStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .unknown
+
+        case 2: return .available
+
+        case 3: return .unavailable
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WaveformWifiStatus, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .unknown:
+            writeInt(&buf, Int32(1))
+
+
+        case .available:
+            writeInt(&buf, Int32(2))
+
+
+        case .unavailable:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWaveformWifiStatus_lift(_ buf: RustBuffer) throws -> WaveformWifiStatus {
+    return try FfiConverterTypeWaveformWifiStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWaveformWifiStatus_lower(_ value: WaveformWifiStatus) -> RustBuffer {
+    return FfiConverterTypeWaveformWifiStatus.lower(value)
+}
+
+
+extension WaveformWifiStatus: Equatable, Hashable {}
+
+
+
+
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -38909,6 +39326,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_plan_relay_nip11_probes() != 54478) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_plan_waveform_peaks() != 22444) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_prepare_whats_new() != 28000) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -39159,6 +39579,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_web_reader_target() != 11832) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_waveform_cache_key() != 46885) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_web_bookmark_row() != 39985) {

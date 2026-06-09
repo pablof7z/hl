@@ -144,8 +144,13 @@ final class PodcastPlayerStore {
         waveformPeaks = []
         waveformTask?.cancel()
         let dur = artifact.preview.durationSeconds.map(TimeInterval.init) ?? 0
-        waveformTask = Task(priority: .background) { [weak self, url] in
-            let peaks = await WaveformExtractor.peaks(forAudioURL: url, durationSeconds: dur)
+        let safeCore = core
+        waveformTask = Task(priority: .background) { [weak self, url, safeCore] in
+            let peaks = await WaveformExtractor.peaks(
+                forAudioURL: url,
+                durationSeconds: dur,
+                core: safeCore
+            )
             guard let self, !Task.isCancelled, let peaks else { return }
             await MainActor.run { self.waveformPeaks = peaks }
         }

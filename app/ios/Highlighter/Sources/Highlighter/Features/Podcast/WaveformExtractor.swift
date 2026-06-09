@@ -1,5 +1,4 @@
 import AVFoundation
-import CryptoKit
 import Foundation
 import Network
 import os
@@ -23,24 +22,56 @@ enum WaveformExtractor {
 
     /// Best-effort fetch with on-disk peak storage. Returns nil if extraction
     /// was skipped or failed for any reason — callers tolerate absent peaks.
-    static func peaks(forAudioURL url: URL, durationSeconds: TimeInterval) async -> [Float]? {
-        if let stored = WaveformPeakStore.read(for: url) {
+    static func peaks(
+        forAudioURL url: URL,
+        durationSeconds: TimeInterval,
+        core: SafeHighlighterCore
+    ) async -> [Float]? {
+        let audioUrl = url.absoluteString
+        let keyProjection = core.projectWaveformCacheKey(
+            input: WaveformCacheKeyProjectionInput(audioUrl: audioUrl)
+        )
+        guard keyProjection.isUsable else {
+            return nil
+        }
+
+        let stored = WaveformPeakStore.read(cacheKey: keyProjection.cacheKey)
+        var plan = core.planWaveformPeaks(
+            input: WaveformPeaksPlanInput(
+                audioUrl: audioUrl,
+                durationSeconds: durationSeconds,
+                cachedPeaksAvailable: stored != nil,
+                wifiStatus: .unknown
+            )
+        )
+
+        if plan.shouldUseCachedPeaks {
             return stored
         }
 
-        guard isWiFiAvailable() else {
-            logger.info("waveform extraction skipped — not on Wi-Fi")
+        if plan.shouldCheckWifiStatus {
+            plan = core.planWaveformPeaks(
+                input: WaveformPeaksPlanInput(
+                    audioUrl: audioUrl,
+                    durationSeconds: durationSeconds,
+                    cachedPeaksAvailable: false,
+                    wifiStatus: isWiFiAvailable() ? .available : .unavailable
+                )
+            )
+        }
+
+        guard plan.shouldExtractPeaks else {
+            if !plan.skipReason.isEmpty {
+                logger.info("waveform extraction skipped: \(plan.skipReason, privacy: .public)")
+            }
             return nil
         }
 
-        let durationGuard = durationSeconds.isFinite && durationSeconds > 0 ? durationSeconds : 0
-        let buckets = max(60, Int(durationGuard.rounded()))
-
-        guard let peaks = await extractPeaks(from: url, bucketCount: buckets) else {
+        guard let peaks = await extractPeaks(from: url, bucketCount: Int(plan.bucketCount)) else {
             logger.error("waveform extraction failed")
             return nil
         }
-        WaveformPeakStore.write(peaks, for: url)
+        WaveformPeakStore.write(peaks, cacheKey: plan.cacheKey)
         return peaks
     }
 
@@ -164,13 +195,13 @@ enum WaveformExtractor {
 
 /// File store for extracted waveform peaks. Stored as raw `Float` little-endian
 /// bytes (4 bytes per peak) under Library/Caches/highlighter/waveforms,
-/// keyed by SHA-256 of the audio URL string. A 1-hour podcast at one peak
-/// per second is 14 KB — cheap to keep around indefinitely.
+/// keyed by the Rust-projected audio URL cache key. A 1-hour podcast at one
+/// peak per second is 14 KB — cheap to keep around indefinitely.
 enum WaveformPeakStore {
     private static let logger = Logger(subsystem: "com.highlighter.app", category: "WaveformPeakStore")
 
-    static func read(for url: URL) -> [Float]? {
-        guard let path = filePath(for: url), FileManager.default.fileExists(atPath: path.path) else {
+    static func read(cacheKey: String) -> [Float]? {
+        guard let path = filePath(cacheKey: cacheKey), FileManager.default.fileExists(atPath: path.path) else {
             return nil
         }
         guard let data = try? Data(contentsOf: path) else { return nil }
@@ -182,8 +213,8 @@ enum WaveformPeakStore {
         return peaks
     }
 
-    static func write(_ peaks: [Float], for url: URL) {
-        guard let path = filePath(for: url) else { return }
+    static func write(_ peaks: [Float], cacheKey: String) {
+        guard let path = filePath(cacheKey: cacheKey) else { return }
         do {
             try FileManager.default.createDirectory(
                 at: path.deletingLastPathComponent(),
@@ -198,15 +229,14 @@ enum WaveformPeakStore {
         }
     }
 
-    private static func filePath(for url: URL) -> URL? {
+    private static func filePath(cacheKey: String) -> URL? {
+        guard !cacheKey.isEmpty else { return nil }
         guard let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
             return nil
         }
-        let hash = SHA256.hash(data: Data(url.absoluteString.utf8))
-        let name = hash.compactMap { String(format: "%02x", $0) }.joined()
         return dir
             .appendingPathComponent("highlighter", isDirectory: true)
             .appendingPathComponent("waveforms", isDirectory: true)
-            .appendingPathComponent(name + ".bin")
+            .appendingPathComponent(cacheKey + ".bin")
     }
 }
