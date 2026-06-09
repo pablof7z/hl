@@ -96,6 +96,7 @@ pub use groups::{
 };
 pub use highlights::{
     ArticleHighlightPublishProjection, ArticleHighlightPublishProjectionInput,
+    ArticleReaderSelectionProjection, ArticleReaderSelectionProjectionInput,
     HighlightDetailContentProjection, HighlightDetailContentProjectionInput,
     HighlightDetailResourceProjection, HighlightDetailResourceProjectionInput,
     HighlightFeedContentProjection, HighlightFeedContentProjectionInput,

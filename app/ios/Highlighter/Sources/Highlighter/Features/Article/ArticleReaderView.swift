@@ -320,6 +320,7 @@ private struct ReaderScroll: View {
                     footnoteBackAnchors: [:],
                     highlightsById: output.highlightsById,
                     paperColor: UIColor(Color.highlighterPaper),
+                    safeCore: app.safeCore,
                     onPublishHighlight: onPublishHighlight,
                     onRequestNote: onRequestNote,
                     onHighlightTap: onHighlightTap,

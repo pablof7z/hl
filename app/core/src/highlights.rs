@@ -148,6 +148,19 @@ pub struct ArticleHighlightPublishProjection {
     pub is_success: bool,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleReaderSelectionProjectionInput {
+    pub quote: String,
+    pub context: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleReaderSelectionProjection {
+    pub quote: String,
+    pub context: String,
+    pub has_quote: bool,
+}
+
 /// Presentation projection for a grouped highlight card. Rust owns unique
 /// highlighter order, strip visibility, avatar cap, overflow count, and the
 /// social byline text sequence; native shells only style the segments.
@@ -452,6 +465,26 @@ pub fn article_highlight_publish_projection(
         submit_note,
         toast_message,
         is_success,
+    }
+}
+
+/// Project article-reader selected text into a highlight action payload. Native
+/// owns UIKit range extraction; Rust owns normalization and context policy.
+pub fn article_reader_selection_projection(
+    input: ArticleReaderSelectionProjectionInput,
+) -> ArticleReaderSelectionProjection {
+    let quote = input.quote.trim().to_string();
+    let context = input.context.trim().to_string();
+    let context = if context == quote {
+        String::new()
+    } else {
+        context
+    };
+
+    ArticleReaderSelectionProjection {
+        has_quote: !quote.is_empty(),
+        quote,
+        context,
     }
 }
 
@@ -2412,6 +2445,31 @@ mod tests {
         assert_eq!(projection.submit_note, "note");
         assert_eq!(projection.toast_message, "Couldn't save — relay rejected");
         assert!(!projection.is_success);
+    }
+
+    #[test]
+    fn article_reader_selection_projection_trims_and_omits_duplicate_context() {
+        let duplicate =
+            article_reader_selection_projection(ArticleReaderSelectionProjectionInput {
+                quote: " selected quote ".into(),
+                context: "\nselected quote\n".into(),
+            });
+        let contextual =
+            article_reader_selection_projection(ArticleReaderSelectionProjectionInput {
+                quote: " selected ".into(),
+                context: "\nparagraph with selected text\n".into(),
+            });
+        let blank = article_reader_selection_projection(ArticleReaderSelectionProjectionInput {
+            quote: " ".into(),
+            context: " paragraph ".into(),
+        });
+
+        assert_eq!(duplicate.quote, "selected quote");
+        assert_eq!(duplicate.context, "");
+        assert!(duplicate.has_quote);
+        assert_eq!(contextual.quote, "selected");
+        assert_eq!(contextual.context, "paragraph with selected text");
+        assert!(!blank.has_quote);
     }
 
     #[test]

@@ -1415,6 +1415,12 @@ actor SafeHighlighterCore {
         core.projectHighlightDetailContent(input: input)
     }
 
+    nonisolated func projectArticleReaderSelection(
+        input: ArticleReaderSelectionProjectionInput
+    ) -> ArticleReaderSelectionProjection {
+        core.projectArticleReaderSelection(input: input)
+    }
+
     nonisolated func projectArticleHighlightPublish(
         input: ArticleHighlightPublishProjectionInput
     ) -> ArticleHighlightPublishProjection {

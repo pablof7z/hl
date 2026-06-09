@@ -1425,6 +1425,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput)  -> ArticleReaderHeaderProjection
 
     /**
+     * Project selected article-reader text. Native shells own text-range
+     * extraction; Rust owns quote/context normalization.
+     */
+    func projectArticleReaderSelection(input: ArticleReaderSelectionProjectionInput)  -> ArticleReaderSelectionProjection
+
+    /**
      * Project the add-Blossom-server sheet. Rust owns URL normalization,
      * scheme validity, and duplicate detection.
      */
@@ -4407,6 +4413,18 @@ open func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput) 
     return try!  FfiConverterTypeArticleReaderHeaderProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_header(self.uniffiClonePointer(),
         FfiConverterTypeArticleReaderHeaderProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project selected article-reader text. Native shells own text-range
+     * extraction; Rust owns quote/context normalization.
+     */
+open func projectArticleReaderSelection(input: ArticleReaderSelectionProjectionInput) -> ArticleReaderSelectionProjection  {
+    return try!  FfiConverterTypeArticleReaderSelectionProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_selection(self.uniffiClonePointer(),
+        FfiConverterTypeArticleReaderSelectionProjectionInput_lower(input),$0
     )
 })
 }
@@ -7695,6 +7713,154 @@ public func FfiConverterTypeArticleReaderRouteOutcome_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeArticleReaderRouteOutcome_lower(_ value: ArticleReaderRouteOutcome) -> RustBuffer {
     return FfiConverterTypeArticleReaderRouteOutcome.lower(value)
+}
+
+
+public struct ArticleReaderSelectionProjection {
+    public var quote: String
+    public var context: String
+    public var hasQuote: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(quote: String, context: String, hasQuote: Bool) {
+        self.quote = quote
+        self.context = context
+        self.hasQuote = hasQuote
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderSelectionProjection: Sendable {}
+#endif
+
+
+extension ArticleReaderSelectionProjection: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderSelectionProjection, rhs: ArticleReaderSelectionProjection) -> Bool {
+        if lhs.quote != rhs.quote {
+            return false
+        }
+        if lhs.context != rhs.context {
+            return false
+        }
+        if lhs.hasQuote != rhs.hasQuote {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(quote)
+        hasher.combine(context)
+        hasher.combine(hasQuote)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderSelectionProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderSelectionProjection {
+        return
+            try ArticleReaderSelectionProjection(
+                quote: FfiConverterString.read(from: &buf),
+                context: FfiConverterString.read(from: &buf),
+                hasQuote: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderSelectionProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.quote, into: &buf)
+        FfiConverterString.write(value.context, into: &buf)
+        FfiConverterBool.write(value.hasQuote, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderSelectionProjection_lift(_ buf: RustBuffer) throws -> ArticleReaderSelectionProjection {
+    return try FfiConverterTypeArticleReaderSelectionProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderSelectionProjection_lower(_ value: ArticleReaderSelectionProjection) -> RustBuffer {
+    return FfiConverterTypeArticleReaderSelectionProjection.lower(value)
+}
+
+
+public struct ArticleReaderSelectionProjectionInput {
+    public var quote: String
+    public var context: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(quote: String, context: String) {
+        self.quote = quote
+        self.context = context
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderSelectionProjectionInput: Sendable {}
+#endif
+
+
+extension ArticleReaderSelectionProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderSelectionProjectionInput, rhs: ArticleReaderSelectionProjectionInput) -> Bool {
+        if lhs.quote != rhs.quote {
+            return false
+        }
+        if lhs.context != rhs.context {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(quote)
+        hasher.combine(context)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderSelectionProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderSelectionProjectionInput {
+        return
+            try ArticleReaderSelectionProjectionInput(
+                quote: FfiConverterString.read(from: &buf),
+                context: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderSelectionProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.quote, into: &buf)
+        FfiConverterString.write(value.context, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderSelectionProjectionInput_lift(_ buf: RustBuffer) throws -> ArticleReaderSelectionProjectionInput {
+    return try FfiConverterTypeArticleReaderSelectionProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderSelectionProjectionInput_lower(_ value: ArticleReaderSelectionProjectionInput) -> RustBuffer {
+    return FfiConverterTypeArticleReaderSelectionProjectionInput.lower(value)
 }
 
 
@@ -34855,6 +35021,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_header() != 55976) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_selection() != 45922) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_blossom_server_entry() != 9121) {
