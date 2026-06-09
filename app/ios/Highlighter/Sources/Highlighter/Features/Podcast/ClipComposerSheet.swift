@@ -55,7 +55,11 @@ struct ClipComposerSheet: View {
     }
 
     private var communityName: String {
-        composerProjection.communityName
+        composerProjection.communityDisplayName
+    }
+
+    private var hasCommunity: Bool {
+        composerProjection.hasCommunity
     }
 
     // MARK: - Body
@@ -245,9 +249,9 @@ struct ClipComposerSheet: View {
                     .font(.callout)
                     .foregroundStyle(.primary)
                 Spacer()
-                Text(communityName.isEmpty ? "Personal" : communityName)
+                Text(communityName)
                     .font(.callout)
-                    .foregroundStyle(communityName.isEmpty ? Color.secondary : Color.highlighterAccent)
+                    .foregroundStyle(hasCommunity ? Color.highlighterAccent : Color.secondary)
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.medium))

@@ -46,6 +46,8 @@ pub struct PodcastClipComposerProjection {
     pub has_transcript: bool,
     pub can_publish: bool,
     pub community_name: String,
+    pub community_display_name: String,
+    pub has_community: bool,
     pub selected_segment_ids: Vec<String>,
 }
 
@@ -283,6 +285,15 @@ pub fn clip_composer_projection(input: PodcastClipComposerInput) -> PodcastClipC
         .iter()
         .map(|segment| segment.id.clone())
         .collect::<Vec<_>>();
+    let selected_group_id = input
+        .selected_group_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty());
+    let community_name = selected_group_id
+        .map(|id| community_name_for_id(id, &input.joined_communities))
+        .unwrap_or_default();
+    let has_community = selected_group_id.is_some();
 
     PodcastClipComposerProjection {
         matching_segments,
@@ -296,13 +307,13 @@ pub fn clip_composer_projection(input: PodcastClipComposerInput) -> PodcastClipC
             && input.clip_start_seconds >= 0.0
             && input.clip_end_seconds <= input.duration_seconds
             && input.clip_start_seconds + 5.0 <= input.clip_end_seconds,
-        community_name: input
-            .selected_group_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|id| !id.is_empty())
-            .map(|id| community_name_for_id(id, &input.joined_communities))
-            .unwrap_or_default(),
+        community_name: community_name.clone(),
+        community_display_name: if has_community {
+            community_name
+        } else {
+            "Personal".to_string()
+        },
+        has_community,
         selected_segment_ids,
     }
 }
@@ -1277,6 +1288,8 @@ HOST: Segment text.
         assert!(projection.has_transcript);
         assert!(projection.can_publish);
         assert_eq!(projection.community_name, "Room name");
+        assert_eq!(projection.community_display_name, "Room name");
+        assert!(projection.has_community);
         assert_eq!(
             projection.selected_segment_ids,
             vec!["a".to_string(), "b".to_string()]
@@ -1310,6 +1323,8 @@ HOST: Segment text.
         assert!(!projection.has_transcript);
         assert!(!projection.can_publish);
         assert_eq!(projection.community_name, "missing-room");
+        assert_eq!(projection.community_display_name, "missing-room");
+        assert!(projection.has_community);
         assert!(projection.selected_segment_ids.is_empty());
 
         let personal = clip_composer_projection(composer_input(
@@ -1322,6 +1337,8 @@ HOST: Segment text.
             Vec::new(),
         ));
         assert_eq!(personal.community_name, "");
+        assert_eq!(personal.community_display_name, "Personal");
+        assert!(!personal.has_community);
     }
 
     #[test]

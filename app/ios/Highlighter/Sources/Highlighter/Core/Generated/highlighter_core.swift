@@ -17096,11 +17096,13 @@ public struct PodcastClipComposerProjection {
     public var hasTranscript: Bool
     public var canPublish: Bool
     public var communityName: String
+    public var communityDisplayName: String
+    public var hasCommunity: Bool
     public var selectedSegmentIds: [String]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(matchingSegments: [TranscriptSegment], excerpt: String, speaker: String, durationSeconds: Double, hasTranscript: Bool, canPublish: Bool, communityName: String, selectedSegmentIds: [String]) {
+    public init(matchingSegments: [TranscriptSegment], excerpt: String, speaker: String, durationSeconds: Double, hasTranscript: Bool, canPublish: Bool, communityName: String, communityDisplayName: String, hasCommunity: Bool, selectedSegmentIds: [String]) {
         self.matchingSegments = matchingSegments
         self.excerpt = excerpt
         self.speaker = speaker
@@ -17108,6 +17110,8 @@ public struct PodcastClipComposerProjection {
         self.hasTranscript = hasTranscript
         self.canPublish = canPublish
         self.communityName = communityName
+        self.communityDisplayName = communityDisplayName
+        self.hasCommunity = hasCommunity
         self.selectedSegmentIds = selectedSegmentIds
     }
 }
@@ -17140,6 +17144,12 @@ extension PodcastClipComposerProjection: Equatable, Hashable {
         if lhs.communityName != rhs.communityName {
             return false
         }
+        if lhs.communityDisplayName != rhs.communityDisplayName {
+            return false
+        }
+        if lhs.hasCommunity != rhs.hasCommunity {
+            return false
+        }
         if lhs.selectedSegmentIds != rhs.selectedSegmentIds {
             return false
         }
@@ -17154,6 +17164,8 @@ extension PodcastClipComposerProjection: Equatable, Hashable {
         hasher.combine(hasTranscript)
         hasher.combine(canPublish)
         hasher.combine(communityName)
+        hasher.combine(communityDisplayName)
+        hasher.combine(hasCommunity)
         hasher.combine(selectedSegmentIds)
     }
 }
@@ -17174,6 +17186,8 @@ public struct FfiConverterTypePodcastClipComposerProjection: FfiConverterRustBuf
                 hasTranscript: FfiConverterBool.read(from: &buf),
                 canPublish: FfiConverterBool.read(from: &buf),
                 communityName: FfiConverterString.read(from: &buf),
+                communityDisplayName: FfiConverterString.read(from: &buf),
+                hasCommunity: FfiConverterBool.read(from: &buf),
                 selectedSegmentIds: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -17186,6 +17200,8 @@ public struct FfiConverterTypePodcastClipComposerProjection: FfiConverterRustBuf
         FfiConverterBool.write(value.hasTranscript, into: &buf)
         FfiConverterBool.write(value.canPublish, into: &buf)
         FfiConverterString.write(value.communityName, into: &buf)
+        FfiConverterString.write(value.communityDisplayName, into: &buf)
+        FfiConverterBool.write(value.hasCommunity, into: &buf)
         FfiConverterSequenceString.write(value.selectedSegmentIds, into: &buf)
     }
 }
