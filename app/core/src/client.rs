@@ -2650,6 +2650,15 @@ impl HighlighterCore {
         crate::search::search_highlight_row_projection(input)
     }
 
+    /// Project a community search row. Rust owns display copy and optional
+    /// metadata labels; native shells render the row layout.
+    pub fn project_search_community_row(
+        &self,
+        input: crate::search::SearchCommunityRowProjectionInput,
+    ) -> crate::search::SearchCommunityRowProjection {
+        crate::search::search_community_row_projection(input)
+    }
+
     /// Project matched text spans for search result rendering. Rust owns query
     /// trimming and case-insensitive matching; native shells apply styling.
     pub fn project_search_text_matches(

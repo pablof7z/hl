@@ -682,33 +682,35 @@ private struct SearchHighlightRow: View {
 }
 
 private struct SearchCommunityRow: View {
+    @Environment(HighlighterStore.self) private var app
     let community: CommunitySummary
 
     var body: some View {
+        let projection = rowProjection
         HStack(alignment: .center, spacing: 14) {
             RoomCoverArt(picture: community.picture, name: community.name, size: 54)
             VStack(alignment: .leading, spacing: 4) {
-                Text(community.name)
+                Text(projection.displayName)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
-                if !community.about.isEmpty {
-                    Text(community.about)
+                if let about = projection.about {
+                    Text(about)
                         .font(.footnote)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(2)
                 }
                 HStack(spacing: 6) {
-                    Text(community.visibility.capitalized)
+                    Text(projection.visibilityLabel)
                         .font(.caption2.weight(.semibold))
                         .tracking(0.6)
                     Text("·")
-                    Text(community.access.capitalized)
+                    Text(projection.accessLabel)
                         .font(.caption2.weight(.semibold))
                         .tracking(0.6)
-                    if let count = community.memberCount {
+                    if let memberCountLabel = projection.memberCountLabel {
                         Text("·")
-                        Text("\(count) members")
+                        Text(memberCountLabel)
                             .font(.caption2)
                     }
                 }
@@ -721,6 +723,12 @@ private struct SearchCommunityRow: View {
         }
         .padding(.vertical, 10)
         .contentShape(Rectangle())
+    }
+
+    private var rowProjection: SearchCommunityRowProjection {
+        app.safeCore.projectSearchCommunityRow(
+            input: SearchCommunityRowProjectionInput(community: community)
+        )
     }
 }
 

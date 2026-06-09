@@ -1669,6 +1669,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput)  -> RoomRecommendationCardProjection
 
     /**
+     * Project a community search row. Rust owns display copy and optional
+     * metadata labels; native shells render the row layout.
+     */
+    func projectSearchCommunityRow(input: SearchCommunityRowProjectionInput)  -> SearchCommunityRowProjection
+
+    /**
      * Project a search highlight row. Rust owns navigation route and
      * page-image URL eligibility.
      */
@@ -5135,6 +5141,18 @@ open func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionI
     return try!  FfiConverterTypeRoomRecommendationCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_recommendation_card(self.uniffiClonePointer(),
         FfiConverterTypeRoomRecommendationCardProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project a community search row. Rust owns display copy and optional
+     * metadata labels; native shells render the row layout.
+     */
+open func projectSearchCommunityRow(input: SearchCommunityRowProjectionInput) -> SearchCommunityRowProjection  {
+    return try!  FfiConverterTypeSearchCommunityRowProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_search_community_row(self.uniffiClonePointer(),
+        FfiConverterTypeSearchCommunityRowProjectionInput_lower(input),$0
     )
 })
 }
@@ -30333,6 +30351,162 @@ public func FfiConverterTypeRoomRecommendationReasonProfile_lower(_ value: RoomR
 }
 
 
+public struct SearchCommunityRowProjection {
+    public var displayName: String
+    public var about: String?
+    public var visibilityLabel: String
+    public var accessLabel: String
+    public var memberCountLabel: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayName: String, about: String?, visibilityLabel: String, accessLabel: String, memberCountLabel: String?) {
+        self.displayName = displayName
+        self.about = about
+        self.visibilityLabel = visibilityLabel
+        self.accessLabel = accessLabel
+        self.memberCountLabel = memberCountLabel
+    }
+}
+
+#if compiler(>=6)
+extension SearchCommunityRowProjection: Sendable {}
+#endif
+
+
+extension SearchCommunityRowProjection: Equatable, Hashable {
+    public static func ==(lhs: SearchCommunityRowProjection, rhs: SearchCommunityRowProjection) -> Bool {
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.visibilityLabel != rhs.visibilityLabel {
+            return false
+        }
+        if lhs.accessLabel != rhs.accessLabel {
+            return false
+        }
+        if lhs.memberCountLabel != rhs.memberCountLabel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayName)
+        hasher.combine(about)
+        hasher.combine(visibilityLabel)
+        hasher.combine(accessLabel)
+        hasher.combine(memberCountLabel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchCommunityRowProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchCommunityRowProjection {
+        return
+            try SearchCommunityRowProjection(
+                displayName: FfiConverterString.read(from: &buf),
+                about: FfiConverterOptionString.read(from: &buf),
+                visibilityLabel: FfiConverterString.read(from: &buf),
+                accessLabel: FfiConverterString.read(from: &buf),
+                memberCountLabel: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchCommunityRowProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterOptionString.write(value.about, into: &buf)
+        FfiConverterString.write(value.visibilityLabel, into: &buf)
+        FfiConverterString.write(value.accessLabel, into: &buf)
+        FfiConverterOptionString.write(value.memberCountLabel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchCommunityRowProjection_lift(_ buf: RustBuffer) throws -> SearchCommunityRowProjection {
+    return try FfiConverterTypeSearchCommunityRowProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchCommunityRowProjection_lower(_ value: SearchCommunityRowProjection) -> RustBuffer {
+    return FfiConverterTypeSearchCommunityRowProjection.lower(value)
+}
+
+
+public struct SearchCommunityRowProjectionInput {
+    public var community: CommunitySummary
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(community: CommunitySummary) {
+        self.community = community
+    }
+}
+
+#if compiler(>=6)
+extension SearchCommunityRowProjectionInput: Sendable {}
+#endif
+
+
+extension SearchCommunityRowProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: SearchCommunityRowProjectionInput, rhs: SearchCommunityRowProjectionInput) -> Bool {
+        if lhs.community != rhs.community {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(community)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchCommunityRowProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchCommunityRowProjectionInput {
+        return
+            try SearchCommunityRowProjectionInput(
+                community: FfiConverterTypeCommunitySummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchCommunityRowProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeCommunitySummary.write(value.community, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchCommunityRowProjectionInput_lift(_ buf: RustBuffer) throws -> SearchCommunityRowProjectionInput {
+    return try FfiConverterTypeSearchCommunityRowProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchCommunityRowProjectionInput_lower(_ value: SearchCommunityRowProjectionInput) -> RustBuffer {
+    return FfiConverterTypeSearchCommunityRowProjectionInput.lower(value)
+}
+
+
 public struct SearchHighlightRowProjection {
     public var articleRoute: ArticleReaderRoute?
     public var pageImageUrl: String?
@@ -39233,6 +39407,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_recommendation_card() != 50552) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_community_row() != 30600) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_highlight_row() != 8706) {

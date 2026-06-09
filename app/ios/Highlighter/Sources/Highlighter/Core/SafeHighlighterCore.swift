@@ -285,6 +285,12 @@ actor SafeHighlighterCore {
         core.projectSearchHighlightRow(input: input)
     }
 
+    nonisolated func projectSearchCommunityRow(
+        input: SearchCommunityRowProjectionInput
+    ) -> SearchCommunityRowProjection {
+        core.projectSearchCommunityRow(input: input)
+    }
+
     nonisolated func projectSearchTextMatches(
         input: SearchTextMatchesProjectionInput
     ) -> SearchTextMatchesProjection {

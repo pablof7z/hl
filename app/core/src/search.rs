@@ -68,6 +68,20 @@ pub struct SearchHighlightRowProjection {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchCommunityRowProjectionInput {
+    pub community: CommunitySummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchCommunityRowProjection {
+    pub display_name: String,
+    pub about: Option<String>,
+    pub visibility_label: String,
+    pub access_label: String,
+    pub member_count_label: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct SearchTextMatchesProjectionInput {
     pub text: String,
     pub query: String,
@@ -140,6 +154,21 @@ pub fn search_highlight_row_projection(
     }
 }
 
+pub fn search_community_row_projection(
+    input: SearchCommunityRowProjectionInput,
+) -> SearchCommunityRowProjection {
+    let community = input.community;
+    SearchCommunityRowProjection {
+        display_name: community.name,
+        about: non_empty_string(&community.about),
+        visibility_label: capitalize_first(&community.visibility),
+        access_label: capitalize_first(&community.access),
+        member_count_label: community
+            .member_count
+            .map(|count| format!("{count} members")),
+    }
+}
+
 pub fn search_text_matches_projection(
     input: SearchTextMatchesProjectionInput,
 ) -> SearchTextMatchesProjection {
@@ -177,6 +206,26 @@ fn page_image_url(value: &str) -> Option<String> {
     match parsed.scheme() {
         "http" | "https" => Some(trimmed.to_string()),
         _ => None,
+    }
+}
+
+fn capitalize_first(value: &str) -> String {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    format!(
+        "{}{}",
+        first.to_uppercase().collect::<String>(),
+        chars.as_str()
+    )
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
     }
 }
 
@@ -708,6 +757,34 @@ mod tests {
             ]
         );
         assert!(projection.queries.len() <= 8);
+    }
+
+    #[test]
+    fn search_community_row_projection_preserves_row_copy() {
+        let mut community_record = community("Readers");
+        community_record.about = "Books and notes".into();
+        community_record.visibility = "private".into();
+        community_record.access = "closed".into();
+        community_record.member_count = Some(1);
+
+        let projection = search_community_row_projection(SearchCommunityRowProjectionInput {
+            community: community_record,
+        });
+
+        assert_eq!(projection.display_name, "Readers");
+        assert_eq!(projection.about, Some("Books and notes".into()));
+        assert_eq!(projection.visibility_label, "Private");
+        assert_eq!(projection.access_label, "Closed");
+        assert_eq!(projection.member_count_label, Some("1 members".into()));
+
+        let projection = search_community_row_projection(SearchCommunityRowProjectionInput {
+            community: community("Writers"),
+        });
+
+        assert_eq!(projection.about, None);
+        assert_eq!(projection.visibility_label, "Public");
+        assert_eq!(projection.access_label, "Open");
+        assert_eq!(projection.member_count_label, None);
     }
 
     #[test]
