@@ -338,7 +338,7 @@ struct CollectionRow: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(Color.highlighterAccent.opacity(0.12))
                     .frame(width: 44, height: 44)
-                Image(systemName: record.kind == 30003 ? "bookmark.fill" : "rectangle.stack.fill")
+                Image(systemName: projection.kindIconSystemName)
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(Color.highlighterAccent)
             }

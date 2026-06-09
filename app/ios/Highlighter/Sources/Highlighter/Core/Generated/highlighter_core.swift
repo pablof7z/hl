@@ -10939,13 +10939,15 @@ public func FfiConverterTypeBookmarkSetRecord_lower(_ value: BookmarkSetRecord) 
 public struct BookmarkSetRowProjection {
     public var displayTitle: String
     public var kindLabel: String
+    public var kindIconSystemName: String
     public var itemCountLabel: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(displayTitle: String, kindLabel: String, itemCountLabel: String?) {
+    public init(displayTitle: String, kindLabel: String, kindIconSystemName: String, itemCountLabel: String?) {
         self.displayTitle = displayTitle
         self.kindLabel = kindLabel
+        self.kindIconSystemName = kindIconSystemName
         self.itemCountLabel = itemCountLabel
     }
 }
@@ -10963,6 +10965,9 @@ extension BookmarkSetRowProjection: Equatable, Hashable {
         if lhs.kindLabel != rhs.kindLabel {
             return false
         }
+        if lhs.kindIconSystemName != rhs.kindIconSystemName {
+            return false
+        }
         if lhs.itemCountLabel != rhs.itemCountLabel {
             return false
         }
@@ -10972,6 +10977,7 @@ extension BookmarkSetRowProjection: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(displayTitle)
         hasher.combine(kindLabel)
+        hasher.combine(kindIconSystemName)
         hasher.combine(itemCountLabel)
     }
 }
@@ -10987,6 +10993,7 @@ public struct FfiConverterTypeBookmarkSetRowProjection: FfiConverterRustBuffer {
             try BookmarkSetRowProjection(
                 displayTitle: FfiConverterString.read(from: &buf),
                 kindLabel: FfiConverterString.read(from: &buf),
+                kindIconSystemName: FfiConverterString.read(from: &buf),
                 itemCountLabel: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -10994,6 +11001,7 @@ public struct FfiConverterTypeBookmarkSetRowProjection: FfiConverterRustBuffer {
     public static func write(_ value: BookmarkSetRowProjection, into buf: inout [UInt8]) {
         FfiConverterString.write(value.displayTitle, into: &buf)
         FfiConverterString.write(value.kindLabel, into: &buf)
+        FfiConverterString.write(value.kindIconSystemName, into: &buf)
         FfiConverterOptionString.write(value.itemCountLabel, into: &buf)
     }
 }

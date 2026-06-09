@@ -99,6 +99,7 @@ pub struct BookmarkSetRowProjectionInput {
 pub struct BookmarkSetRowProjection {
     pub display_title: String,
     pub kind_label: String,
+    pub kind_icon_system_name: String,
     pub item_count_label: Option<String>,
 }
 
@@ -361,12 +362,18 @@ pub fn bookmark_set_row_projection(
 ) -> BookmarkSetRowProjection {
     let record = input.record;
     let item_count = record.article_addresses.len() + record.note_ids.len();
+    let is_bookmark_set = record.kind == KIND_BOOKMARK_SETS as u32;
     BookmarkSetRowProjection {
         display_title: bookmark_set_display_title(&record, "Untitled"),
-        kind_label: if record.kind == KIND_BOOKMARK_SETS as u32 {
+        kind_label: if is_bookmark_set {
             "Bookmarks".to_string()
         } else {
             "Curation".to_string()
+        },
+        kind_icon_system_name: if is_bookmark_set {
+            "bookmark.fill".to_string()
+        } else {
+            "rectangle.stack.fill".to_string()
         },
         item_count_label: if item_count == 0 {
             None
@@ -1085,6 +1092,7 @@ mod tests {
 
         assert_eq!(projection.display_title, "with-id");
         assert_eq!(projection.kind_label, "Bookmarks");
+        assert_eq!(projection.kind_icon_system_name, "bookmark.fill");
         assert_eq!(projection.item_count_label, Some("1 item".into()));
 
         let mut record = set_with_notes("", "", Vec::new(), vec!["note-1", "note-2"]);
@@ -1094,6 +1102,7 @@ mod tests {
 
         assert_eq!(projection.display_title, "Untitled");
         assert_eq!(projection.kind_label, "Curation");
+        assert_eq!(projection.kind_icon_system_name, "rectangle.stack.fill");
         assert_eq!(projection.item_count_label, Some("2 items".into()));
     }
 
