@@ -1223,11 +1223,25 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String])  -> RoomInviteSendResultProjection
 
     /**
+     * Article-only refresh for relay search deltas. Used after NIP-50 events
+     * ingest into nostrdb so the native shell can repaint the Articles bucket
+     * without re-running unrelated sections.
+     */
+    func getSearchArticleResultsSnapshot(query: String) async  -> SearchArticleResultsSnapshot
+
+    /**
      * Resolve the merged set of NIP-50 search relays for the current user —
      * always includes `wss://relay.highlighter.com`, plus every `relay` tag
      * from the newest cached kind:10007 (NIP-51 search relay list).
      */
     func getSearchRelays() async  -> StringListOutcome
+
+    /**
+     * Local search snapshot for the main search screen. Rust owns section
+     * limits and per-section cache-error fallback; native shells render the
+     * returned buckets.
+     */
+    func getSearchResultsSnapshot(query: String) async  -> SearchResultsSnapshot
 
     /**
      * Wrap a local preview for highlight/picture publish paths before a
@@ -1772,15 +1786,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)  -> MutationOutcome
 
-    func searchArticles(query: String, limit: UInt32) async  -> ArticleListOutcome
-
     func searchArtifacts(query: String, limit: UInt32) async  -> ArtifactListOutcome
-
-    func searchCommunities(query: String, limit: UInt32) async  -> CommunityListOutcome
-
-    func searchHighlights(query: String, limit: UInt32) async  -> HighlightListOutcome
-
-    func searchProfiles(query: String, limit: UInt32) async  -> ProfileListOutcome
 
     /**
      * Filter already-projected rooms by user query. Rust owns the search
@@ -1880,8 +1886,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Open a NIP-50 relay subscription for kind:30023 against the user's
      * search relays. Returns a handle; the pump fires
      * `SearchArticlesUpdated { query }` deltas as matching events ingest,
-     * and the Swift store responds by re-running `search_articles` locally
-     * to merge the new events into its Articles bucket.
+     * and the Swift store responds by re-reading Rust's article search
+     * snapshot to merge the new events into its Articles bucket.
      */
     func subscribeArticleSearch(query: String) async  -> SubscriptionOutcome
 
@@ -3712,6 +3718,29 @@ open func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys
 }
 
     /**
+     * Article-only refresh for relay search deltas. Used after NIP-50 events
+     * ingest into nostrdb so the native shell can repaint the Articles bucket
+     * without re-running unrelated sections.
+     */
+open func getSearchArticleResultsSnapshot(query: String)async  -> SearchArticleResultsSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_search_article_results_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(query)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSearchArticleResultsSnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
      * Resolve the merged set of NIP-50 search relays for the current user —
      * always includes `wss://relay.highlighter.com`, plus every `relay` tag
      * from the newest cached kind:10007 (NIP-51 search relay list).
@@ -3729,6 +3758,29 @@ open func getSearchRelays()async  -> StringListOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeStringListOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Local search snapshot for the main search screen. Rust owns section
+     * limits and per-section cache-error fallback; native shells render the
+     * returned buckets.
+     */
+open func getSearchResultsSnapshot(query: String)async  -> SearchResultsSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_search_results_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(query)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSearchResultsSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5481,24 +5533,6 @@ open func savePodcastPosition(guid: String, positionSeconds: Double, artifact: A
 })
 }
 
-open func searchArticles(query: String, limit: UInt32)async  -> ArticleListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_search_articles(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArticleListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
 open func searchArtifacts(query: String, limit: UInt32)async  -> ArtifactListOutcome  {
     return
         try!  await uniffiRustCallAsync(
@@ -5512,60 +5546,6 @@ open func searchArtifacts(query: String, limit: UInt32)async  -> ArtifactListOut
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeArtifactListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-open func searchCommunities(query: String, limit: UInt32)async  -> CommunityListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_search_communities(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommunityListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-open func searchHighlights(query: String, limit: UInt32)async  -> HighlightListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_search_highlights(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-open func searchProfiles(query: String, limit: UInt32)async  -> ProfileListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_search_profiles(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeProfileListOutcome_lift,
             errorHandler: nil
 
         )
@@ -5886,8 +5866,8 @@ open func subscribeArticle(pubkeyHex: String, dTag: String)async  -> Subscriptio
      * Open a NIP-50 relay subscription for kind:30023 against the user's
      * search relays. Returns a handle; the pump fires
      * `SearchArticlesUpdated { query }` deltas as matching events ingest,
-     * and the Swift store responds by re-running `search_articles` locally
-     * to merge the new events into its Articles bucket.
+     * and the Swift store responds by re-reading Rust's article search
+     * snapshot to merge the new events into its Articles bucket.
      */
 open func subscribeArticleSearch(query: String)async  -> SubscriptionOutcome  {
     return
@@ -29804,6 +29784,68 @@ public func FfiConverterTypeRoomRecommendationReasonProfile_lower(_ value: RoomR
 }
 
 
+public struct SearchArticleResultsSnapshot {
+    public var articles: [ArticleRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(articles: [ArticleRecord]) {
+        self.articles = articles
+    }
+}
+
+#if compiler(>=6)
+extension SearchArticleResultsSnapshot: Sendable {}
+#endif
+
+
+extension SearchArticleResultsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: SearchArticleResultsSnapshot, rhs: SearchArticleResultsSnapshot) -> Bool {
+        if lhs.articles != rhs.articles {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(articles)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchArticleResultsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchArticleResultsSnapshot {
+        return
+            try SearchArticleResultsSnapshot(
+                articles: FfiConverterSequenceTypeArticleRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchArticleResultsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeArticleRecord.write(value.articles, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchArticleResultsSnapshot_lift(_ buf: RustBuffer) throws -> SearchArticleResultsSnapshot {
+    return try FfiConverterTypeSearchArticleResultsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchArticleResultsSnapshot_lower(_ value: SearchArticleResultsSnapshot) -> RustBuffer {
+    return FfiConverterTypeSearchArticleResultsSnapshot.lower(value)
+}
+
+
 public struct SearchCommunityRowProjection {
     public var displayName: String
     public var about: String?
@@ -30221,6 +30263,92 @@ public func FfiConverterTypeSearchQueryProjectionInput_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeSearchQueryProjectionInput_lower(_ value: SearchQueryProjectionInput) -> RustBuffer {
     return FfiConverterTypeSearchQueryProjectionInput.lower(value)
+}
+
+
+public struct SearchResultsSnapshot {
+    public var highlights: [HighlightRecord]
+    public var articles: [ArticleRecord]
+    public var communities: [CommunitySummary]
+    public var profiles: [ProfileMetadata]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(highlights: [HighlightRecord], articles: [ArticleRecord], communities: [CommunitySummary], profiles: [ProfileMetadata]) {
+        self.highlights = highlights
+        self.articles = articles
+        self.communities = communities
+        self.profiles = profiles
+    }
+}
+
+#if compiler(>=6)
+extension SearchResultsSnapshot: Sendable {}
+#endif
+
+
+extension SearchResultsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: SearchResultsSnapshot, rhs: SearchResultsSnapshot) -> Bool {
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.articles != rhs.articles {
+            return false
+        }
+        if lhs.communities != rhs.communities {
+            return false
+        }
+        if lhs.profiles != rhs.profiles {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(highlights)
+        hasher.combine(articles)
+        hasher.combine(communities)
+        hasher.combine(profiles)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchResultsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchResultsSnapshot {
+        return
+            try SearchResultsSnapshot(
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
+                articles: FfiConverterSequenceTypeArticleRecord.read(from: &buf),
+                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
+                profiles: FfiConverterSequenceTypeProfileMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchResultsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeHighlightRecord.write(value.highlights, into: &buf)
+        FfiConverterSequenceTypeArticleRecord.write(value.articles, into: &buf)
+        FfiConverterSequenceTypeCommunitySummary.write(value.communities, into: &buf)
+        FfiConverterSequenceTypeProfileMetadata.write(value.profiles, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchResultsSnapshot_lift(_ buf: RustBuffer) throws -> SearchResultsSnapshot {
+    return try FfiConverterTypeSearchResultsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchResultsSnapshot_lower(_ value: SearchResultsSnapshot) -> RustBuffer {
+    return FfiConverterTypeSearchResultsSnapshot.lower(value)
 }
 
 
@@ -33520,9 +33648,9 @@ public enum DataChangeType {
     )
     /**
      * A NIP-50 relay search returned new kind:30023 events. The Swift store
-     * re-queries its local article substring match on receipt; payload is the
-     * query the subscription was opened with (so a stale pump can't update a
-     * newer query's bucket).
+     * re-reads Rust's article snapshot on receipt; payload is the query the
+     * subscription was opened with (so a stale pump can't update a newer
+     * query's bucket).
      */
     case searchArticlesUpdated(query: String
     )
@@ -38435,7 +38563,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_send_result() != 64450) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_article_results_snapshot() != 52032) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_relays() != 44280) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_results_snapshot() != 55653) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_unpublished_artifact_record() != 13176) {
@@ -38867,19 +39001,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_save_podcast_position() != 15916) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_articles() != 49259) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_artifacts() != 20123) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_communities() != 754) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_highlights() != 53923) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_profiles() != 13489) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_search_rooms() != 42451) {
@@ -38939,7 +39061,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 50162) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article_search() != 3961) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article_search() != 22511) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmark_sets() != 33547) {

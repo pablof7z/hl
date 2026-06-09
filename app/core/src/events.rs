@@ -115,9 +115,9 @@ pub enum DataChangeType {
         event: FeedbackEventRecord,
     },
     /// A NIP-50 relay search returned new kind:30023 events. The Swift store
-    /// re-queries its local article substring match on receipt; payload is the
-    /// query the subscription was opened with (so a stale pump can't update a
-    /// newer query's bucket).
+    /// re-reads Rust's article snapshot on receipt; payload is the query the
+    /// subscription was opened with (so a stale pump can't update a newer
+    /// query's bucket).
     SearchArticlesUpdated {
         query: String,
     },

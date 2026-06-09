@@ -134,8 +134,8 @@ pub(crate) enum SubscriptionKind {
     /// term the user typed; `relays` is the resolved set to target (default
     /// `wss://relay.highlighter.com` plus any kind:10007 entries). The pump
     /// just forwards a `SearchArticlesUpdated { query }` trigger when matching
-    /// events ingest into nostrdb — the Swift store re-runs the local ndb
-    /// substring match on each delta to merge relay-delivered events into the
+    /// events ingest into nostrdb; the Swift store re-reads Rust's article
+    /// snapshot on each delta to merge relay-delivered events into the
     /// Articles bucket.
     SearchArticles {
         query: String,

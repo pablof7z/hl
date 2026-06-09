@@ -35,6 +35,37 @@ const KIND_HIGHLIGHT: u16 = 9802;
 /// kind:0 NIP-01 profile metadata.
 const KIND_METADATA: u16 = 0;
 
+/// Main search screen section limits. Native shells render these buckets but
+/// do not choose limits or per-section fallback policy.
+pub const SEARCH_HIGHLIGHT_RESULTS_LIMIT: u32 = 30;
+pub const SEARCH_ARTICLE_RESULTS_LIMIT: u32 = 30;
+pub const SEARCH_COMMUNITY_RESULTS_LIMIT: u32 = 20;
+pub const SEARCH_PROFILE_RESULTS_LIMIT: u32 = 20;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchResultsSnapshot {
+    pub highlights: Vec<HighlightRecord>,
+    pub articles: Vec<ArticleRecord>,
+    pub communities: Vec<CommunitySummary>,
+    pub profiles: Vec<ProfileMetadata>,
+}
+
+impl SearchResultsSnapshot {
+    fn empty() -> Self {
+        Self {
+            highlights: Vec::new(),
+            articles: Vec::new(),
+            communities: Vec::new(),
+            profiles: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchArticleResultsSnapshot {
+    pub articles: Vec<ArticleRecord>,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct SearchQueryProjectionInput {
     pub query: String,
@@ -465,6 +496,58 @@ pub fn search_profiles(
     Ok(records)
 }
 
+pub fn search_results_snapshot(ndb: &Ndb, query: &str) -> SearchResultsSnapshot {
+    let q = query.trim();
+    if q.is_empty() {
+        return SearchResultsSnapshot::empty();
+    }
+
+    SearchResultsSnapshot {
+        highlights: search_section_or_empty(
+            "highlights",
+            search_highlights(ndb, q, SEARCH_HIGHLIGHT_RESULTS_LIMIT),
+        ),
+        articles: search_section_or_empty(
+            "articles",
+            search_articles(ndb, q, SEARCH_ARTICLE_RESULTS_LIMIT),
+        ),
+        communities: search_section_or_empty(
+            "communities",
+            search_communities(ndb, q, SEARCH_COMMUNITY_RESULTS_LIMIT),
+        ),
+        profiles: search_section_or_empty(
+            "profiles",
+            search_profiles(ndb, q, SEARCH_PROFILE_RESULTS_LIMIT),
+        ),
+    }
+}
+
+pub fn search_article_results_snapshot(ndb: &Ndb, query: &str) -> SearchArticleResultsSnapshot {
+    let q = query.trim();
+    if q.is_empty() {
+        return SearchArticleResultsSnapshot {
+            articles: Vec::new(),
+        };
+    }
+
+    SearchArticleResultsSnapshot {
+        articles: search_section_or_empty(
+            "articles",
+            search_articles(ndb, q, SEARCH_ARTICLE_RESULTS_LIMIT),
+        ),
+    }
+}
+
+fn search_section_or_empty<T>(section: &'static str, result: Result<Vec<T>, CoreError>) -> Vec<T> {
+    match result {
+        Ok(values) => values,
+        Err(error) => {
+            tracing::warn!(section, error = %error, "search snapshot section failed");
+            Vec::new()
+        }
+    }
+}
+
 fn primary_label(p: &ProfileMetadata) -> &str {
     if !p.display_name.is_empty() {
         &p.display_name
@@ -884,6 +967,61 @@ mod tests {
         assert_eq!(hits.len(), 2, "dedupe by (pubkey, d): 2 distinct addresses");
         let essay = hits.iter().find(|a| a.identifier == "essay").unwrap();
         assert_eq!(essay.title, "On Attention (revised)", "newest wins");
+    }
+
+    #[test]
+    fn search_snapshots_read_all_sections_and_article_refresh() {
+        let (ndb, _tmp) = fresh_ndb();
+        let keys = Keys::generate();
+
+        let highlight = EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "attention quote")
+            .sign_with_keys(&keys)
+            .unwrap();
+        let article = EventBuilder::new(Kind::Custom(KIND_LONG_FORM), "body")
+            .tags([
+                Tag::parse(vec!["d".to_string(), "attention-essay".to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Attention Essay".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .unwrap();
+        let community = EventBuilder::new(Kind::Custom(KIND_GROUP_METADATA), "")
+            .tags([
+                Tag::identifier("attention-room"),
+                Tag::parse(vec!["name".to_string(), "Attention Room".to_string()]).unwrap(),
+                Tag::parse(vec!["public".to_string()]).unwrap(),
+                Tag::parse(vec!["open".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .unwrap();
+        let profile = EventBuilder::new(
+            Kind::Custom(KIND_METADATA),
+            r#"{"name":"attentionist","display_name":"Attentionist"}"#,
+        )
+        .sign_with_keys(&keys)
+        .unwrap();
+
+        for event in [&highlight, &article, &community, &profile] {
+            process(&ndb, event);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        let snapshot = search_results_snapshot(&ndb, " attention ");
+        assert_eq!(snapshot.highlights.len(), 1);
+        assert_eq!(snapshot.articles.len(), 1);
+        assert_eq!(snapshot.communities.len(), 1);
+        assert_eq!(snapshot.profiles.len(), 1);
+
+        let article_snapshot = search_article_results_snapshot(&ndb, "attention");
+        assert_eq!(
+            article_snapshot.articles[0].address,
+            snapshot.articles[0].address
+        );
+
+        let blank = search_results_snapshot(&ndb, " ");
+        assert!(blank.highlights.is_empty());
+        assert!(blank.articles.is_empty());
+        assert!(blank.communities.is_empty());
+        assert!(blank.profiles.is_empty());
     }
 
     #[test]

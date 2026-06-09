@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Drives `SearchView`. Owns the query pipeline, the four result
+/// Drives `SearchView`. Owns UI query state, Rust-projected result
 /// buckets (highlights / articles / communities / people), and the live
 /// NIP-50 subscription whose deltas re-run the local article match so
 /// relay-delivered events fade into the Articles section as they arrive.
@@ -9,7 +9,7 @@ import Observation
 /// Architecture note: every bucket is read from nostrdb via the Rust core —
 /// the NIP-50 relay sub just ingests into ndb, which in turn triggers a
 /// `SearchArticlesUpdated` delta that the store reacts to by re-running
-/// `search_articles` locally. NostrDB stays the only source of truth.
+/// Rust's article snapshot locally. NostrDB stays the only source of truth.
 @MainActor
 @Observable
 final class SearchStore {
@@ -153,19 +153,12 @@ final class SearchStore {
     }
 
     private func runSearch(for q: String, token: UInt64) async {
-        async let h = safeCore.searchHighlights(query: q, limit: 30)
-        async let a = safeCore.searchArticles(query: q, limit: 30)
-        async let c = safeCore.searchCommunities(query: q, limit: 20)
-        async let p = safeCore.searchProfiles(query: q, limit: 20)
-        let (hs, ars, cs, ps) = await (h, a, c, p)
+        let snapshot = await safeCore.getSearchResultsSnapshot(query: q)
 
         guard token == searchToken else { return }
 
         appliedQuery = q
-        highlights = hs.error.isEmpty ? hs.values : []
-        articles = ars.error.isEmpty ? ars.values : []
-        communities = cs.error.isEmpty ? cs.values : []
-        profiles = ps.error.isEmpty ? ps.values : []
+        apply(snapshot)
         isLocalLoading = false
 
         if activeRelayQuery != q {
@@ -219,10 +212,16 @@ final class SearchStore {
         let token = searchToken
         Task { [weak self] in
             guard let self else { return }
-            let outcome = await self.safeCore.searchArticles(query: q, limit: 30)
-            let refreshed = outcome.error.isEmpty ? outcome.values : []
+            let snapshot = await self.safeCore.getSearchArticleResultsSnapshot(query: q)
             guard token == self.searchToken, q == self.appliedQuery else { return }
-            self.articles = refreshed
+            self.articles = snapshot.articles
         }
+    }
+
+    private func apply(_ snapshot: SearchResultsSnapshot) {
+        highlights = snapshot.highlights
+        articles = snapshot.articles
+        communities = snapshot.communities
+        profiles = snapshot.profiles
     }
 }

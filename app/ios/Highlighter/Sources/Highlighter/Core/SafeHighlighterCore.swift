@@ -263,20 +263,12 @@ actor SafeHighlighterCore {
         core.projectSearchTextMatches(input: input)
     }
 
-    func searchHighlights(query: String, limit: UInt32 = 20) async -> HighlightListOutcome {
-        await core.searchHighlights(query: query, limit: limit)
+    func getSearchResultsSnapshot(query: String) async -> SearchResultsSnapshot {
+        await core.getSearchResultsSnapshot(query: query)
     }
 
-    func searchArticles(query: String, limit: UInt32 = 20) async -> ArticleListOutcome {
-        await core.searchArticles(query: query, limit: limit)
-    }
-
-    func searchCommunities(query: String, limit: UInt32 = 20) async -> CommunityListOutcome {
-        await core.searchCommunities(query: query, limit: limit)
-    }
-
-    func searchProfiles(query: String, limit: UInt32 = 20) async -> ProfileListOutcome {
-        await core.searchProfiles(query: query, limit: limit)
+    func getSearchArticleResultsSnapshot(query: String) async -> SearchArticleResultsSnapshot {
+        await core.getSearchArticleResultsSnapshot(query: query)
     }
 
     func getSearchRelays() async -> StringListOutcome {

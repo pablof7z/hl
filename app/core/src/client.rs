@@ -40,8 +40,8 @@ use crate::models::{
     HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction, MutationOutcome,
     Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
     NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestProjection,
-    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome,
-    ProfileMetadata, ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
+    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
     ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
     RelayDiagnostic, RelayDiagnosticListOutcome, RoomLane, StringListOutcome, StringOutcome,
     SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
@@ -713,19 +713,6 @@ fn highlight_outcome(result: Result<HighlightRecord, CoreError>) -> HighlightOut
         },
         Err(error) => HighlightOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn profile_list_outcome(result: Result<Vec<ProfileMetadata>, CoreError>) -> ProfileListOutcome {
-    match result {
-        Ok(values) => ProfileListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => ProfileListOutcome {
-            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -2606,36 +2593,24 @@ impl HighlighterCore {
         crate::search::search_text_matches_projection(input)
     }
 
-    pub async fn search_highlights(&self, query: String, limit: u32) -> HighlightListOutcome {
-        highlight_list_outcome(crate::search::search_highlights(
-            self.runtime.ndb(),
-            &query,
-            limit,
-        ))
+    /// Local search snapshot for the main search screen. Rust owns section
+    /// limits and per-section cache-error fallback; native shells render the
+    /// returned buckets.
+    pub async fn get_search_results_snapshot(
+        &self,
+        query: String,
+    ) -> crate::search::SearchResultsSnapshot {
+        crate::search::search_results_snapshot(self.runtime.ndb(), &query)
     }
 
-    pub async fn search_articles(&self, query: String, limit: u32) -> ArticleListOutcome {
-        article_list_outcome(crate::search::search_articles(
-            self.runtime.ndb(),
-            &query,
-            limit,
-        ))
-    }
-
-    pub async fn search_communities(&self, query: String, limit: u32) -> CommunityListOutcome {
-        community_list_outcome(crate::search::search_communities(
-            self.runtime.ndb(),
-            &query,
-            limit,
-        ))
-    }
-
-    pub async fn search_profiles(&self, query: String, limit: u32) -> ProfileListOutcome {
-        profile_list_outcome(crate::search::search_profiles(
-            self.runtime.ndb(),
-            &query,
-            limit,
-        ))
+    /// Article-only refresh for relay search deltas. Used after NIP-50 events
+    /// ingest into nostrdb so the native shell can repaint the Articles bucket
+    /// without re-running unrelated sections.
+    pub async fn get_search_article_results_snapshot(
+        &self,
+        query: String,
+    ) -> crate::search::SearchArticleResultsSnapshot {
+        crate::search::search_article_results_snapshot(self.runtime.ndb(), &query)
     }
 
     /// Resolve the merged set of NIP-50 search relays for the current user —
@@ -2670,8 +2645,8 @@ impl HighlighterCore {
     /// Open a NIP-50 relay subscription for kind:30023 against the user's
     /// search relays. Returns a handle; the pump fires
     /// `SearchArticlesUpdated { query }` deltas as matching events ingest,
-    /// and the Swift store responds by re-running `search_articles` locally
-    /// to merge the new events into its Articles bucket.
+    /// and the Swift store responds by re-reading Rust's article search
+    /// snapshot to merge the new events into its Articles bucket.
     pub async fn subscribe_article_search(&self, query: String) -> SubscriptionOutcome {
         let result: Result<u64, CoreError> = async {
             let trimmed = query.trim().to_string();
