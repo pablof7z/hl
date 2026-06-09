@@ -1733,6 +1733,13 @@ impl HighlighterCore {
         highlights::highlight_group_card_projection(input)
     }
 
+    pub fn project_highlight_resource_header(
+        &self,
+        input: highlights::HighlightResourceHeaderProjectionInput,
+    ) -> highlights::HighlightResourceHeaderProjection {
+        highlights::highlight_resource_header_projection(input)
+    }
+
     /// Compose following highlights and following reads into the home feed.
     /// Rust owns grouping, stable identity, duplicate suppression, and merged
     /// ordering; native shells render the returned rows.

@@ -75,7 +75,8 @@ pub use groups::{
 pub use highlights::{
     HighlightGroupCardProjection, HighlightGroupCardProjectionInput,
     HighlightGroupHighlighterProfile, HighlightGroupHighlighterProjection,
-    HighlightGroupLabelSegment,
+    HighlightGroupLabelSegment, HighlightResourceAuthorProfile, HighlightResourceHeaderProjection,
+    HighlightResourceHeaderProjectionInput,
 };
 pub use models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,

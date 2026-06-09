@@ -1435,6 +1435,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectHighlightGroupCard(input: HighlightGroupCardProjectionInput)  -> HighlightGroupCardProjection
 
+    func projectHighlightResourceHeader(input: HighlightResourceHeaderProjectionInput)  -> HighlightResourceHeaderProjection
+
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
     /**
@@ -4258,6 +4260,14 @@ open func projectHighlightGroupCard(input: HighlightGroupCardProjectionInput) ->
     return try!  FfiConverterTypeHighlightGroupCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_highlight_group_card(self.uniffiClonePointer(),
         FfiConverterTypeHighlightGroupCardProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectHighlightResourceHeader(input: HighlightResourceHeaderProjectionInput) -> HighlightResourceHeaderProjection  {
+    return try!  FfiConverterTypeHighlightResourceHeaderProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_highlight_resource_header(self.uniffiClonePointer(),
+        FfiConverterTypeHighlightResourceHeaderProjectionInput_lower(input),$0
     )
 })
 }
@@ -13059,6 +13069,304 @@ public func FfiConverterTypeHighlightReferenceTarget_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeHighlightReferenceTarget_lower(_ value: HighlightReferenceTarget) -> RustBuffer {
     return FfiConverterTypeHighlightReferenceTarget.lower(value)
+}
+
+
+public struct HighlightResourceAuthorProfile {
+    public var pubkey: String
+    public var profile: ProfileMetadata?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkey: String, profile: ProfileMetadata?) {
+        self.pubkey = pubkey
+        self.profile = profile
+    }
+}
+
+#if compiler(>=6)
+extension HighlightResourceAuthorProfile: Sendable {}
+#endif
+
+
+extension HighlightResourceAuthorProfile: Equatable, Hashable {
+    public static func ==(lhs: HighlightResourceAuthorProfile, rhs: HighlightResourceAuthorProfile) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(profile)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightResourceAuthorProfile: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightResourceAuthorProfile {
+        return
+            try HighlightResourceAuthorProfile(
+                pubkey: FfiConverterString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightResourceAuthorProfile, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightResourceAuthorProfile_lift(_ buf: RustBuffer) throws -> HighlightResourceAuthorProfile {
+    return try FfiConverterTypeHighlightResourceAuthorProfile.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightResourceAuthorProfile_lower(_ value: HighlightResourceAuthorProfile) -> RustBuffer {
+    return FfiConverterTypeHighlightResourceAuthorProfile.lower(value)
+}
+
+
+public struct HighlightResourceHeaderProjection {
+    public var sourceKind: HighlightSourceKind
+    public var title: String
+    public var authorOrDomain: String
+    public var timeLabel: String?
+    public var coverUrl: String?
+    public var bookIsbn: String?
+    public var articleAddress: String?
+    public var articleAuthorPubkey: String
+    public var webMetadataUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(sourceKind: HighlightSourceKind, title: String, authorOrDomain: String, timeLabel: String?, coverUrl: String?, bookIsbn: String?, articleAddress: String?, articleAuthorPubkey: String, webMetadataUrl: String?) {
+        self.sourceKind = sourceKind
+        self.title = title
+        self.authorOrDomain = authorOrDomain
+        self.timeLabel = timeLabel
+        self.coverUrl = coverUrl
+        self.bookIsbn = bookIsbn
+        self.articleAddress = articleAddress
+        self.articleAuthorPubkey = articleAuthorPubkey
+        self.webMetadataUrl = webMetadataUrl
+    }
+}
+
+#if compiler(>=6)
+extension HighlightResourceHeaderProjection: Sendable {}
+#endif
+
+
+extension HighlightResourceHeaderProjection: Equatable, Hashable {
+    public static func ==(lhs: HighlightResourceHeaderProjection, rhs: HighlightResourceHeaderProjection) -> Bool {
+        if lhs.sourceKind != rhs.sourceKind {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.authorOrDomain != rhs.authorOrDomain {
+            return false
+        }
+        if lhs.timeLabel != rhs.timeLabel {
+            return false
+        }
+        if lhs.coverUrl != rhs.coverUrl {
+            return false
+        }
+        if lhs.bookIsbn != rhs.bookIsbn {
+            return false
+        }
+        if lhs.articleAddress != rhs.articleAddress {
+            return false
+        }
+        if lhs.articleAuthorPubkey != rhs.articleAuthorPubkey {
+            return false
+        }
+        if lhs.webMetadataUrl != rhs.webMetadataUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(sourceKind)
+        hasher.combine(title)
+        hasher.combine(authorOrDomain)
+        hasher.combine(timeLabel)
+        hasher.combine(coverUrl)
+        hasher.combine(bookIsbn)
+        hasher.combine(articleAddress)
+        hasher.combine(articleAuthorPubkey)
+        hasher.combine(webMetadataUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightResourceHeaderProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightResourceHeaderProjection {
+        return
+            try HighlightResourceHeaderProjection(
+                sourceKind: FfiConverterTypeHighlightSourceKind.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                authorOrDomain: FfiConverterString.read(from: &buf),
+                timeLabel: FfiConverterOptionString.read(from: &buf),
+                coverUrl: FfiConverterOptionString.read(from: &buf),
+                bookIsbn: FfiConverterOptionString.read(from: &buf),
+                articleAddress: FfiConverterOptionString.read(from: &buf),
+                articleAuthorPubkey: FfiConverterString.read(from: &buf),
+                webMetadataUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightResourceHeaderProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeHighlightSourceKind.write(value.sourceKind, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.authorOrDomain, into: &buf)
+        FfiConverterOptionString.write(value.timeLabel, into: &buf)
+        FfiConverterOptionString.write(value.coverUrl, into: &buf)
+        FfiConverterOptionString.write(value.bookIsbn, into: &buf)
+        FfiConverterOptionString.write(value.articleAddress, into: &buf)
+        FfiConverterString.write(value.articleAuthorPubkey, into: &buf)
+        FfiConverterOptionString.write(value.webMetadataUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightResourceHeaderProjection_lift(_ buf: RustBuffer) throws -> HighlightResourceHeaderProjection {
+    return try FfiConverterTypeHighlightResourceHeaderProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightResourceHeaderProjection_lower(_ value: HighlightResourceHeaderProjection) -> RustBuffer {
+    return FfiConverterTypeHighlightResourceHeaderProjection.lower(value)
+}
+
+
+public struct HighlightResourceHeaderProjectionInput {
+    public var lead: HydratedHighlight
+    public var sourceArticle: ArticleRecord?
+    public var sourceArticleAuthorPubkey: String
+    public var articleAuthorProfiles: [HighlightResourceAuthorProfile]
+    public var bookPreview: ArtifactPreview?
+    public var webMetadata: WebMetadata?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(lead: HydratedHighlight, sourceArticle: ArticleRecord?, sourceArticleAuthorPubkey: String, articleAuthorProfiles: [HighlightResourceAuthorProfile], bookPreview: ArtifactPreview?, webMetadata: WebMetadata?) {
+        self.lead = lead
+        self.sourceArticle = sourceArticle
+        self.sourceArticleAuthorPubkey = sourceArticleAuthorPubkey
+        self.articleAuthorProfiles = articleAuthorProfiles
+        self.bookPreview = bookPreview
+        self.webMetadata = webMetadata
+    }
+}
+
+#if compiler(>=6)
+extension HighlightResourceHeaderProjectionInput: Sendable {}
+#endif
+
+
+extension HighlightResourceHeaderProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: HighlightResourceHeaderProjectionInput, rhs: HighlightResourceHeaderProjectionInput) -> Bool {
+        if lhs.lead != rhs.lead {
+            return false
+        }
+        if lhs.sourceArticle != rhs.sourceArticle {
+            return false
+        }
+        if lhs.sourceArticleAuthorPubkey != rhs.sourceArticleAuthorPubkey {
+            return false
+        }
+        if lhs.articleAuthorProfiles != rhs.articleAuthorProfiles {
+            return false
+        }
+        if lhs.bookPreview != rhs.bookPreview {
+            return false
+        }
+        if lhs.webMetadata != rhs.webMetadata {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(lead)
+        hasher.combine(sourceArticle)
+        hasher.combine(sourceArticleAuthorPubkey)
+        hasher.combine(articleAuthorProfiles)
+        hasher.combine(bookPreview)
+        hasher.combine(webMetadata)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightResourceHeaderProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightResourceHeaderProjectionInput {
+        return
+            try HighlightResourceHeaderProjectionInput(
+                lead: FfiConverterTypeHydratedHighlight.read(from: &buf),
+                sourceArticle: FfiConverterOptionTypeArticleRecord.read(from: &buf),
+                sourceArticleAuthorPubkey: FfiConverterString.read(from: &buf),
+                articleAuthorProfiles: FfiConverterSequenceTypeHighlightResourceAuthorProfile.read(from: &buf),
+                bookPreview: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
+                webMetadata: FfiConverterOptionTypeWebMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightResourceHeaderProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeHydratedHighlight.write(value.lead, into: &buf)
+        FfiConverterOptionTypeArticleRecord.write(value.sourceArticle, into: &buf)
+        FfiConverterString.write(value.sourceArticleAuthorPubkey, into: &buf)
+        FfiConverterSequenceTypeHighlightResourceAuthorProfile.write(value.articleAuthorProfiles, into: &buf)
+        FfiConverterOptionTypeArtifactPreview.write(value.bookPreview, into: &buf)
+        FfiConverterOptionTypeWebMetadata.write(value.webMetadata, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightResourceHeaderProjectionInput_lift(_ buf: RustBuffer) throws -> HighlightResourceHeaderProjectionInput {
+    return try FfiConverterTypeHighlightResourceHeaderProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightResourceHeaderProjectionInput_lower(_ value: HighlightResourceHeaderProjectionInput) -> RustBuffer {
+    return FfiConverterTypeHighlightResourceHeaderProjectionInput.lower(value)
 }
 
 
@@ -26857,6 +27165,31 @@ fileprivate struct FfiConverterSequenceTypeHighlightReferenceBucket: FfiConverte
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeHighlightResourceAuthorProfile: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlightResourceAuthorProfile]
+
+    public static func write(_ value: [HighlightResourceAuthorProfile], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlightResourceAuthorProfile.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlightResourceAuthorProfile] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlightResourceAuthorProfile]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlightResourceAuthorProfile.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeHomeFeedItem: FfiConverterRustBuffer {
     typealias SwiftType = [HomeFeedItem]
 
@@ -28038,6 +28371,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_highlight_group_card() != 49051) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_highlight_resource_header() != 61046) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {

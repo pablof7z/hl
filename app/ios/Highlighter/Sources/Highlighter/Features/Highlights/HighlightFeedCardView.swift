@@ -33,19 +33,20 @@ struct HighlightFeedCardView: View {
     }
 
     private var isbnFromLead: String? {
-        app.core.getHighlightBookRoute(
+        app.safeCore.getHighlightBookRoute(
             externalReference: lead.highlight.externalReference,
             artifactAddress: lead.highlight.artifactAddress
         ).value?.isbn
     }
 
     var body: some View {
-        let projection = groupProjection
+        let groupProjection = groupProjection
+        let resourceProjection = resourceProjection
 
         VStack(alignment: .leading, spacing: 14) {
-            resourceHeader
-            if projection.showHighlightersStrip {
-                highlightersStrip(projection)
+            resourceHeader(resourceProjection)
+            if groupProjection.showHighlightersStrip {
+                highlightersStrip(groupProjection)
             }
             highlightsBody
         }
@@ -53,11 +54,16 @@ struct HighlightFeedCardView: View {
         .task(id: lead.highlight.pubkey) {
             await app.requestProfile(pubkeyHex: lead.highlight.pubkey)
         }
-        .task(id: lead.highlight.artifactAddress + lead.highlight.externalReference) {
-            await resolveSource()
+        .task(id: resourceSourceTaskId(resourceProjection)) {
+            await resolveSource(resourceProjection)
         }
-        .task(id: webMetadataURL) {
-            if let url = webMetadataURL {
+        .task(id: resourceProjection.articleAuthorPubkey) {
+            if !resourceProjection.articleAuthorPubkey.isEmpty {
+                await app.requestProfile(pubkeyHex: resourceProjection.articleAuthorPubkey)
+            }
+        }
+        .task(id: resourceProjection.webMetadataUrl) {
+            if let url = resourceProjection.webMetadataUrl {
                 await app.requestWebMetadata(url: url)
             }
         }
@@ -65,14 +71,14 @@ struct HighlightFeedCardView: View {
 
     // MARK: - Resource header
 
-    private var resourceHeader: some View {
+    private func resourceHeader(_ resource: HighlightResourceHeaderProjection) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            resourceCover
+            resourceCover(resource)
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(resourceTitle)
+                Text(resource.title)
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
@@ -80,15 +86,15 @@ struct HighlightFeedCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                resourceSubtitleRow
+                resourceSubtitleRow(resource)
             }
         }
     }
 
-    private var resourceSubtitleRow: some View {
+    private func resourceSubtitleRow(_ resource: HighlightResourceHeaderProjection) -> some View {
         HStack(spacing: 4) {
-            let author = resourceAuthorOrDomain
-            let time = resourceTimeLabel
+            let author = resource.authorOrDomain
+            let time = resource.timeLabel
             if !author.isEmpty {
                 Text(author.uppercased())
                     .font(.caption2.weight(.bold))
@@ -115,25 +121,25 @@ struct HighlightFeedCardView: View {
     }
 
     @ViewBuilder
-    private var resourceCover: some View {
-        if let urlString = resourceCoverURL,
+    private func resourceCover(_ resource: HighlightResourceHeaderProjection) -> some View {
+        if let urlString = resource.coverUrl,
            !urlString.isEmpty,
            let url = URL(string: urlString) {
             Color.clear
                 .overlay(
                     KFImage(url)
-                        .placeholder { coverFallback }
+                        .placeholder { coverFallback(resource) }
                         .fade(duration: 0.15)
                         .resizable()
                         .scaledToFill()
                 )
                 .clipped()
         } else {
-            coverFallback
+            coverFallback(resource)
         }
     }
 
-    private var coverFallback: some View {
+    private func coverFallback(_ resource: HighlightResourceHeaderProjection) -> some View {
         ZStack {
             LinearGradient(
                 colors: [
@@ -143,7 +149,7 @@ struct HighlightFeedCardView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: kindIconName)
+            Image(systemName: kindIconName(resource.sourceKind))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.highlighterInkStrong.opacity(0.55))
         }
@@ -335,19 +341,8 @@ struct HighlightFeedCardView: View {
 
     // MARK: - Derived: artifact kind
 
-    /// Canonical artifact kind for header rendering. Rust owns source and
-    /// reference interpretation; Swift only maps the enum to visual treatment.
-    private var artifactKind: HighlightSourceKind {
-        app.core.getHighlightSourceKind(
-            previewSource: lead.artifact?.preview.source ?? "",
-            externalReference: lead.highlight.externalReference,
-            artifactAddress: lead.highlight.artifactAddress,
-            sourceUrl: lead.highlight.sourceUrl
-        )
-    }
-
-    private var kindIconName: String {
-        switch artifactKind {
+    private func kindIconName(_ kind: HighlightSourceKind) -> String {
+        switch kind {
         case .article: return "doc.text"
         case .web:     return "globe"
         case .podcast: return "waveform"
@@ -358,145 +353,53 @@ struct HighlightFeedCardView: View {
         }
     }
 
-    // MARK: - Derived: resource fields
+    // MARK: - Derived: resource projection
 
-    private var resourceCoverURL: String? {
-        if let img = lead.artifact?.preview.image, !img.isEmpty { return img }
-        if artifactKind == .book, let img = bookPreview?.image, !img.isEmpty { return img }
-        if artifactKind == .article, let img = sourceArticle?.image, !img.isEmpty { return img }
-        if artifactKind == .web, let m = webMetadata {
-            if !m.image.isEmpty { return m.image }
-            if !m.favicon.isEmpty { return m.favicon }
+    private var resourceProjection: HighlightResourceHeaderProjection {
+        let base = app.safeCore.projectHighlightResourceHeader(
+            input: resourceProjectionInput(webMetadata: nil)
+        )
+        guard let url = base.webMetadataUrl,
+              let metadata = app.webMetadataCache[url] else {
+            return base
         }
-        return nil
+        return app.safeCore.projectHighlightResourceHeader(
+            input: resourceProjectionInput(webMetadata: metadata)
+        )
     }
 
-    private var resourceAuthorOrDomain: String {
-        switch artifactKind {
-        case .article:
-            return articleAuthorDisplayName
-        case .podcast:
-            let show = lead.artifact?.preview.podcastShowTitle ?? ""
-            if !show.isEmpty { return show }
-            return lead.artifact?.preview.author ?? ""
-        case .book:
-            return lead.artifact?.preview.author ?? bookPreview?.author ?? ""
-        case .web:
-            if let m = webMetadata {
-                if !m.siteName.isEmpty { return m.siteName }
-                if !m.author.isEmpty { return m.author }
-            }
-            if let domain = lead.artifact?.preview.domain, !domain.isEmpty {
-                return domain
-            }
-            return urlHost ?? ""
-        case .video, .paper:
-            return lead.artifact?.preview.author ?? (lead.artifact?.preview.domain ?? "")
-        case .unknown:
-            return urlHost ?? ""
-        }
+    private func resourceProjectionInput(webMetadata: WebMetadata?) -> HighlightResourceHeaderProjectionInput {
+        HighlightResourceHeaderProjectionInput(
+            lead: lead,
+            sourceArticle: sourceArticle,
+            sourceArticleAuthorPubkey: sourceArticleAuthorPubkey ?? "",
+            articleAuthorProfiles: articleAuthorProfileCandidates,
+            bookPreview: bookPreview,
+            webMetadata: webMetadata
+        )
     }
 
-    private var resourceTitle: String {
-        switch artifactKind {
-        case .article:
-            if let t = sourceArticle?.title, !t.isEmpty { return t }
-            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
-            return "Untitled"
-        case .podcast, .video, .paper:
-            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
-            return "Untitled"
-        case .book:
-            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
-            if let t = bookPreview?.title, !t.isEmpty { return t }
-            return "Untitled"
-        case .web:
-            if let m = webMetadata, !m.title.isEmpty { return m.title }
-            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
-            return urlHost ?? "Web page"
-        case .unknown:
-            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
-            return urlHost ?? "Highlight"
-        }
-    }
-
-    private var resourceTimeLabel: String? {
-        switch artifactKind {
-        case .article:
-            guard let mins = articleReadMinutes else { return nil }
-            return "\(mins) min"
-        case .podcast:
-            guard let secs = lead.artifact?.preview.durationSeconds, secs > 0 else { return nil }
-            return formatDuration(seconds: Int(secs))
-        default: return nil
-        }
-    }
-
-    private var urlHost: String? {
-        let raw = lead.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty, let url = URL(string: raw), let host = url.host else { return nil }
-        return host
-    }
-
-    /// Source URL the OG/favicon fetcher should hit. Only populated for
-    /// the web kind — article/podcast/book branches own their own
-    /// hydration path. Prefers the artifact's normalized URL (when a
-    /// kind:11 share exists) over the raw highlight `sourceUrl` so the
-    /// cache key matches what Rust would store.
-    private var webMetadataURL: String? {
-        guard artifactKind == .web else { return nil }
-        if let u = lead.artifact?.preview.url, !u.isEmpty { return u }
-        let raw = lead.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        return raw.isEmpty ? nil : raw
-    }
-
-    /// Cached enrichment for the web URL (if any). Returns nil for
-    /// non-web kinds. The cache key is whatever URL was passed to
-    /// `requestWebMetadata` — Rust canonicalizes it, but stores the entry
-    /// under the canonical key, so we reach in with the canonical URL too.
-    /// In practice the artifact preview URL is already canonical (built
-    /// by `normalize_artifact_url`), so this lookup is a direct hit.
-    private var webMetadata: WebMetadata? {
-        guard let url = webMetadataURL else { return nil }
-        return app.webMetadataCache[url]
-    }
-
-    // MARK: - Derived: profile / article resolution
-
-    /// Profile-resolved display name for a NIP-23 article author. The resource
-    /// subtitle keeps the prior behavior of falling back to the artifact label,
-    /// not a pubkey, when the profile is unresolved.
-    private var articleAuthorDisplayName: String {
-        let pubkey = articleAuthorPubkey ?? ""
-        return app.safeCore.projectProfileDisplayWithLabel(
-            input: ProfileDisplayWithLabelProjectionInput(
-                pubkey: "",
-                profile: pubkey.isEmpty ? nil : app.profileSnapshots[pubkey],
-                labelFallback: lead.artifact?.preview.author ?? "",
-                pubkeyFallback: .pubkey10,
-                emptyFallback: ""
+    private var articleAuthorProfileCandidates: [HighlightResourceAuthorProfile] {
+        var candidates: [HighlightResourceAuthorProfile] = []
+        if let pubkey = sourceArticle?.pubkey, !pubkey.isEmpty {
+            candidates.append(
+                HighlightResourceAuthorProfile(
+                    pubkey: pubkey,
+                    profile: app.profileSnapshots[pubkey]
+                )
             )
-        ).displayName
-    }
-
-    private var articleAuthorPubkey: String? {
-        if let pubkey = sourceArticle?.pubkey, !pubkey.isEmpty { return pubkey }
-        if let pubkey = sourceArticleAuthorPubkey, !pubkey.isEmpty { return pubkey }
-        return nil
-    }
-
-    private var articleReadMinutes: Int? {
-        guard let content = sourceArticle?.content, !content.isEmpty else { return nil }
-        let words = content.split(whereSeparator: { $0.isWhitespace }).count
-        guard words > 60 else { return nil }
-        return max(1, words / 240)
-    }
-
-    private func formatDuration(seconds: Int) -> String {
-        let h = seconds / 3600
-        let m = (seconds % 3600) / 60
-        if h > 0 { return "\(h)h \(m)m" }
-        return "\(m)m"
+        }
+        if let pubkey = sourceArticleAuthorPubkey,
+           !pubkey.isEmpty,
+           !candidates.contains(where: { $0.pubkey == pubkey }) {
+            candidates.append(
+                HighlightResourceAuthorProfile(
+                    pubkey: pubkey,
+                    profile: app.profileSnapshots[pubkey]
+                )
+            )
+        }
+        return candidates
     }
 
     // MARK: - Derived: group projection
@@ -536,17 +439,20 @@ struct HighlightFeedCardView: View {
         ).label
     }
 
-    private func resolveSource() async {
+    private func resourceSourceTaskId(_ resource: HighlightResourceHeaderProjection) -> String {
+        "\(lead.highlight.eventId)|\(resource.bookIsbn ?? "")|\(resource.articleAddress ?? "")"
+    }
+
+    private func resolveSource(_ resource: HighlightResourceHeaderProjection) async {
         sourceArticle = nil
         sourceArticleAuthorPubkey = nil
 
-        if let isbn = isbnFromLead {
+        if let isbn = resource.bookIsbn {
             await app.requestIsbnPreview(isbn: isbn)
             return
         }
 
-        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return }
+        guard let addr = resource.articleAddress else { return }
 
         let outcome = await app.safeCore.getArticleByAddress(address: addr)
         sourceArticle = outcome.error.isEmpty ? outcome.value : nil

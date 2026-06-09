@@ -14,9 +14,12 @@ use crate::models::{
 };
 use crate::nostr_runtime::NostrRuntime;
 use crate::profile::{
-    profile_display_projection, ProfileDisplayFallback, ProfileDisplayProjectionInput,
+    profile_display_projection, profile_display_with_label_projection, ProfileDisplayFallback,
+    ProfileDisplayProjectionInput, ProfileDisplayWithLabelProjectionInput,
 };
 use crate::relays::highlighter_relay;
+use crate::web_metadata::WebMetadata;
+use ::url::Url;
 
 /// NIP-84 highlight event.
 const KIND_HIGHLIGHT: u16 = 9802;
@@ -55,6 +58,35 @@ pub struct HighlightGroupCardProjection {
     pub visible_highlighters: Vec<HighlightGroupHighlighterProjection>,
     pub overflow_count: u32,
     pub highlighters_label_segments: Vec<HighlightGroupLabelSegment>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightResourceAuthorProfile {
+    pub pubkey: String,
+    pub profile: Option<ProfileMetadata>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightResourceHeaderProjectionInput {
+    pub lead: HydratedHighlight,
+    pub source_article: Option<crate::models::ArticleRecord>,
+    pub source_article_author_pubkey: String,
+    pub article_author_profiles: Vec<HighlightResourceAuthorProfile>,
+    pub book_preview: Option<crate::models::ArtifactPreview>,
+    pub web_metadata: Option<WebMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HighlightResourceHeaderProjection {
+    pub source_kind: HighlightSourceKind,
+    pub title: String,
+    pub author_or_domain: String,
+    pub time_label: Option<String>,
+    pub cover_url: Option<String>,
+    pub book_isbn: Option<String>,
+    pub article_address: Option<String>,
+    pub article_author_pubkey: String,
+    pub web_metadata_url: Option<String>,
 }
 
 /// Presentation projection for a grouped highlight card. Rust owns unique
@@ -198,8 +230,286 @@ pub fn source_kind(
     HighlightSourceKind::Unknown
 }
 
+/// Project the resource header for a grouped highlight card. Rust owns source
+/// interpretation, title/author fallback precedence, lookup keys for async
+/// enrichment, read-time/duration labels, and cover URL selection. Native
+/// shells render the returned fields without branching on artifact semantics.
+pub fn highlight_resource_header_projection(
+    input: HighlightResourceHeaderProjectionInput,
+) -> HighlightResourceHeaderProjection {
+    let lead = input.lead;
+    let preview = lead.artifact.as_ref().map(|artifact| &artifact.preview);
+    let source_kind = source_kind(
+        preview.map(|p| p.source.as_str()).unwrap_or_default(),
+        &lead.highlight.external_reference,
+        &lead.highlight.artifact_address,
+        &lead.highlight.source_url,
+    );
+    let url_host = url_host(&lead.highlight.source_url);
+    let book_route = book_route_for_highlight(
+        &lead.highlight.external_reference,
+        &lead.highlight.artifact_address,
+    );
+    let article_address = article_address_for_highlight(&lead.highlight.artifact_address);
+    let article_author_pubkey = article_author_pubkey(
+        input.source_article.as_ref(),
+        &input.source_article_author_pubkey,
+    );
+    let article_author_profile = input
+        .article_author_profiles
+        .iter()
+        .find(|candidate| candidate.pubkey == article_author_pubkey)
+        .and_then(|candidate| candidate.profile.clone());
+    let web_metadata_url = web_metadata_url(source_kind, preview, &lead.highlight.source_url);
+
+    HighlightResourceHeaderProjection {
+        source_kind,
+        title: resource_title(
+            source_kind,
+            preview,
+            input.source_article.as_ref(),
+            input.book_preview.as_ref(),
+            input.web_metadata.as_ref(),
+            url_host.as_deref(),
+        ),
+        author_or_domain: resource_author_or_domain(
+            source_kind,
+            preview,
+            input.book_preview.as_ref(),
+            input.web_metadata.as_ref(),
+            url_host.as_deref(),
+            &article_author_pubkey,
+            article_author_profile,
+        ),
+        time_label: resource_time_label(source_kind, preview, input.source_article.as_ref()),
+        cover_url: resource_cover_url(
+            source_kind,
+            preview,
+            input.source_article.as_ref(),
+            input.book_preview.as_ref(),
+            input.web_metadata.as_ref(),
+        ),
+        book_isbn: book_route.map(|route| route.isbn),
+        article_address,
+        article_author_pubkey,
+        web_metadata_url,
+    }
+}
+
 fn is_isbn_reference(value: &str) -> bool {
     value.trim().to_ascii_lowercase().starts_with("isbn:")
+}
+
+fn resource_cover_url(
+    source_kind: HighlightSourceKind,
+    preview: Option<&crate::models::ArtifactPreview>,
+    source_article: Option<&crate::models::ArticleRecord>,
+    book_preview: Option<&crate::models::ArtifactPreview>,
+    web_metadata: Option<&WebMetadata>,
+) -> Option<String> {
+    if let Some(image) = preview.and_then(|p| non_empty(&p.image)) {
+        return Some(image);
+    }
+    if source_kind == HighlightSourceKind::Book {
+        if let Some(image) = book_preview.and_then(|p| non_empty(&p.image)) {
+            return Some(image);
+        }
+    }
+    if source_kind == HighlightSourceKind::Article {
+        if let Some(image) = source_article.and_then(|article| non_empty(&article.image)) {
+            return Some(image);
+        }
+    }
+    if source_kind == HighlightSourceKind::Web {
+        if let Some(metadata) = web_metadata {
+            if let Some(image) = non_empty(&metadata.image) {
+                return Some(image);
+            }
+            if let Some(favicon) = non_empty(&metadata.favicon) {
+                return Some(favicon);
+            }
+        }
+    }
+    None
+}
+
+fn resource_author_or_domain(
+    source_kind: HighlightSourceKind,
+    preview: Option<&crate::models::ArtifactPreview>,
+    book_preview: Option<&crate::models::ArtifactPreview>,
+    web_metadata: Option<&WebMetadata>,
+    url_host: Option<&str>,
+    article_author_pubkey: &str,
+    article_author_profile: Option<ProfileMetadata>,
+) -> String {
+    match source_kind {
+        HighlightSourceKind::Article => {
+            let fallback = preview.map(|p| p.author.clone()).unwrap_or_default();
+            profile_display_with_label_projection(ProfileDisplayWithLabelProjectionInput {
+                pubkey: String::new(),
+                profile: if article_author_pubkey.is_empty() {
+                    None
+                } else {
+                    article_author_profile
+                },
+                label_fallback: fallback,
+                pubkey_fallback: ProfileDisplayFallback::Pubkey10,
+                empty_fallback: String::new(),
+            })
+            .display_name
+        }
+        HighlightSourceKind::Podcast => preview
+            .and_then(|p| non_empty(&p.podcast_show_title))
+            .or_else(|| preview.and_then(|p| non_empty(&p.author)))
+            .unwrap_or_default(),
+        HighlightSourceKind::Book => preview
+            .map(|p| p.author.clone())
+            .or_else(|| book_preview.map(|p| p.author.clone()))
+            .unwrap_or_default(),
+        HighlightSourceKind::Web => web_metadata
+            .and_then(|metadata| non_empty(&metadata.site_name))
+            .or_else(|| web_metadata.and_then(|metadata| non_empty(&metadata.author)))
+            .or_else(|| preview.and_then(|p| non_empty(&p.domain)))
+            .or_else(|| url_host.map(str::to_string))
+            .unwrap_or_default(),
+        HighlightSourceKind::Video | HighlightSourceKind::Paper => preview
+            .and_then(|p| non_empty(&p.author))
+            .or_else(|| preview.and_then(|p| non_empty(&p.domain)))
+            .unwrap_or_default(),
+        HighlightSourceKind::Unknown => url_host.map(str::to_string).unwrap_or_default(),
+    }
+}
+
+fn resource_title(
+    source_kind: HighlightSourceKind,
+    preview: Option<&crate::models::ArtifactPreview>,
+    source_article: Option<&crate::models::ArticleRecord>,
+    book_preview: Option<&crate::models::ArtifactPreview>,
+    web_metadata: Option<&WebMetadata>,
+    url_host: Option<&str>,
+) -> String {
+    match source_kind {
+        HighlightSourceKind::Article => source_article
+            .and_then(|article| non_empty(&article.title))
+            .or_else(|| preview.and_then(|p| non_empty(&p.title)))
+            .unwrap_or_else(|| "Untitled".into()),
+        HighlightSourceKind::Podcast | HighlightSourceKind::Video | HighlightSourceKind::Paper => {
+            preview
+                .and_then(|p| non_empty(&p.title))
+                .unwrap_or_else(|| "Untitled".into())
+        }
+        HighlightSourceKind::Book => preview
+            .and_then(|p| non_empty(&p.title))
+            .or_else(|| book_preview.and_then(|p| non_empty(&p.title)))
+            .unwrap_or_else(|| "Untitled".into()),
+        HighlightSourceKind::Web => web_metadata
+            .and_then(|metadata| non_empty(&metadata.title))
+            .or_else(|| preview.and_then(|p| non_empty(&p.title)))
+            .or_else(|| url_host.map(str::to_string))
+            .unwrap_or_else(|| "Web page".into()),
+        HighlightSourceKind::Unknown => preview
+            .and_then(|p| non_empty(&p.title))
+            .or_else(|| url_host.map(str::to_string))
+            .unwrap_or_else(|| "Highlight".into()),
+    }
+}
+
+fn resource_time_label(
+    source_kind: HighlightSourceKind,
+    preview: Option<&crate::models::ArtifactPreview>,
+    source_article: Option<&crate::models::ArticleRecord>,
+) -> Option<String> {
+    match source_kind {
+        HighlightSourceKind::Article => source_article
+            .and_then(|article| read_minutes(&article.content))
+            .map(|minutes| format!("{minutes} min")),
+        HighlightSourceKind::Podcast => preview
+            .and_then(|p| p.duration_seconds)
+            .filter(|seconds| *seconds > 0)
+            .map(format_duration),
+        _ => None,
+    }
+}
+
+fn read_minutes(content: &str) -> Option<usize> {
+    if content.is_empty() {
+        return None;
+    }
+    let words = content.split_whitespace().count();
+    if words <= 60 {
+        None
+    } else {
+        Some(std::cmp::max(1, words / 240))
+    }
+}
+
+fn format_duration(seconds: i64) -> String {
+    let hours = seconds / 3600;
+    let minutes = (seconds % 3600) / 60;
+    if hours > 0 {
+        format!("{hours}h {minutes}m")
+    } else {
+        format!("{minutes}m")
+    }
+}
+
+fn article_address_for_highlight(artifact_address: &str) -> Option<String> {
+    let trimmed = artifact_address.trim();
+    if articles::article_reader_route_from_address(trimmed).is_some() {
+        Some(trimmed.to_string())
+    } else {
+        None
+    }
+}
+
+fn article_author_pubkey(
+    source_article: Option<&crate::models::ArticleRecord>,
+    resolved_author_pubkey: &str,
+) -> String {
+    source_article
+        .and_then(|article| non_empty(&article.pubkey))
+        .or_else(|| non_empty(resolved_author_pubkey))
+        .unwrap_or_default()
+}
+
+fn web_metadata_url(
+    source_kind: HighlightSourceKind,
+    preview: Option<&crate::models::ArtifactPreview>,
+    source_url: &str,
+) -> Option<String> {
+    if source_kind != HighlightSourceKind::Web {
+        return None;
+    }
+    preview
+        .and_then(|p| non_empty(&p.url))
+        .or_else(|| non_empty_trimmed(source_url))
+}
+
+fn url_host(raw_url: &str) -> Option<String> {
+    let trimmed = raw_url.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Url::parse(trimmed)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_string))
+}
+
+fn non_empty(value: &str) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn non_empty_trimmed(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 /// Port of `publishAndShareHighlight` (`highlights.ts:288-319`).
@@ -1285,6 +1595,144 @@ mod tests {
         );
     }
 
+    #[test]
+    fn highlight_resource_header_projects_article_metadata() {
+        let article_pubkey = "a".repeat(64);
+        let article_address = format!("30023:{article_pubkey}:essay");
+        let mut artifact = artifact_with_source("article");
+        artifact.preview.title = "Preview title".into();
+        artifact.preview.author = "Stored author".into();
+        artifact.preview.image = "https://example.com/artifact.jpg".into();
+
+        let mut article = article_record(&article_pubkey, "essay");
+        article.title = "Article title".into();
+        article.image = "https://example.com/article.jpg".into();
+        article.content = repeat_words(480);
+
+        let projection =
+            highlight_resource_header_projection(HighlightResourceHeaderProjectionInput {
+                lead: hydrated_highlight_with_artifact(
+                    highlight_for_source_key("event-article", &format!("a:{article_address}"), 1),
+                    artifact,
+                ),
+                source_article: Some(article),
+                source_article_author_pubkey: String::new(),
+                article_author_profiles: vec![HighlightResourceAuthorProfile {
+                    pubkey: article_pubkey.clone(),
+                    profile: Some(profile_metadata(
+                        &article_pubkey,
+                        "author",
+                        "Profile Author",
+                        "",
+                    )),
+                }],
+                book_preview: None,
+                web_metadata: None,
+            });
+
+        assert_eq!(projection.source_kind, HighlightSourceKind::Article);
+        assert_eq!(projection.title, "Article title");
+        assert_eq!(projection.author_or_domain, "Profile Author");
+        assert_eq!(
+            projection.cover_url,
+            Some("https://example.com/artifact.jpg".into())
+        );
+        assert_eq!(projection.time_label, Some("2 min".into()));
+        assert_eq!(projection.article_address, Some(article_address));
+        assert_eq!(projection.article_author_pubkey, article_pubkey);
+        assert_eq!(projection.web_metadata_url, None);
+    }
+
+    #[test]
+    fn highlight_resource_header_projects_web_metadata() {
+        let mut artifact = artifact_with_source("web");
+        artifact.preview.url = "https://example.com/read".into();
+        artifact.preview.domain = "preview.example".into();
+        let mut metadata = web_metadata("https://example.com/read");
+        metadata.title = "OpenGraph title".into();
+        metadata.site_name = "Example Site".into();
+        metadata.favicon = "https://example.com/favicon.ico".into();
+
+        let projection =
+            highlight_resource_header_projection(HighlightResourceHeaderProjectionInput {
+                lead: hydrated_highlight_with_artifact(
+                    highlight_for_source_key("event-web", "r:https://fallback.example/post", 1),
+                    artifact,
+                ),
+                source_article: None,
+                source_article_author_pubkey: String::new(),
+                article_author_profiles: Vec::new(),
+                book_preview: None,
+                web_metadata: Some(metadata),
+            });
+
+        assert_eq!(projection.source_kind, HighlightSourceKind::Web);
+        assert_eq!(projection.title, "OpenGraph title");
+        assert_eq!(projection.author_or_domain, "Example Site");
+        assert_eq!(
+            projection.cover_url,
+            Some("https://example.com/favicon.ico".into())
+        );
+        assert_eq!(
+            projection.web_metadata_url,
+            Some("https://example.com/read".into())
+        );
+        assert_eq!(projection.time_label, None);
+    }
+
+    #[test]
+    fn highlight_resource_header_formats_podcast_duration() {
+        let projection =
+            highlight_resource_header_projection(HighlightResourceHeaderProjectionInput {
+                lead: hydrated_highlight_with_artifact(
+                    highlight_for_source_key("event-podcast", "i:podcast:item:guid:ep-1", 1),
+                    artifact_for_podcast("https://example.com/audio.mp3"),
+                ),
+                source_article: None,
+                source_article_author_pubkey: String::new(),
+                article_author_profiles: Vec::new(),
+                book_preview: None,
+                web_metadata: None,
+            });
+
+        assert_eq!(projection.source_kind, HighlightSourceKind::Podcast);
+        assert_eq!(projection.title, "Episode 1");
+        assert_eq!(projection.author_or_domain, "Show");
+        assert_eq!(projection.time_label, Some("1h 0m".into()));
+    }
+
+    #[test]
+    fn highlight_resource_header_uses_isbn_preview_without_artifact() {
+        let mut book_preview = empty_preview("book");
+        book_preview.title = "Book title".into();
+        book_preview.author = "Book author".into();
+        book_preview.image = "https://example.com/book.jpg".into();
+
+        let projection =
+            highlight_resource_header_projection(HighlightResourceHeaderProjectionInput {
+                lead: HydratedHighlight {
+                    highlight: highlight_for_source_key("event-book", "i:isbn:9780735211292", 1),
+                    artifact: None,
+                    shared_by_event_id: None,
+                    shared_by_pubkey: None,
+                },
+                source_article: None,
+                source_article_author_pubkey: String::new(),
+                article_author_profiles: Vec::new(),
+                book_preview: Some(book_preview),
+                web_metadata: None,
+            });
+
+        assert_eq!(projection.source_kind, HighlightSourceKind::Book);
+        assert_eq!(projection.title, "Book title");
+        assert_eq!(projection.author_or_domain, "Book author");
+        assert_eq!(
+            projection.cover_url,
+            Some("https://example.com/book.jpg".into())
+        );
+        assert_eq!(projection.book_isbn, Some("9780735211292".into()));
+    }
+
     fn preview_for_podcast(url: &str) -> ArtifactPreview {
         let item_catalog = format!("podcast:item:guid:{}", "ep-1");
         ArtifactPreview {
@@ -1325,6 +1773,95 @@ mod tests {
             pubkey: "f".repeat(64),
             created_at: Some(1_700_000_000),
             note: String::new(),
+        }
+    }
+
+    fn empty_preview(source: &str) -> ArtifactPreview {
+        ArtifactPreview {
+            id: "id".into(),
+            url: String::new(),
+            title: String::new(),
+            author: String::new(),
+            image: String::new(),
+            description: String::new(),
+            source: source.into(),
+            domain: String::new(),
+            catalog_id: String::new(),
+            catalog_kind: String::new(),
+            podcast_guid: String::new(),
+            podcast_item_guid: String::new(),
+            podcast_show_title: String::new(),
+            audio_url: String::new(),
+            audio_preview_url: String::new(),
+            transcript_url: String::new(),
+            feed_url: String::new(),
+            published_at: String::new(),
+            duration_seconds: None,
+            reference_tag_name: String::new(),
+            reference_tag_value: String::new(),
+            reference_kind: String::new(),
+            highlight_tag_name: String::new(),
+            highlight_tag_value: String::new(),
+            highlight_reference_key: String::new(),
+            chapters: Vec::new(),
+        }
+    }
+
+    fn artifact_with_source(source: &str) -> ArtifactRecord {
+        ArtifactRecord {
+            preview: empty_preview(source),
+            group_id: "group-a".into(),
+            share_event_id: "share-1".into(),
+            pubkey: "f".repeat(64),
+            created_at: Some(1_700_000_000),
+            note: String::new(),
+        }
+    }
+
+    fn hydrated_highlight_with_artifact(
+        highlight: HighlightRecord,
+        artifact: ArtifactRecord,
+    ) -> HydratedHighlight {
+        HydratedHighlight {
+            highlight,
+            artifact: Some(artifact),
+            shared_by_event_id: None,
+            shared_by_pubkey: None,
+        }
+    }
+
+    fn article_record(pubkey: &str, identifier: &str) -> crate::models::ArticleRecord {
+        crate::models::ArticleRecord {
+            event_id: "article-event".into(),
+            address: format!("30023:{pubkey}:{identifier}"),
+            pubkey: pubkey.into(),
+            identifier: identifier.into(),
+            title: String::new(),
+            summary: String::new(),
+            image: String::new(),
+            content: String::new(),
+            hashtags: Vec::new(),
+            published_at: None,
+            created_at: Some(1_700_000_000),
+        }
+    }
+
+    fn repeat_words(count: usize) -> String {
+        std::iter::repeat_n("word", count)
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn web_metadata(url: &str) -> WebMetadata {
+        WebMetadata {
+            url: url.into(),
+            title: String::new(),
+            description: String::new(),
+            image: String::new(),
+            site_name: String::new(),
+            author: String::new(),
+            favicon: String::new(),
+            fetched_at: 1_700_000_000,
         }
     }
 
