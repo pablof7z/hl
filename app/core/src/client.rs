@@ -2488,13 +2488,13 @@ impl HighlighterCore {
         crate::lists::query_bookmark_library_snapshot(self.runtime.ndb(), &user_hex)
     }
 
-    /// Resolve the cached article rows referenced by a bookmark/curation set.
-    /// Rust owns NIP-33 address parsing and collection ordering.
-    pub async fn get_bookmark_set_articles(&self, record: BookmarkSetRecord) -> ArticleListOutcome {
-        article_list_outcome(articles::query_articles_for_addresses(
-            self.runtime.ndb(),
-            &record.article_addresses,
-        ))
+    /// Screen-shaped read model for bookmark/curation set detail. Rust owns
+    /// title fallback, article row resolution, and empty-state policy.
+    pub async fn get_bookmark_set_detail_snapshot(
+        &self,
+        record: BookmarkSetRecord,
+    ) -> crate::lists::BookmarkSetDetailSnapshot {
+        crate::lists::query_bookmark_set_detail_snapshot(self.runtime.ndb(), record)
     }
 
     /// Return current user's curation sets projected for the bookmark menu.
@@ -2538,13 +2538,6 @@ impl HighlighterCore {
         input: crate::lists::BookmarkSetRowProjectionInput,
     ) -> crate::lists::BookmarkSetRowProjection {
         crate::lists::bookmark_set_row_projection(input)
-    }
-
-    pub fn project_bookmark_set_detail(
-        &self,
-        input: crate::lists::BookmarkSetDetailProjectionInput,
-    ) -> crate::lists::BookmarkSetDetailProjection {
-        crate::lists::bookmark_set_detail_projection(input)
     }
 
     /// Project create-collection sheet state. Rust owns title normalization

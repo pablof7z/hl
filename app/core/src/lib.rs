@@ -135,11 +135,10 @@ pub use isbn_lookup::{
 pub use lists::{
     BookmarkLibraryFilter, BookmarkLibraryFilterChipProjection, BookmarkLibraryPane,
     BookmarkLibraryProjection, BookmarkLibraryProjectionInput, BookmarkLibraryScope,
-    BookmarkLibraryScopeOptionProjection, BookmarkLibrarySnapshot, BookmarkSetDetailProjection,
-    BookmarkSetDetailProjectionInput, BookmarkSetRowProjection, BookmarkSetRowProjectionInput,
-    BookmarkedArticleRowProjection, BookmarkedArticleRowProjectionInput,
-    CurationSetCreateProjection, CurationSetCreateProjectionInput, WebBookmarkRowProjection,
-    WebBookmarkRowProjectionInput,
+    BookmarkLibraryScopeOptionProjection, BookmarkLibrarySnapshot, BookmarkSetDetailSnapshot,
+    BookmarkSetRowProjection, BookmarkSetRowProjectionInput, BookmarkedArticleRowProjection,
+    BookmarkedArticleRowProjectionInput, CurationSetCreateProjection,
+    CurationSetCreateProjectionInput, WebBookmarkRowProjection, WebBookmarkRowProjectionInput,
 };
 pub use models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,

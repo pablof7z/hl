@@ -340,8 +340,8 @@ actor SafeHighlighterCore {
 
     // MARK: - Bookmark sets (kind:30003/30004) + NIP-B0 (kind:39701)
 
-    func getBookmarkSetArticles(record: BookmarkSetRecord) async -> ArticleListOutcome {
-        await core.getBookmarkSetArticles(record: record)
+    func getBookmarkSetDetailSnapshot(record: BookmarkSetRecord) async -> BookmarkSetDetailSnapshot {
+        await core.getBookmarkSetDetailSnapshot(record: record)
     }
 
     func getBookmarkLibrarySnapshot() async -> BookmarkLibrarySnapshot {
@@ -386,12 +386,6 @@ actor SafeHighlighterCore {
         input: BookmarkSetRowProjectionInput
     ) -> BookmarkSetRowProjection {
         core.projectBookmarkSetRow(input: input)
-    }
-
-    nonisolated func projectBookmarkSetDetail(
-        input: BookmarkSetDetailProjectionInput
-    ) -> BookmarkSetDetailProjection {
-        core.projectBookmarkSetDetail(input: input)
     }
 
     nonisolated func projectCurationSetCreate(

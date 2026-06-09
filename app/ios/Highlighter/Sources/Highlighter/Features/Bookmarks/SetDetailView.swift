@@ -5,20 +5,16 @@ struct SetDetailView: View {
     let record: BookmarkSetRecord
 
     @State private var articles: [ArticleRecord] = []
+    @State private var displayTitle = ""
+    @State private var isCollectionEmpty = false
     @State private var isLoading = false
-
-    private var displayTitle: String {
-        app.safeCore.projectBookmarkSetDetail(
-            input: BookmarkSetDetailProjectionInput(record: record)
-        ).displayTitle
-    }
 
     var body: some View {
         Group {
             if isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if articles.isEmpty && record.noteIds.isEmpty {
+            } else if isCollectionEmpty {
                 ContentUnavailableView {
                     Label("Empty Collection", systemImage: "rectangle.stack")
                 } description: {
@@ -97,7 +93,9 @@ struct SetDetailView: View {
         isLoading = true
         defer { isLoading = false }
 
-        let outcome = await app.safeCore.getBookmarkSetArticles(record: record)
-        articles = outcome.error.isEmpty ? outcome.values : []
+        let snapshot = await app.safeCore.getBookmarkSetDetailSnapshot(record: record)
+        displayTitle = snapshot.displayTitle
+        articles = snapshot.articles
+        isCollectionEmpty = snapshot.isEmpty
     }
 }

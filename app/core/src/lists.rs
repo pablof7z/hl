@@ -125,13 +125,11 @@ pub struct BookmarkSetRowProjection {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct BookmarkSetDetailProjectionInput {
-    pub record: BookmarkSetRecord,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct BookmarkSetDetailProjection {
+pub struct BookmarkSetDetailSnapshot {
     pub display_title: String,
+    pub articles: Vec<ArticleRecord>,
+    pub is_empty: bool,
+    pub error: String,
 }
 
 /// Native create-collection sheet input. Rust owns title normalization.
@@ -206,6 +204,30 @@ pub fn query_bookmark_library_snapshot(ndb: &Ndb, user_hex: &str) -> BookmarkLib
         my_curation_sets,
         my_web_bookmarks,
         following_curation_sets: explorable_curation_sets(ndb, following_curation_sets),
+    }
+}
+
+/// Bookmark/curation-set detail read model. Rust owns the title fallback,
+/// NIP-33 article-address resolution, and whether the collection should render
+/// the empty state.
+pub fn query_bookmark_set_detail_snapshot(
+    ndb: &Ndb,
+    record: BookmarkSetRecord,
+) -> BookmarkSetDetailSnapshot {
+    let display_title = bookmark_set_display_title(&record, "Collection");
+    match articles::query_articles_for_addresses(ndb, &record.article_addresses) {
+        Ok(articles) => BookmarkSetDetailSnapshot {
+            is_empty: articles.is_empty() && record.note_ids.is_empty(),
+            articles,
+            display_title,
+            error: String::new(),
+        },
+        Err(error) => BookmarkSetDetailSnapshot {
+            display_title,
+            articles: Vec::new(),
+            is_empty: record.note_ids.is_empty(),
+            error: error.to_string(),
+        },
     }
 }
 
@@ -464,14 +486,6 @@ pub fn bookmark_set_row_projection(
                 if item_count == 1 { "" } else { "s" }
             ))
         },
-    }
-}
-
-pub fn bookmark_set_detail_projection(
-    input: BookmarkSetDetailProjectionInput,
-) -> BookmarkSetDetailProjection {
-    BookmarkSetDetailProjection {
-        display_title: bookmark_set_display_title(&input.record, "Collection"),
     }
 }
 
@@ -925,16 +939,16 @@ fn parse_web_bookmark_event(event: Event) -> WebBookmarkRecord {
 #[cfg(test)]
 mod tests {
     use super::{
-        bookmark_library_projection, bookmark_set_detail_projection, bookmark_set_row_projection,
+        bookmark_library_projection, bookmark_set_row_projection,
         bookmarked_article_row_projection, curation_menu_items_for_address,
         curation_set_create_projection, filter_explorable_curation_sets,
         next_curation_address_membership, query_bookmark_library_snapshot,
-        web_bookmark_row_projection, BookmarkLibraryFilter, BookmarkLibraryFilterChipProjection,
-        BookmarkLibraryPane, BookmarkLibraryProjectionInput, BookmarkLibraryScope,
-        BookmarkLibraryScopeOptionProjection, BookmarkSetDetailProjectionInput,
-        BookmarkSetRowProjectionInput, BookmarkedArticleRowProjectionInput,
-        CurationMembershipChange, CurationSetCreateProjectionInput, WebBookmarkRowProjectionInput,
-        KIND_BOOKMARK_SETS, KIND_CURATION_SETS, KIND_WEB_BOOKMARK,
+        query_bookmark_set_detail_snapshot, web_bookmark_row_projection, BookmarkLibraryFilter,
+        BookmarkLibraryFilterChipProjection, BookmarkLibraryPane, BookmarkLibraryProjectionInput,
+        BookmarkLibraryScope, BookmarkLibraryScopeOptionProjection, BookmarkSetRowProjectionInput,
+        BookmarkedArticleRowProjectionInput, CurationMembershipChange,
+        CurationSetCreateProjectionInput, WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS,
+        KIND_CURATION_SETS, KIND_WEB_BOOKMARK,
     };
     use crate::models::{ArticleRecord, BookmarkSetRecord, WebBookmarkRecord};
     use nostr_sdk::prelude::*;
@@ -1265,12 +1279,30 @@ mod tests {
     }
 
     #[test]
-    fn bookmark_set_detail_uses_collection_empty_fallback() {
-        let projection = bookmark_set_detail_projection(BookmarkSetDetailProjectionInput {
-            record: set("", "", Vec::new()),
-        });
+    fn bookmark_set_detail_snapshot_projects_title_and_empty_state() {
+        let (ndb, _tmp) = fresh_ndb();
 
-        assert_eq!(projection.display_title, "Collection");
+        let snapshot = query_bookmark_set_detail_snapshot(&ndb, set("", "", Vec::new()));
+
+        assert_eq!(snapshot.display_title, "Collection");
+        assert!(snapshot.articles.is_empty());
+        assert!(snapshot.is_empty);
+        assert!(snapshot.error.is_empty());
+    }
+
+    #[test]
+    fn bookmark_set_detail_snapshot_note_refs_are_not_empty() {
+        let (ndb, _tmp) = fresh_ndb();
+
+        let snapshot = query_bookmark_set_detail_snapshot(
+            &ndb,
+            set_with_notes("", "Notes", Vec::new(), vec!["note-1"]),
+        );
+
+        assert_eq!(snapshot.display_title, "Notes");
+        assert!(snapshot.articles.is_empty());
+        assert!(!snapshot.is_empty);
+        assert!(snapshot.error.is_empty());
     }
 
     #[test]
