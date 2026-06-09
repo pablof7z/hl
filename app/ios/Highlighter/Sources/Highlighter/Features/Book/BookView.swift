@@ -180,21 +180,24 @@ struct BookView: View {
     }
 
     private func passageRow(_ h: HighlightRecord) -> some View {
-        HStack(alignment: .top, spacing: 14) {
+        let content = app.safeCore.projectHighlightDetailContent(
+            input: HighlightDetailContentProjectionInput(highlight: h)
+        )
+        return HStack(alignment: .top, spacing: 14) {
             Rectangle()
                 .fill(Color.highlighterAccent)
                 .frame(width: 3)
                 .clipShape(RoundedRectangle(cornerRadius: 1.5))
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(h.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                Text(content.quoteText)
                     .font(.system(.body, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if !h.note.isEmpty {
-                    Text(h.note)
+                if let note = content.noteText {
+                    Text(note)
                         .font(.footnote)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .fixedSize(horizontal: false, vertical: true)
