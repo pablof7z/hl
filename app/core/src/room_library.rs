@@ -16,6 +16,42 @@ pub struct RoomLibraryArticleCardProjection {
     pub meta_bits: Vec<String>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomLibraryBookCardProjectionInput {
+    pub artifact: ArtifactRecord,
+    pub comment_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomLibraryBookCardProjection {
+    pub title: String,
+    pub title_is_fallback: bool,
+    pub author_label: Option<String>,
+    pub summary: Option<String>,
+    pub image_url: Option<String>,
+    pub sharer_pubkey: String,
+    pub relative_unix_seconds: Option<u64>,
+    pub comment_badge_label: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomLibraryPodcastCardProjectionInput {
+    pub artifact: ArtifactRecord,
+    pub comment_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomLibraryPodcastCardProjection {
+    pub title: String,
+    pub title_is_fallback: bool,
+    pub show_label: Option<String>,
+    pub duration_label: Option<String>,
+    pub image_url: Option<String>,
+    pub sharer_pubkey: String,
+    pub relative_unix_seconds: Option<u64>,
+    pub comment_badge_label: Option<String>,
+}
+
 /// Presentation projection for an article artifact in a room library. Rust
 /// owns route-derived article author identity, avatar fallback identity,
 /// relative timestamp source, and domain/comment meta bits.
@@ -44,6 +80,53 @@ pub fn article_card_projection(
     }
 }
 
+/// Presentation projection for a book artifact in a room library. Rust owns
+/// display fallbacks and badges; Swift only renders the native layout.
+pub fn book_card_projection(
+    input: RoomLibraryBookCardProjectionInput,
+) -> RoomLibraryBookCardProjection {
+    let artifact = input.artifact;
+    let (title, title_is_fallback) = title_or_fallback(&artifact);
+    let relative_unix_seconds = relative_unix_seconds(&artifact);
+
+    RoomLibraryBookCardProjection {
+        title,
+        title_is_fallback,
+        author_label: non_empty_string(&artifact.preview.author),
+        summary: non_empty_string(&artifact.preview.description),
+        image_url: non_empty_string(&artifact.preview.image),
+        sharer_pubkey: artifact.pubkey,
+        relative_unix_seconds,
+        comment_badge_label: comment_badge_label(input.comment_count),
+    }
+}
+
+/// Presentation projection for a podcast artifact in a room library. Rust
+/// owns episode/show fallback policy, duration text, and badges.
+pub fn podcast_card_projection(
+    input: RoomLibraryPodcastCardProjectionInput,
+) -> RoomLibraryPodcastCardProjection {
+    let artifact = input.artifact;
+    let (title, title_is_fallback) = title_or_fallback(&artifact);
+    let relative_unix_seconds = relative_unix_seconds(&artifact);
+    let show_title = if artifact.preview.podcast_show_title.is_empty() {
+        &artifact.preview.author
+    } else {
+        &artifact.preview.podcast_show_title
+    };
+
+    RoomLibraryPodcastCardProjection {
+        title,
+        title_is_fallback,
+        show_label: non_empty_string(show_title),
+        duration_label: duration_label(artifact.preview.duration_seconds),
+        image_url: non_empty_string(&artifact.preview.image),
+        sharer_pubkey: artifact.pubkey,
+        relative_unix_seconds,
+        comment_badge_label: comment_badge_label(input.comment_count),
+    }
+}
+
 fn article_meta_bits(artifact: &ArtifactRecord, comment_count: u32) -> Vec<String> {
     let mut out = Vec::new();
     if !artifact.preview.domain.is_empty() {
@@ -56,6 +139,45 @@ fn article_meta_bits(artifact: &ArtifactRecord, comment_count: u32) -> Vec<Strin
         ));
     }
     out
+}
+
+fn title_or_fallback(artifact: &ArtifactRecord) -> (String, bool) {
+    if artifact.preview.title.is_empty() {
+        ("Untitled".into(), true)
+    } else {
+        (artifact.preview.title.clone(), false)
+    }
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn relative_unix_seconds(artifact: &ArtifactRecord) -> Option<u64> {
+    artifact.created_at.filter(|seconds| *seconds > 0)
+}
+
+fn comment_badge_label(comment_count: u32) -> Option<String> {
+    if comment_count > 0 {
+        Some(comment_count.to_string())
+    } else {
+        None
+    }
+}
+
+fn duration_label(duration_seconds: Option<i64>) -> Option<String> {
+    let secs = duration_seconds.filter(|seconds| *seconds > 0)?;
+    let hours = secs / 3_600;
+    let minutes = (secs % 3_600) / 60;
+    if hours > 0 {
+        Some(format!("{hours}h {minutes}m"))
+    } else {
+        Some(format!("{minutes}m"))
+    }
 }
 
 #[cfg(test)]
@@ -105,6 +227,106 @@ mod tests {
         assert_eq!(projection.author_profile_pubkey, "");
         assert_eq!(projection.relative_unix_seconds, None);
         assert_eq!(projection.meta_bits, vec!["1 comment".to_string()]);
+    }
+
+    #[test]
+    fn book_card_projection_preserves_book_row_policy() {
+        let mut artifact = artifact_record("book");
+        artifact.preview.title = "The Book".into();
+        artifact.preview.author = "Author".into();
+        artifact.preview.description = "Summary".into();
+        artifact.preview.image = "https://example.com/book.jpg".into();
+        artifact.pubkey = "sharerpubkey".into();
+        artifact.created_at = Some(456);
+
+        let projection = book_card_projection(RoomLibraryBookCardProjectionInput {
+            artifact,
+            comment_count: 3,
+        });
+
+        assert_eq!(projection.title, "The Book");
+        assert!(!projection.title_is_fallback);
+        assert_eq!(projection.author_label, Some("Author".into()));
+        assert_eq!(projection.summary, Some("Summary".into()));
+        assert_eq!(
+            projection.image_url,
+            Some("https://example.com/book.jpg".into())
+        );
+        assert_eq!(projection.sharer_pubkey, "sharerpubkey");
+        assert_eq!(projection.relative_unix_seconds, Some(456));
+        assert_eq!(projection.comment_badge_label, Some("3".into()));
+    }
+
+    #[test]
+    fn book_card_projection_falls_back_without_optional_bits() {
+        let mut artifact = artifact_record("book");
+        artifact.preview.title.clear();
+        artifact.preview.author.clear();
+        artifact.preview.description.clear();
+        artifact.preview.image.clear();
+        artifact.created_at = Some(0);
+
+        let projection = book_card_projection(RoomLibraryBookCardProjectionInput {
+            artifact,
+            comment_count: 0,
+        });
+
+        assert_eq!(projection.title, "Untitled");
+        assert!(projection.title_is_fallback);
+        assert_eq!(projection.author_label, None);
+        assert_eq!(projection.summary, None);
+        assert_eq!(projection.image_url, None);
+        assert_eq!(projection.relative_unix_seconds, None);
+        assert_eq!(projection.comment_badge_label, None);
+    }
+
+    #[test]
+    fn podcast_card_projection_preserves_show_duration_and_badges() {
+        let mut artifact = artifact_record("podcast");
+        artifact.preview.title = "Episode".into();
+        artifact.preview.author = "Fallback Show".into();
+        artifact.preview.podcast_show_title = "Actual Show".into();
+        artifact.preview.duration_seconds = Some(3_900);
+        artifact.preview.image = "https://example.com/podcast.jpg".into();
+        artifact.pubkey = "podcaster".into();
+        artifact.created_at = Some(789);
+
+        let projection = podcast_card_projection(RoomLibraryPodcastCardProjectionInput {
+            artifact,
+            comment_count: 1,
+        });
+
+        assert_eq!(projection.title, "Episode");
+        assert!(!projection.title_is_fallback);
+        assert_eq!(projection.show_label, Some("Actual Show".into()));
+        assert_eq!(projection.duration_label, Some("1h 5m".into()));
+        assert_eq!(
+            projection.image_url,
+            Some("https://example.com/podcast.jpg".into())
+        );
+        assert_eq!(projection.sharer_pubkey, "podcaster");
+        assert_eq!(projection.relative_unix_seconds, Some(789));
+        assert_eq!(projection.comment_badge_label, Some("1".into()));
+    }
+
+    #[test]
+    fn podcast_card_projection_uses_author_show_fallback_and_short_duration() {
+        let mut artifact = artifact_record("podcast");
+        artifact.preview.title.clear();
+        artifact.preview.author = "Author Show".into();
+        artifact.preview.podcast_show_title.clear();
+        artifact.preview.duration_seconds = Some(59);
+
+        let projection = podcast_card_projection(RoomLibraryPodcastCardProjectionInput {
+            artifact,
+            comment_count: 0,
+        });
+
+        assert_eq!(projection.title, "Untitled");
+        assert!(projection.title_is_fallback);
+        assert_eq!(projection.show_label, Some("Author Show".into()));
+        assert_eq!(projection.duration_label, Some("0m".into()));
+        assert_eq!(projection.comment_badge_label, None);
     }
 
     fn artifact_record(source: &str) -> ArtifactRecord {

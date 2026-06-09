@@ -134,7 +134,11 @@ pub use room_invites::{
     RoomInviteProjection, RoomInviteProjectionInput, RoomInviteResolvedCandidate,
     RoomInviteSendResultProjection, RoomInviteSuggestion,
 };
-pub use room_library::{RoomLibraryArticleCardProjection, RoomLibraryArticleCardProjectionInput};
+pub use room_library::{
+    RoomLibraryArticleCardProjection, RoomLibraryArticleCardProjectionInput,
+    RoomLibraryBookCardProjection, RoomLibraryBookCardProjectionInput,
+    RoomLibraryPodcastCardProjection, RoomLibraryPodcastCardProjectionInput,
+};
 pub use room_preview::{
     RoomPreviewArtifactRowProjection, RoomPreviewArtifactsProjection,
     RoomPreviewArtifactsProjectionInput,

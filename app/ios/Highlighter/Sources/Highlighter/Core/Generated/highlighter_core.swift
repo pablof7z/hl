@@ -1480,6 +1480,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput)  -> RoomLibraryArticleCardProjection
 
+    func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput)  -> RoomLibraryBookCardProjection
+
+    func projectRoomLibraryPodcastCard(input: RoomLibraryPodcastCardProjectionInput)  -> RoomLibraryPodcastCardProjection
+
     func projectRoomPreviewArtifacts(input: RoomPreviewArtifactsProjectionInput)  -> RoomPreviewArtifactsProjection
 
     func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput)  -> RoomRecommendationCardProjection
@@ -4376,6 +4380,22 @@ open func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionI
     return try!  FfiConverterTypeRoomLibraryArticleCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_library_article_card(self.uniffiClonePointer(),
         FfiConverterTypeRoomLibraryArticleCardProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput) -> RoomLibraryBookCardProjection  {
+    return try!  FfiConverterTypeRoomLibraryBookCardProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_library_book_card(self.uniffiClonePointer(),
+        FfiConverterTypeRoomLibraryBookCardProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomLibraryPodcastCard(input: RoomLibraryPodcastCardProjectionInput) -> RoomLibraryPodcastCardProjection  {
+    return try!  FfiConverterTypeRoomLibraryPodcastCardProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_library_podcast_card(self.uniffiClonePointer(),
+        FfiConverterTypeRoomLibraryPodcastCardProjectionInput_lower(input),$0
     )
 })
 }
@@ -20315,6 +20335,382 @@ public func FfiConverterTypeRoomLibraryArticleCardProjectionInput_lower(_ value:
 }
 
 
+public struct RoomLibraryBookCardProjection {
+    public var title: String
+    public var titleIsFallback: Bool
+    public var authorLabel: String?
+    public var summary: String?
+    public var imageUrl: String?
+    public var sharerPubkey: String
+    public var relativeUnixSeconds: UInt64?
+    public var commentBadgeLabel: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String, titleIsFallback: Bool, authorLabel: String?, summary: String?, imageUrl: String?, sharerPubkey: String, relativeUnixSeconds: UInt64?, commentBadgeLabel: String?) {
+        self.title = title
+        self.titleIsFallback = titleIsFallback
+        self.authorLabel = authorLabel
+        self.summary = summary
+        self.imageUrl = imageUrl
+        self.sharerPubkey = sharerPubkey
+        self.relativeUnixSeconds = relativeUnixSeconds
+        self.commentBadgeLabel = commentBadgeLabel
+    }
+}
+
+#if compiler(>=6)
+extension RoomLibraryBookCardProjection: Sendable {}
+#endif
+
+
+extension RoomLibraryBookCardProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomLibraryBookCardProjection, rhs: RoomLibraryBookCardProjection) -> Bool {
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.titleIsFallback != rhs.titleIsFallback {
+            return false
+        }
+        if lhs.authorLabel != rhs.authorLabel {
+            return false
+        }
+        if lhs.summary != rhs.summary {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        if lhs.sharerPubkey != rhs.sharerPubkey {
+            return false
+        }
+        if lhs.relativeUnixSeconds != rhs.relativeUnixSeconds {
+            return false
+        }
+        if lhs.commentBadgeLabel != rhs.commentBadgeLabel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(title)
+        hasher.combine(titleIsFallback)
+        hasher.combine(authorLabel)
+        hasher.combine(summary)
+        hasher.combine(imageUrl)
+        hasher.combine(sharerPubkey)
+        hasher.combine(relativeUnixSeconds)
+        hasher.combine(commentBadgeLabel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLibraryBookCardProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryBookCardProjection {
+        return
+            try RoomLibraryBookCardProjection(
+                title: FfiConverterString.read(from: &buf),
+                titleIsFallback: FfiConverterBool.read(from: &buf),
+                authorLabel: FfiConverterOptionString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                sharerPubkey: FfiConverterString.read(from: &buf),
+                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
+                commentBadgeLabel: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLibraryBookCardProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterBool.write(value.titleIsFallback, into: &buf)
+        FfiConverterOptionString.write(value.authorLabel, into: &buf)
+        FfiConverterOptionString.write(value.summary, into: &buf)
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
+        FfiConverterString.write(value.sharerPubkey, into: &buf)
+        FfiConverterOptionUInt64.write(value.relativeUnixSeconds, into: &buf)
+        FfiConverterOptionString.write(value.commentBadgeLabel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryBookCardProjection_lift(_ buf: RustBuffer) throws -> RoomLibraryBookCardProjection {
+    return try FfiConverterTypeRoomLibraryBookCardProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryBookCardProjection_lower(_ value: RoomLibraryBookCardProjection) -> RustBuffer {
+    return FfiConverterTypeRoomLibraryBookCardProjection.lower(value)
+}
+
+
+public struct RoomLibraryBookCardProjectionInput {
+    public var artifact: ArtifactRecord
+    public var commentCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifact: ArtifactRecord, commentCount: UInt32) {
+        self.artifact = artifact
+        self.commentCount = commentCount
+    }
+}
+
+#if compiler(>=6)
+extension RoomLibraryBookCardProjectionInput: Sendable {}
+#endif
+
+
+extension RoomLibraryBookCardProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomLibraryBookCardProjectionInput, rhs: RoomLibraryBookCardProjectionInput) -> Bool {
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        if lhs.commentCount != rhs.commentCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifact)
+        hasher.combine(commentCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLibraryBookCardProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryBookCardProjectionInput {
+        return
+            try RoomLibraryBookCardProjectionInput(
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                commentCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLibraryBookCardProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterUInt32.write(value.commentCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryBookCardProjectionInput_lift(_ buf: RustBuffer) throws -> RoomLibraryBookCardProjectionInput {
+    return try FfiConverterTypeRoomLibraryBookCardProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryBookCardProjectionInput_lower(_ value: RoomLibraryBookCardProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomLibraryBookCardProjectionInput.lower(value)
+}
+
+
+public struct RoomLibraryPodcastCardProjection {
+    public var title: String
+    public var titleIsFallback: Bool
+    public var showLabel: String?
+    public var durationLabel: String?
+    public var imageUrl: String?
+    public var sharerPubkey: String
+    public var relativeUnixSeconds: UInt64?
+    public var commentBadgeLabel: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String, titleIsFallback: Bool, showLabel: String?, durationLabel: String?, imageUrl: String?, sharerPubkey: String, relativeUnixSeconds: UInt64?, commentBadgeLabel: String?) {
+        self.title = title
+        self.titleIsFallback = titleIsFallback
+        self.showLabel = showLabel
+        self.durationLabel = durationLabel
+        self.imageUrl = imageUrl
+        self.sharerPubkey = sharerPubkey
+        self.relativeUnixSeconds = relativeUnixSeconds
+        self.commentBadgeLabel = commentBadgeLabel
+    }
+}
+
+#if compiler(>=6)
+extension RoomLibraryPodcastCardProjection: Sendable {}
+#endif
+
+
+extension RoomLibraryPodcastCardProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomLibraryPodcastCardProjection, rhs: RoomLibraryPodcastCardProjection) -> Bool {
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.titleIsFallback != rhs.titleIsFallback {
+            return false
+        }
+        if lhs.showLabel != rhs.showLabel {
+            return false
+        }
+        if lhs.durationLabel != rhs.durationLabel {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        if lhs.sharerPubkey != rhs.sharerPubkey {
+            return false
+        }
+        if lhs.relativeUnixSeconds != rhs.relativeUnixSeconds {
+            return false
+        }
+        if lhs.commentBadgeLabel != rhs.commentBadgeLabel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(title)
+        hasher.combine(titleIsFallback)
+        hasher.combine(showLabel)
+        hasher.combine(durationLabel)
+        hasher.combine(imageUrl)
+        hasher.combine(sharerPubkey)
+        hasher.combine(relativeUnixSeconds)
+        hasher.combine(commentBadgeLabel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLibraryPodcastCardProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryPodcastCardProjection {
+        return
+            try RoomLibraryPodcastCardProjection(
+                title: FfiConverterString.read(from: &buf),
+                titleIsFallback: FfiConverterBool.read(from: &buf),
+                showLabel: FfiConverterOptionString.read(from: &buf),
+                durationLabel: FfiConverterOptionString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                sharerPubkey: FfiConverterString.read(from: &buf),
+                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
+                commentBadgeLabel: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLibraryPodcastCardProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterBool.write(value.titleIsFallback, into: &buf)
+        FfiConverterOptionString.write(value.showLabel, into: &buf)
+        FfiConverterOptionString.write(value.durationLabel, into: &buf)
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
+        FfiConverterString.write(value.sharerPubkey, into: &buf)
+        FfiConverterOptionUInt64.write(value.relativeUnixSeconds, into: &buf)
+        FfiConverterOptionString.write(value.commentBadgeLabel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryPodcastCardProjection_lift(_ buf: RustBuffer) throws -> RoomLibraryPodcastCardProjection {
+    return try FfiConverterTypeRoomLibraryPodcastCardProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryPodcastCardProjection_lower(_ value: RoomLibraryPodcastCardProjection) -> RustBuffer {
+    return FfiConverterTypeRoomLibraryPodcastCardProjection.lower(value)
+}
+
+
+public struct RoomLibraryPodcastCardProjectionInput {
+    public var artifact: ArtifactRecord
+    public var commentCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifact: ArtifactRecord, commentCount: UInt32) {
+        self.artifact = artifact
+        self.commentCount = commentCount
+    }
+}
+
+#if compiler(>=6)
+extension RoomLibraryPodcastCardProjectionInput: Sendable {}
+#endif
+
+
+extension RoomLibraryPodcastCardProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomLibraryPodcastCardProjectionInput, rhs: RoomLibraryPodcastCardProjectionInput) -> Bool {
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        if lhs.commentCount != rhs.commentCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifact)
+        hasher.combine(commentCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLibraryPodcastCardProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryPodcastCardProjectionInput {
+        return
+            try RoomLibraryPodcastCardProjectionInput(
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                commentCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLibraryPodcastCardProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterUInt32.write(value.commentCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryPodcastCardProjectionInput_lift(_ buf: RustBuffer) throws -> RoomLibraryPodcastCardProjectionInput {
+    return try FfiConverterTypeRoomLibraryPodcastCardProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryPodcastCardProjectionInput_lower(_ value: RoomLibraryPodcastCardProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomLibraryPodcastCardProjectionInput.lower(value)
+}
+
+
 public struct RoomPreviewArtifactRowProjection {
     public var artifact: ArtifactRecord
     public var title: String
@@ -27176,6 +27572,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_article_card() != 56696) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_book_card() != 17129) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_podcast_card() != 47926) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_preview_artifacts() != 32023) {

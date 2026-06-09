@@ -1064,6 +1064,18 @@ actor SafeHighlighterCore {
         core.projectRoomLibraryArticleCard(input: input)
     }
 
+    nonisolated func projectRoomLibraryBookCard(
+        input: RoomLibraryBookCardProjectionInput
+    ) -> RoomLibraryBookCardProjection {
+        core.projectRoomLibraryBookCard(input: input)
+    }
+
+    nonisolated func projectRoomLibraryPodcastCard(
+        input: RoomLibraryPodcastCardProjectionInput
+    ) -> RoomLibraryPodcastCardProjection {
+        core.projectRoomLibraryPodcastCard(input: input)
+    }
+
     func addRoomMember(groupId: String, pubkeyHex: String) async -> StringOutcome {
         await core.addRoomMember(groupId: groupId, pubkeyHex: pubkeyHex)
     }
