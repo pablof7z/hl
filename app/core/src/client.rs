@@ -3913,8 +3913,9 @@ impl HighlighterCore {
         let network_preferences = Arc::new(network_preferences::NetworkPreferencesStore::new(
             runtime.data_dir(),
         ));
-        let podcast_position = Arc::new(podcast_position::PodcastPositionStore::new(
+        let podcast_position = Arc::new(podcast_position::PodcastPositionStore::new_with_clock(
             runtime.data_dir(),
+            clock.clone(),
         ));
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {

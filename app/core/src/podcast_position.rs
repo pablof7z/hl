@@ -6,10 +6,10 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::UNIX_EPOCH;
 
 use parking_lot::Mutex;
 
+use crate::clock::Clock;
 use crate::errors::CoreError;
 use crate::models::{ArtifactRecord, PodcastPositionRecord};
 
@@ -23,11 +23,7 @@ pub struct PodcastPositionStore {
 }
 
 impl PodcastPositionStore {
-    pub fn new(data_dir: &Path) -> Self {
-        Self::new_with_clock(data_dir, Arc::new(SystemClock))
-    }
-
-    fn new_with_clock(data_dir: &Path, clock: Arc<dyn Clock>) -> Self {
+    pub(crate) fn new_with_clock(data_dir: &Path, clock: Arc<dyn Clock>) -> Self {
         Self {
             path: data_dir.join(STATE_FILE_NAME),
             clock,
@@ -42,10 +38,7 @@ impl PodcastPositionStore {
         }
 
         let record = guard.as_ref().and_then(Clone::clone)?;
-        let Ok(now) = self.clock.now_unix_seconds() else {
-            tracing::warn!("system clock is before unix epoch while reading podcast position");
-            return Some(record);
-        };
+        let now = self.clock.now_unix_seconds();
         if is_stale(&record, now) {
             if let Err(e) = remove_record(&self.path) {
                 tracing::warn!(path = %self.path.display(), error = %e, "failed to remove stale podcast position");
@@ -87,7 +80,7 @@ impl PodcastPositionStore {
         let record = PodcastPositionRecord {
             guid,
             position_seconds,
-            last_played_at_unix_seconds: self.clock.now_unix_seconds()?,
+            last_played_at_unix_seconds: self.clock.now_unix_seconds(),
             artifact,
         };
 
@@ -155,22 +148,6 @@ fn is_stale(record: &PodcastPositionRecord, now: u64) -> bool {
     now.saturating_sub(record.last_played_at_unix_seconds) >= MAX_AGE_SECONDS
 }
 
-trait Clock: Send + Sync {
-    fn now_unix_seconds(&self) -> Result<u64, CoreError>;
-}
-
-#[derive(Debug)]
-struct SystemClock;
-
-impl Clock for SystemClock {
-    fn now_unix_seconds(&self) -> Result<u64, CoreError> {
-        UNIX_EPOCH
-            .elapsed()
-            .map(|duration| duration.as_secs())
-            .map_err(|e| CoreError::Other(format!("system clock before unix epoch: {e}")))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,7 +156,7 @@ mod tests {
     #[test]
     fn default_position_is_empty() {
         let dir = tempfile::tempdir().unwrap();
-        let store = PodcastPositionStore::new(dir.path());
+        let store = store_at(dir.path(), 10_000);
 
         assert!(store.current().is_none());
     }
@@ -254,13 +231,14 @@ mod tests {
         PodcastPositionStore::new_with_clock(path, Arc::new(FixedClock { now }))
     }
 
+    #[derive(Debug)]
     struct FixedClock {
         now: u64,
     }
 
     impl Clock for FixedClock {
-        fn now_unix_seconds(&self) -> Result<u64, CoreError> {
-            Ok(self.now)
+        fn now_unix_seconds(&self) -> u64 {
+            self.now
         }
     }
 
