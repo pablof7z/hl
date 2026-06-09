@@ -1537,14 +1537,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * snapshot. Rust resolves the optional project agent `p` tag and owns the
      * optimistic insertion of the signed root before relay echo.
      */
-    func publishFeedbackRootNoteSnapshot(coordinate: String, body: String) async  -> FeedbackRootPublishSnapshotOutcome
+    func publishFeedbackRootNoteSnapshot(coordinate: String, body: String) async  -> FeedbackRootPublishSnapshot
 
     /**
      * Publish a feedback reply into an existing root thread and return the
      * refreshed bounded thread snapshot. Rust owns the NIP-10 root marker and
      * optimistic merge of the signed reply.
      */
-    func publishFeedbackThreadReplySnapshot(coordinate: String, parentEventId: String, body: String) async  -> FeedbackReplyPublishSnapshotOutcome
+    func publishFeedbackThreadReplySnapshot(coordinate: String, parentEventId: String, body: String) async  -> FeedbackReplyPublishSnapshot
 
     /**
      * Publish and share one podcast clip highlight. Rust owns clip draft
@@ -4475,7 +4475,7 @@ open func publishDiscussionFromComposer(input: DiscussionComposerPublishInput)as
      * snapshot. Rust resolves the optional project agent `p` tag and owns the
      * optimistic insertion of the signed root before relay echo.
      */
-open func publishFeedbackRootNoteSnapshot(coordinate: String, body: String)async  -> FeedbackRootPublishSnapshotOutcome  {
+open func publishFeedbackRootNoteSnapshot(coordinate: String, body: String)async  -> FeedbackRootPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4487,7 +4487,7 @@ open func publishFeedbackRootNoteSnapshot(coordinate: String, body: String)async
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeFeedbackRootPublishSnapshotOutcome_lift,
+            liftFunc: FfiConverterTypeFeedbackRootPublishSnapshot_lift,
             errorHandler: nil
 
         )
@@ -4498,7 +4498,7 @@ open func publishFeedbackRootNoteSnapshot(coordinate: String, body: String)async
      * refreshed bounded thread snapshot. Rust owns the NIP-10 root marker and
      * optimistic merge of the signed reply.
      */
-open func publishFeedbackThreadReplySnapshot(coordinate: String, parentEventId: String, body: String)async  -> FeedbackReplyPublishSnapshotOutcome  {
+open func publishFeedbackThreadReplySnapshot(coordinate: String, parentEventId: String, body: String)async  -> FeedbackReplyPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4510,7 +4510,7 @@ open func publishFeedbackThreadReplySnapshot(coordinate: String, parentEventId: 
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeFeedbackReplyPublishSnapshotOutcome_lift,
+            liftFunc: FfiConverterTypeFeedbackReplyPublishSnapshot_lift,
             errorHandler: nil
 
         )
@@ -15962,7 +15962,7 @@ public func FfiConverterTypeFeedbackMessageRowProjection_lower(_ value: Feedback
 }
 
 
-public struct FeedbackReplyPublishSnapshotOutcome {
+public struct FeedbackReplyPublishSnapshot {
     public var snapshot: FeedbackThreadSnapshot
     public var error: String
 
@@ -15975,12 +15975,12 @@ public struct FeedbackReplyPublishSnapshotOutcome {
 }
 
 #if compiler(>=6)
-extension FeedbackReplyPublishSnapshotOutcome: Sendable {}
+extension FeedbackReplyPublishSnapshot: Sendable {}
 #endif
 
 
-extension FeedbackReplyPublishSnapshotOutcome: Equatable, Hashable {
-    public static func ==(lhs: FeedbackReplyPublishSnapshotOutcome, rhs: FeedbackReplyPublishSnapshotOutcome) -> Bool {
+extension FeedbackReplyPublishSnapshot: Equatable, Hashable {
+    public static func ==(lhs: FeedbackReplyPublishSnapshot, rhs: FeedbackReplyPublishSnapshot) -> Bool {
         if lhs.snapshot != rhs.snapshot {
             return false
         }
@@ -16001,16 +16001,16 @@ extension FeedbackReplyPublishSnapshotOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeFeedbackReplyPublishSnapshotOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackReplyPublishSnapshotOutcome {
+public struct FfiConverterTypeFeedbackReplyPublishSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackReplyPublishSnapshot {
         return
-            try FeedbackReplyPublishSnapshotOutcome(
+            try FeedbackReplyPublishSnapshot(
                 snapshot: FfiConverterTypeFeedbackThreadSnapshot.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: FeedbackReplyPublishSnapshotOutcome, into buf: inout [UInt8]) {
+    public static func write(_ value: FeedbackReplyPublishSnapshot, into buf: inout [UInt8]) {
         FfiConverterTypeFeedbackThreadSnapshot.write(value.snapshot, into: &buf)
         FfiConverterString.write(value.error, into: &buf)
     }
@@ -16020,19 +16020,19 @@ public struct FfiConverterTypeFeedbackReplyPublishSnapshotOutcome: FfiConverterR
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFeedbackReplyPublishSnapshotOutcome_lift(_ buf: RustBuffer) throws -> FeedbackReplyPublishSnapshotOutcome {
-    return try FfiConverterTypeFeedbackReplyPublishSnapshotOutcome.lift(buf)
+public func FfiConverterTypeFeedbackReplyPublishSnapshot_lift(_ buf: RustBuffer) throws -> FeedbackReplyPublishSnapshot {
+    return try FfiConverterTypeFeedbackReplyPublishSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFeedbackReplyPublishSnapshotOutcome_lower(_ value: FeedbackReplyPublishSnapshotOutcome) -> RustBuffer {
-    return FfiConverterTypeFeedbackReplyPublishSnapshotOutcome.lower(value)
+public func FfiConverterTypeFeedbackReplyPublishSnapshot_lower(_ value: FeedbackReplyPublishSnapshot) -> RustBuffer {
+    return FfiConverterTypeFeedbackReplyPublishSnapshot.lower(value)
 }
 
 
-public struct FeedbackRootPublishSnapshotOutcome {
+public struct FeedbackRootPublishSnapshot {
     public var snapshot: FeedbackThreadsSnapshot
     public var error: String
 
@@ -16045,12 +16045,12 @@ public struct FeedbackRootPublishSnapshotOutcome {
 }
 
 #if compiler(>=6)
-extension FeedbackRootPublishSnapshotOutcome: Sendable {}
+extension FeedbackRootPublishSnapshot: Sendable {}
 #endif
 
 
-extension FeedbackRootPublishSnapshotOutcome: Equatable, Hashable {
-    public static func ==(lhs: FeedbackRootPublishSnapshotOutcome, rhs: FeedbackRootPublishSnapshotOutcome) -> Bool {
+extension FeedbackRootPublishSnapshot: Equatable, Hashable {
+    public static func ==(lhs: FeedbackRootPublishSnapshot, rhs: FeedbackRootPublishSnapshot) -> Bool {
         if lhs.snapshot != rhs.snapshot {
             return false
         }
@@ -16071,16 +16071,16 @@ extension FeedbackRootPublishSnapshotOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeFeedbackRootPublishSnapshotOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackRootPublishSnapshotOutcome {
+public struct FfiConverterTypeFeedbackRootPublishSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackRootPublishSnapshot {
         return
-            try FeedbackRootPublishSnapshotOutcome(
+            try FeedbackRootPublishSnapshot(
                 snapshot: FfiConverterTypeFeedbackThreadsSnapshot.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: FeedbackRootPublishSnapshotOutcome, into buf: inout [UInt8]) {
+    public static func write(_ value: FeedbackRootPublishSnapshot, into buf: inout [UInt8]) {
         FfiConverterTypeFeedbackThreadsSnapshot.write(value.snapshot, into: &buf)
         FfiConverterString.write(value.error, into: &buf)
     }
@@ -16090,15 +16090,15 @@ public struct FfiConverterTypeFeedbackRootPublishSnapshotOutcome: FfiConverterRu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFeedbackRootPublishSnapshotOutcome_lift(_ buf: RustBuffer) throws -> FeedbackRootPublishSnapshotOutcome {
-    return try FfiConverterTypeFeedbackRootPublishSnapshotOutcome.lift(buf)
+public func FfiConverterTypeFeedbackRootPublishSnapshot_lift(_ buf: RustBuffer) throws -> FeedbackRootPublishSnapshot {
+    return try FfiConverterTypeFeedbackRootPublishSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFeedbackRootPublishSnapshotOutcome_lower(_ value: FeedbackRootPublishSnapshotOutcome) -> RustBuffer {
-    return FfiConverterTypeFeedbackRootPublishSnapshotOutcome.lower(value)
+public func FfiConverterTypeFeedbackRootPublishSnapshot_lower(_ value: FeedbackRootPublishSnapshot) -> RustBuffer {
+    return FfiConverterTypeFeedbackRootPublishSnapshot.lower(value)
 }
 
 
@@ -39112,10 +39112,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion_from_composer() != 57199) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_root_note_snapshot() != 21250) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_root_note_snapshot() != 42041) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_thread_reply_snapshot() != 62503) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_thread_reply_snapshot() != 6347) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_clip_highlight() != 38748) {

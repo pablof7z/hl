@@ -45,13 +45,13 @@ pub struct FeedbackThreadSnapshot {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct FeedbackRootPublishSnapshotOutcome {
+pub struct FeedbackRootPublishSnapshot {
     pub snapshot: FeedbackThreadsSnapshot,
     pub error: String,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct FeedbackReplyPublishSnapshotOutcome {
+pub struct FeedbackReplyPublishSnapshot {
     pub snapshot: FeedbackThreadSnapshot,
     pub error: String,
 }

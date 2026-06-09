@@ -71,7 +71,7 @@ final class FeedbackThreadStore {
     /// Send a reply into the open thread. Rust resolves feedback agent
     /// routing and NIP-10 root tagging.
     @discardableResult
-    func sendReply(body: String) async -> FeedbackReplyPublishSnapshotOutcome? {
+    func sendReply(body: String) async -> FeedbackReplyPublishSnapshot? {
         guard let core, let coordinate, let rootEventId else {
             return nil
         }

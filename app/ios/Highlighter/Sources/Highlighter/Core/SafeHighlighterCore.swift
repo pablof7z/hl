@@ -603,7 +603,7 @@ actor SafeHighlighterCore {
     func publishFeedbackRootNoteSnapshot(
         coordinate: String,
         body: String
-    ) async -> FeedbackRootPublishSnapshotOutcome {
+    ) async -> FeedbackRootPublishSnapshot {
         await core.publishFeedbackRootNoteSnapshot(
             coordinate: coordinate,
             body: body
@@ -614,7 +614,7 @@ actor SafeHighlighterCore {
         coordinate: String,
         parentEventId: String,
         body: String
-    ) async -> FeedbackReplyPublishSnapshotOutcome {
+    ) async -> FeedbackReplyPublishSnapshot {
         await core.publishFeedbackThreadReplySnapshot(
             coordinate: coordinate,
             parentEventId: parentEventId,

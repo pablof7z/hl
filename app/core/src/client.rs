@@ -2626,10 +2626,10 @@ impl HighlighterCore {
         &self,
         coordinate: String,
         body: String,
-    ) -> feedback::FeedbackRootPublishSnapshotOutcome {
+    ) -> feedback::FeedbackRootPublishSnapshot {
         let base_snapshot = self.feedback_threads_snapshot_for_current_user(&coordinate);
         if let Err(error) = self.require_user_pubkey() {
-            return feedback::FeedbackRootPublishSnapshotOutcome {
+            return feedback::FeedbackRootPublishSnapshot {
                 snapshot: base_snapshot,
                 error: error.to_string(),
             };
@@ -2645,11 +2645,11 @@ impl HighlighterCore {
         )
         .await
         {
-            Ok(record) => feedback::FeedbackRootPublishSnapshotOutcome {
+            Ok(record) => feedback::FeedbackRootPublishSnapshot {
                 snapshot: feedback::threads_snapshot_with_root(base_snapshot, &record),
                 error: String::new(),
             },
-            Err(error) => feedback::FeedbackRootPublishSnapshotOutcome {
+            Err(error) => feedback::FeedbackRootPublishSnapshot {
                 snapshot: base_snapshot,
                 error: error.to_string(),
             },
@@ -2664,10 +2664,10 @@ impl HighlighterCore {
         coordinate: String,
         parent_event_id: String,
         body: String,
-    ) -> feedback::FeedbackReplyPublishSnapshotOutcome {
+    ) -> feedback::FeedbackReplyPublishSnapshot {
         let base_snapshot = feedback::query_thread_snapshot(self.runtime.ndb(), &parent_event_id);
         if let Err(error) = self.require_user_pubkey() {
-            return feedback::FeedbackReplyPublishSnapshotOutcome {
+            return feedback::FeedbackReplyPublishSnapshot {
                 snapshot: base_snapshot,
                 error: error.to_string(),
             };
@@ -2683,11 +2683,11 @@ impl HighlighterCore {
         )
         .await
         {
-            Ok(record) => feedback::FeedbackReplyPublishSnapshotOutcome {
+            Ok(record) => feedback::FeedbackReplyPublishSnapshot {
                 snapshot: feedback::thread_snapshot_with_event(base_snapshot, &record),
                 error: String::new(),
             },
-            Err(error) => feedback::FeedbackReplyPublishSnapshotOutcome {
+            Err(error) => feedback::FeedbackReplyPublishSnapshot {
                 snapshot: base_snapshot,
                 error: error.to_string(),
             },
