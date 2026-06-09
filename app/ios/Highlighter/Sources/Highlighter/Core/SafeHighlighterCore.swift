@@ -589,6 +589,12 @@ actor SafeHighlighterCore {
         core.projectSecretKeyDisplay(input: input)
     }
 
+    nonisolated func projectRelativeTimeLabel(
+        input: RelativeTimeLabelInput
+    ) -> RelativeTimeLabelProjection {
+        core.projectRelativeTimeLabel(input: input)
+    }
+
     nonisolated func projectProfileDisplay(
         input: ProfileDisplayProjectionInput
     ) -> ProfileDisplayProjection {

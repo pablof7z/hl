@@ -547,18 +547,12 @@ struct HighlightFeedCardView: View {
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        guard let s = seconds, s > 0 else { return nil }
-        let now = Date().timeIntervalSince1970
-        let delta = now - TimeInterval(s)
-        guard delta >= 0 else { return nil }
-        switch delta {
-        case ..<60: return "just now"
-        case ..<3600: return "\(Int(delta / 60))m"
-        case ..<86400: return "\(Int(delta / 3600))h"
-        case ..<(86400 * 7): return "\(Int(delta / 86400))d"
-        case ..<(86400 * 30): return "\(Int(delta / (86400 * 7)))w"
-        default: return "\(Int(delta / (86400 * 30)))mo"
-        }
+        app.safeCore.projectRelativeTimeLabel(
+            input: RelativeTimeLabelInput(
+                unixSeconds: seconds,
+                style: .compact
+            )
+        ).label
     }
 
     private func resolveSource() async {
@@ -706,17 +700,11 @@ private struct HighlightQuoteCard: View {
     }
 
     private var relative: String? {
-        guard let s = highlight.highlight.createdAt, s > 0 else { return nil }
-        let now = Date().timeIntervalSince1970
-        let delta = now - TimeInterval(s)
-        guard delta >= 0 else { return nil }
-        switch delta {
-        case ..<60: return "just now"
-        case ..<3600: return "\(Int(delta / 60))m"
-        case ..<86400: return "\(Int(delta / 3600))h"
-        case ..<(86400 * 7): return "\(Int(delta / 86400))d"
-        case ..<(86400 * 30): return "\(Int(delta / (86400 * 7)))w"
-        default: return "\(Int(delta / (86400 * 30)))mo"
-        }
+        app.safeCore.projectRelativeTimeLabel(
+            input: RelativeTimeLabelInput(
+                unixSeconds: highlight.highlight.createdAt,
+                style: .compact
+            )
+        ).label
     }
 }

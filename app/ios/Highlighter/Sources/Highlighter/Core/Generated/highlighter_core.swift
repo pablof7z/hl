@@ -1458,6 +1458,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectPublicKeyDisplay(input: PublicKeyDisplayProjectionInput)  -> PublicKeyDisplayProjection
 
+    func projectRelativeTimeLabel(input: RelativeTimeLabelInput)  -> RelativeTimeLabelProjection
+
     func projectRelayDetail(input: RelayDetailProjectionInput)  -> RelayDetailProjection
 
     func projectRelayRemove(input: RelayRemoveProjectionInput)  -> RelayRemoveProjection
@@ -4271,6 +4273,14 @@ open func projectPublicKeyDisplay(input: PublicKeyDisplayProjectionInput) -> Pub
     return try!  FfiConverterTypePublicKeyDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_public_key_display(self.uniffiClonePointer(),
         FfiConverterTypePublicKeyDisplayProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRelativeTimeLabel(input: RelativeTimeLabelInput) -> RelativeTimeLabelProjection  {
+    return try!  FfiConverterTypeRelativeTimeLabelProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_relative_time_label(self.uniffiClonePointer(),
+        FfiConverterTypeRelativeTimeLabelInput_lower(input),$0
     )
 })
 }
@@ -16799,6 +16809,138 @@ public func FfiConverterTypeReadingFeedListOutcome_lower(_ value: ReadingFeedLis
 }
 
 
+public struct RelativeTimeLabelInput {
+    public var unixSeconds: UInt64?
+    public var style: RelativeTimeLabelStyle
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(unixSeconds: UInt64?, style: RelativeTimeLabelStyle) {
+        self.unixSeconds = unixSeconds
+        self.style = style
+    }
+}
+
+#if compiler(>=6)
+extension RelativeTimeLabelInput: Sendable {}
+#endif
+
+
+extension RelativeTimeLabelInput: Equatable, Hashable {
+    public static func ==(lhs: RelativeTimeLabelInput, rhs: RelativeTimeLabelInput) -> Bool {
+        if lhs.unixSeconds != rhs.unixSeconds {
+            return false
+        }
+        if lhs.style != rhs.style {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(unixSeconds)
+        hasher.combine(style)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelativeTimeLabelInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelativeTimeLabelInput {
+        return
+            try RelativeTimeLabelInput(
+                unixSeconds: FfiConverterOptionUInt64.read(from: &buf),
+                style: FfiConverterTypeRelativeTimeLabelStyle.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelativeTimeLabelInput, into buf: inout [UInt8]) {
+        FfiConverterOptionUInt64.write(value.unixSeconds, into: &buf)
+        FfiConverterTypeRelativeTimeLabelStyle.write(value.style, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelativeTimeLabelInput_lift(_ buf: RustBuffer) throws -> RelativeTimeLabelInput {
+    return try FfiConverterTypeRelativeTimeLabelInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelativeTimeLabelInput_lower(_ value: RelativeTimeLabelInput) -> RustBuffer {
+    return FfiConverterTypeRelativeTimeLabelInput.lower(value)
+}
+
+
+public struct RelativeTimeLabelProjection {
+    public var label: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(label: String?) {
+        self.label = label
+    }
+}
+
+#if compiler(>=6)
+extension RelativeTimeLabelProjection: Sendable {}
+#endif
+
+
+extension RelativeTimeLabelProjection: Equatable, Hashable {
+    public static func ==(lhs: RelativeTimeLabelProjection, rhs: RelativeTimeLabelProjection) -> Bool {
+        if lhs.label != rhs.label {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(label)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelativeTimeLabelProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelativeTimeLabelProjection {
+        return
+            try RelativeTimeLabelProjection(
+                label: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelativeTimeLabelProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.label, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelativeTimeLabelProjection_lift(_ buf: RustBuffer) throws -> RelativeTimeLabelProjection {
+    return try FfiConverterTypeRelativeTimeLabelProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelativeTimeLabelProjection_lower(_ value: RelativeTimeLabelProjection) -> RustBuffer {
+    return FfiConverterTypeRelativeTimeLabelProjection.lower(value)
+}
+
+
 public struct RelayAvatarProjection {
     public var iconUrl: String?
     public var initial: String
@@ -21996,6 +22138,76 @@ extension ProfileUpdateAction: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum RelativeTimeLabelStyle {
+
+    case compact
+    case ago
+}
+
+
+#if compiler(>=6)
+extension RelativeTimeLabelStyle: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelativeTimeLabelStyle: FfiConverterRustBuffer {
+    typealias SwiftType = RelativeTimeLabelStyle
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelativeTimeLabelStyle {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .compact
+
+        case 2: return .ago
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RelativeTimeLabelStyle, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .compact:
+            writeInt(&buf, Int32(1))
+
+
+        case .ago:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelativeTimeLabelStyle_lift(_ buf: RustBuffer) throws -> RelativeTimeLabelStyle {
+    return try FfiConverterTypeRelativeTimeLabelStyle.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelativeTimeLabelStyle_lower(_ value: RelativeTimeLabelStyle) -> RustBuffer {
+    return FfiConverterTypeRelativeTimeLabelStyle.lower(value)
+}
+
+
+extension RelativeTimeLabelStyle: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Connection state of a single relay the app is talking to. Mirrors the
  * nostr-sdk internal `RelayStatus` but trimmed to the values the UI cares
@@ -25081,6 +25293,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_public_key_display() != 35557) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_relative_time_label() != 33894) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_detail() != 11729) {

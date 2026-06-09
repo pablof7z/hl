@@ -264,16 +264,11 @@ struct BookView: View {
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        guard let s = seconds, s > 0 else { return nil }
-        let delta = Date().timeIntervalSince1970 - TimeInterval(s)
-        guard delta >= 0 else { return nil }
-        switch delta {
-        case ..<60:         return "just now"
-        case ..<3600:       return "\(Int(delta / 60))m"
-        case ..<86400:      return "\(Int(delta / 3600))h"
-        case ..<604800:     return "\(Int(delta / 86400))d"
-        case ..<2592000:    return "\(Int(delta / 604800))w"
-        default:            return "\(Int(delta / 2592000))mo"
-        }
+        app.safeCore.projectRelativeTimeLabel(
+            input: RelativeTimeLabelInput(
+                unixSeconds: seconds,
+                style: .compact
+            )
+        ).label
     }
 }

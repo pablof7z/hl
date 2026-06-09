@@ -50,6 +50,7 @@ pub mod search;
 pub mod session;
 pub mod share_extension;
 pub mod subscriptions;
+pub mod time_labels;
 pub mod web_metadata;
 pub mod whats_new;
 
@@ -118,6 +119,9 @@ pub use room_invites::{
 pub use session::{
     PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,
     SecretKeyDisplayProjectionInput,
+};
+pub use time_labels::{
+    RelativeTimeLabelInput, RelativeTimeLabelProjection, RelativeTimeLabelStyle,
 };
 pub use web_metadata::WebMetadata;
 pub use whats_new::WhatsNewEntry;

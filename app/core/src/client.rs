@@ -973,6 +973,13 @@ impl HighlighterCore {
         crate::session::secret_key_display_projection(input)
     }
 
+    pub fn project_relative_time_label(
+        &self,
+        input: crate::time_labels::RelativeTimeLabelInput,
+    ) -> crate::time_labels::RelativeTimeLabelProjection {
+        crate::time_labels::relative_time_label_projection(input, self.clock.now_unix_seconds())
+    }
+
     pub fn login_nsec(&self, nsec: String) -> CurrentUserOutcome {
         let result: Result<CurrentUser, CoreError> = (|| {
             // Do the session mutation + keys extraction in a single write-guard
