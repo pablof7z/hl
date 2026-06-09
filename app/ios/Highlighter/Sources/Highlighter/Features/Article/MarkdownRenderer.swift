@@ -59,6 +59,7 @@ enum MarkdownRenderer {
         nostrStandaloneEntity: (@Sendable (String) -> NostrEntityRef?)? = nil,
         nostrInlineTokens: (@Sendable (String) -> [NostrContentRun])? = nil,
         nostrInlineRender: (@Sendable (NostrEntityRef) -> NostrEntityInlineRender)? = nil,
+        highlightContent: @Sendable (HighlightRecord) -> HighlightDetailContentProjection,
         profileNames: [String: String] = [:]
     ) -> Output {
         let preprocessed = FootnotePreprocessor.extract(content)
@@ -86,7 +87,7 @@ enum MarkdownRenderer {
             guard case .text(let attrStr) = segment else { return segment }
             let mutable = attrStr.mutableCopy() as! NSMutableAttributedString
             for highlight in highlights {
-                let quote = highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines)
+                let quote = highlightContent(highlight).quoteText
                 guard !quote.isEmpty, quote.count >= 4 else { continue }
                 let plain = mutable.string
                 if let range = plain.range(of: quote) {
@@ -258,8 +259,7 @@ private struct BodyWalker {
         guard let nostrStandaloneEntity else { return nil }
         let children = Array(para.inlineChildren)
         guard children.count == 1, let textNode = children.first as? Markdown.Text else { return nil }
-        let raw = textNode.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        return nostrStandaloneEntity(raw)
+        return nostrStandaloneEntity(textNode.string)
     }
 
     private func imageOnlyParagraph(_ para: Paragraph) -> (URL, String)? {

@@ -302,6 +302,11 @@ private struct ReaderScroll: View {
                     nostrInlineRender: { ref in
                         safeCore.nostrEntityInlineRender(entity: ref)
                     },
+                    highlightContent: { highlight in
+                        safeCore.projectHighlightDetailContent(
+                            input: HighlightDetailContentProjectionInput(highlight: highlight)
+                        )
+                    },
                     profileNames: profileSnapshot
                 )
             }.value
