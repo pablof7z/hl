@@ -10,15 +10,158 @@ use crate::articles;
 use crate::errors::CoreError;
 use crate::models::{
     ArtifactRecord, BlossomUpload, BookRoute, HighlightDraft, HighlightRecord, HighlightSourceKind,
-    HydratedHighlight,
+    HydratedHighlight, ProfileMetadata,
 };
 use crate::nostr_runtime::NostrRuntime;
+use crate::profile::{
+    profile_display_projection, ProfileDisplayFallback, ProfileDisplayProjectionInput,
+};
 use crate::relays::highlighter_relay;
 
 /// NIP-84 highlight event.
 const KIND_HIGHLIGHT: u16 = 9802;
 /// NIP-18 generic repost used to share a highlight into a NIP-29 community.
 const KIND_GENERIC_REPOST: u16 = 16;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightGroupHighlighterProfile {
+    pub pubkey: String,
+    pub profile: Option<ProfileMetadata>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightGroupCardProjectionInput {
+    pub items: Vec<HydratedHighlight>,
+    pub highlighter_profiles: Vec<HighlightGroupHighlighterProfile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HighlightGroupHighlighterProjection {
+    pub pubkey: String,
+    pub display_name: String,
+    pub display_initial: String,
+    pub picture_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HighlightGroupLabelSegment {
+    pub text: String,
+    pub emphasized: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HighlightGroupCardProjection {
+    pub show_highlighters_strip: bool,
+    pub visible_highlighters: Vec<HighlightGroupHighlighterProjection>,
+    pub overflow_count: u32,
+    pub highlighters_label_segments: Vec<HighlightGroupLabelSegment>,
+}
+
+/// Presentation projection for a grouped highlight card. Rust owns unique
+/// highlighter order, strip visibility, avatar cap, overflow count, and the
+/// social byline text sequence; native shells only style the segments.
+pub fn highlight_group_card_projection(
+    input: HighlightGroupCardProjectionInput,
+) -> HighlightGroupCardProjection {
+    let unique_pubkeys = unique_highlighter_pubkeys(&input.items);
+    let show_highlighters_strip = input.items.len() >= 2 && unique_pubkeys.len() >= 2;
+    let highlighters: Vec<HighlightGroupHighlighterProjection> = unique_pubkeys
+        .iter()
+        .map(|pubkey| highlighter_projection(pubkey, &input.highlighter_profiles))
+        .collect();
+
+    if !show_highlighters_strip {
+        return HighlightGroupCardProjection {
+            show_highlighters_strip,
+            visible_highlighters: Vec::new(),
+            overflow_count: 0,
+            highlighters_label_segments: Vec::new(),
+        };
+    }
+
+    HighlightGroupCardProjection {
+        show_highlighters_strip,
+        visible_highlighters: highlighters.iter().take(3).cloned().collect(),
+        overflow_count: highlighters.len().saturating_sub(3) as u32,
+        highlighters_label_segments: if show_highlighters_strip {
+            highlighters_label_segments(&highlighters)
+        } else {
+            Vec::new()
+        },
+    }
+}
+
+fn unique_highlighter_pubkeys(items: &[HydratedHighlight]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for item in items {
+        if seen.insert(item.highlight.pubkey.clone()) {
+            out.push(item.highlight.pubkey.clone());
+        }
+    }
+    out
+}
+
+fn highlighter_projection(
+    pubkey: &str,
+    profiles: &[HighlightGroupHighlighterProfile],
+) -> HighlightGroupHighlighterProjection {
+    let profile = profiles
+        .iter()
+        .find(|snapshot| snapshot.pubkey == pubkey)
+        .and_then(|snapshot| snapshot.profile.clone());
+    let display = profile_display_projection(ProfileDisplayProjectionInput {
+        pubkey: pubkey.to_string(),
+        profile,
+        fallback: ProfileDisplayFallback::Pubkey10,
+    });
+    HighlightGroupHighlighterProjection {
+        pubkey: pubkey.to_string(),
+        display_name: display.display_name,
+        display_initial: display.display_initial,
+        picture_url: display.picture_url,
+    }
+}
+
+fn highlighters_label_segments(
+    highlighters: &[HighlightGroupHighlighterProjection],
+) -> Vec<HighlightGroupLabelSegment> {
+    let mut out = vec![plain_label_segment("Highlighted by ")];
+    match highlighters.len() {
+        0 => {}
+        1 => out.push(emphasized_label_segment(&highlighters[0].display_name)),
+        2 => {
+            out.push(emphasized_label_segment(&highlighters[0].display_name));
+            out.push(plain_label_segment(" and "));
+            out.push(emphasized_label_segment(&highlighters[1].display_name));
+        }
+        _ => {
+            out.push(emphasized_label_segment(&highlighters[0].display_name));
+            out.push(plain_label_segment(", "));
+            out.push(emphasized_label_segment(&highlighters[1].display_name));
+            out.push(plain_label_segment(" and "));
+            out.push(emphasized_label_segment(&format!(
+                "{} others",
+                highlighters.len() - 2
+            )));
+        }
+    }
+    out
+}
+
+fn plain_label_segment(text: &str) -> HighlightGroupLabelSegment {
+    HighlightGroupLabelSegment {
+        text: text.to_string(),
+        emphasized: false,
+    }
+}
+
+fn emphasized_label_segment(text: &str) -> HighlightGroupLabelSegment {
+    HighlightGroupLabelSegment {
+        text: text.to_string(),
+        emphasized: true,
+    }
+}
 
 /// Classify the source behind a highlight for native rendering. Rust owns this
 /// source/reference interpretation so all platform shells show the same icon
@@ -1285,6 +1428,119 @@ mod tests {
             }
         }
         highlight
+    }
+
+    #[test]
+    fn highlight_group_card_projection_dedupes_caps_and_labels_highlighters() {
+        let items = vec![
+            hydrated_highlight_for_pubkey("event-1", "alicepubkey"),
+            hydrated_highlight_for_pubkey("event-2", "bobpubkey"),
+            hydrated_highlight_for_pubkey("event-3", "alicepubkey"),
+            hydrated_highlight_for_pubkey("event-4", "carolpubkey"),
+            hydrated_highlight_for_pubkey("event-5", "danpubkey"),
+        ];
+
+        let projection = highlight_group_card_projection(HighlightGroupCardProjectionInput {
+            items,
+            highlighter_profiles: vec![
+                HighlightGroupHighlighterProfile {
+                    pubkey: "alicepubkey".into(),
+                    profile: Some(profile_metadata(
+                        "alicepubkey",
+                        "alice",
+                        "Alice Doe",
+                        "https://example.com/alice.png",
+                    )),
+                },
+                HighlightGroupHighlighterProfile {
+                    pubkey: "bobpubkey".into(),
+                    profile: Some(profile_metadata("bobpubkey", "bob", "", "")),
+                },
+            ],
+        });
+
+        assert!(projection.show_highlighters_strip);
+        assert_eq!(projection.overflow_count, 1);
+        let visible_pubkeys: Vec<_> = projection
+            .visible_highlighters
+            .iter()
+            .map(|highlighter| highlighter.pubkey.as_str())
+            .collect();
+        assert_eq!(visible_pubkeys, ["alicepubkey", "bobpubkey", "carolpubkey"]);
+        assert_eq!(
+            projection.visible_highlighters[0],
+            HighlightGroupHighlighterProjection {
+                pubkey: "alicepubkey".into(),
+                display_name: "Alice Doe".into(),
+                display_initial: "A".into(),
+                picture_url: "https://example.com/alice.png".into(),
+            }
+        );
+        assert_eq!(
+            projection.highlighters_label_segments,
+            vec![
+                label_segment("Highlighted by ", false),
+                label_segment("Alice Doe", true),
+                label_segment(", ", false),
+                label_segment("bob", true),
+                label_segment(" and ", false),
+                label_segment("2 others", true),
+            ]
+        );
+    }
+
+    #[test]
+    fn highlight_group_card_projection_hides_single_author_groups() {
+        let projection = highlight_group_card_projection(HighlightGroupCardProjectionInput {
+            items: vec![
+                hydrated_highlight_for_pubkey("event-1", "alicepubkey"),
+                hydrated_highlight_for_pubkey("event-2", "alicepubkey"),
+            ],
+            highlighter_profiles: Vec::new(),
+        });
+
+        assert!(!projection.show_highlighters_strip);
+        assert!(projection.visible_highlighters.is_empty());
+        assert_eq!(projection.overflow_count, 0);
+        assert!(projection.highlighters_label_segments.is_empty());
+    }
+
+    fn hydrated_highlight_for_pubkey(event_id: &str, pubkey: &str) -> HydratedHighlight {
+        let mut highlight = highlight_for_source_key(event_id, "a:article", 1);
+        highlight.pubkey = pubkey.to_string();
+        HydratedHighlight {
+            highlight,
+            artifact: None,
+            shared_by_event_id: None,
+            shared_by_pubkey: None,
+        }
+    }
+
+    fn profile_metadata(
+        pubkey: &str,
+        name: &str,
+        display_name: &str,
+        picture: &str,
+    ) -> ProfileMetadata {
+        ProfileMetadata {
+            pubkey: pubkey.into(),
+            name: name.into(),
+            display_name: display_name.into(),
+            about: String::new(),
+            picture: picture.into(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            created_at: None,
+        }
+    }
+
+    fn label_segment(text: &str, emphasized: bool) -> HighlightGroupLabelSegment {
+        HighlightGroupLabelSegment {
+            text: text.into(),
+            emphasized,
+        }
     }
 
     #[test]

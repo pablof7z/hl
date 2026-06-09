@@ -1429,6 +1429,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectFeedbackThreadPresentation(thread: FeedbackThreadRecord)  -> FeedbackThreadPresentationProjection
 
+    func projectHighlightGroupCard(input: HighlightGroupCardProjectionInput)  -> HighlightGroupCardProjection
+
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
     /**
@@ -4214,6 +4216,14 @@ open func projectFeedbackThreadPresentation(thread: FeedbackThreadRecord) -> Fee
     return try!  FfiConverterTypeFeedbackThreadPresentationProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_feedback_thread_presentation(self.uniffiClonePointer(),
         FfiConverterTypeFeedbackThreadRecord_lower(thread),$0
+    )
+})
+}
+
+open func projectHighlightGroupCard(input: HighlightGroupCardProjectionInput) -> HighlightGroupCardProjection  {
+    return try!  FfiConverterTypeHighlightGroupCardProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_highlight_group_card(self.uniffiClonePointer(),
+        FfiConverterTypeHighlightGroupCardProjectionInput_lower(input),$0
     )
 })
 }
@@ -11784,6 +11794,388 @@ public func FfiConverterTypeHighlightDraft_lift(_ buf: RustBuffer) throws -> Hig
 #endif
 public func FfiConverterTypeHighlightDraft_lower(_ value: HighlightDraft) -> RustBuffer {
     return FfiConverterTypeHighlightDraft.lower(value)
+}
+
+
+public struct HighlightGroupCardProjection {
+    public var showHighlightersStrip: Bool
+    public var visibleHighlighters: [HighlightGroupHighlighterProjection]
+    public var overflowCount: UInt32
+    public var highlightersLabelSegments: [HighlightGroupLabelSegment]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(showHighlightersStrip: Bool, visibleHighlighters: [HighlightGroupHighlighterProjection], overflowCount: UInt32, highlightersLabelSegments: [HighlightGroupLabelSegment]) {
+        self.showHighlightersStrip = showHighlightersStrip
+        self.visibleHighlighters = visibleHighlighters
+        self.overflowCount = overflowCount
+        self.highlightersLabelSegments = highlightersLabelSegments
+    }
+}
+
+#if compiler(>=6)
+extension HighlightGroupCardProjection: Sendable {}
+#endif
+
+
+extension HighlightGroupCardProjection: Equatable, Hashable {
+    public static func ==(lhs: HighlightGroupCardProjection, rhs: HighlightGroupCardProjection) -> Bool {
+        if lhs.showHighlightersStrip != rhs.showHighlightersStrip {
+            return false
+        }
+        if lhs.visibleHighlighters != rhs.visibleHighlighters {
+            return false
+        }
+        if lhs.overflowCount != rhs.overflowCount {
+            return false
+        }
+        if lhs.highlightersLabelSegments != rhs.highlightersLabelSegments {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(showHighlightersStrip)
+        hasher.combine(visibleHighlighters)
+        hasher.combine(overflowCount)
+        hasher.combine(highlightersLabelSegments)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightGroupCardProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightGroupCardProjection {
+        return
+            try HighlightGroupCardProjection(
+                showHighlightersStrip: FfiConverterBool.read(from: &buf),
+                visibleHighlighters: FfiConverterSequenceTypeHighlightGroupHighlighterProjection.read(from: &buf),
+                overflowCount: FfiConverterUInt32.read(from: &buf),
+                highlightersLabelSegments: FfiConverterSequenceTypeHighlightGroupLabelSegment.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightGroupCardProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.showHighlightersStrip, into: &buf)
+        FfiConverterSequenceTypeHighlightGroupHighlighterProjection.write(value.visibleHighlighters, into: &buf)
+        FfiConverterUInt32.write(value.overflowCount, into: &buf)
+        FfiConverterSequenceTypeHighlightGroupLabelSegment.write(value.highlightersLabelSegments, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightGroupCardProjection_lift(_ buf: RustBuffer) throws -> HighlightGroupCardProjection {
+    return try FfiConverterTypeHighlightGroupCardProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightGroupCardProjection_lower(_ value: HighlightGroupCardProjection) -> RustBuffer {
+    return FfiConverterTypeHighlightGroupCardProjection.lower(value)
+}
+
+
+public struct HighlightGroupCardProjectionInput {
+    public var items: [HydratedHighlight]
+    public var highlighterProfiles: [HighlightGroupHighlighterProfile]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(items: [HydratedHighlight], highlighterProfiles: [HighlightGroupHighlighterProfile]) {
+        self.items = items
+        self.highlighterProfiles = highlighterProfiles
+    }
+}
+
+#if compiler(>=6)
+extension HighlightGroupCardProjectionInput: Sendable {}
+#endif
+
+
+extension HighlightGroupCardProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: HighlightGroupCardProjectionInput, rhs: HighlightGroupCardProjectionInput) -> Bool {
+        if lhs.items != rhs.items {
+            return false
+        }
+        if lhs.highlighterProfiles != rhs.highlighterProfiles {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(items)
+        hasher.combine(highlighterProfiles)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightGroupCardProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightGroupCardProjectionInput {
+        return
+            try HighlightGroupCardProjectionInput(
+                items: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
+                highlighterProfiles: FfiConverterSequenceTypeHighlightGroupHighlighterProfile.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightGroupCardProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeHydratedHighlight.write(value.items, into: &buf)
+        FfiConverterSequenceTypeHighlightGroupHighlighterProfile.write(value.highlighterProfiles, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightGroupCardProjectionInput_lift(_ buf: RustBuffer) throws -> HighlightGroupCardProjectionInput {
+    return try FfiConverterTypeHighlightGroupCardProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightGroupCardProjectionInput_lower(_ value: HighlightGroupCardProjectionInput) -> RustBuffer {
+    return FfiConverterTypeHighlightGroupCardProjectionInput.lower(value)
+}
+
+
+public struct HighlightGroupHighlighterProfile {
+    public var pubkey: String
+    public var profile: ProfileMetadata?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkey: String, profile: ProfileMetadata?) {
+        self.pubkey = pubkey
+        self.profile = profile
+    }
+}
+
+#if compiler(>=6)
+extension HighlightGroupHighlighterProfile: Sendable {}
+#endif
+
+
+extension HighlightGroupHighlighterProfile: Equatable, Hashable {
+    public static func ==(lhs: HighlightGroupHighlighterProfile, rhs: HighlightGroupHighlighterProfile) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(profile)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightGroupHighlighterProfile: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightGroupHighlighterProfile {
+        return
+            try HighlightGroupHighlighterProfile(
+                pubkey: FfiConverterString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightGroupHighlighterProfile, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightGroupHighlighterProfile_lift(_ buf: RustBuffer) throws -> HighlightGroupHighlighterProfile {
+    return try FfiConverterTypeHighlightGroupHighlighterProfile.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightGroupHighlighterProfile_lower(_ value: HighlightGroupHighlighterProfile) -> RustBuffer {
+    return FfiConverterTypeHighlightGroupHighlighterProfile.lower(value)
+}
+
+
+public struct HighlightGroupHighlighterProjection {
+    public var pubkey: String
+    public var displayName: String
+    public var displayInitial: String
+    public var pictureUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkey: String, displayName: String, displayInitial: String, pictureUrl: String) {
+        self.pubkey = pubkey
+        self.displayName = displayName
+        self.displayInitial = displayInitial
+        self.pictureUrl = pictureUrl
+    }
+}
+
+#if compiler(>=6)
+extension HighlightGroupHighlighterProjection: Sendable {}
+#endif
+
+
+extension HighlightGroupHighlighterProjection: Equatable, Hashable {
+    public static func ==(lhs: HighlightGroupHighlighterProjection, rhs: HighlightGroupHighlighterProjection) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.displayInitial != rhs.displayInitial {
+            return false
+        }
+        if lhs.pictureUrl != rhs.pictureUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(displayName)
+        hasher.combine(displayInitial)
+        hasher.combine(pictureUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightGroupHighlighterProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightGroupHighlighterProjection {
+        return
+            try HighlightGroupHighlighterProjection(
+                pubkey: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                displayInitial: FfiConverterString.read(from: &buf),
+                pictureUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightGroupHighlighterProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.displayInitial, into: &buf)
+        FfiConverterString.write(value.pictureUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightGroupHighlighterProjection_lift(_ buf: RustBuffer) throws -> HighlightGroupHighlighterProjection {
+    return try FfiConverterTypeHighlightGroupHighlighterProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightGroupHighlighterProjection_lower(_ value: HighlightGroupHighlighterProjection) -> RustBuffer {
+    return FfiConverterTypeHighlightGroupHighlighterProjection.lower(value)
+}
+
+
+public struct HighlightGroupLabelSegment {
+    public var text: String
+    public var emphasized: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(text: String, emphasized: Bool) {
+        self.text = text
+        self.emphasized = emphasized
+    }
+}
+
+#if compiler(>=6)
+extension HighlightGroupLabelSegment: Sendable {}
+#endif
+
+
+extension HighlightGroupLabelSegment: Equatable, Hashable {
+    public static func ==(lhs: HighlightGroupLabelSegment, rhs: HighlightGroupLabelSegment) -> Bool {
+        if lhs.text != rhs.text {
+            return false
+        }
+        if lhs.emphasized != rhs.emphasized {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(text)
+        hasher.combine(emphasized)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightGroupLabelSegment: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightGroupLabelSegment {
+        return
+            try HighlightGroupLabelSegment(
+                text: FfiConverterString.read(from: &buf),
+                emphasized: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightGroupLabelSegment, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.text, into: &buf)
+        FfiConverterBool.write(value.emphasized, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightGroupLabelSegment_lift(_ buf: RustBuffer) throws -> HighlightGroupLabelSegment {
+    return try FfiConverterTypeHighlightGroupLabelSegment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightGroupLabelSegment_lower(_ value: HighlightGroupLabelSegment) -> RustBuffer {
+    return FfiConverterTypeHighlightGroupLabelSegment.lower(value)
 }
 
 
@@ -24946,6 +25338,81 @@ fileprivate struct FfiConverterSequenceTypeHighlightDraft: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeHighlightGroupHighlighterProfile: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlightGroupHighlighterProfile]
+
+    public static func write(_ value: [HighlightGroupHighlighterProfile], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlightGroupHighlighterProfile.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlightGroupHighlighterProfile] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlightGroupHighlighterProfile]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlightGroupHighlighterProfile.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlightGroupHighlighterProjection: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlightGroupHighlighterProjection]
+
+    public static func write(_ value: [HighlightGroupHighlighterProjection], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlightGroupHighlighterProjection.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlightGroupHighlighterProjection] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlightGroupHighlighterProjection]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlightGroupHighlighterProjection.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlightGroupLabelSegment: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlightGroupLabelSegment]
+
+    public static func write(_ value: [HighlightGroupLabelSegment], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlightGroupLabelSegment.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlightGroupLabelSegment] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlightGroupLabelSegment]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlightGroupLabelSegment.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeHighlightRecord: FfiConverterRustBuffer {
     typealias SwiftType = [HighlightRecord]
 
@@ -26168,6 +26635,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_thread_presentation() != 19722) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_highlight_group_card() != 49051) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {

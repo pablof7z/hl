@@ -1122,6 +1122,12 @@ actor SafeHighlighterCore {
         await core.getFollowingHighlights(limit: limit)
     }
 
+    nonisolated func projectHighlightGroupCard(
+        input: HighlightGroupCardProjectionInput
+    ) -> HighlightGroupCardProjection {
+        core.projectHighlightGroupCard(input: input)
+    }
+
     nonisolated func buildHomeFeedItems(
         highlights: [HydratedHighlight],
         reads: [ReadingFeedItem]

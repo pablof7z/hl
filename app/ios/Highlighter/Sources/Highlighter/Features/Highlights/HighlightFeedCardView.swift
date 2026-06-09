@@ -40,10 +40,12 @@ struct HighlightFeedCardView: View {
     }
 
     var body: some View {
+        let projection = groupProjection
+
         VStack(alignment: .leading, spacing: 14) {
             resourceHeader
-            if showHighlightersStrip {
-                highlightersStrip
+            if projection.showHighlightersStrip {
+                highlightersStrip(projection)
             }
             highlightsBody
         }
@@ -149,14 +151,12 @@ struct HighlightFeedCardView: View {
 
     // MARK: - Highlighters strip (only when 2+ unique highlighters)
 
-    private var highlightersStrip: some View {
+    private func highlightersStrip(_ projection: HighlightGroupCardProjection) -> some View {
         HStack(spacing: 8) {
             HStack(spacing: -6) {
-                ForEach(uniqueHighlighters.prefix(3), id: \.highlight.pubkey) { h in
-                    let highlighter = profileDisplay(for: h.highlight.pubkey)
-
+                ForEach(projection.visibleHighlighters, id: \.pubkey) { highlighter in
                     AuthorAvatar(
-                        pubkey: h.highlight.pubkey,
+                        pubkey: highlighter.pubkey,
                         pictureURL: highlighter.pictureUrl,
                         displayInitial: highlighter.displayInitial,
                         size: 20
@@ -164,16 +164,16 @@ struct HighlightFeedCardView: View {
                     .overlay(
                         Circle().stroke(Color.highlighterPaperTint, lineWidth: 1.5)
                     )
-                    .task(id: h.highlight.pubkey) {
-                        await app.requestProfile(pubkeyHex: h.highlight.pubkey)
+                    .task(id: highlighter.pubkey) {
+                        await app.requestProfile(pubkeyHex: highlighter.pubkey)
                     }
                 }
-                if uniqueHighlighters.count > 3 {
+                if projection.overflowCount > 0 {
                     ZStack {
                         Circle()
                             .fill(Color.highlighterPaper)
                             .overlay(Circle().stroke(Color.highlighterRule, lineWidth: 0.5))
-                        Text("+\(uniqueHighlighters.count - 3)")
+                        Text("+\(projection.overflowCount)")
                             .font(.system(size: 8, weight: .bold))
                             .foregroundStyle(Color.highlighterInkMuted)
                     }
@@ -182,7 +182,7 @@ struct HighlightFeedCardView: View {
                 }
             }
 
-            Text(highlightersLabel)
+            Text(highlightersLabel(projection.highlightersLabelSegments))
                 .font(.caption)
                 .foregroundStyle(Color.highlighterInkMuted)
                 .lineLimit(1)
@@ -190,37 +190,19 @@ struct HighlightFeedCardView: View {
         }
     }
 
-    private var highlightersLabel: AttributedString {
-        let names = uniqueHighlighters.map { profileDisplay(for: $0.highlight.pubkey).displayName }
-        var out = AttributedString("Highlighted by ")
-        out.foregroundColor = Color.highlighterInkMuted
-
-        switch names.count {
-        case 0:
-            return out
-        case 1:
-            return out + boldName(names[0])
-        case 2:
-            return out + boldName(names[0]) + plain(" and ") + boldName(names[1])
-        default:
-            // First two by name, then "+N others"
-            let lead = boldName(names[0]) + plain(", ") + boldName(names[1])
-            let othersCount = names.count - 2
-            return out + lead + plain(" and ") + boldName("\(othersCount) others")
+    private func highlightersLabel(_ segments: [HighlightGroupLabelSegment]) -> AttributedString {
+        var out = AttributedString()
+        for segment in segments {
+            var text = AttributedString(segment.text)
+            if segment.emphasized {
+                text.font = .caption.weight(.semibold)
+                text.foregroundColor = Color.highlighterInkStrong
+            } else {
+                text.foregroundColor = Color.highlighterInkMuted
+            }
+            out += text
         }
-    }
-
-    private func boldName(_ name: String) -> AttributedString {
-        var s = AttributedString(name)
-        s.font = .caption.weight(.semibold)
-        s.foregroundColor = Color.highlighterInkStrong
-        return s
-    }
-
-    private func plain(_ str: String) -> AttributedString {
-        var s = AttributedString(str)
-        s.foregroundColor = Color.highlighterInkMuted
-        return s
+        return out
     }
 
     // MARK: - Highlight body (single inline OR reel)
@@ -517,21 +499,20 @@ struct HighlightFeedCardView: View {
         return "\(m)m"
     }
 
-    // MARK: - Derived: highlighters
+    // MARK: - Derived: group projection
 
-    private var uniqueHighlighters: [HydratedHighlight] {
-        var seen = Set<String>()
-        var out: [HydratedHighlight] = []
-        for h in items {
-            if seen.insert(h.highlight.pubkey).inserted {
-                out.append(h)
-            }
-        }
-        return out
-    }
-
-    private var showHighlightersStrip: Bool {
-        items.count >= 2 && uniqueHighlighters.count >= 2
+    private var groupProjection: HighlightGroupCardProjection {
+        app.safeCore.projectHighlightGroupCard(
+            input: HighlightGroupCardProjectionInput(
+                items: items,
+                highlighterProfiles: items.map { h in
+                    HighlightGroupHighlighterProfile(
+                        pubkey: h.highlight.pubkey,
+                        profile: app.profileSnapshots[h.highlight.pubkey]
+                    )
+                }
+            )
+        )
     }
 
     // MARK: - Derived: profile helpers

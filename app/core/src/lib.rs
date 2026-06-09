@@ -66,6 +66,11 @@ pub use groups::{
     CreateRoomProjection, CreateRoomProjectionInput, CreateRoomVisibilityOption, RoomAccess,
     RoomAvatarProjection, RoomAvatarProjectionInput, RoomVisibility,
 };
+pub use highlights::{
+    HighlightGroupCardProjection, HighlightGroupCardProjectionInput,
+    HighlightGroupHighlighterProfile, HighlightGroupHighlighterProjection,
+    HighlightGroupLabelSegment,
+};
 pub use models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactListOutcome, ArtifactOutcome,
