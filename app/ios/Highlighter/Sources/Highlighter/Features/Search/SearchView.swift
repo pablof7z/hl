@@ -466,26 +466,9 @@ struct SearchView: View {
     }
 
     private func suggestedQueries() -> [String] {
-        var out: [String] = []
-        var seen = Set<String>()
-        let push: (String) -> Void = { term in
-            let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
-            let key = trimmed.lowercased()
-            if seen.insert(key).inserted {
-                out.append(trimmed)
-            }
-        }
-        // Room names are the user's strongest existing signal.
-        for c in app.joinedCommunities.prefix(4) {
-            push(c.name)
-        }
-        // A handful of evergreen topics so the chips never feel empty.
-        for term in ["Dostoevsky", "Bitcoin", "Attention", "Borges", "Philosophy"] {
-            if out.count >= 8 { break }
-            push(term)
-        }
-        return Array(out.prefix(8))
+        app.safeCore.projectSearchSuggestions(
+            input: SearchSuggestionsProjectionInput(joinedCommunities: app.joinedCommunities)
+        ).queries
     }
 
     private func displayRelay(_ url: String) -> String {

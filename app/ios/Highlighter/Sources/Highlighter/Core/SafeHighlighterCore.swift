@@ -266,6 +266,12 @@ actor SafeHighlighterCore {
         core.projectSearchQuery(input: input)
     }
 
+    nonisolated func projectSearchSuggestions(
+        input: SearchSuggestionsProjectionInput
+    ) -> SearchSuggestionsProjection {
+        core.projectSearchSuggestions(input: input)
+    }
+
     func searchHighlights(query: String, limit: UInt32 = 20) async -> HighlightListOutcome {
         await core.searchHighlights(query: query, limit: limit)
     }

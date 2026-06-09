@@ -2505,6 +2505,15 @@ impl HighlighterCore {
         crate::search::search_query_projection(input)
     }
 
+    /// Project suggested search chips. Rust owns room/fallback ordering,
+    /// trimming, dedupe, and cap policy.
+    pub fn project_search_suggestions(
+        &self,
+        input: crate::search::SearchSuggestionsProjectionInput,
+    ) -> crate::search::SearchSuggestionsProjection {
+        crate::search::search_suggestions_projection(input)
+    }
+
     pub async fn search_highlights(&self, query: String, limit: u32) -> HighlightListOutcome {
         highlight_list_outcome(crate::search::search_highlights(
             self.runtime.ndb(),

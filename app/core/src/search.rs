@@ -44,18 +44,58 @@ pub struct SearchQueryProjection {
     pub has_query: bool,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchSuggestionsProjectionInput {
+    pub joined_communities: Vec<CommunitySummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchSuggestionsProjection {
+    pub queries: Vec<String>,
+}
+
 /// How many candidate notes to pull from ndb before filtering. Higher than the
 /// final `limit` so substring matches still surface when the candidate set is
 /// dominated by non-matching notes.
 const LOCAL_SCAN_MULTIPLIER: i32 = 8;
 const LOCAL_SCAN_FLOOR: i32 = 256;
 const LOCAL_SCAN_CEILING: i32 = 4096;
+const EVERGREEN_SUGGESTED_QUERIES: [&str; 5] =
+    ["Dostoevsky", "Bitcoin", "Attention", "Borges", "Philosophy"];
 
 pub fn search_query_projection(input: SearchQueryProjectionInput) -> SearchQueryProjection {
     let search_query = input.query.trim().to_string();
     SearchQueryProjection {
         has_query: !search_query.is_empty(),
         search_query,
+    }
+}
+
+pub fn search_suggestions_projection(
+    input: SearchSuggestionsProjectionInput,
+) -> SearchSuggestionsProjection {
+    let mut queries = Vec::new();
+    let mut seen = HashSet::new();
+    for community in input.joined_communities.into_iter().take(4) {
+        push_suggestion(&mut queries, &mut seen, community.name);
+    }
+    for fallback in EVERGREEN_SUGGESTED_QUERIES {
+        if queries.len() >= 8 {
+            break;
+        }
+        push_suggestion(&mut queries, &mut seen, fallback.to_string());
+    }
+    queries.truncate(8);
+    SearchSuggestionsProjection { queries }
+}
+
+fn push_suggestion(queries: &mut Vec<String>, seen: &mut HashSet<String>, value: String) {
+    let trimmed = value.trim().to_string();
+    if trimmed.is_empty() {
+        return;
+    }
+    if seen.insert(trimmed.to_lowercase()) {
+        queries.push(trimmed);
     }
 }
 
@@ -490,6 +530,22 @@ mod tests {
         ndb.process_event(&line).unwrap();
     }
 
+    fn community(name: &str) -> CommunitySummary {
+        CommunitySummary {
+            id: format!("id-{name}"),
+            name: name.into(),
+            about: String::new(),
+            picture: String::new(),
+            access: "open".into(),
+            visibility: "public".into(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: String::new(),
+            metadata_event_id: String::new(),
+            created_at: None,
+        }
+    }
+
     #[test]
     fn search_query_projection_trims_and_blocks_blank_queries() {
         let ready = search_query_projection(SearchQueryProjectionInput {
@@ -503,6 +559,32 @@ mod tests {
         assert!(ready.has_query);
         assert_eq!(blank.search_query, "");
         assert!(!blank.has_query);
+    }
+
+    #[test]
+    fn search_suggestions_projection_dedupes_rooms_and_fills_fallbacks() {
+        let projection = search_suggestions_projection(SearchSuggestionsProjectionInput {
+            joined_communities: vec![
+                community("  Bitcoin  "),
+                community(""),
+                community("Sci-Fi"),
+                community("sci-fi"),
+                community("Ignored fifth room"),
+            ],
+        });
+
+        assert_eq!(
+            projection.queries,
+            vec![
+                "Bitcoin",
+                "Sci-Fi",
+                "Dostoevsky",
+                "Attention",
+                "Borges",
+                "Philosophy"
+            ]
+        );
+        assert!(projection.queries.len() <= 8);
     }
 
     #[test]

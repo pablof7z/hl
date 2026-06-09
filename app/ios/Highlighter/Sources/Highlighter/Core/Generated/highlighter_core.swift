@@ -1604,6 +1604,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectSearchQuery(input: SearchQueryProjectionInput)  -> SearchQueryProjection
 
+    /**
+     * Project suggested search chips. Rust owns room/fallback ordering,
+     * trimming, dedupe, and cap policy.
+     */
+    func projectSearchSuggestions(input: SearchSuggestionsProjectionInput)  -> SearchSuggestionsProjection
+
     func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput)  -> SecretKeyDisplayProjection
 
     func projectShareArticleTarget(input: ShareArticleTargetProjectionInput)  -> ShareArtifactTargetProjection
@@ -4868,6 +4874,18 @@ open func projectSearchQuery(input: SearchQueryProjectionInput) -> SearchQueryPr
     return try!  FfiConverterTypeSearchQueryProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_search_query(self.uniffiClonePointer(),
         FfiConverterTypeSearchQueryProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project suggested search chips. Rust owns room/fallback ordering,
+     * trimming, dedupe, and cap policy.
+     */
+open func projectSearchSuggestions(input: SearchSuggestionsProjectionInput) -> SearchSuggestionsProjection  {
+    return try!  FfiConverterTypeSearchSuggestionsProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_search_suggestions(self.uniffiClonePointer(),
+        FfiConverterTypeSearchSuggestionsProjectionInput_lower(input),$0
     )
 })
 }
@@ -27123,6 +27141,130 @@ public func FfiConverterTypeSearchQueryProjectionInput_lower(_ value: SearchQuer
 }
 
 
+public struct SearchSuggestionsProjection {
+    public var queries: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(queries: [String]) {
+        self.queries = queries
+    }
+}
+
+#if compiler(>=6)
+extension SearchSuggestionsProjection: Sendable {}
+#endif
+
+
+extension SearchSuggestionsProjection: Equatable, Hashable {
+    public static func ==(lhs: SearchSuggestionsProjection, rhs: SearchSuggestionsProjection) -> Bool {
+        if lhs.queries != rhs.queries {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(queries)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchSuggestionsProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchSuggestionsProjection {
+        return
+            try SearchSuggestionsProjection(
+                queries: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchSuggestionsProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.queries, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchSuggestionsProjection_lift(_ buf: RustBuffer) throws -> SearchSuggestionsProjection {
+    return try FfiConverterTypeSearchSuggestionsProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchSuggestionsProjection_lower(_ value: SearchSuggestionsProjection) -> RustBuffer {
+    return FfiConverterTypeSearchSuggestionsProjection.lower(value)
+}
+
+
+public struct SearchSuggestionsProjectionInput {
+    public var joinedCommunities: [CommunitySummary]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(joinedCommunities: [CommunitySummary]) {
+        self.joinedCommunities = joinedCommunities
+    }
+}
+
+#if compiler(>=6)
+extension SearchSuggestionsProjectionInput: Sendable {}
+#endif
+
+
+extension SearchSuggestionsProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: SearchSuggestionsProjectionInput, rhs: SearchSuggestionsProjectionInput) -> Bool {
+        if lhs.joinedCommunities != rhs.joinedCommunities {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(joinedCommunities)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchSuggestionsProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchSuggestionsProjectionInput {
+        return
+            try SearchSuggestionsProjectionInput(
+                joinedCommunities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchSuggestionsProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommunitySummary.write(value.joinedCommunities, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchSuggestionsProjectionInput_lift(_ buf: RustBuffer) throws -> SearchSuggestionsProjectionInput {
+    return try FfiConverterTypeSearchSuggestionsProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchSuggestionsProjectionInput_lower(_ value: SearchSuggestionsProjectionInput) -> RustBuffer {
+    return FfiConverterTypeSearchSuggestionsProjectionInput.lower(value)
+}
+
+
 public struct SecretKeyDisplayProjection {
     public var displayValue: String
 
@@ -34427,6 +34569,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_query() != 17921) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_suggestions() != 46024) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_secret_key_display() != 28126) {
