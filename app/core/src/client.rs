@@ -2595,6 +2595,15 @@ impl HighlighterCore {
 
     // -- Bookmarks (NIP-51 kind:10003) -----------------------------------
 
+    /// Project native article bookmark state. Rust owns address trimming,
+    /// membership, and the optimistic post-toggle set.
+    pub fn project_article_bookmark_state(
+        &self,
+        input: crate::bookmarks::ArticleBookmarkStateProjectionInput,
+    ) -> crate::bookmarks::ArticleBookmarkStateProjection {
+        crate::bookmarks::article_bookmark_state_projection(input)
+    }
+
     /// Return the set of article addresses the user has bookmarked in their
     /// newest kind:10003 list (empty when not logged in or no list cached).
     pub async fn get_bookmarked_article_addresses(&self) -> StringListOutcome {

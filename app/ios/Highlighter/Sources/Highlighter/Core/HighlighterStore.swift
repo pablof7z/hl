@@ -160,16 +160,11 @@ final class HighlighterStore {
     /// publish. The inevitable `BookmarksUpdated` delta (ours or from another
     /// client) reconciles to authoritative state via `refreshBookmarks`.
     func toggleBookmark(articleAddress: String) async {
-        let trimmed = articleAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        // Optimistic flip.
-        if bookmarkedArticleAddresses.contains(trimmed) {
-            bookmarkedArticleAddresses.remove(trimmed)
-        } else {
-            bookmarkedArticleAddresses.insert(trimmed)
-        }
+        let projection = articleBookmarkStateProjection(articleAddress: articleAddress)
+        guard projection.canToggle else { return }
+        bookmarkedArticleAddresses = Set(projection.optimisticAddresses)
         // Authoritative toggle + publish.
-        let outcome = await safeCore.toggleArticleBookmark(address: trimmed)
+        let outcome = await safeCore.toggleArticleBookmark(address: projection.canonicalAddress)
         if !outcome.error.isEmpty {
             // Revert on failure.
             await refreshBookmarks()
@@ -186,7 +181,14 @@ final class HighlighterStore {
     }
 
     func isBookmarked(articleAddress: String) -> Bool {
-        bookmarkedArticleAddresses.contains(articleAddress)
+        articleBookmarkStateProjection(articleAddress: articleAddress).isBookmarked
+    }
+
+    private func articleBookmarkStateProjection(articleAddress: String) -> ArticleBookmarkStateProjection {
+        safeCore.projectArticleBookmarkState(input: ArticleBookmarkStateProjectionInput(
+            addresses: Array(bookmarkedArticleAddresses),
+            address: articleAddress
+        ))
     }
 
     /// Reads a profile projection from Rust's local nostrdb state and sets up

@@ -1409,6 +1409,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
 
     /**
+     * Project native article bookmark state. Rust owns address trimming,
+     * membership, and the optimistic post-toggle set.
+     */
+    func projectArticleBookmarkState(input: ArticleBookmarkStateProjectionInput)  -> ArticleBookmarkStateProjection
+
+    /**
      * Project article-reader highlight publish state. Rust owns note
      * normalization and success/failure toast semantics.
      */
@@ -4320,6 +4326,18 @@ open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelayS
 }
 
     /**
+     * Project native article bookmark state. Rust owns address trimming,
+     * membership, and the optimistic post-toggle set.
+     */
+open func projectArticleBookmarkState(input: ArticleBookmarkStateProjectionInput) -> ArticleBookmarkStateProjection  {
+    return try!  FfiConverterTypeArticleBookmarkStateProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_article_bookmark_state(self.uniffiClonePointer(),
+        FfiConverterTypeArticleBookmarkStateProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
      * Project article-reader highlight publish state. Rust owns note
      * normalization and success/failure toast semantics.
      */
@@ -6622,6 +6640,169 @@ public func FfiConverterTypeAddRelaySheetProjectionInput_lift(_ buf: RustBuffer)
 #endif
 public func FfiConverterTypeAddRelaySheetProjectionInput_lower(_ value: AddRelaySheetProjectionInput) -> RustBuffer {
     return FfiConverterTypeAddRelaySheetProjectionInput.lower(value)
+}
+
+
+/**
+ * Native article bookmark state projection. Rust owns canonical address
+ * trimming, current membership, and the optimistic post-toggle set.
+ */
+public struct ArticleBookmarkStateProjection {
+    public var canonicalAddress: String
+    public var canToggle: Bool
+    public var isBookmarked: Bool
+    public var optimisticAddresses: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(canonicalAddress: String, canToggle: Bool, isBookmarked: Bool, optimisticAddresses: [String]) {
+        self.canonicalAddress = canonicalAddress
+        self.canToggle = canToggle
+        self.isBookmarked = isBookmarked
+        self.optimisticAddresses = optimisticAddresses
+    }
+}
+
+#if compiler(>=6)
+extension ArticleBookmarkStateProjection: Sendable {}
+#endif
+
+
+extension ArticleBookmarkStateProjection: Equatable, Hashable {
+    public static func ==(lhs: ArticleBookmarkStateProjection, rhs: ArticleBookmarkStateProjection) -> Bool {
+        if lhs.canonicalAddress != rhs.canonicalAddress {
+            return false
+        }
+        if lhs.canToggle != rhs.canToggle {
+            return false
+        }
+        if lhs.isBookmarked != rhs.isBookmarked {
+            return false
+        }
+        if lhs.optimisticAddresses != rhs.optimisticAddresses {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(canonicalAddress)
+        hasher.combine(canToggle)
+        hasher.combine(isBookmarked)
+        hasher.combine(optimisticAddresses)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleBookmarkStateProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarkStateProjection {
+        return
+            try ArticleBookmarkStateProjection(
+                canonicalAddress: FfiConverterString.read(from: &buf),
+                canToggle: FfiConverterBool.read(from: &buf),
+                isBookmarked: FfiConverterBool.read(from: &buf),
+                optimisticAddresses: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleBookmarkStateProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.canonicalAddress, into: &buf)
+        FfiConverterBool.write(value.canToggle, into: &buf)
+        FfiConverterBool.write(value.isBookmarked, into: &buf)
+        FfiConverterSequenceString.write(value.optimisticAddresses, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarkStateProjection_lift(_ buf: RustBuffer) throws -> ArticleBookmarkStateProjection {
+    return try FfiConverterTypeArticleBookmarkStateProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarkStateProjection_lower(_ value: ArticleBookmarkStateProjection) -> RustBuffer {
+    return FfiConverterTypeArticleBookmarkStateProjection.lower(value)
+}
+
+
+/**
+ * Native article bookmark state input.
+ */
+public struct ArticleBookmarkStateProjectionInput {
+    public var addresses: [String]
+    public var address: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(addresses: [String], address: String) {
+        self.addresses = addresses
+        self.address = address
+    }
+}
+
+#if compiler(>=6)
+extension ArticleBookmarkStateProjectionInput: Sendable {}
+#endif
+
+
+extension ArticleBookmarkStateProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ArticleBookmarkStateProjectionInput, rhs: ArticleBookmarkStateProjectionInput) -> Bool {
+        if lhs.addresses != rhs.addresses {
+            return false
+        }
+        if lhs.address != rhs.address {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(addresses)
+        hasher.combine(address)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleBookmarkStateProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarkStateProjectionInput {
+        return
+            try ArticleBookmarkStateProjectionInput(
+                addresses: FfiConverterSequenceString.read(from: &buf),
+                address: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleBookmarkStateProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.addresses, into: &buf)
+        FfiConverterString.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarkStateProjectionInput_lift(_ buf: RustBuffer) throws -> ArticleBookmarkStateProjectionInput {
+    return try FfiConverterTypeArticleBookmarkStateProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarkStateProjectionInput_lower(_ value: ArticleBookmarkStateProjectionInput) -> RustBuffer {
+    return FfiConverterTypeArticleBookmarkStateProjectionInput.lower(value)
 }
 
 
@@ -33410,6 +33591,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_add_relay_sheet() != 14886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_bookmark_state() != 14884) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_highlight_publish() != 64360) {

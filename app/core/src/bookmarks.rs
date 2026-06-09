@@ -13,6 +13,7 @@
 
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
+use std::collections::BTreeSet;
 
 use crate::errors::CoreError;
 use crate::nostr_runtime::NostrRuntime;
@@ -38,7 +39,51 @@ pub struct BookmarkList {
     pub content: String,
 }
 
+/// Native article bookmark state projection. Rust owns canonical address
+/// trimming, current membership, and the optimistic post-toggle set.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleBookmarkStateProjection {
+    pub canonical_address: String,
+    pub can_toggle: bool,
+    pub is_bookmarked: bool,
+    pub optimistic_addresses: Vec<String>,
+}
+
+/// Native article bookmark state input.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleBookmarkStateProjectionInput {
+    pub addresses: Vec<String>,
+    pub address: String,
+}
+
 // -- Public API --------------------------------------------------------------
+
+pub fn article_bookmark_state_projection(
+    input: ArticleBookmarkStateProjectionInput,
+) -> ArticleBookmarkStateProjection {
+    let canonical_address = input.address.trim().to_string();
+    let mut addresses = input
+        .addresses
+        .into_iter()
+        .map(|address| address.trim().to_string())
+        .filter(|address| !address.is_empty())
+        .collect::<BTreeSet<_>>();
+    let can_toggle = !canonical_address.is_empty();
+    let is_bookmarked = can_toggle && addresses.contains(&canonical_address);
+    if can_toggle {
+        if is_bookmarked {
+            addresses.remove(&canonical_address);
+        } else {
+            addresses.insert(canonical_address.clone());
+        }
+    }
+    ArticleBookmarkStateProjection {
+        canonical_address,
+        can_toggle,
+        is_bookmarked,
+        optimistic_addresses: addresses.into_iter().collect(),
+    }
+}
 
 /// Read the newest cached kind:10003 for `user_hex` and return the set of
 /// addressable-event bookmarks it carries. Empty list when none cached.
@@ -302,5 +347,41 @@ mod tests {
         assert!(is_bookmarked(&ndb, &pk, "30023:aa:essay").unwrap());
         assert!(!is_bookmarked(&ndb, &pk, "30023:aa:letter").unwrap());
         assert!(!is_bookmarked(&ndb, &pk, "30023:aa:").unwrap());
+    }
+
+    #[test]
+    fn article_bookmark_state_projection_trims_dedupes_and_toggles() {
+        let added = article_bookmark_state_projection(ArticleBookmarkStateProjectionInput {
+            addresses: vec![
+                "30023:aa:essay".into(),
+                " 30023:aa:essay ".into(),
+                " ".into(),
+            ],
+            address: " 30023:bb:letter\n".into(),
+        });
+        let removed = article_bookmark_state_projection(ArticleBookmarkStateProjectionInput {
+            addresses: vec!["30023:aa:essay".into(), "30023:bb:letter".into()],
+            address: "30023:aa:essay".into(),
+        });
+        let blank = article_bookmark_state_projection(ArticleBookmarkStateProjectionInput {
+            addresses: vec!["30023:aa:essay".into()],
+            address: " \n ".into(),
+        });
+
+        assert_eq!(added.canonical_address, "30023:bb:letter");
+        assert!(added.can_toggle);
+        assert!(!added.is_bookmarked);
+        assert_eq!(
+            added.optimistic_addresses,
+            vec!["30023:aa:essay", "30023:bb:letter"]
+        );
+
+        assert!(removed.is_bookmarked);
+        assert_eq!(removed.optimistic_addresses, vec!["30023:bb:letter"]);
+
+        assert_eq!(blank.canonical_address, "");
+        assert!(!blank.can_toggle);
+        assert!(!blank.is_bookmarked);
+        assert_eq!(blank.optimistic_addresses, vec!["30023:aa:essay"]);
     }
 }

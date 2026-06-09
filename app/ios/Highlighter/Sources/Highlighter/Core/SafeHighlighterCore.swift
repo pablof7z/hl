@@ -298,6 +298,12 @@ actor SafeHighlighterCore {
 
     // MARK: - Bookmarks (NIP-51 kind:10003)
 
+    nonisolated func projectArticleBookmarkState(
+        input: ArticleBookmarkStateProjectionInput
+    ) -> ArticleBookmarkStateProjection {
+        core.projectArticleBookmarkState(input: input)
+    }
+
     func getBookmarkedArticleAddresses() async -> StringListOutcome {
         await core.getBookmarkedArticleAddresses()
     }
