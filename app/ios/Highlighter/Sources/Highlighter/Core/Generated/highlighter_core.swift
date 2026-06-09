@@ -1478,6 +1478,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomAvatar(input: RoomAvatarProjectionInput)  -> RoomAvatarProjection
 
+    func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput)  -> RoomLibraryArticleCardProjection
+
     func projectRoomPreviewArtifacts(input: RoomPreviewArtifactsProjectionInput)  -> RoomPreviewArtifactsProjection
 
     func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput)  -> RoomRecommendationCardProjection
@@ -4366,6 +4368,14 @@ open func projectRoomAvatar(input: RoomAvatarProjectionInput) -> RoomAvatarProje
     return try!  FfiConverterTypeRoomAvatarProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_avatar(self.uniffiClonePointer(),
         FfiConverterTypeRoomAvatarProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput) -> RoomLibraryArticleCardProjection  {
+    return try!  FfiConverterTypeRoomLibraryArticleCardProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_library_article_card(self.uniffiClonePointer(),
+        FfiConverterTypeRoomLibraryArticleCardProjectionInput_lower(input),$0
     )
 })
 }
@@ -20141,6 +20151,170 @@ public func FfiConverterTypeRoomLane_lower(_ value: RoomLane) -> RustBuffer {
 }
 
 
+public struct RoomLibraryArticleCardProjection {
+    public var articleAuthorPubkey: String?
+    public var avatarPubkey: String
+    public var authorProfilePubkey: String
+    public var relativeUnixSeconds: UInt64?
+    public var metaBits: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(articleAuthorPubkey: String?, avatarPubkey: String, authorProfilePubkey: String, relativeUnixSeconds: UInt64?, metaBits: [String]) {
+        self.articleAuthorPubkey = articleAuthorPubkey
+        self.avatarPubkey = avatarPubkey
+        self.authorProfilePubkey = authorProfilePubkey
+        self.relativeUnixSeconds = relativeUnixSeconds
+        self.metaBits = metaBits
+    }
+}
+
+#if compiler(>=6)
+extension RoomLibraryArticleCardProjection: Sendable {}
+#endif
+
+
+extension RoomLibraryArticleCardProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomLibraryArticleCardProjection, rhs: RoomLibraryArticleCardProjection) -> Bool {
+        if lhs.articleAuthorPubkey != rhs.articleAuthorPubkey {
+            return false
+        }
+        if lhs.avatarPubkey != rhs.avatarPubkey {
+            return false
+        }
+        if lhs.authorProfilePubkey != rhs.authorProfilePubkey {
+            return false
+        }
+        if lhs.relativeUnixSeconds != rhs.relativeUnixSeconds {
+            return false
+        }
+        if lhs.metaBits != rhs.metaBits {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(articleAuthorPubkey)
+        hasher.combine(avatarPubkey)
+        hasher.combine(authorProfilePubkey)
+        hasher.combine(relativeUnixSeconds)
+        hasher.combine(metaBits)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLibraryArticleCardProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryArticleCardProjection {
+        return
+            try RoomLibraryArticleCardProjection(
+                articleAuthorPubkey: FfiConverterOptionString.read(from: &buf),
+                avatarPubkey: FfiConverterString.read(from: &buf),
+                authorProfilePubkey: FfiConverterString.read(from: &buf),
+                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
+                metaBits: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLibraryArticleCardProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.articleAuthorPubkey, into: &buf)
+        FfiConverterString.write(value.avatarPubkey, into: &buf)
+        FfiConverterString.write(value.authorProfilePubkey, into: &buf)
+        FfiConverterOptionUInt64.write(value.relativeUnixSeconds, into: &buf)
+        FfiConverterSequenceString.write(value.metaBits, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryArticleCardProjection_lift(_ buf: RustBuffer) throws -> RoomLibraryArticleCardProjection {
+    return try FfiConverterTypeRoomLibraryArticleCardProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryArticleCardProjection_lower(_ value: RoomLibraryArticleCardProjection) -> RustBuffer {
+    return FfiConverterTypeRoomLibraryArticleCardProjection.lower(value)
+}
+
+
+public struct RoomLibraryArticleCardProjectionInput {
+    public var artifact: ArtifactRecord
+    public var commentCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifact: ArtifactRecord, commentCount: UInt32) {
+        self.artifact = artifact
+        self.commentCount = commentCount
+    }
+}
+
+#if compiler(>=6)
+extension RoomLibraryArticleCardProjectionInput: Sendable {}
+#endif
+
+
+extension RoomLibraryArticleCardProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomLibraryArticleCardProjectionInput, rhs: RoomLibraryArticleCardProjectionInput) -> Bool {
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        if lhs.commentCount != rhs.commentCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifact)
+        hasher.combine(commentCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLibraryArticleCardProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryArticleCardProjectionInput {
+        return
+            try RoomLibraryArticleCardProjectionInput(
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                commentCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLibraryArticleCardProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterUInt32.write(value.commentCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryArticleCardProjectionInput_lift(_ buf: RustBuffer) throws -> RoomLibraryArticleCardProjectionInput {
+    return try FfiConverterTypeRoomLibraryArticleCardProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryArticleCardProjectionInput_lower(_ value: RoomLibraryArticleCardProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomLibraryArticleCardProjectionInput.lower(value)
+}
+
+
 public struct RoomPreviewArtifactRowProjection {
     public var artifact: ArtifactRecord
     public var title: String
@@ -26999,6 +27173,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_avatar() != 27524) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_article_card() != 56696) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_preview_artifacts() != 32023) {

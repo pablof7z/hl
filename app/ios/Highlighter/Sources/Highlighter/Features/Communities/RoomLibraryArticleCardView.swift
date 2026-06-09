@@ -11,21 +11,21 @@ struct RoomLibraryArticleCardView: View {
     var commentCount: Int = 0
 
     var body: some View {
-        let author = authorDisplay
+        let projection = cardProjection
+        let author = authorDisplay(projection)
 
         ReadingCard(
             title: artifact.preview.title,
             summary: artifact.preview.description,
             imageURL: coverURL,
             authorName: author.displayName,
-            authorPubkey: articleAuthorPubkey,
-            relativeDate: relativeDate,
-            metaBits: metaBits,
+            authorPubkey: projection.articleAuthorPubkey,
+            relativeDate: relativeDate(projection.relativeUnixSeconds),
+            metaBits: projection.metaBits,
             showTrailing: false,
             avatar: {
-                let pubkey = articleAuthorPubkey ?? artifact.pubkey
                 AuthorAvatar(
-                    pubkey: pubkey,
+                    pubkey: projection.avatarPubkey,
                     pictureURL: author.pictureUrl,
                     displayInitial: author.displayInitial,
                     size: 22
@@ -33,8 +33,8 @@ struct RoomLibraryArticleCardView: View {
             },
             trailing: { EmptyView() }
         )
-        .task(id: articleAuthorPubkey ?? "") {
-            guard let pk = articleAuthorPubkey else { return }
+        .task(id: projection.articleAuthorPubkey ?? "") {
+            guard let pk = projection.articleAuthorPubkey else { return }
             await app.requestProfile(pubkeyHex: pk)
         }
     }
@@ -46,18 +46,23 @@ struct RoomLibraryArticleCardView: View {
         return URL(string: artifact.preview.image)
     }
 
-    private var articleAuthorPubkey: String? {
-        let route = app.core.getArtifactDetailRoute(artifact: artifact)
-        guard route.target == .article, !route.articlePubkey.isEmpty else { return nil }
-        return route.articlePubkey
+    private var cardProjection: RoomLibraryArticleCardProjection {
+        app.safeCore.projectRoomLibraryArticleCard(
+            input: RoomLibraryArticleCardProjectionInput(
+                artifact: artifact,
+                commentCount: UInt32(commentCount)
+            )
+        )
     }
 
-    private var authorDisplay: ProfileDisplayProjection {
-        let pubkey = articleAuthorPubkey ?? ""
+    private func authorDisplay(
+        _ projection: RoomLibraryArticleCardProjection
+    ) -> ProfileDisplayProjection {
+        let pubkey = projection.authorProfilePubkey
         return app.safeCore.projectProfileDisplayWithLabel(
             input: ProfileDisplayWithLabelProjectionInput(
                 pubkey: pubkey,
-                profile: app.profileSnapshots[pubkey],
+                profile: pubkey.isEmpty ? nil : app.profileSnapshots[pubkey],
                 labelFallback: artifact.preview.author,
                 pubkeyFallback: .pubkey10,
                 emptyFallback: "Unknown"
@@ -65,21 +70,12 @@ struct RoomLibraryArticleCardView: View {
         )
     }
 
-    private var relativeDate: String? {
-        guard let seconds = artifact.createdAt, seconds > 0 else { return nil }
+    private func relativeDate(_ seconds: UInt64?) -> String? {
+        guard let seconds else { return nil }
         let date = Date(timeIntervalSince1970: TimeInterval(seconds))
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         formatter.dateTimeStyle = .numeric
         return formatter.localizedString(for: date, relativeTo: Date())
-    }
-
-    private var metaBits: [String] {
-        var out: [String] = []
-        if !artifact.preview.domain.isEmpty { out.append(artifact.preview.domain) }
-        if commentCount > 0 {
-            out.append("\(commentCount) comment\(commentCount == 1 ? "" : "s")")
-        }
-        return out
     }
 }

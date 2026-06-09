@@ -68,6 +68,7 @@ use crate::reference_targets;
 use crate::relays::nostr_connect_relay;
 use crate::room_explorer_config;
 use crate::room_lanes;
+use crate::room_library;
 use crate::room_state;
 use crate::session::{current_user_from_pubkey, Session};
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
@@ -2080,6 +2081,13 @@ impl HighlighterCore {
             &highlights_by_reference,
             &comments_by_reference,
         )
+    }
+
+    pub fn project_room_library_article_card(
+        &self,
+        input: room_library::RoomLibraryArticleCardProjectionInput,
+    ) -> room_library::RoomLibraryArticleCardProjection {
+        room_library::article_card_projection(input)
     }
 
     /// Build the visible NIP-22 comment thread from a bounded screen record

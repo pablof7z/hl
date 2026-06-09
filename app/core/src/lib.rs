@@ -45,6 +45,7 @@ pub mod relays;
 pub mod room_explorer_config;
 pub mod room_invites;
 pub mod room_lanes;
+pub mod room_library;
 pub mod room_preview;
 pub mod room_state;
 pub mod search;
@@ -133,6 +134,7 @@ pub use room_invites::{
     RoomInviteProjection, RoomInviteProjectionInput, RoomInviteResolvedCandidate,
     RoomInviteSendResultProjection, RoomInviteSuggestion,
 };
+pub use room_library::{RoomLibraryArticleCardProjection, RoomLibraryArticleCardProjectionInput};
 pub use room_preview::{
     RoomPreviewArtifactRowProjection, RoomPreviewArtifactsProjection,
     RoomPreviewArtifactsProjectionInput,
