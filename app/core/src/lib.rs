@@ -110,9 +110,10 @@ pub use relays::{
     RelaySettingsProjection, RelayStatusTone,
 };
 pub use room_invites::{
-    RoomInviteAddDecision, RoomInviteCandidate, RoomInviteCandidateSource, RoomInviteChip,
-    RoomInviteInputFormat, RoomInviteProjection, RoomInviteProjectionInput,
-    RoomInviteResolvedCandidate, RoomInviteSendResultProjection, RoomInviteSuggestion,
+    RoomInviteAddDecision, RoomInviteAvatarProjection, RoomInviteAvatarProjectionInput,
+    RoomInviteCandidate, RoomInviteCandidateSource, RoomInviteChip, RoomInviteInputFormat,
+    RoomInviteProjection, RoomInviteProjectionInput, RoomInviteResolvedCandidate,
+    RoomInviteSendResultProjection, RoomInviteSuggestion,
 };
 pub use web_metadata::WebMetadata;
 pub use whats_new::WhatsNewEntry;

@@ -447,16 +447,19 @@ private struct AvatarView: View {
     let pubkeyHex: String
     let size: CGFloat
 
+    @Environment(HighlighterStore.self) private var appStore
+
     var body: some View {
-        let url = URL(string: profile?.picture ?? "")
+        let avatar = avatarProjection
+        let url = URL(string: avatar.pictureUrl)
         ZStack {
             if let url, let _ = url.scheme {
                 KFImage(url)
-                    .placeholder { fallback }
+                    .placeholder { fallback(avatar) }
                     .resizable()
                     .scaledToFill()
             } else {
-                fallback
+                fallback(avatar)
             }
         }
         .frame(width: size, height: size)
@@ -466,19 +469,22 @@ private struct AvatarView: View {
         )
     }
 
-    private var fallback: some View {
+    private func fallback(_ avatar: RoomInviteAvatarProjection) -> some View {
         ZStack {
             Color.highlighterTintPale
-            Text(initial)
+            Text(avatar.displayInitial)
                 .font(.system(size: size * 0.4, weight: .semibold, design: .default))
                 .foregroundStyle(Color.highlighterInkStrong)
         }
     }
 
-    private var initial: String {
-        let name = profile?.name ?? ""
-        if let first = name.first { return String(first).uppercased() }
-        return String(pubkeyHex.prefix(1)).uppercased()
+    private var avatarProjection: RoomInviteAvatarProjection {
+        appStore.safeCore.getRoomInviteAvatarProjection(
+            input: RoomInviteAvatarProjectionInput(
+                pubkeyHex: pubkeyHex,
+                profile: profile
+            )
+        )
     }
 }
 

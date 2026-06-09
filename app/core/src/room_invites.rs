@@ -91,6 +91,18 @@ pub struct RoomInviteSendResultProjection {
     pub remaining_selected: Vec<RoomInviteCandidate>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomInviteAvatarProjectionInput {
+    pub pubkey_hex: String,
+    pub profile: Option<ProfileMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomInviteAvatarProjection {
+    pub picture_url: String,
+    pub display_initial: String,
+}
+
 pub fn project_invite(input: RoomInviteProjectionInput) -> RoomInviteProjection {
     let limit = if input.limit == 0 {
         50usize
@@ -135,6 +147,32 @@ pub fn project_invite(input: RoomInviteProjectionInput) -> RoomInviteProjection 
         visible_follows,
         resolved_candidate,
         show_empty_follow_message,
+    }
+}
+
+pub fn avatar_projection(input: RoomInviteAvatarProjectionInput) -> RoomInviteAvatarProjection {
+    let picture_url = input
+        .profile
+        .as_ref()
+        .map(|profile| profile.picture.clone())
+        .unwrap_or_default();
+    let display_initial = input
+        .profile
+        .as_ref()
+        .and_then(|profile| profile.name.chars().next())
+        .map(|first| first.to_uppercase().collect())
+        .unwrap_or_else(|| {
+            input
+                .pubkey_hex
+                .chars()
+                .take(1)
+                .collect::<String>()
+                .to_uppercase()
+        });
+
+    RoomInviteAvatarProjection {
+        picture_url,
+        display_initial,
     }
 }
 
@@ -438,6 +476,39 @@ mod tests {
         });
         assert!(empty.visible_follows.is_empty());
         assert!(empty.show_empty_follow_message);
+    }
+
+    #[test]
+    fn avatar_projection_prefers_profile_name_initial() {
+        let pubkey = hex("01");
+        let projection = avatar_projection(RoomInviteAvatarProjectionInput {
+            pubkey_hex: pubkey.clone(),
+            profile: Some(profile(&pubkey, "ada", "Ada Lovelace", "ada@example.com")),
+        });
+
+        assert_eq!(
+            projection,
+            RoomInviteAvatarProjection {
+                picture_url: String::new(),
+                display_initial: "A".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn avatar_projection_falls_back_to_pubkey_initial() {
+        let projection = avatar_projection(RoomInviteAvatarProjectionInput {
+            pubkey_hex: "fbcdef".into(),
+            profile: Some(profile(&hex("01"), "", "Ada Lovelace", "ada@example.com")),
+        });
+
+        assert_eq!(
+            projection,
+            RoomInviteAvatarProjection {
+                picture_url: String::new(),
+                display_initial: "F".into(),
+            }
+        );
     }
 
     #[test]

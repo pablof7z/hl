@@ -1243,6 +1243,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getRoomInviteAddDecision(pubkeyHex: String, selectedPubkeys: [String], currentUserPubkey: String)  -> RoomInviteAddDecision
 
+    func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput)  -> RoomInviteAvatarProjection
+
     func getRoomInviteProjection(input: RoomInviteProjectionInput)  -> RoomInviteProjection
 
     func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String])  -> RoomInviteSendResultProjection
@@ -3543,6 +3545,14 @@ open func getRoomInviteAddDecision(pubkeyHex: String, selectedPubkeys: [String],
         FfiConverterString.lower(pubkeyHex),
         FfiConverterSequenceString.lower(selectedPubkeys),
         FfiConverterString.lower(currentUserPubkey),$0
+    )
+})
+}
+
+open func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput) -> RoomInviteAvatarProjection  {
+    return try!  FfiConverterTypeRoomInviteAvatarProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_avatar_projection(self.uniffiClonePointer(),
+        FfiConverterTypeRoomInviteAvatarProjectionInput_lower(input),$0
     )
 })
 }
@@ -17842,6 +17852,146 @@ public func FfiConverterTypeRoomInviteAddDecision_lower(_ value: RoomInviteAddDe
 }
 
 
+public struct RoomInviteAvatarProjection {
+    public var pictureUrl: String
+    public var displayInitial: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pictureUrl: String, displayInitial: String) {
+        self.pictureUrl = pictureUrl
+        self.displayInitial = displayInitial
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteAvatarProjection: Sendable {}
+#endif
+
+
+extension RoomInviteAvatarProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteAvatarProjection, rhs: RoomInviteAvatarProjection) -> Bool {
+        if lhs.pictureUrl != rhs.pictureUrl {
+            return false
+        }
+        if lhs.displayInitial != rhs.displayInitial {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pictureUrl)
+        hasher.combine(displayInitial)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteAvatarProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteAvatarProjection {
+        return
+            try RoomInviteAvatarProjection(
+                pictureUrl: FfiConverterString.read(from: &buf),
+                displayInitial: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteAvatarProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pictureUrl, into: &buf)
+        FfiConverterString.write(value.displayInitial, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteAvatarProjection_lift(_ buf: RustBuffer) throws -> RoomInviteAvatarProjection {
+    return try FfiConverterTypeRoomInviteAvatarProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteAvatarProjection_lower(_ value: RoomInviteAvatarProjection) -> RustBuffer {
+    return FfiConverterTypeRoomInviteAvatarProjection.lower(value)
+}
+
+
+public struct RoomInviteAvatarProjectionInput {
+    public var pubkeyHex: String
+    public var profile: ProfileMetadata?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkeyHex: String, profile: ProfileMetadata?) {
+        self.pubkeyHex = pubkeyHex
+        self.profile = profile
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteAvatarProjectionInput: Sendable {}
+#endif
+
+
+extension RoomInviteAvatarProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteAvatarProjectionInput, rhs: RoomInviteAvatarProjectionInput) -> Bool {
+        if lhs.pubkeyHex != rhs.pubkeyHex {
+            return false
+        }
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkeyHex)
+        hasher.combine(profile)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteAvatarProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteAvatarProjectionInput {
+        return
+            try RoomInviteAvatarProjectionInput(
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteAvatarProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkeyHex, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteAvatarProjectionInput_lift(_ buf: RustBuffer) throws -> RoomInviteAvatarProjectionInput {
+    return try FfiConverterTypeRoomInviteAvatarProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteAvatarProjectionInput_lower(_ value: RoomInviteAvatarProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomInviteAvatarProjectionInput.lower(value)
+}
+
+
 public struct RoomInviteCandidate {
     public var pubkeyHex: String
     public var source: RoomInviteCandidateSource
@@ -24341,6 +24491,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_add_decision() != 25995) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_avatar_projection() != 27101) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_projection() != 27402) {

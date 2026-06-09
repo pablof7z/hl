@@ -3433,6 +3433,13 @@ impl HighlighterCore {
         crate::room_invites::project_invite(input)
     }
 
+    pub fn get_room_invite_avatar_projection(
+        &self,
+        input: crate::room_invites::RoomInviteAvatarProjectionInput,
+    ) -> crate::room_invites::RoomInviteAvatarProjection {
+        crate::room_invites::avatar_projection(input)
+    }
+
     pub fn get_room_invite_add_decision(
         &self,
         pubkey_hex: String,
