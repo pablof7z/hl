@@ -12,11 +12,6 @@ final class FeedbackStore {
     private(set) var isLoading: Bool = true
     private(set) var loadError: String?
 
-    /// Cached so the composer doesn't refetch on every send. Resolved lazily
-    /// the first time the user posts a new thread; stays valid for the
-    /// lifetime of the store.
-    @ObservationIgnored private(set) var cachedAgentPubkey: String?
-
     @ObservationIgnored private var coordinate: String?
     @ObservationIgnored private var core: SafeHighlighterCore?
     @ObservationIgnored private weak var bridge: EventBridge?
@@ -76,19 +71,14 @@ final class FeedbackStore {
         )
     }
 
-    /// Resolve and cache the project's first agent pubkey. Returns `nil` if
-    /// the project event isn't in nostrdb yet — callers should still publish,
-    /// just without a `p` tag, and let the agent discover the note via its
-    /// own `a`-tag subscription.
+    /// Resolve the project's first agent pubkey from Rust/nostrdb. Returns
+    /// `nil` if the project event isn't cached yet — callers should still
+    /// publish, just without a `p` tag, and let the agent discover the note
+    /// via its own `a`-tag subscription.
     func resolveAgentPubkey() async -> String? {
-        if let cachedAgentPubkey { return cachedAgentPubkey }
         guard let core, let coordinate else { return nil }
         let outcome = await core.getProjectFirstAgentPubkey(coordinate: coordinate)
-        if outcome.error.isEmpty, let agent = outcome.value {
-            cachedAgentPubkey = agent
-            return agent
-        }
-        return nil
+        return outcome.error.isEmpty ? outcome.value : nil
     }
 }
 
