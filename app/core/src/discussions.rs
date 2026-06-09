@@ -9,6 +9,7 @@
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
+use crate::artifacts;
 use crate::clock::Clock;
 use crate::errors::CoreError;
 use crate::models::{ArtifactPreview, DiscussionAttachment, DiscussionRecord};
@@ -29,6 +30,30 @@ pub struct DiscussionAttachmentProjection {
     pub author: Option<String>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DiscussionComposerProjectionInput {
+    pub title: String,
+    pub body: String,
+    pub attachment_url: String,
+    pub is_publishing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DiscussionComposerProjection {
+    pub submit_title: String,
+    pub submit_body: String,
+    pub submit_attachment_url: Option<String>,
+    pub can_publish: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DiscussionComposerPublishInput {
+    pub group_id: String,
+    pub title: String,
+    pub body: String,
+    pub attachment_url: Option<String>,
+}
+
 /// Project a discussion attachment for native list/detail rendering. Rust owns
 /// the title->URL label fallback and optional metadata presence.
 pub fn attachment_projection(
@@ -44,6 +69,23 @@ pub fn attachment_projection(
         label: non_empty(label),
         image_url: non_empty(attachment.image),
         author: non_empty(attachment.author),
+    }
+}
+
+/// Discussion composer projection. Rust owns submit normalization and publish
+/// eligibility; native shells render fields and execute the user action.
+pub fn composer_projection(
+    input: DiscussionComposerProjectionInput,
+) -> DiscussionComposerProjection {
+    let submit_title = input.title.trim().to_string();
+    let submit_body = input.body.trim().to_string();
+    let submit_attachment_url = non_empty(input.attachment_url.trim().to_string());
+
+    DiscussionComposerProjection {
+        can_publish: !submit_title.is_empty() && !input.is_publishing,
+        submit_title,
+        submit_body,
+        submit_attachment_url,
     }
 }
 
@@ -90,6 +132,25 @@ pub fn query_for_group(
 
     records.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(records)
+}
+
+/// Build and publish a composer submission. Rust owns the optional URL
+/// attachment conversion; the native shell never fabricates preview records.
+pub async fn publish_from_composer(
+    runtime: &NostrRuntime,
+    input: DiscussionComposerPublishInput,
+    clock: &dyn Clock,
+) -> Result<DiscussionRecord, CoreError> {
+    let attachment = composer_attachment_preview(input.attachment_url.as_deref())?;
+    publish(
+        runtime,
+        &input.group_id,
+        &input.title,
+        &input.body,
+        attachment,
+        clock,
+    )
+    .await
 }
 
 /// Build + sign + publish a kind:11 discussion thread into a NIP-29 group.
@@ -263,6 +324,15 @@ fn build_event(
     Ok(EventBuilder::new(Kind::Custom(KIND_DISCUSSION), body.trim()).tags(tags))
 }
 
+fn composer_attachment_preview(
+    attachment_url: Option<&str>,
+) -> Result<Option<ArtifactPreview>, CoreError> {
+    let Some(url) = attachment_url.map(str::trim).filter(|url| !url.is_empty()) else {
+        return Ok(None);
+    };
+    artifacts::build_preview(url).map(Some)
+}
+
 fn slug_from_title(title: &str, clock: &dyn Clock) -> String {
     let mut out = String::with_capacity(title.len());
     let mut last_dash = false;
@@ -359,6 +429,56 @@ mod tests {
         );
         assert_eq!(projection.author, None);
         assert_eq!(projection.image_url, None);
+    }
+
+    #[test]
+    fn composer_projection_trims_and_blocks_blank_or_publishing_title() {
+        let projection = composer_projection(DiscussionComposerProjectionInput {
+            title: "  Launch thread  ".into(),
+            body: "  body copy  ".into(),
+            attachment_url: "  https://example.com/post  ".into(),
+            is_publishing: false,
+        });
+
+        assert_eq!(projection.submit_title, "Launch thread");
+        assert_eq!(projection.submit_body, "body copy");
+        assert_eq!(
+            projection.submit_attachment_url,
+            Some("https://example.com/post".into())
+        );
+        assert!(projection.can_publish);
+
+        let blank = composer_projection(DiscussionComposerProjectionInput {
+            title: " \n\t ".into(),
+            body: "body".into(),
+            attachment_url: " \n\t ".into(),
+            is_publishing: false,
+        });
+        let publishing = composer_projection(DiscussionComposerProjectionInput {
+            title: "Launch thread".into(),
+            body: "body".into(),
+            attachment_url: String::new(),
+            is_publishing: true,
+        });
+
+        assert!(!blank.can_publish);
+        assert_eq!(blank.submit_attachment_url, None);
+        assert!(!publishing.can_publish);
+    }
+
+    #[test]
+    fn composer_attachment_preview_builds_real_preview_or_rejects_invalid_url() {
+        let preview = composer_attachment_preview(Some(" https://example.com/post?ref=abc "))
+            .expect("preview")
+            .expect("attachment");
+
+        assert_eq!(preview.url, "https://example.com/post");
+        assert_eq!(preview.reference_tag_name, "i");
+        assert_eq!(preview.reference_kind, "web");
+        assert!(composer_attachment_preview(Some(" \n\t "))
+            .expect("blank")
+            .is_none());
+        assert!(composer_attachment_preview(Some("not a url")).is_err());
     }
 
     #[test]

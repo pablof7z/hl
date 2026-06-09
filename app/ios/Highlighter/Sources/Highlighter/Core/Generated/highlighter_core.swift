@@ -1443,6 +1443,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectDiscussionAttachment(input: DiscussionAttachmentProjectionInput)  -> DiscussionAttachmentProjection
 
     /**
+     * Discussion composer projection. Rust owns draft normalization and
+     * publish eligibility; native shells render the composer affordance.
+     */
+    func projectDiscussionComposer(input: DiscussionComposerProjectionInput)  -> DiscussionComposerProjection
+
+    /**
      * Feedback composer projection shared by new-thread and reply surfaces.
      * Rust owns submit trimming and send eligibility so each platform shell
      * renders the same enabled/disabled state.
@@ -1573,6 +1579,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func publishCommentLike(eventId: String, authorPubkeyHex: String) async  -> ReactionOutcome
 
     func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async  -> DiscussionOutcome
+
+    func publishDiscussionFromComposer(input: DiscussionComposerPublishInput) async  -> DiscussionOutcome
 
     /**
      * Publish a feedback note (kind:1) for the shake-to-share surface. When
@@ -4364,6 +4372,18 @@ open func projectDiscussionAttachment(input: DiscussionAttachmentProjectionInput
 }
 
     /**
+     * Discussion composer projection. Rust owns draft normalization and
+     * publish eligibility; native shells render the composer affordance.
+     */
+open func projectDiscussionComposer(input: DiscussionComposerProjectionInput) -> DiscussionComposerProjection  {
+    return try!  FfiConverterTypeDiscussionComposerProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_discussion_composer(self.uniffiClonePointer(),
+        FfiConverterTypeDiscussionComposerProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
      * Feedback composer projection shared by new-thread and reply surfaces.
      * Rust owns submit trimming and send eligibility so each platform shell
      * renders the same enabled/disabled state.
@@ -4781,6 +4801,24 @@ open func publishDiscussion(groupId: String, title: String, body: String, attach
                 uniffi_highlighter_core_fn_method_highlightercore_publish_discussion(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(groupId),FfiConverterString.lower(title),FfiConverterString.lower(body),FfiConverterOptionTypeArtifactPreview.lower(attachment)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeDiscussionOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func publishDiscussionFromComposer(input: DiscussionComposerPublishInput)async  -> DiscussionOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_discussion_from_composer(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeDiscussionComposerPublishInput_lower(input)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -12274,6 +12312,264 @@ public func FfiConverterTypeDiscussionAttachmentProjectionInput_lift(_ buf: Rust
 #endif
 public func FfiConverterTypeDiscussionAttachmentProjectionInput_lower(_ value: DiscussionAttachmentProjectionInput) -> RustBuffer {
     return FfiConverterTypeDiscussionAttachmentProjectionInput.lower(value)
+}
+
+
+public struct DiscussionComposerProjection {
+    public var submitTitle: String
+    public var submitBody: String
+    public var submitAttachmentUrl: String?
+    public var canPublish: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(submitTitle: String, submitBody: String, submitAttachmentUrl: String?, canPublish: Bool) {
+        self.submitTitle = submitTitle
+        self.submitBody = submitBody
+        self.submitAttachmentUrl = submitAttachmentUrl
+        self.canPublish = canPublish
+    }
+}
+
+#if compiler(>=6)
+extension DiscussionComposerProjection: Sendable {}
+#endif
+
+
+extension DiscussionComposerProjection: Equatable, Hashable {
+    public static func ==(lhs: DiscussionComposerProjection, rhs: DiscussionComposerProjection) -> Bool {
+        if lhs.submitTitle != rhs.submitTitle {
+            return false
+        }
+        if lhs.submitBody != rhs.submitBody {
+            return false
+        }
+        if lhs.submitAttachmentUrl != rhs.submitAttachmentUrl {
+            return false
+        }
+        if lhs.canPublish != rhs.canPublish {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(submitTitle)
+        hasher.combine(submitBody)
+        hasher.combine(submitAttachmentUrl)
+        hasher.combine(canPublish)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscussionComposerProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionComposerProjection {
+        return
+            try DiscussionComposerProjection(
+                submitTitle: FfiConverterString.read(from: &buf),
+                submitBody: FfiConverterString.read(from: &buf),
+                submitAttachmentUrl: FfiConverterOptionString.read(from: &buf),
+                canPublish: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscussionComposerProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.submitTitle, into: &buf)
+        FfiConverterString.write(value.submitBody, into: &buf)
+        FfiConverterOptionString.write(value.submitAttachmentUrl, into: &buf)
+        FfiConverterBool.write(value.canPublish, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionComposerProjection_lift(_ buf: RustBuffer) throws -> DiscussionComposerProjection {
+    return try FfiConverterTypeDiscussionComposerProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionComposerProjection_lower(_ value: DiscussionComposerProjection) -> RustBuffer {
+    return FfiConverterTypeDiscussionComposerProjection.lower(value)
+}
+
+
+public struct DiscussionComposerProjectionInput {
+    public var title: String
+    public var body: String
+    public var attachmentUrl: String
+    public var isPublishing: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String, body: String, attachmentUrl: String, isPublishing: Bool) {
+        self.title = title
+        self.body = body
+        self.attachmentUrl = attachmentUrl
+        self.isPublishing = isPublishing
+    }
+}
+
+#if compiler(>=6)
+extension DiscussionComposerProjectionInput: Sendable {}
+#endif
+
+
+extension DiscussionComposerProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: DiscussionComposerProjectionInput, rhs: DiscussionComposerProjectionInput) -> Bool {
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.body != rhs.body {
+            return false
+        }
+        if lhs.attachmentUrl != rhs.attachmentUrl {
+            return false
+        }
+        if lhs.isPublishing != rhs.isPublishing {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(title)
+        hasher.combine(body)
+        hasher.combine(attachmentUrl)
+        hasher.combine(isPublishing)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscussionComposerProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionComposerProjectionInput {
+        return
+            try DiscussionComposerProjectionInput(
+                title: FfiConverterString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf),
+                attachmentUrl: FfiConverterString.read(from: &buf),
+                isPublishing: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscussionComposerProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.body, into: &buf)
+        FfiConverterString.write(value.attachmentUrl, into: &buf)
+        FfiConverterBool.write(value.isPublishing, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionComposerProjectionInput_lift(_ buf: RustBuffer) throws -> DiscussionComposerProjectionInput {
+    return try FfiConverterTypeDiscussionComposerProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionComposerProjectionInput_lower(_ value: DiscussionComposerProjectionInput) -> RustBuffer {
+    return FfiConverterTypeDiscussionComposerProjectionInput.lower(value)
+}
+
+
+public struct DiscussionComposerPublishInput {
+    public var groupId: String
+    public var title: String
+    public var body: String
+    public var attachmentUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(groupId: String, title: String, body: String, attachmentUrl: String?) {
+        self.groupId = groupId
+        self.title = title
+        self.body = body
+        self.attachmentUrl = attachmentUrl
+    }
+}
+
+#if compiler(>=6)
+extension DiscussionComposerPublishInput: Sendable {}
+#endif
+
+
+extension DiscussionComposerPublishInput: Equatable, Hashable {
+    public static func ==(lhs: DiscussionComposerPublishInput, rhs: DiscussionComposerPublishInput) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.body != rhs.body {
+            return false
+        }
+        if lhs.attachmentUrl != rhs.attachmentUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(title)
+        hasher.combine(body)
+        hasher.combine(attachmentUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscussionComposerPublishInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionComposerPublishInput {
+        return
+            try DiscussionComposerPublishInput(
+                groupId: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf),
+                attachmentUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscussionComposerPublishInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.body, into: &buf)
+        FfiConverterOptionString.write(value.attachmentUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionComposerPublishInput_lift(_ buf: RustBuffer) throws -> DiscussionComposerPublishInput {
+    return try FfiConverterTypeDiscussionComposerPublishInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionComposerPublishInput_lower(_ value: DiscussionComposerPublishInput) -> RustBuffer {
+    return FfiConverterTypeDiscussionComposerPublishInput.lower(value)
 }
 
 
@@ -31304,6 +31600,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_discussion_attachment() != 2804) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_discussion_composer() != 16585) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_composer() != 43880) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -31425,6 +31724,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 58699) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion_from_composer() != 17266) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_note() != 47994) {

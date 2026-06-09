@@ -26,7 +26,7 @@ struct DiscussionComposerView: View {
     @State private var errorMessage: String?
 
     private var canPublish: Bool {
-        !title.trimmingCharacters(in: .whitespaces).isEmpty && !isPublishing
+        composerProjection.canPublish
     }
 
     var body: some View {
@@ -74,26 +74,31 @@ struct DiscussionComposerView: View {
         }
     }
 
+    private var composerProjection: DiscussionComposerProjection {
+        app.safeCore.projectDiscussionComposer(
+            input: DiscussionComposerProjectionInput(
+                title: title,
+                body: messageBody,
+                attachmentUrl: attachmentURL,
+                isPublishing: isPublishing
+            )
+        )
+    }
+
     private func publish() async {
+        let projection = composerProjection
+        guard projection.canPublish else { return }
         isPublishing = true
         errorMessage = nil
         defer { isPublishing = false }
 
-        let trimmedURL = attachmentURL.trimmingCharacters(in: .whitespaces)
-        var attachment: ArtifactPreview? = nil
-        if !trimmedURL.isEmpty {
-            // build_preview isn't implemented in the core yet (Phase 3 work),
-            // so we can't build a rich preview from a bare URL today. Swallow
-            // the attachment silently rather than block publish — the room
-            // still gets the discussion; the attachment field just stays
-            // empty. Once build_preview lands, wire it here.
-        }
-
-        let outcome = await app.safeCore.publishDiscussion(
-            groupId: groupId,
-            title: title.trimmingCharacters(in: .whitespaces),
-            body: messageBody,
-            attachment: attachment
+        let outcome = await app.safeCore.publishDiscussionFromComposer(
+            input: DiscussionComposerPublishInput(
+                groupId: groupId,
+                title: projection.submitTitle,
+                body: projection.submitBody,
+                attachmentUrl: projection.submitAttachmentUrl
+            )
         )
         guard outcome.error.isEmpty, let record = outcome.value else {
             errorMessage = outcome.error.isEmpty ? "Failed to publish." : outcome.error

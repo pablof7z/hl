@@ -1016,6 +1016,12 @@ actor SafeHighlighterCore {
         core.projectDiscussionAttachment(input: input)
     }
 
+    nonisolated func projectDiscussionComposer(
+        input: DiscussionComposerProjectionInput
+    ) -> DiscussionComposerProjection {
+        core.projectDiscussionComposer(input: input)
+    }
+
     nonisolated func upsertChatMessage(
         messages: [ChatMessageRecord],
         message: ChatMessageRecord
@@ -1366,6 +1372,12 @@ actor SafeHighlighterCore {
             body: body,
             attachment: attachment
         )
+    }
+
+    func publishDiscussionFromComposer(
+        input: DiscussionComposerPublishInput
+    ) async -> DiscussionOutcome {
+        await core.publishDiscussionFromComposer(input: input)
     }
 
     func publishHighlightsAndShare(

@@ -2283,6 +2283,15 @@ impl HighlighterCore {
         crate::discussions::attachment_projection(input)
     }
 
+    /// Discussion composer projection. Rust owns draft normalization and
+    /// publish eligibility; native shells render the composer affordance.
+    pub fn project_discussion_composer(
+        &self,
+        input: crate::discussions::DiscussionComposerProjectionInput,
+    ) -> crate::discussions::DiscussionComposerProjection {
+        crate::discussions::composer_projection(input)
+    }
+
     /// Upsert a live chat delta into a bounded room chat list. Rust owns
     /// replacement identity and oldest-first ordering.
     pub fn upsert_chat_message(
@@ -3241,6 +3250,19 @@ impl HighlighterCore {
                 self.clock.as_ref(),
             )
             .await
+        }
+        .await;
+        discussion_outcome(result)
+    }
+
+    pub async fn publish_discussion_from_composer(
+        &self,
+        input: crate::discussions::DiscussionComposerPublishInput,
+    ) -> DiscussionOutcome {
+        let result: Result<DiscussionRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            crate::discussions::publish_from_composer(&self.runtime, input, self.clock.as_ref())
+                .await
         }
         .await;
         discussion_outcome(result)
