@@ -157,6 +157,13 @@ pub struct SecretKeyDisplayProjection {
     pub display_value: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SecretKeySettingsSnapshot {
+    pub has_secret_key: bool,
+    pub display_value: String,
+    pub copy_value: Option<String>,
+}
+
 /// Settings identity projection for the user's public NIP-19 key. Rust owns
 /// compact key labeling so native shells do not duplicate identity formatting.
 pub fn public_key_display_projection(
@@ -178,6 +185,33 @@ pub fn secret_key_display_projection(
         masked_nsec_label(&input.nsec)
     };
     SecretKeyDisplayProjection { display_value }
+}
+
+/// Secret-key settings snapshot. Native shells can execute copy/reveal UI
+/// mechanics, but Rust owns whether the active session has local nsec
+/// material and how that key is displayed.
+pub fn secret_key_settings_snapshot(
+    nsec: Option<String>,
+    is_revealed: bool,
+) -> SecretKeySettingsSnapshot {
+    let Some(nsec) = nsec.filter(|value| !value.is_empty()) else {
+        return SecretKeySettingsSnapshot {
+            has_secret_key: false,
+            display_value: String::new(),
+            copy_value: None,
+        };
+    };
+    let display_value = secret_key_display_projection(SecretKeyDisplayProjectionInput {
+        nsec: nsec.clone(),
+        is_revealed,
+    })
+    .display_value;
+
+    SecretKeySettingsSnapshot {
+        has_secret_key: true,
+        display_value,
+        copy_value: Some(nsec),
+    }
 }
 
 fn compact_npub_label(npub: &str) -> String {
@@ -394,6 +428,11 @@ impl Session {
         }
     }
 
+    pub(crate) fn nsec_bech32(&self) -> Option<String> {
+        self.keys()
+            .and_then(|keys| keys.secret_key().to_bech32().ok())
+    }
+
     /// Pubkey of the currently-active signer, regardless of type. Cheap — no
     /// relay roundtrip for NIP-46.
     pub fn pubkey(&self) -> Option<PublicKey> {
@@ -564,5 +603,32 @@ mod tests {
         });
 
         assert_eq!(projection.display_value, "nsec1abcdefghijklmnopqrstuvwxyz");
+    }
+
+    #[test]
+    fn secret_key_settings_snapshot_projects_active_local_key() {
+        let hidden =
+            secret_key_settings_snapshot(Some("nsec1abcdefghijklmnopqrstuvwxyz".into()), false);
+        assert!(hidden.has_secret_key);
+        assert_eq!(
+            hidden.display_value,
+            "nsec1abc••••••••••••••••••••••••uvwxyz"
+        );
+        assert_eq!(
+            hidden.copy_value,
+            Some("nsec1abcdefghijklmnopqrstuvwxyz".into())
+        );
+
+        let revealed =
+            secret_key_settings_snapshot(Some("nsec1abcdefghijklmnopqrstuvwxyz".into()), true);
+        assert_eq!(revealed.display_value, "nsec1abcdefghijklmnopqrstuvwxyz");
+    }
+
+    #[test]
+    fn secret_key_settings_snapshot_hides_missing_key() {
+        let snapshot = secret_key_settings_snapshot(None, true);
+        assert!(!snapshot.has_secret_key);
+        assert!(snapshot.display_value.is_empty());
+        assert_eq!(snapshot.copy_value, None);
     }
 }

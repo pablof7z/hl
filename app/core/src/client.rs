@@ -381,6 +381,14 @@ impl HighlighterCore {
         crate::session::secret_key_display_projection(input)
     }
 
+    pub fn current_secret_key_settings_snapshot(
+        &self,
+        is_revealed: bool,
+    ) -> crate::session::SecretKeySettingsSnapshot {
+        let nsec = self.inner.read().session.nsec_bech32();
+        crate::session::secret_key_settings_snapshot(nsec, is_revealed)
+    }
+
     pub fn project_relative_time_label(
         &self,
         input: crate::time_labels::RelativeTimeLabelInput,
@@ -4116,6 +4124,35 @@ mod tests {
         assert!(
             rx.recv_timeout(Duration::from_millis(100)).is_err(),
             "pending join should be consumed once"
+        );
+    }
+
+    #[test]
+    fn secret_key_settings_snapshot_reads_active_nsec_session() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let core = HighlighterCore::new_with_data_dir(tmp.path().join("ndb"));
+
+        let missing = core.current_secret_key_settings_snapshot(false);
+        assert!(!missing.has_secret_key);
+        assert_eq!(missing.copy_value, None);
+
+        let nsec = Keys::generate().secret_key().to_bech32().unwrap();
+        let login = core.login_nsec(nsec.clone());
+        assert!(login.is_authenticated);
+
+        let hidden = core.current_secret_key_settings_snapshot(false);
+        assert!(hidden.has_secret_key);
+        assert_eq!(hidden.copy_value, Some(nsec.clone()));
+        assert_ne!(hidden.display_value, nsec);
+
+        let revealed = core.current_secret_key_settings_snapshot(true);
+        assert_eq!(revealed.display_value, nsec);
+
+        core.logout();
+        assert!(
+            !core
+                .current_secret_key_settings_snapshot(true)
+                .has_secret_key
         );
     }
 }

@@ -818,6 +818,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func cropOcrLines(lines: [OcrLine], pageRect: OcrRect)  -> [OcrLine]
 
+    func currentSecretKeySettingsSnapshot(isRevealed: Bool)  -> SecretKeySettingsSnapshot
+
     func currentUser()  -> CurrentUser?
 
     /**
@@ -2175,6 +2177,14 @@ open func cropOcrLines(lines: [OcrLine], pageRect: OcrRect) -> [OcrLine]  {
     uniffi_highlighter_core_fn_method_highlightercore_crop_ocr_lines(self.uniffiClonePointer(),
         FfiConverterSequenceTypeOcrLine.lower(lines),
         FfiConverterTypeOcrRect_lower(pageRect),$0
+    )
+})
+}
+
+open func currentSecretKeySettingsSnapshot(isRevealed: Bool) -> SecretKeySettingsSnapshot  {
+    return try!  FfiConverterTypeSecretKeySettingsSnapshot_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_current_secret_key_settings_snapshot(self.uniffiClonePointer(),
+        FfiConverterBool.lower(isRevealed),$0
     )
 })
 }
@@ -31456,6 +31466,84 @@ public func FfiConverterTypeSecretKeyDisplayProjectionInput_lower(_ value: Secre
 }
 
 
+public struct SecretKeySettingsSnapshot {
+    public var hasSecretKey: Bool
+    public var displayValue: String
+    public var copyValue: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(hasSecretKey: Bool, displayValue: String, copyValue: String?) {
+        self.hasSecretKey = hasSecretKey
+        self.displayValue = displayValue
+        self.copyValue = copyValue
+    }
+}
+
+#if compiler(>=6)
+extension SecretKeySettingsSnapshot: Sendable {}
+#endif
+
+
+extension SecretKeySettingsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: SecretKeySettingsSnapshot, rhs: SecretKeySettingsSnapshot) -> Bool {
+        if lhs.hasSecretKey != rhs.hasSecretKey {
+            return false
+        }
+        if lhs.displayValue != rhs.displayValue {
+            return false
+        }
+        if lhs.copyValue != rhs.copyValue {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(hasSecretKey)
+        hasher.combine(displayValue)
+        hasher.combine(copyValue)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecretKeySettingsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecretKeySettingsSnapshot {
+        return
+            try SecretKeySettingsSnapshot(
+                hasSecretKey: FfiConverterBool.read(from: &buf),
+                displayValue: FfiConverterString.read(from: &buf),
+                copyValue: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SecretKeySettingsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.hasSecretKey, into: &buf)
+        FfiConverterString.write(value.displayValue, into: &buf)
+        FfiConverterOptionString.write(value.copyValue, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretKeySettingsSnapshot_lift(_ buf: RustBuffer) throws -> SecretKeySettingsSnapshot {
+    return try FfiConverterTypeSecretKeySettingsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretKeySettingsSnapshot_lower(_ value: SecretKeySettingsSnapshot) -> RustBuffer {
+    return FfiConverterTypeSecretKeySettingsSnapshot.lower(value)
+}
+
+
 public struct ShareArticleTargetProjectionInput {
     public var article: ArticleRecord
 
@@ -39075,6 +39163,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_crop_ocr_lines() != 63723) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_current_secret_key_settings_snapshot() != 50508) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_current_user() != 38772) {

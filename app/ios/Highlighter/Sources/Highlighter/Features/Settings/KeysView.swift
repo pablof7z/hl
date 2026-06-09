@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct KeysView: View {
-    @State private var nsec: String? = KeychainService.loadNsec()
     @State private var isRevealed = false
     @State private var copiedNsec = false
     @State private var copiedNpub = false
@@ -27,10 +26,11 @@ struct KeysView: View {
     @ViewBuilder
     private var nsecSection: some View {
         Section {
-            if let nsec {
+            let snapshot = secretKeySnapshot
+            if snapshot.hasSecretKey {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text(secretKeyDisplay(nsec).displayValue)
+                        Text(snapshot.displayValue)
                             .font(.system(.footnote, design: .monospaced))
                             .foregroundStyle(isRevealed ? .primary : .secondary)
                             .lineLimit(isRevealed ? nil : 1)
@@ -52,7 +52,7 @@ struct KeysView: View {
                     }
 
                     Button {
-                        UIPasteboard.general.string = nsec
+                        UIPasteboard.general.string = snapshot.copyValue
                         copiedNsec = true
                         nsecCopyResetTimer.schedule(after: 2) {
                             copiedNsec = false
@@ -141,12 +141,7 @@ struct KeysView: View {
 
     // MARK: - Helpers
 
-    private func secretKeyDisplay(_ nsec: String) -> SecretKeyDisplayProjection {
-        store.safeCore.projectSecretKeyDisplay(
-            input: SecretKeyDisplayProjectionInput(
-                nsec: nsec,
-                isRevealed: isRevealed
-            )
-        )
+    private var secretKeySnapshot: SecretKeySettingsSnapshot {
+        store.safeCore.currentSecretKeySettingsSnapshot(isRevealed: isRevealed)
     }
 }

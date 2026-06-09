@@ -239,7 +239,7 @@ pub use search::{
 pub use session::{
     AccountGenerationSnapshot, AuthSessionRestoreSnapshot, AuthSessionSnapshot,
     PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,
-    SecretKeyDisplayProjectionInput,
+    SecretKeyDisplayProjectionInput, SecretKeySettingsSnapshot,
 };
 pub use share_extension::{
     ShareQueueAttempt, ShareQueueDrainProjection, ShareQueueDrainProjectionInput, ShareQueueItem,

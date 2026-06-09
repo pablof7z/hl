@@ -672,6 +672,12 @@ actor SafeHighlighterCore {
         core.projectSecretKeyDisplay(input: input)
     }
 
+    nonisolated func currentSecretKeySettingsSnapshot(
+        isRevealed: Bool
+    ) -> SecretKeySettingsSnapshot {
+        core.currentSecretKeySettingsSnapshot(isRevealed: isRevealed)
+    }
+
     nonisolated func projectRelativeTimeLabel(
         input: RelativeTimeLabelInput
     ) -> RelativeTimeLabelProjection {
