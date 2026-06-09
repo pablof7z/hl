@@ -215,12 +215,8 @@ actor SafeHighlighterCore {
         await core.getJoinedRoomNamesForRelay(url: url)
     }
 
-    func getArtifacts(groupId: String, limit: UInt32 = 32) async -> ArtifactListOutcome {
-        await core.getArtifacts(groupId: groupId, limit: limit)
-    }
-
-    func getHighlights(groupId: String, limit: UInt32 = 64) async -> HydratedHighlightListOutcome {
-        await core.getHighlights(groupId: groupId, limit: limit)
+    func getRoomHomeSnapshot(groupId: String) async -> RoomHomeSnapshot {
+        await core.getRoomHomeSnapshot(groupId: groupId)
     }
 
     func getRecentBooks(limit: UInt32 = 24) async -> ArtifactListOutcome {
@@ -987,32 +983,6 @@ actor SafeHighlighterCore {
         core.getArtifactCommentScope(preview: preview)
     }
 
-    nonisolated func getArtifactReferenceTarget(
-        artifact: ArtifactRecord
-    ) -> ArtifactReferenceTarget? {
-        core.getArtifactReferenceTarget(artifact: artifact)
-    }
-
-    nonisolated func getHighlightReferenceTarget(
-        highlight: HighlightRecord
-    ) -> HighlightReferenceTarget? {
-        core.getHighlightReferenceTarget(highlight: highlight)
-    }
-
-    nonisolated func buildVisibleRoomLanes(
-        artifacts: [ArtifactRecord],
-        highlights: [HydratedHighlight],
-        highlightsByReference: [HighlightReferenceBucket],
-        commentsByReference: [CommentReferenceBucket]
-    ) -> [RoomLane] {
-        core.buildVisibleRoomLanes(
-            artifacts: artifacts,
-            highlights: highlights,
-            highlightsByReference: highlightsByReference,
-            commentsByReference: commentsByReference
-        )
-    }
-
     nonisolated func buildCommentThread(
         records: [CommentRecord],
         rootTagValue: String
@@ -1035,35 +1005,6 @@ actor SafeHighlighterCore {
         )
     }
 
-    nonisolated func upsertRoomArtifact(
-        artifacts: [ArtifactRecord],
-        artifact: ArtifactRecord
-    ) -> [ArtifactRecord] {
-        core.upsertRoomArtifact(
-            artifacts: artifacts,
-            artifact: artifact
-        )
-    }
-
-    nonisolated func upsertRoomHighlight(
-        highlights: [HydratedHighlight],
-        highlight: HydratedHighlight
-    ) -> [HydratedHighlight] {
-        core.upsertRoomHighlight(
-            highlights: highlights,
-            highlight: highlight
-        )
-    }
-
-    nonisolated func upsertHighlightReferenceBucket(
-        bucket: [HighlightRecord],
-        highlight: HighlightRecord
-    ) -> [HighlightRecord] {
-        core.upsertHighlightReferenceBucket(
-            bucket: bucket,
-            highlight: highlight
-        )
-    }
 
     nonisolated func countArtifactComments(
         artifact: ArtifactRecord,

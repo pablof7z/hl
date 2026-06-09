@@ -13,17 +13,10 @@ import Observation
 final class RoomStore {
     private(set) var artifacts: [ArtifactRecord] = []
     private(set) var highlights: [HydratedHighlight] = []
-    /// Per-artifact highlights, keyed by `"<tagName>:<tagValue>"` (e.g.
-    /// `"a:30023:pk:d"` for articles, `"i:isbn:…"` for books, `"r:<url>"`
-    /// for podcasts). Populated by `get_highlights_for_reference` because
-    /// the group-scoped `get_highlights(groupId:)` filters on `#h` which
-    /// kind:9802 events don't carry.
     private(set) var highlightsByReference: [String: [HighlightRecord]] = [:]
-    /// NIP-22 comments (kind:1111) per artifact, keyed by the UPPERCASE
-    /// scope (`"A:30023:pk:d"` / `"I:isbn:…"` / `"E:<event-id>"`).
     private(set) var commentsByReference: [String: [CommentRecord]] = [:]
+    private(set) var lanes: [RoomLane] = []
     private(set) var isLoading: Bool = true
-    private(set) var loadError: String?
 
     @ObservationIgnored private var groupId: String?
     @ObservationIgnored private var core: SafeHighlighterCore?
@@ -38,22 +31,8 @@ final class RoomStore {
         self.core = core
         self.bridge = bridge
         isLoading = true
-        loadError = nil
-
-        async let artifactsFetch = core.getArtifacts(groupId: groupId)
-        async let highlightsFetch = core.getHighlights(groupId: groupId)
-
-        let (artifactOutcome, highlightOutcome) = await (artifactsFetch, highlightsFetch)
-        artifacts = artifactOutcome.values
-        highlights = highlightOutcome.values
-        if !artifactOutcome.error.isEmpty {
-            loadError = artifactOutcome.error
-        } else if !highlightOutcome.error.isEmpty {
-            loadError = highlightOutcome.error
-        }
+        await reloadSnapshot()
         isLoading = false
-
-        await refreshReferenceQueries()
 
         let outcome = await core.subscribeRoom(groupId: groupId)
         guard outcome.error.isEmpty else {
@@ -74,91 +53,8 @@ final class RoomStore {
 
     // MARK: - Delta application (called by EventBridge)
 
-    func apply(artifact: ArtifactRecord) {
-        guard let core else { return }
-        artifacts = core.upsertRoomArtifact(artifacts: artifacts, artifact: artifact)
-        Task { await self.refreshReferenceQueries(for: artifact) }
-    }
-
-    func apply(highlight: HydratedHighlight) {
-        guard let core else { return }
-        highlights = core.upsertRoomHighlight(highlights: highlights, highlight: highlight)
-        // Merge into the reference-scoped bucket too so per-artifact lanes
-        // reflect live arrivals without waiting for the next refresh.
-        if let target = core.getHighlightReferenceTarget(highlight: highlight.highlight) {
-            let key = target.lookupKey
-            highlightsByReference[key] = core.upsertHighlightReferenceBucket(
-                bucket: highlightsByReference[key] ?? [],
-                highlight: highlight.highlight
-            )
-        }
-    }
-
-    // MARK: - Reference queries
-
-    /// Runs `get_highlights_for_reference` + `get_comments_for_reference`
-    /// for every artifact in `artifacts`. Each artifact dispatches both
-    /// fetches in parallel; failures keep whatever was previously there.
-    private func refreshReferenceQueries() async {
-        guard let core else { return }
-        let targets: [ArtifactReferenceTarget] = artifacts.compactMap {
-            core.getArtifactReferenceTarget(artifact: $0)
-        }
-        guard !targets.isEmpty else { return }
-
-        struct FetchResult {
-            let target: ArtifactReferenceTarget
-            let highlights: [HighlightRecord]?
-            let comments: [CommentRecord]?
-        }
-
-        await withTaskGroup(of: FetchResult.self) { group in
-            for target in targets {
-                group.addTask {
-                    let highlightOutcome = await core.getHighlightsForReference(
-                        tagName: target.lowercaseTag,
-                        tagValue: target.value
-                    )
-                    let commentOutcome: CommentListOutcome?
-                    if let scope = target.commentScope {
-                        commentOutcome = await core.getCommentsForScope(scope: scope, limit: 128)
-                    } else {
-                        commentOutcome = nil
-                    }
-                    return FetchResult(
-                        target: target,
-                        highlights: highlightOutcome.error.isEmpty ? highlightOutcome.values : nil,
-                        comments: commentOutcome?.error.isEmpty == true ? commentOutcome?.values : nil
-                    )
-                }
-            }
-            for await result in group {
-                let t = result.target
-                if let hl = result.highlights {
-                    highlightsByReference[t.lookupKey] = hl
-                }
-                if let cm = result.comments, !t.commentKey.isEmpty {
-                    commentsByReference[t.commentKey] = cm
-                }
-            }
-        }
-    }
-
-    private func refreshReferenceQueries(for artifact: ArtifactRecord) async {
-        guard let core, let target = core.getArtifactReferenceTarget(artifact: artifact) else { return }
-        let highlightOutcome = await core.getHighlightsForReference(
-            tagName: target.lowercaseTag,
-            tagValue: target.value
-        )
-        if highlightOutcome.error.isEmpty {
-            highlightsByReference[target.lookupKey] = highlightOutcome.values
-        }
-        if let scope = target.commentScope, !target.commentKey.isEmpty {
-            let commentOutcome = await core.getCommentsForScope(scope: scope, limit: 128)
-            if commentOutcome.error.isEmpty {
-                commentsByReference[target.commentKey] = commentOutcome.values
-            }
-        }
+    func reloadFromCache() async {
+        await reloadSnapshot()
     }
 
     func commentCount(for artifact: ArtifactRecord) -> Int {
@@ -172,5 +68,19 @@ final class RoomStore {
             artifact: artifact,
             commentsByReference: buckets
         ))
+    }
+
+    private func reloadSnapshot() async {
+        guard let groupId, let core else { return }
+        let snapshot = await core.getRoomHomeSnapshot(groupId: groupId)
+        artifacts = snapshot.artifacts
+        highlights = snapshot.highlights
+        highlightsByReference = snapshot.highlightsByReference.reduce(into: [:]) { buckets, bucket in
+            buckets[bucket.lookupKey] = bucket.highlights
+        }
+        commentsByReference = snapshot.commentsByReference.reduce(into: [:]) { buckets, bucket in
+            buckets[bucket.commentKey] = bucket.comments
+        }
+        lanes = snapshot.lanes
     }
 }

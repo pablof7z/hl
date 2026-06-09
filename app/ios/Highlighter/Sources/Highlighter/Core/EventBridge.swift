@@ -366,15 +366,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     @MainActor
     private func dispatchRoom(_ change: DataChangeType, store: RoomStore) {
         switch change {
-        case .artifactUpserted(_, let artifact):
-            store.apply(artifact: artifact)
-        case .highlightUpserted(_, let highlight):
-            store.apply(highlight: highlight)
-        case .highlightShared:
-            // Kind:16 arrives as a hint that a new highlight belongs in the
-            // room; the corresponding `highlightUpserted` (once the 9802 is
-            // fetched) carries the body we display. No-op here.
-            break
+        case .artifactUpserted, .highlightUpserted, .highlightShared:
+            Task { await store.reloadFromCache() }
         default:
             break
         }

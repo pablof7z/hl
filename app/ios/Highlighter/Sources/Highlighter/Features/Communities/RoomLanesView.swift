@@ -1,34 +1,20 @@
 import SwiftUI
 
 /// The community home's Home tab — a stream of artifact-grouped highlight
-/// modules, identical in shape to the Highlights tab. Each lane pairs one
-/// artifact with the room's recent highlights on it; dormant lanes (no
-/// highlights and no comments) are filtered out — the Library tab is the
-/// place to browse every artifact regardless of activity.
-///
-/// Highlight data flows in two streams because the Rust core's
-/// `get_highlights(groupId:)` filters on `#h` tags that kind:9802 events
-/// don't carry (community association lives on the kind:16 repost, not
-/// on the highlight itself). So for articles we fetch per-address via
-/// `get_highlights_for_article`. Books and podcasts don't yet have an
-/// equivalent per-artifact query; their lanes appear without pull-quotes
-/// until that lands.
+/// modules, identical in shape to the Highlights tab. Rust supplies the
+/// bounded visible lanes; this view only renders them.
 struct RoomLanesView: View {
-    @Environment(HighlighterStore.self) private var appStore
-
-    let artifacts: [ArtifactRecord]
-    let highlights: [HydratedHighlight]
-    let highlightsByReference: [String: [HighlightRecord]]
-    let commentsByReference: [String: [CommentRecord]]
+    let lanes: [RoomLane]
+    let artifactCount: Int
     let isLoading: Bool
     let onShareToCommunity: (ArtifactRecord) -> Void
 
     var body: some View {
-        if isLoading && artifacts.isEmpty {
+        if isLoading && artifactCount == 0 {
             ProgressView()
                 .controlSize(.large)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if visibleLanes.isEmpty {
+        } else if lanes.isEmpty {
             ContentUnavailableView(
                 "Nothing here yet",
                 systemImage: "square.stack.3d.up",
@@ -37,9 +23,9 @@ struct RoomLanesView: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(visibleLanes.enumerated()), id: \.element.id) { index, lane in
+                    ForEach(Array(lanes.enumerated()), id: \.element.id) { index, lane in
                         laneView(for: lane)
-                        if index < visibleLanes.count - 1 {
+                        if index < lanes.count - 1 {
                             Rectangle()
                                 .fill(Color.highlighterRule)
                                 .frame(height: 1)
@@ -50,21 +36,6 @@ struct RoomLanesView: View {
             }
             .background(Color.highlighterPaper.ignoresSafeArea())
         }
-    }
-
-    private var visibleLanes: [RoomLane] {
-        let highlightBuckets = highlightsByReference.map { key, values in
-            HighlightReferenceBucket(lookupKey: key, highlights: values)
-        }
-        let commentBuckets = commentsByReference.map { key, values in
-            CommentReferenceBucket(commentKey: key, comments: values)
-        }
-        return appStore.safeCore.buildVisibleRoomLanes(
-            artifacts: artifacts,
-            highlights: highlights,
-            highlightsByReference: highlightBuckets,
-            commentsByReference: commentBuckets
-        )
     }
 
     @ViewBuilder

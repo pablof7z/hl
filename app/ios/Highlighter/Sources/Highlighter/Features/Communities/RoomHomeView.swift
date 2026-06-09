@@ -160,10 +160,8 @@ struct RoomHomeView: View {
 
     private var homeContent: some View {
         RoomLanesView(
-            artifacts: room.artifacts,
-            highlights: room.highlights,
-            highlightsByReference: room.highlightsByReference,
-            commentsByReference: room.commentsByReference,
+            lanes: room.lanes,
+            artifactCount: room.artifacts.count,
             isLoading: room.isLoading,
             onShareToCommunity: { artifact in
                 shareTarget = .artifact(artifact, core: app.safeCore)

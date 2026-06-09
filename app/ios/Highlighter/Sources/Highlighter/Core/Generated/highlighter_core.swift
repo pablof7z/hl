@@ -797,13 +797,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func buildPreviewFromUrl(url: String) async  -> ArtifactPreviewOutcome
 
-    /**
-     * Build the visible community-home artifact lanes from bounded screen
-     * inputs. Rust owns artifact/highlight matching, de-duplication, dormant
-     * filtering, and activity ordering.
-     */
-    func buildVisibleRoomLanes(artifacts: [ArtifactRecord], highlights: [HydratedHighlight], highlightsByReference: [HighlightReferenceBucket], commentsByReference: [CommentReferenceBucket])  -> [RoomLane]
-
     func checkNip05Availability(name: String) async  -> Nip05AvailabilityOutcome
 
     func classifyLoginInput(input: String)  -> LoginInputAction
@@ -981,15 +974,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
 
     /**
-     * Project an artifact record into the room lane reference target used for
-     * highlight and comment reads. Rust owns reference precedence, artifact
-     * identity, and NIP-22 comment keys.
-     */
-    func getArtifactReferenceTarget(artifact: ArtifactRecord)  -> ArtifactReferenceTarget?
-
-    func getArtifacts(groupId: String, limit: UInt32) async  -> ArtifactListOutcome
-
-    /**
      * Return the user's ordered Blossom server list from nostrdb. Empty if no
      * kind:10063 has been cached yet (relay hasn't delivered it).
      */
@@ -1111,18 +1095,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getHighlightCommentScope(eventIdHex: String)  -> CommentScopeOutcome
 
     /**
-     * Project a highlight into the room lane reference bucket used for live
-     * updates. Native shells only use this to place the raw delta.
-     */
-    func getHighlightReferenceTarget(highlight: HighlightRecord)  -> HighlightReferenceTarget?
-
-    /**
      * Classify a highlight source for native icon/label rendering. Rust owns
      * the source/reference interpretation; native shells only render the enum.
      */
     func getHighlightSourceKind(previewSource: String, externalReference: String, artifactAddress: String, sourceUrl: String)  -> HighlightSourceKind
-
-    func getHighlights(groupId: String, limit: UInt32) async  -> HydratedHighlightListOutcome
 
     /**
      * Read all highlights referencing the given NIP-23 article address
@@ -1203,6 +1179,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * limits. Native shells render the returned shelves.
      */
     func getRoomExplorerSnapshot(joined: [CommunitySummary]) async  -> RoomExplorerSnapshot
+
+    /**
+     * Full room-home read model for one community. Rust owns artifact and
+     * highlight limits, reference-scoped highlight/comment reads, and lane
+     * assembly.
+     */
+    func getRoomHomeSnapshot(groupId: String) async  -> RoomHomeSnapshot
 
     func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput)  -> RoomInviteAvatarProjection
 
@@ -2071,12 +2054,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func upsertFeedbackThreadEvent(events: [FeedbackEventRecord], event: FeedbackEventRecord)  -> [FeedbackEventRecord]
 
     /**
-     * Upsert a raw highlight into a per-reference bucket. Rust owns
-     * replacement identity and newest-first ordering.
-     */
-    func upsertHighlightReferenceBucket(bucket: [HighlightRecord], highlight: HighlightRecord)  -> [HighlightRecord]
-
-    /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
      * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
      * the live relay pool so the change takes effect immediately.
@@ -2084,22 +2061,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func upsertRelay(cfg: RelayConfig) async  -> MutationOutcome
 
     /**
-     * Upsert a live room artifact delta into a bounded screen collection.
-     * Rust owns replacement identity and newest-first ordering.
-     */
-    func upsertRoomArtifact(artifacts: [ArtifactRecord], artifact: ArtifactRecord)  -> [ArtifactRecord]
-
-    /**
      * Upsert a live discussion delta into a bounded room discussion list.
      * Rust owns replacement identity and newest-first ordering.
      */
     func upsertRoomDiscussion(discussions: [DiscussionRecord], discussion: DiscussionRecord)  -> [DiscussionRecord]
-
-    /**
-     * Upsert a live room highlight delta into a bounded screen collection.
-     * Rust owns replacement identity and newest-first ordering.
-     */
-    func upsertRoomHighlight(highlights: [HydratedHighlight], highlight: HydratedHighlight)  -> [HydratedHighlight]
 
 }
 open class HighlighterCore: HighlighterCoreProtocol, @unchecked Sendable {
@@ -2257,22 +2222,6 @@ open func buildPreviewFromUrl(url: String)async  -> ArtifactPreviewOutcome  {
             errorHandler: nil
 
         )
-}
-
-    /**
-     * Build the visible community-home artifact lanes from bounded screen
-     * inputs. Rust owns artifact/highlight matching, de-duplication, dormant
-     * filtering, and activity ordering.
-     */
-open func buildVisibleRoomLanes(artifacts: [ArtifactRecord], highlights: [HydratedHighlight], highlightsByReference: [HighlightReferenceBucket], commentsByReference: [CommentReferenceBucket]) -> [RoomLane]  {
-    return try!  FfiConverterSequenceTypeRoomLane.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_build_visible_room_lanes(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeArtifactRecord.lower(artifacts),
-        FfiConverterSequenceTypeHydratedHighlight.lower(highlights),
-        FfiConverterSequenceTypeHighlightReferenceBucket.lower(highlightsByReference),
-        FfiConverterSequenceTypeCommentReferenceBucket.lower(commentsByReference),$0
-    )
-})
 }
 
 open func checkNip05Availability(name: String)async  -> Nip05AvailabilityOutcome  {
@@ -2833,37 +2782,6 @@ open func getArtifactDetailRoute(artifact: ArtifactRecord) -> ArtifactDetailRout
 }
 
     /**
-     * Project an artifact record into the room lane reference target used for
-     * highlight and comment reads. Rust owns reference precedence, artifact
-     * identity, and NIP-22 comment keys.
-     */
-open func getArtifactReferenceTarget(artifact: ArtifactRecord) -> ArtifactReferenceTarget?  {
-    return try!  FfiConverterOptionTypeArtifactReferenceTarget.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_artifact_reference_target(self.uniffiClonePointer(),
-        FfiConverterTypeArtifactRecord_lower(artifact),$0
-    )
-})
-}
-
-open func getArtifacts(groupId: String, limit: UInt32)async  -> ArtifactListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_artifacts(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Return the user's ordered Blossom server list from nostrdb. Empty if no
      * kind:10063 has been cached yet (relay hasn't delivered it).
      */
@@ -3266,18 +3184,6 @@ open func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome  {
 }
 
     /**
-     * Project a highlight into the room lane reference bucket used for live
-     * updates. Native shells only use this to place the raw delta.
-     */
-open func getHighlightReferenceTarget(highlight: HighlightRecord) -> HighlightReferenceTarget?  {
-    return try!  FfiConverterOptionTypeHighlightReferenceTarget.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_highlight_reference_target(self.uniffiClonePointer(),
-        FfiConverterTypeHighlightRecord_lower(highlight),$0
-    )
-})
-}
-
-    /**
      * Classify a highlight source for native icon/label rendering. Rust owns
      * the source/reference interpretation; native shells only render the enum.
      */
@@ -3290,24 +3196,6 @@ open func getHighlightSourceKind(previewSource: String, externalReference: Strin
         FfiConverterString.lower(sourceUrl),$0
     )
 })
-}
-
-open func getHighlights(groupId: String, limit: UInt32)async  -> HydratedHighlightListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_highlights(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHydratedHighlightListOutcome_lift,
-            errorHandler: nil
-
-        )
 }
 
     /**
@@ -3619,6 +3507,29 @@ open func getRoomExplorerSnapshot(joined: [CommunitySummary])async  -> RoomExplo
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRoomExplorerSnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Full room-home read model for one community. Rust owns artifact and
+     * highlight limits, reference-scoped highlight/comment reads, and lane
+     * assembly.
+     */
+open func getRoomHomeSnapshot(groupId: String)async  -> RoomHomeSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_room_home_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(groupId)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRoomHomeSnapshot_lift,
             errorHandler: nil
 
         )
@@ -6415,19 +6326,6 @@ open func upsertFeedbackThreadEvent(events: [FeedbackEventRecord], event: Feedba
 }
 
     /**
-     * Upsert a raw highlight into a per-reference bucket. Rust owns
-     * replacement identity and newest-first ordering.
-     */
-open func upsertHighlightReferenceBucket(bucket: [HighlightRecord], highlight: HighlightRecord) -> [HighlightRecord]  {
-    return try!  FfiConverterSequenceTypeHighlightRecord.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_upsert_highlight_reference_bucket(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeHighlightRecord.lower(bucket),
-        FfiConverterTypeHighlightRecord_lower(highlight),$0
-    )
-})
-}
-
-    /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
      * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
      * the live relay pool so the change takes effect immediately.
@@ -6451,19 +6349,6 @@ open func upsertRelay(cfg: RelayConfig)async  -> MutationOutcome  {
 }
 
     /**
-     * Upsert a live room artifact delta into a bounded screen collection.
-     * Rust owns replacement identity and newest-first ordering.
-     */
-open func upsertRoomArtifact(artifacts: [ArtifactRecord], artifact: ArtifactRecord) -> [ArtifactRecord]  {
-    return try!  FfiConverterSequenceTypeArtifactRecord.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_upsert_room_artifact(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeArtifactRecord.lower(artifacts),
-        FfiConverterTypeArtifactRecord_lower(artifact),$0
-    )
-})
-}
-
-    /**
      * Upsert a live discussion delta into a bounded room discussion list.
      * Rust owns replacement identity and newest-first ordering.
      */
@@ -6472,19 +6357,6 @@ open func upsertRoomDiscussion(discussions: [DiscussionRecord], discussion: Disc
     uniffi_highlighter_core_fn_method_highlightercore_upsert_room_discussion(self.uniffiClonePointer(),
         FfiConverterSequenceTypeDiscussionRecord.lower(discussions),
         FfiConverterTypeDiscussionRecord_lower(discussion),$0
-    )
-})
-}
-
-    /**
-     * Upsert a live room highlight delta into a bounded screen collection.
-     * Rust owns replacement identity and newest-first ordering.
-     */
-open func upsertRoomHighlight(highlights: [HydratedHighlight], highlight: HydratedHighlight) -> [HydratedHighlight]  {
-    return try!  FfiConverterSequenceTypeHydratedHighlight.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_upsert_room_highlight(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeHydratedHighlight.lower(highlights),
-        FfiConverterTypeHydratedHighlight_lower(highlight),$0
     )
 })
 }
@@ -27102,6 +26974,100 @@ public func FfiConverterTypeRoomExplorerSnapshot_lower(_ value: RoomExplorerSnap
 }
 
 
+public struct RoomHomeSnapshot {
+    public var artifacts: [ArtifactRecord]
+    public var highlights: [HydratedHighlight]
+    public var highlightsByReference: [HighlightReferenceBucket]
+    public var commentsByReference: [CommentReferenceBucket]
+    public var lanes: [RoomLane]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifacts: [ArtifactRecord], highlights: [HydratedHighlight], highlightsByReference: [HighlightReferenceBucket], commentsByReference: [CommentReferenceBucket], lanes: [RoomLane]) {
+        self.artifacts = artifacts
+        self.highlights = highlights
+        self.highlightsByReference = highlightsByReference
+        self.commentsByReference = commentsByReference
+        self.lanes = lanes
+    }
+}
+
+#if compiler(>=6)
+extension RoomHomeSnapshot: Sendable {}
+#endif
+
+
+extension RoomHomeSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RoomHomeSnapshot, rhs: RoomHomeSnapshot) -> Bool {
+        if lhs.artifacts != rhs.artifacts {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.highlightsByReference != rhs.highlightsByReference {
+            return false
+        }
+        if lhs.commentsByReference != rhs.commentsByReference {
+            return false
+        }
+        if lhs.lanes != rhs.lanes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifacts)
+        hasher.combine(highlights)
+        hasher.combine(highlightsByReference)
+        hasher.combine(commentsByReference)
+        hasher.combine(lanes)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomHomeSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomHomeSnapshot {
+        return
+            try RoomHomeSnapshot(
+                artifacts: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
+                highlightsByReference: FfiConverterSequenceTypeHighlightReferenceBucket.read(from: &buf),
+                commentsByReference: FfiConverterSequenceTypeCommentReferenceBucket.read(from: &buf),
+                lanes: FfiConverterSequenceTypeRoomLane.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomHomeSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeArtifactRecord.write(value.artifacts, into: &buf)
+        FfiConverterSequenceTypeHydratedHighlight.write(value.highlights, into: &buf)
+        FfiConverterSequenceTypeHighlightReferenceBucket.write(value.highlightsByReference, into: &buf)
+        FfiConverterSequenceTypeCommentReferenceBucket.write(value.commentsByReference, into: &buf)
+        FfiConverterSequenceTypeRoomLane.write(value.lanes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomHomeSnapshot_lift(_ buf: RustBuffer) throws -> RoomHomeSnapshot {
+    return try FfiConverterTypeRoomHomeSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomHomeSnapshot_lower(_ value: RoomHomeSnapshot) -> RustBuffer {
+    return FfiConverterTypeRoomHomeSnapshot.lower(value)
+}
+
+
 public struct RoomInviteAvatarProjection {
     public var pictureUrl: String
     public var displayInitial: String
@@ -36112,30 +36078,6 @@ fileprivate struct FfiConverterOptionTypeArtifactRecord: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeArtifactReferenceTarget: FfiConverterRustBuffer {
-    typealias SwiftType = ArtifactReferenceTarget?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeArtifactReferenceTarget.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeArtifactReferenceTarget.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeBlossomUpload: FfiConverterRustBuffer {
     typealias SwiftType = BlossomUpload?
 
@@ -36464,30 +36406,6 @@ fileprivate struct FfiConverterOptionTypeHighlightRecord: FfiConverterRustBuffer
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeHighlightRecord.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionTypeHighlightReferenceTarget: FfiConverterRustBuffer {
-    typealias SwiftType = HighlightReferenceTarget?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeHighlightReferenceTarget.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeHighlightReferenceTarget.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -38335,9 +38253,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 40366) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_build_visible_room_lanes() != 39759) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 22195) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38461,12 +38376,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_route() != 10925) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_reference_target() != 4174) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifacts() != 37995) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_servers() != 25689) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38527,13 +38436,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_comment_scope() != 65340) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_reference_target() != 14075) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_source_kind() != 42257) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights() != 24276) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_article() != 21511) {
@@ -38597,6 +38500,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_explorer_snapshot() != 45699) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_home_snapshot() != 12801) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_avatar_projection() != 27101) {
@@ -39199,19 +39105,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_feedback_thread_event() != 41212) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_highlight_reference_bucket() != 35855) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 53820) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_room_artifact() != 51542) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_room_discussion() != 40134) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_room_highlight() != 21960) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_constructor_highlightercore_new() != 37739) {

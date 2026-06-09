@@ -27,25 +27,24 @@ use crate::isbn_lookup;
 use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome, ArtifactPreview,
-    ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget, BlossomUpload,
-    BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetOutcome, BookmarkSetRecord,
-    BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord,
-    CommentListOutcome, CommentOutcome, CommentRecord, CommentReferenceBucket, CommentScope,
-    CommentScopeOutcome, CommentThreadNode, CommentThreadProjection, CommunityListOutcome,
-    CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome, CurrentUser,
-    CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
-    FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome,
-    FeedbackThreadRecord, GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind,
-    HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction,
-    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
-    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute,
+    BookRouteOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome,
+    ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord, CommentListOutcome,
+    CommentOutcome, CommentRecord, CommentReferenceBucket, CommentScope, CommentScopeOutcome,
+    CommentThreadNode, CommentThreadProjection, CommunityListOutcome, CommunitySummary,
+    CurationMenuItem, CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
+    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
+    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
+    GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
+    HighlightSourceKind, HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome,
+    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
+    NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
     OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
     PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
     ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
-    RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome, RoomLane,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebMetadataOutcome, WhatsNewEntriesOutcome,
+    RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome, StringListOutcome,
+    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
+    WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -63,10 +62,8 @@ use crate::profile_page;
 use crate::reads;
 use crate::recent_searches;
 use crate::recommendations;
-use crate::reference_targets;
 use crate::relays::nostr_connect_relay;
 use crate::room_explorer_config;
-use crate::room_lanes;
 use crate::room_library;
 use crate::room_state;
 use crate::session::{current_user_from_pubkey, Session};
@@ -1545,12 +1542,14 @@ impl HighlighterCore {
         })())
     }
 
-    pub async fn get_artifacts(&self, group_id: String, limit: u32) -> ArtifactListOutcome {
-        artifact_list_outcome(crate::artifacts::query_for_group(
-            self.runtime.ndb(),
-            &group_id,
-            limit,
-        ))
+    /// Full room-home read model for one community. Rust owns artifact and
+    /// highlight limits, reference-scoped highlight/comment reads, and lane
+    /// assembly.
+    pub async fn get_room_home_snapshot(
+        &self,
+        group_id: String,
+    ) -> crate::room_home::RoomHomeSnapshot {
+        crate::room_home::query_room_home_snapshot(self.runtime.ndb(), &group_id)
     }
 
     /// Classify a highlight source for native icon/label rendering. Rust owns
@@ -1568,18 +1567,6 @@ impl HighlighterCore {
             &artifact_address,
             &source_url,
         )
-    }
-
-    pub async fn get_highlights(
-        &self,
-        group_id: String,
-        limit: u32,
-    ) -> HydratedHighlightListOutcome {
-        hydrated_highlight_list_outcome(crate::highlights::query_for_group(
-            self.runtime.ndb(),
-            &group_id,
-            limit,
-        ))
     }
 
     pub async fn get_my_highlights(&self, limit: u32) -> HighlightListOutcome {
@@ -2108,43 +2095,6 @@ impl HighlighterCore {
         comment_scope_outcome(comments::scope_from_preview(&preview))
     }
 
-    /// Project an artifact record into the room lane reference target used for
-    /// highlight and comment reads. Rust owns reference precedence, artifact
-    /// identity, and NIP-22 comment keys.
-    pub fn get_artifact_reference_target(
-        &self,
-        artifact: ArtifactRecord,
-    ) -> Option<ArtifactReferenceTarget> {
-        reference_targets::artifact_reference_target(&artifact)
-    }
-
-    /// Project a highlight into the room lane reference bucket used for live
-    /// updates. Native shells only use this to place the raw delta.
-    pub fn get_highlight_reference_target(
-        &self,
-        highlight: HighlightRecord,
-    ) -> Option<HighlightReferenceTarget> {
-        reference_targets::highlight_reference_target(&highlight)
-    }
-
-    /// Build the visible community-home artifact lanes from bounded screen
-    /// inputs. Rust owns artifact/highlight matching, de-duplication, dormant
-    /// filtering, and activity ordering.
-    pub fn build_visible_room_lanes(
-        &self,
-        artifacts: Vec<ArtifactRecord>,
-        highlights: Vec<HydratedHighlight>,
-        highlights_by_reference: Vec<HighlightReferenceBucket>,
-        comments_by_reference: Vec<CommentReferenceBucket>,
-    ) -> Vec<RoomLane> {
-        room_lanes::build_visible_room_lanes(
-            &artifacts,
-            &highlights,
-            &highlights_by_reference,
-            &comments_by_reference,
-        )
-    }
-
     pub fn project_room_library_article_card(
         &self,
         input: room_library::RoomLibraryArticleCardProjectionInput,
@@ -2200,36 +2150,6 @@ impl HighlighterCore {
         root_tag_value: String,
     ) -> CommentThreadProjection {
         comments::insert_comment_and_build_thread(&records, &comment, root_tag_value.trim())
-    }
-
-    /// Upsert a live room artifact delta into a bounded screen collection.
-    /// Rust owns replacement identity and newest-first ordering.
-    pub fn upsert_room_artifact(
-        &self,
-        artifacts: Vec<ArtifactRecord>,
-        artifact: ArtifactRecord,
-    ) -> Vec<ArtifactRecord> {
-        room_state::upsert_room_artifact(&artifacts, &artifact)
-    }
-
-    /// Upsert a live room highlight delta into a bounded screen collection.
-    /// Rust owns replacement identity and newest-first ordering.
-    pub fn upsert_room_highlight(
-        &self,
-        highlights: Vec<HydratedHighlight>,
-        highlight: HydratedHighlight,
-    ) -> Vec<HydratedHighlight> {
-        room_state::upsert_room_highlight(&highlights, &highlight)
-    }
-
-    /// Upsert a raw highlight into a per-reference bucket. Rust owns
-    /// replacement identity and newest-first ordering.
-    pub fn upsert_highlight_reference_bucket(
-        &self,
-        bucket: Vec<HighlightRecord>,
-        highlight: HighlightRecord,
-    ) -> Vec<HighlightRecord> {
-        room_state::upsert_highlight_reference_bucket(&bucket, &highlight)
     }
 
     /// Count comments for an artifact using Rust-owned reference keys.
