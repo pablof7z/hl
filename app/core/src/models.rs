@@ -205,18 +205,6 @@ pub struct ProfileOutcome {
     pub error: String,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct NostrEntityRefOutcome {
-    pub value: Option<crate::nostr_entities::NostrEntityRef>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct NostrEntityEventOutcome {
-    pub value: Option<crate::nostr_entities::NostrEntityEvent>,
-    pub error: String,
-}
-
 /// Mirrors `CommunitySummary` in `web/src/lib/ndk/groups.ts:23-35`.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CommunitySummary {

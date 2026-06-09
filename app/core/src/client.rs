@@ -32,10 +32,9 @@ use crate::models::{
     CommunityListOutcome, CommunitySummary, CurrentUser, DataOutcome, DiscussionOutcome,
     DiscussionRecord, FeedbackThreadRecord, HighlightListOutcome, HighlightOutcome,
     HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
-    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
-    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
-    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
+    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
+    OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
+    ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
     TranscriptSegmentListOutcome, WebMetadataOutcome,
 };
 use crate::network_preferences;
@@ -387,36 +386,6 @@ fn optional_profile_outcome(result: Result<Option<ProfileMetadata>, CoreError>) 
             error: String::new(),
         },
         Err(error) => ProfileOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn nostr_entity_ref_outcome(
-    result: Result<crate::nostr_entities::NostrEntityRef, CoreError>,
-) -> NostrEntityRefOutcome {
-    match result {
-        Ok(value) => NostrEntityRefOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => NostrEntityRefOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn nostr_entity_event_outcome(
-    result: Result<Option<crate::nostr_entities::NostrEntityEvent>, CoreError>,
-) -> NostrEntityEventOutcome {
-    match result {
-        Ok(value) => NostrEntityEventOutcome {
-            value,
-            error: String::new(),
-        },
-        Err(error) => NostrEntityEventOutcome {
             value: None,
             error: error.to_string(),
         },
@@ -3535,8 +3504,11 @@ impl HighlighterCore {
     /// `nevent1…`, `naddr1…`) into a renderable variant. Strips an
     /// optional `nostr:` URI prefix. Used by the iOS rich-text renderer
     /// to walk event content for inline mentions and event-ref cards.
-    pub fn decode_nostr_entity(&self, input: String) -> NostrEntityRefOutcome {
-        nostr_entity_ref_outcome(crate::nostr_entities::decode_nostr_entity(&input))
+    pub fn decode_nostr_entity(
+        &self,
+        input: String,
+    ) -> crate::nostr_entities::NostrEntityRefSnapshot {
+        crate::nostr_entities::ref_snapshot(crate::nostr_entities::decode_nostr_entity(&input))
     }
 
     pub fn nostr_entity_fallback_label(
@@ -3618,8 +3590,8 @@ impl HighlighterCore {
     pub async fn resolve_nostr_entity(
         &self,
         entity: crate::nostr_entities::NostrEntityRef,
-    ) -> NostrEntityEventOutcome {
-        nostr_entity_event_outcome(crate::nostr_entities::resolve_from_cache(
+    ) -> crate::nostr_entities::NostrEntityResolutionSnapshot {
+        crate::nostr_entities::resolution_snapshot(crate::nostr_entities::resolve_from_cache(
             self.runtime.ndb(),
             &entity,
         ))

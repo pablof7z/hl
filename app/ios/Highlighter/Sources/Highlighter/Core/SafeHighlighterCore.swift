@@ -707,7 +707,7 @@ actor SafeHighlighterCore {
         core.projectProfileUpdate(input: input)
     }
 
-    nonisolated func decodeNostrEntity(_ input: String) -> NostrEntityRefOutcome {
+    nonisolated func decodeNostrEntity(_ input: String) -> NostrEntityRefSnapshot {
         core.decodeNostrEntity(input: input)
     }
 
@@ -753,7 +753,7 @@ actor SafeHighlighterCore {
         )
     }
 
-    func resolveNostrEntity(_ entity: NostrEntityRef) async -> NostrEntityEventOutcome {
+    func resolveNostrEntity(_ entity: NostrEntityRef) async -> NostrEntityResolutionSnapshot {
         await core.resolveNostrEntity(entity: entity)
     }
 

@@ -152,11 +152,11 @@ pub use models::{
     FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightListOutcome,
     HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
     HighlightSourceKind, HomeFeedItem, HydratedHighlight, LoginInputAction, MutationOutcome,
-    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
-    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
-    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
-    ReadingFeedItem, RoomLane, RoomRecommendation, RoomRecommendationReason, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome,
+    OnboardingInterest, OnboardingInterestChip, OnboardingInterestProjection,
+    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome,
+    ProfileMetadata, ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RoomLane,
+    RoomRecommendation, RoomRecommendationReason, StringOutcome, SubscriptionOutcome,
+    TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome,
 };
 pub use nip05::{
     Nip05Availability, Nip05AvailabilitySnapshot, Nip05AvailabilityState,
@@ -164,7 +164,10 @@ pub use nip05::{
     OnboardingCreateAccountProjectionInput, OnboardingUsernameCheckProjection,
 };
 pub use nip46::NostrConnectStartSnapshot;
-pub use nostr_entities::{NostrEntityArticleCardProjection, NostrEntityArticleCardProjectionInput};
+pub use nostr_entities::{
+    NostrEntityArticleCardProjection, NostrEntityArticleCardProjectionInput,
+    NostrEntityRefSnapshot, NostrEntityResolutionSnapshot,
+};
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
 pub use podcast_transcript::{
     PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipComposerPublishInput,

@@ -97,7 +97,7 @@ pub enum NostrContentRun {
 
 /// Resolved event data for a [`NostrEntityRef`]. Returned by
 /// [`resolve_from_cache`] when the underlying event is already in nostrdb.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NostrEntityEvent {
     pub event_id_hex: String,
     pub kind: u32,
@@ -109,6 +109,20 @@ pub struct NostrEntityEvent {
     /// `image` etc. for an article card without needing a second FFI
     /// record schema per kind.
     pub tags_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NostrEntityRefSnapshot {
+    pub entity: Option<NostrEntityRef>,
+    pub decoded: bool,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NostrEntityResolutionSnapshot {
+    pub event: Option<NostrEntityEvent>,
+    pub resolved: bool,
+    pub error_message: String,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -184,6 +198,38 @@ pub fn decode_nostr_entity(input: &str) -> Result<NostrEntityRef, CoreError> {
             ))
         }
     })
+}
+
+pub fn ref_snapshot(result: Result<NostrEntityRef, CoreError>) -> NostrEntityRefSnapshot {
+    match result {
+        Ok(entity) => NostrEntityRefSnapshot {
+            entity: Some(entity),
+            decoded: true,
+            error_message: String::new(),
+        },
+        Err(error) => NostrEntityRefSnapshot {
+            entity: None,
+            decoded: false,
+            error_message: error.to_string(),
+        },
+    }
+}
+
+pub fn resolution_snapshot(
+    result: Result<Option<NostrEntityEvent>, CoreError>,
+) -> NostrEntityResolutionSnapshot {
+    match result {
+        Ok(event) => NostrEntityResolutionSnapshot {
+            resolved: event.is_some(),
+            event,
+            error_message: String::new(),
+        },
+        Err(error) => NostrEntityResolutionSnapshot {
+            event: None,
+            resolved: false,
+            error_message: error.to_string(),
+        },
+    }
 }
 
 pub fn fallback_label(entity: &NostrEntityRef) -> String {
@@ -723,6 +769,50 @@ mod tests {
         let err =
             decode_nostr_entity("nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5");
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn ref_snapshot_projects_decode_and_error_states() {
+        let entity = NostrEntityRef::Profile {
+            pubkey_hex: "abcdef".into(),
+            relays: Vec::new(),
+        };
+        let success = ref_snapshot(Ok(entity.clone()));
+        assert_eq!(success.entity, Some(entity));
+        assert!(success.decoded);
+        assert!(success.error_message.is_empty());
+
+        let failure = ref_snapshot(Err(CoreError::InvalidInput("bad entity".into())));
+        assert_eq!(failure.entity, None);
+        assert!(!failure.decoded);
+        assert_eq!(failure.error_message, "invalid input: bad entity");
+    }
+
+    #[test]
+    fn resolution_snapshot_projects_hit_miss_and_error_states() {
+        let event = NostrEntityEvent {
+            event_id_hex: "event".into(),
+            kind: 1,
+            render_kind: NostrEntityRenderKind::Note,
+            pubkey_hex: "author".into(),
+            content: "hello".into(),
+            created_at: 1,
+            tags_json: "[]".into(),
+        };
+        let hit = resolution_snapshot(Ok(Some(event.clone())));
+        assert_eq!(hit.event, Some(event));
+        assert!(hit.resolved);
+        assert!(hit.error_message.is_empty());
+
+        let miss = resolution_snapshot(Ok(None));
+        assert_eq!(miss.event, None);
+        assert!(!miss.resolved);
+        assert!(miss.error_message.is_empty());
+
+        let failure = resolution_snapshot(Err(CoreError::Cache("query failed".into())));
+        assert_eq!(failure.event, None);
+        assert!(!failure.resolved);
+        assert_eq!(failure.error_message, "cache error: query failed");
     }
 
     #[test]

@@ -171,9 +171,9 @@ final class NostrEntityCardStore {
     }
 
     func start() async {
-        let snapshotOutcome = await safeCore.resolveNostrEntity(entity)
-        if snapshotOutcome.error.isEmpty, let snapshot = snapshotOutcome.value {
-            resolved = snapshot
+        let snapshot = await safeCore.resolveNostrEntity(entity)
+        if snapshot.resolved, let event = snapshot.event {
+            resolved = event
             return
         }
 

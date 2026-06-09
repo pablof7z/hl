@@ -831,7 +831,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * optional `nostr:` URI prefix. Used by the iOS rich-text renderer
      * to walk event content for inline mentions and event-ref cards.
      */
-    func decodeNostrEntity(input: String)  -> NostrEntityRefOutcome
+    func decodeNostrEntity(input: String)  -> NostrEntityRefSnapshot
 
     /**
      * Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
@@ -1670,7 +1670,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * The caller should pair this with `subscribe_nostr_entity` so a
      * cold-cache reference warms up over the wire.
      */
-    func resolveNostrEntity(entity: NostrEntityRef) async  -> NostrEntityEventOutcome
+    func resolveNostrEntity(entity: NostrEntityRef) async  -> NostrEntityResolutionSnapshot
 
     func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?)  -> OcrRect
 
@@ -2256,8 +2256,8 @@ open func currentUser() -> CurrentUser?  {
      * optional `nostr:` URI prefix. Used by the iOS rich-text renderer
      * to walk event content for inline mentions and event-ref cards.
      */
-open func decodeNostrEntity(input: String) -> NostrEntityRefOutcome  {
-    return try!  FfiConverterTypeNostrEntityRefOutcome_lift(try! rustCall() {
+open func decodeNostrEntity(input: String) -> NostrEntityRefSnapshot  {
+    return try!  FfiConverterTypeNostrEntityRefSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_decode_nostr_entity(self.uniffiClonePointer(),
         FfiConverterString.lower(input),$0
     )
@@ -4976,7 +4976,7 @@ open func requestJoinRoom(groupId: String, roomName: String)async  -> StringOutc
      * The caller should pair this with `subscribe_nostr_entity` so a
      * cold-cache reference warms up over the wire.
      */
-open func resolveNostrEntity(entity: NostrEntityRef)async  -> NostrEntityEventOutcome  {
+open func resolveNostrEntity(entity: NostrEntityRef)async  -> NostrEntityResolutionSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4988,7 +4988,7 @@ open func resolveNostrEntity(entity: NostrEntityRef)async  -> NostrEntityEventOu
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeNostrEntityEventOutcome_lift,
+            liftFunc: FfiConverterTypeNostrEntityResolutionSnapshot_lift,
             errorHandler: nil
 
         )
@@ -21117,37 +21117,43 @@ public func FfiConverterTypeNostrEntityEvent_lower(_ value: NostrEntityEvent) ->
 }
 
 
-public struct NostrEntityEventOutcome {
-    public var value: NostrEntityEvent?
-    public var error: String
+public struct NostrEntityRefSnapshot {
+    public var entity: NostrEntityRef?
+    public var decoded: Bool
+    public var errorMessage: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(value: NostrEntityEvent?, error: String) {
-        self.value = value
-        self.error = error
+    public init(entity: NostrEntityRef?, decoded: Bool, errorMessage: String) {
+        self.entity = entity
+        self.decoded = decoded
+        self.errorMessage = errorMessage
     }
 }
 
 #if compiler(>=6)
-extension NostrEntityEventOutcome: Sendable {}
+extension NostrEntityRefSnapshot: Sendable {}
 #endif
 
 
-extension NostrEntityEventOutcome: Equatable, Hashable {
-    public static func ==(lhs: NostrEntityEventOutcome, rhs: NostrEntityEventOutcome) -> Bool {
-        if lhs.value != rhs.value {
+extension NostrEntityRefSnapshot: Equatable, Hashable {
+    public static func ==(lhs: NostrEntityRefSnapshot, rhs: NostrEntityRefSnapshot) -> Bool {
+        if lhs.entity != rhs.entity {
             return false
         }
-        if lhs.error != rhs.error {
+        if lhs.decoded != rhs.decoded {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
+        hasher.combine(entity)
+        hasher.combine(decoded)
+        hasher.combine(errorMessage)
     }
 }
 
@@ -21156,18 +21162,20 @@ extension NostrEntityEventOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeNostrEntityEventOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityEventOutcome {
+public struct FfiConverterTypeNostrEntityRefSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityRefSnapshot {
         return
-            try NostrEntityEventOutcome(
-                value: FfiConverterOptionTypeNostrEntityEvent.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
+            try NostrEntityRefSnapshot(
+                entity: FfiConverterOptionTypeNostrEntityRef.read(from: &buf),
+                decoded: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: NostrEntityEventOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeNostrEntityEvent.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
+    public static func write(_ value: NostrEntityRefSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeNostrEntityRef.write(value.entity, into: &buf)
+        FfiConverterBool.write(value.decoded, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
     }
 }
 
@@ -21175,49 +21183,55 @@ public struct FfiConverterTypeNostrEntityEventOutcome: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNostrEntityEventOutcome_lift(_ buf: RustBuffer) throws -> NostrEntityEventOutcome {
-    return try FfiConverterTypeNostrEntityEventOutcome.lift(buf)
+public func FfiConverterTypeNostrEntityRefSnapshot_lift(_ buf: RustBuffer) throws -> NostrEntityRefSnapshot {
+    return try FfiConverterTypeNostrEntityRefSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNostrEntityEventOutcome_lower(_ value: NostrEntityEventOutcome) -> RustBuffer {
-    return FfiConverterTypeNostrEntityEventOutcome.lower(value)
+public func FfiConverterTypeNostrEntityRefSnapshot_lower(_ value: NostrEntityRefSnapshot) -> RustBuffer {
+    return FfiConverterTypeNostrEntityRefSnapshot.lower(value)
 }
 
 
-public struct NostrEntityRefOutcome {
-    public var value: NostrEntityRef?
-    public var error: String
+public struct NostrEntityResolutionSnapshot {
+    public var event: NostrEntityEvent?
+    public var resolved: Bool
+    public var errorMessage: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(value: NostrEntityRef?, error: String) {
-        self.value = value
-        self.error = error
+    public init(event: NostrEntityEvent?, resolved: Bool, errorMessage: String) {
+        self.event = event
+        self.resolved = resolved
+        self.errorMessage = errorMessage
     }
 }
 
 #if compiler(>=6)
-extension NostrEntityRefOutcome: Sendable {}
+extension NostrEntityResolutionSnapshot: Sendable {}
 #endif
 
 
-extension NostrEntityRefOutcome: Equatable, Hashable {
-    public static func ==(lhs: NostrEntityRefOutcome, rhs: NostrEntityRefOutcome) -> Bool {
-        if lhs.value != rhs.value {
+extension NostrEntityResolutionSnapshot: Equatable, Hashable {
+    public static func ==(lhs: NostrEntityResolutionSnapshot, rhs: NostrEntityResolutionSnapshot) -> Bool {
+        if lhs.event != rhs.event {
             return false
         }
-        if lhs.error != rhs.error {
+        if lhs.resolved != rhs.resolved {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
+        hasher.combine(event)
+        hasher.combine(resolved)
+        hasher.combine(errorMessage)
     }
 }
 
@@ -21226,18 +21240,20 @@ extension NostrEntityRefOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeNostrEntityRefOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityRefOutcome {
+public struct FfiConverterTypeNostrEntityResolutionSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityResolutionSnapshot {
         return
-            try NostrEntityRefOutcome(
-                value: FfiConverterOptionTypeNostrEntityRef.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
+            try NostrEntityResolutionSnapshot(
+                event: FfiConverterOptionTypeNostrEntityEvent.read(from: &buf),
+                resolved: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: NostrEntityRefOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeNostrEntityRef.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
+    public static func write(_ value: NostrEntityResolutionSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeNostrEntityEvent.write(value.event, into: &buf)
+        FfiConverterBool.write(value.resolved, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
     }
 }
 
@@ -21245,15 +21261,15 @@ public struct FfiConverterTypeNostrEntityRefOutcome: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNostrEntityRefOutcome_lift(_ buf: RustBuffer) throws -> NostrEntityRefOutcome {
-    return try FfiConverterTypeNostrEntityRefOutcome.lift(buf)
+public func FfiConverterTypeNostrEntityResolutionSnapshot_lift(_ buf: RustBuffer) throws -> NostrEntityResolutionSnapshot {
+    return try FfiConverterTypeNostrEntityResolutionSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNostrEntityRefOutcome_lower(_ value: NostrEntityRefOutcome) -> RustBuffer {
-    return FfiConverterTypeNostrEntityRefOutcome.lower(value)
+public func FfiConverterTypeNostrEntityResolutionSnapshot_lower(_ value: NostrEntityResolutionSnapshot) -> RustBuffer {
+    return FfiConverterTypeNostrEntityResolutionSnapshot.lower(value)
 }
 
 
@@ -39020,7 +39036,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_current_user() != 38772) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_decode_nostr_entity() != 38143) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_decode_nostr_entity() != 3321) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_decode_npub() != 65494) {
@@ -39626,7 +39642,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_request_join_room() != 5056) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 40698) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 31286) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_sanitize_highlight_crop_box() != 64518) {
