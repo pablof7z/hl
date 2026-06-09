@@ -59,6 +59,7 @@ use crate::podcast_transcript::{
     TranscriptSegment,
 };
 use crate::profile;
+use crate::profile_page;
 use crate::reads;
 use crate::recent_searches;
 use crate::recommendations;
@@ -1706,6 +1707,25 @@ impl HighlighterCore {
             self.runtime.ndb(),
             pubkey_hex.trim(),
         ))
+    }
+
+    /// Full profile-page read model. Rust owns tab queries, section limits,
+    /// current-viewer follow state, and per-section cache-error fallback.
+    pub async fn get_profile_page_snapshot(
+        &self,
+        pubkey_hex: String,
+    ) -> profile_page::ProfilePageSnapshot {
+        let viewer_pubkey = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|user| user.pubkey);
+        profile_page::query_profile_page_snapshot(
+            self.runtime.ndb(),
+            pubkey_hex.trim(),
+            viewer_pubkey.as_deref(),
+        )
     }
 
     /// Profile/avatar presentation projection. Rust owns profile-name

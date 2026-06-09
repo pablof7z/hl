@@ -305,8 +305,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
 
     @MainActor
     private func dispatchProfile(_ change: DataChangeType, store: ProfileStore) {
-        if case .userProfileUpdated(_, let kind) = change {
-            Task { await store.applyUpdate(kind: kind) }
+        if case .userProfileUpdated = change {
+            Task { await store.applyUpdate() }
         }
     }
 

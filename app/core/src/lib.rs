@@ -36,6 +36,7 @@ pub mod pictures;
 pub mod podcast_position;
 pub mod podcast_transcript;
 pub mod profile;
+pub mod profile_page;
 pub mod reactions;
 pub mod reads;
 pub mod recent_books;
@@ -173,6 +174,7 @@ pub use profile::{
     ProfileIdentityProjectionInput, ProfileRelationshipProjection,
     ProfileRelationshipProjectionInput, ProfileUpdateProjection, ProfileUpdateProjectionInput,
 };
+pub use profile_page::ProfilePageSnapshot;
 pub use reactions::{CommentLikeStateProjection, CommentLikeStateProjectionInput, ReactionRecord};
 pub use reads::{
     ReadingFeedCardProjection, ReadingFeedCardProjectionInput, ReadingFeedInteractorProfile,

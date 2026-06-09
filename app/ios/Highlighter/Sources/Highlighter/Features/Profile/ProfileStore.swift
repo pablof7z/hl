@@ -75,76 +75,19 @@ final class ProfileStore {
     // MARK: - Loads
 
     func loadAll() async {
-        let relationship = relationshipProjection
-        async let profileTask: ProfileMetadata? = {
-            let outcome = await safeCore.getUserProfile(pubkeyHex: pubkey)
-            return outcome.error.isEmpty ? outcome.value : nil
-        }()
-        async let articlesTask: [ArticleRecord] = {
-            let outcome = await safeCore.getUserArticles(pubkeyHex: pubkey)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-        async let highlightsTask: [HighlightRecord] = {
-            let outcome = await safeCore.getUserHighlights(pubkeyHex: pubkey)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-        async let communitiesTask: [CommunitySummary] = {
-            let outcome = await safeCore.getUserCommunities(pubkeyHex: pubkey)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-        async let followTask: Bool = {
-            guard relationship.shouldRefreshFollowState else {
-                return false
-            }
-            let outcome = await safeCore.isFollowing(targetPubkeyHex: relationship.targetPubkey)
-            return outcome.error.isEmpty ? outcome.value : false
-        }()
-
-        let (profile, articles, highlights, communities, following) = await (
-            profileTask, articlesTask, highlightsTask, communitiesTask, followTask
-        )
-        self.profile = profile ?? self.profile
-        self.articles = articles
-        self.highlights = highlights
-        self.communities = communities
-        self.isFollowing = following
+        let snapshot = await safeCore.getProfilePageSnapshot(pubkeyHex: pubkey)
+        profile = snapshot.profile ?? profile
+        articles = snapshot.articles
+        highlights = snapshot.highlights
+        communities = snapshot.communities
+        isFollowing = snapshot.isFollowing
     }
 
     /// Called by `EventBridge` when a `UserProfileUpdated` delta arrives.
-    /// Re-queries only the slice Rust says is affected by the event kind.
-    func applyUpdate(kind: UInt32) async {
-        switch safeCore.getProfileUpdateAction(kind: kind) {
-        case .refreshProfile:
-            let outcome = await safeCore.getUserProfile(pubkeyHex: pubkey)
-            if outcome.error.isEmpty, let p = outcome.value {
-                self.profile = p
-            }
-        case .refreshFollowState:
-            let relationship = relationshipProjection
-            if relationship.shouldRefreshFollowState {
-                let outcome = await safeCore.isFollowing(targetPubkeyHex: relationship.targetPubkey)
-                if outcome.error.isEmpty {
-                    self.isFollowing = outcome.value
-                }
-            }
-        case .refreshArticles:
-            let outcome = await safeCore.getUserArticles(pubkeyHex: pubkey)
-            if outcome.error.isEmpty {
-                self.articles = outcome.values
-            }
-        case .refreshHighlights:
-            let outcome = await safeCore.getUserHighlights(pubkeyHex: pubkey)
-            if outcome.error.isEmpty {
-                self.highlights = outcome.values
-            }
-        case .refreshCommunities:
-            let outcome = await safeCore.getUserCommunities(pubkeyHex: pubkey)
-            if outcome.error.isEmpty {
-                self.communities = outcome.values
-            }
-        case .ignore:
-            break
-        }
+    /// Re-queries Rust's full profile page snapshot so native code does not
+    /// branch on protocol event kinds for this page.
+    func applyUpdate() async {
+        await loadAll()
     }
 
     // MARK: - Follow

@@ -672,6 +672,10 @@ actor SafeHighlighterCore {
         await core.getUserProfile(pubkeyHex: pubkeyHex)
     }
 
+    func getProfilePageSnapshot(pubkeyHex: String) async -> ProfilePageSnapshot {
+        await core.getProfilePageSnapshot(pubkeyHex: pubkeyHex)
+    }
+
     nonisolated func projectPublicKeyDisplay(
         input: PublicKeyDisplayProjectionInput
     ) -> PublicKeyDisplayProjection {

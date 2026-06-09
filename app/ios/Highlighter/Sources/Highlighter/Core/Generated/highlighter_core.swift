@@ -1163,6 +1163,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getPodcastPositionSeconds(guid: String)  -> Double?
 
     /**
+     * Full profile-page read model. Rust owns tab queries, section limits,
+     * current-viewer follow state, and per-section cache-error fallback.
+     */
+    func getProfilePageSnapshot(pubkeyHex: String) async  -> ProfilePageSnapshot
+
+    /**
      * Classify a subscription event kind into the exact profile slice that
      * native shells should refresh.
      */
@@ -3472,6 +3478,28 @@ open func getPodcastPositionSeconds(guid: String) -> Double?  {
         FfiConverterString.lower(guid),$0
     )
 })
+}
+
+    /**
+     * Full profile-page read model. Rust owns tab queries, section limits,
+     * current-viewer follow state, and per-section cache-error fallback.
+     */
+open func getProfilePageSnapshot(pubkeyHex: String)async  -> ProfilePageSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_profile_page_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(pubkeyHex)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeProfilePageSnapshot_lift,
+            errorHandler: nil
+
+        )
 }
 
     /**
@@ -23886,6 +23914,100 @@ public func FfiConverterTypeProfileOutcome_lower(_ value: ProfileOutcome) -> Rus
 }
 
 
+public struct ProfilePageSnapshot {
+    public var profile: ProfileMetadata?
+    public var articles: [ArticleRecord]
+    public var highlights: [HighlightRecord]
+    public var communities: [CommunitySummary]
+    public var isFollowing: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(profile: ProfileMetadata?, articles: [ArticleRecord], highlights: [HighlightRecord], communities: [CommunitySummary], isFollowing: Bool) {
+        self.profile = profile
+        self.articles = articles
+        self.highlights = highlights
+        self.communities = communities
+        self.isFollowing = isFollowing
+    }
+}
+
+#if compiler(>=6)
+extension ProfilePageSnapshot: Sendable {}
+#endif
+
+
+extension ProfilePageSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ProfilePageSnapshot, rhs: ProfilePageSnapshot) -> Bool {
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        if lhs.articles != rhs.articles {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.communities != rhs.communities {
+            return false
+        }
+        if lhs.isFollowing != rhs.isFollowing {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(profile)
+        hasher.combine(articles)
+        hasher.combine(highlights)
+        hasher.combine(communities)
+        hasher.combine(isFollowing)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfilePageSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfilePageSnapshot {
+        return
+            try ProfilePageSnapshot(
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                articles: FfiConverterSequenceTypeArticleRecord.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
+                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
+                isFollowing: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfilePageSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+        FfiConverterSequenceTypeArticleRecord.write(value.articles, into: &buf)
+        FfiConverterSequenceTypeHighlightRecord.write(value.highlights, into: &buf)
+        FfiConverterSequenceTypeCommunitySummary.write(value.communities, into: &buf)
+        FfiConverterBool.write(value.isFollowing, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfilePageSnapshot_lift(_ buf: RustBuffer) throws -> ProfilePageSnapshot {
+    return try FfiConverterTypeProfilePageSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfilePageSnapshot_lower(_ value: ProfilePageSnapshot) -> RustBuffer {
+    return FfiConverterTypeProfilePageSnapshot.lower(value)
+}
+
+
 public struct ProfileRelationshipProjection {
     public var targetPubkey: String
     public var isOwnProfile: Bool
@@ -38454,6 +38576,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_position_seconds() != 16855) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_profile_page_snapshot() != 21484) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_profile_update_action() != 16735) {
