@@ -501,9 +501,9 @@ impl NostrRuntime {
     }
 
     /// Curated-list subscription: pull the latest kind:10012 from the supplied
-    /// curator pubkey. The rooms referenced by the list are then backfilled
-    /// with a separate metadata subscription once the Swift side calls
-    /// `get_featured_rooms` and sees the list event in cache.
+    /// curator pubkey. The Rust room explorer snapshot path backfills the
+    /// referenced rooms with a separate metadata subscription once the list
+    /// event is visible in cache.
     pub fn spawn_curated_list_subscription(&self, curator: PublicKey) -> SubscriptionId {
         let id = SubscriptionId::generate();
         let client = self.client.clone();

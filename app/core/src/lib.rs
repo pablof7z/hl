@@ -43,6 +43,7 @@ pub mod recommendations;
 pub mod reference_targets;
 pub mod relay_polish;
 pub mod relays;
+pub mod room_explorer;
 pub mod room_explorer_config;
 pub mod room_invites;
 pub mod room_lanes;
@@ -148,9 +149,9 @@ pub use models::{
     OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome,
     ProfileMetadata, ProfileOutcome, ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome,
     ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
-    RoomLane, RoomRecommendation, RoomRecommendationListOutcome, RoomRecommendationReason,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    RoomLane, RoomRecommendation, RoomRecommendationReason, StringListOutcome, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::{
     Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,
@@ -186,6 +187,7 @@ pub use relays::{
     RelayDetailProjectionInput, RelayRemoveProjection, RelayRemoveProjectionInput,
     RelayRowProjection, RelayRowProjectionInput, RelaySettingsProjection, RelayStatusTone,
 };
+pub use room_explorer::RoomExplorerSnapshot;
 pub use room_invites::{
     RoomInviteAvatarProjection, RoomInviteAvatarProjectionInput, RoomInviteCandidate,
     RoomInviteCandidateSource, RoomInviteChip, RoomInviteInputFormat, RoomInviteProjection,

@@ -43,10 +43,9 @@ use crate::models::{
     OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome,
     ProfileMetadata, ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
     ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
-    RelayDiagnostic, RelayDiagnosticListOutcome, RoomLane, RoomRecommendation,
-    RoomRecommendationListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
+    RelayDiagnostic, RelayDiagnosticListOutcome, RoomLane, StringListOutcome, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -580,21 +579,6 @@ fn cache_stats_outcome(result: Result<crate::models::CacheStats, CoreError>) -> 
         },
         Err(error) => CacheStatsOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn room_recommendation_list_outcome(
-    result: Result<Vec<RoomRecommendation>, CoreError>,
-) -> RoomRecommendationListOutcome {
-    match result {
-        Ok(values) => RoomRecommendationListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => RoomRecommendationListOutcome {
-            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -3865,46 +3849,6 @@ impl HighlighterCore {
         })())
     }
 
-    /// Install (if not already installed) the kind:10012 curated-list sub for
-    /// `curator_pubkey_hex`. Once the list lands in ndb, this method also
-    /// spawns a metadata backfill for every group the list references, so a
-    /// subsequent `get_featured_rooms` returns rich summaries rather than
-    /// bare ids. Idempotent; the sub rides until logout.
-    pub async fn start_featured_rooms(&self, curator_pubkey_hex: String) -> MutationOutcome {
-        mutation_outcome((|| {
-            let curator = PublicKey::from_hex(curator_pubkey_hex.trim())
-                .map_err(|e| CoreError::InvalidInput(format!("invalid curator pubkey: {e}")))?;
-
-            let already = self.inner.read().session.has_curation_subscription();
-            if !already {
-                let sub_id = self.runtime.spawn_curated_list_subscription(curator);
-                self.inner.write().session.set_curation_subscription(sub_id);
-            }
-
-            // Even if the sub was already installed, ensure any groups the
-            // currently-cached list references have their 39000s backfilled —
-            // the relay may have delivered the list but not the metadata.
-            let group_ids_from_list = {
-                let ndb = self.runtime.ndb();
-                // Reuse fetch_curated_rooms' internals indirectly by asking for
-                // the list's ids. A full fetch is cheap; we only need ids here.
-                match curation::fetch_curated_rooms_from_ndb(ndb, curator_pubkey_hex.trim()) {
-                    Ok(summaries) => summaries.into_iter().map(|c| c.id).collect::<Vec<_>>(),
-                    Err(_) => Vec::new(),
-                }
-            };
-            if !group_ids_from_list.is_empty() {
-                self.runtime
-                    .spawn_group_metadata_subscription(group_ids_from_list);
-            }
-            Ok(())
-        })())
-    }
-
-    pub async fn get_room_explorer_curator_pubkey(&self) -> StringOutcome {
-        string_outcome(self.room_explorer_config.curator_pubkey().await)
-    }
-
     pub async fn start_room_explorer_featured_rooms(&self) -> MutationOutcome {
         let result: Result<(), CoreError> = async {
             let curator_pubkey = self.room_explorer_config.refresh_curator_pubkey().await?;
@@ -3919,15 +3863,44 @@ impl HighlighterCore {
         mutation_outcome(result)
     }
 
-    /// Curator's latest kind:10012 list, resolved into `CommunitySummary`
-    /// items in curator-chosen order. Rooms without cached metadata are
-    /// dropped; the next call after `start_featured_rooms` has backfilled
-    /// metadata returns the full list.
-    pub async fn get_featured_rooms(&self, curator_pubkey_hex: String) -> CommunityListOutcome {
-        community_list_outcome(curation::fetch_curated_rooms_from_ndb(
-            self.runtime.ndb(),
-            curator_pubkey_hex.trim(),
-        ))
+    /// Snapshot for the room explorer shelves. Rust owns curator lookup,
+    /// per-shelf cache failure fallbacks, joined-room exclusion, and shelf
+    /// limits. Native shells render the returned shelves.
+    pub async fn get_room_explorer_snapshot(
+        &self,
+        joined: Vec<CommunitySummary>,
+    ) -> crate::room_explorer::RoomExplorerSnapshot {
+        let curator_pubkey = self
+            .room_explorer_config
+            .curator_pubkey()
+            .await
+            .unwrap_or_default();
+        let featured = if curator_pubkey.trim().is_empty() {
+            Vec::new()
+        } else {
+            curation::fetch_curated_rooms_from_ndb(self.runtime.ndb(), curator_pubkey.trim())
+                .unwrap_or_default()
+        };
+        let new_rooms =
+            discovery::query_all_rooms_from_ndb(self.runtime.ndb(), 24).unwrap_or_default();
+        let new_noteworthy = discovery::exclude_joined_rooms(&new_rooms, &joined);
+        let user_pubkey = self.inner.read().session.current_user().map(|u| u.pubkey);
+        let (friends_shelf, authors_shelf) = match user_pubkey {
+            Some(pubkey) => (
+                recommendations::query_rooms_with_friends(self.runtime.ndb(), &pubkey, 16)
+                    .unwrap_or_default(),
+                recommendations::query_rooms_from_read_authors(self.runtime.ndb(), &pubkey, 16)
+                    .unwrap_or_default(),
+            ),
+            None => (Vec::new(), Vec::new()),
+        };
+
+        crate::room_explorer::RoomExplorerSnapshot {
+            featured,
+            new_noteworthy,
+            friends_shelf,
+            authors_shelf,
+        }
     }
 
     /// Every cached room, newest first, truncated to `limit`. Powers the
@@ -3939,26 +3912,6 @@ impl HighlighterCore {
         ))
     }
 
-    /// The N most-recently-seen rooms. Same underlying query as
-    /// `get_all_rooms` with a tighter limit — kept as a distinct method so
-    /// the Swift explorer store's shelves remain single-purpose.
-    pub async fn get_new_rooms(&self, limit: u32) -> CommunityListOutcome {
-        community_list_outcome(discovery::query_all_rooms_from_ndb(
-            self.runtime.ndb(),
-            limit,
-        ))
-    }
-
-    /// Remove rooms the user has already joined while preserving discovery
-    /// order. Rust owns explorer shelf duplicate suppression.
-    pub fn exclude_joined_rooms(
-        &self,
-        rooms: Vec<CommunitySummary>,
-        joined: Vec<CommunitySummary>,
-    ) -> Vec<CommunitySummary> {
-        discovery::exclude_joined_rooms(&rooms, &joined)
-    }
-
     /// Filter already-projected rooms by user query. Rust owns the search
     /// normalization and match fields for the browse-all room grid.
     pub fn search_rooms(
@@ -3967,39 +3920,6 @@ impl HighlighterCore {
         query: String,
     ) -> Vec<CommunitySummary> {
         discovery::search_rooms(&rooms, &query)
-    }
-
-    /// Rooms where 2+ of the user's follows are members. Empty when the user
-    /// isn't logged in, has no follows cached, or no room satisfies the
-    /// threshold.
-    pub async fn get_rooms_with_friends(&self, limit: u32) -> RoomRecommendationListOutcome {
-        let Some(user) = self.inner.read().session.current_user() else {
-            return RoomRecommendationListOutcome {
-                values: Vec::new(),
-                error: String::new(),
-            };
-        };
-        room_recommendation_list_outcome(recommendations::query_rooms_with_friends(
-            self.runtime.ndb(),
-            &user.pubkey,
-            limit,
-        ))
-    }
-
-    /// Rooms where authors of articles the user has highlighted post
-    /// artifacts. Empty when the user hasn't highlighted any articles yet.
-    pub async fn get_rooms_from_read_authors(&self, limit: u32) -> RoomRecommendationListOutcome {
-        let Some(user) = self.inner.read().session.current_user() else {
-            return RoomRecommendationListOutcome {
-                values: Vec::new(),
-                error: String::new(),
-            };
-        };
-        room_recommendation_list_outcome(recommendations::query_rooms_from_read_authors(
-            self.runtime.ndb(),
-            &user.pubkey,
-            limit,
-        ))
     }
 
     /// Publish a NIP-29 kind:9021 join-request for `group_id`. Rust owns the
@@ -4630,6 +4550,42 @@ impl HighlighterCore {
 }
 
 impl HighlighterCore {
+    /// Install (if not already installed) the kind:10012 curated-list sub for
+    /// `curator_pubkey_hex`. Once the list lands in ndb, this method also
+    /// spawns a metadata backfill for every group the list references, so a
+    /// subsequent room explorer snapshot returns rich summaries rather than
+    /// bare ids. Idempotent; the sub rides until logout.
+    async fn start_featured_rooms(&self, curator_pubkey_hex: String) -> MutationOutcome {
+        mutation_outcome((|| {
+            let curator = PublicKey::from_hex(curator_pubkey_hex.trim())
+                .map_err(|e| CoreError::InvalidInput(format!("invalid curator pubkey: {e}")))?;
+
+            let already = self.inner.read().session.has_curation_subscription();
+            if !already {
+                let sub_id = self.runtime.spawn_curated_list_subscription(curator);
+                self.inner.write().session.set_curation_subscription(sub_id);
+            }
+
+            // Even if the sub was already installed, ensure any groups the
+            // currently-cached list references have their 39000s backfilled;
+            // the relay may have delivered the list but not the metadata.
+            let group_ids_from_list = {
+                let ndb = self.runtime.ndb();
+                // Reuse fetch_curated_rooms' internals indirectly by asking for
+                // the list's ids. A full fetch is cheap; we only need ids here.
+                match curation::fetch_curated_rooms_from_ndb(ndb, curator_pubkey_hex.trim()) {
+                    Ok(summaries) => summaries.into_iter().map(|c| c.id).collect::<Vec<_>>(),
+                    Err(_) => Vec::new(),
+                }
+            };
+            if !group_ids_from_list.is_empty() {
+                self.runtime
+                    .spawn_group_metadata_subscription(group_ids_from_list);
+            }
+            Ok(())
+        })())
+    }
+
     fn emit_app_toast(&self, message: String) {
         if message.trim().is_empty() {
             return;

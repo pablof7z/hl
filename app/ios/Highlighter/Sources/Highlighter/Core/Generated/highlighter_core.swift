@@ -886,12 +886,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String)  -> StringOutcome
 
-    /**
-     * Remove rooms the user has already joined while preserving discovery
-     * order. Rust owns explorer shelf duplicate suppression.
-     */
-    func excludeJoinedRooms(rooms: [CommunitySummary], joined: [CommunitySummary])  -> [CommunitySummary]
-
     func extendPodcastClipToSegment(selection: PodcastClipSelection, segment: TranscriptSegment)  -> PodcastClipSelection
 
     func extractNostrEventRefs(content: String)  -> [NostrEntityRef]
@@ -1064,14 +1058,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getDiscussions(groupId: String, limit: UInt32) async  -> DiscussionListOutcome
 
     /**
-     * Curator's latest kind:10012 list, resolved into `CommunitySummary`
-     * items in curator-chosen order. Rooms without cached metadata are
-     * dropped; the next call after `start_featured_rooms` has backfilled
-     * metadata returns the full list.
-     */
-    func getFeaturedRooms(curatorPubkeyHex: String) async  -> CommunityListOutcome
-
-    /**
      * Every message in a feedback thread, ordered ascending by `created_at`.
      */
     func getFeedbackThreadEvents(rootEventId: String) async  -> FeedbackEventListOutcome
@@ -1176,13 +1162,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getMyWebBookmarks() async  -> WebBookmarkListOutcome
 
-    /**
-     * The N most-recently-seen rooms. Same underlying query as
-     * `get_all_rooms` with a tighter limit — kept as a distinct method so
-     * the Swift explorer store's shelves remain single-purpose.
-     */
-    func getNewRooms(limit: UInt32) async  -> CommunityListOutcome
-
     func getOnboardingInterestProjection(selectedIds: [String])  -> OnboardingInterestProjection
 
     func getOnboardingInterestSelection(selectedIds: [String])  -> OnboardingInterestSelection
@@ -1230,26 +1209,18 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getRelays() async  -> RelayConfigListOutcome
 
-    func getRoomExplorerCuratorPubkey() async  -> StringOutcome
+    /**
+     * Snapshot for the room explorer shelves. Rust owns curator lookup,
+     * per-shelf cache failure fallbacks, joined-room exclusion, and shelf
+     * limits. Native shells render the returned shelves.
+     */
+    func getRoomExplorerSnapshot(joined: [CommunitySummary]) async  -> RoomExplorerSnapshot
 
     func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput)  -> RoomInviteAvatarProjection
 
     func getRoomInviteProjection(input: RoomInviteProjectionInput)  -> RoomInviteProjection
 
     func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String])  -> RoomInviteSendResultProjection
-
-    /**
-     * Rooms where authors of articles the user has highlighted post
-     * artifacts. Empty when the user hasn't highlighted any articles yet.
-     */
-    func getRoomsFromReadAuthors(limit: UInt32) async  -> RoomRecommendationListOutcome
-
-    /**
-     * Rooms where 2+ of the user's follows are members. Empty when the user
-     * isn't logged in, has no follows cached, or no room satisfies the
-     * threshold.
-     */
-    func getRoomsWithFriends(limit: UInt32) async  -> RoomRecommendationListOutcome
 
     /**
      * Resolve the merged set of NIP-50 search relays for the current user —
@@ -1872,15 +1843,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func standaloneNostrEntity(content: String)  -> NostrEntityRef?
 
     func startDefaultNostrConnect(callback: String) async  -> StringOutcome
-
-    /**
-     * Install (if not already installed) the kind:10012 curated-list sub for
-     * `curator_pubkey_hex`. Once the list lands in ndb, this method also
-     * spawns a metadata backfill for every group the list references, so a
-     * subsequent `get_featured_rooms` returns rich summaries rather than
-     * bare ids. Idempotent; the sub rides until logout.
-     */
-    func startFeaturedRooms(curatorPubkeyHex: String) async  -> MutationOutcome
 
     /**
      * Install (if not already installed) two relay subs that together
@@ -2615,19 +2577,6 @@ open func encodeHighlightShareNevent(eventIdHex: String, authorPubkeyHex: String
 })
 }
 
-    /**
-     * Remove rooms the user has already joined while preserving discovery
-     * order. Rust owns explorer shelf duplicate suppression.
-     */
-open func excludeJoinedRooms(rooms: [CommunitySummary], joined: [CommunitySummary]) -> [CommunitySummary]  {
-    return try!  FfiConverterSequenceTypeCommunitySummary.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_exclude_joined_rooms(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeCommunitySummary.lower(rooms),
-        FfiConverterSequenceTypeCommunitySummary.lower(joined),$0
-    )
-})
-}
-
 open func extendPodcastClipToSegment(selection: PodcastClipSelection, segment: TranscriptSegment) -> PodcastClipSelection  {
     return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_extend_podcast_clip_to_segment(self.uniffiClonePointer(),
@@ -3157,30 +3106,6 @@ open func getDiscussions(groupId: String, limit: UInt32)async  -> DiscussionList
 }
 
     /**
-     * Curator's latest kind:10012 list, resolved into `CommunitySummary`
-     * items in curator-chosen order. Rooms without cached metadata are
-     * dropped; the next call after `start_featured_rooms` has backfilled
-     * metadata returns the full list.
-     */
-open func getFeaturedRooms(curatorPubkeyHex: String)async  -> CommunityListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_featured_rooms(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(curatorPubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommunityListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Every message in a feedback thread, ordered ascending by `created_at`.
      */
 open func getFeedbackThreadEvents(rootEventId: String)async  -> FeedbackEventListOutcome  {
@@ -3569,29 +3494,6 @@ open func getMyWebBookmarks()async  -> WebBookmarkListOutcome  {
         )
 }
 
-    /**
-     * The N most-recently-seen rooms. Same underlying query as
-     * `get_all_rooms` with a tighter limit — kept as a distinct method so
-     * the Swift explorer store's shelves remain single-purpose.
-     */
-open func getNewRooms(limit: UInt32)async  -> CommunityListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_new_rooms(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommunityListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
 open func getOnboardingInterestProjection(selectedIds: [String]) -> OnboardingInterestProjection  {
     return try!  FfiConverterTypeOnboardingInterestProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_onboarding_interest_projection(self.uniffiClonePointer(),
@@ -3761,19 +3663,24 @@ open func getRelays()async  -> RelayConfigListOutcome  {
         )
 }
 
-open func getRoomExplorerCuratorPubkey()async  -> StringOutcome  {
+    /**
+     * Snapshot for the room explorer shelves. Rust owns curator lookup,
+     * per-shelf cache failure fallbacks, joined-room exclusion, and shelf
+     * limits. Native shells render the returned shelves.
+     */
+open func getRoomExplorerSnapshot(joined: [CommunitySummary])async  -> RoomExplorerSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_room_explorer_curator_pubkey(
-                    self.uniffiClonePointer()
-
+                uniffi_highlighter_core_fn_method_highlightercore_get_room_explorer_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterSequenceTypeCommunitySummary.lower(joined)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringOutcome_lift,
+            liftFunc: FfiConverterTypeRoomExplorerSnapshot_lift,
             errorHandler: nil
 
         )
@@ -3802,51 +3709,6 @@ open func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys
         FfiConverterSequenceString.lower(failedPubkeys),$0
     )
 })
-}
-
-    /**
-     * Rooms where authors of articles the user has highlighted post
-     * artifacts. Empty when the user hasn't highlighted any articles yet.
-     */
-open func getRoomsFromReadAuthors(limit: UInt32)async  -> RoomRecommendationListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_rooms_from_read_authors(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRoomRecommendationListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Rooms where 2+ of the user's follows are members. Empty when the user
-     * isn't logged in, has no follows cached, or no room satisfies the
-     * threshold.
-     */
-open func getRoomsWithFriends(limit: UInt32)async  -> RoomRecommendationListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_rooms_with_friends(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRoomRecommendationListOutcome_lift,
-            errorHandler: nil
-
-        )
 }
 
     /**
@@ -5919,31 +5781,6 @@ open func startDefaultNostrConnect(callback: String)async  -> StringOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeStringOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Install (if not already installed) the kind:10012 curated-list sub for
-     * `curator_pubkey_hex`. Once the list lands in ndb, this method also
-     * spawns a metadata backfill for every group the list references, so a
-     * subsequent `get_featured_rooms` returns rich summaries rather than
-     * bare ids. Idempotent; the sub rides until logout.
-     */
-open func startFeaturedRooms(curatorPubkeyHex: String)async  -> MutationOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_start_featured_rooms(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(curatorPubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
             errorHandler: nil
 
         )
@@ -26999,6 +26836,92 @@ public func FfiConverterTypeRoomCoverCardProjectionInput_lower(_ value: RoomCove
 }
 
 
+public struct RoomExplorerSnapshot {
+    public var featured: [CommunitySummary]
+    public var newNoteworthy: [CommunitySummary]
+    public var friendsShelf: [RoomRecommendation]
+    public var authorsShelf: [RoomRecommendation]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(featured: [CommunitySummary], newNoteworthy: [CommunitySummary], friendsShelf: [RoomRecommendation], authorsShelf: [RoomRecommendation]) {
+        self.featured = featured
+        self.newNoteworthy = newNoteworthy
+        self.friendsShelf = friendsShelf
+        self.authorsShelf = authorsShelf
+    }
+}
+
+#if compiler(>=6)
+extension RoomExplorerSnapshot: Sendable {}
+#endif
+
+
+extension RoomExplorerSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RoomExplorerSnapshot, rhs: RoomExplorerSnapshot) -> Bool {
+        if lhs.featured != rhs.featured {
+            return false
+        }
+        if lhs.newNoteworthy != rhs.newNoteworthy {
+            return false
+        }
+        if lhs.friendsShelf != rhs.friendsShelf {
+            return false
+        }
+        if lhs.authorsShelf != rhs.authorsShelf {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(featured)
+        hasher.combine(newNoteworthy)
+        hasher.combine(friendsShelf)
+        hasher.combine(authorsShelf)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomExplorerSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerSnapshot {
+        return
+            try RoomExplorerSnapshot(
+                featured: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
+                newNoteworthy: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
+                friendsShelf: FfiConverterSequenceTypeRoomRecommendation.read(from: &buf),
+                authorsShelf: FfiConverterSequenceTypeRoomRecommendation.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomExplorerSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommunitySummary.write(value.featured, into: &buf)
+        FfiConverterSequenceTypeCommunitySummary.write(value.newNoteworthy, into: &buf)
+        FfiConverterSequenceTypeRoomRecommendation.write(value.friendsShelf, into: &buf)
+        FfiConverterSequenceTypeRoomRecommendation.write(value.authorsShelf, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomExplorerSnapshot_lift(_ buf: RustBuffer) throws -> RoomExplorerSnapshot {
+    return try FfiConverterTypeRoomExplorerSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomExplorerSnapshot_lower(_ value: RoomExplorerSnapshot) -> RustBuffer {
+    return FfiConverterTypeRoomExplorerSnapshot.lower(value)
+}
+
+
 public struct RoomInviteAvatarProjection {
     public var pictureUrl: String
     public var displayInitial: String
@@ -29808,76 +29731,6 @@ public func FfiConverterTypeRoomRecommendationCardProjectionInput_lift(_ buf: Ru
 #endif
 public func FfiConverterTypeRoomRecommendationCardProjectionInput_lower(_ value: RoomRecommendationCardProjectionInput) -> RustBuffer {
     return FfiConverterTypeRoomRecommendationCardProjectionInput.lower(value)
-}
-
-
-public struct RoomRecommendationListOutcome {
-    public var values: [RoomRecommendation]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [RoomRecommendation], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension RoomRecommendationListOutcome: Sendable {}
-#endif
-
-
-extension RoomRecommendationListOutcome: Equatable, Hashable {
-    public static func ==(lhs: RoomRecommendationListOutcome, rhs: RoomRecommendationListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomRecommendationListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationListOutcome {
-        return
-            try RoomRecommendationListOutcome(
-                values: FfiConverterSequenceTypeRoomRecommendation.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomRecommendationListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeRoomRecommendation.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomRecommendationListOutcome_lift(_ buf: RustBuffer) throws -> RoomRecommendationListOutcome {
-    return try FfiConverterTypeRoomRecommendationListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomRecommendationListOutcome_lower(_ value: RoomRecommendationListOutcome) -> RustBuffer {
-    return FfiConverterTypeRoomRecommendationListOutcome.lower(value)
 }
 
 
@@ -38366,9 +38219,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_encode_highlight_share_nevent() != 64061) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_exclude_joined_rooms() != 28890) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_extend_podcast_clip_to_segment() != 47481) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38471,9 +38321,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 7889) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_featured_rooms() != 33699) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_feedback_thread_events() != 52617) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38534,9 +38381,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_web_bookmarks() != 39742) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_new_rooms() != 59476) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_onboarding_interest_projection() != 3646) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38579,7 +38423,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relays() != 2197) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_explorer_curator_pubkey() != 6750) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_explorer_snapshot() != 45699) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_avatar_projection() != 27101) {
@@ -38589,12 +38433,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_send_result() != 64450) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_rooms_from_read_authors() != 16750) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_rooms_with_friends() != 56619) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_relays() != 44280) {
@@ -39087,9 +38925,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_default_nostr_connect() != 22248) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_start_featured_rooms() != 31596) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_friends_rooms_discovery() != 44697) {

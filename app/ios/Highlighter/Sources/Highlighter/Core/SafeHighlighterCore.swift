@@ -1207,38 +1207,16 @@ actor SafeHighlighterCore {
         await core.startFriendsRoomsDiscovery()
     }
 
-    func startFeaturedRooms(curatorPubkeyHex: String) async -> MutationOutcome {
-        await core.startFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
-    }
-
-    func getRoomExplorerCuratorPubkey() async -> StringOutcome {
-        await core.getRoomExplorerCuratorPubkey()
-    }
-
     func startRoomExplorerFeaturedRooms() async -> MutationOutcome {
         await core.startRoomExplorerFeaturedRooms()
     }
 
-    func getFeaturedRooms(curatorPubkeyHex: String) async -> CommunityListOutcome {
-        await core.getFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
+    func getRoomExplorerSnapshot(joined: [CommunitySummary]) async -> RoomExplorerSnapshot {
+        await core.getRoomExplorerSnapshot(joined: joined)
     }
 
     func getAllRooms(limit: UInt32 = 120) async -> CommunityListOutcome {
         await core.getAllRooms(limit: limit)
-    }
-
-    func getNewRooms(limit: UInt32 = 24) async -> CommunityListOutcome {
-        await core.getNewRooms(limit: limit)
-    }
-
-    nonisolated func excludeJoinedRooms(
-        rooms: [CommunitySummary],
-        joined: [CommunitySummary]
-    ) -> [CommunitySummary] {
-        core.excludeJoinedRooms(
-            rooms: rooms,
-            joined: joined
-        )
     }
 
     nonisolated func searchRooms(
@@ -1249,14 +1227,6 @@ actor SafeHighlighterCore {
             rooms: rooms,
             query: query
         )
-    }
-
-    func getRoomsWithFriends(limit: UInt32 = 16) async -> RoomRecommendationListOutcome {
-        await core.getRoomsWithFriends(limit: limit)
-    }
-
-    func getRoomsFromReadAuthors(limit: UInt32 = 16) async -> RoomRecommendationListOutcome {
-        await core.getRoomsFromReadAuthors(limit: limit)
     }
 
     func requestJoinRoom(groupId: String, roomName: String) async -> StringOutcome {

@@ -27,8 +27,8 @@ final class RoomExplorerStore {
         self.appStore = appStore
     }
 
-    /// Run all shelf queries in parallel. Safe to call on every view appear —
-    /// each query reads cached ndb state and returns in milliseconds.
+    /// Read the Rust-owned shelf snapshot. Safe to call on every view appear —
+    /// the snapshot reads cached ndb state and returns in milliseconds.
     /// Relay subscriptions are fired-and-forgotten so they never block the
     /// nostrdb reads or delay `isFirstLoad → false`.
     func refresh() async {
@@ -45,36 +45,8 @@ final class RoomExplorerStore {
         Task { _ = await safeCore.startFriendsRoomsDiscovery() }
         Task { await ensureCurationSubscription(safeCore: safeCore) }
 
-        let curatorOutcome = await safeCore.getRoomExplorerCuratorPubkey()
-        let curatorPubkey = curatorOutcome.error.isEmpty ? curatorOutcome.value : ""
-
-        async let featuredTask: [CommunitySummary] = {
-            let outcome = await safeCore.getFeaturedRooms(curatorPubkeyHex: curatorPubkey)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-        async let newTask: [CommunitySummary] = {
-            let outcome = await safeCore.getNewRooms(limit: 24)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-        async let friendsTask: [RoomRecommendation] = {
-            let outcome = await safeCore.getRoomsWithFriends(limit: 16)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-        async let authorsTask: [RoomRecommendation] = {
-            let outcome = await safeCore.getRoomsFromReadAuthors(limit: 16)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-
-        let (fetchedFeatured, fetchedNew, fetchedFriends, fetchedAuthors) =
-            await (featuredTask, newTask, friendsTask, authorsTask)
-
-        featured = fetchedFeatured
-        newNoteworthy = safeCore.excludeJoinedRooms(
-            rooms: fetchedNew,
-            joined: appStore.joinedCommunities
-        )
-        friendsShelf = fetchedFriends
-        authorsShelf = fetchedAuthors
+        let snapshot = await safeCore.getRoomExplorerSnapshot(joined: appStore.joinedCommunities)
+        apply(snapshot)
         isFirstLoad = false
     }
 
@@ -88,43 +60,24 @@ final class RoomExplorerStore {
         }
     }
 
-    /// Lightweight re-read of nostrdb — no subscription side-effects.
+    /// Lightweight re-read of Rust's cached explorer snapshot — no subscription side-effects.
     /// Called by EventBridge whenever a CommunityUpserted delta arrives so
     /// newly-discovered rooms appear without a pull-to-refresh.
     func reloadFromCache() async {
         guard let appStore else { return }
         let safeCore = appStore.safeCore
-        let curatorOutcome = await safeCore.getRoomExplorerCuratorPubkey()
-        let curatorPubkey = curatorOutcome.error.isEmpty ? curatorOutcome.value : ""
-
-        async let featuredTask: [CommunitySummary] = {
-            let outcome = await safeCore.getFeaturedRooms(curatorPubkeyHex: curatorPubkey)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-        async let newTask: [CommunitySummary] = {
-            let outcome = await safeCore.getNewRooms(limit: 24)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-        async let friendsTask: [RoomRecommendation] = {
-            let outcome = await safeCore.getRoomsWithFriends(limit: 16)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-        async let authorsTask: [RoomRecommendation] = {
-            let outcome = await safeCore.getRoomsFromReadAuthors(limit: 16)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-
-        let (f, n, fr, a) = await (featuredTask, newTask, friendsTask, authorsTask)
-        featured = f
-        newNoteworthy = safeCore.excludeJoinedRooms(
-            rooms: n,
-            joined: appStore.joinedCommunities
-        )
-        friendsShelf = fr
-        authorsShelf = a
+        let snapshot = await safeCore.getRoomExplorerSnapshot(joined: appStore.joinedCommunities)
+        apply(snapshot)
     }
 
     // MARK: - Private
+
+    private func apply(_ snapshot: RoomExplorerSnapshot) {
+        featured = snapshot.featured
+        newNoteworthy = snapshot.newNoteworthy
+        friendsShelf = snapshot.friendsShelf
+        authorsShelf = snapshot.authorsShelf
+    }
 
     private func ensureCurationSubscription(safeCore: SafeHighlighterCore) async {
         if !hasStartedCuration {

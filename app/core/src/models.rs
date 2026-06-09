@@ -274,12 +274,6 @@ pub struct CacheStatsOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct RoomRecommendationListOutcome {
-    pub values: Vec<RoomRecommendation>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct DiscussionOutcome {
     pub value: Option<DiscussionRecord>,
     pub error: String,
