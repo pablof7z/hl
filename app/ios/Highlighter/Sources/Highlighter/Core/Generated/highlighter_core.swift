@@ -1490,6 +1490,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput)  -> SecretKeyDisplayProjection
 
+    func projectShareArticleTarget(input: ShareArticleTargetProjectionInput)  -> ShareArtifactTargetProjection
+
+    func projectShareArtifactTarget(input: ShareArtifactTargetProjectionInput)  -> ShareArtifactTargetProjection
+
+    func projectShareHighlightArticleTarget(input: ShareHighlightArticleTargetProjectionInput)  -> ShareArtifactTargetProjection?
+
+    func projectShareHighlightTarget(input: ShareHighlightTargetProjectionInput)  -> ShareHighlightTargetProjection
+
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
 
     /**
@@ -4420,6 +4428,38 @@ open func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput) -> Sec
     return try!  FfiConverterTypeSecretKeyDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_secret_key_display(self.uniffiClonePointer(),
         FfiConverterTypeSecretKeyDisplayProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectShareArticleTarget(input: ShareArticleTargetProjectionInput) -> ShareArtifactTargetProjection  {
+    return try!  FfiConverterTypeShareArtifactTargetProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_share_article_target(self.uniffiClonePointer(),
+        FfiConverterTypeShareArticleTargetProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectShareArtifactTarget(input: ShareArtifactTargetProjectionInput) -> ShareArtifactTargetProjection  {
+    return try!  FfiConverterTypeShareArtifactTargetProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_share_artifact_target(self.uniffiClonePointer(),
+        FfiConverterTypeShareArtifactTargetProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectShareHighlightArticleTarget(input: ShareHighlightArticleTargetProjectionInput) -> ShareArtifactTargetProjection?  {
+    return try!  FfiConverterOptionTypeShareArtifactTargetProjection.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_share_highlight_article_target(self.uniffiClonePointer(),
+        FfiConverterTypeShareHighlightArticleTargetProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectShareHighlightTarget(input: ShareHighlightTargetProjectionInput) -> ShareHighlightTargetProjection  {
+    return try!  FfiConverterTypeShareHighlightTargetProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_share_highlight_target(self.uniffiClonePointer(),
+        FfiConverterTypeShareHighlightTargetProjectionInput_lower(input),$0
     )
 })
 }
@@ -21518,6 +21558,450 @@ public func FfiConverterTypeSecretKeyDisplayProjectionInput_lower(_ value: Secre
 }
 
 
+public struct ShareArticleTargetProjectionInput {
+    public var article: ArticleRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(article: ArticleRecord) {
+        self.article = article
+    }
+}
+
+#if compiler(>=6)
+extension ShareArticleTargetProjectionInput: Sendable {}
+#endif
+
+
+extension ShareArticleTargetProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ShareArticleTargetProjectionInput, rhs: ShareArticleTargetProjectionInput) -> Bool {
+        if lhs.article != rhs.article {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(article)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareArticleTargetProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareArticleTargetProjectionInput {
+        return
+            try ShareArticleTargetProjectionInput(
+                article: FfiConverterTypeArticleRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareArticleTargetProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArticleRecord.write(value.article, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareArticleTargetProjectionInput_lift(_ buf: RustBuffer) throws -> ShareArticleTargetProjectionInput {
+    return try FfiConverterTypeShareArticleTargetProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareArticleTargetProjectionInput_lower(_ value: ShareArticleTargetProjectionInput) -> RustBuffer {
+    return FfiConverterTypeShareArticleTargetProjectionInput.lower(value)
+}
+
+
+public struct ShareArtifactTargetProjection {
+    public var preview: ArtifactPreview
+    public var displayTitle: String
+    public var displaySubtitle: String
+    public var imageUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(preview: ArtifactPreview, displayTitle: String, displaySubtitle: String, imageUrl: String?) {
+        self.preview = preview
+        self.displayTitle = displayTitle
+        self.displaySubtitle = displaySubtitle
+        self.imageUrl = imageUrl
+    }
+}
+
+#if compiler(>=6)
+extension ShareArtifactTargetProjection: Sendable {}
+#endif
+
+
+extension ShareArtifactTargetProjection: Equatable, Hashable {
+    public static func ==(lhs: ShareArtifactTargetProjection, rhs: ShareArtifactTargetProjection) -> Bool {
+        if lhs.preview != rhs.preview {
+            return false
+        }
+        if lhs.displayTitle != rhs.displayTitle {
+            return false
+        }
+        if lhs.displaySubtitle != rhs.displaySubtitle {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(preview)
+        hasher.combine(displayTitle)
+        hasher.combine(displaySubtitle)
+        hasher.combine(imageUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareArtifactTargetProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareArtifactTargetProjection {
+        return
+            try ShareArtifactTargetProjection(
+                preview: FfiConverterTypeArtifactPreview.read(from: &buf),
+                displayTitle: FfiConverterString.read(from: &buf),
+                displaySubtitle: FfiConverterString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareArtifactTargetProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactPreview.write(value.preview, into: &buf)
+        FfiConverterString.write(value.displayTitle, into: &buf)
+        FfiConverterString.write(value.displaySubtitle, into: &buf)
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareArtifactTargetProjection_lift(_ buf: RustBuffer) throws -> ShareArtifactTargetProjection {
+    return try FfiConverterTypeShareArtifactTargetProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareArtifactTargetProjection_lower(_ value: ShareArtifactTargetProjection) -> RustBuffer {
+    return FfiConverterTypeShareArtifactTargetProjection.lower(value)
+}
+
+
+public struct ShareArtifactTargetProjectionInput {
+    public var artifact: ArtifactRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifact: ArtifactRecord) {
+        self.artifact = artifact
+    }
+}
+
+#if compiler(>=6)
+extension ShareArtifactTargetProjectionInput: Sendable {}
+#endif
+
+
+extension ShareArtifactTargetProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ShareArtifactTargetProjectionInput, rhs: ShareArtifactTargetProjectionInput) -> Bool {
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifact)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareArtifactTargetProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareArtifactTargetProjectionInput {
+        return
+            try ShareArtifactTargetProjectionInput(
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareArtifactTargetProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareArtifactTargetProjectionInput_lift(_ buf: RustBuffer) throws -> ShareArtifactTargetProjectionInput {
+    return try FfiConverterTypeShareArtifactTargetProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareArtifactTargetProjectionInput_lower(_ value: ShareArtifactTargetProjectionInput) -> RustBuffer {
+    return FfiConverterTypeShareArtifactTargetProjectionInput.lower(value)
+}
+
+
+public struct ShareHighlightArticleTargetProjectionInput {
+    public var highlight: HighlightRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(highlight: HighlightRecord) {
+        self.highlight = highlight
+    }
+}
+
+#if compiler(>=6)
+extension ShareHighlightArticleTargetProjectionInput: Sendable {}
+#endif
+
+
+extension ShareHighlightArticleTargetProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ShareHighlightArticleTargetProjectionInput, rhs: ShareHighlightArticleTargetProjectionInput) -> Bool {
+        if lhs.highlight != rhs.highlight {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(highlight)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareHighlightArticleTargetProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareHighlightArticleTargetProjectionInput {
+        return
+            try ShareHighlightArticleTargetProjectionInput(
+                highlight: FfiConverterTypeHighlightRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareHighlightArticleTargetProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeHighlightRecord.write(value.highlight, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareHighlightArticleTargetProjectionInput_lift(_ buf: RustBuffer) throws -> ShareHighlightArticleTargetProjectionInput {
+    return try FfiConverterTypeShareHighlightArticleTargetProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareHighlightArticleTargetProjectionInput_lower(_ value: ShareHighlightArticleTargetProjectionInput) -> RustBuffer {
+    return FfiConverterTypeShareHighlightArticleTargetProjectionInput.lower(value)
+}
+
+
+public struct ShareHighlightTargetProjection {
+    public var eventId: String
+    public var authorPubkeyHex: String
+    public var relayHint: String
+    public var displayTitle: String
+    public var displaySubtitle: String
+    public var imageUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, authorPubkeyHex: String, relayHint: String, displayTitle: String, displaySubtitle: String, imageUrl: String?) {
+        self.eventId = eventId
+        self.authorPubkeyHex = authorPubkeyHex
+        self.relayHint = relayHint
+        self.displayTitle = displayTitle
+        self.displaySubtitle = displaySubtitle
+        self.imageUrl = imageUrl
+    }
+}
+
+#if compiler(>=6)
+extension ShareHighlightTargetProjection: Sendable {}
+#endif
+
+
+extension ShareHighlightTargetProjection: Equatable, Hashable {
+    public static func ==(lhs: ShareHighlightTargetProjection, rhs: ShareHighlightTargetProjection) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.authorPubkeyHex != rhs.authorPubkeyHex {
+            return false
+        }
+        if lhs.relayHint != rhs.relayHint {
+            return false
+        }
+        if lhs.displayTitle != rhs.displayTitle {
+            return false
+        }
+        if lhs.displaySubtitle != rhs.displaySubtitle {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(authorPubkeyHex)
+        hasher.combine(relayHint)
+        hasher.combine(displayTitle)
+        hasher.combine(displaySubtitle)
+        hasher.combine(imageUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareHighlightTargetProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareHighlightTargetProjection {
+        return
+            try ShareHighlightTargetProjection(
+                eventId: FfiConverterString.read(from: &buf),
+                authorPubkeyHex: FfiConverterString.read(from: &buf),
+                relayHint: FfiConverterString.read(from: &buf),
+                displayTitle: FfiConverterString.read(from: &buf),
+                displaySubtitle: FfiConverterString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareHighlightTargetProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.authorPubkeyHex, into: &buf)
+        FfiConverterString.write(value.relayHint, into: &buf)
+        FfiConverterString.write(value.displayTitle, into: &buf)
+        FfiConverterString.write(value.displaySubtitle, into: &buf)
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareHighlightTargetProjection_lift(_ buf: RustBuffer) throws -> ShareHighlightTargetProjection {
+    return try FfiConverterTypeShareHighlightTargetProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareHighlightTargetProjection_lower(_ value: ShareHighlightTargetProjection) -> RustBuffer {
+    return FfiConverterTypeShareHighlightTargetProjection.lower(value)
+}
+
+
+public struct ShareHighlightTargetProjectionInput {
+    public var highlight: HighlightRecord
+    public var relayHint: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(highlight: HighlightRecord, relayHint: String) {
+        self.highlight = highlight
+        self.relayHint = relayHint
+    }
+}
+
+#if compiler(>=6)
+extension ShareHighlightTargetProjectionInput: Sendable {}
+#endif
+
+
+extension ShareHighlightTargetProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ShareHighlightTargetProjectionInput, rhs: ShareHighlightTargetProjectionInput) -> Bool {
+        if lhs.highlight != rhs.highlight {
+            return false
+        }
+        if lhs.relayHint != rhs.relayHint {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(highlight)
+        hasher.combine(relayHint)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareHighlightTargetProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareHighlightTargetProjectionInput {
+        return
+            try ShareHighlightTargetProjectionInput(
+                highlight: FfiConverterTypeHighlightRecord.read(from: &buf),
+                relayHint: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareHighlightTargetProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeHighlightRecord.write(value.highlight, into: &buf)
+        FfiConverterString.write(value.relayHint, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareHighlightTargetProjectionInput_lift(_ buf: RustBuffer) throws -> ShareHighlightTargetProjectionInput {
+    return try FfiConverterTypeShareHighlightTargetProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareHighlightTargetProjectionInput_lower(_ value: ShareHighlightTargetProjectionInput) -> RustBuffer {
+    return FfiConverterTypeShareHighlightTargetProjectionInput.lower(value)
+}
+
+
 public struct StringListOutcome {
     public var values: [String]
     public var error: String
@@ -25727,6 +26211,30 @@ fileprivate struct FfiConverterOptionTypeRoomInviteResolvedCandidate: FfiConvert
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeShareArtifactTargetProjection: FfiConverterRustBuffer {
+    typealias SwiftType = ShareArtifactTargetProjection?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeShareArtifactTargetProjection.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeShareArtifactTargetProjection.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeTranscriptSegment: FfiConverterRustBuffer {
     typealias SwiftType = TranscriptSegment?
 
@@ -27587,6 +28095,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_secret_key_display() != 28126) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_article_target() != 4077) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_artifact_target() != 15214) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_highlight_article_target() != 58694) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_highlight_target() != 26659) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 1182) {

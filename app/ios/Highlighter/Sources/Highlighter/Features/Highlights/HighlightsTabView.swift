@@ -141,7 +141,7 @@ struct HighlightsTabView: View {
     @ViewBuilder
     private func highlightContextMenu(_ item: HydratedHighlight) -> some View {
         Button {
-            shareTarget = .highlight(item.highlight)
+            shareTarget = .highlight(item.highlight, core: app.safeCore)
         } label: {
             Label("Share quote to room", systemImage: "quote.bubble")
         }
@@ -168,7 +168,7 @@ struct HighlightsTabView: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button {
-                shareTarget = ShareToCommunityTarget.article(item.article, core: app.core)
+                shareTarget = ShareToCommunityTarget.article(item.article, core: app.safeCore)
             } label: {
                 Label("Share to community", systemImage: "square.and.arrow.up")
             }
@@ -179,18 +179,18 @@ struct HighlightsTabView: View {
     /// highlights today — we reshare the source article, not the quote.
     private func shareTargetForHighlight(_ item: HydratedHighlight) -> ShareToCommunityTarget? {
         if let existing = item.artifact {
-            return .artifact(existing)
+            return .artifact(existing, core: app.safeCore)
         }
-        let addr = item.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty,
-              let preview = app.core.getArticleArtifactPreviewForAddress(address: addr).value else {
+        guard let projection = app.safeCore.projectShareHighlightArticleTarget(
+            input: ShareHighlightArticleTargetProjectionInput(highlight: item.highlight)
+        ) else {
             return nil
         }
         return ShareToCommunityTarget(
-            payload: .artifactShare(preview: preview),
-            displayTitle: "Article",
-            displaySubtitle: item.highlight.quote,
-            imageURL: nil
+            payload: .artifactShare(preview: projection.preview),
+            displayTitle: projection.displayTitle,
+            displaySubtitle: projection.displaySubtitle,
+            imageURL: projection.imageUrl.flatMap { URL(string: $0) }
         )
     }
 }

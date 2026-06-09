@@ -269,7 +269,7 @@ struct HighlightDetailView: View {
             }
 
             Button {
-                shareTarget = .highlight(highlight)
+                shareTarget = .highlight(highlight, core: app.safeCore)
             } label: {
                 actionIcon(systemName: "rectangle.stack.badge.plus")
             }

@@ -746,6 +746,30 @@ actor SafeHighlighterCore {
         core.projectArticleProfileCard(input: input)
     }
 
+    nonisolated func projectShareArticleTarget(
+        input: ShareArticleTargetProjectionInput
+    ) -> ShareArtifactTargetProjection {
+        core.projectShareArticleTarget(input: input)
+    }
+
+    nonisolated func projectShareArtifactTarget(
+        input: ShareArtifactTargetProjectionInput
+    ) -> ShareArtifactTargetProjection {
+        core.projectShareArtifactTarget(input: input)
+    }
+
+    nonisolated func projectShareHighlightTarget(
+        input: ShareHighlightTargetProjectionInput
+    ) -> ShareHighlightTargetProjection {
+        core.projectShareHighlightTarget(input: input)
+    }
+
+    nonisolated func projectShareHighlightArticleTarget(
+        input: ShareHighlightArticleTargetProjectionInput
+    ) -> ShareArtifactTargetProjection? {
+        core.projectShareHighlightArticleTarget(input: input)
+    }
+
     nonisolated func getArticleArtifactPreview(article: ArticleRecord) -> ArtifactPreviewOutcome {
         core.getArticleArtifactPreview(article: article)
     }

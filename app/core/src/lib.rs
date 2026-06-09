@@ -51,6 +51,7 @@ pub mod room_state;
 pub mod search;
 pub mod session;
 pub mod share_extension;
+pub mod share_targets;
 pub mod subscriptions;
 pub mod time_labels;
 pub mod web_metadata;
@@ -146,6 +147,11 @@ pub use room_preview::{
 pub use session::{
     PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,
     SecretKeyDisplayProjectionInput,
+};
+pub use share_targets::{
+    ShareArticleTargetProjectionInput, ShareArtifactTargetProjection,
+    ShareArtifactTargetProjectionInput, ShareHighlightArticleTargetProjectionInput,
+    ShareHighlightTargetProjection, ShareHighlightTargetProjectionInput,
 };
 pub use time_labels::{
     RelativeTimeLabelInput, RelativeTimeLabelProjection, RelativeTimeLabelStyle,

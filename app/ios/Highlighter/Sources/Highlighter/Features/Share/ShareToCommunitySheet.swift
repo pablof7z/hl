@@ -24,23 +24,27 @@ struct ShareToCommunityTarget: Identifiable {
         case highlightRepost(eventId: String, authorPubkeyHex: String, relayHint: String)
     }
 
-    static func article(_ article: ArticleRecord, core: HighlighterCore) -> ShareToCommunityTarget? {
-        guard let preview = core.getArticleArtifactPreview(article: article).value else { return nil }
+    static func article(_ article: ArticleRecord, core: SafeHighlighterCore) -> ShareToCommunityTarget {
+        let projection = core.projectShareArticleTarget(
+            input: ShareArticleTargetProjectionInput(article: article)
+        )
         return ShareToCommunityTarget(
-            payload: .artifactShare(preview: preview),
-            displayTitle: article.title.isEmpty ? "Untitled" : article.title,
-            displaySubtitle: article.summary,
-            imageURL: article.image.isEmpty ? nil : URL(string: article.image)
+            payload: .artifactShare(preview: projection.preview),
+            displayTitle: projection.displayTitle,
+            displaySubtitle: projection.displaySubtitle,
+            imageURL: projection.imageUrl.flatMap { URL(string: $0) }
         )
     }
 
-    static func artifact(_ artifact: ArtifactRecord) -> ShareToCommunityTarget {
-        let preview = artifact.preview
+    static func artifact(_ artifact: ArtifactRecord, core: SafeHighlighterCore) -> ShareToCommunityTarget {
+        let projection = core.projectShareArtifactTarget(
+            input: ShareArtifactTargetProjectionInput(artifact: artifact)
+        )
         return ShareToCommunityTarget(
-            payload: .artifactShare(preview: preview),
-            displayTitle: artifact.preview.title.isEmpty ? "Untitled" : artifact.preview.title,
-            displaySubtitle: artifact.preview.description,
-            imageURL: artifact.preview.image.isEmpty ? nil : URL(string: artifact.preview.image)
+            payload: .artifactShare(preview: projection.preview),
+            displayTitle: projection.displayTitle,
+            displaySubtitle: projection.displaySubtitle,
+            imageURL: projection.imageUrl.flatMap { URL(string: $0) }
         )
     }
 
@@ -49,20 +53,24 @@ struct ShareToCommunityTarget: Identifiable {
     /// in the room sees the friend's quote with full attribution.
     static func highlight(
         _ highlight: HighlightRecord,
-        relayHint: String = ""
+        relayHint: String = "",
+        core: SafeHighlighterCore
     ) -> ShareToCommunityTarget {
-        let snippet = highlight.quote.isEmpty
-            ? "Highlight"
-            : "\u{201C}\(highlight.quote)\u{201D}"
+        let projection = core.projectShareHighlightTarget(
+            input: ShareHighlightTargetProjectionInput(
+                highlight: highlight,
+                relayHint: relayHint
+            )
+        )
         return ShareToCommunityTarget(
             payload: .highlightRepost(
-                eventId: highlight.eventId,
-                authorPubkeyHex: highlight.pubkey,
-                relayHint: relayHint
+                eventId: projection.eventId,
+                authorPubkeyHex: projection.authorPubkeyHex,
+                relayHint: projection.relayHint
             ),
-            displayTitle: snippet,
-            displaySubtitle: highlight.note,
-            imageURL: nil
+            displayTitle: projection.displayTitle,
+            displaySubtitle: projection.displaySubtitle,
+            imageURL: projection.imageUrl.flatMap { URL(string: $0) }
         )
     }
 }

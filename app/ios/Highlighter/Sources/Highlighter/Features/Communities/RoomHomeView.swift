@@ -166,7 +166,7 @@ struct RoomHomeView: View {
             commentsByReference: room.commentsByReference,
             isLoading: room.isLoading,
             onShareToCommunity: { artifact in
-                shareTarget = .artifact(artifact)
+                shareTarget = .artifact(artifact, core: app.safeCore)
             }
         )
     }
@@ -195,7 +195,7 @@ struct RoomHomeView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button {
-                                    shareTarget = .artifact(a)
+                                    shareTarget = .artifact(a, core: app.safeCore)
                                 } label: {
                                     Label("Share to community", systemImage: "square.and.arrow.up")
                                 }

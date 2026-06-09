@@ -71,6 +71,7 @@ use crate::room_lanes;
 use crate::room_library;
 use crate::room_state;
 use crate::session::{current_user_from_pubkey, Session};
+use crate::share_targets;
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
 use crate::web_metadata::{self, WebMetadata, WebMetadataStore};
 use crate::whats_new;
@@ -1896,6 +1897,34 @@ impl HighlighterCore {
         input: articles::ArticleProfileCardProjectionInput,
     ) -> articles::ArticleProfileCardProjection {
         articles::article_profile_card_projection(input)
+    }
+
+    pub fn project_share_article_target(
+        &self,
+        input: share_targets::ShareArticleTargetProjectionInput,
+    ) -> share_targets::ShareArtifactTargetProjection {
+        share_targets::article_target_projection(input)
+    }
+
+    pub fn project_share_artifact_target(
+        &self,
+        input: share_targets::ShareArtifactTargetProjectionInput,
+    ) -> share_targets::ShareArtifactTargetProjection {
+        share_targets::artifact_target_projection(input)
+    }
+
+    pub fn project_share_highlight_target(
+        &self,
+        input: share_targets::ShareHighlightTargetProjectionInput,
+    ) -> share_targets::ShareHighlightTargetProjection {
+        share_targets::highlight_target_projection(input)
+    }
+
+    pub fn project_share_highlight_article_target(
+        &self,
+        input: share_targets::ShareHighlightArticleTargetProjectionInput,
+    ) -> Option<share_targets::ShareArtifactTargetProjection> {
+        share_targets::highlight_article_target_projection(input)
     }
 
     /// Project a cached NIP-23 article into the artifact preview shape used by
