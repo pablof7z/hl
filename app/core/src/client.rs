@@ -3469,20 +3469,6 @@ impl HighlighterCore {
         ))
     }
 
-    /// First `p` tag of the project's kind:31933 event by addressable
-    /// coordinate. The shake-to-share composer uses this to pick the agent
-    /// pubkey for the root note's `p` tag. `None` if the project event isn't
-    /// cached or has no agents.
-    pub async fn get_project_first_agent_pubkey(
-        &self,
-        coordinate: String,
-    ) -> OptionalStringOutcome {
-        optional_string_outcome(feedback::query_first_agent_pubkey(
-            self.runtime.ndb(),
-            &coordinate,
-        ))
-    }
-
     /// Feedback composer projection shared by new-thread and reply surfaces.
     /// Rust owns submit trimming and send eligibility so each platform shell
     /// renders the same enabled/disabled state.
@@ -3531,6 +3517,12 @@ impl HighlighterCore {
         event: FeedbackEventRecord,
     ) -> Vec<FeedbackEventRecord> {
         feedback::upsert_thread_event(&events, &event)
+    }
+
+    fn feedback_agent_pubkey_for(&self, coordinate: &str) -> Option<String> {
+        feedback::query_first_agent_pubkey(self.runtime.ndb(), coordinate)
+            .ok()
+            .flatten()
     }
 
     // -- Writes --
@@ -3634,25 +3626,46 @@ impl HighlighterCore {
         chat_message_outcome(result)
     }
 
-    /// Publish a feedback note (kind:1) for the shake-to-share surface. When
-    /// `parent_event_id` is `Some`, the note is a reply marked NIP-10 root;
-    /// otherwise it's a brand-new thread. `agent_pubkey` is optional — pass
-    /// `None` when the project event isn't cached yet (the note still ships,
-    /// just without a `p` tag).
-    pub async fn publish_feedback_note(
+    /// Publish a feedback root note. Rust resolves the current project agent
+    /// pubkey from nostrdb and deliberately publishes without a `p` tag when
+    /// the project event is not cached yet.
+    pub async fn publish_feedback_root_note(
         &self,
         coordinate: String,
-        agent_pubkey: Option<String>,
-        parent_event_id: Option<String>,
         body: String,
     ) -> FeedbackEventOutcome {
         let result: Result<FeedbackEventRecord, CoreError> = async {
             let _ = self.require_user_pubkey()?;
+            let agent_pubkey = self.feedback_agent_pubkey_for(&coordinate);
             feedback::publish_note(
                 &self.runtime,
                 &coordinate,
                 agent_pubkey.as_deref(),
-                parent_event_id.as_deref(),
+                None,
+                &body,
+            )
+            .await
+        }
+        .await;
+        feedback_event_outcome(result)
+    }
+
+    /// Publish a feedback reply into an existing root thread. Rust resolves
+    /// the optional project agent `p` tag and owns the NIP-10 root marker.
+    pub async fn publish_feedback_thread_reply(
+        &self,
+        coordinate: String,
+        parent_event_id: String,
+        body: String,
+    ) -> FeedbackEventOutcome {
+        let result: Result<FeedbackEventRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            let agent_pubkey = self.feedback_agent_pubkey_for(&coordinate);
+            feedback::publish_note(
+                &self.runtime,
+                &coordinate,
+                agent_pubkey.as_deref(),
+                Some(parent_event_id.as_str()),
                 &body,
             )
             .await

@@ -66,23 +66,19 @@ final class FeedbackThreadStore {
         )
     }
 
-    /// Send a reply into the open thread. Rust/nostrdb resolves the current
-    /// agent pubkey at send time; replies publish without a `p` tag when the
-    /// project event isn't available.
+    /// Send a reply into the open thread. Rust resolves feedback agent
+    /// routing and NIP-10 root tagging.
     @discardableResult
     func sendReply(body: String) async -> FeedbackEventOutcome? {
         guard let core, let coordinate, let rootEventId else {
             return nil
         }
-        let agentOutcome = await core.getProjectFirstAgentPubkey(coordinate: coordinate)
-        let agent = agentOutcome.error.isEmpty ? agentOutcome.value : nil
 
         isPublishing = true
         defer { isPublishing = false }
 
-        let outcome = await core.publishFeedbackNote(
+        let outcome = await core.publishFeedbackThreadReply(
             coordinate: coordinate,
-            agentPubkey: agent,
             parentEventId: rootEventId,
             body: body
         )

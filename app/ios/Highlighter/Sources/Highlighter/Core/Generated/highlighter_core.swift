@@ -896,6 +896,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func extractNostrEventRefs(content: String)  -> [NostrEntityRef]
 
+    func feedbackAgentPubkeyFor(coordinate: String)  -> String?
+
     /**
      * Resolve an ISBN against the bounded recent-book projection already
      * rendered by the native picker. Rust owns the canonical ISBN reference
@@ -1204,14 +1206,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * native shells should refresh.
      */
     func getProfileUpdateAction(kind: UInt32)  -> ProfileUpdateAction
-
-    /**
-     * First `p` tag of the project's kind:31933 event by addressable
-     * coordinate. The shake-to-share composer uses this to pick the agent
-     * pubkey for the root note's `p` tag. `None` if the project event isn't
-     * cached or has no agents.
-     */
-    func getProjectFirstAgentPubkey(coordinate: String) async  -> OptionalStringOutcome
 
     /**
      * Recent books across the user's joined communities — drives the
@@ -1743,13 +1737,17 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func publishDiscussionFromComposer(input: DiscussionComposerPublishInput) async  -> DiscussionOutcome
 
     /**
-     * Publish a feedback note (kind:1) for the shake-to-share surface. When
-     * `parent_event_id` is `Some`, the note is a reply marked NIP-10 root;
-     * otherwise it's a brand-new thread. `agent_pubkey` is optional — pass
-     * `None` when the project event isn't cached yet (the note still ships,
-     * just without a `p` tag).
+     * Publish a feedback root note. Rust resolves the current project agent
+     * pubkey from nostrdb and deliberately publishes without a `p` tag when
+     * the project event is not cached yet.
      */
-    func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEventId: String?, body: String) async  -> FeedbackEventOutcome
+    func publishFeedbackRootNote(coordinate: String, body: String) async  -> FeedbackEventOutcome
+
+    /**
+     * Publish a feedback reply into an existing root thread. Rust resolves
+     * the optional project agent `p` tag and owns the NIP-10 root marker.
+     */
+    func publishFeedbackThreadReply(coordinate: String, parentEventId: String, body: String) async  -> FeedbackEventOutcome
 
     /**
      * Publish and share one podcast clip highlight. Rust owns clip draft
@@ -2643,6 +2641,14 @@ open func extractNostrEventRefs(content: String) -> [NostrEntityRef]  {
     return try!  FfiConverterSequenceTypeNostrEntityRef.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_extract_nostr_event_refs(self.uniffiClonePointer(),
         FfiConverterString.lower(content),$0
+    )
+})
+}
+
+open func feedbackAgentPubkeyFor(coordinate: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_feedback_agent_pubkey_for(self.uniffiClonePointer(),
+        FfiConverterString.lower(coordinate),$0
     )
 })
 }
@@ -3666,30 +3672,6 @@ open func getProfileUpdateAction(kind: UInt32) -> ProfileUpdateAction  {
         FfiConverterUInt32.lower(kind),$0
     )
 })
-}
-
-    /**
-     * First `p` tag of the project's kind:31933 event by addressable
-     * coordinate. The shake-to-share composer uses this to pick the agent
-     * pubkey for the root note's `p` tag. `None` if the project event isn't
-     * cached or has no agents.
-     */
-open func getProjectFirstAgentPubkey(coordinate: String)async  -> OptionalStringOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_project_first_agent_pubkey(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(coordinate)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeOptionalStringOutcome_lift,
-            errorHandler: nil
-
-        )
 }
 
     /**
@@ -5392,19 +5374,39 @@ open func publishDiscussionFromComposer(input: DiscussionComposerPublishInput)as
 }
 
     /**
-     * Publish a feedback note (kind:1) for the shake-to-share surface. When
-     * `parent_event_id` is `Some`, the note is a reply marked NIP-10 root;
-     * otherwise it's a brand-new thread. `agent_pubkey` is optional — pass
-     * `None` when the project event isn't cached yet (the note still ships,
-     * just without a `p` tag).
+     * Publish a feedback root note. Rust resolves the current project agent
+     * pubkey from nostrdb and deliberately publishes without a `p` tag when
+     * the project event is not cached yet.
      */
-open func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEventId: String?, body: String)async  -> FeedbackEventOutcome  {
+open func publishFeedbackRootNote(coordinate: String, body: String)async  -> FeedbackEventOutcome  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_feedback_note(
+                uniffi_highlighter_core_fn_method_highlightercore_publish_feedback_root_note(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(coordinate),FfiConverterOptionString.lower(agentPubkey),FfiConverterOptionString.lower(parentEventId),FfiConverterString.lower(body)
+                    FfiConverterString.lower(coordinate),FfiConverterString.lower(body)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFeedbackEventOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Publish a feedback reply into an existing root thread. Rust resolves
+     * the optional project agent `p` tag and owns the NIP-10 root marker.
+     */
+open func publishFeedbackThreadReply(coordinate: String, parentEventId: String, body: String)async  -> FeedbackEventOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_feedback_thread_reply(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(coordinate),FfiConverterString.lower(parentEventId),FfiConverterString.lower(body)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -38373,6 +38375,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_extract_nostr_event_refs() != 37795) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_feedback_agent_pubkey_for() != 18793) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_find_existing_book_for_isbn() != 23084) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38560,9 +38565,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_profile_update_action() != 16735) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_project_first_agent_pubkey() != 2324) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 59174) {
@@ -38988,7 +38990,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion_from_composer() != 17266) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_note() != 47994) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_root_note() != 35574) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_thread_reply() != 58424) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_clip_highlight() != 12471) {

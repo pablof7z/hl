@@ -71,23 +71,4 @@ final class FeedbackStore {
         )
     }
 
-    /// Resolve the project's first agent pubkey from Rust/nostrdb. Returns
-    /// `nil` if the project event isn't cached yet — callers should still
-    /// publish, just without a `p` tag, and let the agent discover the note
-    /// via its own `a`-tag subscription.
-    func resolveAgentPubkey() async -> String? {
-        guard let core, let coordinate else { return nil }
-        let outcome = await core.getProjectFirstAgentPubkey(coordinate: coordinate)
-        return outcome.error.isEmpty ? outcome.value : nil
-    }
-}
-
-enum FeedbackError: LocalizedError {
-    case notReady
-
-    var errorDescription: String? {
-        switch self {
-        case .notReady: return "Feedback isn't ready yet."
-        }
-    }
 }

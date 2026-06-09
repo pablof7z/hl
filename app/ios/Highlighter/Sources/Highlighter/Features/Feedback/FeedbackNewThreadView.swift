@@ -76,11 +76,8 @@ struct FeedbackNewThreadView: View {
         errorMessage = nil
         defer { isPublishing = false }
 
-        let agent = await store.resolveAgentPubkey()
-        let outcome = await app.safeCore.publishFeedbackNote(
+        let outcome = await app.safeCore.publishFeedbackRootNote(
             coordinate: FeedbackProject.coordinate,
-            agentPubkey: agent,
-            parentEventId: nil,
             body: projection.submitBody
         )
         guard outcome.error.isEmpty, let record = outcome.value else {

@@ -630,10 +630,6 @@ actor SafeHighlighterCore {
         await core.getFeedbackThreadEvents(rootEventId: rootEventId)
     }
 
-    func getProjectFirstAgentPubkey(coordinate: String) async -> OptionalStringOutcome {
-        await core.getProjectFirstAgentPubkey(coordinate: coordinate)
-    }
-
     nonisolated func projectFeedbackComposer(
         input: FeedbackComposerProjectionInput
     ) -> FeedbackComposerProjection {
@@ -672,15 +668,23 @@ actor SafeHighlighterCore {
         )
     }
 
-    func publishFeedbackNote(
+    func publishFeedbackRootNote(
         coordinate: String,
-        agentPubkey: String?,
-        parentEventId: String?,
         body: String
     ) async -> FeedbackEventOutcome {
-        await core.publishFeedbackNote(
+        await core.publishFeedbackRootNote(
             coordinate: coordinate,
-            agentPubkey: agentPubkey,
+            body: body
+        )
+    }
+
+    func publishFeedbackThreadReply(
+        coordinate: String,
+        parentEventId: String,
+        body: String
+    ) async -> FeedbackEventOutcome {
+        await core.publishFeedbackThreadReply(
+            coordinate: coordinate,
             parentEventId: parentEventId,
             body: body
         )
