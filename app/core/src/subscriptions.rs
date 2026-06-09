@@ -1722,9 +1722,9 @@ mod tests {
         outcome.handle
     }
 
-    fn expect_login(outcome: crate::models::CurrentUserOutcome) -> crate::models::CurrentUser {
-        assert!(outcome.error.is_empty(), "login: {}", outcome.error);
-        outcome.value.expect("login returned no user")
+    fn expect_login(outcome: crate::session::AuthSessionSnapshot) -> crate::models::CurrentUser {
+        assert!(outcome.is_authenticated, "login: {}", outcome.error_message);
+        outcome.user.expect("login returned no user")
     }
 
     fn isolated_core() -> (Arc<HighlighterCore>, TempDir) {

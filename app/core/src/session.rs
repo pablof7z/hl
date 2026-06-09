@@ -51,6 +51,28 @@ pub fn classify_login_input(input: &str) -> LoginInputAction {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AuthSessionSnapshot {
+    pub user: Option<CurrentUser>,
+    pub is_authenticated: bool,
+    pub error_message: String,
+}
+
+pub fn auth_session_snapshot(result: Result<CurrentUser, CoreError>) -> AuthSessionSnapshot {
+    match result {
+        Ok(user) => AuthSessionSnapshot {
+            user: Some(user),
+            is_authenticated: true,
+            error_message: String::new(),
+        },
+        Err(error) => AuthSessionSnapshot {
+            user: None,
+            is_authenticated: false,
+            error_message: error.to_string(),
+        },
+    }
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct PublicKeyDisplayProjectionInput {
     pub npub: String,
@@ -359,6 +381,23 @@ mod tests {
                 message: "Enter an nsec1… or bunker:// URI.".into()
             }
         );
+    }
+
+    #[test]
+    fn auth_session_snapshot_projects_success_and_error_states() {
+        let user = CurrentUser {
+            pubkey: "abc123".into(),
+            npub: "npub1abc".into(),
+        };
+        let success = auth_session_snapshot(Ok(user.clone()));
+        assert_eq!(success.user, Some(user));
+        assert!(success.is_authenticated);
+        assert!(success.error_message.is_empty());
+
+        let failure = auth_session_snapshot(Err(CoreError::InvalidInput("bad key".into())));
+        assert_eq!(failure.user, None);
+        assert!(!failure.is_authenticated);
+        assert_eq!(failure.error_message, "invalid input: bad key");
     }
 
     #[test]

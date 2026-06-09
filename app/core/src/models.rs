@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CurrentUser {
     pub pubkey: String,
     pub npub: String,
@@ -44,12 +44,6 @@ pub struct OnboardingInterestSelection {
 pub struct OnboardingInterestProjection {
     pub interests: Vec<OnboardingInterestChip>,
     pub selection: OnboardingInterestSelection,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct CurrentUserOutcome {
-    pub value: Option<CurrentUser>,
-    pub error: String,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]

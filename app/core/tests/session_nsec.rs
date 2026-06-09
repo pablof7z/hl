@@ -2,7 +2,7 @@
 //! keypair, encode as nsec, hand it to login_nsec, and verify the returned
 //! pubkey matches what we started with.
 
-use highlighter_core::{CurrentUser, CurrentUserOutcome, HighlighterCore};
+use highlighter_core::{AuthSessionSnapshot, CurrentUser, HighlighterCore};
 use nostr_sdk::prelude::*;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -15,9 +15,13 @@ fn isolated_core() -> (Arc<HighlighterCore>, TempDir) {
     (core, tmp)
 }
 
-fn expect_user(outcome: CurrentUserOutcome) -> CurrentUser {
-    assert!(outcome.error.is_empty(), "login_nsec: {}", outcome.error);
-    outcome.value.expect("login_nsec returned no user")
+fn expect_user(outcome: AuthSessionSnapshot) -> CurrentUser {
+    assert!(
+        outcome.is_authenticated,
+        "login_nsec: {}",
+        outcome.error_message
+    );
+    outcome.user.expect("login_nsec returned no user")
 }
 
 #[test]
@@ -48,10 +52,13 @@ fn nsec_login_rejects_garbage() {
     let (core, _tmp) = isolated_core();
     assert!(!core
         .login_nsec("not a real nsec".to_string())
-        .error
+        .error_message
         .is_empty());
-    assert!(!core.login_nsec(String::new()).error.is_empty());
-    assert!(!core.login_nsec("nsec1garbage".to_string()).error.is_empty());
+    assert!(!core.login_nsec(String::new()).error_message.is_empty());
+    assert!(!core
+        .login_nsec("nsec1garbage".to_string())
+        .error_message
+        .is_empty());
 }
 
 #[test]

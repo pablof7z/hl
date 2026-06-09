@@ -29,14 +29,14 @@ use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome,
     ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome,
     BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommentScopeOutcome,
-    CommunityListOutcome, CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome,
-    DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord, GeneratedAccountOutcome,
-    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction,
-    MutationOutcome, Nip05AvailabilityOutcome, NostrConnectOptions, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestProjection,
-    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
+    CommunityListOutcome, CommunitySummary, CurrentUser, DataOutcome, DiscussionOutcome,
+    DiscussionRecord, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightListOutcome,
+    HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome,
+    Nip05AvailabilityOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
+    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
+    OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
+    ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
+    TranscriptSegmentListOutcome, WebMetadataOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -197,19 +197,6 @@ fn transcript_segment_list_outcome(
         },
         Err(error) => TranscriptSegmentListOutcome {
             values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
-fn current_user_outcome(result: Result<CurrentUser, CoreError>) -> CurrentUserOutcome {
-    match result {
-        Ok(value) => CurrentUserOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => CurrentUserOutcome {
-            value: None,
             error: error.to_string(),
         },
     }
@@ -467,6 +454,74 @@ fn nostr_entity_event_outcome(
 }
 
 impl HighlighterCore {
+    fn login_nsec_result(&self, nsec: &str) -> Result<CurrentUser, CoreError> {
+        // Do the session mutation + keys extraction in a single write-guard
+        // scope. Binding both values to locals ensures the guard drops
+        // before the subsequent `self.inner.write()` call — without this,
+        // Rust keeps the guard alive for the whole expression chain and
+        // parking_lot deadlocks on re-entry.
+        let (user, keys) = {
+            let mut guard = self.inner.write();
+            let user = guard.session.login_nsec(nsec)?;
+            let keys = guard.session.keys().cloned();
+            (user, keys)
+        };
+
+        if let Some(keys) = keys {
+            self.runtime.set_signer(keys.clone());
+            let pubkey = keys.public_key();
+            // First-pass: apply whatever's in cache so subscriptions have a
+            // pool to talk to immediately. The bootstrap below races to
+            // fetch the user's actual NIP-65 from the network and re-apply
+            // — without it, a fresh install with cold cache stays on
+            // seed_defaults forever.
+            self.runtime.spawn_apply_user_relay_config(pubkey.to_hex());
+            let user_relay_config_id = self.runtime.spawn_user_relay_config_bootstrap(pubkey);
+            let sub_id = self.runtime.spawn_membership_subscription(pubkey);
+            let contacts_id = self.runtime.spawn_contacts_subscription(pubkey);
+            // Eagerly fetch 39000 metadata for any groups already in the
+            // nostrdb cache. Without this, the first `getJoinedCommunities`
+            // call on a warm cache would return summaries with name=id because
+            // the stage-2 metadata sub would only be installed after the pump
+            // sees a live membership delta.
+            let cached_ids =
+                crate::subscriptions::collect_cached_group_ids(self.runtime.ndb(), &pubkey);
+            if !cached_ids.is_empty() {
+                self.runtime
+                    .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
+            }
+            // Best-effort outbox bootstrap: fetch follows' kind:10002 so the
+            // home-feed planner has data to work with. Empty on first login
+            // (no kind:3 cached yet) — `subscribe_following_*` will re-arm
+            // this whenever it's called, picking up follows discovered since.
+            //
+            // Also kick off a NIP-77 negentropy sync against purplepag.es
+            // for the social trio (kind:0/3/10002) of the same set. Live
+            // subscriptions catch incremental updates; negentropy sync is
+            // the cheap cold-start path that closes the "no kind:10002
+            // cached" gap so the planner stops dumping authors into the
+            // fallback shard.
+            let cached_follows = current_followed_pubkeys(self.runtime.ndb(), &pubkey);
+            self.runtime
+                .spawn_negentropy_sync_for_follows(cached_follows.clone());
+            let follows_nip65_id = self
+                .runtime
+                .spawn_follows_relay_lists_subscription(cached_follows);
+
+            let mut guard = self.inner.write();
+            guard.session.set_membership_subscription(sub_id);
+            guard.session.set_contacts_subscription(contacts_id);
+            guard
+                .session
+                .set_user_relay_config_subscription(user_relay_config_id);
+            if let Some(id) = follows_nip65_id {
+                guard.session.set_follows_nip65_subscription(id);
+            }
+        }
+
+        Ok(user)
+    }
+
     async fn start_nostr_connect_with_options(
         &self,
         options: NostrConnectOptions,
@@ -593,75 +648,8 @@ impl HighlighterCore {
         crate::time_labels::relative_time_label_projection(input, self.clock.now_unix_seconds())
     }
 
-    pub fn login_nsec(&self, nsec: String) -> CurrentUserOutcome {
-        let result: Result<CurrentUser, CoreError> = (|| {
-            // Do the session mutation + keys extraction in a single write-guard
-            // scope. Binding both values to locals ensures the guard drops
-            // before the subsequent `self.inner.write()` call — without this,
-            // Rust keeps the guard alive for the whole expression chain and
-            // parking_lot deadlocks on re-entry.
-            let (user, keys) = {
-                let mut guard = self.inner.write();
-                let user = guard.session.login_nsec(&nsec)?;
-                let keys = guard.session.keys().cloned();
-                (user, keys)
-            };
-
-            if let Some(keys) = keys {
-                self.runtime.set_signer(keys.clone());
-                let pubkey = keys.public_key();
-                // First-pass: apply whatever's in cache so subscriptions have a
-                // pool to talk to immediately. The bootstrap below races to
-                // fetch the user's actual NIP-65 from the network and re-apply
-                // — without it, a fresh install with cold cache stays on
-                // seed_defaults forever.
-                self.runtime.spawn_apply_user_relay_config(pubkey.to_hex());
-                let user_relay_config_id = self.runtime.spawn_user_relay_config_bootstrap(pubkey);
-                let sub_id = self.runtime.spawn_membership_subscription(pubkey);
-                let contacts_id = self.runtime.spawn_contacts_subscription(pubkey);
-                // Eagerly fetch 39000 metadata for any groups already in the
-                // nostrdb cache. Without this, the first `getJoinedCommunities`
-                // call on a warm cache would return summaries with name=id because
-                // the stage-2 metadata sub would only be installed after the pump
-                // sees a live membership delta.
-                let cached_ids =
-                    crate::subscriptions::collect_cached_group_ids(self.runtime.ndb(), &pubkey);
-                if !cached_ids.is_empty() {
-                    self.runtime
-                        .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
-                }
-                // Best-effort outbox bootstrap: fetch follows' kind:10002 so the
-                // home-feed planner has data to work with. Empty on first login
-                // (no kind:3 cached yet) — `subscribe_following_*` will re-arm
-                // this whenever it's called, picking up follows discovered since.
-                //
-                // Also kick off a NIP-77 negentropy sync against purplepag.es
-                // for the social trio (kind:0/3/10002) of the same set. Live
-                // subscriptions catch incremental updates; negentropy sync is
-                // the cheap cold-start path that closes the "no kind:10002
-                // cached" gap so the planner stops dumping authors into the
-                // fallback shard.
-                let cached_follows = current_followed_pubkeys(self.runtime.ndb(), &pubkey);
-                self.runtime
-                    .spawn_negentropy_sync_for_follows(cached_follows.clone());
-                let follows_nip65_id = self
-                    .runtime
-                    .spawn_follows_relay_lists_subscription(cached_follows);
-
-                let mut guard = self.inner.write();
-                guard.session.set_membership_subscription(sub_id);
-                guard.session.set_contacts_subscription(contacts_id);
-                guard
-                    .session
-                    .set_user_relay_config_subscription(user_relay_config_id);
-                if let Some(id) = follows_nip65_id {
-                    guard.session.set_follows_nip65_subscription(id);
-                }
-            }
-
-            Ok(user)
-        })();
-        current_user_outcome(result)
+    pub fn login_nsec(&self, nsec: String) -> crate::session::AuthSessionSnapshot {
+        crate::session::auth_session_snapshot(self.login_nsec_result(&nsec))
     }
 
     pub fn generate_account(&self) -> GeneratedAccountOutcome {
@@ -671,13 +659,7 @@ impl HighlighterCore {
                 .secret_key()
                 .to_bech32()
                 .map_err(|e| CoreError::Other(format!("nsec encoding failed: {e}")))?;
-            let outcome = self.login_nsec(nsec.clone());
-            if !outcome.error.is_empty() {
-                return Err(CoreError::Other(outcome.error));
-            }
-            let user = outcome
-                .value
-                .ok_or_else(|| CoreError::Other("login did not return a user".into()))?;
+            let user = self.login_nsec_result(&nsec)?;
             Ok(crate::models::GeneratedAccount { user, nsec })
         })();
         generated_account_outcome(result)
@@ -957,7 +939,7 @@ impl HighlighterCore {
         string_outcome(result)
     }
 
-    pub async fn pair_bunker(&self, uri: String) -> CurrentUserOutcome {
+    pub async fn pair_bunker(&self, uri: String) -> crate::session::AuthSessionSnapshot {
         let result: Result<CurrentUser, CoreError> = async {
             let normalized = normalize_bunker_uri(&uri);
             if normalized.is_empty() {
@@ -1000,7 +982,7 @@ impl HighlighterCore {
             Ok(user)
         }
         .await;
-        current_user_outcome(result)
+        crate::session::auth_session_snapshot(result)
     }
 
     // -- Subscriptions --

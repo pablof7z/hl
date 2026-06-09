@@ -147,8 +147,8 @@ pub use models::{
     ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget, BlossomUpload,
     BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetRecord, ChatMessageRecord,
     CommentRecord, CommentReferenceBucket, CommentThreadNode, CommentThreadProjection,
-    CommunityListOutcome, CommunitySummary, CurationMenuItem, CurrentUser, CurrentUserOutcome,
-    DataOutcome, DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
+    CommunityListOutcome, CommunitySummary, CurationMenuItem, CurrentUser, DataOutcome,
+    DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
     FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, GeneratedAccountOutcome,
     HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightReferenceBucket,
     HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem, HydratedHighlight,
@@ -229,8 +229,8 @@ pub use search::{
     SearchTextMatchSpan, SearchTextMatchesProjection, SearchTextMatchesProjectionInput,
 };
 pub use session::{
-    PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,
-    SecretKeyDisplayProjectionInput,
+    AuthSessionSnapshot, PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput,
+    SecretKeyDisplayProjection, SecretKeyDisplayProjectionInput,
 };
 pub use share_extension::{
     ShareQueueAttempt, ShareQueueDrainProjection, ShareQueueDrainProjectionInput, ShareQueueItem,

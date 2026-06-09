@@ -11,8 +11,8 @@ final class AppSessionStore {
     /// Returns the logged-in user if a saved credential succeeds, nil otherwise.
     func restoreSession(into core: SafeHighlighterCore) async -> CurrentUser? {
         if let nsec = KeychainService.loadNsec() {
-            let outcome = await core.loginNsec(nsec)
-            if outcome.error.isEmpty, let user = outcome.value {
+            let snapshot = await core.loginNsec(nsec)
+            if snapshot.isAuthenticated, let user = snapshot.user {
                 return user
             }
             // Stale/invalid nsec — clear so we don't keep retrying.
@@ -20,8 +20,8 @@ final class AppSessionStore {
         }
 
         if let uri = KeychainService.loadBunkerURI() {
-            let outcome = await core.pairBunker(uri)
-            if outcome.error.isEmpty, let user = outcome.value {
+            let snapshot = await core.pairBunker(uri)
+            if snapshot.isAuthenticated, let user = snapshot.user {
                 return user
             }
             KeychainService.deleteBunkerURI()

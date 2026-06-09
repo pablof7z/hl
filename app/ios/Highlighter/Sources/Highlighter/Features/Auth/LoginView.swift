@@ -157,20 +157,20 @@ struct LoginView: View {
         case .empty:
             return
         case .nsec(let nsec):
-            let outcome = await store.safeCore.loginNsec(nsec)
-            if outcome.error.isEmpty, let user = outcome.value {
+            let snapshot = await store.safeCore.loginNsec(nsec)
+            if snapshot.isAuthenticated, let user = snapshot.user {
                 AppSessionStore.shared.persistNsec(nsec)
                 await store.completeLogin(user: user)
             } else {
-                errorMessage = outcome.error.isEmpty ? "Sign in failed." : outcome.error
+                errorMessage = snapshot.errorMessage
             }
         case .bunker(let uri):
-            let outcome = await store.safeCore.pairBunker(uri)
-            if outcome.error.isEmpty, let user = outcome.value {
+            let snapshot = await store.safeCore.pairBunker(uri)
+            if snapshot.isAuthenticated, let user = snapshot.user {
                 AppSessionStore.shared.persistBunkerURI(uri)
                 await store.completeLogin(user: user)
             } else {
-                errorMessage = outcome.error.isEmpty ? "Sign in failed." : outcome.error
+                errorMessage = snapshot.errorMessage
             }
         case .invalid(let message):
             errorMessage = message

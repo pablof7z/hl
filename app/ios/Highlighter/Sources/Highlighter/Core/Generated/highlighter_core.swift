@@ -1220,7 +1220,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func loadPodcastTranscript(url: String) async  -> TranscriptSegmentListOutcome
 
-    func loginNsec(nsec: String)  -> CurrentUserOutcome
+    func loginNsec(nsec: String)  -> AuthSessionSnapshot
 
     func logout()
 
@@ -1249,7 +1249,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func ocrAltText(markdown: String)  -> String
 
-    func pairBunker(uri: String) async  -> CurrentUserOutcome
+    func pairBunker(uri: String) async  -> AuthSessionSnapshot
 
     func planRelayNip11Probes(input: RelayNip11ProbePlanInput)  -> RelayNip11ProbePlan
 
@@ -3596,8 +3596,8 @@ open func loadPodcastTranscript(url: String)async  -> TranscriptSegmentListOutco
         )
 }
 
-open func loginNsec(nsec: String) -> CurrentUserOutcome  {
-    return try!  FfiConverterTypeCurrentUserOutcome_lift(try! rustCall() {
+open func loginNsec(nsec: String) -> AuthSessionSnapshot  {
+    return try!  FfiConverterTypeAuthSessionSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_login_nsec(self.uniffiClonePointer(),
         FfiConverterString.lower(nsec),$0
     )
@@ -3717,7 +3717,7 @@ open func ocrAltText(markdown: String) -> String  {
 })
 }
 
-open func pairBunker(uri: String)async  -> CurrentUserOutcome  {
+open func pairBunker(uri: String)async  -> AuthSessionSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -3729,7 +3729,7 @@ open func pairBunker(uri: String)async  -> CurrentUserOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCurrentUserOutcome_lift,
+            liftFunc: FfiConverterTypeAuthSessionSnapshot_lift,
             errorHandler: nil
 
         )
@@ -8694,6 +8694,84 @@ public func FfiConverterTypeArtifactReferenceTarget_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeArtifactReferenceTarget_lower(_ value: ArtifactReferenceTarget) -> RustBuffer {
     return FfiConverterTypeArtifactReferenceTarget.lower(value)
+}
+
+
+public struct AuthSessionSnapshot {
+    public var user: CurrentUser?
+    public var isAuthenticated: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(user: CurrentUser?, isAuthenticated: Bool, errorMessage: String) {
+        self.user = user
+        self.isAuthenticated = isAuthenticated
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension AuthSessionSnapshot: Sendable {}
+#endif
+
+
+extension AuthSessionSnapshot: Equatable, Hashable {
+    public static func ==(lhs: AuthSessionSnapshot, rhs: AuthSessionSnapshot) -> Bool {
+        if lhs.user != rhs.user {
+            return false
+        }
+        if lhs.isAuthenticated != rhs.isAuthenticated {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(user)
+        hasher.combine(isAuthenticated)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthSessionSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthSessionSnapshot {
+        return
+            try AuthSessionSnapshot(
+                user: FfiConverterOptionTypeCurrentUser.read(from: &buf),
+                isAuthenticated: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AuthSessionSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeCurrentUser.write(value.user, into: &buf)
+        FfiConverterBool.write(value.isAuthenticated, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthSessionSnapshot_lift(_ buf: RustBuffer) throws -> AuthSessionSnapshot {
+    return try FfiConverterTypeAuthSessionSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthSessionSnapshot_lower(_ value: AuthSessionSnapshot) -> RustBuffer {
+    return FfiConverterTypeAuthSessionSnapshot.lower(value)
 }
 
 
@@ -14941,76 +15019,6 @@ public func FfiConverterTypeCurrentUser_lift(_ buf: RustBuffer) throws -> Curren
 #endif
 public func FfiConverterTypeCurrentUser_lower(_ value: CurrentUser) -> RustBuffer {
     return FfiConverterTypeCurrentUser.lower(value)
-}
-
-
-public struct CurrentUserOutcome {
-    public var value: CurrentUser?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: CurrentUser?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension CurrentUserOutcome: Sendable {}
-#endif
-
-
-extension CurrentUserOutcome: Equatable, Hashable {
-    public static func ==(lhs: CurrentUserOutcome, rhs: CurrentUserOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCurrentUserOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurrentUserOutcome {
-        return
-            try CurrentUserOutcome(
-                value: FfiConverterOptionTypeCurrentUser.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CurrentUserOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeCurrentUser.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCurrentUserOutcome_lift(_ buf: RustBuffer) throws -> CurrentUserOutcome {
-    return try FfiConverterTypeCurrentUserOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCurrentUserOutcome_lower(_ value: CurrentUserOutcome) -> RustBuffer {
-    return FfiConverterTypeCurrentUserOutcome.lower(value)
 }
 
 
@@ -39024,7 +39032,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_load_podcast_transcript() != 42829) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_login_nsec() != 40335) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_login_nsec() != 1483) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_logout() != 15288) {
@@ -39060,7 +39068,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_ocr_alt_text() != 9116) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 14588) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 32523) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_plan_relay_nip11_probes() != 54478) {

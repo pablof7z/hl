@@ -106,7 +106,7 @@ async fn pair_bunker_rejects_garbage() {
     for case in cases {
         let res = core.pair_bunker(case.to_string()).await;
         assert!(
-            !res.error.is_empty(),
+            !res.error_message.is_empty(),
             "pair_bunker should reject {case:?} but got {:?}",
             res
         );

@@ -12,7 +12,7 @@ actor SafeHighlighterCore {
 
     // MARK: - Auth
 
-    func loginNsec(_ nsec: String) -> CurrentUserOutcome {
+    func loginNsec(_ nsec: String) -> AuthSessionSnapshot {
         core.loginNsec(nsec: nsec)
     }
 
@@ -24,7 +24,7 @@ actor SafeHighlighterCore {
         await core.startDefaultNostrConnect(callback: callback)
     }
 
-    func pairBunker(_ uri: String) async -> CurrentUserOutcome {
+    func pairBunker(_ uri: String) async -> AuthSessionSnapshot {
         await core.pairBunker(uri: uri)
     }
 
