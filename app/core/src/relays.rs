@@ -234,6 +234,12 @@ pub struct NetworkDiagnosticsSnapshot {
     pub error_message: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NetworkCacheStatsSnapshot {
+    pub stats: Option<crate::models::CacheStats>,
+    pub error_message: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct RelayRemoveProjectionInput {
     pub url: String,
@@ -590,6 +596,21 @@ pub fn network_diagnostics_snapshot(
         diagnostics,
         projection,
         error_message: String::new(),
+    }
+}
+
+pub fn network_cache_stats_snapshot(
+    result: Result<crate::models::CacheStats, CoreError>,
+) -> NetworkCacheStatsSnapshot {
+    match result {
+        Ok(stats) => NetworkCacheStatsSnapshot {
+            stats: Some(stats),
+            error_message: String::new(),
+        },
+        Err(error) => NetworkCacheStatsSnapshot {
+            stats: None,
+            error_message: error.to_string(),
+        },
     }
 }
 
@@ -1630,10 +1651,22 @@ mod tests {
         assert_eq!(snapshot.diagnostics, diagnostics);
         assert!(snapshot.error_message.is_empty());
         assert_eq!(snapshot.projection.connected_count, 1);
-        assert_eq!(
-            snapshot.projection.aggregate_state_label,
-            "Online — 1 of 1"
-        );
+        assert_eq!(snapshot.projection.aggregate_state_label, "Online — 1 of 1");
+    }
+
+    #[test]
+    fn network_cache_stats_snapshot_surfaces_stats_and_errors() {
+        let stats = crate::models::CacheStats {
+            event_count_estimate: 42,
+            disk_bytes: 2048,
+        };
+        let success = network_cache_stats_snapshot(Ok(stats.clone()));
+        assert_eq!(success.stats, Some(stats));
+        assert!(success.error_message.is_empty());
+
+        let failure = network_cache_stats_snapshot(Err(CoreError::Cache("missing".into())));
+        assert!(failure.stats.is_none());
+        assert_eq!(failure.error_message, "cache error: missing");
     }
 
     #[test]

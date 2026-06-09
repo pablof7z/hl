@@ -189,12 +189,6 @@ pub struct Nip11DocumentOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct CacheStatsOutcome {
-    pub value: Option<CacheStats>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct DiscussionOutcome {
     pub value: Option<DiscussionRecord>,
     pub error: String,
@@ -850,7 +844,7 @@ pub struct Nip11Document {
 /// Local nostrdb cache statistics. Rough — `disk_bytes` is the sum of file
 /// sizes in the ndb directory; `event_count_estimate` is an upper bound
 /// returned by a single kinds-wildcard query.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CacheStats {
     pub disk_bytes: u64,
     pub event_count_estimate: u64,

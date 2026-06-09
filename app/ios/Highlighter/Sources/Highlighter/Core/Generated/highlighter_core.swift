@@ -990,12 +990,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getBookmarkSetDetailSnapshot(record: BookmarkSetRecord) async  -> BookmarkSetDetailSnapshot
 
     /**
-     * Size + event-count snapshot of the local nostrdb cache. Order-of-
-     * magnitude figures used by the Network Settings "Local cache" card.
-     */
-    func getCacheStats() async  -> CacheStatsOutcome
-
-    /**
      * Lightweight cache projection for whether a room has any chat activity.
      */
     func getChatPresenceSnapshot(groupId: String) async  -> ChatPresenceSnapshot
@@ -1070,6 +1064,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getJoinedCommunities() async  -> CommunityListOutcome
 
     func getMyHighlights(limit: UInt32) async  -> HighlightListOutcome
+
+    /**
+     * Size + event-count snapshot of the local nostrdb cache. Order-of-
+     * magnitude figures used by the Network Settings "Local cache" card.
+     */
+    func getNetworkCacheStatsSnapshot() async  -> NetworkCacheStatsSnapshot
 
     /**
      * Return the screen-shaped Network Settings snapshot: configured relays,
@@ -2716,28 +2716,6 @@ open func getBookmarkSetDetailSnapshot(record: BookmarkSetRecord)async  -> Bookm
 }
 
     /**
-     * Size + event-count snapshot of the local nostrdb cache. Order-of-
-     * magnitude figures used by the Network Settings "Local cache" card.
-     */
-open func getCacheStats()async  -> CacheStatsOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_cache_stats(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCacheStatsOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Lightweight cache projection for whether a room has any chat activity.
      */
 open func getChatPresenceSnapshot(groupId: String)async  -> ChatPresenceSnapshot  {
@@ -2996,6 +2974,28 @@ open func getMyHighlights(limit: UInt32)async  -> HighlightListOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeHighlightListOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Size + event-count snapshot of the local nostrdb cache. Order-of-
+     * magnitude figures used by the Network Settings "Local cache" card.
+     */
+open func getNetworkCacheStatsSnapshot()async  -> NetworkCacheStatsSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_network_cache_stats_snapshot(
+                    self.uniffiClonePointer()
+
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNetworkCacheStatsSnapshot_lift,
             errorHandler: nil
 
         )
@@ -10823,76 +10823,6 @@ public func FfiConverterTypeCacheStats_lift(_ buf: RustBuffer) throws -> CacheSt
 #endif
 public func FfiConverterTypeCacheStats_lower(_ value: CacheStats) -> RustBuffer {
     return FfiConverterTypeCacheStats.lower(value)
-}
-
-
-public struct CacheStatsOutcome {
-    public var value: CacheStats?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: CacheStats?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension CacheStatsOutcome: Sendable {}
-#endif
-
-
-extension CacheStatsOutcome: Equatable, Hashable {
-    public static func ==(lhs: CacheStatsOutcome, rhs: CacheStatsOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCacheStatsOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CacheStatsOutcome {
-        return
-            try CacheStatsOutcome(
-                value: FfiConverterOptionTypeCacheStats.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CacheStatsOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeCacheStats.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCacheStatsOutcome_lift(_ buf: RustBuffer) throws -> CacheStatsOutcome {
-    return try FfiConverterTypeCacheStatsOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCacheStatsOutcome_lower(_ value: CacheStatsOutcome) -> RustBuffer {
-    return FfiConverterTypeCacheStatsOutcome.lower(value)
 }
 
 
@@ -19788,6 +19718,76 @@ public func FfiConverterTypeMutationOutcome_lift(_ buf: RustBuffer) throws -> Mu
 #endif
 public func FfiConverterTypeMutationOutcome_lower(_ value: MutationOutcome) -> RustBuffer {
     return FfiConverterTypeMutationOutcome.lower(value)
+}
+
+
+public struct NetworkCacheStatsSnapshot {
+    public var stats: CacheStats?
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(stats: CacheStats?, errorMessage: String) {
+        self.stats = stats
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension NetworkCacheStatsSnapshot: Sendable {}
+#endif
+
+
+extension NetworkCacheStatsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: NetworkCacheStatsSnapshot, rhs: NetworkCacheStatsSnapshot) -> Bool {
+        if lhs.stats != rhs.stats {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(stats)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkCacheStatsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkCacheStatsSnapshot {
+        return
+            try NetworkCacheStatsSnapshot(
+                stats: FfiConverterOptionTypeCacheStats.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkCacheStatsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeCacheStats.write(value.stats, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkCacheStatsSnapshot_lift(_ buf: RustBuffer) throws -> NetworkCacheStatsSnapshot {
+    return try FfiConverterTypeNetworkCacheStatsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkCacheStatsSnapshot_lower(_ value: NetworkCacheStatsSnapshot) -> RustBuffer {
+    return FfiConverterTypeNetworkCacheStatsSnapshot.lower(value)
 }
 
 
@@ -38528,9 +38528,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmark_set_detail_snapshot() != 59106) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 59703) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_presence_snapshot() != 49713) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38571,6 +38568,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_highlights() != 57472) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_network_cache_stats_snapshot() != 16607) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_network_settings_snapshot() != 60252) {

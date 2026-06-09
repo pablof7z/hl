@@ -28,17 +28,16 @@ use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome,
     ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome,
-    BookmarkSetRecord, CacheStatsOutcome, CommentRecord, CommentReferenceBucket, CommentScope,
-    CommentScopeOutcome, CommunityListOutcome, CommunitySummary, CurrentUser, CurrentUserOutcome,
-    DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord,
-    GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
-    HighlightSourceKind, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
-    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
-    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
-    OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
-    ProfileUpdateAction, ProfileUpdateDraft, RelayConfigListOutcome, RelayDiagnostic,
-    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
+    BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommentScopeOutcome,
+    CommunityListOutcome, CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome,
+    DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord, GeneratedAccountOutcome,
+    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction,
+    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
+    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
+    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
+    ProfileUpdateDraft, RelayConfigListOutcome, RelayDiagnostic, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -390,19 +389,6 @@ fn nip11_document_outcome(
             error: String::new(),
         },
         Err(error) => Nip11DocumentOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn cache_stats_outcome(result: Result<crate::models::CacheStats, CoreError>) -> CacheStatsOutcome {
-    match result {
-        Ok(value) => CacheStatsOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => CacheStatsOutcome {
             value: None,
             error: error.to_string(),
         },
@@ -4093,8 +4079,10 @@ impl HighlighterCore {
 
     /// Size + event-count snapshot of the local nostrdb cache. Order-of-
     /// magnitude figures used by the Network Settings "Local cache" card.
-    pub async fn get_cache_stats(&self) -> CacheStatsOutcome {
-        cache_stats_outcome(crate::relay_polish::cache_stats(
+    pub async fn get_network_cache_stats_snapshot(
+        &self,
+    ) -> crate::relays::NetworkCacheStatsSnapshot {
+        crate::relays::network_cache_stats_snapshot(crate::relay_polish::cache_stats(
             self.runtime.ndb(),
             self.runtime.data_dir(),
         ))

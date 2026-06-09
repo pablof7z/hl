@@ -150,8 +150,8 @@ final class NetworkSettingsStore {
     // MARK: - Cache
 
     func refreshCacheStats() async {
-        let outcome = await core.getCacheStats()
-        if outcome.error.isEmpty, let stats = outcome.value {
+        let snapshot = await core.getNetworkCacheStatsSnapshot()
+        if let stats = snapshot.stats {
             cacheStats = stats
         }
     }

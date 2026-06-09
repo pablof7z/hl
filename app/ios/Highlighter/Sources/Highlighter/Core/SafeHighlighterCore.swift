@@ -1525,7 +1525,7 @@ actor SafeHighlighterCore {
         await core.importRelaysFromNpub(npub: npub)
     }
 
-    func getCacheStats() async -> CacheStatsOutcome {
-        await core.getCacheStats()
+    func getNetworkCacheStatsSnapshot() async -> NetworkCacheStatsSnapshot {
+        await core.getNetworkCacheStatsSnapshot()
     }
 }
