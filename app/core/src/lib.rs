@@ -103,6 +103,10 @@ pub use profile::{
     ProfileIdentityProjectionInput,
 };
 pub use reactions::ReactionRecord;
+pub use recommendations::{
+    RoomRecommendationAvatarProjection, RoomRecommendationCardProjection,
+    RoomRecommendationCardProjectionInput, RoomRecommendationReasonProfile,
+};
 pub use relays::{
     AddRelayProbeStatus, AddRelaySheetProjection, AddRelaySheetProjectionInput, ImportRelayRow,
     ImportRelaysProjection, ImportRelaysProjectionInput, RelayAvatarProjection, RelayConfig,

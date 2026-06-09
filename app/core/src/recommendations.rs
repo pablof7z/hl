@@ -21,12 +21,110 @@ use crate::follows;
 use crate::groups::{
     build_community_summary, is_public_open_room, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA,
 };
-use crate::models::{RoomRecommendation, RoomRecommendationReason};
+use crate::models::{ProfileMetadata, RoomRecommendation, RoomRecommendationReason};
+use crate::profile::{
+    profile_handle_projection, ProfileDisplayFallback, ProfileDisplayProjectionInput,
+};
 
 /// NIP-51 "simple groups" list (kind:10009). A user publishes this to
 /// enumerate the NIP-29 rooms they're in; we read one from each follow to
 /// build the "Friends are here" shelf.
 const KIND_SIMPLE_GROUPS_LIST: u16 = 10009;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomRecommendationReasonProfile {
+    pub pubkey: String,
+    pub profile: Option<ProfileMetadata>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomRecommendationCardProjectionInput {
+    pub recommendation: RoomRecommendation,
+    pub reason_profiles: Vec<RoomRecommendationReasonProfile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomRecommendationAvatarProjection {
+    pub pubkey: String,
+    pub picture_url: String,
+    pub display_initial: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomRecommendationCardProjection {
+    pub byline: String,
+    pub visible_avatars: Vec<RoomRecommendationAvatarProjection>,
+    pub preload_pubkeys: Vec<String>,
+    pub overflow_label: Option<String>,
+}
+
+/// Presentation projection for the "Friends are here" room card. Rust owns
+/// the social-proof copy, visible avatar cap, preload list, and overflow badge.
+pub fn room_recommendation_card_projection(
+    input: RoomRecommendationCardProjectionInput,
+) -> RoomRecommendationCardProjection {
+    let reason_pubkeys = input.recommendation.reason_pubkeys;
+    let total = reason_pubkeys.len();
+    let byline = match reason_pubkeys.first() {
+        None => {
+            let about = input.recommendation.summary.about.trim();
+            if about.is_empty() {
+                "Rooms you may like".to_string()
+            } else {
+                about.to_string()
+            }
+        }
+        Some(primary_pubkey) => {
+            let first_handle =
+                recommendation_profile_handle(primary_pubkey, &input.reason_profiles).display_name;
+            match total {
+                1 => format!("@{first_handle} is here"),
+                2 => format!("@{first_handle} + 1 you follow"),
+                _ => format!("@{first_handle} + {} you follow", total - 1),
+            }
+        }
+    };
+
+    let visible_pubkeys: Vec<String> = reason_pubkeys.into_iter().take(3).collect();
+    let visible_avatars = visible_pubkeys
+        .iter()
+        .map(|pubkey| {
+            let display = recommendation_profile_handle(pubkey, &input.reason_profiles);
+            RoomRecommendationAvatarProjection {
+                pubkey: pubkey.clone(),
+                picture_url: display.picture_url,
+                display_initial: display.display_initial,
+            }
+        })
+        .collect();
+
+    let overflow_label = total
+        .checked_sub(3)
+        .filter(|count| *count > 0)
+        .map(|count| format!("+{count}"));
+
+    RoomRecommendationCardProjection {
+        byline,
+        visible_avatars,
+        preload_pubkeys: visible_pubkeys,
+        overflow_label,
+    }
+}
+
+fn recommendation_profile_handle(
+    pubkey: &str,
+    profiles: &[RoomRecommendationReasonProfile],
+) -> crate::profile::ProfileDisplayProjection {
+    let profile = profiles
+        .iter()
+        .find(|snapshot| snapshot.pubkey == pubkey)
+        .and_then(|snapshot| snapshot.profile.clone());
+    profile_handle_projection(ProfileDisplayProjectionInput {
+        pubkey: pubkey.to_string(),
+        profile,
+        fallback: ProfileDisplayFallback::Pubkey6,
+    })
+}
 
 /// Rooms where 2+ of the user's follows are members. Rooms the user is
 /// already in are excluded — the explorer's "Your rooms" shelf is elsewhere.
@@ -767,5 +865,110 @@ mod tests {
         let out = query_rooms_from_read_authors(&ndb, &me.public_key().to_hex(), 32).unwrap();
         let ids: Vec<_> = out.iter().map(|r| r.summary.id.as_str()).collect();
         assert_eq!(ids, vec!["alpha"]);
+    }
+
+    #[test]
+    fn room_recommendation_card_projection_matches_friend_byline_and_avatar_cap() {
+        let pubkeys = vec![
+            "aaaaaa111111".to_string(),
+            "bbbbbb222222".to_string(),
+            "cccccc333333".to_string(),
+            "dddddd444444".to_string(),
+            "eeeeee555555".to_string(),
+        ];
+        let projection =
+            room_recommendation_card_projection(RoomRecommendationCardProjectionInput {
+                recommendation: RoomRecommendation {
+                    summary: summary_fixture(""),
+                    reason_pubkeys: pubkeys.clone(),
+                    reason_kind: RoomRecommendationReason::Friends,
+                },
+                reason_profiles: vec![RoomRecommendationReasonProfile {
+                    pubkey: pubkeys[0].clone(),
+                    profile: Some(profile_fixture(
+                        &pubkeys[0],
+                        "alice",
+                        "Alice",
+                        "https://img",
+                    )),
+                }],
+            });
+
+        assert_eq!(projection.byline, "@alice + 4 you follow");
+        assert_eq!(projection.preload_pubkeys, pubkeys[..3].to_vec());
+        assert_eq!(projection.overflow_label, Some("+2".into()));
+        assert_eq!(
+            projection
+                .visible_avatars
+                .iter()
+                .map(|avatar| avatar.pubkey.as_str())
+                .collect::<Vec<_>>(),
+            vec!["aaaaaa111111", "bbbbbb222222", "cccccc333333"]
+        );
+        assert_eq!(projection.visible_avatars[0].picture_url, "https://img");
+        assert_eq!(projection.visible_avatars[0].display_initial, "a");
+    }
+
+    #[test]
+    fn room_recommendation_card_projection_preserves_empty_reason_fallbacks() {
+        let with_about =
+            room_recommendation_card_projection(RoomRecommendationCardProjectionInput {
+                recommendation: RoomRecommendation {
+                    summary: summary_fixture("Members are discussing books"),
+                    reason_pubkeys: Vec::new(),
+                    reason_kind: RoomRecommendationReason::Friends,
+                },
+                reason_profiles: Vec::new(),
+            });
+        let without_about =
+            room_recommendation_card_projection(RoomRecommendationCardProjectionInput {
+                recommendation: RoomRecommendation {
+                    summary: summary_fixture(""),
+                    reason_pubkeys: Vec::new(),
+                    reason_kind: RoomRecommendationReason::Friends,
+                },
+                reason_profiles: Vec::new(),
+            });
+
+        assert_eq!(with_about.byline, "Members are discussing books");
+        assert_eq!(without_about.byline, "Rooms you may like");
+        assert!(without_about.visible_avatars.is_empty());
+        assert_eq!(without_about.overflow_label, None);
+    }
+
+    fn summary_fixture(about: &str) -> crate::models::CommunitySummary {
+        crate::models::CommunitySummary {
+            id: "alpha".into(),
+            name: "Alpha".into(),
+            about: about.into(),
+            picture: String::new(),
+            access: "open".into(),
+            visibility: "public".into(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: String::new(),
+            metadata_event_id: String::new(),
+            created_at: None,
+        }
+    }
+
+    fn profile_fixture(
+        pubkey: &str,
+        name: &str,
+        display_name: &str,
+        picture: &str,
+    ) -> ProfileMetadata {
+        ProfileMetadata {
+            pubkey: pubkey.into(),
+            name: name.into(),
+            display_name: display_name.into(),
+            about: String::new(),
+            picture: picture.into(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            created_at: None,
+        }
     }
 }

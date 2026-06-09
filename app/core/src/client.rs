@@ -3392,6 +3392,13 @@ impl HighlighterCore {
         groups::room_avatar_projection(input)
     }
 
+    pub fn project_room_recommendation_card(
+        &self,
+        input: recommendations::RoomRecommendationCardProjectionInput,
+    ) -> recommendations::RoomRecommendationCardProjection {
+        recommendations::room_recommendation_card_projection(input)
+    }
+
     pub async fn create_room(
         &self,
         name: String,

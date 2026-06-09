@@ -1470,6 +1470,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomAvatar(input: RoomAvatarProjectionInput)  -> RoomAvatarProjection
 
+    func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput)  -> RoomRecommendationCardProjection
+
     func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput)  -> SecretKeyDisplayProjection
 
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
@@ -4322,6 +4324,14 @@ open func projectRoomAvatar(input: RoomAvatarProjectionInput) -> RoomAvatarProje
     return try!  FfiConverterTypeRoomAvatarProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_avatar(self.uniffiClonePointer(),
         FfiConverterTypeRoomAvatarProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput) -> RoomRecommendationCardProjection  {
+    return try!  FfiConverterTypeRoomRecommendationCardProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_recommendation_card(self.uniffiClonePointer(),
+        FfiConverterTypeRoomRecommendationCardProjectionInput_lower(input),$0
     )
 })
 }
@@ -19252,6 +19262,240 @@ public func FfiConverterTypeRoomRecommendation_lower(_ value: RoomRecommendation
 }
 
 
+public struct RoomRecommendationAvatarProjection {
+    public var pubkey: String
+    public var pictureUrl: String
+    public var displayInitial: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkey: String, pictureUrl: String, displayInitial: String) {
+        self.pubkey = pubkey
+        self.pictureUrl = pictureUrl
+        self.displayInitial = displayInitial
+    }
+}
+
+#if compiler(>=6)
+extension RoomRecommendationAvatarProjection: Sendable {}
+#endif
+
+
+extension RoomRecommendationAvatarProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomRecommendationAvatarProjection, rhs: RoomRecommendationAvatarProjection) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.pictureUrl != rhs.pictureUrl {
+            return false
+        }
+        if lhs.displayInitial != rhs.displayInitial {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(pictureUrl)
+        hasher.combine(displayInitial)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomRecommendationAvatarProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationAvatarProjection {
+        return
+            try RoomRecommendationAvatarProjection(
+                pubkey: FfiConverterString.read(from: &buf),
+                pictureUrl: FfiConverterString.read(from: &buf),
+                displayInitial: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomRecommendationAvatarProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterString.write(value.pictureUrl, into: &buf)
+        FfiConverterString.write(value.displayInitial, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendationAvatarProjection_lift(_ buf: RustBuffer) throws -> RoomRecommendationAvatarProjection {
+    return try FfiConverterTypeRoomRecommendationAvatarProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendationAvatarProjection_lower(_ value: RoomRecommendationAvatarProjection) -> RustBuffer {
+    return FfiConverterTypeRoomRecommendationAvatarProjection.lower(value)
+}
+
+
+public struct RoomRecommendationCardProjection {
+    public var byline: String
+    public var visibleAvatars: [RoomRecommendationAvatarProjection]
+    public var preloadPubkeys: [String]
+    public var overflowLabel: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(byline: String, visibleAvatars: [RoomRecommendationAvatarProjection], preloadPubkeys: [String], overflowLabel: String?) {
+        self.byline = byline
+        self.visibleAvatars = visibleAvatars
+        self.preloadPubkeys = preloadPubkeys
+        self.overflowLabel = overflowLabel
+    }
+}
+
+#if compiler(>=6)
+extension RoomRecommendationCardProjection: Sendable {}
+#endif
+
+
+extension RoomRecommendationCardProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomRecommendationCardProjection, rhs: RoomRecommendationCardProjection) -> Bool {
+        if lhs.byline != rhs.byline {
+            return false
+        }
+        if lhs.visibleAvatars != rhs.visibleAvatars {
+            return false
+        }
+        if lhs.preloadPubkeys != rhs.preloadPubkeys {
+            return false
+        }
+        if lhs.overflowLabel != rhs.overflowLabel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(byline)
+        hasher.combine(visibleAvatars)
+        hasher.combine(preloadPubkeys)
+        hasher.combine(overflowLabel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomRecommendationCardProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationCardProjection {
+        return
+            try RoomRecommendationCardProjection(
+                byline: FfiConverterString.read(from: &buf),
+                visibleAvatars: FfiConverterSequenceTypeRoomRecommendationAvatarProjection.read(from: &buf),
+                preloadPubkeys: FfiConverterSequenceString.read(from: &buf),
+                overflowLabel: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomRecommendationCardProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.byline, into: &buf)
+        FfiConverterSequenceTypeRoomRecommendationAvatarProjection.write(value.visibleAvatars, into: &buf)
+        FfiConverterSequenceString.write(value.preloadPubkeys, into: &buf)
+        FfiConverterOptionString.write(value.overflowLabel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendationCardProjection_lift(_ buf: RustBuffer) throws -> RoomRecommendationCardProjection {
+    return try FfiConverterTypeRoomRecommendationCardProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendationCardProjection_lower(_ value: RoomRecommendationCardProjection) -> RustBuffer {
+    return FfiConverterTypeRoomRecommendationCardProjection.lower(value)
+}
+
+
+public struct RoomRecommendationCardProjectionInput {
+    public var recommendation: RoomRecommendation
+    public var reasonProfiles: [RoomRecommendationReasonProfile]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(recommendation: RoomRecommendation, reasonProfiles: [RoomRecommendationReasonProfile]) {
+        self.recommendation = recommendation
+        self.reasonProfiles = reasonProfiles
+    }
+}
+
+#if compiler(>=6)
+extension RoomRecommendationCardProjectionInput: Sendable {}
+#endif
+
+
+extension RoomRecommendationCardProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomRecommendationCardProjectionInput, rhs: RoomRecommendationCardProjectionInput) -> Bool {
+        if lhs.recommendation != rhs.recommendation {
+            return false
+        }
+        if lhs.reasonProfiles != rhs.reasonProfiles {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(recommendation)
+        hasher.combine(reasonProfiles)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomRecommendationCardProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationCardProjectionInput {
+        return
+            try RoomRecommendationCardProjectionInput(
+                recommendation: FfiConverterTypeRoomRecommendation.read(from: &buf),
+                reasonProfiles: FfiConverterSequenceTypeRoomRecommendationReasonProfile.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomRecommendationCardProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeRoomRecommendation.write(value.recommendation, into: &buf)
+        FfiConverterSequenceTypeRoomRecommendationReasonProfile.write(value.reasonProfiles, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendationCardProjectionInput_lift(_ buf: RustBuffer) throws -> RoomRecommendationCardProjectionInput {
+    return try FfiConverterTypeRoomRecommendationCardProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendationCardProjectionInput_lower(_ value: RoomRecommendationCardProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomRecommendationCardProjectionInput.lower(value)
+}
+
+
 public struct RoomRecommendationListOutcome {
     public var values: [RoomRecommendation]
     public var error: String
@@ -19319,6 +19563,76 @@ public func FfiConverterTypeRoomRecommendationListOutcome_lift(_ buf: RustBuffer
 #endif
 public func FfiConverterTypeRoomRecommendationListOutcome_lower(_ value: RoomRecommendationListOutcome) -> RustBuffer {
     return FfiConverterTypeRoomRecommendationListOutcome.lower(value)
+}
+
+
+public struct RoomRecommendationReasonProfile {
+    public var pubkey: String
+    public var profile: ProfileMetadata?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkey: String, profile: ProfileMetadata?) {
+        self.pubkey = pubkey
+        self.profile = profile
+    }
+}
+
+#if compiler(>=6)
+extension RoomRecommendationReasonProfile: Sendable {}
+#endif
+
+
+extension RoomRecommendationReasonProfile: Equatable, Hashable {
+    public static func ==(lhs: RoomRecommendationReasonProfile, rhs: RoomRecommendationReasonProfile) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(profile)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomRecommendationReasonProfile: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationReasonProfile {
+        return
+            try RoomRecommendationReasonProfile(
+                pubkey: FfiConverterString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomRecommendationReasonProfile, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendationReasonProfile_lift(_ buf: RustBuffer) throws -> RoomRecommendationReasonProfile {
+    return try FfiConverterTypeRoomRecommendationReasonProfile.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomRecommendationReasonProfile_lower(_ value: RoomRecommendationReasonProfile) -> RustBuffer {
+    return FfiConverterTypeRoomRecommendationReasonProfile.lower(value)
 }
 
 
@@ -24660,6 +24974,56 @@ fileprivate struct FfiConverterSequenceTypeRoomRecommendation: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRoomRecommendationAvatarProjection: FfiConverterRustBuffer {
+    typealias SwiftType = [RoomRecommendationAvatarProjection]
+
+    public static func write(_ value: [RoomRecommendationAvatarProjection], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRoomRecommendationAvatarProjection.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomRecommendationAvatarProjection] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RoomRecommendationAvatarProjection]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRoomRecommendationAvatarProjection.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRoomRecommendationReasonProfile: FfiConverterRustBuffer {
+    typealias SwiftType = [RoomRecommendationReasonProfile]
+
+    public static func write(_ value: [RoomRecommendationReasonProfile], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRoomRecommendationReasonProfile.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomRecommendationReasonProfile] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RoomRecommendationReasonProfile]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRoomRecommendationReasonProfile.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTranscriptSegment: FfiConverterRustBuffer {
     typealias SwiftType = [TranscriptSegment]
 
@@ -25318,6 +25682,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_avatar() != 27524) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_recommendation_card() != 50552) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_secret_key_display() != 28126) {
