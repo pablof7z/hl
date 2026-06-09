@@ -21,7 +21,7 @@ pub const LIKE_CONTENT: &str = "+";
 
 /// One row of cached reaction data — what the UI needs to render
 /// "12 likes · I liked this".
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct ReactionRecord {
     pub event_id: String,
     pub pubkey: String,
@@ -30,13 +30,13 @@ pub struct ReactionRecord {
     pub created_at: Option<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReactionSummary {
     pub like_count: u32,
     pub my_like_event_id: Option<String>,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct CommentLikeStateProjectionInput {
     pub liked_event_ids: Vec<String>,
     pub event_id_hex: String,
@@ -45,7 +45,7 @@ pub struct CommentLikeStateProjectionInput {
     pub adjust_count: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommentLikeStateProjection {
     pub canonical_event_id_hex: String,
     pub is_liked: bool,

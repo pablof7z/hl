@@ -113,105 +113,37 @@ final class CommentsStore {
     // MARK: - Like (kind:7)
 
     func isLiked(_ commentId: String) -> Bool {
-        commentLikeStateProjection(eventIdHex: commentId)?.isLiked ?? false
+        likedCommentIds.contains(commentId)
     }
 
     func likeCount(_ commentId: String) -> Int {
         likeCounts[commentId] ?? 0
     }
 
-    /// Toggle a like on `comment`. If the user already liked, deletes the
-    /// reaction via NIP-09. Optimistic count + state update.
+    /// Toggle a like on `comment`. Rust publishes/deletes and returns the
+    /// interaction snapshot to render.
     func toggleLike(_ comment: CommentRecord) async {
         guard let core else { return }
-        let id = comment.eventId
-        guard let projection = commentLikeStateProjection(eventIdHex: id),
-              projection.canApply else { return }
-        let wasLiked = projection.isLiked
-        likedCommentIds = projection.optimisticLikedEventIds
-        likeCounts[id] = Int(projection.likeCount)
-
-        let outcome = await core.toggleCommentLike(
-            eventId: id,
+        let outcome = await core.toggleCommentLikeSnapshot(
+            records: records,
+            eventId: comment.eventId,
             authorPubkeyHex: comment.pubkey
         )
-        if outcome.error.isEmpty {
-            if let confirmed = commentLikeStateProjection(
-                eventIdHex: projection.canonicalEventIdHex,
-                likeCount: UInt32(likeCount(id)),
-                desiredLiked: outcome.value
-            ) {
-                likedCommentIds = confirmed.optimisticLikedEventIds
-                likeCounts[id] = Int(confirmed.likeCount)
-            }
-            return
-        }
-
-        if let rollback = commentLikeStateProjection(
-            eventIdHex: projection.canonicalEventIdHex,
-            likeCount: UInt32(likeCount(id)),
-            desiredLiked: wasLiked,
-            adjustCount: true
-        ) {
-            likedCommentIds = rollback.optimisticLikedEventIds
-            likeCounts[id] = Int(rollback.likeCount)
-        }
+        apply(interactions: outcome.interactions)
     }
 
     // MARK: - Bookmark (kind:10003)
 
     func isBookmarked(_ commentId: String) -> Bool {
-        eventBookmarkStateProjection(eventIdHex: commentId)?.isBookmarked ?? false
+        bookmarked.contains(commentId)
     }
 
     func toggleBookmark(_ comment: CommentRecord) async {
         guard let core else { return }
-        guard let projection = eventBookmarkStateProjection(eventIdHex: comment.eventId),
-              projection.canApply else { return }
-        bookmarked = projection.optimisticEventIds
-        let outcome = await core.toggleEventBookmark(eventIdHex: projection.canonicalEventIdHex)
-        if outcome.error.isEmpty {
-            if let confirmed = eventBookmarkStateProjection(
-                eventIdHex: projection.canonicalEventIdHex,
-                desiredMember: outcome.value
-            ) {
-                bookmarked = confirmed.optimisticEventIds
-            }
-        } else {
-            if let rollback = eventBookmarkStateProjection(
-                eventIdHex: projection.canonicalEventIdHex,
-                desiredMember: projection.isBookmarked
-            ) {
-                bookmarked = rollback.optimisticEventIds
-            }
-        }
-    }
-
-    private func eventBookmarkStateProjection(
-        eventIdHex: String,
-        desiredMember: Bool? = nil
-    ) -> EventBookmarkStateProjection? {
-        guard let core else { return nil }
-        return core.projectEventBookmarkState(input: EventBookmarkStateProjectionInput(
-            eventIds: bookmarked,
-            eventIdHex: eventIdHex,
-            desiredMember: desiredMember
-        ))
-    }
-
-    private func commentLikeStateProjection(
-        eventIdHex: String,
-        likeCount: UInt32? = nil,
-        desiredLiked: Bool? = nil,
-        adjustCount: Bool = false
-    ) -> CommentLikeStateProjection? {
-        guard let core else { return nil }
-        return core.projectCommentLikeState(input: CommentLikeStateProjectionInput(
-            likedEventIds: likedCommentIds,
-            eventIdHex: eventIdHex,
-            likeCount: likeCount ?? UInt32(likeCounts[eventIdHex] ?? 0),
-            desiredLiked: desiredLiked,
-            adjustCount: adjustCount
-        ))
+        let outcome = await core.toggleCommentBookmarkSnapshot(
+            records: records,
+            eventIdHex: comment.eventId
+        )
+        apply(interactions: outcome.interactions)
     }
 }

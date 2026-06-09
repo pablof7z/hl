@@ -58,7 +58,7 @@ pub struct ArticleBookmarkStateProjectionInput {
 
 /// Native event bookmark state projection. Used for comment bookmarks and
 /// other event-id-addressed NIP-51 entries.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventBookmarkStateProjection {
     pub canonical_event_id_hex: String,
     pub can_apply: bool,
@@ -68,7 +68,7 @@ pub struct EventBookmarkStateProjection {
 
 /// Native event bookmark state input. `desired_member == None` toggles;
 /// `Some(true/false)` projects an authoritative member/non-member state.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct EventBookmarkStateProjectionInput {
     pub event_ids: Vec<String>,
     pub event_id_hex: String,

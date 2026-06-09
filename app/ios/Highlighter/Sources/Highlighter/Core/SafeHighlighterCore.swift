@@ -301,12 +301,6 @@ actor SafeHighlighterCore {
         core.projectArticleBookmarkChrome(input: input)
     }
 
-    nonisolated func projectEventBookmarkState(
-        input: EventBookmarkStateProjectionInput
-    ) -> EventBookmarkStateProjection {
-        core.projectEventBookmarkState(input: input)
-    }
-
     func getBookmarkedArticleAddresses() async -> StringListOutcome {
         await core.getBookmarkedArticleAddresses()
     }
@@ -323,22 +317,25 @@ actor SafeHighlighterCore {
         await core.subscribeBookmarks()
     }
 
-    // MARK: - Reactions (kind:7)
+    // MARK: - Comment interactions
 
-    nonisolated func projectCommentLikeState(
-        input: CommentLikeStateProjectionInput
-    ) -> CommentLikeStateProjection {
-        core.projectCommentLikeState(input: input)
+    func toggleCommentLikeSnapshot(
+        records: [CommentRecord],
+        eventId: String,
+        authorPubkeyHex: String
+    ) async -> CommentInteractionMutationOutcome {
+        await core.toggleCommentLikeSnapshot(
+            records: records,
+            eventId: eventId,
+            authorPubkeyHex: authorPubkeyHex
+        )
     }
 
-    func toggleCommentLike(eventId: String, authorPubkeyHex: String) async -> BoolOutcome {
-        await core.toggleCommentLike(eventId: eventId, authorPubkeyHex: authorPubkeyHex)
-    }
-
-    // MARK: - Event bookmarks (kind:10003 note bookmarks)
-
-    func toggleEventBookmark(eventIdHex: String) async -> BoolOutcome {
-        await core.toggleEventBookmark(eventIdHex: eventIdHex)
+    func toggleCommentBookmarkSnapshot(
+        records: [CommentRecord],
+        eventIdHex: String
+    ) async -> CommentInteractionMutationOutcome {
+        await core.toggleCommentBookmarkSnapshot(records: records, eventIdHex: eventIdHex)
     }
 
     // MARK: - Bookmark sets (kind:30003/30004) + NIP-B0 (kind:39701)

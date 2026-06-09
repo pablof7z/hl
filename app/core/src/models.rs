@@ -302,12 +302,6 @@ pub struct NostrEntityEventOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct ReactionOutcome {
-    pub value: Option<crate::reactions::ReactionRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct WhatsNewEntriesOutcome {
     pub entries: Vec<crate::whats_new::WhatsNewEntry>,
     pub error: String,

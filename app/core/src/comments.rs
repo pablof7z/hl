@@ -128,6 +128,12 @@ pub struct CommentPublishSnapshotOutcome {
     pub error: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentInteractionMutationOutcome {
+    pub interactions: CommentInteractionSnapshot,
+    pub error: String,
+}
+
 /// Comment composer projection. Rust owns draft normalization and submit
 /// eligibility; native shells render the composer affordance.
 pub fn comment_composer_projection(
@@ -391,6 +397,81 @@ pub fn comment_thread_snapshot_with_comment(
         records: projection.records,
         tree: projection.tree,
         error: snapshot.error,
+    }
+}
+
+pub fn comment_interaction_snapshot_with_like_state(
+    snapshot: CommentInteractionSnapshot,
+    event_id_hex: &str,
+    desired_liked: bool,
+) -> CommentInteractionSnapshot {
+    let like_count = snapshot
+        .rows
+        .iter()
+        .find(|row| row.event_id.eq_ignore_ascii_case(event_id_hex.trim()))
+        .map(|row| row.like_count)
+        .unwrap_or(0);
+    let projection = crate::reactions::comment_like_state_projection(
+        crate::reactions::CommentLikeStateProjectionInput {
+            liked_event_ids: snapshot.liked_event_ids,
+            event_id_hex: event_id_hex.to_string(),
+            like_count,
+            desired_liked: Some(desired_liked),
+            adjust_count: true,
+        },
+    );
+    if !projection.can_apply {
+        return CommentInteractionSnapshot {
+            rows: snapshot.rows,
+            liked_event_ids: projection.optimistic_liked_event_ids,
+            bookmarked_event_ids: snapshot.bookmarked_event_ids,
+        };
+    }
+    let canonical = projection.canonical_event_id_hex;
+    let mut rows = snapshot.rows;
+    for row in &mut rows {
+        if row.event_id == canonical {
+            row.like_count = projection.like_count;
+            row.is_liked = desired_liked;
+        }
+    }
+    CommentInteractionSnapshot {
+        rows,
+        liked_event_ids: projection.optimistic_liked_event_ids,
+        bookmarked_event_ids: snapshot.bookmarked_event_ids,
+    }
+}
+
+pub fn comment_interaction_snapshot_with_bookmark_state(
+    snapshot: CommentInteractionSnapshot,
+    event_id_hex: &str,
+    desired_bookmarked: bool,
+) -> CommentInteractionSnapshot {
+    let projection = crate::bookmarks::event_bookmark_state_projection(
+        crate::bookmarks::EventBookmarkStateProjectionInput {
+            event_ids: snapshot.bookmarked_event_ids,
+            event_id_hex: event_id_hex.to_string(),
+            desired_member: Some(desired_bookmarked),
+        },
+    );
+    if !projection.can_apply {
+        return CommentInteractionSnapshot {
+            rows: snapshot.rows,
+            liked_event_ids: snapshot.liked_event_ids,
+            bookmarked_event_ids: projection.optimistic_event_ids,
+        };
+    }
+    let canonical = projection.canonical_event_id_hex;
+    let mut rows = snapshot.rows;
+    for row in &mut rows {
+        if row.event_id == canonical {
+            row.is_bookmarked = desired_bookmarked;
+        }
+    }
+    CommentInteractionSnapshot {
+        rows,
+        liked_event_ids: snapshot.liked_event_ids,
+        bookmarked_event_ids: projection.optimistic_event_ids,
     }
 }
 
@@ -1292,6 +1373,58 @@ mod tests {
         assert!(snapshot.interactions.liked_event_ids.is_empty());
         assert!(snapshot.interactions.bookmarked_event_ids.is_empty());
         assert!(snapshot.error.is_empty());
+    }
+
+    #[test]
+    fn comment_interaction_snapshot_with_like_state_updates_row_and_membership() {
+        let event_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let snapshot = CommentInteractionSnapshot {
+            rows: vec![CommentInteractionRow {
+                event_id: event_id.into(),
+                like_count: 2,
+                is_liked: false,
+                is_bookmarked: false,
+            }],
+            liked_event_ids: Vec::new(),
+            bookmarked_event_ids: Vec::new(),
+        };
+
+        let liked = comment_interaction_snapshot_with_like_state(snapshot, event_id, true);
+
+        assert_eq!(liked.rows[0].like_count, 3);
+        assert!(liked.rows[0].is_liked);
+        assert_eq!(liked.liked_event_ids, vec![event_id.to_string()]);
+
+        let unliked = comment_interaction_snapshot_with_like_state(liked, event_id, false);
+
+        assert_eq!(unliked.rows[0].like_count, 2);
+        assert!(!unliked.rows[0].is_liked);
+        assert!(unliked.liked_event_ids.is_empty());
+    }
+
+    #[test]
+    fn comment_interaction_snapshot_with_bookmark_state_updates_row_and_membership() {
+        let event_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let snapshot = CommentInteractionSnapshot {
+            rows: vec![CommentInteractionRow {
+                event_id: event_id.into(),
+                like_count: 0,
+                is_liked: false,
+                is_bookmarked: false,
+            }],
+            liked_event_ids: Vec::new(),
+            bookmarked_event_ids: Vec::new(),
+        };
+
+        let bookmarked = comment_interaction_snapshot_with_bookmark_state(snapshot, event_id, true);
+
+        assert!(bookmarked.rows[0].is_bookmarked);
+        assert_eq!(bookmarked.bookmarked_event_ids, vec![event_id.to_string()]);
+
+        let removed = comment_interaction_snapshot_with_bookmark_state(bookmarked, event_id, false);
+
+        assert!(!removed.rows[0].is_bookmarked);
+        assert!(removed.bookmarked_event_ids.is_empty());
     }
 
     #[test]

@@ -75,7 +75,6 @@ pub use blossom::{
 pub use bookmarks::{
     ArticleBookmarkChromeProjection, ArticleBookmarkChromeProjectionInput,
     ArticleBookmarkStateProjection, ArticleBookmarkStateProjectionInput,
-    EventBookmarkStateProjection, EventBookmarkStateProjectionInput,
 };
 pub use capture::{
     CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput,
@@ -90,10 +89,10 @@ pub use chat::{
 pub use client::HighlighterCore;
 pub use comments::{
     CommentActionChromeProjection, CommentActionChromeProjectionInput, CommentComposerProjection,
-    CommentComposerProjectionInput, CommentInteractionRow, CommentInteractionSnapshot,
-    CommentNodeChromeProjection, CommentNodeChromeProjectionInput, CommentPublishSnapshotOutcome,
-    CommentThreadSnapshot, CommentThreadViewProjection, CommentThreadViewProjectionInput,
-    CommentToolbarProjection, CommentToolbarProjectionInput,
+    CommentComposerProjectionInput, CommentInteractionMutationOutcome, CommentInteractionRow,
+    CommentInteractionSnapshot, CommentNodeChromeProjection, CommentNodeChromeProjectionInput,
+    CommentPublishSnapshotOutcome, CommentThreadSnapshot, CommentThreadViewProjection,
+    CommentThreadViewProjectionInput, CommentToolbarProjection, CommentToolbarProjectionInput,
 };
 pub use discussions::{
     DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput,
@@ -156,10 +155,10 @@ pub use models::{
     NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
     OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
     PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
-    ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
-    RelayDiagnosticListOutcome, RoomLane, RoomRecommendation, RoomRecommendationReason,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnosticListOutcome,
+    RoomLane, RoomRecommendation, RoomRecommendationReason, StringListOutcome, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome,
+    WhatsNewEntriesOutcome,
 };
 pub use nip05::{
     Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,
@@ -181,7 +180,6 @@ pub use profile::{
     ProfileRelationshipProjectionInput, ProfileUpdateProjection, ProfileUpdateProjectionInput,
 };
 pub use profile_page::ProfilePageSnapshot;
-pub use reactions::{CommentLikeStateProjection, CommentLikeStateProjectionInput, ReactionRecord};
 pub use reads::{
     ReadingFeedCardProjection, ReadingFeedCardProjectionInput, ReadingFeedInteractorProfile,
 };

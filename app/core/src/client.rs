@@ -38,10 +38,9 @@ use crate::models::{
     NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
     OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
     PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
-    RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome, StringListOutcome,
-    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
+    ProfileUpdateDraft, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
+    RelayDiagnostic, RelayDiagnosticListOutcome, StringListOutcome, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -621,21 +620,6 @@ fn nostr_entity_event_outcome(
             error: String::new(),
         },
         Err(error) => NostrEntityEventOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn reaction_outcome(
-    result: Result<crate::reactions::ReactionRecord, CoreError>,
-) -> ReactionOutcome {
-    match result {
-        Ok(value) => ReactionOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => ReactionOutcome {
             value: None,
             error: error.to_string(),
         },
@@ -2139,77 +2123,103 @@ impl HighlighterCore {
 
     // -- Reactions (NIP-25 kind:7) ---------------------------------------
 
-    pub fn project_comment_like_state(
+    /// Toggle the current user's like on a visible NIP-22 comment and return
+    /// the updated interaction snapshot for the current screen records.
+    pub async fn toggle_comment_like_snapshot(
         &self,
-        input: crate::reactions::CommentLikeStateProjectionInput,
-    ) -> crate::reactions::CommentLikeStateProjection {
-        crate::reactions::comment_like_state_projection(input)
-    }
-
-    /// Toggle the current user's like on a NIP-22 comment. Rust queries the
-    /// current cached reaction summary to decide whether to publish a kind:7
-    /// like or delete the existing reaction via NIP-09, so native shells never
-    /// need to cache reaction event ids.
-    pub async fn toggle_comment_like(
-        &self,
+        records: Vec<CommentRecord>,
         event_id: String,
         author_pubkey_hex: String,
-    ) -> BoolOutcome {
-        let result: Result<bool, CoreError> = async {
-            let current_user = self.require_user_pubkey()?;
-            let current_user_hex = current_user.to_hex();
-            let event_id = event_id.trim();
-            let summary = crate::reactions::query_like_summary_for_event(
-                self.runtime.ndb(),
-                event_id,
-                Some(current_user_hex.as_str()),
-                128,
-            )?;
-            if let Some(reaction_event_id) = summary.my_like_event_id {
-                crate::reactions::unpublish_reaction(&self.runtime, &reaction_event_id).await?;
-                Ok(false)
-            } else {
-                crate::reactions::publish_comment_like(
-                    &self.runtime,
-                    event_id,
-                    author_pubkey_hex.trim(),
-                )
-                .await?;
-                Ok(true)
-            }
+    ) -> comments::CommentInteractionMutationOutcome {
+        let current_user = self.current_user_pubkey_hex();
+        let base = comments::comment_interaction_snapshot(
+            self.runtime.ndb(),
+            &records,
+            current_user.as_deref(),
+        );
+        match self
+            .toggle_comment_like_state(&event_id, &author_pubkey_hex)
+            .await
+        {
+            Ok(is_liked) => comments::CommentInteractionMutationOutcome {
+                interactions: comments::comment_interaction_snapshot_with_like_state(
+                    base, &event_id, is_liked,
+                ),
+                error: String::new(),
+            },
+            Err(error) => comments::CommentInteractionMutationOutcome {
+                interactions: base,
+                error: error.to_string(),
+            },
         }
-        .await;
-        bool_outcome(result)
     }
 
-    /// Publish a like targeting a NIP-22 comment. Rust owns both the target
-    /// kind and the NIP-25 content marker for "like".
-    pub async fn publish_comment_like(
+    /// Toggle the current user's bookmark on a visible NIP-22 comment and
+    /// return the updated interaction snapshot for the current screen records.
+    pub async fn toggle_comment_bookmark_snapshot(
         &self,
-        event_id: String,
-        author_pubkey_hex: String,
-    ) -> ReactionOutcome {
-        let result: Result<crate::reactions::ReactionRecord, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
+        records: Vec<CommentRecord>,
+        event_id_hex: String,
+    ) -> comments::CommentInteractionMutationOutcome {
+        let current_user = self.current_user_pubkey_hex();
+        let base = comments::comment_interaction_snapshot(
+            self.runtime.ndb(),
+            &records,
+            current_user.as_deref(),
+        );
+        match self.toggle_event_bookmark_state(&event_id_hex).await {
+            Ok(is_bookmarked) => comments::CommentInteractionMutationOutcome {
+                interactions: comments::comment_interaction_snapshot_with_bookmark_state(
+                    base,
+                    &event_id_hex,
+                    is_bookmarked,
+                ),
+                error: String::new(),
+            },
+            Err(error) => comments::CommentInteractionMutationOutcome {
+                interactions: base,
+                error: error.to_string(),
+            },
+        }
+    }
+
+    async fn toggle_comment_like_state(
+        &self,
+        event_id: &str,
+        author_pubkey_hex: &str,
+    ) -> Result<bool, CoreError> {
+        let current_user = self.require_user_pubkey()?;
+        let current_user_hex = current_user.to_hex();
+        let event_id = event_id.trim();
+        let summary = crate::reactions::query_like_summary_for_event(
+            self.runtime.ndb(),
+            event_id,
+            Some(current_user_hex.as_str()),
+            128,
+        )?;
+        if let Some(reaction_event_id) = summary.my_like_event_id {
+            crate::reactions::unpublish_reaction(&self.runtime, &reaction_event_id).await?;
+            Ok(false)
+        } else {
             crate::reactions::publish_comment_like(
                 &self.runtime,
-                event_id.trim(),
+                event_id,
                 author_pubkey_hex.trim(),
             )
-            .await
+            .await?;
+            Ok(true)
         }
-        .await;
-        reaction_outcome(result)
     }
 
-    /// Delete one of the user's own kind:7 reactions via NIP-09.
-    pub async fn unpublish_reaction(&self, reaction_event_id: String) -> StringOutcome {
-        let result: Result<String, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            crate::reactions::unpublish_reaction(&self.runtime, reaction_event_id.trim()).await
-        }
-        .await;
-        string_outcome(result)
+    async fn toggle_event_bookmark_state(&self, event_id_hex: &str) -> Result<bool, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .ok_or(CoreError::NotInitialized)?;
+        crate::bookmarks::toggle_event_bookmark(&self.runtime, &user_hex, event_id_hex).await
     }
 
     pub async fn get_user_highlights(
@@ -2445,15 +2455,6 @@ impl HighlighterCore {
         crate::bookmarks::article_bookmark_chrome_projection(input)
     }
 
-    /// Project native event bookmark state. Rust owns event-id canonicalization,
-    /// current membership, forced membership, and optimistic post-toggle state.
-    pub fn project_event_bookmark_state(
-        &self,
-        input: crate::bookmarks::EventBookmarkStateProjectionInput,
-    ) -> crate::bookmarks::EventBookmarkStateProjection {
-        crate::bookmarks::event_bookmark_state_projection(input)
-    }
-
     /// Return the set of article addresses the user has bookmarked in their
     /// newest kind:10003 list (empty when not logged in or no list cached).
     pub async fn get_bookmarked_article_addresses(&self) -> StringListOutcome {
@@ -2499,19 +2500,6 @@ impl HighlighterCore {
             None => return bool_outcome(Err(CoreError::NotInitialized)),
         };
         bool_outcome(crate::bookmarks::toggle_bookmark(&self.runtime, &user_hex, &address).await)
-    }
-
-    /// Toggle `event_id_hex` in the user's kind:10003 list (for comments
-    /// and other event-id-addressed targets). Returns the new membership
-    /// state.
-    pub async fn toggle_event_bookmark(&self, event_id_hex: String) -> BoolOutcome {
-        let user_hex = match self.inner.read().session.current_user().map(|u| u.pubkey) {
-            Some(user_hex) => user_hex,
-            None => return bool_outcome(Err(CoreError::NotInitialized)),
-        };
-        bool_outcome(
-            crate::bookmarks::toggle_event_bookmark(&self.runtime, &user_hex, &event_id_hex).await,
-        )
     }
 
     /// Open a live subscription on the current user's kind:10003 bookmark
