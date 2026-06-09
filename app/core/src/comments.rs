@@ -16,6 +16,7 @@ use crate::nostr_runtime::NostrRuntime;
 
 /// kind:1111 — NIP-22 comment.
 pub const KIND_NIP22_COMMENT: u16 = 1111;
+pub const COMMENT_THREAD_LIMIT: u32 = 256;
 const KIND_DISCUSSION_THREAD: u16 = 11;
 const KIND_HIGHLIGHT: u16 = 9802;
 const KIND_NIP23_ARTICLE: u16 = 30023;
@@ -111,6 +112,20 @@ pub struct CommentInteractionSnapshot {
     pub rows: Vec<CommentInteractionRow>,
     pub liked_event_ids: Vec<String>,
     pub bookmarked_event_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentThreadSnapshot {
+    pub records: Vec<CommentRecord>,
+    pub tree: Vec<CommentThreadNode>,
+    pub interactions: CommentInteractionSnapshot,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentPublishSnapshotOutcome {
+    pub snapshot: CommentThreadSnapshot,
+    pub error: String,
 }
 
 /// Comment composer projection. Rust owns draft normalization and submit
@@ -341,6 +356,57 @@ pub fn comment_interaction_snapshot(
         rows,
         liked_event_ids,
         bookmarked_event_ids,
+    }
+}
+
+pub fn comment_thread_snapshot(
+    ndb: &Ndb,
+    scope: &CommentScope,
+    limit: u32,
+    current_user_pubkey: Option<&str>,
+) -> CommentThreadSnapshot {
+    match query_for_scope(ndb, scope, limit) {
+        Ok(records) => {
+            snapshot_from_records(ndb, records, &scope.root_tag_value, current_user_pubkey)
+        }
+        Err(error) => CommentThreadSnapshot {
+            records: Vec::new(),
+            tree: Vec::new(),
+            interactions: comment_interaction_snapshot(ndb, &[], current_user_pubkey),
+            error: error.to_string(),
+        },
+    }
+}
+
+pub fn comment_thread_snapshot_with_comment(
+    ndb: &Ndb,
+    snapshot: CommentThreadSnapshot,
+    comment: &CommentRecord,
+    root_tag_value: &str,
+    current_user_pubkey: Option<&str>,
+) -> CommentThreadSnapshot {
+    let projection = insert_comment_and_build_thread(&snapshot.records, comment, root_tag_value);
+    CommentThreadSnapshot {
+        interactions: comment_interaction_snapshot(ndb, &projection.records, current_user_pubkey),
+        records: projection.records,
+        tree: projection.tree,
+        error: snapshot.error,
+    }
+}
+
+fn snapshot_from_records(
+    ndb: &Ndb,
+    records: Vec<CommentRecord>,
+    root_tag_value: &str,
+    current_user_pubkey: Option<&str>,
+) -> CommentThreadSnapshot {
+    let tree = build_thread(&records, root_tag_value);
+    let interactions = comment_interaction_snapshot(ndb, &records, current_user_pubkey);
+    CommentThreadSnapshot {
+        records,
+        tree,
+        interactions,
+        error: String::new(),
     }
 }
 
@@ -840,6 +906,20 @@ mod tests {
         ndb.process_event(&line).unwrap();
     }
 
+    fn ndb_with_events(events: &[&Event]) -> (Ndb, TempDir) {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = Config::new();
+        let db_path = tmp.path().to_str().unwrap().to_owned();
+        {
+            let ndb = Ndb::new(&db_path, &cfg).unwrap();
+            for event in events {
+                process(&ndb, event);
+            }
+        }
+        let ndb = Ndb::new(&db_path, &cfg).unwrap();
+        (ndb, tmp)
+    }
+
     #[test]
     fn article_scope_uses_address_kind() {
         let scope = article_scope("30023:pubkey:essay").expect("scope");
@@ -1144,7 +1224,6 @@ mod tests {
 
     #[test]
     fn comment_interaction_snapshot_reads_likes_and_bookmarks() {
-        let (ndb, _tmp) = fresh_ndb();
         let user = Keys::generate();
         let author = Keys::generate();
         let target = EventBuilder::new(Kind::Custom(KIND_NIP22_COMMENT), "comment")
@@ -1163,10 +1242,7 @@ mod tests {
             .tags([Tag::parse(vec!["e".to_string(), target_id.clone()]).unwrap()])
             .sign_with_keys(&user)
             .unwrap();
-        process(&ndb, &target);
-        process(&ndb, &reaction);
-        process(&ndb, &bookmarks);
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        let (ndb, _tmp) = ndb_with_events(&[&target, &reaction, &bookmarks]);
 
         let record = comment(&target_id, "root", Some(1));
         let snapshot =
@@ -1179,6 +1255,43 @@ mod tests {
         assert!(snapshot.rows[0].is_bookmarked);
         assert_eq!(snapshot.liked_event_ids, vec![target_id.clone()]);
         assert_eq!(snapshot.bookmarked_event_ids, vec![target_id]);
+    }
+
+    #[test]
+    fn comment_thread_snapshot_with_comment_rebuilds_tree_and_interactions() {
+        let (ndb, _tmp) = fresh_ndb();
+        let root = "root";
+        let top_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let reply_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let top = comment(top_id, root, Some(1));
+        let reply = comment(reply_id, top_id, Some(2));
+        let base = snapshot_from_records(&ndb, vec![top], root, None);
+
+        let snapshot = comment_thread_snapshot_with_comment(&ndb, base, &reply, root, None);
+
+        assert_eq!(
+            snapshot
+                .records
+                .iter()
+                .map(|record| record.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![top_id, reply_id]
+        );
+        assert_eq!(snapshot.tree.len(), 1);
+        assert_eq!(snapshot.tree[0].record.event_id, top_id);
+        assert_eq!(snapshot.tree[0].children[0].record.event_id, reply_id);
+        assert_eq!(
+            snapshot
+                .interactions
+                .rows
+                .iter()
+                .map(|row| row.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![top_id, reply_id]
+        );
+        assert!(snapshot.interactions.liked_event_ids.is_empty());
+        assert!(snapshot.interactions.bookmarked_event_ids.is_empty());
+        assert!(snapshot.error.is_empty());
     }
 
     #[test]

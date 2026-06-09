@@ -2,8 +2,8 @@ import Foundation
 import Observation
 
 /// View-scoped reactive state for the NIP-22 comment thread on a single
-/// artifact. Holds the flat record list, the built tree, per-comment
-/// reaction + bookmark state, and the in-flight composer drafts.
+/// artifact. Rust owns the flat record list, built tree, and per-comment
+/// reaction + bookmark snapshot; Swift keeps only transient composer drafts.
 ///
 /// Pattern follows `RoomStore` — allocated by the consuming view in a
 /// `.task { }`, deallocated on disappear; reads NostrDB via the Rust
@@ -49,28 +49,23 @@ final class CommentsStore {
         guard let core, let scope else { return }
         isLoading = true
         loadError = nil
-        let outcome = await core.getCommentsForScope(
-            scope: scope,
-            limit: 256
-        )
-        if outcome.error.isEmpty {
-            records = outcome.values
-            tree = core.buildCommentThread(
-                records: outcome.values,
-                rootTagValue: scope.rootTagValue
-            )
-            await refreshReactionsAndBookmarks(for: outcome.values)
+        let snapshot = await core.getCommentThreadSnapshot(scope: scope)
+        if snapshot.error.isEmpty {
+            apply(snapshot: snapshot)
         } else {
-            loadError = outcome.error
+            loadError = snapshot.error
         }
         isLoading = false
     }
 
-    /// Reaction counts + my-bookmark predicates for every visible comment.
-    /// Rust owns the per-row cache reads and section fallback policy.
-    private func refreshReactionsAndBookmarks(for records: [CommentRecord]) async {
-        guard let core else { return }
-        let snapshot = await core.getCommentInteractionSnapshot(records: records)
+    private func apply(snapshot: CommentThreadSnapshot) {
+        records = snapshot.records
+        tree = snapshot.tree
+        apply(interactions: snapshot.interactions)
+        loadError = snapshot.error.isEmpty ? nil : snapshot.error
+    }
+
+    private func apply(interactions snapshot: CommentInteractionSnapshot) {
         likeCounts = Dictionary(
             uniqueKeysWithValues: snapshot.rows.map { ($0.eventId, Int($0.likeCount)) }
         )
@@ -97,28 +92,20 @@ final class CommentsStore {
 
     /// Publish a comment scoped to the artifact. `parentEventId == nil`
     /// posts a top-level thread; otherwise posts as a reply to that
-    /// kind:1111 comment. Optimistically inserts the new record and
-    /// rebuilds the tree.
+    /// kind:1111 comment. Rust returns the rebuilt snapshot.
     @discardableResult
-    func publish(content: String, parentEventId: String?) async -> CommentOutcome? {
+    func publish(content: String, parentEventId: String?) async -> CommentPublishSnapshotOutcome? {
         guard let core, let scope else {
             return nil
         }
 
-        let outcome = await core.publishCommentForScope(
+        let outcome = await core.publishCommentForScopeSnapshot(
             scope: scope,
             parentEventId: parentEventId,
             content: content
         )
-        guard outcome.error.isEmpty, let record = outcome.value else { return outcome }
-
-        let projection = core.insertCommentAndBuildThread(
-            records: records,
-            comment: record,
-            rootTagValue: scope.rootTagValue
-        )
-        records = projection.records
-        tree = projection.tree
+        guard outcome.error.isEmpty else { return outcome }
+        apply(snapshot: outcome.snapshot)
         setDraft("", forParent: parentEventId)
         return outcome
     }

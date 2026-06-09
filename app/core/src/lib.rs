@@ -91,8 +91,9 @@ pub use client::HighlighterCore;
 pub use comments::{
     CommentActionChromeProjection, CommentActionChromeProjectionInput, CommentComposerProjection,
     CommentComposerProjectionInput, CommentInteractionRow, CommentInteractionSnapshot,
-    CommentNodeChromeProjection, CommentNodeChromeProjectionInput, CommentThreadViewProjection,
-    CommentThreadViewProjectionInput, CommentToolbarProjection, CommentToolbarProjectionInput,
+    CommentNodeChromeProjection, CommentNodeChromeProjectionInput, CommentPublishSnapshotOutcome,
+    CommentThreadSnapshot, CommentThreadViewProjection, CommentThreadViewProjectionInput,
+    CommentToolbarProjection, CommentToolbarProjectionInput,
 };
 pub use discussions::{
     DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput,

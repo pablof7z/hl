@@ -959,28 +959,6 @@ actor SafeHighlighterCore {
         core.getArtifactCommentScope(preview: preview)
     }
 
-    nonisolated func buildCommentThread(
-        records: [CommentRecord],
-        rootTagValue: String
-    ) -> [CommentThreadNode] {
-        core.buildCommentThread(
-            records: records,
-            rootTagValue: rootTagValue
-        )
-    }
-
-    nonisolated func insertCommentAndBuildThread(
-        records: [CommentRecord],
-        comment: CommentRecord,
-        rootTagValue: String
-    ) -> CommentThreadProjection {
-        core.insertCommentAndBuildThread(
-            records: records,
-            comment: comment,
-            rootTagValue: rootTagValue
-        )
-    }
-
 
     nonisolated func countArtifactComments(
         artifact: ArtifactRecord,
@@ -1050,8 +1028,11 @@ actor SafeHighlighterCore {
         await core.getCommentsForScope(scope: scope, limit: limit)
     }
 
-    func getCommentInteractionSnapshot(records: [CommentRecord]) async -> CommentInteractionSnapshot {
-        await core.getCommentInteractionSnapshot(records: records)
+    func getCommentThreadSnapshot(
+        scope: CommentScope,
+        limit: UInt32 = 256
+    ) async -> CommentThreadSnapshot {
+        await core.getCommentThreadSnapshot(scope: scope, limit: limit)
     }
 
     func publishCommentForScope(
@@ -1060,6 +1041,20 @@ actor SafeHighlighterCore {
         content: String
     ) async -> CommentOutcome {
         await core.publishCommentForScope(scope: scope, parentEventId: parentEventId, content: content)
+    }
+
+    func publishCommentForScopeSnapshot(
+        scope: CommentScope,
+        parentEventId: String? = nil,
+        content: String,
+        limit: UInt32 = 256
+    ) async -> CommentPublishSnapshotOutcome {
+        await core.publishCommentForScopeSnapshot(
+            scope: scope,
+            parentEventId: parentEventId,
+            content: content,
+            limit: limit
+        )
     }
 
     func getUserHighlights(pubkeyHex: String, limit: UInt32 = 64) async -> HighlightListOutcome {

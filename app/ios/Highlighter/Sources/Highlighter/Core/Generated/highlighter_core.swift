@@ -770,13 +770,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func autoConnectedRelayConfig(url: String)  -> RelayConfig
 
     /**
-     * Build the visible NIP-22 comment thread from a bounded screen record
-     * set. Rust owns parent resolution, orphan promotion, and chronological
-     * child ordering.
-     */
-    func buildCommentThread(records: [CommentRecord], rootTagValue: String)  -> [CommentThreadNode]
-
-    /**
      * Build the edited ISBN book preview after scan/manual entry. Rust owns
      * ISBN normalization and the NIP-73 reference fields; native supplies
      * only the user's edited title/author and optional lookup metadata.
@@ -1026,11 +1019,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getChatSnapshot(groupId: String, pageCount: UInt32) async  -> ChatSnapshot
 
     /**
-     * Interaction snapshot for the currently visible comment records. Rust
-     * owns reaction summary reads, current-user like membership, and event
-     * bookmark membership.
+     * Full comments sheet snapshot for a Rust-owned NIP-22 scope. Rust owns
+     * record query, tree build, reaction summary, and bookmark membership.
      */
-    func getCommentInteractionSnapshot(records: [CommentRecord]) async  -> CommentInteractionSnapshot
+    func getCommentThreadSnapshot(scope: CommentScope, limit: UInt32) async  -> CommentThreadSnapshot
 
     /**
      * Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
@@ -1259,12 +1251,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * kind:10063. Called once after login; no-op when the list already exists.
      */
     func initDefaultBlossomServers() async  -> MutationOutcome
-
-    /**
-     * Project an optimistically published comment into the current bounded
-     * thread state. Rust owns comment duplicate suppression and tree rebuild.
-     */
-    func insertCommentAndBuildThread(records: [CommentRecord], comment: CommentRecord, rootTagValue: String)  -> CommentThreadProjection
 
     /**
      * Read-only predicate: is `address` currently bookmarked for the logged-in
@@ -1666,6 +1652,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * replies (the parent kind:1111 comment).
      */
     func publishCommentForScope(scope: CommentScope, parentEventId: String?, content: String) async  -> CommentOutcome
+
+    /**
+     * Publish a NIP-22 comment and return the refreshed comments sheet
+     * snapshot. Rust owns optimistic insertion and tree/interaction rebuild.
+     */
+    func publishCommentForScopeSnapshot(scope: CommentScope, parentEventId: String?, content: String, limit: UInt32) async  -> CommentPublishSnapshotOutcome
 
     /**
      * Publish a like targeting a NIP-22 comment. Rust owns both the target
@@ -2127,20 +2119,6 @@ open func autoConnectedRelayConfig(url: String) -> RelayConfig  {
     return try!  FfiConverterTypeRelayConfig_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_auto_connected_relay_config(self.uniffiClonePointer(),
         FfiConverterString.lower(url),$0
-    )
-})
-}
-
-    /**
-     * Build the visible NIP-22 comment thread from a bounded screen record
-     * set. Rust owns parent resolution, orphan promotion, and chronological
-     * child ordering.
-     */
-open func buildCommentThread(records: [CommentRecord], rootTagValue: String) -> [CommentThreadNode]  {
-    return try!  FfiConverterSequenceTypeCommentThreadNode.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_build_comment_thread(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeCommentRecord.lower(records),
-        FfiConverterString.lower(rootTagValue),$0
     )
 })
 }
@@ -2936,23 +2914,22 @@ open func getChatSnapshot(groupId: String, pageCount: UInt32)async  -> ChatSnaps
 }
 
     /**
-     * Interaction snapshot for the currently visible comment records. Rust
-     * owns reaction summary reads, current-user like membership, and event
-     * bookmark membership.
+     * Full comments sheet snapshot for a Rust-owned NIP-22 scope. Rust owns
+     * record query, tree build, reaction summary, and bookmark membership.
      */
-open func getCommentInteractionSnapshot(records: [CommentRecord])async  -> CommentInteractionSnapshot  {
+open func getCommentThreadSnapshot(scope: CommentScope, limit: UInt32)async  -> CommentThreadSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_comment_interaction_snapshot(
+                uniffi_highlighter_core_fn_method_highlightercore_get_comment_thread_snapshot(
                     self.uniffiClonePointer(),
-                    FfiConverterSequenceTypeCommentRecord.lower(records)
+                    FfiConverterTypeCommentScope_lower(scope),FfiConverterUInt32.lower(limit)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommentInteractionSnapshot_lift,
+            liftFunc: FfiConverterTypeCommentThreadSnapshot_lift,
             errorHandler: nil
 
         )
@@ -3781,20 +3758,6 @@ open func initDefaultBlossomServers()async  -> MutationOutcome  {
             errorHandler: nil
 
         )
-}
-
-    /**
-     * Project an optimistically published comment into the current bounded
-     * thread state. Rust owns comment duplicate suppression and tree rebuild.
-     */
-open func insertCommentAndBuildThread(records: [CommentRecord], comment: CommentRecord, rootTagValue: String) -> CommentThreadProjection  {
-    return try!  FfiConverterTypeCommentThreadProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_insert_comment_and_build_thread(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeCommentRecord.lower(records),
-        FfiConverterTypeCommentRecord_lower(comment),
-        FfiConverterString.lower(rootTagValue),$0
-    )
-})
 }
 
     /**
@@ -5006,6 +4969,28 @@ open func publishCommentForScope(scope: CommentScope, parentEventId: String?, co
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCommentOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Publish a NIP-22 comment and return the refreshed comments sheet
+     * snapshot. Rust owns optimistic insertion and tree/interaction rebuild.
+     */
+open func publishCommentForScopeSnapshot(scope: CommentScope, parentEventId: String?, content: String, limit: UInt32)async  -> CommentPublishSnapshotOutcome  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_publish_comment_for_scope_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeCommentScope_lower(scope),FfiConverterOptionString.lower(parentEventId),FfiConverterString.lower(content),FfiConverterUInt32.lower(limit)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCommentPublishSnapshotOutcome_lift,
             errorHandler: nil
 
         )
@@ -13464,6 +13449,76 @@ public func FfiConverterTypeCommentOutcome_lower(_ value: CommentOutcome) -> Rus
 }
 
 
+public struct CommentPublishSnapshotOutcome {
+    public var snapshot: CommentThreadSnapshot
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: CommentThreadSnapshot, error: String) {
+        self.snapshot = snapshot
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CommentPublishSnapshotOutcome: Sendable {}
+#endif
+
+
+extension CommentPublishSnapshotOutcome: Equatable, Hashable {
+    public static func ==(lhs: CommentPublishSnapshotOutcome, rhs: CommentPublishSnapshotOutcome) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentPublishSnapshotOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentPublishSnapshotOutcome {
+        return
+            try CommentPublishSnapshotOutcome(
+                snapshot: FfiConverterTypeCommentThreadSnapshot.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentPublishSnapshotOutcome, into buf: inout [UInt8]) {
+        FfiConverterTypeCommentThreadSnapshot.write(value.snapshot, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentPublishSnapshotOutcome_lift(_ buf: RustBuffer) throws -> CommentPublishSnapshotOutcome {
+    return try FfiConverterTypeCommentPublishSnapshotOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentPublishSnapshotOutcome_lower(_ value: CommentPublishSnapshotOutcome) -> RustBuffer {
+    return FfiConverterTypeCommentPublishSnapshotOutcome.lower(value)
+}
+
+
 /**
  * NIP-22 comment (kind:1111) anchored to an external artifact. The
  * `root_*` fields name the addressable target (uppercase `A`/`E`/`I`);
@@ -13963,6 +14018,92 @@ public func FfiConverterTypeCommentThreadProjection_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeCommentThreadProjection_lower(_ value: CommentThreadProjection) -> RustBuffer {
     return FfiConverterTypeCommentThreadProjection.lower(value)
+}
+
+
+public struct CommentThreadSnapshot {
+    public var records: [CommentRecord]
+    public var tree: [CommentThreadNode]
+    public var interactions: CommentInteractionSnapshot
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(records: [CommentRecord], tree: [CommentThreadNode], interactions: CommentInteractionSnapshot, error: String) {
+        self.records = records
+        self.tree = tree
+        self.interactions = interactions
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CommentThreadSnapshot: Sendable {}
+#endif
+
+
+extension CommentThreadSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CommentThreadSnapshot, rhs: CommentThreadSnapshot) -> Bool {
+        if lhs.records != rhs.records {
+            return false
+        }
+        if lhs.tree != rhs.tree {
+            return false
+        }
+        if lhs.interactions != rhs.interactions {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(records)
+        hasher.combine(tree)
+        hasher.combine(interactions)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentThreadSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadSnapshot {
+        return
+            try CommentThreadSnapshot(
+                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf),
+                tree: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf),
+                interactions: FfiConverterTypeCommentInteractionSnapshot.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentThreadSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommentRecord.write(value.records, into: &buf)
+        FfiConverterSequenceTypeCommentThreadNode.write(value.tree, into: &buf)
+        FfiConverterTypeCommentInteractionSnapshot.write(value.interactions, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadSnapshot_lift(_ buf: RustBuffer) throws -> CommentThreadSnapshot {
+    return try FfiConverterTypeCommentThreadSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadSnapshot_lower(_ value: CommentThreadSnapshot) -> RustBuffer {
+    return FfiConverterTypeCommentThreadSnapshot.lower(value)
 }
 
 
@@ -38574,9 +38715,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_auto_connected_relay_config() != 62438) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_build_comment_thread() != 31980) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_edited_book_preview() != 19782) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38733,7 +38871,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_snapshot() != 45542) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_comment_interaction_snapshot() != 61327) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_comment_thread_snapshot() != 50818) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_scope() != 40070) {
@@ -38881,9 +39019,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 36336) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_insert_comment_and_build_thread() != 9948) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_article_bookmarked() != 17349) {
@@ -39226,6 +39361,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_for_scope() != 51702) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_for_scope_snapshot() != 49852) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_like() != 16813) {

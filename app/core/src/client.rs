@@ -30,19 +30,18 @@ use crate::models::{
     ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute,
     BookRouteOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome,
     CommentListOutcome, CommentOutcome, CommentRecord, CommentReferenceBucket, CommentScope,
-    CommentScopeOutcome, CommentThreadNode, CommentThreadProjection, CommunityListOutcome,
-    CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome, CurrentUser,
-    CurrentUserOutcome, DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord,
-    GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
-    HighlightSourceKind, HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome,
-    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
-    NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
-    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
-    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
-    RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome, StringListOutcome,
-    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
+    CommentScopeOutcome, CommunityListOutcome, CommunitySummary, CurationMenuItem,
+    CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionOutcome,
+    DiscussionRecord, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightListOutcome,
+    HighlightOutcome, HighlightRecord, HighlightSourceKind, HomeFeedItem, HydratedHighlight,
+    HydratedHighlightListOutcome, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
+    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
+    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
+    OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
+    ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem,
+    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome,
+    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -2032,28 +2031,6 @@ impl HighlighterCore {
         room_library::generic_card_projection(input)
     }
 
-    /// Build the visible NIP-22 comment thread from a bounded screen record
-    /// set. Rust owns parent resolution, orphan promotion, and chronological
-    /// child ordering.
-    pub fn build_comment_thread(
-        &self,
-        records: Vec<CommentRecord>,
-        root_tag_value: String,
-    ) -> Vec<CommentThreadNode> {
-        comments::build_thread(&records, &root_tag_value)
-    }
-
-    /// Project an optimistically published comment into the current bounded
-    /// thread state. Rust owns comment duplicate suppression and tree rebuild.
-    pub fn insert_comment_and_build_thread(
-        &self,
-        records: Vec<CommentRecord>,
-        comment: CommentRecord,
-        root_tag_value: String,
-    ) -> CommentThreadProjection {
-        comments::insert_comment_and_build_thread(&records, &comment, root_tag_value.trim())
-    }
-
     /// Count comments for an artifact using Rust-owned reference keys.
     pub fn count_artifact_comments(
         &self,
@@ -2132,23 +2109,18 @@ impl HighlighterCore {
         comment_list_outcome(comments::query_for_scope(self.runtime.ndb(), &scope, limit))
     }
 
-    /// Interaction snapshot for the currently visible comment records. Rust
-    /// owns reaction summary reads, current-user like membership, and event
-    /// bookmark membership.
-    pub async fn get_comment_interaction_snapshot(
+    /// Full comments sheet snapshot for a Rust-owned NIP-22 scope. Rust owns
+    /// record query, tree build, reaction summary, and bookmark membership.
+    pub async fn get_comment_thread_snapshot(
         &self,
-        records: Vec<CommentRecord>,
-    ) -> comments::CommentInteractionSnapshot {
-        let current_user = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|user| user.pubkey);
-        comments::comment_interaction_snapshot(
+        scope: CommentScope,
+        limit: u32,
+    ) -> comments::CommentThreadSnapshot {
+        comments::comment_thread_snapshot(
             self.runtime.ndb(),
-            &records,
-            current_user.as_deref(),
+            &scope,
+            limit,
+            self.current_user_pubkey_hex().as_deref(),
         )
     }
 
@@ -2171,6 +2143,54 @@ impl HighlighterCore {
         }
         .await;
         comment_outcome(result)
+    }
+
+    /// Publish a NIP-22 comment and return the refreshed comments sheet
+    /// snapshot. Rust owns optimistic insertion and tree/interaction rebuild.
+    pub async fn publish_comment_for_scope_snapshot(
+        &self,
+        scope: CommentScope,
+        parent_event_id: Option<String>,
+        content: String,
+        limit: u32,
+    ) -> comments::CommentPublishSnapshotOutcome {
+        let current_user = self.current_user_pubkey_hex();
+        let base_snapshot = comments::comment_thread_snapshot(
+            self.runtime.ndb(),
+            &scope,
+            limit,
+            current_user.as_deref(),
+        );
+        if let Err(error) = self.require_user_pubkey() {
+            return comments::CommentPublishSnapshotOutcome {
+                snapshot: base_snapshot,
+                error: error.to_string(),
+            };
+        }
+        let result: Result<CommentRecord, CoreError> = async {
+            let parent = parent_event_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+            comments::publish_comment_for_scope(&self.runtime, &scope, parent, content.trim()).await
+        }
+        .await;
+        match result {
+            Ok(record) => comments::CommentPublishSnapshotOutcome {
+                snapshot: comments::comment_thread_snapshot_with_comment(
+                    self.runtime.ndb(),
+                    base_snapshot,
+                    &record,
+                    &scope.root_tag_value,
+                    current_user.as_deref(),
+                ),
+                error: String::new(),
+            },
+            Err(error) => comments::CommentPublishSnapshotOutcome {
+                snapshot: base_snapshot,
+                error: error.to_string(),
+            },
+        }
     }
 
     // -- Reactions (NIP-25 kind:7) ---------------------------------------
@@ -4439,6 +4459,14 @@ impl HighlighterCore {
             .ok_or(CoreError::NotAuthenticated)?;
         PublicKey::from_hex(&user.pubkey)
             .map_err(|e| CoreError::Other(format!("invalid current user pubkey: {e}")))
+    }
+
+    fn current_user_pubkey_hex(&self) -> Option<String> {
+        self.inner
+            .read()
+            .session
+            .current_user()
+            .map(|user| user.pubkey)
     }
 
     fn feedback_agent_pubkey_for(&self, coordinate: &str) -> Option<String> {
