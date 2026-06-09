@@ -1117,7 +1117,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getSearchResultsSnapshot(query: String) async  -> SearchResultsSnapshot
 
-    func getUserProfile(pubkeyHex: String) async  -> ProfileOutcome
+    func getUserProfile(pubkeyHex: String) async  -> ProfileMetadata?
 
     /**
      * Project a web URL into the external NIP-22 root scope used by comment
@@ -3210,7 +3210,7 @@ open func getSearchResultsSnapshot(query: String)async  -> SearchResultsSnapshot
         )
 }
 
-open func getUserProfile(pubkeyHex: String)async  -> ProfileOutcome  {
+open func getUserProfile(pubkeyHex: String)async  -> ProfileMetadata?  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -3222,7 +3222,7 @@ open func getUserProfile(pubkeyHex: String)async  -> ProfileOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeProfileOutcome_lift,
+            liftFunc: FfiConverterOptionTypeProfileMetadata.lift,
             errorHandler: nil
 
         )
@@ -38787,7 +38787,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_results_snapshot() != 55653) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 11410) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 16648) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_comment_scope() != 47583) {

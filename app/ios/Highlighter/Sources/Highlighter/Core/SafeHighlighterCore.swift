@@ -636,7 +636,7 @@ actor SafeHighlighterCore {
 
     // MARK: - Profile reads
 
-    func getUserProfile(pubkeyHex: String) async -> ProfileOutcome {
+    func getUserProfile(pubkeyHex: String) async -> ProfileMetadata? {
         await core.getUserProfile(pubkeyHex: pubkeyHex)
     }
 

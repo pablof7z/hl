@@ -199,8 +199,7 @@ final class HighlighterStore {
     /// arrives. Safe to call from multiple views for the same pubkey.
     func requestProfile(pubkeyHex: String) async {
         if profileSnapshots[pubkeyHex] == nil {
-            let outcome = await safeCore.getUserProfile(pubkeyHex: pubkeyHex)
-            if outcome.error.isEmpty, let profile = outcome.value {
+            if let profile = await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
                 applyProfileSnapshot(profile)
             }
         }
@@ -214,8 +213,7 @@ final class HighlighterStore {
 
     /// Called by `EventBridge` when a subscribed profile's kind:0 arrives from a relay.
     func applyProfileSnapshotUpdate(pubkeyHex: String) async {
-        let outcome = await safeCore.getUserProfile(pubkeyHex: pubkeyHex)
-        if outcome.error.isEmpty, let profile = outcome.value {
+        if let profile = await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
             applyProfileSnapshot(profile)
         }
     }
@@ -340,8 +338,7 @@ final class HighlighterStore {
         // picture. Cheap — single nostrdb read. Lives on the app-scope store
         // because multiple surfaces (toolbar + future editors) need it.
         if let user = currentUser {
-            let outcome = await safeCore.getUserProfile(pubkeyHex: user.pubkey)
-            if outcome.error.isEmpty, let profile = outcome.value {
+            if let profile = await safeCore.getUserProfile(pubkeyHex: user.pubkey) {
                 currentUserProfile = profile
             }
         }

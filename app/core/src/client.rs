@@ -255,19 +255,6 @@ fn profile_outcome(result: Result<ProfileMetadata, CoreError>) -> ProfileOutcome
     }
 }
 
-fn optional_profile_outcome(result: Result<Option<ProfileMetadata>, CoreError>) -> ProfileOutcome {
-    match result {
-        Ok(value) => ProfileOutcome {
-            value,
-            error: String::new(),
-        },
-        Err(error) => ProfileOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
 impl HighlighterCore {
     fn login_nsec_result(&self, nsec: &str) -> Result<CurrentUser, CoreError> {
         // Do the session mutation + keys extraction in a single write-guard
@@ -1191,11 +1178,10 @@ impl HighlighterCore {
 
     // -- Profile reads (per-pubkey, no auth required) --
 
-    pub async fn get_user_profile(&self, pubkey_hex: String) -> ProfileOutcome {
-        optional_profile_outcome(profile::query_profile_from_ndb(
-            self.runtime.ndb(),
-            pubkey_hex.trim(),
-        ))
+    pub async fn get_user_profile(&self, pubkey_hex: String) -> Option<ProfileMetadata> {
+        profile::query_profile_from_ndb(self.runtime.ndb(), pubkey_hex.trim())
+            .ok()
+            .flatten()
     }
 
     /// Full profile-page read model. Rust owns tab queries, section limits,
