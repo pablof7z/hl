@@ -336,6 +336,13 @@ pub struct ImportRelaysProjection {
     pub selected_configs: Vec<RelayConfig>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ImportRelaysFetchSnapshot {
+    pub fetched: Vec<RelayConfig>,
+    pub selected_urls: Vec<String>,
+    pub error_message: String,
+}
+
 /// Native import-relays source field projection. Rust owns the canonical
 /// source input and whether fetching can start.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -710,8 +717,8 @@ pub fn relay_nip11_probe_snapshot(
     }
 }
 
-pub fn default_import_relay_selection(relays: Vec<RelayConfig>) -> Vec<String> {
-    relays.into_iter().map(|relay| relay.url).collect()
+fn initial_import_relay_selection(relays: &[RelayConfig]) -> Vec<String> {
+    relays.iter().map(|relay| relay.url.clone()).collect()
 }
 
 pub fn toggle_import_relay_selection(
@@ -729,6 +736,23 @@ pub fn toggle_import_relay_selection(
         }
     }
     selected_import_urls_for_fetched(&fetched, &selected)
+}
+
+pub fn import_relays_fetch_snapshot(
+    result: Result<Vec<RelayConfig>, CoreError>,
+) -> ImportRelaysFetchSnapshot {
+    match result {
+        Ok(fetched) => ImportRelaysFetchSnapshot {
+            selected_urls: initial_import_relay_selection(&fetched),
+            fetched,
+            error_message: String::new(),
+        },
+        Err(error) => ImportRelaysFetchSnapshot {
+            fetched: Vec::new(),
+            selected_urls: Vec::new(),
+            error_message: error.to_string(),
+        },
+    }
 }
 
 /// Project the source field for importing another user's relay list. Native
@@ -1833,7 +1857,7 @@ mod tests {
     }
 
     #[test]
-    fn default_import_relay_selection_selects_every_fetched_url() {
+    fn initial_import_relay_selection_selects_every_fetched_url() {
         let rows = vec![
             RelayConfig::read_write("wss://one.example"),
             RelayConfig {
@@ -1846,9 +1870,35 @@ mod tests {
         ];
 
         assert_eq!(
-            default_import_relay_selection(rows),
+            initial_import_relay_selection(&rows),
             vec!["wss://one.example", "wss://two.example"]
         );
+    }
+
+    #[test]
+    fn import_relays_fetch_snapshot_selects_successes_and_surfaces_errors() {
+        let fetched = vec![
+            RelayConfig::read_write("wss://one.example"),
+            RelayConfig {
+                url: "wss://two.example".into(),
+                read: true,
+                write: false,
+                rooms: false,
+                indexer: false,
+            },
+        ];
+        let success = import_relays_fetch_snapshot(Ok(fetched.clone()));
+        assert_eq!(success.fetched, fetched);
+        assert_eq!(
+            success.selected_urls,
+            vec!["wss://one.example", "wss://two.example"]
+        );
+        assert!(success.error_message.is_empty());
+
+        let failure = import_relays_fetch_snapshot(Err(CoreError::Network("missing".into())));
+        assert!(failure.fetched.is_empty());
+        assert!(failure.selected_urls.is_empty());
+        assert_eq!(failure.error_message, "network error: missing");
     }
 
     #[test]

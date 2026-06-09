@@ -156,9 +156,9 @@ pub use models::{
     NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
     OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
     PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
-    ReadingFeedItem, RelayConfigListOutcome, RoomLane, RoomRecommendation,
-    RoomRecommendationReason, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    ReadingFeedItem, RoomLane, RoomRecommendation, RoomRecommendationReason, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome,
+    WhatsNewEntriesOutcome,
 };
 pub use nip05::{
     Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,
@@ -190,12 +190,13 @@ pub use recommendations::{
 };
 pub use relays::{
     AddRelayProbeStatus, AddRelaySheetProjection, AddRelaySheetProjectionInput, ImportRelayRow,
-    ImportRelaysProjection, ImportRelaysProjectionInput, ImportRelaysSourceProjection,
-    ImportRelaysSourceProjectionInput, NetworkCacheStatsSnapshot, NetworkDiagnosticsSnapshot,
-    NetworkSettingsMutationSnapshot, NetworkSettingsSnapshot, RelayAvatarProjection, RelayConfig,
-    RelayDetailProjection, RelayDetailProjectionInput, RelayHostedRoomsSnapshot,
-    RelayNip11ProbeSnapshot, RelayRemoveProjection, RelayRemoveProjectionInput, RelayRowProjection,
-    RelayRowProjectionInput, RelaySettingsProjection, RelayStatusTone,
+    ImportRelaysFetchSnapshot, ImportRelaysProjection, ImportRelaysProjectionInput,
+    ImportRelaysSourceProjection, ImportRelaysSourceProjectionInput, NetworkCacheStatsSnapshot,
+    NetworkDiagnosticsSnapshot, NetworkSettingsMutationSnapshot, NetworkSettingsSnapshot,
+    RelayAvatarProjection, RelayConfig, RelayDetailProjection, RelayDetailProjectionInput,
+    RelayHostedRoomsSnapshot, RelayNip11ProbeSnapshot, RelayRemoveProjection,
+    RelayRemoveProjectionInput, RelayRowProjection, RelayRowProjectionInput,
+    RelaySettingsProjection, RelayStatusTone,
 };
 pub use room_explorer::{RoomBrowseSnapshot, RoomExplorerSnapshot};
 pub use room_home::RoomHomeSnapshot;

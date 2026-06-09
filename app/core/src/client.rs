@@ -35,9 +35,8 @@ use crate::models::{
     MutationOutcome, Nip05AvailabilityOutcome, NostrConnectOptions, NostrEntityEventOutcome,
     NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestProjection,
     OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayConfigListOutcome,
-    RelayDiagnostic, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebMetadataOutcome, WhatsNewEntriesOutcome,
+    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -359,21 +358,6 @@ fn community_list_outcome(
             error: String::new(),
         },
         Err(error) => CommunityListOutcome {
-            values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
-fn relay_config_list_outcome(
-    result: Result<Vec<crate::relays::RelayConfig>, CoreError>,
-) -> RelayConfigListOutcome {
-    match result {
-        Ok(values) => RelayConfigListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => RelayConfigListOutcome {
             values: Vec::new(),
             error: error.to_string(),
         },
@@ -3990,13 +3974,6 @@ impl HighlighterCore {
         crate::relays::finish_relay_nip11_probe(in_flight_urls, url)
     }
 
-    pub fn default_import_relay_selection(
-        &self,
-        relays: Vec<crate::relays::RelayConfig>,
-    ) -> Vec<String> {
-        crate::relays::default_import_relay_selection(relays)
-    }
-
     pub fn toggle_import_relay_selection(
         &self,
         fetched: Vec<crate::relays::RelayConfig>,
@@ -4061,8 +4038,13 @@ impl HighlighterCore {
     /// parsed `RelayConfig` rows. Useful for "adopt someone else's relay
     /// setup" flows — the Swift caller shows the list with checkboxes
     /// and upserts the selected subset through `upsert_relay`.
-    pub async fn import_relays_from_npub(&self, npub: String) -> RelayConfigListOutcome {
-        relay_config_list_outcome(crate::relay_polish::import_from_npub(&self.runtime, &npub).await)
+    pub async fn import_relays_from_npub_snapshot(
+        &self,
+        npub: String,
+    ) -> crate::relays::ImportRelaysFetchSnapshot {
+        crate::relays::import_relays_fetch_snapshot(
+            crate::relay_polish::import_from_npub(&self.runtime, &npub).await,
+        )
     }
 
     /// Size + event-count snapshot of the local nostrdb cache. Order-of-

@@ -838,8 +838,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func defaultHighlightCropBox(highlightBoxes: [OcrRect], imageWidth: Double, imageHeight: Double, marginFraction: Double)  -> OcrRect?
 
-    func defaultImportRelaySelection(relays: [RelayConfig])  -> [String]
-
     func detectOcrActivePage(lines: [OcrLine])  -> OcrPageDetection?
 
     /**
@@ -1199,7 +1197,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * setup" flows — the Swift caller shows the list with checkboxes
      * and upserts the selected subset through `upsert_relay`.
      */
-    func importRelaysFromNpub(npub: String) async  -> RelayConfigListOutcome
+    func importRelaysFromNpubSnapshot(npub: String) async  -> ImportRelaysFetchSnapshot
 
     /**
      * Publish the default Blossom server list only if the user has no cached
@@ -2256,14 +2254,6 @@ open func defaultHighlightCropBox(highlightBoxes: [OcrRect], imageWidth: Double,
         FfiConverterDouble.lower(imageWidth),
         FfiConverterDouble.lower(imageHeight),
         FfiConverterDouble.lower(marginFraction),$0
-    )
-})
-}
-
-open func defaultImportRelaySelection(relays: [RelayConfig]) -> [String]  {
-    return try!  FfiConverterSequenceString.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_default_import_relay_selection(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeRelayConfig.lower(relays),$0
     )
 })
 }
@@ -3487,11 +3477,11 @@ open func getWebMetadata(url: String)async  -> WebMetadataOutcome  {
      * setup" flows — the Swift caller shows the list with checkboxes
      * and upserts the selected subset through `upsert_relay`.
      */
-open func importRelaysFromNpub(npub: String)async  -> RelayConfigListOutcome  {
+open func importRelaysFromNpubSnapshot(npub: String)async  -> ImportRelaysFetchSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_import_relays_from_npub(
+                uniffi_highlighter_core_fn_method_highlightercore_import_relays_from_npub_snapshot(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(npub)
                 )
@@ -3499,7 +3489,7 @@ open func importRelaysFromNpub(npub: String)async  -> RelayConfigListOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRelayConfigListOutcome_lift,
+            liftFunc: FfiConverterTypeImportRelaysFetchSnapshot_lift,
             errorHandler: nil
 
         )
@@ -19060,6 +19050,84 @@ public func FfiConverterTypeImportRelayRow_lower(_ value: ImportRelayRow) -> Rus
 }
 
 
+public struct ImportRelaysFetchSnapshot {
+    public var fetched: [RelayConfig]
+    public var selectedUrls: [String]
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(fetched: [RelayConfig], selectedUrls: [String], errorMessage: String) {
+        self.fetched = fetched
+        self.selectedUrls = selectedUrls
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension ImportRelaysFetchSnapshot: Sendable {}
+#endif
+
+
+extension ImportRelaysFetchSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ImportRelaysFetchSnapshot, rhs: ImportRelaysFetchSnapshot) -> Bool {
+        if lhs.fetched != rhs.fetched {
+            return false
+        }
+        if lhs.selectedUrls != rhs.selectedUrls {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(fetched)
+        hasher.combine(selectedUrls)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRelaysFetchSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysFetchSnapshot {
+        return
+            try ImportRelaysFetchSnapshot(
+                fetched: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                selectedUrls: FfiConverterSequenceString.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ImportRelaysFetchSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRelayConfig.write(value.fetched, into: &buf)
+        FfiConverterSequenceString.write(value.selectedUrls, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysFetchSnapshot_lift(_ buf: RustBuffer) throws -> ImportRelaysFetchSnapshot {
+    return try FfiConverterTypeImportRelaysFetchSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysFetchSnapshot_lower(_ value: ImportRelaysFetchSnapshot) -> RustBuffer {
+    return FfiConverterTypeImportRelaysFetchSnapshot.lower(value)
+}
+
+
 public struct ImportRelaysProjection {
     public var rows: [ImportRelayRow]
     public var selectedCount: UInt64
@@ -25422,76 +25490,6 @@ public func FfiConverterTypeRelayConfig_lift(_ buf: RustBuffer) throws -> RelayC
 #endif
 public func FfiConverterTypeRelayConfig_lower(_ value: RelayConfig) -> RustBuffer {
     return FfiConverterTypeRelayConfig.lower(value)
-}
-
-
-public struct RelayConfigListOutcome {
-    public var values: [RelayConfig]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [RelayConfig], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension RelayConfigListOutcome: Sendable {}
-#endif
-
-
-extension RelayConfigListOutcome: Equatable, Hashable {
-    public static func ==(lhs: RelayConfigListOutcome, rhs: RelayConfigListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRelayConfigListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayConfigListOutcome {
-        return
-            try RelayConfigListOutcome(
-                values: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RelayConfigListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeRelayConfig.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRelayConfigListOutcome_lift(_ buf: RustBuffer) throws -> RelayConfigListOutcome {
-    return try FfiConverterTypeRelayConfigListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRelayConfigListOutcome_lower(_ value: RelayConfigListOutcome) -> RustBuffer {
-    return FfiConverterTypeRelayConfigListOutcome.lower(value)
 }
 
 
@@ -38446,9 +38444,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_default_highlight_crop_box() != 34951) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_default_import_relay_selection() != 36291) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_detect_ocr_active_page() != 8731) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38671,7 +38666,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 12216) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_import_relays_from_npub() != 23451) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_import_relays_from_npub_snapshot() != 45090) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 36336) {

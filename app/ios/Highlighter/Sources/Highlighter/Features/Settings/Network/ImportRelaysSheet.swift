@@ -136,14 +136,11 @@ struct ImportRelaysSheet: View {
         selectedUrls = []
         isFetching = true
         defer { isFetching = false }
-        let outcome = await appStore.safeCore
-            .importRelaysFromNpub(source.submitNpub)
-        if outcome.error.isEmpty {
-            fetched = outcome.values
-            selectedUrls = appStore.safeCore.defaultImportRelaySelection(relays: outcome.values)
-        } else {
-            errorText = outcome.error
-        }
+        let snapshot = await appStore.safeCore
+            .importRelaysFromNpubSnapshot(source.submitNpub)
+        fetched = snapshot.fetched
+        selectedUrls = snapshot.selectedUrls
+        errorText = snapshot.errorMessage.isEmpty ? nil : snapshot.errorMessage
     }
 
     private func applySelected() async {

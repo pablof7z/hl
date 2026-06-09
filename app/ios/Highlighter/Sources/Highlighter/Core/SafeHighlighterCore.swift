@@ -1479,10 +1479,6 @@ actor SafeHighlighterCore {
         core.finishRelayNip11Probe(inFlightUrls: inFlightUrls, url: url)
     }
 
-    nonisolated func defaultImportRelaySelection(relays: [RelayConfig]) -> [String] {
-        core.defaultImportRelaySelection(relays: relays)
-    }
-
     nonisolated func toggleImportRelaySelection(
         fetched: [RelayConfig],
         selectedUrls: [String],
@@ -1521,8 +1517,8 @@ actor SafeHighlighterCore {
         await core.probeRelayNip11Snapshot(url: url)
     }
 
-    func importRelaysFromNpub(_ npub: String) async -> RelayConfigListOutcome {
-        await core.importRelaysFromNpub(npub: npub)
+    func importRelaysFromNpubSnapshot(_ npub: String) async -> ImportRelaysFetchSnapshot {
+        await core.importRelaysFromNpubSnapshot(npub: npub)
     }
 
     func getNetworkCacheStatsSnapshot() async -> NetworkCacheStatsSnapshot {

@@ -177,12 +177,6 @@ pub struct CommunityListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct RelayConfigListOutcome {
-    pub values: Vec<crate::relays::RelayConfig>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct DiscussionOutcome {
     pub value: Option<DiscussionRecord>,
     pub error: String,
