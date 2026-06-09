@@ -3633,6 +3633,39 @@ impl HighlighterCore {
         highlight_list_outcome(result)
     }
 
+    /// Publish and share one podcast clip highlight. Rust owns clip draft
+    /// construction, NIP-29 repost publication, and single-record outcome
+    /// collapse for native player controls.
+    pub async fn publish_podcast_clip_highlight(
+        &self,
+        input: podcast_transcript::PodcastClipPublishInput,
+    ) -> HighlightOutcome {
+        let result: Result<HighlightRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            let draft = podcast_transcript::clip_highlight_draft(
+                &input.segments,
+                &input.selected_segment_ids,
+                input.note,
+                input.clip_start_seconds,
+                input.clip_end_seconds,
+                input.clip_speaker,
+            );
+            let records = crate::highlights::publish_and_share(
+                &self.runtime,
+                input.artifact,
+                vec![draft],
+                &input.target_group_id,
+            )
+            .await?;
+            records
+                .into_iter()
+                .next()
+                .ok_or_else(|| CoreError::Relay("No highlight returned from publish.".into()))
+        }
+        .await;
+        highlight_outcome(result)
+    }
+
     /// Re-share an existing kind:9802 highlight into a NIP-29 room as a
     /// kind:16 generic repost. Used to surface a friend's highlight (or
     /// your own old one) into a community without re-publishing the

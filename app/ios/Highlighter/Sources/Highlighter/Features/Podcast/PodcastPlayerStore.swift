@@ -309,30 +309,21 @@ final class PodcastPlayerStore {
         publishError = nil
         defer { isPublishing = false }
 
-        let draft = core.getPodcastClipHighlightDraft(
+        let outcome = await core.publishPodcastClipHighlight(input: PodcastClipPublishInput(
+            artifact: artifact,
+            targetGroupId: targetGroupId,
+            note: note,
             segments: segments,
             selectedSegmentIds: selectedSegmentIds,
-            note: note,
             clipStartSeconds: clipStart,
             clipEndSeconds: clipEnd,
             clipSpeaker: speaker
-        )
-
-        let outcome = await core.publishHighlightsAndShare(
-            artifact: artifact,
-            drafts: [draft],
-            targetGroupId: targetGroupId
-        )
+        ))
         guard outcome.error.isEmpty else {
             publishError = outcome.error
-            return HighlightOutcome(value: nil, error: outcome.error)
+            return outcome
         }
-        guard let first = outcome.values.first else {
-            let error = PodcastPlayerError.emptyResult.errorDescription ?? "No highlight returned from publish."
-            publishError = error
-            return HighlightOutcome(value: nil, error: error)
-        }
-        return HighlightOutcome(value: first, error: "")
+        return outcome
     }
 
     // MARK: - Transcript
@@ -666,14 +657,4 @@ final class PodcastPlayerStore {
 
 enum TranscriptAvailability {
     case loading, available, unavailable
-}
-
-enum PodcastPlayerError: Error, LocalizedError {
-    case emptyResult
-
-    var errorDescription: String? {
-        switch self {
-        case .emptyResult: return "No highlight returned from publish."
-        }
-    }
 }

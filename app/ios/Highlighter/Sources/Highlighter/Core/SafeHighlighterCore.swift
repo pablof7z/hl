@@ -1593,6 +1593,12 @@ actor SafeHighlighterCore {
         )
     }
 
+    func publishPodcastClipHighlight(
+        input: PodcastClipPublishInput
+    ) async -> HighlightOutcome {
+        await core.publishPodcastClipHighlight(input: input)
+    }
+
     func publishHighlight(
         draft: HighlightDraft,
         artifact: ArtifactRecord

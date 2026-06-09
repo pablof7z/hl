@@ -161,10 +161,10 @@ pub use nip05::{
 pub use nostr_entities::{NostrEntityArticleCardProjection, NostrEntityArticleCardProjectionInput};
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
 pub use podcast_transcript::{
-    PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipReference,
-    PodcastClipSelection, PodcastListeningProjection, PodcastListeningProjectionInput,
-    PodcastNowPlayingProjection, PodcastNowPlayingProjectionInput, PodcastTimelineRow,
-    PodcastTimelineRowKind, PodcastTimelineRowState, TranscriptSegment,
+    PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipPublishInput,
+    PodcastClipReference, PodcastClipSelection, PodcastListeningProjection,
+    PodcastListeningProjectionInput, PodcastNowPlayingProjection, PodcastNowPlayingProjectionInput,
+    PodcastTimelineRow, PodcastTimelineRowKind, PodcastTimelineRowState, TranscriptSegment,
 };
 pub use profile::{
     ProfileDisplayFallback, ProfileDisplayProjection, ProfileDisplayProjectionInput,
