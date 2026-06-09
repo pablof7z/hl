@@ -199,9 +199,10 @@ pub use room_home::RoomHomeSnapshot;
 pub use room_invites::{
     RoomInviteAvatarProjection, RoomInviteAvatarProjectionInput, RoomInviteCandidate,
     RoomInviteCandidateSource, RoomInviteChip, RoomInviteInputFormat, RoomInviteProjection,
-    RoomInviteProjectionInput, RoomInviteResolvedCandidate, RoomInviteSelectionAction,
-    RoomInviteSelectionChromeInput, RoomInviteSelectionChromeProjection, RoomInviteSelectionInput,
-    RoomInviteSelectionProjection, RoomInviteSendResultProjection, RoomInviteSuggestion,
+    RoomInviteResolvedCandidate, RoomInviteSelectionAction, RoomInviteSelectionChromeInput,
+    RoomInviteSelectionChromeProjection, RoomInviteSelectionInput, RoomInviteSelectionProjection,
+    RoomInviteSendResultProjection, RoomInviteSnapshot, RoomInviteSnapshotInput,
+    RoomInviteSuggestion,
 };
 pub use room_library::{
     RoomLibraryArticleCardProjection, RoomLibraryArticleCardProjectionInput,

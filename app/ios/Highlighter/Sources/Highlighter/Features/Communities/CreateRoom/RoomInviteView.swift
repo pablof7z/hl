@@ -30,8 +30,7 @@ struct RoomInviteView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var query: String = ""
-    @State private var follows: [String] = []
-    @State private var followsLoaded = false
+    @State private var inviteSnapshot: RoomInviteSnapshot?
     @State private var selected: [Candidate] = []
     @State private var sending = false
     @State private var error: String?
@@ -83,8 +82,12 @@ struct RoomInviteView: View {
                 }
             }
         }
-        .task {
-            await loadFollows()
+        .task(id: inviteSnapshotRequestKey) {
+            await refreshInviteSnapshot(requestProfiles: true)
+        }
+        .task(id: inviteProfileRefreshKey) {
+            guard inviteSnapshot != nil else { return }
+            await refreshInviteSnapshot(requestProfiles: false)
         }
         .alert("Couldn't add", isPresented: errorBinding, actions: {
             Button("OK") { error = nil }
@@ -304,16 +307,7 @@ struct RoomInviteView: View {
     }
 
     private var inviteProjection: RoomInviteProjection {
-        appStore.safeCore.getRoomInviteProjection(
-            input: RoomInviteProjectionInput(
-                query: query,
-                follows: follows,
-                profiles: Array(appStore.profileSnapshots.values),
-                selected: selected.map(\.coreCandidate),
-                followsLoaded: followsLoaded,
-                limit: 50
-            )
-        )
+        inviteSnapshot?.projection ?? Self.emptyInviteProjection
     }
 
     private var selectionChrome: RoomInviteSelectionChromeProjection {
@@ -321,6 +315,37 @@ struct RoomInviteView: View {
             input: RoomInviteSelectionChromeInput(selectedCount: UInt64(selected.count))
         )
     }
+
+    private var inviteSnapshotRequestKey: String {
+        let selectedKey = selected
+            .map { "\($0.pubkeyHex):\($0.source)" }
+            .joined(separator: ",")
+        return "\(query)|\(selectedKey)|\(appStore.currentUser?.pubkey ?? "")"
+    }
+
+    private var inviteProfileRefreshKey: String {
+        (inviteSnapshot?.profilePubkeysToRequest ?? [])
+            .map { pubkey in
+                guard let profile = appStore.profileSnapshots[pubkey] else {
+                    return "\(pubkey):"
+                }
+                return [
+                    pubkey,
+                    profile.name,
+                    profile.displayName,
+                    profile.nip05,
+                    profile.picture
+                ].joined(separator: ":")
+            }
+            .joined(separator: "|")
+    }
+
+    private static let emptyInviteProjection = RoomInviteProjection(
+        selectedChips: [],
+        visibleFollows: [],
+        resolvedCandidate: nil,
+        showEmptyFollowMessage: false
+    )
 
     private func profile(for pubkey: String) -> ProfileMetadata? {
         appStore.profileSnapshots[pubkey]
@@ -368,20 +393,24 @@ struct RoomInviteView: View {
 
     // MARK: - Loading + actions
 
-    private func loadFollows() async {
-        let outcome = await appStore.safeCore.getFollows()
-        if outcome.error.isEmpty {
-            await MainActor.run {
-                follows = outcome.values
-                followsLoaded = true
-            }
-            // Request profile projections for the first chunk so suggestions
-            // render with names rather than truncated hex.
-            for pubkey in outcome.values.prefix(40) {
-                await appStore.requestProfile(pubkeyHex: pubkey)
-            }
-        } else {
-            await MainActor.run { followsLoaded = true }
+    @MainActor
+    private func refreshInviteSnapshot(requestProfiles: Bool) async {
+        let requestKey = inviteSnapshotRequestKey
+        let snapshot = await appStore.safeCore.getRoomInviteSnapshot(
+            input: RoomInviteSnapshotInput(
+                query: query,
+                profiles: Array(appStore.profileSnapshots.values),
+                selected: selected.map(\.coreCandidate),
+                limit: 50
+            )
+        )
+        guard !Task.isCancelled, requestKey == inviteSnapshotRequestKey else { return }
+        inviteSnapshot = snapshot
+
+        guard requestProfiles else { return }
+        for pubkey in snapshot.profilePubkeysToRequest {
+            guard !Task.isCancelled else { return }
+            await appStore.requestProfile(pubkeyHex: pubkey)
         }
     }
 

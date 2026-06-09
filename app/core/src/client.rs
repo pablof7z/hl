@@ -3614,11 +3614,15 @@ impl HighlighterCore {
         string_outcome(result)
     }
 
-    pub fn get_room_invite_projection(
+    pub async fn get_room_invite_snapshot(
         &self,
-        input: crate::room_invites::RoomInviteProjectionInput,
-    ) -> crate::room_invites::RoomInviteProjection {
-        crate::room_invites::project_invite(input)
+        input: crate::room_invites::RoomInviteSnapshotInput,
+    ) -> crate::room_invites::RoomInviteSnapshot {
+        let follows_result = (|| {
+            let user_pubkey = self.require_user_pubkey()?;
+            crate::follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())
+        })();
+        crate::room_invites::snapshot(input, follows_result)
     }
 
     pub fn get_room_invite_avatar_projection(
@@ -3758,17 +3762,6 @@ impl HighlighterCore {
             let _ = crate::nostr_entities::relay_filter(&entity)?;
             self.subscriptions
                 .register(&self.runtime, SubscriptionKind::NostrEntity { entity })
-        })())
-    }
-
-    /// Pubkeys (hex) the current user follows per their cached kind:3 contact
-    /// list. Empty if the user isn't logged in or the cache hasn't seen a
-    /// kind:3 yet. Used by the room-invite picker to surface "people you know"
-    /// before any typing happens.
-    pub async fn get_follows(&self) -> StringListOutcome {
-        string_list_outcome((|| {
-            let user_pubkey = self.require_user_pubkey()?;
-            crate::follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())
         })())
     }
 

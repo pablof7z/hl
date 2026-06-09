@@ -1153,18 +1153,14 @@ actor SafeHighlighterCore {
         await core.createRoomInviteCodes(groupId: groupId, count: count)
     }
 
-    func getFollows() async -> StringListOutcome {
-        await core.getFollows()
-    }
-
     nonisolated func decodeNpub(_ input: String) -> StringOutcome {
         core.decodeNpub(input: input)
     }
 
-    nonisolated func getRoomInviteProjection(
-        input: RoomInviteProjectionInput
-    ) -> RoomInviteProjection {
-        core.getRoomInviteProjection(input: input)
+    func getRoomInviteSnapshot(
+        input: RoomInviteSnapshotInput
+    ) async -> RoomInviteSnapshot {
+        await core.getRoomInviteSnapshot(input: input)
     }
 
     nonisolated func getRoomInviteAvatarProjection(

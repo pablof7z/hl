@@ -1044,14 +1044,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getFeedbackThreadsSnapshot(coordinate: String) async  -> FeedbackThreadsSnapshot
 
     /**
-     * Pubkeys (hex) the current user follows per their cached kind:3 contact
-     * list. Empty if the user isn't logged in or the cache hasn't seen a
-     * kind:3 yet. Used by the room-invite picker to surface "people you know"
-     * before any typing happens.
-     */
-    func getFollows() async  -> StringListOutcome
-
-    /**
      * Resolve a highlight's book reference from its external reference or
      * artifact address. Rust owns the precedence and canonical catalog id.
      */
@@ -1156,9 +1148,9 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput)  -> RoomInviteAvatarProjection
 
-    func getRoomInviteProjection(input: RoomInviteProjectionInput)  -> RoomInviteProjection
-
     func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String])  -> RoomInviteSendResultProjection
+
+    func getRoomInviteSnapshot(input: RoomInviteSnapshotInput) async  -> RoomInviteSnapshot
 
     /**
      * Article-only refresh for relay search deltas. Used after NIP-50 events
@@ -2924,30 +2916,6 @@ open func getFeedbackThreadsSnapshot(coordinate: String)async  -> FeedbackThread
 }
 
     /**
-     * Pubkeys (hex) the current user follows per their cached kind:3 contact
-     * list. Empty if the user isn't logged in or the cache hasn't seen a
-     * kind:3 yet. Used by the room-invite picker to surface "people you know"
-     * before any typing happens.
-     */
-open func getFollows()async  -> StringListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_follows(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Resolve a highlight's book reference from its external reference or
      * artifact address. Rust owns the precedence and canonical catalog id.
      */
@@ -3340,14 +3308,6 @@ open func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput) 
 })
 }
 
-open func getRoomInviteProjection(input: RoomInviteProjectionInput) -> RoomInviteProjection  {
-    return try!  FfiConverterTypeRoomInviteProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_projection(self.uniffiClonePointer(),
-        FfiConverterTypeRoomInviteProjectionInput_lower(input),$0
-    )
-})
-}
-
 open func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String]) -> RoomInviteSendResultProjection  {
     return try!  FfiConverterTypeRoomInviteSendResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_send_result(self.uniffiClonePointer(),
@@ -3355,6 +3315,24 @@ open func getRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys
         FfiConverterSequenceString.lower(failedPubkeys),$0
     )
 })
+}
+
+open func getRoomInviteSnapshot(input: RoomInviteSnapshotInput)async  -> RoomInviteSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeRoomInviteSnapshotInput_lower(input)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRoomInviteSnapshot_lift,
+            errorHandler: nil
+
+        )
 }
 
     /**
@@ -27014,108 +26992,6 @@ public func FfiConverterTypeRoomInviteProjection_lower(_ value: RoomInviteProjec
 }
 
 
-public struct RoomInviteProjectionInput {
-    public var query: String
-    public var follows: [String]
-    public var profiles: [ProfileMetadata]
-    public var selected: [RoomInviteCandidate]
-    public var followsLoaded: Bool
-    public var limit: UInt32
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(query: String, follows: [String], profiles: [ProfileMetadata], selected: [RoomInviteCandidate], followsLoaded: Bool, limit: UInt32) {
-        self.query = query
-        self.follows = follows
-        self.profiles = profiles
-        self.selected = selected
-        self.followsLoaded = followsLoaded
-        self.limit = limit
-    }
-}
-
-#if compiler(>=6)
-extension RoomInviteProjectionInput: Sendable {}
-#endif
-
-
-extension RoomInviteProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: RoomInviteProjectionInput, rhs: RoomInviteProjectionInput) -> Bool {
-        if lhs.query != rhs.query {
-            return false
-        }
-        if lhs.follows != rhs.follows {
-            return false
-        }
-        if lhs.profiles != rhs.profiles {
-            return false
-        }
-        if lhs.selected != rhs.selected {
-            return false
-        }
-        if lhs.followsLoaded != rhs.followsLoaded {
-            return false
-        }
-        if lhs.limit != rhs.limit {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(query)
-        hasher.combine(follows)
-        hasher.combine(profiles)
-        hasher.combine(selected)
-        hasher.combine(followsLoaded)
-        hasher.combine(limit)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomInviteProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteProjectionInput {
-        return
-            try RoomInviteProjectionInput(
-                query: FfiConverterString.read(from: &buf),
-                follows: FfiConverterSequenceString.read(from: &buf),
-                profiles: FfiConverterSequenceTypeProfileMetadata.read(from: &buf),
-                selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf),
-                followsLoaded: FfiConverterBool.read(from: &buf),
-                limit: FfiConverterUInt32.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomInviteProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.query, into: &buf)
-        FfiConverterSequenceString.write(value.follows, into: &buf)
-        FfiConverterSequenceTypeProfileMetadata.write(value.profiles, into: &buf)
-        FfiConverterSequenceTypeRoomInviteCandidate.write(value.selected, into: &buf)
-        FfiConverterBool.write(value.followsLoaded, into: &buf)
-        FfiConverterUInt32.write(value.limit, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomInviteProjectionInput_lift(_ buf: RustBuffer) throws -> RoomInviteProjectionInput {
-    return try FfiConverterTypeRoomInviteProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomInviteProjectionInput_lower(_ value: RoomInviteProjectionInput) -> RustBuffer {
-    return FfiConverterTypeRoomInviteProjectionInput.lower(value)
-}
-
-
 public struct RoomInviteResolvedCandidate {
     public var pubkeyHex: String
     public var format: RoomInviteInputFormat
@@ -27605,6 +27481,170 @@ public func FfiConverterTypeRoomInviteSendResultProjection_lift(_ buf: RustBuffe
 #endif
 public func FfiConverterTypeRoomInviteSendResultProjection_lower(_ value: RoomInviteSendResultProjection) -> RustBuffer {
     return FfiConverterTypeRoomInviteSendResultProjection.lower(value)
+}
+
+
+public struct RoomInviteSnapshot {
+    public var projection: RoomInviteProjection
+    public var profilePubkeysToRequest: [String]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(projection: RoomInviteProjection, profilePubkeysToRequest: [String], error: String) {
+        self.projection = projection
+        self.profilePubkeysToRequest = profilePubkeysToRequest
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteSnapshot: Sendable {}
+#endif
+
+
+extension RoomInviteSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteSnapshot, rhs: RoomInviteSnapshot) -> Bool {
+        if lhs.projection != rhs.projection {
+            return false
+        }
+        if lhs.profilePubkeysToRequest != rhs.profilePubkeysToRequest {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(projection)
+        hasher.combine(profilePubkeysToRequest)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSnapshot {
+        return
+            try RoomInviteSnapshot(
+                projection: FfiConverterTypeRoomInviteProjection.read(from: &buf),
+                profilePubkeysToRequest: FfiConverterSequenceString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteSnapshot, into buf: inout [UInt8]) {
+        FfiConverterTypeRoomInviteProjection.write(value.projection, into: &buf)
+        FfiConverterSequenceString.write(value.profilePubkeysToRequest, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSnapshot_lift(_ buf: RustBuffer) throws -> RoomInviteSnapshot {
+    return try FfiConverterTypeRoomInviteSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSnapshot_lower(_ value: RoomInviteSnapshot) -> RustBuffer {
+    return FfiConverterTypeRoomInviteSnapshot.lower(value)
+}
+
+
+public struct RoomInviteSnapshotInput {
+    public var query: String
+    public var profiles: [ProfileMetadata]
+    public var selected: [RoomInviteCandidate]
+    public var limit: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(query: String, profiles: [ProfileMetadata], selected: [RoomInviteCandidate], limit: UInt32) {
+        self.query = query
+        self.profiles = profiles
+        self.selected = selected
+        self.limit = limit
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteSnapshotInput: Sendable {}
+#endif
+
+
+extension RoomInviteSnapshotInput: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteSnapshotInput, rhs: RoomInviteSnapshotInput) -> Bool {
+        if lhs.query != rhs.query {
+            return false
+        }
+        if lhs.profiles != rhs.profiles {
+            return false
+        }
+        if lhs.selected != rhs.selected {
+            return false
+        }
+        if lhs.limit != rhs.limit {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(query)
+        hasher.combine(profiles)
+        hasher.combine(selected)
+        hasher.combine(limit)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteSnapshotInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSnapshotInput {
+        return
+            try RoomInviteSnapshotInput(
+                query: FfiConverterString.read(from: &buf),
+                profiles: FfiConverterSequenceTypeProfileMetadata.read(from: &buf),
+                selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf),
+                limit: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteSnapshotInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.query, into: &buf)
+        FfiConverterSequenceTypeProfileMetadata.write(value.profiles, into: &buf)
+        FfiConverterSequenceTypeRoomInviteCandidate.write(value.selected, into: &buf)
+        FfiConverterUInt32.write(value.limit, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSnapshotInput_lift(_ buf: RustBuffer) throws -> RoomInviteSnapshotInput {
+    return try FfiConverterTypeRoomInviteSnapshotInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSnapshotInput_lower(_ value: RoomInviteSnapshotInput) -> RustBuffer {
+    return FfiConverterTypeRoomInviteSnapshotInput.lower(value)
 }
 
 
@@ -37912,9 +37952,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_feedback_threads_snapshot() != 11029) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_follows() != 13105) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_book_route() != 28768) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -37993,10 +38030,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_avatar_projection() != 27101) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_projection() != 27402) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_send_result() != 64450) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_send_result() != 64450) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_snapshot() != 54503) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_article_results_snapshot() != 52032) {

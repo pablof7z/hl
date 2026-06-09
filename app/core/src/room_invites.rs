@@ -31,8 +31,8 @@ pub struct RoomInviteCandidate {
     pub source: RoomInviteCandidateSource,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct RoomInviteProjectionInput {
+#[derive(Debug, Clone)]
+pub struct RoomInviteProjectionContext {
     pub query: String,
     pub follows: Vec<String>,
     pub profiles: Vec<ProfileMetadata>,
@@ -47,6 +47,21 @@ pub struct RoomInviteProjection {
     pub visible_follows: Vec<RoomInviteSuggestion>,
     pub resolved_candidate: Option<RoomInviteResolvedCandidate>,
     pub show_empty_follow_message: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomInviteSnapshotInput {
+    pub query: String,
+    pub profiles: Vec<ProfileMetadata>,
+    pub selected: Vec<RoomInviteCandidate>,
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomInviteSnapshot {
+    pub projection: RoomInviteProjection,
+    pub profile_pubkeys_to_request: Vec<String>,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -135,7 +150,7 @@ pub struct RoomInviteAvatarProjection {
     pub display_initial: String,
 }
 
-pub fn project_invite(input: RoomInviteProjectionInput) -> RoomInviteProjection {
+pub fn project_invite(input: RoomInviteProjectionContext) -> RoomInviteProjection {
     let limit = if input.limit == 0 {
         50usize
     } else {
@@ -179,6 +194,30 @@ pub fn project_invite(input: RoomInviteProjectionInput) -> RoomInviteProjection 
         visible_follows,
         resolved_candidate,
         show_empty_follow_message,
+    }
+}
+
+pub fn snapshot(
+    input: RoomInviteSnapshotInput,
+    follows_result: Result<Vec<String>, CoreError>,
+) -> RoomInviteSnapshot {
+    let (follows, error) = match follows_result {
+        Ok(follows) => (follows, String::new()),
+        Err(error) => (Vec::new(), error.to_string()),
+    };
+    let projection = project_invite(RoomInviteProjectionContext {
+        query: input.query,
+        follows,
+        profiles: input.profiles,
+        selected: input.selected,
+        follows_loaded: true,
+        limit: input.limit,
+    });
+
+    RoomInviteSnapshot {
+        profile_pubkeys_to_request: projection_profile_pubkeys(&projection),
+        projection,
+        error,
     }
 }
 
@@ -497,6 +536,29 @@ fn selected_set(selected: &[RoomInviteCandidate]) -> HashSet<String> {
         .collect()
 }
 
+fn projection_profile_pubkeys(projection: &RoomInviteProjection) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut pubkeys = Vec::new();
+
+    for chip in &projection.selected_chips {
+        push_unique_pubkey(&mut pubkeys, &mut seen, &chip.pubkey_hex);
+    }
+    for row in &projection.visible_follows {
+        push_unique_pubkey(&mut pubkeys, &mut seen, &row.pubkey_hex);
+    }
+    if let Some(resolved) = &projection.resolved_candidate {
+        push_unique_pubkey(&mut pubkeys, &mut seen, &resolved.pubkey_hex);
+    }
+
+    pubkeys
+}
+
+fn push_unique_pubkey(pubkeys: &mut Vec<String>, seen: &mut HashSet<String>, pubkey: &str) {
+    if seen.insert(pubkey.to_ascii_lowercase()) {
+        pubkeys.push(pubkey.to_string());
+    }
+}
+
 fn normalize_query(input: &str) -> String {
     input.trim().replace("nostr:", "")
 }
@@ -520,7 +582,7 @@ mod tests {
             source: RoomInviteCandidateSource::Follow,
         }];
 
-        let projection = project_invite(RoomInviteProjectionInput {
+        let projection = project_invite(RoomInviteProjectionContext {
             query: "ada".into(),
             follows: follows.clone(),
             profiles: vec![
@@ -546,7 +608,7 @@ mod tests {
     #[test]
     fn project_invite_resolves_hex_paste_and_hides_follow_empty_message() {
         let pasted = hex("0a");
-        let projection = project_invite(RoomInviteProjectionInput {
+        let projection = project_invite(RoomInviteProjectionContext {
             query: format!(" nostr:{pasted} "),
             follows: Vec::new(),
             profiles: vec![profile(&pasted, "", "Paste User", "")],
@@ -568,7 +630,7 @@ mod tests {
     fn project_invite_caps_blank_follows_and_shows_empty_query_message() {
         let follows = (0..60).map(|idx| format!("{idx:064x}")).collect::<Vec<_>>();
 
-        let blank = project_invite(RoomInviteProjectionInput {
+        let blank = project_invite(RoomInviteProjectionContext {
             query: String::new(),
             follows: follows.clone(),
             profiles: Vec::new(),
@@ -579,7 +641,7 @@ mod tests {
         assert_eq!(blank.visible_follows.len(), 50);
         assert!(!blank.show_empty_follow_message);
 
-        let empty = project_invite(RoomInviteProjectionInput {
+        let empty = project_invite(RoomInviteProjectionContext {
             query: "missing".into(),
             follows,
             profiles: Vec::new(),
@@ -589,6 +651,51 @@ mod tests {
         });
         assert!(empty.visible_follows.is_empty());
         assert!(empty.show_empty_follow_message);
+    }
+
+    #[test]
+    fn snapshot_projects_cached_follows_and_profile_requests_without_exposing_follow_list() {
+        let follows = vec![hex("01"), hex("02"), hex("03")];
+        let selected = vec![RoomInviteCandidate {
+            pubkey_hex: follows[1].clone(),
+            source: RoomInviteCandidateSource::Follow,
+        }];
+
+        let snapshot = snapshot(
+            RoomInviteSnapshotInput {
+                query: String::new(),
+                profiles: vec![profile(&follows[0], "grace", "Grace Hopper", "")],
+                selected: selected.clone(),
+                limit: 2,
+            },
+            Ok(follows.clone()),
+        );
+
+        assert!(snapshot.error.is_empty());
+        assert_eq!(snapshot.projection.visible_follows.len(), 2);
+        assert_eq!(snapshot.projection.selected_chips.len(), 1);
+        assert_eq!(snapshot.projection.selected_chips[0].pubkey_hex, follows[1]);
+        assert_eq!(
+            snapshot.profile_pubkeys_to_request,
+            vec![follows[1].clone(), follows[0].clone()]
+        );
+    }
+
+    #[test]
+    fn snapshot_surfaces_follow_lookup_errors_in_state() {
+        let snapshot = snapshot(
+            RoomInviteSnapshotInput {
+                query: "ada".into(),
+                profiles: Vec::new(),
+                selected: Vec::new(),
+                limit: 50,
+            },
+            Err(CoreError::NotAuthenticated),
+        );
+
+        assert_eq!(snapshot.error, "not authenticated");
+        assert!(snapshot.projection.visible_follows.is_empty());
+        assert!(snapshot.projection.show_empty_follow_message);
     }
 
     #[test]
