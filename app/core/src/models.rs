@@ -74,12 +74,6 @@ pub struct SubscriptionOutcome {
     pub error: String,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct DiscussionListOutcome {
-    pub values: Vec<DiscussionRecord>,
-    pub error: String,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum HighlightSourceKind {
     Article,
@@ -94,12 +88,6 @@ pub enum HighlightSourceKind {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct HighlightOutcome {
     pub value: Option<HighlightRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct ProfileListOutcome {
-    pub values: Vec<ProfileMetadata>,
     pub error: String,
 }
 
