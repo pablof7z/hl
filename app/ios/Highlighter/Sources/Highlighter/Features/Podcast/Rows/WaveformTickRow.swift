@@ -11,6 +11,7 @@ import SwiftUI
 /// the start of the slice.
 struct WaveformTickRow: View {
     let t: Double
+    let timestampLabel: String
     let state: TimelineRowState
     let windowSeconds: Double
     let peaks: [Float]
@@ -21,7 +22,7 @@ struct WaveformTickRow: View {
             onSeek(t)
         } label: {
             HStack(alignment: .center, spacing: 14) {
-                Text(formatTimestamp(t))
+                Text(timestampLabel)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .frame(width: 48, alignment: .leading)
@@ -75,14 +76,4 @@ struct WaveformTickRow: View {
         .frame(maxWidth: .infinity)
         .frame(height: 18)
     }
-}
-
-private func formatTimestamp(_ seconds: Double) -> String {
-    guard seconds.isFinite, seconds >= 0 else { return "0:00" }
-    let total = Int(seconds)
-    let h = total / 3600
-    let m = (total % 3600) / 60
-    let s = total % 60
-    if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
-    return String(format: "%d:%02d", m, s)
 }

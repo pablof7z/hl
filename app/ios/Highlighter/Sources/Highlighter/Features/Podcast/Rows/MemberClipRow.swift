@@ -4,6 +4,7 @@ struct MemberClipRow: View {
     @Environment(HighlighterStore.self) private var app
 
     let highlight: HighlightRecord
+    let rangeLabel: String
     let state: TimelineRowState
     let onSeek: (Double) -> Void
 
@@ -119,14 +120,6 @@ struct MemberClipRow: View {
         }
     }
 
-    private var rangeLabel: String {
-        let s = formatTimestamp(highlight.clipStartSeconds)
-        let e = formatTimestamp(highlight.clipEndSeconds)
-        if let s, let e { return "\(s)–\(e)" }
-        if let s { return s }
-        return "—"
-    }
-
     private var authorDisplay: ProfileDisplayProjection {
         app.safeCore.projectProfileDisplay(
             input: ProfileDisplayProjectionInput(
@@ -136,14 +129,4 @@ struct MemberClipRow: View {
             )
         )
     }
-}
-
-private func formatTimestamp(_ seconds: Double?) -> String? {
-    guard let s = seconds, s >= 0 else { return nil }
-    let total = Int(s.rounded())
-    let h = total / 3600
-    let m = (total % 3600) / 60
-    let sec = total % 60
-    if h > 0 { return String(format: "%d:%02d:%02d", h, m, sec) }
-    return String(format: "%d:%02d", m, sec)
 }

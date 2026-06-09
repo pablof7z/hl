@@ -278,21 +278,38 @@ struct PodcastListeningView: View {
     private func rowView(for row: PodcastTimelineRow) -> some View {
         switch row.kind {
         case .chapter:
-            ChapterRow(t: row.t, title: row.chapterTitle, state: row.state, onSeek: { player.seek(to: $0) })
+            ChapterRow(
+                t: row.t,
+                timestampLabel: row.timestampLabel,
+                title: row.chapterTitle,
+                state: row.state,
+                onSeek: { player.seek(to: $0) }
+            )
         case .clip:
             if let highlight = row.clip {
-                MemberClipRow(highlight: highlight, state: row.state, onSeek: { player.seek(to: $0) })
+                MemberClipRow(
+                    highlight: highlight,
+                    rangeLabel: row.clipRangeLabel,
+                    state: row.state,
+                    onSeek: { player.seek(to: $0) }
+                )
             }
         case .transcript:
             if let segment = row.transcriptSegment {
-                TranscriptRow(segment: segment, state: row.state, onSeek: {
-                    player.seek(to: $0)
-                    if !player.isPlaying { player.play() }
-                })
+                TranscriptRow(
+                    segment: segment,
+                    timestampLabel: row.timestampLabel,
+                    state: row.state,
+                    onSeek: {
+                        player.seek(to: $0)
+                        if !player.isPlaying { player.play() }
+                    }
+                )
             }
         case .waveformTick:
             WaveformTickRow(
                 t: row.t,
+                timestampLabel: row.timestampLabel,
                 state: row.state,
                 windowSeconds: row.waveformWindowSeconds,
                 peaks: player.waveformPeaks(from: row.t, to: row.t + row.waveformWindowSeconds),

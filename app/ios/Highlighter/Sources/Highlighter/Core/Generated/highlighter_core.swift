@@ -23387,22 +23387,26 @@ public func FfiConverterTypePodcastPositionRecord_lower(_ value: PodcastPosition
 public struct PodcastTimelineRow {
     public var id: String
     public var t: Double
+    public var timestampLabel: String
     public var kind: PodcastTimelineRowKind
     public var state: PodcastTimelineRowState
     public var chapterTitle: String
     public var clip: HighlightRecord?
+    public var clipRangeLabel: String
     public var transcriptSegment: TranscriptSegment?
     public var waveformWindowSeconds: Double
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, t: Double, kind: PodcastTimelineRowKind, state: PodcastTimelineRowState, chapterTitle: String, clip: HighlightRecord?, transcriptSegment: TranscriptSegment?, waveformWindowSeconds: Double) {
+    public init(id: String, t: Double, timestampLabel: String, kind: PodcastTimelineRowKind, state: PodcastTimelineRowState, chapterTitle: String, clip: HighlightRecord?, clipRangeLabel: String, transcriptSegment: TranscriptSegment?, waveformWindowSeconds: Double) {
         self.id = id
         self.t = t
+        self.timestampLabel = timestampLabel
         self.kind = kind
         self.state = state
         self.chapterTitle = chapterTitle
         self.clip = clip
+        self.clipRangeLabel = clipRangeLabel
         self.transcriptSegment = transcriptSegment
         self.waveformWindowSeconds = waveformWindowSeconds
     }
@@ -23421,6 +23425,9 @@ extension PodcastTimelineRow: Equatable, Hashable {
         if lhs.t != rhs.t {
             return false
         }
+        if lhs.timestampLabel != rhs.timestampLabel {
+            return false
+        }
         if lhs.kind != rhs.kind {
             return false
         }
@@ -23431,6 +23438,9 @@ extension PodcastTimelineRow: Equatable, Hashable {
             return false
         }
         if lhs.clip != rhs.clip {
+            return false
+        }
+        if lhs.clipRangeLabel != rhs.clipRangeLabel {
             return false
         }
         if lhs.transcriptSegment != rhs.transcriptSegment {
@@ -23445,10 +23455,12 @@ extension PodcastTimelineRow: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(id)
         hasher.combine(t)
+        hasher.combine(timestampLabel)
         hasher.combine(kind)
         hasher.combine(state)
         hasher.combine(chapterTitle)
         hasher.combine(clip)
+        hasher.combine(clipRangeLabel)
         hasher.combine(transcriptSegment)
         hasher.combine(waveformWindowSeconds)
     }
@@ -23465,10 +23477,12 @@ public struct FfiConverterTypePodcastTimelineRow: FfiConverterRustBuffer {
             try PodcastTimelineRow(
                 id: FfiConverterString.read(from: &buf),
                 t: FfiConverterDouble.read(from: &buf),
+                timestampLabel: FfiConverterString.read(from: &buf),
                 kind: FfiConverterTypePodcastTimelineRowKind.read(from: &buf),
                 state: FfiConverterTypePodcastTimelineRowState.read(from: &buf),
                 chapterTitle: FfiConverterString.read(from: &buf),
                 clip: FfiConverterOptionTypeHighlightRecord.read(from: &buf),
+                clipRangeLabel: FfiConverterString.read(from: &buf),
                 transcriptSegment: FfiConverterOptionTypeTranscriptSegment.read(from: &buf),
                 waveformWindowSeconds: FfiConverterDouble.read(from: &buf)
         )
@@ -23477,10 +23491,12 @@ public struct FfiConverterTypePodcastTimelineRow: FfiConverterRustBuffer {
     public static func write(_ value: PodcastTimelineRow, into buf: inout [UInt8]) {
         FfiConverterString.write(value.id, into: &buf)
         FfiConverterDouble.write(value.t, into: &buf)
+        FfiConverterString.write(value.timestampLabel, into: &buf)
         FfiConverterTypePodcastTimelineRowKind.write(value.kind, into: &buf)
         FfiConverterTypePodcastTimelineRowState.write(value.state, into: &buf)
         FfiConverterString.write(value.chapterTitle, into: &buf)
         FfiConverterOptionTypeHighlightRecord.write(value.clip, into: &buf)
+        FfiConverterString.write(value.clipRangeLabel, into: &buf)
         FfiConverterOptionTypeTranscriptSegment.write(value.transcriptSegment, into: &buf)
         FfiConverterDouble.write(value.waveformWindowSeconds, into: &buf)
     }

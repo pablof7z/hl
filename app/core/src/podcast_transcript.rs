@@ -81,10 +81,12 @@ pub enum PodcastTimelineRowState {
 pub struct PodcastTimelineRow {
     pub id: String,
     pub t: f64,
+    pub timestamp_label: String,
     pub kind: PodcastTimelineRowKind,
     pub state: PodcastTimelineRowState,
     pub chapter_title: String,
     pub clip: Option<HighlightRecord>,
+    pub clip_range_label: String,
     pub transcript_segment: Option<TranscriptSegment>,
     pub waveform_window_seconds: f64,
 }
@@ -472,12 +474,15 @@ fn listening_rows(input: &PodcastListeningProjectionInput) -> Vec<PodcastTimelin
                 .then_with(|| a.event_id.cmp(&b.event_id))
         });
         for clip in clips {
+            let t = clip_start(&clip);
             rows.push(PodcastTimelineRow {
                 id: format!("clip-{}", clip.event_id),
-                t: clip_start(&clip),
+                t,
+                timestamp_label: format_timestamp(t),
                 kind: PodcastTimelineRowKind::Clip,
                 state: PodcastTimelineRowState::Future,
                 chapter_title: String::new(),
+                clip_range_label: clip_range_label(&clip),
                 clip: Some(clip),
                 transcript_segment: None,
                 waveform_window_seconds: window_seconds,
@@ -491,9 +496,11 @@ fn listening_rows(input: &PodcastListeningProjectionInput) -> Vec<PodcastTimelin
                 rows.push(PodcastTimelineRow {
                     id: format!("chapter-{}", swift_double_id(chapter.start_seconds)),
                     t: chapter.start_seconds,
+                    timestamp_label: format_timestamp(chapter.start_seconds),
                     kind: PodcastTimelineRowKind::Chapter,
                     state: PodcastTimelineRowState::Future,
                     chapter_title: chapter.title.clone(),
+                    clip_range_label: String::new(),
                     clip: None,
                     transcript_segment: None,
                     waveform_window_seconds: window_seconds,
@@ -507,9 +514,11 @@ fn listening_rows(input: &PodcastListeningProjectionInput) -> Vec<PodcastTimelin
             rows.push(PodcastTimelineRow {
                 id: format!("transcript-{}", segment.id),
                 t: segment.start,
+                timestamp_label: format_timestamp(segment.start),
                 kind: PodcastTimelineRowKind::Transcript,
                 state: PodcastTimelineRowState::Future,
                 chapter_title: String::new(),
+                clip_range_label: String::new(),
                 clip: None,
                 transcript_segment: Some(segment.clone()),
                 waveform_window_seconds: window_seconds,
@@ -531,9 +540,11 @@ fn listening_rows(input: &PodcastListeningProjectionInput) -> Vec<PodcastTimelin
                 rows.push(PodcastTimelineRow {
                     id: format!("waveform-{}", swift_double_id(t)),
                     t,
+                    timestamp_label: format_timestamp(t),
                     kind: PodcastTimelineRowKind::WaveformTick,
                     state: PodcastTimelineRowState::Future,
                     chapter_title: String::new(),
+                    clip_range_label: String::new(),
                     clip: None,
                     transcript_segment: None,
                     waveform_window_seconds: window_seconds,
@@ -612,6 +623,27 @@ fn format_timestamp(seconds: f64) -> String {
     } else {
         format!("{m}:{s:02}")
     }
+}
+
+fn clip_range_label(clip: &HighlightRecord) -> String {
+    let start = clip
+        .clip_start_seconds
+        .and_then(format_optional_clip_timestamp);
+    let end = clip
+        .clip_end_seconds
+        .and_then(format_optional_clip_timestamp);
+    match (start, end) {
+        (Some(start), Some(end)) => format!("{start}–{end}"),
+        (Some(start), None) => start,
+        _ => "—".into(),
+    }
+}
+
+fn format_optional_clip_timestamp(seconds: f64) -> Option<String> {
+    if !seconds.is_finite() || seconds < 0.0 {
+        return None;
+    }
+    Some(format_timestamp(seconds.round()))
 }
 
 fn swift_double_id(value: f64) -> String {
@@ -1427,6 +1459,10 @@ HOST: Segment text.
         assert_eq!(projection.rows[0].state, PodcastTimelineRowState::Played);
         assert_eq!(projection.rows[4].state, PodcastTimelineRowState::Active);
         assert_eq!(projection.rows[5].state, PodcastTimelineRowState::Future);
+        assert_eq!(projection.rows[0].timestamp_label, "0:00");
+        assert_eq!(projection.rows[2].timestamp_label, "0:15");
+        assert_eq!(projection.rows[2].clip_range_label, "0:15–0:25");
+        assert_eq!(projection.rows[6].timestamp_label, "1:30");
         assert_eq!(projection.rows[6].id, "chapter-90.5");
     }
 
@@ -1494,6 +1530,9 @@ HOST: Segment text.
         assert_eq!(projection.episode_title, "Untitled episode");
         assert_eq!(projection.episode_meta, "1m · 1 clip");
         assert_eq!(projection.current_speaker_or_timestamp, "Ada");
+        assert_eq!(projection.rows[0].timestamp_label, "0:00");
+        assert_eq!(projection.rows[2].clip_range_label, "1:00–1:10");
+        assert_eq!(projection.rows[3].timestamp_label, "1:30");
         assert_eq!(
             projection
                 .rows
