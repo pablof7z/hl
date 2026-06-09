@@ -218,6 +218,30 @@ pub struct NetworkSettingsMutationSnapshot {
     pub error_message: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum NetworkRelayConnectionPolicyAction {
+    None,
+    ReconnectAll,
+    DisconnectAll,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NetworkWifiOnlyPreferenceSnapshot {
+    pub applied: bool,
+    pub wifi_only_enabled: bool,
+    pub path_monitor_enabled: bool,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NetworkPathPolicySnapshot {
+    pub wifi_only_enabled: bool,
+    pub path_monitor_enabled: bool,
+    pub is_wifi: bool,
+    pub relay_action: NetworkRelayConnectionPolicyAction,
+    pub error_message: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NetworkSettingsSnapshot {
     pub relays: Vec<RelayConfig>,
@@ -578,6 +602,47 @@ pub fn network_settings_mutation_snapshot(
             should_reload: false,
             error_message: format!("{error_prefix} — {error}"),
         },
+    }
+}
+
+pub fn network_wifi_only_preference_snapshot(
+    result: Result<(), CoreError>,
+    requested_enabled: bool,
+    previous_enabled: bool,
+) -> NetworkWifiOnlyPreferenceSnapshot {
+    match result {
+        Ok(()) => NetworkWifiOnlyPreferenceSnapshot {
+            applied: true,
+            wifi_only_enabled: requested_enabled,
+            path_monitor_enabled: requested_enabled,
+            error_message: String::new(),
+        },
+        Err(error) => NetworkWifiOnlyPreferenceSnapshot {
+            applied: false,
+            wifi_only_enabled: previous_enabled,
+            path_monitor_enabled: previous_enabled,
+            error_message: format!("Couldn't update Wi-Fi-only mode — {error}"),
+        },
+    }
+}
+
+pub fn network_path_policy_snapshot(
+    wifi_only_enabled: bool,
+    is_wifi: bool,
+) -> NetworkPathPolicySnapshot {
+    let relay_action = if !wifi_only_enabled {
+        NetworkRelayConnectionPolicyAction::None
+    } else if is_wifi {
+        NetworkRelayConnectionPolicyAction::ReconnectAll
+    } else {
+        NetworkRelayConnectionPolicyAction::DisconnectAll
+    };
+    NetworkPathPolicySnapshot {
+        wifi_only_enabled,
+        path_monitor_enabled: wifi_only_enabled,
+        is_wifi,
+        relay_action,
+        error_message: String::new(),
     }
 }
 
@@ -1658,6 +1723,57 @@ mod tests {
             failure.error_message,
             "Couldn't remove relay — relay error: offline"
         );
+    }
+
+    #[test]
+    fn network_wifi_only_preference_snapshot_applies_or_restores_previous_state() {
+        let enabled = network_wifi_only_preference_snapshot(Ok(()), true, false);
+        assert!(enabled.applied);
+        assert!(enabled.wifi_only_enabled);
+        assert!(enabled.path_monitor_enabled);
+        assert!(enabled.error_message.is_empty());
+
+        let disabled = network_wifi_only_preference_snapshot(Ok(()), false, true);
+        assert!(disabled.applied);
+        assert!(!disabled.wifi_only_enabled);
+        assert!(!disabled.path_monitor_enabled);
+
+        let failure = network_wifi_only_preference_snapshot(
+            Err(CoreError::Cache("readonly".into())),
+            true,
+            false,
+        );
+        assert!(!failure.applied);
+        assert!(!failure.wifi_only_enabled);
+        assert!(!failure.path_monitor_enabled);
+        assert_eq!(
+            failure.error_message,
+            "Couldn't update Wi-Fi-only mode — cache error: readonly"
+        );
+    }
+
+    #[test]
+    fn network_path_policy_snapshot_maps_raw_path_to_rust_owned_relay_action() {
+        let disabled = network_path_policy_snapshot(false, false);
+        assert_eq!(
+            disabled.relay_action,
+            NetworkRelayConnectionPolicyAction::None
+        );
+        assert!(!disabled.path_monitor_enabled);
+
+        let wifi = network_path_policy_snapshot(true, true);
+        assert_eq!(
+            wifi.relay_action,
+            NetworkRelayConnectionPolicyAction::ReconnectAll
+        );
+        assert!(wifi.path_monitor_enabled);
+
+        let non_wifi = network_path_policy_snapshot(true, false);
+        assert_eq!(
+            non_wifi.relay_action,
+            NetworkRelayConnectionPolicyAction::DisconnectAll
+        );
+        assert!(non_wifi.path_monitor_enabled);
     }
 
     #[test]

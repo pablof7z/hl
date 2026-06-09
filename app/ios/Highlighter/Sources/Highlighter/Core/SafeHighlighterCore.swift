@@ -67,8 +67,8 @@ actor SafeHighlighterCore {
         await core.completeOnboardingInterests(selectedIds: selectedIds)
     }
 
-    func setWifiOnlyEnabled(_ enabled: Bool) -> NetworkSettingsMutationSnapshot {
-        core.setWifiOnlyEnabled(enabled: enabled)
+    func setWifiOnlyEnabled(_ enabled: Bool) async -> NetworkWifiOnlyPreferenceSnapshot {
+        await core.setWifiOnlyEnabled(enabled: enabled)
     }
 
     func getPodcastPosition() -> PodcastPositionRecord? {
@@ -1511,6 +1511,10 @@ actor SafeHighlighterCore {
 
     func disconnectAll() async -> NetworkSettingsMutationSnapshot {
         await core.disconnectAll()
+    }
+
+    func applyNetworkPathStatus(isWifi: Bool) async -> NetworkPathPolicySnapshot {
+        await core.applyNetworkPathStatus(isWifi: isWifi)
     }
 
     func probeRelayNip11Snapshot(_ url: String) async -> RelayNip11ProbeSnapshot {

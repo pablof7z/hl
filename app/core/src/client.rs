@@ -795,15 +795,20 @@ impl HighlighterCore {
         mutation_outcome(result)
     }
 
-    pub fn set_wifi_only_enabled(
+    pub async fn set_wifi_only_enabled(
         &self,
         enabled: bool,
-    ) -> crate::relays::NetworkSettingsMutationSnapshot {
-        crate::relays::network_settings_mutation_snapshot(
+    ) -> crate::relays::NetworkWifiOnlyPreferenceSnapshot {
+        let previous = self.network_preferences.wifi_only_enabled();
+        let snapshot = crate::relays::network_wifi_only_preference_snapshot(
             self.network_preferences.set_wifi_only_enabled(enabled),
-            false,
-            "Couldn't update Wi-Fi-only mode",
-        )
+            enabled,
+            previous,
+        );
+        if snapshot.applied && !snapshot.wifi_only_enabled {
+            self.runtime.client().connect().await;
+        }
+        snapshot
     }
 
     pub fn get_podcast_position(&self) -> Option<PodcastPositionRecord> {
@@ -4016,12 +4021,35 @@ impl HighlighterCore {
         crate::relays::network_settings_mutation_snapshot(Ok(()), false, "Couldn't reconnect")
     }
 
-    /// Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
-    /// when the device drops off Wi-Fi — the Swift side re-enables by
-    /// calling `reconnect_all` once the path monitor reports Wi-Fi back.
+    /// Close every WebSocket in the pool. Used by explicit user/app
+    /// reconnect flows; Wi-Fi-only path policy is owned by
+    /// `apply_network_path_status`.
     pub async fn disconnect_all(&self) -> crate::relays::NetworkSettingsMutationSnapshot {
         self.runtime.client().disconnect().await;
         crate::relays::network_settings_mutation_snapshot(Ok(()), false, "Couldn't disconnect")
+    }
+
+    /// Apply a raw native network path update. Native reports only whether
+    /// the current path is Wi-Fi; Rust owns the Wi-Fi-only preference lookup
+    /// and relay connect/disconnect policy.
+    pub async fn apply_network_path_status(
+        &self,
+        is_wifi: bool,
+    ) -> crate::relays::NetworkPathPolicySnapshot {
+        let snapshot = crate::relays::network_path_policy_snapshot(
+            self.network_preferences.wifi_only_enabled(),
+            is_wifi,
+        );
+        match snapshot.relay_action {
+            crate::relays::NetworkRelayConnectionPolicyAction::None => {}
+            crate::relays::NetworkRelayConnectionPolicyAction::ReconnectAll => {
+                self.runtime.client().connect().await;
+            }
+            crate::relays::NetworkRelayConnectionPolicyAction::DisconnectAll => {
+                self.runtime.client().disconnect().await;
+            }
+        }
+        snapshot
     }
 
     /// Fetch the target relay's NIP-11 information document via an HTTPS

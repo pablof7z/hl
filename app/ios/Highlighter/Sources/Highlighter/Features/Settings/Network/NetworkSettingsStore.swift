@@ -85,19 +85,12 @@ final class NetworkSettingsStore {
         }
     }
 
-    /// Toggle Wi-Fi-only mode. When on, an `NWPathMonitor` suspends the
-    /// relay pool on cellular and resumes it when Wi-Fi comes back. The
-    /// Rust core owns the durable preference; Swift owns path monitoring.
+    /// Toggle Wi-Fi-only mode. Swift owns the `NWPathMonitor` capability;
+    /// Rust owns the durable preference and relay connection policy.
     func setWifiOnly(_ on: Bool) async {
-        let previous = wifiOnlyEnabled
         wifiOnlyEnabled = on
-        applyWifiOnlyEnforcement(on)
         let snapshot = await core.setWifiOnlyEnabled(on)
-        if !snapshot.applied {
-            wifiOnlyEnabled = previous
-            applyWifiOnlyEnforcement(previous)
-            lastError = snapshot.errorMessage
-        }
+        applyWifiOnlyPreferenceSnapshot(snapshot)
     }
 
     // MARK: - Lifecycle
@@ -158,13 +151,12 @@ final class NetworkSettingsStore {
 
     // MARK: - NWPathMonitor
 
-    private func applyWifiOnlyEnforcement(_ enabled: Bool) {
+    private func applyPathMonitor(_ enabled: Bool) {
         if enabled {
             startPathMonitor()
         } else {
             pathMonitor?.cancel()
             pathMonitor = nil
-            Task { await reconnectAll() }
         }
     }
 
@@ -175,12 +167,8 @@ final class NetworkSettingsStore {
             guard let self else { return }
             let isWifi = path.usesInterfaceType(.wifi)
             Task { @MainActor in
-                guard self.wifiOnlyEnabled else { return }
-                if isWifi {
-                    _ = await self.core.reconnectAll()
-                } else {
-                    _ = await self.core.disconnectAll()
-                }
+                let snapshot = await self.core.applyNetworkPathStatus(isWifi: isWifi)
+                self.applyNetworkPathPolicySnapshot(snapshot)
             }
         }
         monitor.start(queue: .global(qos: .utility))
@@ -268,8 +256,25 @@ final class NetworkSettingsStore {
     private func applyNetworkSettingsSnapshot(_ snapshot: NetworkSettingsSnapshot) {
         relays = snapshot.relays
         wifiOnlyEnabled = snapshot.wifiOnlyEnabled
+        applyPathMonitor(snapshot.wifiOnlyEnabled)
         applyRelaySettingsProjection(snapshot.projection, rows: snapshot.diagnostics)
         lastError = snapshot.errorMessage.isEmpty ? nil : snapshot.errorMessage
+    }
+
+    private func applyWifiOnlyPreferenceSnapshot(_ snapshot: NetworkWifiOnlyPreferenceSnapshot) {
+        wifiOnlyEnabled = snapshot.wifiOnlyEnabled
+        applyPathMonitor(snapshot.pathMonitorEnabled)
+        if !snapshot.errorMessage.isEmpty {
+            lastError = snapshot.errorMessage
+        }
+    }
+
+    private func applyNetworkPathPolicySnapshot(_ snapshot: NetworkPathPolicySnapshot) {
+        wifiOnlyEnabled = snapshot.wifiOnlyEnabled
+        applyPathMonitor(snapshot.pathMonitorEnabled)
+        if !snapshot.errorMessage.isEmpty {
+            lastError = snapshot.errorMessage
+        }
     }
 
     private func applyNetworkDiagnosticsSnapshot(_ snapshot: NetworkDiagnosticsSnapshot) {

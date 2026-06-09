@@ -761,6 +761,13 @@ public func FfiConverterTypeEventCallback_lower(_ value: EventCallback) -> Unsaf
 public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     /**
+     * Apply a raw native network path update. Native reports only whether
+     * the current path is Wi-Fi; Rust owns the Wi-Fi-only preference lookup
+     * and relay connect/disconnect policy.
+     */
+    func applyNetworkPathStatus(isWifi: Bool) async  -> NetworkPathPolicySnapshot
+
+    /**
      * Publish the Rust-projected profile follow mutation and return the
      * post-action screen state. Rust owns rollback on error; the shell only
      * applies the returned snapshot.
@@ -841,9 +848,9 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func detectOcrActivePage(lines: [OcrLine])  -> OcrPageDetection?
 
     /**
-     * Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
-     * when the device drops off Wi-Fi — the Swift side re-enables by
-     * calling `reconnect_all` once the path monitor reports Wi-Fi back.
+     * Close every WebSocket in the pool. Used by explicit user/app
+     * reconnect flows; Wi-Fi-only path policy is owned by
+     * `apply_network_path_status`.
      */
     func disconnectAll() async  -> NetworkSettingsMutationSnapshot
 
@@ -1685,7 +1692,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async  -> NetworkSettingsMutationSnapshot
 
-    func setWifiOnlyEnabled(enabled: Bool)  -> NetworkSettingsMutationSnapshot
+    func setWifiOnlyEnabled(enabled: Bool) async  -> NetworkWifiOnlyPreferenceSnapshot
 
     func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary])  -> Data
 
@@ -1993,6 +2000,29 @@ public convenience init() {
 
 
     /**
+     * Apply a raw native network path update. Native reports only whether
+     * the current path is Wi-Fi; Rust owns the Wi-Fi-only preference lookup
+     * and relay connect/disconnect policy.
+     */
+open func applyNetworkPathStatus(isWifi: Bool)async  -> NetworkPathPolicySnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_apply_network_path_status(
+                    self.uniffiClonePointer(),
+                    FfiConverterBool.lower(isWifi)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNetworkPathPolicySnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
      * Publish the Rust-projected profile follow mutation and return the
      * post-action screen state. Rust owns rollback on error; the shell only
      * applies the returned snapshot.
@@ -2267,9 +2297,9 @@ open func detectOcrActivePage(lines: [OcrLine]) -> OcrPageDetection?  {
 }
 
     /**
-     * Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
-     * when the device drops off Wi-Fi — the Swift side re-enables by
-     * calling `reconnect_all` once the path monitor reports Wi-Fi back.
+     * Close every WebSocket in the pool. Used by explicit user/app
+     * reconnect flows; Wi-Fi-only path policy is owned by
+     * `apply_network_path_status`.
      */
 open func disconnectAll()async  -> NetworkSettingsMutationSnapshot  {
     return
@@ -5055,12 +5085,22 @@ open func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, index
         )
 }
 
-open func setWifiOnlyEnabled(enabled: Bool) -> NetworkSettingsMutationSnapshot  {
-    return try!  FfiConverterTypeNetworkSettingsMutationSnapshot_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_set_wifi_only_enabled(self.uniffiClonePointer(),
-        FfiConverterBool.lower(enabled),$0
-    )
-})
+open func setWifiOnlyEnabled(enabled: Bool)async  -> NetworkWifiOnlyPreferenceSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_set_wifi_only_enabled(
+                    self.uniffiClonePointer(),
+                    FfiConverterBool.lower(enabled)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot_lift,
+            errorHandler: nil
+
+        )
 }
 
 open func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary]) -> Data  {
@@ -19937,6 +19977,100 @@ public func FfiConverterTypeNetworkDiagnosticsSnapshot_lower(_ value: NetworkDia
 }
 
 
+public struct NetworkPathPolicySnapshot {
+    public var wifiOnlyEnabled: Bool
+    public var pathMonitorEnabled: Bool
+    public var isWifi: Bool
+    public var relayAction: NetworkRelayConnectionPolicyAction
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(wifiOnlyEnabled: Bool, pathMonitorEnabled: Bool, isWifi: Bool, relayAction: NetworkRelayConnectionPolicyAction, errorMessage: String) {
+        self.wifiOnlyEnabled = wifiOnlyEnabled
+        self.pathMonitorEnabled = pathMonitorEnabled
+        self.isWifi = isWifi
+        self.relayAction = relayAction
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension NetworkPathPolicySnapshot: Sendable {}
+#endif
+
+
+extension NetworkPathPolicySnapshot: Equatable, Hashable {
+    public static func ==(lhs: NetworkPathPolicySnapshot, rhs: NetworkPathPolicySnapshot) -> Bool {
+        if lhs.wifiOnlyEnabled != rhs.wifiOnlyEnabled {
+            return false
+        }
+        if lhs.pathMonitorEnabled != rhs.pathMonitorEnabled {
+            return false
+        }
+        if lhs.isWifi != rhs.isWifi {
+            return false
+        }
+        if lhs.relayAction != rhs.relayAction {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(wifiOnlyEnabled)
+        hasher.combine(pathMonitorEnabled)
+        hasher.combine(isWifi)
+        hasher.combine(relayAction)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkPathPolicySnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkPathPolicySnapshot {
+        return
+            try NetworkPathPolicySnapshot(
+                wifiOnlyEnabled: FfiConverterBool.read(from: &buf),
+                pathMonitorEnabled: FfiConverterBool.read(from: &buf),
+                isWifi: FfiConverterBool.read(from: &buf),
+                relayAction: FfiConverterTypeNetworkRelayConnectionPolicyAction.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkPathPolicySnapshot, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.wifiOnlyEnabled, into: &buf)
+        FfiConverterBool.write(value.pathMonitorEnabled, into: &buf)
+        FfiConverterBool.write(value.isWifi, into: &buf)
+        FfiConverterTypeNetworkRelayConnectionPolicyAction.write(value.relayAction, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkPathPolicySnapshot_lift(_ buf: RustBuffer) throws -> NetworkPathPolicySnapshot {
+    return try FfiConverterTypeNetworkPathPolicySnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkPathPolicySnapshot_lower(_ value: NetworkPathPolicySnapshot) -> RustBuffer {
+    return FfiConverterTypeNetworkPathPolicySnapshot.lower(value)
+}
+
+
 public struct NetworkSettingsMutationSnapshot {
     public var applied: Bool
     public var shouldReload: Bool
@@ -20106,6 +20240,92 @@ public func FfiConverterTypeNetworkSettingsSnapshot_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeNetworkSettingsSnapshot_lower(_ value: NetworkSettingsSnapshot) -> RustBuffer {
     return FfiConverterTypeNetworkSettingsSnapshot.lower(value)
+}
+
+
+public struct NetworkWifiOnlyPreferenceSnapshot {
+    public var applied: Bool
+    public var wifiOnlyEnabled: Bool
+    public var pathMonitorEnabled: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(applied: Bool, wifiOnlyEnabled: Bool, pathMonitorEnabled: Bool, errorMessage: String) {
+        self.applied = applied
+        self.wifiOnlyEnabled = wifiOnlyEnabled
+        self.pathMonitorEnabled = pathMonitorEnabled
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension NetworkWifiOnlyPreferenceSnapshot: Sendable {}
+#endif
+
+
+extension NetworkWifiOnlyPreferenceSnapshot: Equatable, Hashable {
+    public static func ==(lhs: NetworkWifiOnlyPreferenceSnapshot, rhs: NetworkWifiOnlyPreferenceSnapshot) -> Bool {
+        if lhs.applied != rhs.applied {
+            return false
+        }
+        if lhs.wifiOnlyEnabled != rhs.wifiOnlyEnabled {
+            return false
+        }
+        if lhs.pathMonitorEnabled != rhs.pathMonitorEnabled {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(applied)
+        hasher.combine(wifiOnlyEnabled)
+        hasher.combine(pathMonitorEnabled)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkWifiOnlyPreferenceSnapshot {
+        return
+            try NetworkWifiOnlyPreferenceSnapshot(
+                applied: FfiConverterBool.read(from: &buf),
+                wifiOnlyEnabled: FfiConverterBool.read(from: &buf),
+                pathMonitorEnabled: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkWifiOnlyPreferenceSnapshot, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.applied, into: &buf)
+        FfiConverterBool.write(value.wifiOnlyEnabled, into: &buf)
+        FfiConverterBool.write(value.pathMonitorEnabled, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot_lift(_ buf: RustBuffer) throws -> NetworkWifiOnlyPreferenceSnapshot {
+    return try FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot_lower(_ value: NetworkWifiOnlyPreferenceSnapshot) -> RustBuffer {
+    return FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot.lower(value)
 }
 
 
@@ -34454,6 +34674,83 @@ extension LoginInputAction: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum NetworkRelayConnectionPolicyAction {
+
+    case none
+    case reconnectAll
+    case disconnectAll
+}
+
+
+#if compiler(>=6)
+extension NetworkRelayConnectionPolicyAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkRelayConnectionPolicyAction: FfiConverterRustBuffer {
+    typealias SwiftType = NetworkRelayConnectionPolicyAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkRelayConnectionPolicyAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .none
+
+        case 2: return .reconnectAll
+
+        case 3: return .disconnectAll
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NetworkRelayConnectionPolicyAction, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .none:
+            writeInt(&buf, Int32(1))
+
+
+        case .reconnectAll:
+            writeInt(&buf, Int32(2))
+
+
+        case .disconnectAll:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkRelayConnectionPolicyAction_lift(_ buf: RustBuffer) throws -> NetworkRelayConnectionPolicyAction {
+    return try FfiConverterTypeNetworkRelayConnectionPolicyAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkRelayConnectionPolicyAction_lower(_ value: NetworkRelayConnectionPolicyAction) -> RustBuffer {
+    return FfiConverterTypeNetworkRelayConnectionPolicyAction.lower(value)
+}
+
+
+extension NetworkRelayConnectionPolicyAction: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum NostrContentRun {
 
     case text(value: String
@@ -38387,6 +38684,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_eventcallback_on_data_changed() != 54279) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_apply_network_path_status() != 37260) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_apply_profile_follow_mutation() != 50949) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38447,7 +38747,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_detect_ocr_active_page() != 8731) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 27013) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 61549) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_download_podcast_artwork() != 30059) {
@@ -39068,7 +39368,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_relay_roles() != 30185) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_wifi_only_enabled() != 35813) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_wifi_only_enabled() != 17319) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_extension_communities_snapshot() != 38830) {
