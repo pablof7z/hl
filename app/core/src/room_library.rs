@@ -52,6 +52,16 @@ pub struct RoomLibraryPodcastCardProjection {
     pub comment_badge_label: Option<String>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomLibraryGenericCardProjectionInput {
+    pub artifact: ArtifactRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomLibraryGenericCardProjection {
+    pub title: String,
+}
+
 /// Presentation projection for an article artifact in a room library. Rust
 /// owns route-derived article author identity, avatar fallback identity,
 /// relative timestamp source, and domain/comment meta bits.
@@ -125,6 +135,15 @@ pub fn podcast_card_projection(
         relative_unix_seconds,
         comment_badge_label: comment_badge_label(input.comment_count),
     }
+}
+
+/// Presentation projection for a fallback artifact row in the room library.
+/// Rust owns title fallback parity for source types without a specialized card.
+pub fn generic_card_projection(
+    input: RoomLibraryGenericCardProjectionInput,
+) -> RoomLibraryGenericCardProjection {
+    let (title, _) = title_or_fallback(&input.artifact);
+    RoomLibraryGenericCardProjection { title }
 }
 
 fn article_meta_bits(artifact: &ArtifactRecord, comment_count: u32) -> Vec<String> {
@@ -327,6 +346,24 @@ mod tests {
         assert_eq!(projection.show_label, Some("Author Show".into()));
         assert_eq!(projection.duration_label, Some("0m".into()));
         assert_eq!(projection.comment_badge_label, None);
+    }
+
+    #[test]
+    fn generic_card_projection_preserves_default_row_title_fallback() {
+        let mut artifact = artifact_record("web");
+        artifact.preview.title.clear();
+
+        let projection =
+            generic_card_projection(RoomLibraryGenericCardProjectionInput { artifact });
+
+        assert_eq!(projection.title, "Untitled");
+
+        let mut artifact = artifact_record("paper");
+        artifact.preview.title = "Paper".into();
+        let projection =
+            generic_card_projection(RoomLibraryGenericCardProjectionInput { artifact });
+
+        assert_eq!(projection.title, "Paper");
     }
 
     fn artifact_record(source: &str) -> ArtifactRecord {

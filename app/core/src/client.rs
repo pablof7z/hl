@@ -2147,6 +2147,13 @@ impl HighlighterCore {
         room_library::podcast_card_projection(input)
     }
 
+    pub fn project_room_library_generic_card(
+        &self,
+        input: room_library::RoomLibraryGenericCardProjectionInput,
+    ) -> room_library::RoomLibraryGenericCardProjection {
+        room_library::generic_card_projection(input)
+    }
+
     /// Build the visible NIP-22 comment thread from a bounded screen record
     /// set. Rust owns parent resolution, orphan promotion, and chronological
     /// child ordering.

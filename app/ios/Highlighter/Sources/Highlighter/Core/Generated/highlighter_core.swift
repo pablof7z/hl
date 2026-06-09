@@ -1486,6 +1486,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput)  -> RoomLibraryBookCardProjection
 
+    func projectRoomLibraryGenericCard(input: RoomLibraryGenericCardProjectionInput)  -> RoomLibraryGenericCardProjection
+
     func projectRoomLibraryPodcastCard(input: RoomLibraryPodcastCardProjectionInput)  -> RoomLibraryPodcastCardProjection
 
     func projectRoomPreviewArtifacts(input: RoomPreviewArtifactsProjectionInput)  -> RoomPreviewArtifactsProjection
@@ -4416,6 +4418,14 @@ open func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput) 
     return try!  FfiConverterTypeRoomLibraryBookCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_library_book_card(self.uniffiClonePointer(),
         FfiConverterTypeRoomLibraryBookCardProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomLibraryGenericCard(input: RoomLibraryGenericCardProjectionInput) -> RoomLibraryGenericCardProjection  {
+    return try!  FfiConverterTypeRoomLibraryGenericCardProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_library_generic_card(self.uniffiClonePointer(),
+        FfiConverterTypeRoomLibraryGenericCardProjectionInput_lower(input),$0
     )
 })
 }
@@ -21061,6 +21071,130 @@ public func FfiConverterTypeRoomLibraryBookCardProjectionInput_lower(_ value: Ro
 }
 
 
+public struct RoomLibraryGenericCardProjection {
+    public var title: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String) {
+        self.title = title
+    }
+}
+
+#if compiler(>=6)
+extension RoomLibraryGenericCardProjection: Sendable {}
+#endif
+
+
+extension RoomLibraryGenericCardProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomLibraryGenericCardProjection, rhs: RoomLibraryGenericCardProjection) -> Bool {
+        if lhs.title != rhs.title {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(title)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLibraryGenericCardProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryGenericCardProjection {
+        return
+            try RoomLibraryGenericCardProjection(
+                title: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLibraryGenericCardProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryGenericCardProjection_lift(_ buf: RustBuffer) throws -> RoomLibraryGenericCardProjection {
+    return try FfiConverterTypeRoomLibraryGenericCardProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryGenericCardProjection_lower(_ value: RoomLibraryGenericCardProjection) -> RustBuffer {
+    return FfiConverterTypeRoomLibraryGenericCardProjection.lower(value)
+}
+
+
+public struct RoomLibraryGenericCardProjectionInput {
+    public var artifact: ArtifactRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifact: ArtifactRecord) {
+        self.artifact = artifact
+    }
+}
+
+#if compiler(>=6)
+extension RoomLibraryGenericCardProjectionInput: Sendable {}
+#endif
+
+
+extension RoomLibraryGenericCardProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomLibraryGenericCardProjectionInput, rhs: RoomLibraryGenericCardProjectionInput) -> Bool {
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifact)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLibraryGenericCardProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryGenericCardProjectionInput {
+        return
+            try RoomLibraryGenericCardProjectionInput(
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLibraryGenericCardProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryGenericCardProjectionInput_lift(_ buf: RustBuffer) throws -> RoomLibraryGenericCardProjectionInput {
+    return try FfiConverterTypeRoomLibraryGenericCardProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLibraryGenericCardProjectionInput_lower(_ value: RoomLibraryGenericCardProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomLibraryGenericCardProjectionInput.lower(value)
+}
+
+
 public struct RoomLibraryPodcastCardProjection {
     public var title: String
     public var titleIsFallback: Bool
@@ -28612,6 +28746,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_book_card() != 17129) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_generic_card() != 61708) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_podcast_card() != 47926) {

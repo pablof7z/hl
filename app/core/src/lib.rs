@@ -140,6 +140,7 @@ pub use room_invites::{
 pub use room_library::{
     RoomLibraryArticleCardProjection, RoomLibraryArticleCardProjectionInput,
     RoomLibraryBookCardProjection, RoomLibraryBookCardProjectionInput,
+    RoomLibraryGenericCardProjection, RoomLibraryGenericCardProjectionInput,
     RoomLibraryPodcastCardProjection, RoomLibraryPodcastCardProjectionInput,
 };
 pub use room_preview::{

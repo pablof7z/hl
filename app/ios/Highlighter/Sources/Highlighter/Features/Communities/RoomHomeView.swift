@@ -229,16 +229,24 @@ struct RoomHomeView: View {
         case "podcast":
             RoomLibraryPodcastCardView(artifact: a, commentCount: commentCount)
         default:
-            HStack {
-                Text(a.preview.title.isEmpty ? "Untitled" : a.preview.title)
-                    .foregroundStyle(Color.highlighterInkStrong)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.footnote)
-                    .foregroundStyle(Color.highlighterInkMuted)
-            }
-            .padding(.vertical, 14)
+            genericArtifactRow(a)
         }
+    }
+
+    private func genericArtifactRow(_ artifact: ArtifactRecord) -> some View {
+        let projection = app.safeCore.projectRoomLibraryGenericCard(
+            input: RoomLibraryGenericCardProjectionInput(artifact: artifact)
+        )
+
+        return HStack {
+            Text(projection.title)
+                .foregroundStyle(Color.highlighterInkStrong)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.footnote)
+                .foregroundStyle(Color.highlighterInkMuted)
+        }
+        .padding(.vertical, 14)
     }
 
     /// Resolve the count of NIP-22 comments anchored to an artifact, using
