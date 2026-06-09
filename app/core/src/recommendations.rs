@@ -555,6 +555,7 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
 
     fn isolated_ndb() -> (Ndb, tempfile::TempDir) {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -566,12 +567,7 @@ mod tests {
     }
 
     fn ingest(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
-    }
-
-    fn wait_for_ndb() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        process_event_and_wait(ndb, event);
     }
 
     fn sign(keys: &Keys, kind: u16, tags: Vec<Tag>, content: &str) -> Event {
@@ -646,7 +642,6 @@ mod tests {
         // Only f1 in bravo → doesn't meet threshold.
         ingest(&ndb, &meta(&author, "bravo", "Bravo"));
         ingest(&ndb, &members(&author, "bravo", &[&f1, &stranger]));
-        wait_for_ndb();
 
         let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
         assert_eq!(out.len(), 1);
@@ -687,7 +682,6 @@ mod tests {
         // Both follows list "alpha" as a group they're in. No 39002 needed.
         ingest(&ndb, &groups_list(&f1, &["alpha"], "wss://relay", 100));
         ingest(&ndb, &groups_list(&f2, &["alpha"], "wss://relay", 100));
-        wait_for_ndb();
 
         let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
         assert_eq!(out.len(), 1);
@@ -716,7 +710,6 @@ mod tests {
         ingest(&ndb, &members(&author, "private", &[&f1, &f2]));
         ingest(&ndb, &members(&author, "closed", &[&f1, &f2]));
         ingest(&ndb, &members(&author, "alpha", &[&f1, &f2]));
-        wait_for_ndb();
 
         let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
         let ids: Vec<_> = out.iter().map(|r| r.summary.id.as_str()).collect();
@@ -739,7 +732,6 @@ mod tests {
         // Even with two follows matching, user is already in alpha → exclude.
         ingest(&ndb, &groups_list(&f1, &["alpha"], "wss://relay", 100));
         ingest(&ndb, &groups_list(&f2, &["alpha"], "wss://relay", 100));
-        wait_for_ndb();
 
         let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
         assert!(out.is_empty());
@@ -757,7 +749,6 @@ mod tests {
         ingest(&ndb, &meta(&author, "alpha", "Alpha"));
         // Me + two follows — user is already a member.
         ingest(&ndb, &members(&author, "alpha", &[&me, &f1, &f2]));
-        wait_for_ndb();
 
         let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
         assert!(
@@ -811,7 +802,6 @@ mod tests {
 
         ingest(&ndb, &meta(&group_author, "alpha", "Alpha"));
         ingest(&ndb, &meta(&group_author, "bravo", "Bravo"));
-        wait_for_ndb();
 
         let out = query_rooms_from_read_authors(&ndb, &me.public_key().to_hex(), 32).unwrap();
         let ids: Vec<_> = out.iter().map(|r| r.summary.id.as_str()).collect();
@@ -860,7 +850,6 @@ mod tests {
             &meta_with_markers(&group_author, "closed", "Closed", "public", "closed"),
         );
         ingest(&ndb, &meta(&group_author, "alpha", "Alpha"));
-        wait_for_ndb();
 
         let out = query_rooms_from_read_authors(&ndb, &me.public_key().to_hex(), 32).unwrap();
         let ids: Vec<_> = out.iter().map(|r| r.summary.id.as_str()).collect();

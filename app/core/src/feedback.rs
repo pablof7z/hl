@@ -1310,6 +1310,9 @@ mod tests {
         client.connect_relay(relay).await.expect("connect");
 
         let root_hex = "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949";
+        let wait_sub = ndb
+            .subscribe(&[NdbFilter::new().kinds([KIND_FEEDBACK_NOTE as u64]).build()])
+            .expect("subscribe ndb wait");
         let id = SubscriptionId::generate();
         let filter = Filter::new()
             .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
@@ -1319,8 +1322,13 @@ mod tests {
             .await
             .expect("subscribe");
 
-        // Wait for events to arrive and be persisted.
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            ndb.wait_for_notes(wait_sub, 3),
+        )
+        .await
+        .expect("timed out waiting for feedback notes")
+        .expect("feedback notes");
 
         let txn = Transaction::new(&ndb).expect("txn");
         let all = ndb
@@ -1359,14 +1367,25 @@ mod tests {
         let initial = initial.rows;
         eprintln!("initial cache events: {}", initial.len());
 
+        let wait_sub = core
+            .runtime()
+            .ndb()
+            .subscribe(&[NdbFilter::new().kinds([KIND_FEEDBACK_NOTE as u64]).build()])
+            .expect("subscribe ndb wait");
+
         // Step 2: open the subscription — this is where ensure_feedback_relay
         // adds + connects the relay and the REQ goes out.
         let outcome = core.subscribe_feedback_thread(root_hex.clone()).await;
         assert!(outcome.error.is_empty(), "subscribe: {}", outcome.error);
         let _handle = outcome.handle;
 
-        // Wait for the relay to backfill historical events.
-        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            core.runtime().ndb().wait_for_notes(wait_sub, 3),
+        )
+        .await
+        .expect("timed out waiting for feedback notes")
+        .expect("feedback notes");
 
         // Step 3: re-query — by now the subscription should have populated ndb.
         let after = core.get_feedback_thread_snapshot(root_hex.clone()).await;

@@ -59,6 +59,8 @@ pub mod session;
 pub mod share_extension;
 pub mod share_targets;
 pub mod subscriptions;
+#[cfg(test)]
+pub mod test_ndb;
 pub mod time_labels;
 pub mod web_metadata;
 pub mod whats_new;

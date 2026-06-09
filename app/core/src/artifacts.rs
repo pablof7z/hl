@@ -937,6 +937,7 @@ fn parse_tag(parts: &[&str]) -> Result<Tag, CoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
 
     #[test]
     fn normalize_strips_tracking_and_default_ports() {
@@ -1257,12 +1258,7 @@ mod tests {
     }
 
     fn ingest(ndb: &nostrdb::Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
-    }
-
-    fn wait_for_ndb() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        process_event_and_wait(ndb, event);
     }
 
     struct SearchableShare<'a> {
@@ -1347,7 +1343,6 @@ mod tests {
         let keys = Keys::generate();
         let share = make_share(&keys, "alpha", "art-1", "Alpha Article");
         ingest(&ndb, &share);
-        wait_for_ndb();
 
         let records = query_for_group(&ndb, "alpha", 32).expect("query");
         assert_eq!(records.len(), 1);
@@ -1361,7 +1356,6 @@ mod tests {
         let keys = Keys::generate();
         ingest(&ndb, &make_share(&keys, "alpha", "a1", "Alpha"));
         ingest(&ndb, &make_share(&keys, "bravo", "b1", "Bravo"));
-        wait_for_ndb();
 
         let alpha = query_for_group(&ndb, "alpha", 32).expect("alpha");
         assert_eq!(alpha.len(), 1);
@@ -1388,7 +1382,6 @@ mod tests {
             .expect("sign");
         ingest(&ndb, &discussion);
         ingest(&ndb, &make_share(&keys, "alpha", "art-1", "Real Article"));
-        wait_for_ndb();
 
         let records = query_for_group(&ndb, "alpha", 32).expect("query");
         assert_eq!(records.len(), 1, "discussion must be excluded");
@@ -1405,7 +1398,6 @@ mod tests {
                 &make_share(&keys, "alpha", &format!("a{i}"), &format!("T{i}")),
             );
         }
-        wait_for_ndb();
         let records = query_for_group(&ndb, "alpha", 3).expect("query");
         assert_eq!(records.len(), 3);
     }
@@ -1497,7 +1489,6 @@ mod tests {
         );
         ingest(&ndb, &rust_book);
         ingest(&ndb, &management);
-        wait_for_ndb();
 
         let by_title = search_cached(&ndb, "RUST programming", 20).expect("title search");
         assert_eq!(by_title.len(), 1);
@@ -1552,7 +1543,6 @@ mod tests {
                 ),
             );
         }
-        wait_for_ndb();
 
         let hits = search_cached(&ndb, "rust", 2).expect("search");
         assert_eq!(hits.len(), 2);
@@ -1588,7 +1578,6 @@ mod tests {
         );
         ingest(&ndb, &older);
         ingest(&ndb, &newer);
-        wait_for_ndb();
 
         let hits = search_cached(&ndb, "clean architecture", 20).expect("search");
         assert_eq!(hits.len(), 1);

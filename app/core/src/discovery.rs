@@ -108,6 +108,7 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
 
     fn isolated_ndb() -> (Ndb, tempfile::TempDir) {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -119,12 +120,7 @@ mod tests {
     }
 
     fn ingest(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
-    }
-
-    fn wait_for_ndb() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        process_event_and_wait(ndb, event);
     }
 
     fn meta(keys: &Keys, id: &str, name: &str, ts: u64) -> Event {
@@ -165,7 +161,6 @@ mod tests {
         ingest(&ndb, &meta(&author, "alpha", "Alpha", 100));
         ingest(&ndb, &meta(&author, "bravo", "Bravo", 300));
         ingest(&ndb, &meta(&author, "charlie", "Charlie", 200));
-        wait_for_ndb();
 
         let out = query_all_rooms_from_ndb(&ndb, 32).expect("ok");
         let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
@@ -182,7 +177,6 @@ mod tests {
                 &meta(&author, &format!("room{i}"), &format!("R{i}"), 100 + i),
             );
         }
-        wait_for_ndb();
 
         let out = query_all_rooms_from_ndb(&ndb, 4).expect("ok");
         assert_eq!(out.len(), 4);
@@ -202,7 +196,6 @@ mod tests {
         );
         ingest(&ndb, &meta(&author, "alpha", "Alpha", 200));
         ingest(&ndb, &meta(&author, "bravo", "Bravo", 100));
-        wait_for_ndb();
 
         let out = query_all_rooms_from_ndb(&ndb, 2).expect("ok");
         let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
@@ -215,7 +208,6 @@ mod tests {
         let author = Keys::generate();
         ingest(&ndb, &meta(&author, "alpha", "Old Alpha", 100));
         ingest(&ndb, &meta(&author, "alpha", "New Alpha", 200));
-        wait_for_ndb();
 
         let out = query_all_rooms_from_ndb(&ndb, 32).expect("ok");
         assert_eq!(out.len(), 1);

@@ -444,6 +444,7 @@ struct PendingItem {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
     use nostrdb::{Config as NdbConfig, Ndb};
     use tempfile::TempDir;
 
@@ -457,14 +458,7 @@ mod tests {
     }
 
     fn ingest(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
-    }
-
-    fn wait_for_ndb() {
-        // nostrdb processes writes on a background ingester thread; give it a
-        // moment to commit before opening a read transaction.
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        process_event_and_wait(ndb, event);
     }
 
     fn sign(keys: &Keys, kind: u16, tags: Vec<Tag>, ts: u64, content: &str) -> Event {
@@ -542,7 +536,6 @@ mod tests {
         ingest(&ndb, &a1);
         ingest(&ndb, &b1);
         ingest(&ndb, &s1);
-        wait_for_ndb();
 
         let feed = query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
         assert_eq!(feed.len(), 2, "only follow-authored articles surface");
@@ -573,7 +566,6 @@ mod tests {
         let comment = interaction_event(&alice, KIND_NIP22_COMMENT, &address, 1_500, "great read");
         ingest(&ndb, &reaction);
         ingest(&ndb, &comment);
-        wait_for_ndb();
 
         let feed = query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
         assert_eq!(feed.len(), 1);
@@ -607,7 +599,6 @@ mod tests {
         let address = format!("30023:{}:post", alice.public_key().to_hex());
         let reaction = interaction_event(&bob, KIND_REACTION, &address, 5_000, "+");
         ingest(&ndb, &reaction);
-        wait_for_ndb();
 
         let feed = query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
         assert_eq!(feed.len(), 1);
@@ -682,7 +673,6 @@ mod tests {
                 ),
             );
         }
-        wait_for_ndb();
         let feed = query_following_reads(&ndb, &me.public_key().to_hex(), 2).expect("query");
         assert_eq!(feed.len(), 2);
         assert_eq!(feed[0].article.identifier, "p4");

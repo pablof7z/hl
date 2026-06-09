@@ -1803,6 +1803,7 @@ fn format_clip_time(value: f64) -> String {
 mod tests {
     use super::*;
     use crate::models::{ArtifactPreview, ArtifactRecord, HighlightDraft};
+    use crate::test_ndb::process_event_and_wait;
 
     #[test]
     fn source_kind_uses_preview_source_first() {
@@ -2737,7 +2738,6 @@ mod tests {
             },
         );
         ingest(&ndb, &share);
-        wait_for_ndb();
 
         let highlight = highlight_for_source_key("h1", "i:isbn:9781593278281", 1_000);
         let out = hydrate(&ndb, vec![highlight.clone()]).expect("hydrate");
@@ -2770,7 +2770,6 @@ mod tests {
             },
         );
         ingest(&ndb, &share);
-        wait_for_ndb();
 
         let highlight = highlight_for_source_key("h-web", "r:https://example.com/essay", 1_000);
         let out = hydrate(&ndb, vec![highlight]).expect("hydrate");
@@ -3149,11 +3148,9 @@ mod tests {
             .sign_with_keys(&keys)
             .expect("sign");
 
-        for e in [&matching, &other] {
-            let relay_line = format!("[\"EVENT\",\"s\",{}]", e.as_json());
-            ndb.process_event(&relay_line).expect("process event");
+        for event in [&matching, &other] {
+            process_event_and_wait(&ndb, event);
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
 
         let hits = query_for_article(&ndb, target_address, 32).expect("query");
         assert_eq!(hits.len(), 1);
@@ -3196,12 +3193,7 @@ mod tests {
     }
 
     fn ingest(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
-    }
-
-    fn wait_for_ndb() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        process_event_and_wait(ndb, event);
     }
 
     fn make_group_highlight(keys: &Keys, group_id: &str, quote: &str) -> Event {
@@ -3220,7 +3212,6 @@ mod tests {
         let keys = Keys::generate();
         let hl = make_group_highlight(&keys, "alpha", "my insight");
         ingest(&ndb, &hl);
-        wait_for_ndb();
 
         let records = query_for_group(&ndb, "alpha", 32).expect("query");
         assert_eq!(records.len(), 1);
@@ -3233,7 +3224,6 @@ mod tests {
         let keys = Keys::generate();
         ingest(&ndb, &make_group_highlight(&keys, "alpha", "alpha hl"));
         ingest(&ndb, &make_group_highlight(&keys, "bravo", "bravo hl"));
-        wait_for_ndb();
 
         let alpha = query_for_group(&ndb, "alpha", 32).expect("alpha");
         assert_eq!(alpha.len(), 1);
@@ -3259,7 +3249,6 @@ mod tests {
             .expect("sign");
         ingest(&ndb, &no_h);
         ingest(&ndb, &make_group_highlight(&keys, "alpha", "alpha hl"));
-        wait_for_ndb();
 
         let records = query_for_group(&ndb, "alpha", 32).expect("query");
         assert_eq!(records.len(), 1);

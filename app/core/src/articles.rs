@@ -457,6 +457,7 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
 
     fn sign_article(keys: &Keys, d: &str, tags: Vec<Tag>, ts: u64, content: &str) -> Event {
         let mut all = vec![Tag::identifier(d)];
@@ -790,13 +791,9 @@ mod tests {
         let newer = sign_article(&keys, "post-x", vec![named("title", "Newer")], 2_000, "v2");
         let other = sign_article(&keys, "post-y", vec![named("title", "Other")], 1_500, "w");
 
-        for e in [&older, &newer, &other] {
-            let relay_line = format!("[\"EVENT\",\"s\",{}]", e.as_json());
-            ndb.process_event(&relay_line).expect("process event");
+        for event in [&older, &newer, &other] {
+            process_event_and_wait(&ndb, event);
         }
-
-        // Give ndb a moment to index — it processes writes async.
-        std::thread::sleep(std::time::Duration::from_millis(100));
 
         let got = query_article(&ndb, &keys.public_key().to_hex(), "post-x")
             .expect("query_article")

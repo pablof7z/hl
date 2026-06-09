@@ -951,6 +951,7 @@ mod tests {
         WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS, KIND_CURATION_SETS, KIND_WEB_BOOKMARK,
     };
     use crate::models::{ArticleRecord, BookmarkSetRecord, WebBookmarkRecord};
+    use crate::test_ndb::process_event_and_wait;
     use nostr_sdk::prelude::*;
     use nostrdb::{Config, Ndb};
     use tempfile::TempDir;
@@ -963,8 +964,7 @@ mod tests {
     }
 
     fn process(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).unwrap();
+        process_event_and_wait(ndb, event);
     }
 
     fn set(id: &str, title: &str, article_addresses: Vec<&str>) -> BookmarkSetRecord {
@@ -1200,7 +1200,6 @@ mod tests {
         ] {
             process(&ndb, event);
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let snapshot = query_bookmark_library_snapshot(&ndb, &user.public_key().to_hex());
         assert_eq!(snapshot.my_articles.len(), 1);

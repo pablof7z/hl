@@ -125,6 +125,7 @@ fn list_section_or_empty<T>(section: &'static str, result: Result<Vec<T>, CoreEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
     use nostr_sdk::prelude::*;
     use tempfile::TempDir;
 
@@ -136,8 +137,7 @@ mod tests {
     }
 
     fn process(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).unwrap();
+        process_event_and_wait(ndb, event);
     }
 
     fn named(name: &str, value: &str) -> Tag {
@@ -185,7 +185,6 @@ mod tests {
         for event in [&artifact, &highlight, &comment] {
             process(&ndb, event);
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
 
         let snapshot = query_room_home_snapshot(&ndb, "room-a");
 

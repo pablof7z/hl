@@ -113,6 +113,7 @@ fn bool_section_or_false(section: &'static str, result: Result<bool, CoreError>)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
     use nostr_sdk::prelude::*;
     use tempfile::TempDir;
 
@@ -124,8 +125,7 @@ mod tests {
     }
 
     fn process(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).unwrap();
+        process_event_and_wait(ndb, event);
     }
 
     fn named(name: &str, value: &str) -> Tag {
@@ -183,7 +183,6 @@ mod tests {
         ] {
             process(&ndb, event);
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
 
         let snapshot = query_profile_page_snapshot(
             &ndb,

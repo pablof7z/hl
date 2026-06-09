@@ -379,6 +379,7 @@ fn parse_bookmark_event(event: Event) -> BookmarkList {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
     use tempfile::TempDir;
 
     fn fresh_ndb() -> (Ndb, TempDir) {
@@ -389,8 +390,7 @@ mod tests {
     }
 
     fn process(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).unwrap();
+        process_event_and_wait(ndb, event);
     }
 
     #[test]
@@ -408,7 +408,6 @@ mod tests {
             .sign_with_keys(&keys)
             .unwrap();
         process(&ndb, &event);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let list = query_bookmarks(&ndb, &keys.public_key().to_hex()).unwrap();
         assert_eq!(list.addresses, vec!["30023:aa:essay", "30023:bb:letter"]);
@@ -434,7 +433,6 @@ mod tests {
 
         process(&ndb, &older);
         process(&ndb, &newer);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let list = query_bookmarks(&ndb, &keys.public_key().to_hex()).unwrap();
         assert_eq!(list.addresses, vec!["30023:aa:new"]);
@@ -450,7 +448,6 @@ mod tests {
             .sign_with_keys(&keys)
             .unwrap();
         process(&ndb, &event);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let pk = keys.public_key().to_hex();
         assert!(is_bookmarked(&ndb, &pk, "30023:aa:essay").unwrap());

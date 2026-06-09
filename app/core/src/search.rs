@@ -748,6 +748,7 @@ fn article_record_from_event(event: &Event) -> Option<ArticleRecord> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
     use tempfile::TempDir;
 
     fn fresh_ndb() -> (Ndb, TempDir) {
@@ -758,8 +759,7 @@ mod tests {
     }
 
     fn process(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).unwrap();
+        process_event_and_wait(ndb, event);
     }
 
     fn community(name: &str) -> CommunitySummary {
@@ -948,7 +948,6 @@ mod tests {
         process(&ndb, &match_quote);
         process(&ndb, &match_note);
         process(&ndb, &no_match);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let hits = search_highlights(&ndb, "DOSTOEVSKY", 20).unwrap();
         assert!(hits.iter().any(|h| h.note.contains("dostoevsky")));
@@ -993,7 +992,6 @@ mod tests {
         process(&ndb, &older);
         process(&ndb, &newer);
         process(&ndb, &hashtag_match);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let hits = search_articles(&ndb, "attention", 20).unwrap();
         assert_eq!(hits.len(), 2, "dedupe by (pubkey, d): 2 distinct addresses");
@@ -1035,7 +1033,6 @@ mod tests {
         for event in [&highlight, &article, &community, &profile] {
             process(&ndb, event);
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let snapshot = search_results_snapshot(&ndb, " attention ");
         assert_eq!(snapshot.highlights.len(), 1);
@@ -1076,7 +1073,6 @@ mod tests {
                 .unwrap();
             process(&ndb, &event);
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let hits = search_communities(&ndb, "reader", 20).unwrap();
         let ids: Vec<_> = hits.iter().map(|c| c.id.as_str()).collect();
@@ -1104,7 +1100,6 @@ mod tests {
 
         process(&ndb, &contains_only);
         process(&ndb, &prefix_match);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let hits = search_profiles(&ndb, "huxley", 20).unwrap();
         assert_eq!(hits.len(), 2);
@@ -1131,7 +1126,6 @@ mod tests {
             .sign_with_keys(&user)
             .unwrap();
         process(&ndb, &event);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let relays = query_search_relays(&ndb, &user.public_key().to_hex()).unwrap();
         assert_eq!(

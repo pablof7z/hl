@@ -184,6 +184,7 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
 
     fn isolated_ndb() -> (Ndb, tempfile::TempDir) {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -195,12 +196,7 @@ mod tests {
     }
 
     fn ingest(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
-    }
-
-    fn wait_for_ndb() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        process_event_and_wait(ndb, event);
     }
 
     fn sign(keys: &Keys, kind: u16, tags: Vec<Tag>, content: &str) -> Event {
@@ -275,7 +271,6 @@ mod tests {
             &ndb,
             &list_event(&curator, &["bravo", "alpha"], "wss://relay.example", 100),
         );
-        wait_for_ndb();
 
         let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
@@ -294,7 +289,6 @@ mod tests {
             &ndb,
             &list_event(&curator, &["alpha", "bravo"], "wss://relay.example", 100),
         );
-        wait_for_ndb();
 
         let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 1);
@@ -325,7 +319,6 @@ mod tests {
                 100,
             ),
         );
-        wait_for_ndb();
 
         let out =
             fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("curated");
@@ -351,7 +344,6 @@ mod tests {
             &ndb,
             &list_event(&curator, &["alpha", "bravo"], "wss://relay.example", 200),
         );
-        wait_for_ndb();
 
         let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 2);
@@ -375,7 +367,6 @@ mod tests {
             .sign_with_keys(&curator)
             .expect("sign");
         ingest(&ndb, &list);
-        wait_for_ndb();
 
         let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 1);
@@ -393,7 +384,6 @@ mod tests {
             &ndb,
             &list_event(&curator, &["alpha", "alpha", "alpha"], "wss://r", 100),
         );
-        wait_for_ndb();
 
         let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 1);
