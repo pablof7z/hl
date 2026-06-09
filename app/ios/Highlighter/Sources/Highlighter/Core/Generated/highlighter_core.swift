@@ -912,6 +912,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getArticleArtifactRecord(article: ArticleRecord)  -> ArtifactOutcome
 
     /**
+     * Return the current article bookmark snapshot. Rust owns the nostrdb
+     * query and error semantics; native shells render and cache the returned
+     * address set.
+     */
+    func getArticleBookmarksSnapshot() async  -> ArticleBookmarksSnapshot
+
+    /**
      * Read a single NIP-23 article by its full NIP-33 address
      * (`30023:<pubkey>:<d>`) from nostrdb.
      */
@@ -988,12 +995,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * title fallback, article row resolution, and empty-state policy.
      */
     func getBookmarkSetDetailSnapshot(record: BookmarkSetRecord) async  -> BookmarkSetDetailSnapshot
-
-    /**
-     * Return the set of article addresses the user has bookmarked in their
-     * newest kind:10003 list (empty when not logged in or no list cached).
-     */
-    func getBookmarkedArticleAddresses() async  -> StringListOutcome
 
     /**
      * Size + event-count snapshot of the local nostrdb cache. Order-of-
@@ -1222,12 +1223,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * kind:10063. Called once after login; no-op when the list already exists.
      */
     func initDefaultBlossomServers() async  -> MutationOutcome
-
-    /**
-     * Read-only predicate: is `address` currently bookmarked for the logged-in
-     * user? Always `false` when no user is logged in.
-     */
-    func isArticleBookmarked(address: String) async  -> BoolOutcome
 
     /**
      * Returns true if the logged-in user's cached contact list currently
@@ -1890,11 +1885,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func suggestNip05Username(displayName: String)  -> String
 
     /**
-     * Toggle `address` in the user's kind:10003 list. Returns the new
-     * membership state — `true` if the address is now bookmarked, `false`
-     * if it was removed.
+     * Toggle `address` in the user's kind:10003 list and return the
+     * post-toggle article bookmark snapshot. Rust owns the read-modify-write;
+     * native shells do not inspect a bool mutation outcome.
      */
-    func toggleArticleBookmark(address: String) async  -> BoolOutcome
+    func toggleArticleBookmarkSnapshot(address: String) async  -> ArticleBookmarksSnapshot
 
     /**
      * Toggle the current user's bookmark on a visible NIP-22 comment and
@@ -2508,6 +2503,29 @@ open func getArticleArtifactRecord(article: ArticleRecord) -> ArtifactOutcome  {
 }
 
     /**
+     * Return the current article bookmark snapshot. Rust owns the nostrdb
+     * query and error semantics; native shells render and cache the returned
+     * address set.
+     */
+open func getArticleBookmarksSnapshot()async  -> ArticleBookmarksSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_article_bookmarks_snapshot(
+                    self.uniffiClonePointer()
+
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeArticleBookmarksSnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
      * Read a single NIP-23 article by its full NIP-33 address
      * (`30023:<pubkey>:<d>`) from nostrdb.
      */
@@ -2735,28 +2753,6 @@ open func getBookmarkSetDetailSnapshot(record: BookmarkSetRecord)async  -> Bookm
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeBookmarkSetDetailSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Return the set of article addresses the user has bookmarked in their
-     * newest kind:10003 list (empty when not logged in or no list cached).
-     */
-open func getBookmarkedArticleAddresses()async  -> StringListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_bookmarked_article_addresses(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringListOutcome_lift,
             errorHandler: nil
 
         )
@@ -3592,28 +3588,6 @@ open func initDefaultBlossomServers()async  -> MutationOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeMutationOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Read-only predicate: is `address` currently bookmarked for the logged-in
-     * user? Always `false` when no user is logged in.
-     */
-open func isArticleBookmarked(address: String)async  -> BoolOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_is_article_bookmarked(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(address)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBoolOutcome_lift,
             errorHandler: nil
 
         )
@@ -5744,15 +5718,15 @@ open func suggestNip05Username(displayName: String) -> String  {
 }
 
     /**
-     * Toggle `address` in the user's kind:10003 list. Returns the new
-     * membership state — `true` if the address is now bookmarked, `false`
-     * if it was removed.
+     * Toggle `address` in the user's kind:10003 list and return the
+     * post-toggle article bookmark snapshot. Rust owns the read-modify-write;
+     * native shells do not inspect a bool mutation outcome.
      */
-open func toggleArticleBookmark(address: String)async  -> BoolOutcome  {
+open func toggleArticleBookmarkSnapshot(address: String)async  -> ArticleBookmarksSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_toggle_article_bookmark(
+                uniffi_highlighter_core_fn_method_highlightercore_toggle_article_bookmark_snapshot(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(address)
                 )
@@ -5760,7 +5734,7 @@ open func toggleArticleBookmark(address: String)async  -> BoolOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBoolOutcome_lift,
+            liftFunc: FfiConverterTypeArticleBookmarksSnapshot_lift,
             errorHandler: nil
 
         )
@@ -6611,6 +6585,76 @@ public func FfiConverterTypeArticleBookmarkStateProjectionInput_lift(_ buf: Rust
 #endif
 public func FfiConverterTypeArticleBookmarkStateProjectionInput_lower(_ value: ArticleBookmarkStateProjectionInput) -> RustBuffer {
     return FfiConverterTypeArticleBookmarkStateProjectionInput.lower(value)
+}
+
+
+public struct ArticleBookmarksSnapshot {
+    public var addresses: [String]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(addresses: [String], error: String) {
+        self.addresses = addresses
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ArticleBookmarksSnapshot: Sendable {}
+#endif
+
+
+extension ArticleBookmarksSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ArticleBookmarksSnapshot, rhs: ArticleBookmarksSnapshot) -> Bool {
+        if lhs.addresses != rhs.addresses {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(addresses)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleBookmarksSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarksSnapshot {
+        return
+            try ArticleBookmarksSnapshot(
+                addresses: FfiConverterSequenceString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleBookmarksSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.addresses, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarksSnapshot_lift(_ buf: RustBuffer) throws -> ArticleBookmarksSnapshot {
+    return try FfiConverterTypeArticleBookmarksSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarksSnapshot_lower(_ value: ArticleBookmarksSnapshot) -> RustBuffer {
+    return FfiConverterTypeArticleBookmarksSnapshot.lower(value)
 }
 
 
@@ -37799,6 +37843,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_artifact_record() != 57115) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_bookmarks_snapshot() != 7294) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_by_address() != 8240) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -37839,9 +37886,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmark_set_detail_snapshot() != 59106) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmarked_article_addresses() != 46854) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 59703) {
@@ -37989,9 +38033,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 36336) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_is_article_bookmarked() != 17349) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_following() != 423) {
@@ -38474,7 +38515,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_suggest_nip05_username() != 36133) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark() != 27334) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark_snapshot() != 16959) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_comment_bookmark_snapshot() != 59864) {

@@ -165,8 +165,10 @@ final class HighlighterStore {
         guard projection.canToggle else { return }
         bookmarkedArticleAddresses = projection.optimisticAddresses
         // Authoritative toggle + publish.
-        let outcome = await safeCore.toggleArticleBookmark(address: projection.canonicalAddress)
-        if !outcome.error.isEmpty {
+        let snapshot = await safeCore.toggleArticleBookmarkSnapshot(address: projection.canonicalAddress)
+        if snapshot.error.isEmpty {
+            bookmarkedArticleAddresses = snapshot.addresses
+        } else {
             // Revert on failure.
             await refreshBookmarks()
         }
@@ -175,9 +177,9 @@ final class HighlighterStore {
     }
 
     func refreshBookmarks() async {
-        let outcome = await safeCore.getBookmarkedArticleAddresses()
-        if outcome.error.isEmpty {
-            bookmarkedArticleAddresses = outcome.values
+        let snapshot = await safeCore.getArticleBookmarksSnapshot()
+        if snapshot.error.isEmpty {
+            bookmarkedArticleAddresses = snapshot.addresses
         }
     }
 

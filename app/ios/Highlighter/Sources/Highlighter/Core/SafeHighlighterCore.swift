@@ -304,16 +304,12 @@ actor SafeHighlighterCore {
         core.projectArticleBookmarkChrome(input: input)
     }
 
-    func getBookmarkedArticleAddresses() async -> StringListOutcome {
-        await core.getBookmarkedArticleAddresses()
+    func getArticleBookmarksSnapshot() async -> ArticleBookmarksSnapshot {
+        await core.getArticleBookmarksSnapshot()
     }
 
-    func isArticleBookmarked(address: String) async -> BoolOutcome {
-        await core.isArticleBookmarked(address: address)
-    }
-
-    func toggleArticleBookmark(address: String) async -> BoolOutcome {
-        await core.toggleArticleBookmark(address: address)
+    func toggleArticleBookmarkSnapshot(address: String) async -> ArticleBookmarksSnapshot {
+        await core.toggleArticleBookmarkSnapshot(address: address)
     }
 
     func subscribeBookmarks() async -> SubscriptionOutcome {

@@ -56,6 +56,12 @@ pub struct ArticleBookmarkStateProjectionInput {
     pub address: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleBookmarksSnapshot {
+    pub addresses: Vec<String>,
+    pub error: String,
+}
+
 /// Native event bookmark state projection. Used for comment bookmarks and
 /// other event-id-addressed NIP-51 entries.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,6 +122,16 @@ pub fn article_bookmark_state_projection(
         can_toggle,
         is_bookmarked,
         optimistic_addresses: addresses.into_iter().collect(),
+    }
+}
+
+pub fn article_bookmarks_snapshot(
+    addresses: Vec<String>,
+    error: impl ToString,
+) -> ArticleBookmarksSnapshot {
+    ArticleBookmarksSnapshot {
+        addresses,
+        error: error.to_string(),
     }
 }
 
@@ -230,13 +246,13 @@ pub fn is_bookmarked(ndb: &Ndb, user_hex: &str, address: &str) -> Result<bool, C
 }
 
 /// Toggle `address` in the user's kind:10003 bookmark list. Reads the newest
-/// cached list, flips membership, re-publishes. Returns the new membership
-/// state (`true` = now bookmarked, `false` = removed).
-pub async fn toggle_bookmark(
+/// cached list, flips membership, re-publishes, and returns the complete
+/// post-toggle article address set.
+pub async fn toggle_article_bookmark_addresses(
     runtime: &NostrRuntime,
     user_hex: &str,
     address: &str,
-) -> Result<bool, CoreError> {
+) -> Result<Vec<String>, CoreError> {
     let address = address.trim();
     if address.is_empty() {
         return Err(CoreError::InvalidInput(
@@ -245,19 +261,17 @@ pub async fn toggle_bookmark(
     }
 
     let mut list = query_bookmarks(runtime.ndb(), user_hex)?;
-    let now_bookmarked = match list.addresses.iter().position(|a| a == address) {
+    match list.addresses.iter().position(|a| a == address) {
         Some(idx) => {
             list.addresses.remove(idx);
-            false
         }
         None => {
             list.addresses.push(address.to_string());
-            true
         }
     };
 
     publish_bookmarks(runtime, &list).await?;
-    Ok(now_bookmarked)
+    Ok(list.addresses)
 }
 
 /// Toggle `event_hex` in the user's kind:10003 bookmark list (for comments
@@ -442,6 +456,20 @@ mod tests {
         assert!(is_bookmarked(&ndb, &pk, "30023:aa:essay").unwrap());
         assert!(!is_bookmarked(&ndb, &pk, "30023:aa:letter").unwrap());
         assert!(!is_bookmarked(&ndb, &pk, "30023:aa:").unwrap());
+    }
+
+    #[test]
+    fn article_bookmarks_snapshot_preserves_addresses_and_error() {
+        let snapshot = article_bookmarks_snapshot(
+            vec!["30023:aa:essay".into(), "30023:bb:letter".into()],
+            "cache unavailable",
+        );
+
+        assert_eq!(
+            snapshot.addresses,
+            vec!["30023:aa:essay", "30023:bb:letter"]
+        );
+        assert_eq!(snapshot.error, "cache unavailable");
     }
 
     #[test]

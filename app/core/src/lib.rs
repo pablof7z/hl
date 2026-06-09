@@ -76,7 +76,7 @@ pub use blossom::{
 pub use book_detail::BookDetailSnapshot;
 pub use bookmarks::{
     ArticleBookmarkChromeProjection, ArticleBookmarkChromeProjectionInput,
-    ArticleBookmarkStateProjection, ArticleBookmarkStateProjectionInput,
+    ArticleBookmarkStateProjection, ArticleBookmarkStateProjectionInput, ArticleBookmarksSnapshot,
 };
 pub use capture::{
     CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput,

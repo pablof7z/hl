@@ -2374,9 +2374,12 @@ impl HighlighterCore {
         crate::bookmarks::article_bookmark_chrome_projection(input)
     }
 
-    /// Return the set of article addresses the user has bookmarked in their
-    /// newest kind:10003 list (empty when not logged in or no list cached).
-    pub async fn get_bookmarked_article_addresses(&self) -> StringListOutcome {
+    /// Return the current article bookmark snapshot. Rust owns the nostrdb
+    /// query and error semantics; native shells render and cache the returned
+    /// address set.
+    pub async fn get_article_bookmarks_snapshot(
+        &self,
+    ) -> crate::bookmarks::ArticleBookmarksSnapshot {
         let user_hex = self
             .inner
             .read()
@@ -2384,41 +2387,35 @@ impl HighlighterCore {
             .current_user()
             .map(|u| u.pubkey)
             .unwrap_or_default();
-        string_list_outcome(
-            crate::bookmarks::query_bookmarks(self.runtime.ndb(), &user_hex)
-                .map(|list| list.addresses),
-        )
-    }
-
-    /// Read-only predicate: is `address` currently bookmarked for the logged-in
-    /// user? Always `false` when no user is logged in.
-    pub async fn is_article_bookmarked(&self, address: String) -> BoolOutcome {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .unwrap_or_default();
-        if user_hex.is_empty() {
-            return bool_outcome(Ok(false));
+        match crate::bookmarks::query_bookmarks(self.runtime.ndb(), &user_hex) {
+            Ok(list) => crate::bookmarks::article_bookmarks_snapshot(list.addresses, ""),
+            Err(error) => crate::bookmarks::article_bookmarks_snapshot(Vec::new(), error),
         }
-        bool_outcome(crate::bookmarks::is_bookmarked(
-            self.runtime.ndb(),
-            &user_hex,
-            &address,
-        ))
     }
 
-    /// Toggle `address` in the user's kind:10003 list. Returns the new
-    /// membership state — `true` if the address is now bookmarked, `false`
-    /// if it was removed.
-    pub async fn toggle_article_bookmark(&self, address: String) -> BoolOutcome {
-        let user_hex = match self.inner.read().session.current_user().map(|u| u.pubkey) {
-            Some(user_hex) => user_hex,
-            None => return bool_outcome(Err(CoreError::NotInitialized)),
-        };
-        bool_outcome(crate::bookmarks::toggle_bookmark(&self.runtime, &user_hex, &address).await)
+    /// Toggle `address` in the user's kind:10003 list and return the
+    /// post-toggle article bookmark snapshot. Rust owns the read-modify-write;
+    /// native shells do not inspect a bool mutation outcome.
+    pub async fn toggle_article_bookmark_snapshot(
+        &self,
+        address: String,
+    ) -> crate::bookmarks::ArticleBookmarksSnapshot {
+        let result: Result<Vec<String>, CoreError> = async {
+            let user_hex = self
+                .inner
+                .read()
+                .session
+                .current_user()
+                .map(|u| u.pubkey)
+                .ok_or(CoreError::NotInitialized)?;
+            crate::bookmarks::toggle_article_bookmark_addresses(&self.runtime, &user_hex, &address)
+                .await
+        }
+        .await;
+        match result {
+            Ok(addresses) => crate::bookmarks::article_bookmarks_snapshot(addresses, ""),
+            Err(error) => crate::bookmarks::article_bookmarks_snapshot(Vec::new(), error),
+        }
     }
 
     /// Open a live subscription on the current user's kind:10003 bookmark
