@@ -3730,6 +3730,13 @@ impl HighlighterCore {
         crate::nostr_entities::identity_key(&entity)
     }
 
+    pub fn project_nostr_entity_article_card(
+        &self,
+        input: crate::nostr_entities::NostrEntityArticleCardProjectionInput,
+    ) -> crate::nostr_entities::NostrEntityArticleCardProjection {
+        crate::nostr_entities::article_card_projection(input)
+    }
+
     pub fn tokenize_nostr_content(
         &self,
         content: String,

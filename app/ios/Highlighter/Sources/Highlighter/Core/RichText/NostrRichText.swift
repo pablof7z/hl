@@ -284,22 +284,17 @@ private struct ArticleEntityCard: View {
     @State private var profile: ProfileMetadata?
 
     var body: some View {
-        let tags = parseTags(event.tagsJson)
-        let title = tagValue(tags, "title")
-        let image = tagValue(tags, "image")
-        let summary = tagValue(tags, "summary")
-        let dTag = tagValue(tags, "d")
-        let target = appStore.core
-            .getArticleReaderRouteForArticle(pubkeyHex: event.pubkeyHex, dTag: dTag)
-            .value
-            .map { ArticleReaderTarget(route: $0) }
+        let projection = appStore.safeCore.projectNostrEntityArticleCard(
+            input: NostrEntityArticleCardProjectionInput(event: event)
+        )
+        let target = projection.readerRoute.map { ArticleReaderTarget(route: $0) }
         return Group {
             if let target {
                 NavigationLink(value: target) {
-                    cardContent(title: title, image: image, summary: summary)
+                    cardContent(projection)
                 }
             } else {
-                cardContent(title: title, image: image, summary: summary)
+                cardContent(projection)
             }
         }
         .buttonStyle(.plain)
@@ -312,10 +307,10 @@ private struct ArticleEntityCard: View {
         }
     }
 
-    private func cardContent(title: String, image: String, summary: String) -> some View {
+    private func cardContent(_ projection: NostrEntityArticleCardProjection) -> some View {
         let author = authorDisplay
         return HStack(alignment: .top, spacing: 12) {
-            if let url = URL(string: image), !image.isEmpty {
+            if let image = projection.imageUrl, let url = URL(string: image) {
                 KFImage(url)
                     .resizable()
                     .scaledToFill()
@@ -327,11 +322,11 @@ private struct ArticleEntityCard: View {
                     .frame(width: 88, height: 88)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(title.isEmpty ? "Untitled" : title)
+                Text(projection.displayTitle)
                     .font(.system(.headline, design: .default))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
-                if !summary.isEmpty {
+                if let summary = projection.summary {
                     Text(summary)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
@@ -583,18 +578,6 @@ private struct GenericEntityCard: View {
 }
 
 // MARK: - Helpers
-
-private func parseTags(_ json: String) -> [[String]] {
-    guard let data = json.data(using: .utf8) else { return [] }
-    return (try? JSONDecoder().decode([[String]].self, from: data)) ?? []
-}
-
-private func tagValue(_ tags: [[String]], _ name: String) -> String {
-    for t in tags where t.first == name && t.count > 1 {
-        return t[1]
-    }
-    return ""
-}
 
 private func relativeDate(_ secondsSinceEpoch: UInt64) -> String {
     let date = Date(timeIntervalSince1970: TimeInterval(secondsSinceEpoch))

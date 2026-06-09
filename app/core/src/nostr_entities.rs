@@ -28,7 +28,9 @@ use nostr_sdk::nips::nip19::{
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
+use crate::articles;
 use crate::errors::CoreError;
+use crate::models::ArticleReaderRoute;
 
 const KIND_METADATA: u32 = 0;
 const KIND_SHORT_NOTE: u32 = 1;
@@ -107,6 +109,19 @@ pub struct NostrEntityEvent {
     /// `image` etc. for an article card without needing a second FFI
     /// record schema per kind.
     pub tags_json: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NostrEntityArticleCardProjectionInput {
+    pub event: NostrEntityEvent,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NostrEntityArticleCardProjection {
+    pub display_title: String,
+    pub image_url: Option<String>,
+    pub summary: Option<String>,
+    pub reader_route: Option<ArticleReaderRoute>,
 }
 
 /// Accept the bare bech32 (`npub1…`) and the `nostr:` URI form
@@ -310,6 +325,48 @@ pub fn extract_event_refs(content: &str) -> Vec<NostrEntityRef> {
         }
     }
     out
+}
+
+/// Presentation projection for a resolved NIP-23 entity card. Rust owns event
+/// tag decoding, title fallback, optional media/summary presence, and native
+/// reader route construction.
+pub fn article_card_projection(
+    input: NostrEntityArticleCardProjectionInput,
+) -> NostrEntityArticleCardProjection {
+    let event = input.event;
+    let tags = tags_from_json(&event.tags_json);
+    let d_tag = tag_value(&tags, "d");
+    let title = tag_value(&tags, "title");
+    NostrEntityArticleCardProjection {
+        display_title: if title.is_empty() {
+            "Untitled".into()
+        } else {
+            title
+        },
+        image_url: non_empty_string(&tag_value(&tags, "image")),
+        summary: non_empty_string(&tag_value(&tags, "summary")),
+        reader_route: articles::article_reader_route(&event.pubkey_hex, &d_tag),
+    }
+}
+
+fn tags_from_json(json: &str) -> Vec<Vec<String>> {
+    serde_json::from_str(json).unwrap_or_default()
+}
+
+fn tag_value(tags: &[Vec<String>], name: &str) -> String {
+    tags.iter()
+        .find(|tag| tag.first().is_some_and(|tag_name| tag_name == name) && tag.len() > 1)
+        .and_then(|tag| tag.get(1))
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
 }
 
 fn scan_nostr_uri(content: &str, start: usize) -> Option<(Range<usize>, &str)> {
@@ -973,5 +1030,54 @@ mod tests {
             render_kind_for_event_kind(11),
             NostrEntityRenderKind::Generic
         );
+    }
+
+    #[test]
+    fn article_card_projection_projects_article_tags_and_route() {
+        let projection = article_card_projection(NostrEntityArticleCardProjectionInput {
+            event: entity_article_event(
+                "authorpubkey",
+                r#"[["d","essay"],["title","Article"],["image","https://example.com/cover.jpg"],["summary","Summary"]]"#,
+            ),
+        });
+
+        assert_eq!(projection.display_title, "Article");
+        assert_eq!(
+            projection.image_url,
+            Some("https://example.com/cover.jpg".into())
+        );
+        assert_eq!(projection.summary, Some("Summary".into()));
+        assert_eq!(
+            projection.reader_route,
+            Some(ArticleReaderRoute {
+                address: "30023:authorpubkey:essay".into(),
+                pubkey: "authorpubkey".into(),
+                d_tag: "essay".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn article_card_projection_falls_back_without_optional_tags() {
+        let projection = article_card_projection(NostrEntityArticleCardProjectionInput {
+            event: entity_article_event("authorpubkey", r#"[["d",""]]"#),
+        });
+
+        assert_eq!(projection.display_title, "Untitled");
+        assert_eq!(projection.image_url, None);
+        assert_eq!(projection.summary, None);
+        assert_eq!(projection.reader_route, None);
+    }
+
+    fn entity_article_event(pubkey_hex: &str, tags_json: &str) -> NostrEntityEvent {
+        NostrEntityEvent {
+            event_id_hex: "event".into(),
+            kind: KIND_LONG_FORM,
+            render_kind: NostrEntityRenderKind::Article,
+            pubkey_hex: pubkey_hex.into(),
+            content: String::new(),
+            created_at: 123,
+            tags_json: tags_json.into(),
+        }
     }
 }

@@ -1461,6 +1461,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
+    func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput)  -> NostrEntityArticleCardProjection
+
     /**
      * Profile/avatar presentation projection. Rust owns profile-name
      * precedence, pubkey fallback, and avatar URL selection; native shells
@@ -4394,6 +4396,14 @@ open func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelay
     return try!  FfiConverterTypeImportRelaysProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_import_relays(self.uniffiClonePointer(),
         FfiConverterTypeImportRelaysProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput) -> NostrEntityArticleCardProjection  {
+    return try!  FfiConverterTypeNostrEntityArticleCardProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_nostr_entity_article_card(self.uniffiClonePointer(),
+        FfiConverterTypeNostrEntityArticleCardProjectionInput_lower(input),$0
     )
 })
 }
@@ -15835,6 +15845,154 @@ public func FfiConverterTypeNip11DocumentOutcome_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeNip11DocumentOutcome_lower(_ value: Nip11DocumentOutcome) -> RustBuffer {
     return FfiConverterTypeNip11DocumentOutcome.lower(value)
+}
+
+
+public struct NostrEntityArticleCardProjection {
+    public var displayTitle: String
+    public var imageUrl: String?
+    public var summary: String?
+    public var readerRoute: ArticleReaderRoute?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayTitle: String, imageUrl: String?, summary: String?, readerRoute: ArticleReaderRoute?) {
+        self.displayTitle = displayTitle
+        self.imageUrl = imageUrl
+        self.summary = summary
+        self.readerRoute = readerRoute
+    }
+}
+
+#if compiler(>=6)
+extension NostrEntityArticleCardProjection: Sendable {}
+#endif
+
+
+extension NostrEntityArticleCardProjection: Equatable, Hashable {
+    public static func ==(lhs: NostrEntityArticleCardProjection, rhs: NostrEntityArticleCardProjection) -> Bool {
+        if lhs.displayTitle != rhs.displayTitle {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        if lhs.summary != rhs.summary {
+            return false
+        }
+        if lhs.readerRoute != rhs.readerRoute {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayTitle)
+        hasher.combine(imageUrl)
+        hasher.combine(summary)
+        hasher.combine(readerRoute)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNostrEntityArticleCardProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityArticleCardProjection {
+        return
+            try NostrEntityArticleCardProjection(
+                displayTitle: FfiConverterString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
+                readerRoute: FfiConverterOptionTypeArticleReaderRoute.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NostrEntityArticleCardProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayTitle, into: &buf)
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
+        FfiConverterOptionString.write(value.summary, into: &buf)
+        FfiConverterOptionTypeArticleReaderRoute.write(value.readerRoute, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityArticleCardProjection_lift(_ buf: RustBuffer) throws -> NostrEntityArticleCardProjection {
+    return try FfiConverterTypeNostrEntityArticleCardProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityArticleCardProjection_lower(_ value: NostrEntityArticleCardProjection) -> RustBuffer {
+    return FfiConverterTypeNostrEntityArticleCardProjection.lower(value)
+}
+
+
+public struct NostrEntityArticleCardProjectionInput {
+    public var event: NostrEntityEvent
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(event: NostrEntityEvent) {
+        self.event = event
+    }
+}
+
+#if compiler(>=6)
+extension NostrEntityArticleCardProjectionInput: Sendable {}
+#endif
+
+
+extension NostrEntityArticleCardProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: NostrEntityArticleCardProjectionInput, rhs: NostrEntityArticleCardProjectionInput) -> Bool {
+        if lhs.event != rhs.event {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(event)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNostrEntityArticleCardProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityArticleCardProjectionInput {
+        return
+            try NostrEntityArticleCardProjectionInput(
+                event: FfiConverterTypeNostrEntityEvent.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NostrEntityArticleCardProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeNostrEntityEvent.write(value.event, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityArticleCardProjectionInput_lift(_ buf: RustBuffer) throws -> NostrEntityArticleCardProjectionInput {
+    return try FfiConverterTypeNostrEntityArticleCardProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNostrEntityArticleCardProjectionInput_lower(_ value: NostrEntityArticleCardProjectionInput) -> RustBuffer {
+    return FfiConverterTypeNostrEntityArticleCardProjectionInput.lower(value)
 }
 
 
@@ -30608,6 +30766,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_nostr_entity_article_card() != 6476) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_display() != 29583) {

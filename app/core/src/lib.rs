@@ -119,6 +119,7 @@ pub use models::{
     WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::Nip05Availability;
+pub use nostr_entities::{NostrEntityArticleCardProjection, NostrEntityArticleCardProjectionInput};
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
 pub use podcast_transcript::{
     PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipReference,

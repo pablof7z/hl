@@ -673,6 +673,12 @@ actor SafeHighlighterCore {
         core.nostrEntityIdentityKey(entity: entity)
     }
 
+    nonisolated func projectNostrEntityArticleCard(
+        input: NostrEntityArticleCardProjectionInput
+    ) -> NostrEntityArticleCardProjection {
+        core.projectNostrEntityArticleCard(input: input)
+    }
+
     nonisolated func tokenizeNostrContent(_ content: String) -> [NostrContentRun] {
         core.tokenizeNostrContent(content: content)
     }
