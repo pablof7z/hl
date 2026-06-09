@@ -17,6 +17,13 @@ pub struct ArticleReaderSnapshot {
     pub highlights: Vec<HighlightRecord>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleReaderHighlightPublishSnapshotOutcome {
+    pub snapshot: ArticleReaderSnapshot,
+    pub published_highlight_id: String,
+    pub error: String,
+}
+
 impl ArticleReaderSnapshot {
     fn empty() -> Self {
         Self {
@@ -24,6 +31,17 @@ impl ArticleReaderSnapshot {
             author_profile: None,
             highlights: Vec::new(),
         }
+    }
+}
+
+pub fn snapshot_with_published_highlight(
+    snapshot: ArticleReaderSnapshot,
+    highlight: &HighlightRecord,
+) -> ArticleReaderSnapshot {
+    ArticleReaderSnapshot {
+        article: snapshot.article,
+        author_profile: snapshot.author_profile,
+        highlights: highlights::insert_unique_front(&snapshot.highlights, highlight),
     }
 }
 
@@ -92,9 +110,19 @@ mod tests {
         (ndb, tmp)
     }
 
-    fn process(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).unwrap();
+    fn ndb_with_events(events: &[&Event]) -> (Ndb, TempDir) {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = nostrdb::Config::new().set_mapsize(64 * 1024 * 1024);
+        let db_path = tmp.path().to_str().unwrap().to_owned();
+        {
+            let ndb = Ndb::new(&db_path, &cfg).unwrap();
+            for event in events {
+                let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
+                ndb.process_event(&line).unwrap();
+            }
+        }
+        let ndb = Ndb::new(&db_path, &cfg).unwrap();
+        (ndb, tmp)
     }
 
     fn named(name: &str, value: &str) -> Tag {
@@ -103,7 +131,6 @@ mod tests {
 
     #[test]
     fn article_reader_snapshot_hydrates_reader_dependencies() {
-        let (ndb, _tmp) = fresh_ndb();
         let author = Keys::generate();
         let highlighter = Keys::generate();
         let address = articles::article_address(&author.public_key().to_hex(), "essay");
@@ -130,10 +157,7 @@ mod tests {
             .sign_with_keys(&highlighter)
             .unwrap();
 
-        for event in [&article, &profile, &highlight] {
-            process(&ndb, event);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        let (ndb, _tmp) = ndb_with_events(&[&article, &profile, &highlight]);
 
         let snapshot = query_article_reader_snapshot(&ndb, &author.public_key().to_hex(), "essay");
 
@@ -161,5 +185,50 @@ mod tests {
         assert!(snapshot.article.is_none());
         assert!(snapshot.author_profile.is_none());
         assert!(snapshot.highlights.is_empty());
+    }
+
+    #[test]
+    fn article_reader_snapshot_with_published_highlight_dedupes_front() {
+        let existing = HighlightRecord {
+            event_id: "existing".into(),
+            pubkey: "reader".into(),
+            quote: "old".into(),
+            context: String::new(),
+            note: String::new(),
+            artifact_address: "30023:author:essay".into(),
+            event_reference: String::new(),
+            external_reference: String::new(),
+            source_url: String::new(),
+            source_reference_key: "a:30023:author:essay".into(),
+            clip_start_seconds: None,
+            clip_end_seconds: None,
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: Vec::new(),
+            image_url: String::new(),
+            created_at: Some(10),
+        };
+        let published = HighlightRecord {
+            event_id: "published".into(),
+            quote: "new".into(),
+            ..existing.clone()
+        };
+        let snapshot = ArticleReaderSnapshot {
+            article: None,
+            author_profile: None,
+            highlights: vec![existing.clone()],
+        };
+
+        let projected = snapshot_with_published_highlight(snapshot, &published);
+        let duplicate = snapshot_with_published_highlight(projected.clone(), &published);
+
+        assert_eq!(
+            projected
+                .highlights
+                .iter()
+                .map(|highlight| highlight.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["published", "existing"]
+        );
+        assert_eq!(duplicate.highlights.len(), 2);
     }
 }

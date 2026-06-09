@@ -947,16 +947,6 @@ actor SafeHighlighterCore {
         await core.getBookHighlights(catalogId: catalogId, limit: limit)
     }
 
-    nonisolated func insertUniqueHighlightFront(
-        highlights: [HighlightRecord],
-        highlight: HighlightRecord
-    ) -> [HighlightRecord] {
-        core.insertUniqueHighlightFront(
-            highlights: highlights,
-            highlight: highlight
-        )
-    }
-
     nonisolated func getProfileUpdateAction(kind: UInt32) -> ProfileUpdateAction {
         core.getProfileUpdateAction(kind: kind)
     }
@@ -1408,13 +1398,17 @@ actor SafeHighlighterCore {
         await core.publishPodcastComposerClip(input: input)
     }
 
-    func publishArticleReaderHighlight(
+    func publishArticleReaderHighlightSnapshot(
+        pubkeyHex: String,
+        dTag: String,
         article: ArticleRecord?,
         quote: String,
         note: String,
         context: String
-    ) async -> HighlightOutcome {
-        await core.publishArticleReaderHighlight(
+    ) async -> ArticleReaderHighlightPublishSnapshotOutcome {
+        await core.publishArticleReaderHighlightSnapshot(
+            pubkeyHex: pubkeyHex,
+            dTag: dTag,
             article: article,
             quote: quote,
             note: note,

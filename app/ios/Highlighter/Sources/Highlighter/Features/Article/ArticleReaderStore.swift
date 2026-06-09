@@ -104,6 +104,10 @@ final class ArticleReaderStore {
             pubkeyHex: target.pubkey,
             dTag: target.dTag
         )
+        apply(snapshot: snapshot)
+    }
+
+    private func apply(snapshot: ArticleReaderSnapshot) {
         if let loadedArticle = snapshot.article {
             article = loadedArticle
         }
@@ -127,19 +131,22 @@ final class ArticleReaderStore {
     /// waiting for the subscription to echo back.
     ///
     /// Returns outcome state so the caller can surface publish failures in a toast.
-    func publishHighlight(quote: String, note: String, context: String) async -> HighlightOutcome {
-        let outcome = await safeCore.publishArticleReaderHighlight(
+    func publishHighlight(
+        quote: String,
+        note: String,
+        context: String
+    ) async -> ArticleReaderHighlightPublishSnapshotOutcome {
+        let outcome = await safeCore.publishArticleReaderHighlightSnapshot(
+            pubkeyHex: target.pubkey,
+            dTag: target.dTag,
             article: article,
             quote: quote,
             note: note,
             context: context
         )
-        guard outcome.error.isEmpty, let record = outcome.value else { return outcome }
-        highlights = safeCore.insertUniqueHighlightFront(
-            highlights: highlights,
-            highlight: record
-        )
-        lastPublishedHighlightId = record.eventId
+        guard outcome.error.isEmpty else { return outcome }
+        apply(snapshot: outcome.snapshot)
+        lastPublishedHighlightId = outcome.publishedHighlightId
         return outcome
     }
 

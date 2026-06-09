@@ -1267,12 +1267,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func insertCommentAndBuildThread(records: [CommentRecord], comment: CommentRecord, rootTagValue: String)  -> CommentThreadProjection
 
     /**
-     * Project an optimistically published highlight into the current visible
-     * article highlight list. Rust owns duplicate suppression and ordering.
-     */
-    func insertUniqueHighlightFront(highlights: [HighlightRecord], highlight: HighlightRecord)  -> [HighlightRecord]
-
-    /**
      * Read-only predicate: is `address` currently bookmarked for the logged-in
      * user? Always `false` when no user is logged in.
      */
@@ -1649,11 +1643,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectWebMetadataRequest(input: WebMetadataRequestProjectionInput)  -> WebMetadataRequestProjection
 
     /**
-     * Publish a solo NIP-84 highlight from an article reader selection.
-     * Rust owns article artifact derivation and draft defaults; native shells
-     * only provide the raw selected text fields.
+     * Publish a solo NIP-84 highlight from an article reader selection and
+     * return the refreshed reader snapshot. Rust owns article artifact
+     * derivation, optimistic highlight insertion, and duplicate suppression.
      */
-    func publishArticleReaderHighlight(article: ArticleRecord?, quote: String, note: String, context: String) async  -> HighlightOutcome
+    func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String, article: ArticleRecord?, quote: String, note: String, context: String) async  -> ArticleReaderHighlightPublishSnapshotOutcome
 
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
 
@@ -3804,19 +3798,6 @@ open func insertCommentAndBuildThread(records: [CommentRecord], comment: Comment
 }
 
     /**
-     * Project an optimistically published highlight into the current visible
-     * article highlight list. Rust owns duplicate suppression and ordering.
-     */
-open func insertUniqueHighlightFront(highlights: [HighlightRecord], highlight: HighlightRecord) -> [HighlightRecord]  {
-    return try!  FfiConverterSequenceTypeHighlightRecord.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_insert_unique_highlight_front(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeHighlightRecord.lower(highlights),
-        FfiConverterTypeHighlightRecord_lower(highlight),$0
-    )
-})
-}
-
-    /**
      * Read-only predicate: is `address` currently bookmarked for the logged-in
      * user? Always `false` when no user is logged in.
      */
@@ -4926,23 +4907,23 @@ open func projectWebMetadataRequest(input: WebMetadataRequestProjectionInput) ->
 }
 
     /**
-     * Publish a solo NIP-84 highlight from an article reader selection.
-     * Rust owns article artifact derivation and draft defaults; native shells
-     * only provide the raw selected text fields.
+     * Publish a solo NIP-84 highlight from an article reader selection and
+     * return the refreshed reader snapshot. Rust owns article artifact
+     * derivation, optimistic highlight insertion, and duplicate suppression.
      */
-open func publishArticleReaderHighlight(article: ArticleRecord?, quote: String, note: String, context: String)async  -> HighlightOutcome  {
+open func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String, article: ArticleRecord?, quote: String, note: String, context: String)async  -> ArticleReaderHighlightPublishSnapshotOutcome  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_article_reader_highlight(
+                uniffi_highlighter_core_fn_method_highlightercore_publish_article_reader_highlight_snapshot(
                     self.uniffiClonePointer(),
-                    FfiConverterOptionTypeArticleRecord.lower(article),FfiConverterString.lower(quote),FfiConverterString.lower(note),FfiConverterString.lower(context)
+                    FfiConverterString.lower(pubkeyHex),FfiConverterString.lower(dTag),FfiConverterOptionTypeArticleRecord.lower(article),FfiConverterString.lower(quote),FfiConverterString.lower(note),FfiConverterString.lower(context)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightOutcome_lift,
+            liftFunc: FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome_lift,
             errorHandler: nil
 
         )
@@ -7519,6 +7500,84 @@ public func FfiConverterTypeArticleReaderHeaderProjectionInput_lift(_ buf: RustB
 #endif
 public func FfiConverterTypeArticleReaderHeaderProjectionInput_lower(_ value: ArticleReaderHeaderProjectionInput) -> RustBuffer {
     return FfiConverterTypeArticleReaderHeaderProjectionInput.lower(value)
+}
+
+
+public struct ArticleReaderHighlightPublishSnapshotOutcome {
+    public var snapshot: ArticleReaderSnapshot
+    public var publishedHighlightId: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: ArticleReaderSnapshot, publishedHighlightId: String, error: String) {
+        self.snapshot = snapshot
+        self.publishedHighlightId = publishedHighlightId
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderHighlightPublishSnapshotOutcome: Sendable {}
+#endif
+
+
+extension ArticleReaderHighlightPublishSnapshotOutcome: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderHighlightPublishSnapshotOutcome, rhs: ArticleReaderHighlightPublishSnapshotOutcome) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        if lhs.publishedHighlightId != rhs.publishedHighlightId {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+        hasher.combine(publishedHighlightId)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderHighlightPublishSnapshotOutcome {
+        return
+            try ArticleReaderHighlightPublishSnapshotOutcome(
+                snapshot: FfiConverterTypeArticleReaderSnapshot.read(from: &buf),
+                publishedHighlightId: FfiConverterString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderHighlightPublishSnapshotOutcome, into buf: inout [UInt8]) {
+        FfiConverterTypeArticleReaderSnapshot.write(value.snapshot, into: &buf)
+        FfiConverterString.write(value.publishedHighlightId, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome_lift(_ buf: RustBuffer) throws -> ArticleReaderHighlightPublishSnapshotOutcome {
+    return try FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome_lower(_ value: ArticleReaderHighlightPublishSnapshotOutcome) -> RustBuffer {
+    return FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome.lower(value)
 }
 
 
@@ -38827,9 +38886,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_insert_comment_and_build_thread() != 9948) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_insert_unique_highlight_front() != 61304) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_article_bookmarked() != 17349) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -39157,7 +39213,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_web_metadata_request() != 53856) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_article_reader_highlight() != 20796) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_article_reader_highlight_snapshot() != 59085) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 1182) {

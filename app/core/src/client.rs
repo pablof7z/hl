@@ -1961,16 +1961,6 @@ impl HighlighterCore {
         ))
     }
 
-    /// Project an optimistically published highlight into the current visible
-    /// article highlight list. Rust owns duplicate suppression and ordering.
-    pub fn insert_unique_highlight_front(
-        &self,
-        highlights: Vec<HighlightRecord>,
-        highlight: HighlightRecord,
-    ) -> Vec<HighlightRecord> {
-        highlights::insert_unique_front(&highlights, &highlight)
-    }
-
     /// Classify a subscription event kind into the exact profile slice that
     /// native shells should refresh.
     pub fn get_profile_update_action(&self, kind: u32) -> ProfileUpdateAction {
@@ -3446,26 +3436,49 @@ impl HighlighterCore {
         mutation_outcome(result)
     }
 
-    /// Publish a solo NIP-84 highlight from an article reader selection.
-    /// Rust owns article artifact derivation and draft defaults; native shells
-    /// only provide the raw selected text fields.
-    pub async fn publish_article_reader_highlight(
+    /// Publish a solo NIP-84 highlight from an article reader selection and
+    /// return the refreshed reader snapshot. Rust owns article artifact
+    /// derivation, optimistic highlight insertion, and duplicate suppression.
+    pub async fn publish_article_reader_highlight_snapshot(
         &self,
+        pubkey_hex: String,
+        d_tag: String,
         article: Option<ArticleRecord>,
         quote: String,
         note: String,
         context: String,
-    ) -> HighlightOutcome {
+    ) -> article_reader::ArticleReaderHighlightPublishSnapshotOutcome {
+        let base_snapshot =
+            article_reader::query_article_reader_snapshot(self.runtime.ndb(), &pubkey_hex, &d_tag);
+        if let Err(error) = self.require_user_pubkey() {
+            return article_reader::ArticleReaderHighlightPublishSnapshotOutcome {
+                snapshot: base_snapshot,
+                published_highlight_id: String::new(),
+                error: error.to_string(),
+            };
+        }
+
+        let article_for_publish = article.or_else(|| base_snapshot.article.clone());
         let result: Result<HighlightRecord, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            let article =
-                article.ok_or_else(|| CoreError::InvalidInput("Article not yet loaded.".into()))?;
+            let article = article_for_publish
+                .ok_or_else(|| CoreError::InvalidInput("Article not yet loaded.".into()))?;
             let artifact = articles::article_artifact_record(&article);
             let draft = highlights::article_reader_highlight_draft(quote, note, context);
             crate::highlights::publish(&self.runtime, draft, artifact).await
         }
         .await;
-        highlight_outcome(result)
+        match result {
+            Ok(record) => article_reader::ArticleReaderHighlightPublishSnapshotOutcome {
+                snapshot: article_reader::snapshot_with_published_highlight(base_snapshot, &record),
+                published_highlight_id: record.event_id,
+                error: String::new(),
+            },
+            Err(error) => article_reader::ArticleReaderHighlightPublishSnapshotOutcome {
+                snapshot: base_snapshot,
+                published_highlight_id: String::new(),
+                error: error.to_string(),
+            },
+        }
     }
 
     // -- Rooms explorer (discovery + curation + recommendations) --
