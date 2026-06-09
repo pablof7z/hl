@@ -192,7 +192,7 @@ actor SafeHighlighterCore {
         )
     }
 
-    func downloadPodcastArtwork(url: String) async -> DataOutcome {
+    func downloadPodcastArtwork(url: String) async -> Data? {
         await core.downloadPodcastArtwork(url: url)
     }
 

@@ -847,7 +847,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func disconnectAll() async  -> NetworkSettingsMutationSnapshot
 
-    func downloadPodcastArtwork(url: String) async  -> DataOutcome
+    func downloadPodcastArtwork(url: String) async  -> Data?
 
     func extendPodcastClipToSegment(selection: PodcastClipSelection, segment: TranscriptSegment)  -> PodcastClipSelection
 
@@ -2294,7 +2294,7 @@ open func disconnectAll()async  -> NetworkSettingsMutationSnapshot  {
         )
 }
 
-open func downloadPodcastArtwork(url: String)async  -> DataOutcome  {
+open func downloadPodcastArtwork(url: String)async  -> Data?  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2306,7 +2306,7 @@ open func downloadPodcastArtwork(url: String)async  -> DataOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeDataOutcome_lift,
+            liftFunc: FfiConverterOptionData.lift,
             errorHandler: nil
 
         )
@@ -14882,76 +14882,6 @@ public func FfiConverterTypeCurrentUser_lift(_ buf: RustBuffer) throws -> Curren
 #endif
 public func FfiConverterTypeCurrentUser_lower(_ value: CurrentUser) -> RustBuffer {
     return FfiConverterTypeCurrentUser.lower(value)
-}
-
-
-public struct DataOutcome {
-    public var value: Data
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: Data, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension DataOutcome: Sendable {}
-#endif
-
-
-extension DataOutcome: Equatable, Hashable {
-    public static func ==(lhs: DataOutcome, rhs: DataOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeDataOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DataOutcome {
-        return
-            try DataOutcome(
-                value: FfiConverterData.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: DataOutcome, into buf: inout [UInt8]) {
-        FfiConverterData.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeDataOutcome_lift(_ buf: RustBuffer) throws -> DataOutcome {
-    return try FfiConverterTypeDataOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeDataOutcome_lower(_ value: DataOutcome) -> RustBuffer {
-    return FfiConverterTypeDataOutcome.lower(value)
 }
 
 
@@ -36727,6 +36657,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
+    typealias SwiftType = Data?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterData.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterData.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeArticleReaderRoute: FfiConverterRustBuffer {
     typealias SwiftType = ArticleReaderRoute?
 
@@ -38925,7 +38879,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 61549) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_download_podcast_artwork() != 30059) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_download_podcast_artwork() != 58552) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_extend_podcast_clip_to_segment() != 47481) {

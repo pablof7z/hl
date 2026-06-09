@@ -28,9 +28,9 @@ use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactOutcome,
     ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome,
     BookRoute, BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope,
-    CommunityListOutcome, CommunitySummary, CurrentUser, DataOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackThreadRecord, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
+    CommunityListOutcome, CommunitySummary, CurrentUser, DiscussionOutcome, DiscussionRecord,
+    FeedbackThreadRecord, HighlightListOutcome, HighlightOutcome, HighlightRecord,
+    HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
     OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
     PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
     ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
@@ -128,19 +128,6 @@ fn join_room_display_name(room_name: &str) -> String {
         "this room".to_string()
     } else {
         trimmed.to_string()
-    }
-}
-
-fn data_outcome(result: Result<Vec<u8>, CoreError>) -> DataOutcome {
-    match result {
-        Ok(value) => DataOutcome {
-            value,
-            error: String::new(),
-        },
-        Err(error) => DataOutcome {
-            value: Vec::new(),
-            error: error.to_string(),
-        },
     }
 }
 
@@ -775,8 +762,8 @@ impl HighlighterCore {
         podcast_transcript::set_clip_end(&selection, value, duration_seconds)
     }
 
-    pub async fn download_podcast_artwork(&self, url: String) -> DataOutcome {
-        data_outcome(podcast_transcript::download_artwork(&url).await)
+    pub async fn download_podcast_artwork(&self, url: String) -> Option<Vec<u8>> {
+        podcast_transcript::download_artwork(&url).await.ok()
     }
 
     pub fn get_artifact_detail_route(&self, artifact: ArtifactRecord) -> ArtifactDetailRoute {

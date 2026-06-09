@@ -148,7 +148,7 @@ pub use models::{
     ArtifactReferenceTarget, BlossomUpload, BlossomUploadOutcome, BookRoute, BookmarkSetRecord,
     ChatMessageRecord, CommentRecord, CommentReferenceBucket, CommentThreadNode,
     CommentThreadProjection, CommunityListOutcome, CommunitySummary, CurationMenuItem, CurrentUser,
-    DataOutcome, DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
+    DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
     FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightListOutcome,
     HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
     HighlightSourceKind, HomeFeedItem, HydratedHighlight, LoginInputAction, MutationOutcome,

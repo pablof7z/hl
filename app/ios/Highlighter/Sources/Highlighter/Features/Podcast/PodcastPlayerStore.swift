@@ -616,8 +616,8 @@ final class PodcastPlayerStore {
     private func fetchAndApplyArtwork(from urlString: String) {
         guard !urlString.isEmpty, let url = URL(string: urlString) else { return }
         Task(priority: .userInitiated) { [weak self, core] in
-            let outcome = await core.downloadPodcastArtwork(url: url.absoluteString)
-            guard outcome.error.isEmpty, let uiImage = UIImage(data: outcome.value) else { return }
+            guard let data = await core.downloadPodcastArtwork(url: url.absoluteString),
+                  let uiImage = UIImage(data: data) else { return }
             let artwork = MPMediaItemArtwork(boundsSize: uiImage.size) { _ in uiImage }
             await MainActor.run { [weak self] in
                 self?.updateNowPlayingInfo(artwork: artwork)
