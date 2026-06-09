@@ -1019,6 +1019,10 @@ actor SafeHighlighterCore {
         core.getWebCommentScope(url: url)
     }
 
+    nonisolated func getWebCommentScopeSnapshot(url: String) -> CommentScopeSnapshot {
+        core.getWebCommentScopeSnapshot(url: url)
+    }
+
     func getCommentThreadSnapshot(
         scope: CommentScope,
         limit: UInt32 = 256

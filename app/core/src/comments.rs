@@ -80,6 +80,13 @@ pub struct CommentToolbarProjection {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentScopeSnapshot {
+    pub scope: Option<CommentScope>,
+    pub attach: bool,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CommentActionChromeProjectionInput {
     pub is_liked: bool,
     pub is_bookmarked: bool,
@@ -581,6 +588,21 @@ pub fn web_scope(url: &str) -> Result<CommentScope, CoreError> {
     external_scope(url, KIND_WEB_EXTERNAL)
 }
 
+pub fn scope_snapshot(result: Result<CommentScope, CoreError>) -> CommentScopeSnapshot {
+    match result {
+        Ok(scope) => CommentScopeSnapshot {
+            scope: Some(scope),
+            attach: true,
+            error_message: String::new(),
+        },
+        Err(error) => CommentScopeSnapshot {
+            scope: None,
+            attach: false,
+            error_message: error.to_string(),
+        },
+    }
+}
+
 /// Project an artifact preview's protocol reference fields into the NIP-22
 /// scope used by comment surfaces. Native shells must not duplicate this
 /// `a/e/i` mapping or the default kind policy.
@@ -1047,6 +1069,23 @@ mod tests {
         assert_eq!(scope.root_tag_name, "I");
         assert_eq!(scope.root_tag_value, "https://example.com/post");
         assert_eq!(scope.root_kind, 0);
+    }
+
+    #[test]
+    fn scope_snapshot_projects_attach_and_error_states() {
+        let scope = web_scope("https://example.com/post").expect("scope");
+        let success = scope_snapshot(Ok(scope.clone()));
+        assert_eq!(success.scope, Some(scope));
+        assert!(success.attach);
+        assert!(success.error_message.is_empty());
+
+        let failure = scope_snapshot(web_scope(" "));
+        assert!(failure.scope.is_none());
+        assert!(!failure.attach);
+        assert_eq!(
+            failure.error_message,
+            "invalid input: external comment identifier must not be empty"
+        );
     }
 
     #[test]

@@ -1708,6 +1708,13 @@ impl HighlighterCore {
         comment_scope_outcome(comments::web_scope(&url))
     }
 
+    /// Project a web URL into a screen-shaped NIP-22 comment attachment
+    /// snapshot. Native shells use `attach` to decide whether to apply the
+    /// comment modifier and keep the protocol scope opaque.
+    pub fn get_web_comment_scope_snapshot(&self, url: String) -> comments::CommentScopeSnapshot {
+        comments::scope_snapshot(comments::web_scope(&url))
+    }
+
     /// Project an artifact preview into a NIP-22 root scope using the
     /// preview's Rust-owned protocol reference fields.
     pub fn get_artifact_comment_scope(&self, preview: ArtifactPreview) -> CommentScopeOutcome {

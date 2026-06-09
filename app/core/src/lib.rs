@@ -94,8 +94,9 @@ pub use comments::{
     CommentActionChromeProjection, CommentActionChromeProjectionInput, CommentComposerProjection,
     CommentComposerProjectionInput, CommentInteractionMutationOutcome, CommentInteractionRow,
     CommentInteractionSnapshot, CommentNodeChromeProjection, CommentNodeChromeProjectionInput,
-    CommentPublishSnapshotOutcome, CommentThreadSnapshot, CommentThreadViewProjection,
-    CommentThreadViewProjectionInput, CommentToolbarProjection, CommentToolbarProjectionInput,
+    CommentPublishSnapshotOutcome, CommentScopeSnapshot, CommentThreadSnapshot,
+    CommentThreadViewProjection, CommentThreadViewProjectionInput, CommentToolbarProjection,
+    CommentToolbarProjectionInput,
 };
 pub use discussions::{
     DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput,

@@ -1191,6 +1191,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getWebCommentScope(url: String)  -> CommentScopeOutcome
 
     /**
+     * Project a web URL into a screen-shaped NIP-22 comment attachment
+     * snapshot. Native shells use `attach` to decide whether to apply the
+     * comment modifier and keep the protocol scope opaque.
+     */
+    func getWebCommentScopeSnapshot(url: String)  -> CommentScopeSnapshot
+
+    /**
      * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
      * JSON-on-disk cache (7-day positive TTL, 1-hour negative TTL) and
      * in-flight coalescing — concurrent calls for the same URL share one
@@ -3504,6 +3511,19 @@ open func getUserProfile(pubkeyHex: String)async  -> ProfileOutcome  {
 open func getWebCommentScope(url: String) -> CommentScopeOutcome  {
     return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_web_comment_scope(self.uniffiClonePointer(),
+        FfiConverterString.lower(url),$0
+    )
+})
+}
+
+    /**
+     * Project a web URL into a screen-shaped NIP-22 comment attachment
+     * snapshot. Native shells use `attach` to decide whether to apply the
+     * comment modifier and keep the protocol scope opaque.
+     */
+open func getWebCommentScopeSnapshot(url: String) -> CommentScopeSnapshot  {
+    return try!  FfiConverterTypeCommentScopeSnapshot_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_web_comment_scope_snapshot(self.uniffiClonePointer(),
         FfiConverterString.lower(url),$0
     )
 })
@@ -13551,6 +13571,84 @@ public func FfiConverterTypeCommentScopeOutcome_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeCommentScopeOutcome_lower(_ value: CommentScopeOutcome) -> RustBuffer {
     return FfiConverterTypeCommentScopeOutcome.lower(value)
+}
+
+
+public struct CommentScopeSnapshot {
+    public var scope: CommentScope?
+    public var attach: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(scope: CommentScope?, attach: Bool, errorMessage: String) {
+        self.scope = scope
+        self.attach = attach
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension CommentScopeSnapshot: Sendable {}
+#endif
+
+
+extension CommentScopeSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CommentScopeSnapshot, rhs: CommentScopeSnapshot) -> Bool {
+        if lhs.scope != rhs.scope {
+            return false
+        }
+        if lhs.attach != rhs.attach {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(scope)
+        hasher.combine(attach)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentScopeSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentScopeSnapshot {
+        return
+            try CommentScopeSnapshot(
+                scope: FfiConverterOptionTypeCommentScope.read(from: &buf),
+                attach: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentScopeSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeCommentScope.write(value.scope, into: &buf)
+        FfiConverterBool.write(value.attach, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentScopeSnapshot_lift(_ buf: RustBuffer) throws -> CommentScopeSnapshot {
+    return try FfiConverterTypeCommentScopeSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentScopeSnapshot_lower(_ value: CommentScopeSnapshot) -> RustBuffer {
+    return FfiConverterTypeCommentScopeSnapshot.lower(value)
 }
 
 
@@ -39394,6 +39492,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_comment_scope() != 47386) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_comment_scope_snapshot() != 56800) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 12216) {
