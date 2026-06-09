@@ -57,6 +57,19 @@ pub struct BookmarkSetDetailProjection {
     pub display_title: String,
 }
 
+/// Native create-collection sheet input. Rust owns title normalization.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CurationSetCreateProjectionInput {
+    pub title: String,
+}
+
+/// Native create-collection sheet projection. Rust owns submit eligibility.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CurationSetCreateProjection {
+    pub submit_title: String,
+    pub can_create: bool,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct WebBookmarkRowProjectionInput {
     pub bookmark: WebBookmarkRecord,
@@ -273,6 +286,18 @@ pub fn bookmark_set_detail_projection(
 ) -> BookmarkSetDetailProjection {
     BookmarkSetDetailProjection {
         display_title: bookmark_set_display_title(&input.record, "Collection"),
+    }
+}
+
+/// Project the create-collection sheet. Native shells render controls and pass
+/// the returned `submit_title` to the publish action.
+pub fn curation_set_create_projection(
+    input: CurationSetCreateProjectionInput,
+) -> CurationSetCreateProjection {
+    let submit_title = input.title.trim().to_string();
+    CurationSetCreateProjection {
+        can_create: !submit_title.is_empty(),
+        submit_title,
     }
 }
 
@@ -674,10 +699,11 @@ mod tests {
     use super::{
         bookmark_set_detail_projection, bookmark_set_row_projection,
         bookmarked_article_row_projection, curation_menu_items_for_address,
-        filter_explorable_curation_sets, next_curation_address_membership,
-        web_bookmark_row_projection, BookmarkSetDetailProjectionInput,
-        BookmarkSetRowProjectionInput, BookmarkedArticleRowProjectionInput,
-        CurationMembershipChange, WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS,
+        curation_set_create_projection, filter_explorable_curation_sets,
+        next_curation_address_membership, web_bookmark_row_projection,
+        BookmarkSetDetailProjectionInput, BookmarkSetRowProjectionInput,
+        BookmarkedArticleRowProjectionInput, CurationMembershipChange,
+        CurationSetCreateProjectionInput, WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS,
         KIND_CURATION_SETS,
     };
     use crate::models::{ArticleRecord, BookmarkSetRecord, WebBookmarkRecord};
@@ -827,6 +853,21 @@ mod tests {
         });
 
         assert_eq!(projection.display_title, "Collection");
+    }
+
+    #[test]
+    fn curation_set_create_projection_trims_and_requires_title() {
+        let projection = curation_set_create_projection(CurationSetCreateProjectionInput {
+            title: "  Essays  ".into(),
+        });
+        let blank = curation_set_create_projection(CurationSetCreateProjectionInput {
+            title: " \n ".into(),
+        });
+
+        assert_eq!(projection.submit_title, "Essays");
+        assert!(projection.can_create);
+        assert_eq!(blank.submit_title, "");
+        assert!(!blank.can_create);
     }
 
     #[test]

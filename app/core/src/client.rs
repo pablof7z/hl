@@ -2810,6 +2810,15 @@ impl HighlighterCore {
         crate::lists::bookmark_set_detail_projection(input)
     }
 
+    /// Project create-collection sheet state. Rust owns title normalization
+    /// and create eligibility; native shells render the returned state.
+    pub fn project_curation_set_create(
+        &self,
+        input: crate::lists::CurationSetCreateProjectionInput,
+    ) -> crate::lists::CurationSetCreateProjection {
+        crate::lists::curation_set_create_projection(input)
+    }
+
     pub fn project_web_bookmark_row(
         &self,
         input: crate::lists::WebBookmarkRowProjectionInput,

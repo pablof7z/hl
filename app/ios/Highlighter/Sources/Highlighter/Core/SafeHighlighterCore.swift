@@ -404,6 +404,12 @@ actor SafeHighlighterCore {
         core.projectBookmarkSetDetail(input: input)
     }
 
+    nonisolated func projectCurationSetCreate(
+        input: CurationSetCreateProjectionInput
+    ) -> CurationSetCreateProjection {
+        core.projectCurationSetCreate(input: input)
+    }
+
     nonisolated func projectWebBookmarkRow(
         input: WebBookmarkRowProjectionInput
     ) -> WebBookmarkRowProjection {

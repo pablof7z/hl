@@ -124,6 +124,7 @@ struct NewCollectionSheet: View {
     var onCancel: () -> Void
     var onCreate: (String) -> Void
 
+    @Environment(HighlighterStore.self) private var app
     @State private var title: String = ""
     @FocusState private var focused: Bool
 
@@ -153,19 +154,22 @@ struct NewCollectionSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") { commit() }
                         .fontWeight(.semibold)
-                        .disabled(trimmed.isEmpty)
+                        .disabled(!createProjection.canCreate)
                 }
             }
             .onAppear { focused = true }
         }
     }
 
-    private var trimmed: String {
-        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var createProjection: CurationSetCreateProjection {
+        app.safeCore.projectCurationSetCreate(
+            input: CurationSetCreateProjectionInput(title: title)
+        )
     }
 
     private func commit() {
-        guard !trimmed.isEmpty else { return }
-        onCreate(trimmed)
+        let projection = createProjection
+        guard projection.canCreate else { return }
+        onCreate(projection.submitTitle)
     }
 }

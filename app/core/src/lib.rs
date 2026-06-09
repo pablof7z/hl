@@ -106,7 +106,8 @@ pub use isbn_lookup::{
 pub use lists::{
     BookmarkSetDetailProjection, BookmarkSetDetailProjectionInput, BookmarkSetRowProjection,
     BookmarkSetRowProjectionInput, BookmarkedArticleRowProjection,
-    BookmarkedArticleRowProjectionInput, WebBookmarkRowProjection, WebBookmarkRowProjectionInput,
+    BookmarkedArticleRowProjectionInput, CurationSetCreateProjection,
+    CurationSetCreateProjectionInput, WebBookmarkRowProjection, WebBookmarkRowProjectionInput,
 };
 pub use models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,

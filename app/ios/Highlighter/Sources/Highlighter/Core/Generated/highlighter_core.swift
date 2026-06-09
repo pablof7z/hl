@@ -1456,6 +1456,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectCreateRoom(input: CreateRoomProjectionInput)  -> CreateRoomProjection
 
+    /**
+     * Project create-collection sheet state. Rust owns title normalization
+     * and create eligibility; native shells render the returned state.
+     */
+    func projectCurationSetCreate(input: CurationSetCreateProjectionInput)  -> CurationSetCreateProjection
+
     func projectDiscussionAttachment(input: DiscussionAttachmentProjectionInput)  -> DiscussionAttachmentProjection
 
     /**
@@ -4435,6 +4441,18 @@ open func projectCreateRoom(input: CreateRoomProjectionInput) -> CreateRoomProje
     return try!  FfiConverterTypeCreateRoomProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_create_room(self.uniffiClonePointer(),
         FfiConverterTypeCreateRoomProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project create-collection sheet state. Rust owns title normalization
+     * and create eligibility; native shells render the returned state.
+     */
+open func projectCurationSetCreate(input: CurationSetCreateProjectionInput) -> CurationSetCreateProjection  {
+    return try!  FfiConverterTypeCurationSetCreateProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_curation_set_create(self.uniffiClonePointer(),
+        FfiConverterTypeCurationSetCreateProjectionInput_lower(input),$0
     )
 })
 }
@@ -12672,6 +12690,144 @@ public func FfiConverterTypeCurationMenuItemListOutcome_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeCurationMenuItemListOutcome_lower(_ value: CurationMenuItemListOutcome) -> RustBuffer {
     return FfiConverterTypeCurationMenuItemListOutcome.lower(value)
+}
+
+
+/**
+ * Native create-collection sheet projection. Rust owns submit eligibility.
+ */
+public struct CurationSetCreateProjection {
+    public var submitTitle: String
+    public var canCreate: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(submitTitle: String, canCreate: Bool) {
+        self.submitTitle = submitTitle
+        self.canCreate = canCreate
+    }
+}
+
+#if compiler(>=6)
+extension CurationSetCreateProjection: Sendable {}
+#endif
+
+
+extension CurationSetCreateProjection: Equatable, Hashable {
+    public static func ==(lhs: CurationSetCreateProjection, rhs: CurationSetCreateProjection) -> Bool {
+        if lhs.submitTitle != rhs.submitTitle {
+            return false
+        }
+        if lhs.canCreate != rhs.canCreate {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(submitTitle)
+        hasher.combine(canCreate)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCurationSetCreateProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationSetCreateProjection {
+        return
+            try CurationSetCreateProjection(
+                submitTitle: FfiConverterString.read(from: &buf),
+                canCreate: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CurationSetCreateProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.submitTitle, into: &buf)
+        FfiConverterBool.write(value.canCreate, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationSetCreateProjection_lift(_ buf: RustBuffer) throws -> CurationSetCreateProjection {
+    return try FfiConverterTypeCurationSetCreateProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationSetCreateProjection_lower(_ value: CurationSetCreateProjection) -> RustBuffer {
+    return FfiConverterTypeCurationSetCreateProjection.lower(value)
+}
+
+
+/**
+ * Native create-collection sheet input. Rust owns title normalization.
+ */
+public struct CurationSetCreateProjectionInput {
+    public var title: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String) {
+        self.title = title
+    }
+}
+
+#if compiler(>=6)
+extension CurationSetCreateProjectionInput: Sendable {}
+#endif
+
+
+extension CurationSetCreateProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CurationSetCreateProjectionInput, rhs: CurationSetCreateProjectionInput) -> Bool {
+        if lhs.title != rhs.title {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(title)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCurationSetCreateProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationSetCreateProjectionInput {
+        return
+            try CurationSetCreateProjectionInput(
+                title: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CurationSetCreateProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationSetCreateProjectionInput_lift(_ buf: RustBuffer) throws -> CurationSetCreateProjectionInput {
+    return try FfiConverterTypeCurationSetCreateProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationSetCreateProjectionInput_lower(_ value: CurationSetCreateProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCurationSetCreateProjectionInput.lower(value)
 }
 
 
@@ -32953,6 +33109,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room() != 12904) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_curation_set_create() != 8394) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_discussion_attachment() != 2804) {
