@@ -282,7 +282,7 @@ actor SafeHighlighterCore {
         await core.clearRecentSearchesSnapshot()
     }
 
-    func subscribeArticleSearch(query: String) async -> SubscriptionOutcome {
+    func subscribeArticleSearch(query: String) async -> SubscriptionStartSnapshot {
         await core.subscribeArticleSearch(query: query)
     }
 
@@ -308,7 +308,7 @@ actor SafeHighlighterCore {
         await core.toggleArticleBookmarkSnapshot(address: address)
     }
 
-    func subscribeBookmarks() async -> SubscriptionOutcome {
+    func subscribeBookmarks() async -> SubscriptionStartSnapshot {
         await core.subscribeBookmarks()
     }
 
@@ -391,15 +391,15 @@ actor SafeHighlighterCore {
         core.projectWebBookmarkRow(input: input)
     }
 
-    func subscribeBookmarkSets() async -> SubscriptionOutcome {
+    func subscribeBookmarkSets() async -> SubscriptionStartSnapshot {
         await core.subscribeBookmarkSets()
     }
 
-    func subscribeFollowingCurationSets() async -> SubscriptionOutcome {
+    func subscribeFollowingCurationSets() async -> SubscriptionStartSnapshot {
         await core.subscribeFollowingCurationSets()
     }
 
-    func subscribeWebBookmarks() async -> SubscriptionOutcome {
+    func subscribeWebBookmarks() async -> SubscriptionStartSnapshot {
         await core.subscribeWebBookmarks()
     }
 
@@ -568,7 +568,7 @@ actor SafeHighlighterCore {
         )
     }
 
-    func subscribeRoomChat(groupId: String) async -> SubscriptionOutcome {
+    func subscribeRoomChat(groupId: String) async -> SubscriptionStartSnapshot {
         await core.subscribeRoomChat(groupId: groupId)
     }
 
@@ -622,11 +622,11 @@ actor SafeHighlighterCore {
         )
     }
 
-    func subscribeFeedbackThreads(coordinate: String) async -> SubscriptionOutcome {
+    func subscribeFeedbackThreads(coordinate: String) async -> SubscriptionStartSnapshot {
         await core.subscribeFeedbackThreads(coordinate: coordinate)
     }
 
-    func subscribeFeedbackThread(rootEventId: String) async -> SubscriptionOutcome {
+    func subscribeFeedbackThread(rootEventId: String) async -> SubscriptionStartSnapshot {
         await core.subscribeFeedbackThread(rootEventId: rootEventId)
     }
 
@@ -757,7 +757,7 @@ actor SafeHighlighterCore {
         await core.resolveNostrEntity(entity: entity)
     }
 
-    func subscribeNostrEntity(_ entity: NostrEntityRef) async -> SubscriptionOutcome {
+    func subscribeNostrEntity(_ entity: NostrEntityRef) async -> SubscriptionStartSnapshot {
         await core.subscribeNostrEntity(entity: entity)
     }
 
@@ -1208,31 +1208,31 @@ actor SafeHighlighterCore {
 
     // MARK: - Subscriptions
 
-    func subscribeFollowingReads() async -> SubscriptionOutcome {
+    func subscribeFollowingReads() async -> SubscriptionStartSnapshot {
         await core.subscribeFollowingReads()
     }
 
-    func subscribeFollowingHighlights() async -> SubscriptionOutcome {
+    func subscribeFollowingHighlights() async -> SubscriptionStartSnapshot {
         await core.subscribeFollowingHighlights()
     }
 
-    func subscribeJoinedCommunities() async -> SubscriptionOutcome {
+    func subscribeJoinedCommunities() async -> SubscriptionStartSnapshot {
         await core.subscribeJoinedCommunities()
     }
 
-    func subscribeRoom(groupId: String) async -> SubscriptionOutcome {
+    func subscribeRoom(groupId: String) async -> SubscriptionStartSnapshot {
         await core.subscribeRoom(groupId: groupId)
     }
 
-    func subscribeRoomDiscussions(groupId: String) async -> SubscriptionOutcome {
+    func subscribeRoomDiscussions(groupId: String) async -> SubscriptionStartSnapshot {
         await core.subscribeRoomDiscussions(groupId: groupId)
     }
 
-    func subscribeUserProfile(pubkeyHex: String) async -> SubscriptionOutcome {
+    func subscribeUserProfile(pubkeyHex: String) async -> SubscriptionStartSnapshot {
         await core.subscribeUserProfile(pubkeyHex: pubkeyHex)
     }
 
-    func subscribeArticle(pubkeyHex: String, dTag: String) async -> SubscriptionOutcome {
+    func subscribeArticle(pubkeyHex: String, dTag: String) async -> SubscriptionStartSnapshot {
         await core.subscribeArticle(pubkeyHex: pubkeyHex, dTag: dTag)
     }
 
@@ -1457,7 +1457,7 @@ actor SafeHighlighterCore {
         core.projectImportRelays(input: input)
     }
 
-    func subscribeRelayStatus() async -> SubscriptionOutcome {
+    func subscribeRelayStatus() async -> SubscriptionStartSnapshot {
         await core.subscribeRelayStatus()
     }
 

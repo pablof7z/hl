@@ -1686,7 +1686,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * highlighting this article's `a`-tag arrives. Install on reader view
      * appearance; `unsubscribe(handle)` on disappearance.
      */
-    func subscribeArticle(pubkeyHex: String, dTag: String) async  -> SubscriptionOutcome
+    func subscribeArticle(pubkeyHex: String, dTag: String) async  -> SubscriptionStartSnapshot
 
     /**
      * Open a NIP-50 relay subscription for kind:30023 against the user's
@@ -1695,26 +1695,26 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * and the Swift store responds by re-reading Rust's article search
      * snapshot to merge the new events into its Articles bucket.
      */
-    func subscribeArticleSearch(query: String) async  -> SubscriptionOutcome
+    func subscribeArticleSearch(query: String) async  -> SubscriptionStartSnapshot
 
     /**
      * Open a live subscription for the current user's kind:30003/30004 sets.
      * Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
      */
-    func subscribeBookmarkSets() async  -> SubscriptionOutcome
+    func subscribeBookmarkSets() async  -> SubscriptionStartSnapshot
 
     /**
      * Open a live subscription on the current user's kind:10003 bookmark
      * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
      * Swift bookmarks store re-queries on each.
      */
-    func subscribeBookmarks() async  -> SubscriptionOutcome
+    func subscribeBookmarks() async  -> SubscriptionStartSnapshot
 
     /**
      * Per-thread feedback subscription. Fires `FeedbackThreadUpdated` deltas
      * for every kind:1 `e`-tagged to the root (regardless of author).
      */
-    func subscribeFeedbackThread(rootEventId: String) async  -> SubscriptionOutcome
+    func subscribeFeedbackThread(rootEventId: String) async  -> SubscriptionStartSnapshot
 
     /**
      * Feedback-threads subscription for the shake-to-share surface. Fires
@@ -1722,13 +1722,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * the current user (with the project `a` tag) or any kind:513 metadata
      * for the same project arrives. Swift re-queries on each.
      */
-    func subscribeFeedbackThreads(coordinate: String) async  -> SubscriptionOutcome
+    func subscribeFeedbackThreads(coordinate: String) async  -> SubscriptionStartSnapshot
 
     /**
      * Open a live subscription for kind:30004 sets from followed authors.
      * Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
      */
-    func subscribeFollowingCurationSets() async  -> SubscriptionOutcome
+    func subscribeFollowingCurationSets() async  -> SubscriptionStartSnapshot
 
     /**
      * Highlights home-feed view-scope subscription. Snapshots the user's
@@ -1737,7 +1737,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * ids, then listens for kind:9802 events authored by anyone in that
      * set or tagged into any joined room.
      */
-    func subscribeFollowingHighlights() async  -> SubscriptionOutcome
+    func subscribeFollowingHighlights() async  -> SubscriptionStartSnapshot
 
     /**
      * Following Reads view-scope subscription. Snapshots the user's current
@@ -1746,7 +1746,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `FollowingReadsUpdated` deltas; the Swift store re-queries the feed.
      * Install on tab appearance; `unsubscribe(handle)` on disappearance.
      */
-    func subscribeFollowingReads() async  -> SubscriptionOutcome
+    func subscribeFollowingReads() async  -> SubscriptionStartSnapshot
 
     /**
      * App-scope subscription for the joined-communities view. Returns a
@@ -1754,7 +1754,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * with that handle. Re-uses the relay sub installed at login; this
      * call is about setting up the nostrdb notification pump.
      */
-    func subscribeJoinedCommunities() async  -> SubscriptionOutcome
+    func subscribeJoinedCommunities() async  -> SubscriptionStartSnapshot
 
     /**
      * Install a view-scoped subscription for the missing event behind an
@@ -1763,7 +1763,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `NdbDatabase` bridge; the subscription pump emits
      * `NostrEntityResolved` when the target lands.
      */
-    func subscribeNostrEntity(entity: NostrEntityRef) async  -> SubscriptionOutcome
+    func subscribeNostrEntity(entity: NostrEntityRef) async  -> SubscriptionStartSnapshot
 
     /**
      * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
@@ -1771,46 +1771,46 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `subscription_id == 0`, so this returns `0` unconditionally — the
      * value is a stable contract, not a unique sub id.
      */
-    func subscribeRelayStatus() async  -> SubscriptionOutcome
+    func subscribeRelayStatus() async  -> SubscriptionStartSnapshot
 
     /**
      * Per-room view-scope subscription. Returns a handle; fires
      * ArtifactUpserted / HighlightUpserted / HighlightShared for this
      * specific group.
      */
-    func subscribeRoom(groupId: String) async  -> SubscriptionOutcome
+    func subscribeRoom(groupId: String) async  -> SubscriptionStartSnapshot
 
     /**
      * Per-room Chat view-scope subscription. Returns a handle; fires
      * `ChatMessageUpserted` deltas for kind:9 messages tagged
      * `#h=<group_id>`.
      */
-    func subscribeRoomChat(groupId: String) async  -> SubscriptionOutcome
+    func subscribeRoomChat(groupId: String) async  -> SubscriptionStartSnapshot
 
     /**
      * Per-room Discussions view-scope subscription. Returns a handle; fires
      * `DiscussionUpserted` deltas for kind:11 threads in this group that
      * carry the `t=discussion` marker.
      */
-    func subscribeRoomDiscussions(groupId: String) async  -> SubscriptionOutcome
+    func subscribeRoomDiscussions(groupId: String) async  -> SubscriptionStartSnapshot
 
     /**
      * Profile view-scope subscription. Fires `UserProfileUpdated` deltas
      * when any event relevant to `pubkey_hex`'s profile arrives. Install on
      * profile view appearance; `unsubscribe(handle)` on disappearance.
      */
-    func subscribeUserProfile(pubkeyHex: String) async  -> SubscriptionOutcome
+    func subscribeUserProfile(pubkeyHex: String) async  -> SubscriptionStartSnapshot
 
     /**
      * Vault view-scope subscription for the current user's own highlights.
      */
-    func subscribeVault() async  -> SubscriptionOutcome
+    func subscribeVault() async  -> SubscriptionStartSnapshot
 
     /**
      * Open a live subscription for the current user's NIP-B0 kind:39701 events.
      * Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
      */
-    func subscribeWebBookmarks() async  -> SubscriptionOutcome
+    func subscribeWebBookmarks() async  -> SubscriptionStartSnapshot
 
     func suggestNip05Username(displayName: String)  -> String
 
@@ -5025,7 +5025,7 @@ open func startRoomExplorerFeaturedRooms()async  -> MutationOutcome  {
      * highlighting this article's `a`-tag arrives. Install on reader view
      * appearance; `unsubscribe(handle)` on disappearance.
      */
-open func subscribeArticle(pubkeyHex: String, dTag: String)async  -> SubscriptionOutcome  {
+open func subscribeArticle(pubkeyHex: String, dTag: String)async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5037,7 +5037,7 @@ open func subscribeArticle(pubkeyHex: String, dTag: String)async  -> Subscriptio
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5050,7 +5050,7 @@ open func subscribeArticle(pubkeyHex: String, dTag: String)async  -> Subscriptio
      * and the Swift store responds by re-reading Rust's article search
      * snapshot to merge the new events into its Articles bucket.
      */
-open func subscribeArticleSearch(query: String)async  -> SubscriptionOutcome  {
+open func subscribeArticleSearch(query: String)async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5062,7 +5062,7 @@ open func subscribeArticleSearch(query: String)async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5072,7 +5072,7 @@ open func subscribeArticleSearch(query: String)async  -> SubscriptionOutcome  {
      * Open a live subscription for the current user's kind:30003/30004 sets.
      * Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
      */
-open func subscribeBookmarkSets()async  -> SubscriptionOutcome  {
+open func subscribeBookmarkSets()async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5084,7 +5084,7 @@ open func subscribeBookmarkSets()async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5095,7 +5095,7 @@ open func subscribeBookmarkSets()async  -> SubscriptionOutcome  {
      * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
      * Swift bookmarks store re-queries on each.
      */
-open func subscribeBookmarks()async  -> SubscriptionOutcome  {
+open func subscribeBookmarks()async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5107,7 +5107,7 @@ open func subscribeBookmarks()async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5117,7 +5117,7 @@ open func subscribeBookmarks()async  -> SubscriptionOutcome  {
      * Per-thread feedback subscription. Fires `FeedbackThreadUpdated` deltas
      * for every kind:1 `e`-tagged to the root (regardless of author).
      */
-open func subscribeFeedbackThread(rootEventId: String)async  -> SubscriptionOutcome  {
+open func subscribeFeedbackThread(rootEventId: String)async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5129,7 +5129,7 @@ open func subscribeFeedbackThread(rootEventId: String)async  -> SubscriptionOutc
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5141,7 +5141,7 @@ open func subscribeFeedbackThread(rootEventId: String)async  -> SubscriptionOutc
      * the current user (with the project `a` tag) or any kind:513 metadata
      * for the same project arrives. Swift re-queries on each.
      */
-open func subscribeFeedbackThreads(coordinate: String)async  -> SubscriptionOutcome  {
+open func subscribeFeedbackThreads(coordinate: String)async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5153,7 +5153,7 @@ open func subscribeFeedbackThreads(coordinate: String)async  -> SubscriptionOutc
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5163,7 +5163,7 @@ open func subscribeFeedbackThreads(coordinate: String)async  -> SubscriptionOutc
      * Open a live subscription for kind:30004 sets from followed authors.
      * Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
      */
-open func subscribeFollowingCurationSets()async  -> SubscriptionOutcome  {
+open func subscribeFollowingCurationSets()async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5175,7 +5175,7 @@ open func subscribeFollowingCurationSets()async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5188,7 +5188,7 @@ open func subscribeFollowingCurationSets()async  -> SubscriptionOutcome  {
      * ids, then listens for kind:9802 events authored by anyone in that
      * set or tagged into any joined room.
      */
-open func subscribeFollowingHighlights()async  -> SubscriptionOutcome  {
+open func subscribeFollowingHighlights()async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5200,7 +5200,7 @@ open func subscribeFollowingHighlights()async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5213,7 +5213,7 @@ open func subscribeFollowingHighlights()async  -> SubscriptionOutcome  {
      * `FollowingReadsUpdated` deltas; the Swift store re-queries the feed.
      * Install on tab appearance; `unsubscribe(handle)` on disappearance.
      */
-open func subscribeFollowingReads()async  -> SubscriptionOutcome  {
+open func subscribeFollowingReads()async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5225,7 +5225,7 @@ open func subscribeFollowingReads()async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5237,7 +5237,7 @@ open func subscribeFollowingReads()async  -> SubscriptionOutcome  {
      * with that handle. Re-uses the relay sub installed at login; this
      * call is about setting up the nostrdb notification pump.
      */
-open func subscribeJoinedCommunities()async  -> SubscriptionOutcome  {
+open func subscribeJoinedCommunities()async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5249,7 +5249,7 @@ open func subscribeJoinedCommunities()async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5262,7 +5262,7 @@ open func subscribeJoinedCommunities()async  -> SubscriptionOutcome  {
      * `NdbDatabase` bridge; the subscription pump emits
      * `NostrEntityResolved` when the target lands.
      */
-open func subscribeNostrEntity(entity: NostrEntityRef)async  -> SubscriptionOutcome  {
+open func subscribeNostrEntity(entity: NostrEntityRef)async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5274,7 +5274,7 @@ open func subscribeNostrEntity(entity: NostrEntityRef)async  -> SubscriptionOutc
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5286,7 +5286,7 @@ open func subscribeNostrEntity(entity: NostrEntityRef)async  -> SubscriptionOutc
      * `subscription_id == 0`, so this returns `0` unconditionally — the
      * value is a stable contract, not a unique sub id.
      */
-open func subscribeRelayStatus()async  -> SubscriptionOutcome  {
+open func subscribeRelayStatus()async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5298,7 +5298,7 @@ open func subscribeRelayStatus()async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5309,7 +5309,7 @@ open func subscribeRelayStatus()async  -> SubscriptionOutcome  {
      * ArtifactUpserted / HighlightUpserted / HighlightShared for this
      * specific group.
      */
-open func subscribeRoom(groupId: String)async  -> SubscriptionOutcome  {
+open func subscribeRoom(groupId: String)async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5321,7 +5321,7 @@ open func subscribeRoom(groupId: String)async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5332,7 +5332,7 @@ open func subscribeRoom(groupId: String)async  -> SubscriptionOutcome  {
      * `ChatMessageUpserted` deltas for kind:9 messages tagged
      * `#h=<group_id>`.
      */
-open func subscribeRoomChat(groupId: String)async  -> SubscriptionOutcome  {
+open func subscribeRoomChat(groupId: String)async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5344,7 +5344,7 @@ open func subscribeRoomChat(groupId: String)async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5355,7 +5355,7 @@ open func subscribeRoomChat(groupId: String)async  -> SubscriptionOutcome  {
      * `DiscussionUpserted` deltas for kind:11 threads in this group that
      * carry the `t=discussion` marker.
      */
-open func subscribeRoomDiscussions(groupId: String)async  -> SubscriptionOutcome  {
+open func subscribeRoomDiscussions(groupId: String)async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5367,7 +5367,7 @@ open func subscribeRoomDiscussions(groupId: String)async  -> SubscriptionOutcome
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5378,7 +5378,7 @@ open func subscribeRoomDiscussions(groupId: String)async  -> SubscriptionOutcome
      * when any event relevant to `pubkey_hex`'s profile arrives. Install on
      * profile view appearance; `unsubscribe(handle)` on disappearance.
      */
-open func subscribeUserProfile(pubkeyHex: String)async  -> SubscriptionOutcome  {
+open func subscribeUserProfile(pubkeyHex: String)async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5390,7 +5390,7 @@ open func subscribeUserProfile(pubkeyHex: String)async  -> SubscriptionOutcome  
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5399,7 +5399,7 @@ open func subscribeUserProfile(pubkeyHex: String)async  -> SubscriptionOutcome  
     /**
      * Vault view-scope subscription for the current user's own highlights.
      */
-open func subscribeVault()async  -> SubscriptionOutcome  {
+open func subscribeVault()async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5411,7 +5411,7 @@ open func subscribeVault()async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5421,7 +5421,7 @@ open func subscribeVault()async  -> SubscriptionOutcome  {
      * Open a live subscription for the current user's NIP-B0 kind:39701 events.
      * Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
      */
-open func subscribeWebBookmarks()async  -> SubscriptionOutcome  {
+open func subscribeWebBookmarks()async  -> SubscriptionStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5433,7 +5433,7 @@ open func subscribeWebBookmarks()async  -> SubscriptionOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSubscriptionOutcome_lift,
+            liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
 
         )
@@ -32254,7 +32254,7 @@ public func FfiConverterTypeShareWebReaderTargetSnapshot_lower(_ value: ShareWeb
 }
 
 
-public struct SubscriptionOutcome {
+public struct SubscriptionStartSnapshot {
     public var handle: UInt64
     public var error: String
 
@@ -32267,12 +32267,12 @@ public struct SubscriptionOutcome {
 }
 
 #if compiler(>=6)
-extension SubscriptionOutcome: Sendable {}
+extension SubscriptionStartSnapshot: Sendable {}
 #endif
 
 
-extension SubscriptionOutcome: Equatable, Hashable {
-    public static func ==(lhs: SubscriptionOutcome, rhs: SubscriptionOutcome) -> Bool {
+extension SubscriptionStartSnapshot: Equatable, Hashable {
+    public static func ==(lhs: SubscriptionStartSnapshot, rhs: SubscriptionStartSnapshot) -> Bool {
         if lhs.handle != rhs.handle {
             return false
         }
@@ -32293,16 +32293,16 @@ extension SubscriptionOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeSubscriptionOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SubscriptionOutcome {
+public struct FfiConverterTypeSubscriptionStartSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SubscriptionStartSnapshot {
         return
-            try SubscriptionOutcome(
+            try SubscriptionStartSnapshot(
                 handle: FfiConverterUInt64.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: SubscriptionOutcome, into buf: inout [UInt8]) {
+    public static func write(_ value: SubscriptionStartSnapshot, into buf: inout [UInt8]) {
         FfiConverterUInt64.write(value.handle, into: &buf)
         FfiConverterString.write(value.error, into: &buf)
     }
@@ -32312,15 +32312,15 @@ public struct FfiConverterTypeSubscriptionOutcome: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeSubscriptionOutcome_lift(_ buf: RustBuffer) throws -> SubscriptionOutcome {
-    return try FfiConverterTypeSubscriptionOutcome.lift(buf)
+public func FfiConverterTypeSubscriptionStartSnapshot_lift(_ buf: RustBuffer) throws -> SubscriptionStartSnapshot {
+    return try FfiConverterTypeSubscriptionStartSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeSubscriptionOutcome_lower(_ value: SubscriptionOutcome) -> RustBuffer {
-    return FfiConverterTypeSubscriptionOutcome.lower(value)
+public func FfiConverterTypeSubscriptionStartSnapshot_lower(_ value: SubscriptionStartSnapshot) -> RustBuffer {
+    return FfiConverterTypeSubscriptionStartSnapshot.lower(value)
 }
 
 
@@ -39205,58 +39205,58 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_explorer_featured_rooms() != 63111) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 50162) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 30320) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article_search() != 22511) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article_search() != 26438) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmark_sets() != 33547) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmark_sets() != 52593) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmarks() != 36659) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmarks() != 34331) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_thread() != 41468) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_thread() != 55426) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_threads() != 42524) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_threads() != 30503) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_curation_sets() != 48600) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_curation_sets() != 19877) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_highlights() != 63581) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_highlights() != 56616) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_reads() != 57904) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_reads() != 37127) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_joined_communities() != 5805) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_joined_communities() != 12142) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_nostr_entity() != 32465) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_nostr_entity() != 20040) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_relay_status() != 58504) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_relay_status() != 228) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room() != 15617) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room() != 64926) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_chat() != 48782) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_chat() != 3396) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_discussions() != 38212) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_discussions() != 16790) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_user_profile() != 33636) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_user_profile() != 261) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_vault() != 2040) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_vault() != 52210) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_web_bookmarks() != 43717) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_web_bookmarks() != 14611) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_suggest_nip05_username() != 36133) {

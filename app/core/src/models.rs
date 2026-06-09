@@ -69,7 +69,7 @@ pub struct BookRoute {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct SubscriptionOutcome {
+pub struct SubscriptionStartSnapshot {
     pub handle: u64,
     pub error: String,
 }

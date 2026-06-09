@@ -30,7 +30,8 @@ use crate::models::{
     CurrentUser, DiscussionRecord, FeedbackThreadRecord, HighlightRecord, HighlightSourceKind,
     LoginInputAction, MutationOutcome, NostrConnectOptions, OnboardingInterest,
     OnboardingInterestProjection, OnboardingInterestSelection, PodcastPositionRecord,
-    ProfileMetadata, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, SubscriptionOutcome,
+    ProfileMetadata, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic,
+    SubscriptionStartSnapshot,
 };
 use crate::network_preferences;
 use crate::nip05;
@@ -114,13 +115,13 @@ fn join_room_display_name(room_name: &str) -> String {
     }
 }
 
-fn subscription_outcome(result: Result<u64, CoreError>) -> SubscriptionOutcome {
+fn subscription_start_snapshot(result: Result<u64, CoreError>) -> SubscriptionStartSnapshot {
     match result {
-        Ok(handle) => SubscriptionOutcome {
+        Ok(handle) => SubscriptionStartSnapshot {
             handle,
             error: String::new(),
         },
-        Err(error) => SubscriptionOutcome {
+        Err(error) => SubscriptionStartSnapshot {
             handle: 0,
             error: error.to_string(),
         },
@@ -704,8 +705,8 @@ impl HighlighterCore {
     /// handle; fires CommunityUpserted / MembershipChanged deltas tagged
     /// with that handle. Re-uses the relay sub installed at login; this
     /// call is about setting up the nostrdb notification pump.
-    pub async fn subscribe_joined_communities(&self) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_joined_communities(&self) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let user_pubkey = self.require_user_pubkey()?;
             self.subscriptions.register(
                 &self.runtime,
@@ -717,8 +718,8 @@ impl HighlighterCore {
     /// Per-room view-scope subscription. Returns a handle; fires
     /// ArtifactUpserted / HighlightUpserted / HighlightShared for this
     /// specific group.
-    pub async fn subscribe_room(&self, group_id: String) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_room(&self, group_id: String) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             if group_id.trim().is_empty() {
                 return Err(CoreError::InvalidInput("group_id must not be empty".into()));
             }
@@ -730,8 +731,8 @@ impl HighlighterCore {
     /// Per-room Discussions view-scope subscription. Returns a handle; fires
     /// `DiscussionUpserted` deltas for kind:11 threads in this group that
     /// carry the `t=discussion` marker.
-    pub async fn subscribe_room_discussions(&self, group_id: String) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_room_discussions(&self, group_id: String) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             if group_id.trim().is_empty() {
                 return Err(CoreError::InvalidInput("group_id must not be empty".into()));
             }
@@ -745,8 +746,8 @@ impl HighlighterCore {
     /// Per-room Chat view-scope subscription. Returns a handle; fires
     /// `ChatMessageUpserted` deltas for kind:9 messages tagged
     /// `#h=<group_id>`.
-    pub async fn subscribe_room_chat(&self, group_id: String) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_room_chat(&self, group_id: String) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             if group_id.trim().is_empty() {
                 return Err(CoreError::InvalidInput("group_id must not be empty".into()));
             }
@@ -756,8 +757,8 @@ impl HighlighterCore {
     }
 
     /// Vault view-scope subscription for the current user's own highlights.
-    pub async fn subscribe_vault(&self) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_vault(&self) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let user_pubkey = self.require_user_pubkey()?;
             self.subscriptions
                 .register(&self.runtime, SubscriptionKind::Vault { user_pubkey })
@@ -767,8 +768,8 @@ impl HighlighterCore {
     /// Profile view-scope subscription. Fires `UserProfileUpdated` deltas
     /// when any event relevant to `pubkey_hex`'s profile arrives. Install on
     /// profile view appearance; `unsubscribe(handle)` on disappearance.
-    pub async fn subscribe_user_profile(&self, pubkey_hex: String) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_user_profile(&self, pubkey_hex: String) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let pubkey = PublicKey::from_hex(pubkey_hex.trim())
                 .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
             self.subscriptions
@@ -781,8 +782,8 @@ impl HighlighterCore {
     /// (b) interactions by a follow against any kind:30023 content. Fires
     /// `FollowingReadsUpdated` deltas; the Swift store re-queries the feed.
     /// Install on tab appearance; `unsubscribe(handle)` on disappearance.
-    pub async fn subscribe_following_reads(&self) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_following_reads(&self) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let user_pubkey = self.require_user_pubkey()?;
             let follow_hex_strings =
                 follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())?;
@@ -805,8 +806,8 @@ impl HighlighterCore {
     /// but we want our own highlights in the home feed) and joined-group
     /// ids, then listens for kind:9802 events authored by anyone in that
     /// set or tagged into any joined room.
-    pub async fn subscribe_following_highlights(&self) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_following_highlights(&self) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let user_pubkey = self.require_user_pubkey()?;
             let follow_hex_strings =
                 follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())?;
@@ -841,8 +842,8 @@ impl HighlighterCore {
         &self,
         pubkey_hex: String,
         d_tag: String,
-    ) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    ) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let pubkey_hex = pubkey_hex.trim();
             let d_tag = d_tag.trim();
             if pubkey_hex.is_empty() || d_tag.is_empty() {
@@ -868,8 +869,11 @@ impl HighlighterCore {
     /// `FeedbackThreadsUpdated` deltas whenever a kind:1 root authored by
     /// the current user (with the project `a` tag) or any kind:513 metadata
     /// for the same project arrives. Swift re-queries on each.
-    pub async fn subscribe_feedback_threads(&self, coordinate: String) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_feedback_threads(
+        &self,
+        coordinate: String,
+    ) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let coordinate = coordinate.trim();
             if coordinate.is_empty() {
                 return Err(CoreError::InvalidInput(
@@ -889,8 +893,11 @@ impl HighlighterCore {
 
     /// Per-thread feedback subscription. Fires `FeedbackThreadUpdated` deltas
     /// for every kind:1 `e`-tagged to the root (regardless of author).
-    pub async fn subscribe_feedback_thread(&self, root_event_id: String) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_feedback_thread(
+        &self,
+        root_event_id: String,
+    ) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let root_event_id = root_event_id.trim();
             if root_event_id.is_empty() {
                 return Err(CoreError::InvalidInput(
@@ -1815,7 +1822,7 @@ impl HighlighterCore {
     /// `SearchArticlesUpdated { query }` deltas as matching events ingest,
     /// and the Swift store responds by re-reading Rust's article search
     /// snapshot to merge the new events into its Articles bucket.
-    pub async fn subscribe_article_search(&self, query: String) -> SubscriptionOutcome {
+    pub async fn subscribe_article_search(&self, query: String) -> SubscriptionStartSnapshot {
         let result: Result<u64, CoreError> = async {
             let trimmed = query.trim().to_string();
             if trimmed.is_empty() {
@@ -1843,7 +1850,7 @@ impl HighlighterCore {
             )
         }
         .await;
-        subscription_outcome(result)
+        subscription_start_snapshot(result)
     }
 
     // -- Bookmarks (NIP-51 kind:10003) -----------------------------------
@@ -1912,8 +1919,8 @@ impl HighlighterCore {
     /// Open a live subscription on the current user's kind:10003 bookmark
     /// events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
     /// Swift bookmarks store re-queries on each.
-    pub async fn subscribe_bookmarks(&self) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_bookmarks(&self) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let user_hex = self
                 .inner
                 .read()
@@ -2090,8 +2097,8 @@ impl HighlighterCore {
 
     /// Open a live subscription for the current user's kind:30003/30004 sets.
     /// Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
-    pub async fn subscribe_bookmark_sets(&self) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_bookmark_sets(&self) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let user_hex = self
                 .inner
                 .read()
@@ -2110,8 +2117,8 @@ impl HighlighterCore {
 
     /// Open a live subscription for kind:30004 sets from followed authors.
     /// Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
-    pub async fn subscribe_following_curation_sets(&self) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_following_curation_sets(&self) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let user_hex = self
                 .inner
                 .read()
@@ -2133,8 +2140,8 @@ impl HighlighterCore {
 
     /// Open a live subscription for the current user's NIP-B0 kind:39701 events.
     /// Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
-    pub async fn subscribe_web_bookmarks(&self) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    pub async fn subscribe_web_bookmarks(&self) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let user_hex = self
                 .inner
                 .read()
@@ -3257,8 +3264,8 @@ impl HighlighterCore {
     pub async fn subscribe_nostr_entity(
         &self,
         entity: crate::nostr_entities::NostrEntityRef,
-    ) -> SubscriptionOutcome {
-        subscription_outcome((|| {
+    ) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot((|| {
             let _ = self.require_user_pubkey()?;
             let _ = crate::nostr_entities::relay_filter(&entity)?;
             self.subscriptions
@@ -3576,8 +3583,8 @@ impl HighlighterCore {
     /// event bus. Relay status changes are app-scoped and ride
     /// `subscription_id == 0`, so this returns `0` unconditionally — the
     /// value is a stable contract, not a unique sub id.
-    pub async fn subscribe_relay_status(&self) -> SubscriptionOutcome {
-        subscription_outcome(Ok(0))
+    pub async fn subscribe_relay_status(&self) -> SubscriptionStartSnapshot {
+        subscription_start_snapshot(Ok(0))
     }
 
     /// Nudge the relay pool to attempt a reconnect on every disconnected

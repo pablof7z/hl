@@ -1717,7 +1717,7 @@ mod tests {
         (Arc::new(ChannelCallback { tx }), rx)
     }
 
-    fn expect_subscription(outcome: crate::models::SubscriptionOutcome) -> u64 {
+    fn expect_subscription(outcome: crate::models::SubscriptionStartSnapshot) -> u64 {
         assert!(outcome.error.is_empty(), "subscribe: {}", outcome.error);
         outcome.handle
     }
