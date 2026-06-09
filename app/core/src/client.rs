@@ -28,9 +28,9 @@ use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome,
     ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome,
-    BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, CommentRecord, CommentReferenceBucket,
-    CommentScope, CommentScopeOutcome, CommunityListOutcome, CommunitySummary, CurrentUser,
-    CurrentUserOutcome, DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord,
+    BookmarkSetRecord, CacheStatsOutcome, CommentRecord, CommentReferenceBucket, CommentScope,
+    CommentScopeOutcome, CommunityListOutcome, CommunitySummary, CurrentUser, CurrentUserOutcome,
+    DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord,
     GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
     HighlightSourceKind, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
     Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
@@ -108,19 +108,6 @@ fn mutation_outcome(result: Result<(), CoreError>) -> MutationOutcome {
         },
         Err(error) => MutationOutcome {
             applied: false,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn bool_outcome(result: Result<bool, CoreError>) -> BoolOutcome {
-    match result {
-        Ok(value) => BoolOutcome {
-            value,
-            error: String::new(),
-        },
-        Err(error) => BoolOutcome {
-            value: false,
             error: error.to_string(),
         },
     }
@@ -1556,6 +1543,16 @@ impl HighlighterCore {
         profile::profile_relationship_projection(input)
     }
 
+    /// Profile follow-tap projection. Rust owns whether a tap may start,
+    /// the optimistic button state, and the exact mutation the shell executes.
+    pub fn project_profile_follow_action(
+        &self,
+        relationship: profile::ProfileRelationshipProjection,
+        input: profile::ProfileFollowActionInput,
+    ) -> profile::ProfileFollowActionProjection {
+        profile::profile_follow_action_projection(relationship, input)
+    }
+
     /// Profile edit-form projection. Rust owns draft normalization and save
     /// eligibility; native shells bind controls to the returned projection.
     pub fn project_profile_update(
@@ -2145,29 +2142,16 @@ impl HighlighterCore {
         ))
     }
 
-    // -- Follow state (kind:3) --
-
-    /// Returns true if the logged-in user's cached contact list currently
-    /// includes `target_pubkey_hex`.
-    pub async fn is_following(&self, target_pubkey_hex: String) -> BoolOutcome {
-        bool_outcome((|| {
-            let Some(user) = self.inner.read().session.current_user() else {
-                return Err(CoreError::NotAuthenticated);
-            };
-            follows::is_following(self.runtime.ndb(), &user.pubkey, target_pubkey_hex.trim())
-        })())
-    }
-
-    /// Publish a new kind:3 that adds (`follow=true`) or removes
-    /// (`follow=false`) `target_pubkey_hex` from the logged-in user's contact
-    /// list. Returns the new event id, or `None` if already in the desired
-    /// state (no republish).
-    pub async fn set_follow(
+    /// Publish the Rust-projected profile follow mutation and return the
+    /// post-action screen state. Rust owns rollback on error; the shell only
+    /// applies the returned snapshot.
+    pub async fn apply_profile_follow_mutation(
         &self,
-        target_pubkey_hex: String,
-        follow: bool,
-    ) -> OptionalStringOutcome {
-        let result: Result<Option<String>, CoreError> = async {
+        input: profile::ProfileFollowMutationInput,
+    ) -> profile::ProfileFollowMutationSnapshot {
+        let target_pubkey = input.target_pubkey.clone();
+        let requested_follow_state = input.requested_follow_state;
+        let result: Result<(), CoreError> = async {
             let follower = {
                 let guard = self.inner.read();
                 guard
@@ -2179,13 +2163,14 @@ impl HighlighterCore {
             follows::publish_follow_toggle(
                 &self.runtime,
                 &follower,
-                target_pubkey_hex.trim(),
-                follow,
+                target_pubkey.trim(),
+                requested_follow_state,
             )
-            .await
+            .await?;
+            Ok(())
         }
         .await;
-        optional_string_outcome(result)
+        profile::profile_follow_mutation_snapshot(input, result)
     }
 
     /// Screen-shaped snapshot for the capture book picker. Rust owns recent

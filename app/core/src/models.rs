@@ -64,12 +64,6 @@ pub struct MutationOutcome {
     pub error: String,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct BoolOutcome {
-    pub value: bool,
-    pub error: String,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum ProfileUpdateAction {
     RefreshProfile,

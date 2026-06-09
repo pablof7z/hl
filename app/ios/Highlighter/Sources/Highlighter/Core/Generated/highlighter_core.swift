@@ -767,6 +767,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func addRoomMember(groupId: String, pubkeyHex: String) async  -> StringOutcome
 
+    /**
+     * Publish the Rust-projected profile follow mutation and return the
+     * post-action screen state. Rust owns rollback on error; the shell only
+     * applies the returned snapshot.
+     */
+    func applyProfileFollowMutation(input: ProfileFollowMutationInput) async  -> ProfileFollowMutationSnapshot
+
     func autoConnectedRelayConfig(url: String)  -> RelayConfig
 
     /**
@@ -1216,12 +1223,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func initDefaultBlossomServers() async  -> MutationOutcome
 
-    /**
-     * Returns true if the logged-in user's cached contact list currently
-     * includes `target_pubkey_hex`.
-     */
-    func isFollowing(targetPubkeyHex: String) async  -> BoolOutcome
-
     func isNip05UsernameValid(input: String)  -> Bool
 
     func isOnboardingComplete()  -> Bool
@@ -1461,6 +1462,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectProfileDisplayWithLabel(input: ProfileDisplayWithLabelProjectionInput)  -> ProfileDisplayProjection
 
     /**
+     * Profile follow-tap projection. Rust owns whether a tap may start,
+     * the optimistic button state, and the exact mutation the shell executes.
+     */
+    func projectProfileFollowAction(relationship: ProfileRelationshipProjection, input: ProfileFollowActionInput)  -> ProfileFollowActionProjection
+
+    /**
      * Compact profile handle projection for social proof surfaces. Rust owns
      * handle precedence and pubkey fallback length; native shells render it.
      */
@@ -1679,14 +1686,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func setBlossomServers(servers: [String]) async  -> StringOutcome
 
     func setEventCallback(callback: EventCallback)
-
-    /**
-     * Publish a new kind:3 that adds (`follow=true`) or removes
-     * (`follow=false`) `target_pubkey_hex` from the logged-in user's contact
-     * list. Returns the new event id, or `None` if already in the desired
-     * state (no republish).
-     */
-    func setFollow(targetPubkeyHex: String, follow: Bool) async  -> OptionalStringOutcome
 
     func setOnboardingComplete(complete: Bool)  -> MutationOutcome
 
@@ -2024,6 +2023,29 @@ open func addRoomMember(groupId: String, pubkeyHex: String)async  -> StringOutco
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeStringOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+    /**
+     * Publish the Rust-projected profile follow mutation and return the
+     * post-action screen state. Rust owns rollback on error; the shell only
+     * applies the returned snapshot.
+     */
+open func applyProfileFollowMutation(input: ProfileFollowMutationInput)async  -> ProfileFollowMutationSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_apply_profile_follow_mutation(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeProfileFollowMutationInput_lower(input)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeProfileFollowMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -3571,28 +3593,6 @@ open func initDefaultBlossomServers()async  -> MutationOutcome  {
         )
 }
 
-    /**
-     * Returns true if the logged-in user's cached contact list currently
-     * includes `target_pubkey_hex`.
-     */
-open func isFollowing(targetPubkeyHex: String)async  -> BoolOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_is_following(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(targetPubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBoolOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
 open func isNip05UsernameValid(input: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_is_nip05_username_valid(self.uniffiClonePointer(),
@@ -4281,6 +4281,19 @@ open func projectProfileDisplayWithLabel(input: ProfileDisplayWithLabelProjectio
     return try!  FfiConverterTypeProfileDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_profile_display_with_label(self.uniffiClonePointer(),
         FfiConverterTypeProfileDisplayWithLabelProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Profile follow-tap projection. Rust owns whether a tap may start,
+     * the optimistic button state, and the exact mutation the shell executes.
+     */
+open func projectProfileFollowAction(relationship: ProfileRelationshipProjection, input: ProfileFollowActionInput) -> ProfileFollowActionProjection  {
+    return try!  FfiConverterTypeProfileFollowActionProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_profile_follow_action(self.uniffiClonePointer(),
+        FfiConverterTypeProfileRelationshipProjection_lower(relationship),
+        FfiConverterTypeProfileFollowActionInput_lower(input),$0
     )
 })
 }
@@ -5052,30 +5065,6 @@ open func setEventCallback(callback: EventCallback)  {try! rustCall() {
         FfiConverterTypeEventCallback_lower(callback),$0
     )
 }
-}
-
-    /**
-     * Publish a new kind:3 that adds (`follow=true`) or removes
-     * (`follow=false`) `target_pubkey_hex` from the logged-in user's contact
-     * list. Returns the new event id, or `None` if already in the desired
-     * state (no republish).
-     */
-open func setFollow(targetPubkeyHex: String, follow: Bool)async  -> OptionalStringOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_set_follow(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(targetPubkeyHex),FfiConverterBool.lower(follow)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeOptionalStringOutcome_lift,
-            errorHandler: nil
-
-        )
 }
 
 open func setOnboardingComplete(complete: Bool) -> MutationOutcome  {
@@ -10661,76 +10650,6 @@ public func FfiConverterTypeBookmarkedArticleRowProjectionInput_lift(_ buf: Rust
 #endif
 public func FfiConverterTypeBookmarkedArticleRowProjectionInput_lower(_ value: BookmarkedArticleRowProjectionInput) -> RustBuffer {
     return FfiConverterTypeBookmarkedArticleRowProjectionInput.lower(value)
-}
-
-
-public struct BoolOutcome {
-    public var value: Bool
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: Bool, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension BoolOutcome: Sendable {}
-#endif
-
-
-extension BoolOutcome: Equatable, Hashable {
-    public static func ==(lhs: BoolOutcome, rhs: BoolOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeBoolOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BoolOutcome {
-        return
-            try BoolOutcome(
-                value: FfiConverterBool.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: BoolOutcome, into buf: inout [UInt8]) {
-        FfiConverterBool.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBoolOutcome_lift(_ buf: RustBuffer) throws -> BoolOutcome {
-    return try FfiConverterTypeBoolOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBoolOutcome_lower(_ value: BoolOutcome) -> RustBuffer {
-    return FfiConverterTypeBoolOutcome.lower(value)
 }
 
 
@@ -23052,6 +22971,310 @@ public func FfiConverterTypeProfileDisplayWithLabelProjectionInput_lift(_ buf: R
 #endif
 public func FfiConverterTypeProfileDisplayWithLabelProjectionInput_lower(_ value: ProfileDisplayWithLabelProjectionInput) -> RustBuffer {
     return FfiConverterTypeProfileDisplayWithLabelProjectionInput.lower(value)
+}
+
+
+public struct ProfileFollowActionInput {
+    public var isFollowing: Bool
+    public var isMutating: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(isFollowing: Bool, isMutating: Bool) {
+        self.isFollowing = isFollowing
+        self.isMutating = isMutating
+    }
+}
+
+#if compiler(>=6)
+extension ProfileFollowActionInput: Sendable {}
+#endif
+
+
+extension ProfileFollowActionInput: Equatable, Hashable {
+    public static func ==(lhs: ProfileFollowActionInput, rhs: ProfileFollowActionInput) -> Bool {
+        if lhs.isFollowing != rhs.isFollowing {
+            return false
+        }
+        if lhs.isMutating != rhs.isMutating {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isFollowing)
+        hasher.combine(isMutating)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileFollowActionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileFollowActionInput {
+        return
+            try ProfileFollowActionInput(
+                isFollowing: FfiConverterBool.read(from: &buf),
+                isMutating: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileFollowActionInput, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.isFollowing, into: &buf)
+        FfiConverterBool.write(value.isMutating, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowActionInput_lift(_ buf: RustBuffer) throws -> ProfileFollowActionInput {
+    return try FfiConverterTypeProfileFollowActionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowActionInput_lower(_ value: ProfileFollowActionInput) -> RustBuffer {
+    return FfiConverterTypeProfileFollowActionInput.lower(value)
+}
+
+
+public struct ProfileFollowActionProjection {
+    public var canStart: Bool
+    public var optimisticIsFollowing: Bool
+    public var mutation: ProfileFollowMutationInput?
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(canStart: Bool, optimisticIsFollowing: Bool, mutation: ProfileFollowMutationInput?, errorMessage: String) {
+        self.canStart = canStart
+        self.optimisticIsFollowing = optimisticIsFollowing
+        self.mutation = mutation
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension ProfileFollowActionProjection: Sendable {}
+#endif
+
+
+extension ProfileFollowActionProjection: Equatable, Hashable {
+    public static func ==(lhs: ProfileFollowActionProjection, rhs: ProfileFollowActionProjection) -> Bool {
+        if lhs.canStart != rhs.canStart {
+            return false
+        }
+        if lhs.optimisticIsFollowing != rhs.optimisticIsFollowing {
+            return false
+        }
+        if lhs.mutation != rhs.mutation {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(canStart)
+        hasher.combine(optimisticIsFollowing)
+        hasher.combine(mutation)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileFollowActionProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileFollowActionProjection {
+        return
+            try ProfileFollowActionProjection(
+                canStart: FfiConverterBool.read(from: &buf),
+                optimisticIsFollowing: FfiConverterBool.read(from: &buf),
+                mutation: FfiConverterOptionTypeProfileFollowMutationInput.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileFollowActionProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.canStart, into: &buf)
+        FfiConverterBool.write(value.optimisticIsFollowing, into: &buf)
+        FfiConverterOptionTypeProfileFollowMutationInput.write(value.mutation, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowActionProjection_lift(_ buf: RustBuffer) throws -> ProfileFollowActionProjection {
+    return try FfiConverterTypeProfileFollowActionProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowActionProjection_lower(_ value: ProfileFollowActionProjection) -> RustBuffer {
+    return FfiConverterTypeProfileFollowActionProjection.lower(value)
+}
+
+
+public struct ProfileFollowMutationInput {
+    public var targetPubkey: String
+    public var requestedFollowState: Bool
+    public var previousFollowState: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(targetPubkey: String, requestedFollowState: Bool, previousFollowState: Bool) {
+        self.targetPubkey = targetPubkey
+        self.requestedFollowState = requestedFollowState
+        self.previousFollowState = previousFollowState
+    }
+}
+
+#if compiler(>=6)
+extension ProfileFollowMutationInput: Sendable {}
+#endif
+
+
+extension ProfileFollowMutationInput: Equatable, Hashable {
+    public static func ==(lhs: ProfileFollowMutationInput, rhs: ProfileFollowMutationInput) -> Bool {
+        if lhs.targetPubkey != rhs.targetPubkey {
+            return false
+        }
+        if lhs.requestedFollowState != rhs.requestedFollowState {
+            return false
+        }
+        if lhs.previousFollowState != rhs.previousFollowState {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(targetPubkey)
+        hasher.combine(requestedFollowState)
+        hasher.combine(previousFollowState)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileFollowMutationInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileFollowMutationInput {
+        return
+            try ProfileFollowMutationInput(
+                targetPubkey: FfiConverterString.read(from: &buf),
+                requestedFollowState: FfiConverterBool.read(from: &buf),
+                previousFollowState: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileFollowMutationInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.targetPubkey, into: &buf)
+        FfiConverterBool.write(value.requestedFollowState, into: &buf)
+        FfiConverterBool.write(value.previousFollowState, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowMutationInput_lift(_ buf: RustBuffer) throws -> ProfileFollowMutationInput {
+    return try FfiConverterTypeProfileFollowMutationInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowMutationInput_lower(_ value: ProfileFollowMutationInput) -> RustBuffer {
+    return FfiConverterTypeProfileFollowMutationInput.lower(value)
+}
+
+
+public struct ProfileFollowMutationSnapshot {
+    public var isFollowing: Bool
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(isFollowing: Bool, error: String) {
+        self.isFollowing = isFollowing
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ProfileFollowMutationSnapshot: Sendable {}
+#endif
+
+
+extension ProfileFollowMutationSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ProfileFollowMutationSnapshot, rhs: ProfileFollowMutationSnapshot) -> Bool {
+        if lhs.isFollowing != rhs.isFollowing {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isFollowing)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileFollowMutationSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileFollowMutationSnapshot {
+        return
+            try ProfileFollowMutationSnapshot(
+                isFollowing: FfiConverterBool.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileFollowMutationSnapshot, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.isFollowing, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowMutationSnapshot_lift(_ buf: RustBuffer) throws -> ProfileFollowMutationSnapshot {
+    return try FfiConverterTypeProfileFollowMutationSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowMutationSnapshot_lower(_ value: ProfileFollowMutationSnapshot) -> RustBuffer {
+    return FfiConverterTypeProfileFollowMutationSnapshot.lower(value)
 }
 
 
@@ -36150,6 +36373,30 @@ fileprivate struct FfiConverterOptionTypePodcastPositionRecord: FfiConverterRust
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeProfileFollowMutationInput: FfiConverterRustBuffer {
+    typealias SwiftType = ProfileFollowMutationInput?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeProfileFollowMutationInput.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeProfileFollowMutationInput.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeProfileMetadata: FfiConverterRustBuffer {
     typealias SwiftType = ProfileMetadata?
 
@@ -37781,6 +38028,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_add_room_member() != 15527) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_apply_profile_follow_mutation() != 50949) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_auto_connected_relay_config() != 62438) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38072,9 +38322,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 36336) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_is_following() != 423) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_nip05_username_valid() != 33870) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38273,6 +38520,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_display_with_label() != 13355) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_follow_action() != 10930) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_handle() != 16948) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38454,9 +38704,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_event_callback() != 16901) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_follow() != 40209) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_onboarding_complete() != 42515) {

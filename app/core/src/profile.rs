@@ -175,6 +175,33 @@ pub struct ProfileRelationshipProjection {
     pub should_refresh_follow_state: bool,
 }
 
+#[derive(Debug, Clone, Copy, uniffi::Record)]
+pub struct ProfileFollowActionInput {
+    pub is_following: bool,
+    pub is_mutating: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProfileFollowMutationInput {
+    pub target_pubkey: String,
+    pub requested_follow_state: bool,
+    pub previous_follow_state: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProfileFollowActionProjection {
+    pub can_start: bool,
+    pub optimistic_is_following: bool,
+    pub mutation: Option<ProfileFollowMutationInput>,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProfileFollowMutationSnapshot {
+    pub is_following: bool,
+    pub error: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ProfileUpdateProjectionInput {
     pub initial: Option<ProfileMetadata>,
@@ -339,6 +366,57 @@ pub fn profile_relationship_projection(
         is_own_profile,
         can_show_follow_action,
         should_refresh_follow_state: can_show_follow_action,
+    }
+}
+
+pub fn profile_follow_action_projection(
+    relationship: ProfileRelationshipProjection,
+    input: ProfileFollowActionInput,
+) -> ProfileFollowActionProjection {
+    if input.is_mutating {
+        return ProfileFollowActionProjection {
+            can_start: false,
+            optimistic_is_following: input.is_following,
+            mutation: None,
+            error_message: String::new(),
+        };
+    }
+
+    if !relationship.can_show_follow_action {
+        return ProfileFollowActionProjection {
+            can_start: false,
+            optimistic_is_following: input.is_following,
+            mutation: None,
+            error_message: String::new(),
+        };
+    }
+
+    let requested_follow_state = !input.is_following;
+    ProfileFollowActionProjection {
+        can_start: true,
+        optimistic_is_following: requested_follow_state,
+        mutation: Some(ProfileFollowMutationInput {
+            target_pubkey: relationship.target_pubkey,
+            requested_follow_state,
+            previous_follow_state: input.is_following,
+        }),
+        error_message: String::new(),
+    }
+}
+
+pub fn profile_follow_mutation_snapshot(
+    input: ProfileFollowMutationInput,
+    result: Result<(), CoreError>,
+) -> ProfileFollowMutationSnapshot {
+    match result {
+        Ok(()) => ProfileFollowMutationSnapshot {
+            is_following: input.requested_follow_state,
+            error: String::new(),
+        },
+        Err(error) => ProfileFollowMutationSnapshot {
+            is_following: input.previous_follow_state,
+            error: error.to_string(),
+        },
     }
 }
 
@@ -904,6 +982,98 @@ mod tests {
         assert!(!logged_out.should_refresh_follow_state);
         assert!(distinct.can_show_follow_action);
         assert!(distinct.should_refresh_follow_state);
+    }
+
+    #[test]
+    fn profile_follow_action_projection_blocks_busy_or_hidden_actions() {
+        let relationship = profile_relationship_projection(ProfileRelationshipProjectionInput {
+            profile_pubkey: "abcdef".into(),
+            viewer_pubkey: Some("123456".into()),
+        });
+        let hidden_relationship =
+            profile_relationship_projection(ProfileRelationshipProjectionInput {
+                profile_pubkey: "abcdef".into(),
+                viewer_pubkey: None,
+            });
+        let busy = profile_follow_action_projection(
+            relationship.clone(),
+            ProfileFollowActionInput {
+                is_following: false,
+                is_mutating: true,
+            },
+        );
+        let hidden = profile_follow_action_projection(
+            hidden_relationship,
+            ProfileFollowActionInput {
+                is_following: false,
+                is_mutating: false,
+            },
+        );
+
+        assert!(!busy.can_start);
+        assert!(!busy.optimistic_is_following);
+        assert_eq!(busy.mutation, None);
+        assert!(!hidden.can_start);
+        assert_eq!(hidden.mutation, None);
+    }
+
+    #[test]
+    fn profile_follow_action_projection_builds_toggle_mutation() {
+        let relationship = profile_relationship_projection(ProfileRelationshipProjectionInput {
+            profile_pubkey: " abcdef ".into(),
+            viewer_pubkey: Some("123456".into()),
+        });
+
+        let follow = profile_follow_action_projection(
+            relationship.clone(),
+            ProfileFollowActionInput {
+                is_following: false,
+                is_mutating: false,
+            },
+        );
+        let unfollow = profile_follow_action_projection(
+            relationship,
+            ProfileFollowActionInput {
+                is_following: true,
+                is_mutating: false,
+            },
+        );
+
+        assert!(follow.can_start);
+        assert!(follow.optimistic_is_following);
+        assert_eq!(
+            follow.mutation,
+            Some(ProfileFollowMutationInput {
+                target_pubkey: "abcdef".into(),
+                requested_follow_state: true,
+                previous_follow_state: false,
+            })
+        );
+        assert!(unfollow.can_start);
+        assert!(!unfollow.optimistic_is_following);
+        assert!(!unfollow.mutation.expect("mutation").requested_follow_state);
+    }
+
+    #[test]
+    fn profile_follow_mutation_snapshot_keeps_success_or_reverts_error() {
+        let input = ProfileFollowMutationInput {
+            target_pubkey: "abcdef".into(),
+            requested_follow_state: true,
+            previous_follow_state: false,
+        };
+
+        let success = profile_follow_mutation_snapshot(input.clone(), Ok(()));
+        let failure = profile_follow_mutation_snapshot(input, Err(CoreError::Relay("nope".into())));
+
+        assert_eq!(
+            success,
+            ProfileFollowMutationSnapshot {
+                is_following: true,
+                error: String::new(),
+            }
+        );
+        assert!(!failure.is_following);
+        assert_eq!(failure.error, "relay error: nope");
     }
 
     #[test]

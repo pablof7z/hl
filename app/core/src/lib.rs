@@ -144,8 +144,8 @@ pub use models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactOutcome, ArtifactPreview,
     ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget, BlossomUpload,
-    BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetRecord, BoolOutcome,
-    CacheStatsOutcome, ChatMessageRecord, CommentRecord, CommentReferenceBucket, CommentThreadNode,
+    BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetRecord, CacheStatsOutcome,
+    ChatMessageRecord, CommentRecord, CommentReferenceBucket, CommentThreadNode,
     CommentThreadProjection, CommunityListOutcome, CommunitySummary, CurationMenuItem, CurrentUser,
     CurrentUserOutcome, DataOutcome, DiscussionAttachment, DiscussionListOutcome,
     DiscussionOutcome, DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord,
@@ -175,8 +175,9 @@ pub use podcast_transcript::{
 };
 pub use profile::{
     ProfileDisplayFallback, ProfileDisplayProjection, ProfileDisplayProjectionInput,
-    ProfileDisplayWithLabelProjectionInput, ProfileIdentityProjection,
-    ProfileIdentityProjectionInput, ProfileRelationshipProjection,
+    ProfileDisplayWithLabelProjectionInput, ProfileFollowActionInput,
+    ProfileFollowActionProjection, ProfileFollowMutationInput, ProfileFollowMutationSnapshot,
+    ProfileIdentityProjection, ProfileIdentityProjectionInput, ProfileRelationshipProjection,
     ProfileRelationshipProjectionInput, ProfileUpdateProjection, ProfileUpdateProjectionInput,
 };
 pub use profile_page::ProfilePageSnapshot;

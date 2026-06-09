@@ -94,19 +94,26 @@ final class ProfileStore {
 
     func toggleFollow() async {
         let relationship = relationshipProjection
-        guard relationship.canShowFollowAction else { return }
-        guard !isMutatingFollow else { return }
+        let action = safeCore.projectProfileFollowAction(
+            relationship: relationship,
+            input: ProfileFollowActionInput(
+                isFollowing: isFollowing,
+                isMutating: isMutatingFollow
+            )
+        )
+        guard action.canStart, let mutation = action.mutation else {
+            if !action.errorMessage.isEmpty {
+                followError = action.errorMessage
+            }
+            return
+        }
         isMutatingFollow = true
         followError = nil
-        let wasFollowing = isFollowing
-        isFollowing = !wasFollowing
-        let outcome = await safeCore.setFollow(
-            targetPubkeyHex: relationship.targetPubkey,
-            follow: !wasFollowing
-        )
-        if !outcome.error.isEmpty {
-            isFollowing = wasFollowing
-            followError = outcome.error
+        isFollowing = action.optimisticIsFollowing
+        let snapshot = await safeCore.applyProfileFollowMutation(input: mutation)
+        isFollowing = snapshot.isFollowing
+        if !snapshot.error.isEmpty {
+            followError = snapshot.error
         }
         isMutatingFollow = false
     }

@@ -692,6 +692,19 @@ actor SafeHighlighterCore {
         core.projectProfileRelationship(input: input)
     }
 
+    nonisolated func projectProfileFollowAction(
+        relationship: ProfileRelationshipProjection,
+        input: ProfileFollowActionInput
+    ) -> ProfileFollowActionProjection {
+        core.projectProfileFollowAction(relationship: relationship, input: input)
+    }
+
+    func applyProfileFollowMutation(
+        input: ProfileFollowMutationInput
+    ) async -> ProfileFollowMutationSnapshot {
+        await core.applyProfileFollowMutation(input: input)
+    }
+
     nonisolated func projectProfileUpdate(
         input: ProfileUpdateProjectionInput
     ) -> ProfileUpdateProjection {
@@ -1189,14 +1202,6 @@ actor SafeHighlighterCore {
             selected: selected,
             failedPubkeys: failedPubkeys
         )
-    }
-
-    func isFollowing(targetPubkeyHex: String) async -> BoolOutcome {
-        await core.isFollowing(targetPubkeyHex: targetPubkeyHex)
-    }
-
-    func setFollow(targetPubkeyHex: String, follow: Bool) async -> OptionalStringOutcome {
-        await core.setFollow(targetPubkeyHex: targetPubkeyHex, follow: follow)
     }
 
     // MARK: - Home Feed
