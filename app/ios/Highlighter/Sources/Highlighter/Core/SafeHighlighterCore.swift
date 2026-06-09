@@ -824,19 +824,11 @@ actor SafeHighlighterCore {
         await core.registerNip05(name: name, domain: domain)
     }
 
-    func getUserArticles(pubkeyHex: String, limit: UInt32 = 32) async -> ArticleListOutcome {
-        await core.getUserArticles(pubkeyHex: pubkeyHex, limit: limit)
-    }
-
-    func getArticle(pubkeyHex: String, dTag: String) async -> ArticleOutcome {
-        await core.getArticle(pubkeyHex: pubkeyHex, dTag: dTag)
-    }
-
     func getArticleReaderSnapshot(pubkeyHex: String, dTag: String) async -> ArticleReaderSnapshot {
         await core.getArticleReaderSnapshot(pubkeyHex: pubkeyHex, dTag: dTag)
     }
 
-    func getArticleByAddress(address: String) async -> ArticleOutcome {
+    func getArticleByAddress(address: String) async -> ArticleRecord? {
         await core.getArticleByAddress(address: address)
     }
 

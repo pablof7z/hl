@@ -865,13 +865,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func generateAccount()  -> AccountGenerationSnapshot
 
     /**
-     * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
-     * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
-     * backfills via relays, and a later call returns `Some`.
-     */
-    func getArticle(pubkeyHex: String, dTag: String) async  -> ArticleOutcome
-
-    /**
      * Return the author pubkey from a valid NIP-23 article address
      * (`30023:<pubkey>:<d>`).
      */
@@ -888,7 +881,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Read a single NIP-23 article by its full NIP-33 address
      * (`30023:<pubkey>:<d>`) from nostrdb.
      */
-    func getArticleByAddress(address: String) async  -> ArticleOutcome
+    func getArticleByAddress(address: String) async  -> ArticleRecord?
 
     /**
      * Project a NIP-23 article address into the NIP-22 root scope used by
@@ -1131,8 +1124,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * returned buckets.
      */
     func getSearchResultsSnapshot(query: String) async  -> SearchResultsSnapshot
-
-    func getUserArticles(pubkeyHex: String, limit: UInt32) async  -> ArticleListOutcome
 
     func getUserCommunities(pubkeyHex: String) async  -> CommunityListOutcome
 
@@ -2360,29 +2351,6 @@ open func generateAccount() -> AccountGenerationSnapshot  {
 }
 
     /**
-     * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
-     * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
-     * backfills via relays, and a later call returns `Some`.
-     */
-open func getArticle(pubkeyHex: String, dTag: String)async  -> ArticleOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_article(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex),FfiConverterString.lower(dTag)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArticleOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Return the author pubkey from a valid NIP-23 article address
      * (`30023:<pubkey>:<d>`).
      */
@@ -2431,7 +2399,7 @@ open func getArticleBookmarksSnapshot()async  -> ArticleBookmarksSnapshot  {
      * Read a single NIP-23 article by its full NIP-33 address
      * (`30023:<pubkey>:<d>`) from nostrdb.
      */
-open func getArticleByAddress(address: String)async  -> ArticleOutcome  {
+open func getArticleByAddress(address: String)async  -> ArticleRecord?  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2443,7 +2411,7 @@ open func getArticleByAddress(address: String)async  -> ArticleOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArticleOutcome_lift,
+            liftFunc: FfiConverterOptionTypeArticleRecord.lift,
             errorHandler: nil
 
         )
@@ -3289,24 +3257,6 @@ open func getSearchResultsSnapshot(query: String)async  -> SearchResultsSnapshot
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSearchResultsSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-open func getUserArticles(pubkeyHex: String, limit: UInt32)async  -> ArticleListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_user_articles(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArticleListOutcome_lift,
             errorHandler: nil
 
         )
@@ -6785,146 +6735,6 @@ public func FfiConverterTypeArticleHighlightPublishProjectionInput_lift(_ buf: R
 #endif
 public func FfiConverterTypeArticleHighlightPublishProjectionInput_lower(_ value: ArticleHighlightPublishProjectionInput) -> RustBuffer {
     return FfiConverterTypeArticleHighlightPublishProjectionInput.lower(value)
-}
-
-
-public struct ArticleListOutcome {
-    public var values: [ArticleRecord]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [ArticleRecord], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ArticleListOutcome: Sendable {}
-#endif
-
-
-extension ArticleListOutcome: Equatable, Hashable {
-    public static func ==(lhs: ArticleListOutcome, rhs: ArticleListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeArticleListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleListOutcome {
-        return
-            try ArticleListOutcome(
-                values: FfiConverterSequenceTypeArticleRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ArticleListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeArticleRecord.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArticleListOutcome_lift(_ buf: RustBuffer) throws -> ArticleListOutcome {
-    return try FfiConverterTypeArticleListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArticleListOutcome_lower(_ value: ArticleListOutcome) -> RustBuffer {
-    return FfiConverterTypeArticleListOutcome.lower(value)
-}
-
-
-public struct ArticleOutcome {
-    public var value: ArticleRecord?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: ArticleRecord?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ArticleOutcome: Sendable {}
-#endif
-
-
-extension ArticleOutcome: Equatable, Hashable {
-    public static func ==(lhs: ArticleOutcome, rhs: ArticleOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeArticleOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleOutcome {
-        return
-            try ArticleOutcome(
-                value: FfiConverterOptionTypeArticleRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ArticleOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeArticleRecord.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArticleOutcome_lift(_ buf: RustBuffer) throws -> ArticleOutcome {
-    return try FfiConverterTypeArticleOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArticleOutcome_lower(_ value: ArticleOutcome) -> RustBuffer {
-    return FfiConverterTypeArticleOutcome.lower(value)
 }
 
 
@@ -38897,16 +38707,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 14084) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article() != 62635) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_address_author() != 16403) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_bookmarks_snapshot() != 7294) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_by_address() != 8240) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_by_address() != 60886) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_comment_scope() != 12928) {
@@ -39057,9 +38864,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_results_snapshot() != 55653) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_articles() != 49199) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_communities() != 40783) {

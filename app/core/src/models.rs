@@ -111,18 +111,6 @@ pub struct BlossomUploadOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct ArticleOutcome {
-    pub value: Option<ArticleRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct ArticleListOutcome {
-    pub values: Vec<ArticleRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct CommunityListOutcome {
     pub values: Vec<CommunitySummary>,
     pub error: String,

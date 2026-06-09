@@ -25,15 +25,14 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleListOutcome, ArticleOutcome, ArticleRecord, ArtifactDetailRoute, ArtifactOutcome,
-    ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome,
-    BookRoute, BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope,
-    CommunityListOutcome, CommunitySummary, CurrentUser, DiscussionOutcome, DiscussionRecord,
-    FeedbackThreadRecord, HighlightListOutcome, HighlightOutcome, HighlightRecord,
-    HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
-    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
-    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
+    ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome,
+    ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookmarkSetRecord,
+    CommentRecord, CommentReferenceBucket, CommentScope, CommunityListOutcome, CommunitySummary,
+    CurrentUser, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord, HighlightListOutcome,
+    HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome,
+    NostrConnectOptions, OnboardingInterest, OnboardingInterestProjection,
+    OnboardingInterestSelection, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
+    ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
     TranscriptSegmentListOutcome, WebMetadataOutcome,
 };
 use crate::network_preferences;
@@ -154,32 +153,6 @@ fn subscription_outcome(result: Result<u64, CoreError>) -> SubscriptionOutcome {
         },
         Err(error) => SubscriptionOutcome {
             handle: 0,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn article_list_outcome(result: Result<Vec<ArticleRecord>, CoreError>) -> ArticleListOutcome {
-    match result {
-        Ok(values) => ArticleListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => ArticleListOutcome {
-            values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
-fn optional_article_outcome(result: Result<Option<ArticleRecord>, CoreError>) -> ArticleOutcome {
-    match result {
-        Ok(value) => ArticleOutcome {
-            value,
-            error: String::new(),
-        },
-        Err(error) => ArticleOutcome {
-            value: None,
             error: error.to_string(),
         },
     }
@@ -1404,25 +1377,6 @@ impl HighlighterCore {
         nip05::registration_snapshot(result)
     }
 
-    pub async fn get_user_articles(&self, pubkey_hex: String, limit: u32) -> ArticleListOutcome {
-        article_list_outcome(articles::query_articles_by_author(
-            self.runtime.ndb(),
-            pubkey_hex.trim(),
-            limit,
-        ))
-    }
-
-    /// Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
-    /// if ndb hasn't cached it yet — the reader's `subscribe_article` pump
-    /// backfills via relays, and a later call returns `Some`.
-    pub async fn get_article(&self, pubkey_hex: String, d_tag: String) -> ArticleOutcome {
-        optional_article_outcome(articles::query_article(
-            self.runtime.ndb(),
-            pubkey_hex.trim(),
-            d_tag.trim(),
-        ))
-    }
-
     /// Full article-reader read model. Rust owns article/profile/highlight
     /// cache reads, the highlight limit, and partial-failure fallback.
     pub async fn get_article_reader_snapshot(
@@ -1439,11 +1393,10 @@ impl HighlighterCore {
 
     /// Read a single NIP-23 article by its full NIP-33 address
     /// (`30023:<pubkey>:<d>`) from nostrdb.
-    pub async fn get_article_by_address(&self, address: String) -> ArticleOutcome {
-        optional_article_outcome(articles::query_article_by_address(
-            self.runtime.ndb(),
-            address.trim(),
-        ))
+    pub async fn get_article_by_address(&self, address: String) -> Option<ArticleRecord> {
+        articles::query_article_by_address(self.runtime.ndb(), address.trim())
+            .ok()
+            .flatten()
     }
 
     /// Return the author pubkey from a valid NIP-23 article address
