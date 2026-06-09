@@ -534,7 +534,7 @@ actor SafeHighlighterCore {
         core.projectWebMetadataRequest(input: input)
     }
 
-    func getWebMetadata(url: String) async -> WebMetadataOutcome {
+    func getWebMetadata(url: String) async -> WebMetadata? {
         await core.getWebMetadata(url: url)
     }
 

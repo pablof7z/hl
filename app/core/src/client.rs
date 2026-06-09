@@ -32,7 +32,7 @@ use crate::models::{
     HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
     OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
     PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome, WebMetadataOutcome,
+    ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
 };
 use crate::network_preferences;
 use crate::nip05;
@@ -162,19 +162,6 @@ fn artifact_preview_outcome(result: Result<ArtifactPreview, CoreError>) -> Artif
             error: String::new(),
         },
         Err(error) => ArtifactPreviewOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn web_metadata_outcome(result: Result<WebMetadata, CoreError>) -> WebMetadataOutcome {
-    match result {
-        Ok(value) => WebMetadataOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => WebMetadataOutcome {
             value: None,
             error: error.to_string(),
         },
@@ -2564,8 +2551,10 @@ impl HighlighterCore {
     /// in-flight coalescing — concurrent calls for the same URL share one
     /// HTTP request. Returns `CoreError::NotFound` when the page 404s,
     /// `CoreError::Network` on transport failure.
-    pub async fn get_web_metadata(&self, url: String) -> WebMetadataOutcome {
-        web_metadata_outcome(web_metadata::get_or_fetch(self.web_metadata.clone(), &url).await)
+    pub async fn get_web_metadata(&self, url: String) -> Option<WebMetadata> {
+        web_metadata::get_or_fetch(self.web_metadata.clone(), &url)
+            .await
+            .ok()
     }
 
     pub async fn get_room_discussion_snapshot(

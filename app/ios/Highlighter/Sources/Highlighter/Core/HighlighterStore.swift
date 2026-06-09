@@ -245,9 +245,9 @@ final class HighlighterStore {
         }
         let task = Task { [weak self, canonicalUrl, cacheKeys] in
             guard let self else { return }
-            let outcome = await self.safeCore.getWebMetadata(url: canonicalUrl)
+            let metadata = await self.safeCore.getWebMetadata(url: canonicalUrl)
             await MainActor.run {
-                if outcome.error.isEmpty, let metadata = outcome.value {
+                if let metadata {
                     self.applyWebMetadata(metadata, cacheKeys: cacheKeys)
                 }
                 self.webMetadataInflight.removeValue(forKey: canonicalUrl)

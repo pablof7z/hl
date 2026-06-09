@@ -81,12 +81,6 @@ pub struct SubscriptionOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct WebMetadataOutcome {
-    pub value: Option<crate::web_metadata::WebMetadata>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct ArtifactOutcome {
     pub value: Option<ArtifactRecord>,
     pub error: String,

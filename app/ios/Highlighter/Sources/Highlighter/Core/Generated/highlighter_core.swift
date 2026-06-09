@@ -1132,7 +1132,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * HTTP request. Returns `CoreError::NotFound` when the page 404s,
      * `CoreError::Network` on transport failure.
      */
-    func getWebMetadata(url: String) async  -> WebMetadataOutcome
+    func getWebMetadata(url: String) async  -> WebMetadata?
 
     /**
      * Fetch another user's kind:10002 via the indexer pool and return the
@@ -3247,7 +3247,7 @@ open func getWebCommentScope(url: String) -> CommentScopeSnapshot  {
      * HTTP request. Returns `CoreError::NotFound` when the page 404s,
      * `CoreError::Network` on transport failure.
      */
-open func getWebMetadata(url: String)async  -> WebMetadataOutcome  {
+open func getWebMetadata(url: String)async  -> WebMetadata?  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -3259,7 +3259,7 @@ open func getWebMetadata(url: String)async  -> WebMetadataOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeWebMetadataOutcome_lift,
+            liftFunc: FfiConverterOptionTypeWebMetadata.lift,
             errorHandler: nil
 
         )
@@ -32770,76 +32770,6 @@ public func FfiConverterTypeWebMetadata_lower(_ value: WebMetadata) -> RustBuffe
 }
 
 
-public struct WebMetadataOutcome {
-    public var value: WebMetadata?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: WebMetadata?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension WebMetadataOutcome: Sendable {}
-#endif
-
-
-extension WebMetadataOutcome: Equatable, Hashable {
-    public static func ==(lhs: WebMetadataOutcome, rhs: WebMetadataOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWebMetadataOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebMetadataOutcome {
-        return
-            try WebMetadataOutcome(
-                value: FfiConverterOptionTypeWebMetadata.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: WebMetadataOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeWebMetadata.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWebMetadataOutcome_lift(_ buf: RustBuffer) throws -> WebMetadataOutcome {
-    return try FfiConverterTypeWebMetadataOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWebMetadataOutcome_lower(_ value: WebMetadataOutcome) -> RustBuffer {
-    return FfiConverterTypeWebMetadataOutcome.lower(value)
-}
-
-
 /**
  * Native web metadata request projection. Rust owns URL validity,
  * canonicalization, and the mirror keys native shells should hydrate.
@@ -38793,7 +38723,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_comment_scope() != 47583) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 12216) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 13151) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_import_relays_from_npub_snapshot() != 45090) {
