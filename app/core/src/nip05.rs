@@ -45,6 +45,13 @@ pub struct OnboardingUsernameCheckProjection {
     pub valid: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Nip05RegistrationSnapshot {
+    pub identifier: String,
+    pub succeeded: bool,
+    pub error_message: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct AvailabilityResponse {
     available: bool,
@@ -116,6 +123,21 @@ pub fn onboarding_username_check_projection(input: &str) -> OnboardingUsernameCh
         username,
         has_username,
         valid,
+    }
+}
+
+pub fn registration_snapshot(result: Result<String, CoreError>) -> Nip05RegistrationSnapshot {
+    match result {
+        Ok(identifier) => Nip05RegistrationSnapshot {
+            identifier,
+            succeeded: true,
+            error_message: String::new(),
+        },
+        Err(error) => Nip05RegistrationSnapshot {
+            identifier: String::new(),
+            succeeded: false,
+            error_message: error.to_string(),
+        },
     }
 }
 
@@ -313,5 +335,18 @@ mod tests {
         assert_eq!(invalid.username, "Alice");
         assert!(invalid.has_username);
         assert!(!invalid.valid);
+    }
+
+    #[test]
+    fn registration_snapshot_projects_success_and_error_states() {
+        let success = registration_snapshot(Ok("alice@highlighter.com".into()));
+        assert_eq!(success.identifier, "alice@highlighter.com");
+        assert!(success.succeeded);
+        assert!(success.error_message.is_empty());
+
+        let failure = registration_snapshot(Err(CoreError::Network("taken".into())));
+        assert!(failure.identifier.is_empty());
+        assert!(!failure.succeeded);
+        assert_eq!(failure.error_message, "network error: taken");
     }
 }

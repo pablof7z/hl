@@ -28,7 +28,7 @@ actor SafeHighlighterCore {
         await core.pairBunker(uri: uri)
     }
 
-    func generateAccount() -> GeneratedAccountOutcome {
+    func generateAccount() -> AccountGenerationSnapshot {
         core.generateAccount()
     }
 
@@ -816,7 +816,7 @@ actor SafeHighlighterCore {
         await core.checkNip05Availability(name: name)
     }
 
-    func registerNip05(name: String, domain: String) async -> StringOutcome {
+    func registerNip05(name: String, domain: String) async -> Nip05RegistrationSnapshot {
         await core.registerNip05(name: name, domain: domain)
     }
 

@@ -30,8 +30,8 @@ use crate::models::{
     ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome,
     BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommentScopeOutcome,
     CommunityListOutcome, CommunitySummary, CurrentUser, DataOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightListOutcome,
-    HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome,
+    DiscussionRecord, FeedbackThreadRecord, HighlightListOutcome, HighlightOutcome,
+    HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome,
     Nip05AvailabilityOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
     OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
     OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
@@ -197,21 +197,6 @@ fn transcript_segment_list_outcome(
         },
         Err(error) => TranscriptSegmentListOutcome {
             values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
-fn generated_account_outcome(
-    result: Result<crate::models::GeneratedAccount, CoreError>,
-) -> GeneratedAccountOutcome {
-    match result {
-        Ok(value) => GeneratedAccountOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => GeneratedAccountOutcome {
-            value: None,
             error: error.to_string(),
         },
     }
@@ -652,7 +637,7 @@ impl HighlighterCore {
         crate::session::auth_session_snapshot(self.login_nsec_result(&nsec))
     }
 
-    pub fn generate_account(&self) -> GeneratedAccountOutcome {
+    pub fn generate_account(&self) -> crate::session::AccountGenerationSnapshot {
         let result: Result<crate::models::GeneratedAccount, CoreError> = (|| {
             let keys = Keys::generate();
             let nsec = keys
@@ -662,7 +647,7 @@ impl HighlighterCore {
             let user = self.login_nsec_result(&nsec)?;
             Ok(crate::models::GeneratedAccount { user, nsec })
         })();
-        generated_account_outcome(result)
+        crate::session::account_generation_snapshot(result)
     }
 
     pub fn logout(&self) {
@@ -1517,13 +1502,17 @@ impl HighlighterCore {
         nip05_availability_outcome(nip05::check_availability(&name).await)
     }
 
-    pub async fn register_nip05(&self, name: String, domain: String) -> StringOutcome {
+    pub async fn register_nip05(
+        &self,
+        name: String,
+        domain: String,
+    ) -> nip05::Nip05RegistrationSnapshot {
         let result: Result<String, CoreError> = async {
             let _ = self.require_user_pubkey()?;
             nip05::register_username(&self.runtime, &name, &domain).await
         }
         .await;
-        string_outcome(result)
+        nip05::registration_snapshot(result)
     }
 
     pub async fn get_user_articles(&self, pubkey_hex: String, limit: u32) -> ArticleListOutcome {

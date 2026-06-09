@@ -876,7 +876,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func finishRelayNip11Probe(inFlightUrls: [String], url: String)  -> [String]
 
-    func generateAccount()  -> GeneratedAccountOutcome
+    func generateAccount()  -> AccountGenerationSnapshot
 
     /**
      * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
@@ -1650,7 +1650,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func refreshRelayConnectionsForForeground() async  -> NetworkSettingsMutationSnapshot
 
-    func registerNip05(name: String, domain: String) async  -> StringOutcome
+    func registerNip05(name: String, domain: String) async  -> Nip05RegistrationSnapshot
 
     /**
      * Remove a relay by URL.
@@ -2399,8 +2399,8 @@ open func finishRelayNip11Probe(inFlightUrls: [String], url: String) -> [String]
 })
 }
 
-open func generateAccount() -> GeneratedAccountOutcome  {
-    return try!  FfiConverterTypeGeneratedAccountOutcome_lift(try! rustCall() {
+open func generateAccount() -> AccountGenerationSnapshot  {
+    return try!  FfiConverterTypeAccountGenerationSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_generate_account(self.uniffiClonePointer(),$0
     )
 })
@@ -4908,7 +4908,7 @@ open func refreshRelayConnectionsForForeground()async  -> NetworkSettingsMutatio
         )
 }
 
-open func registerNip05(name: String, domain: String)async  -> StringOutcome  {
+open func registerNip05(name: String, domain: String)async  -> Nip05RegistrationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4920,7 +4920,7 @@ open func registerNip05(name: String, domain: String)async  -> StringOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringOutcome_lift,
+            liftFunc: FfiConverterTypeNip05RegistrationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5994,6 +5994,84 @@ public func FfiConverterTypeHighlighterCore_lower(_ value: HighlighterCore) -> U
 }
 
 
+
+
+public struct AccountGenerationSnapshot {
+    public var account: GeneratedAccount?
+    public var succeeded: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(account: GeneratedAccount?, succeeded: Bool, errorMessage: String) {
+        self.account = account
+        self.succeeded = succeeded
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension AccountGenerationSnapshot: Sendable {}
+#endif
+
+
+extension AccountGenerationSnapshot: Equatable, Hashable {
+    public static func ==(lhs: AccountGenerationSnapshot, rhs: AccountGenerationSnapshot) -> Bool {
+        if lhs.account != rhs.account {
+            return false
+        }
+        if lhs.succeeded != rhs.succeeded {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(account)
+        hasher.combine(succeeded)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAccountGenerationSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AccountGenerationSnapshot {
+        return
+            try AccountGenerationSnapshot(
+                account: FfiConverterOptionTypeGeneratedAccount.read(from: &buf),
+                succeeded: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AccountGenerationSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeGeneratedAccount.write(value.account, into: &buf)
+        FfiConverterBool.write(value.succeeded, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAccountGenerationSnapshot_lift(_ buf: RustBuffer) throws -> AccountGenerationSnapshot {
+    return try FfiConverterTypeAccountGenerationSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAccountGenerationSnapshot_lower(_ value: AccountGenerationSnapshot) -> RustBuffer {
+    return FfiConverterTypeAccountGenerationSnapshot.lower(value)
+}
 
 
 public struct AddRelaySheetProjection {
@@ -17051,76 +17129,6 @@ public func FfiConverterTypeGeneratedAccount_lower(_ value: GeneratedAccount) ->
 }
 
 
-public struct GeneratedAccountOutcome {
-    public var value: GeneratedAccount?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: GeneratedAccount?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension GeneratedAccountOutcome: Sendable {}
-#endif
-
-
-extension GeneratedAccountOutcome: Equatable, Hashable {
-    public static func ==(lhs: GeneratedAccountOutcome, rhs: GeneratedAccountOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeGeneratedAccountOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GeneratedAccountOutcome {
-        return
-            try GeneratedAccountOutcome(
-                value: FfiConverterOptionTypeGeneratedAccount.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: GeneratedAccountOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeGeneratedAccount.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeGeneratedAccountOutcome_lift(_ buf: RustBuffer) throws -> GeneratedAccountOutcome {
-    return try FfiConverterTypeGeneratedAccountOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeGeneratedAccountOutcome_lower(_ value: GeneratedAccountOutcome) -> RustBuffer {
-    return FfiConverterTypeGeneratedAccountOutcome.lower(value)
-}
-
-
 public struct HighlightDetailContentProjection {
     public var quoteText: String
     public var noteText: String?
@@ -20522,6 +20530,84 @@ public func FfiConverterTypeNip05AvailabilityOutcome_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeNip05AvailabilityOutcome_lower(_ value: Nip05AvailabilityOutcome) -> RustBuffer {
     return FfiConverterTypeNip05AvailabilityOutcome.lower(value)
+}
+
+
+public struct Nip05RegistrationSnapshot {
+    public var identifier: String
+    public var succeeded: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(identifier: String, succeeded: Bool, errorMessage: String) {
+        self.identifier = identifier
+        self.succeeded = succeeded
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension Nip05RegistrationSnapshot: Sendable {}
+#endif
+
+
+extension Nip05RegistrationSnapshot: Equatable, Hashable {
+    public static func ==(lhs: Nip05RegistrationSnapshot, rhs: Nip05RegistrationSnapshot) -> Bool {
+        if lhs.identifier != rhs.identifier {
+            return false
+        }
+        if lhs.succeeded != rhs.succeeded {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(identifier)
+        hasher.combine(succeeded)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNip05RegistrationSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05RegistrationSnapshot {
+        return
+            try Nip05RegistrationSnapshot(
+                identifier: FfiConverterString.read(from: &buf),
+                succeeded: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Nip05RegistrationSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.identifier, into: &buf)
+        FfiConverterBool.write(value.succeeded, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNip05RegistrationSnapshot_lift(_ buf: RustBuffer) throws -> Nip05RegistrationSnapshot {
+    return try FfiConverterTypeNip05RegistrationSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNip05RegistrationSnapshot_lower(_ value: Nip05RegistrationSnapshot) -> RustBuffer {
+    return FfiConverterTypeNip05RegistrationSnapshot.lower(value)
 }
 
 
@@ -38816,7 +38902,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_finish_relay_nip11_probe() != 14293) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 356) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 14084) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article() != 62635) {
@@ -39377,7 +39463,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_refresh_relay_connections_for_foreground() != 19095) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_register_nip05() != 29734) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_register_nip05() != 58977) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 35958) {

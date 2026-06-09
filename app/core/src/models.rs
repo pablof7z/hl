@@ -10,7 +10,7 @@ pub struct CurrentUser {
     pub npub: String,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct GeneratedAccount {
     pub user: CurrentUser,
     pub nsec: String,
@@ -44,12 +44,6 @@ pub struct OnboardingInterestSelection {
 pub struct OnboardingInterestProjection {
     pub interests: Vec<OnboardingInterestChip>,
     pub selection: OnboardingInterestSelection,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct GeneratedAccountOutcome {
-    pub value: Option<GeneratedAccount>,
-    pub error: String,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]

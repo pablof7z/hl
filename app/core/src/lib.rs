@@ -149,19 +149,19 @@ pub use models::{
     CommentRecord, CommentReferenceBucket, CommentThreadNode, CommentThreadProjection,
     CommunityListOutcome, CommunitySummary, CurationMenuItem, CurrentUser, DataOutcome,
     DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
-    FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, GeneratedAccountOutcome,
-    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightReferenceBucket,
-    HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem, HydratedHighlight,
-    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
-    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
-    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
-    ReadingFeedItem, RoomLane, RoomRecommendation, RoomRecommendationReason, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome,
+    FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightListOutcome,
+    HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
+    HighlightSourceKind, HomeFeedItem, HydratedHighlight, LoginInputAction, MutationOutcome,
+    Nip05AvailabilityOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
+    OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RoomLane, RoomRecommendation,
+    RoomRecommendationReason, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebBookmarkRecord, WebMetadataOutcome,
 };
 pub use nip05::{
-    Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,
-    OnboardingUsernameCheckProjection,
+    Nip05Availability, Nip05RegistrationSnapshot, OnboardingCreateAccountProjection,
+    OnboardingCreateAccountProjectionInput, OnboardingUsernameCheckProjection,
 };
 pub use nostr_entities::{NostrEntityArticleCardProjection, NostrEntityArticleCardProjectionInput};
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
@@ -229,8 +229,8 @@ pub use search::{
     SearchTextMatchSpan, SearchTextMatchesProjection, SearchTextMatchesProjectionInput,
 };
 pub use session::{
-    AuthSessionSnapshot, PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput,
-    SecretKeyDisplayProjection, SecretKeyDisplayProjectionInput,
+    AccountGenerationSnapshot, AuthSessionSnapshot, PublicKeyDisplayProjection,
+    PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection, SecretKeyDisplayProjectionInput,
 };
 pub use share_extension::{
     ShareQueueAttempt, ShareQueueDrainProjection, ShareQueueDrainProjectionInput, ShareQueueItem,

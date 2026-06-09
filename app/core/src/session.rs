@@ -18,7 +18,7 @@ use std::sync::Arc;
 use nostr_sdk::prelude::*;
 
 use crate::errors::CoreError;
-use crate::models::{CurrentUser, LoginInputAction};
+use crate::models::{CurrentUser, GeneratedAccount, LoginInputAction};
 use crate::nip46::BunkerSigner;
 
 const COMPACT_NPUB_THRESHOLD: usize = 20;
@@ -68,6 +68,30 @@ pub fn auth_session_snapshot(result: Result<CurrentUser, CoreError>) -> AuthSess
         Err(error) => AuthSessionSnapshot {
             user: None,
             is_authenticated: false,
+            error_message: error.to_string(),
+        },
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountGenerationSnapshot {
+    pub account: Option<GeneratedAccount>,
+    pub succeeded: bool,
+    pub error_message: String,
+}
+
+pub fn account_generation_snapshot(
+    result: Result<GeneratedAccount, CoreError>,
+) -> AccountGenerationSnapshot {
+    match result {
+        Ok(account) => AccountGenerationSnapshot {
+            account: Some(account),
+            succeeded: true,
+            error_message: String::new(),
+        },
+        Err(error) => AccountGenerationSnapshot {
+            account: None,
+            succeeded: false,
             error_message: error.to_string(),
         },
     }
@@ -398,6 +422,26 @@ mod tests {
         assert_eq!(failure.user, None);
         assert!(!failure.is_authenticated);
         assert_eq!(failure.error_message, "invalid input: bad key");
+    }
+
+    #[test]
+    fn account_generation_snapshot_projects_success_and_error_states() {
+        let account = GeneratedAccount {
+            user: CurrentUser {
+                pubkey: "abc123".into(),
+                npub: "npub1abc".into(),
+            },
+            nsec: "nsec1abc".into(),
+        };
+        let success = account_generation_snapshot(Ok(account.clone()));
+        assert_eq!(success.account, Some(account));
+        assert!(success.succeeded);
+        assert!(success.error_message.is_empty());
+
+        let failure = account_generation_snapshot(Err(CoreError::Other("entropy failed".into())));
+        assert_eq!(failure.account, None);
+        assert!(!failure.succeeded);
+        assert_eq!(failure.error_message, "entropy failed");
     }
 
     #[test]

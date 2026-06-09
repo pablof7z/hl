@@ -246,9 +246,9 @@ struct OnboardingCreateAccountView: View {
 
         Task {
             defer { isWorking = false }
-            let accountOutcome = await store.safeCore.generateAccount()
-            guard accountOutcome.error.isEmpty, let account = accountOutcome.value else {
-                errorMessage = accountOutcome.error.isEmpty ? "Account creation failed." : accountOutcome.error
+            let accountSnapshot = await store.safeCore.generateAccount()
+            guard accountSnapshot.succeeded, let account = accountSnapshot.account else {
+                errorMessage = accountSnapshot.errorMessage
                 return
             }
             AppSessionStore.shared.persistNsec(account.nsec)
@@ -256,15 +256,15 @@ struct OnboardingCreateAccountView: View {
             let claimedUsername: String
             if case .available(let identifier, let domain) = usernameState,
                !projection.username.isEmpty {
-                let registerOutcome = await store.safeCore.registerNip05(
+                let registerSnapshot = await store.safeCore.registerNip05(
                     name: projection.username,
                     domain: domain
                 )
-                guard registerOutcome.error.isEmpty else {
-                    errorMessage = registerOutcome.error
+                guard registerSnapshot.succeeded else {
+                    errorMessage = registerSnapshot.errorMessage
                     return
                 }
-                claimedUsername = registerOutcome.value.isEmpty ? identifier : registerOutcome.value
+                claimedUsername = registerSnapshot.identifier.isEmpty ? identifier : registerSnapshot.identifier
             } else {
                 claimedUsername = ""
             }
