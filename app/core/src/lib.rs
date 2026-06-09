@@ -104,6 +104,9 @@ pub use profile::{
     ProfileIdentityProjectionInput,
 };
 pub use reactions::ReactionRecord;
+pub use reads::{
+    ReadingFeedCardProjection, ReadingFeedCardProjectionInput, ReadingFeedInteractorProfile,
+};
 pub use recommendations::{
     RoomRecommendationAvatarProjection, RoomRecommendationCardProjection,
     RoomRecommendationCardProjectionInput, RoomRecommendationReasonProfile,

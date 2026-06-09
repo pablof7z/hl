@@ -1458,6 +1458,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectPublicKeyDisplay(input: PublicKeyDisplayProjectionInput)  -> PublicKeyDisplayProjection
 
+    func projectReadingFeedCard(input: ReadingFeedCardProjectionInput)  -> ReadingFeedCardProjection
+
     func projectRelativeTimeLabel(input: RelativeTimeLabelInput)  -> RelativeTimeLabelProjection
 
     func projectRelayDetail(input: RelayDetailProjectionInput)  -> RelayDetailProjection
@@ -4277,6 +4279,14 @@ open func projectPublicKeyDisplay(input: PublicKeyDisplayProjectionInput) -> Pub
     return try!  FfiConverterTypePublicKeyDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_public_key_display(self.uniffiClonePointer(),
         FfiConverterTypePublicKeyDisplayProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectReadingFeedCard(input: ReadingFeedCardProjectionInput) -> ReadingFeedCardProjection  {
+    return try!  FfiConverterTypeReadingFeedCardProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_reading_feed_card(self.uniffiClonePointer(),
+        FfiConverterTypeReadingFeedCardProjectionInput_lower(input),$0
     )
 })
 }
@@ -16644,6 +16654,248 @@ public func FfiConverterTypeReactionSummaryOutcome_lower(_ value: ReactionSummar
 }
 
 
+public struct ReadingFeedCardProjection {
+    public var metaBits: [String]
+    public var showSocialSignal: Bool
+    public var visibleInteractorPubkeys: [String]
+    public var primaryInteractorPubkey: String?
+    public var socialText: String
+    public var relativeUnixSeconds: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(metaBits: [String], showSocialSignal: Bool, visibleInteractorPubkeys: [String], primaryInteractorPubkey: String?, socialText: String, relativeUnixSeconds: UInt64?) {
+        self.metaBits = metaBits
+        self.showSocialSignal = showSocialSignal
+        self.visibleInteractorPubkeys = visibleInteractorPubkeys
+        self.primaryInteractorPubkey = primaryInteractorPubkey
+        self.socialText = socialText
+        self.relativeUnixSeconds = relativeUnixSeconds
+    }
+}
+
+#if compiler(>=6)
+extension ReadingFeedCardProjection: Sendable {}
+#endif
+
+
+extension ReadingFeedCardProjection: Equatable, Hashable {
+    public static func ==(lhs: ReadingFeedCardProjection, rhs: ReadingFeedCardProjection) -> Bool {
+        if lhs.metaBits != rhs.metaBits {
+            return false
+        }
+        if lhs.showSocialSignal != rhs.showSocialSignal {
+            return false
+        }
+        if lhs.visibleInteractorPubkeys != rhs.visibleInteractorPubkeys {
+            return false
+        }
+        if lhs.primaryInteractorPubkey != rhs.primaryInteractorPubkey {
+            return false
+        }
+        if lhs.socialText != rhs.socialText {
+            return false
+        }
+        if lhs.relativeUnixSeconds != rhs.relativeUnixSeconds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(metaBits)
+        hasher.combine(showSocialSignal)
+        hasher.combine(visibleInteractorPubkeys)
+        hasher.combine(primaryInteractorPubkey)
+        hasher.combine(socialText)
+        hasher.combine(relativeUnixSeconds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReadingFeedCardProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadingFeedCardProjection {
+        return
+            try ReadingFeedCardProjection(
+                metaBits: FfiConverterSequenceString.read(from: &buf),
+                showSocialSignal: FfiConverterBool.read(from: &buf),
+                visibleInteractorPubkeys: FfiConverterSequenceString.read(from: &buf),
+                primaryInteractorPubkey: FfiConverterOptionString.read(from: &buf),
+                socialText: FfiConverterString.read(from: &buf),
+                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReadingFeedCardProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.metaBits, into: &buf)
+        FfiConverterBool.write(value.showSocialSignal, into: &buf)
+        FfiConverterSequenceString.write(value.visibleInteractorPubkeys, into: &buf)
+        FfiConverterOptionString.write(value.primaryInteractorPubkey, into: &buf)
+        FfiConverterString.write(value.socialText, into: &buf)
+        FfiConverterOptionUInt64.write(value.relativeUnixSeconds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadingFeedCardProjection_lift(_ buf: RustBuffer) throws -> ReadingFeedCardProjection {
+    return try FfiConverterTypeReadingFeedCardProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadingFeedCardProjection_lower(_ value: ReadingFeedCardProjection) -> RustBuffer {
+    return FfiConverterTypeReadingFeedCardProjection.lower(value)
+}
+
+
+public struct ReadingFeedCardProjectionInput {
+    public var item: ReadingFeedItem
+    public var interactorProfiles: [ReadingFeedInteractorProfile]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(item: ReadingFeedItem, interactorProfiles: [ReadingFeedInteractorProfile]) {
+        self.item = item
+        self.interactorProfiles = interactorProfiles
+    }
+}
+
+#if compiler(>=6)
+extension ReadingFeedCardProjectionInput: Sendable {}
+#endif
+
+
+extension ReadingFeedCardProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ReadingFeedCardProjectionInput, rhs: ReadingFeedCardProjectionInput) -> Bool {
+        if lhs.item != rhs.item {
+            return false
+        }
+        if lhs.interactorProfiles != rhs.interactorProfiles {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(item)
+        hasher.combine(interactorProfiles)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReadingFeedCardProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadingFeedCardProjectionInput {
+        return
+            try ReadingFeedCardProjectionInput(
+                item: FfiConverterTypeReadingFeedItem.read(from: &buf),
+                interactorProfiles: FfiConverterSequenceTypeReadingFeedInteractorProfile.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReadingFeedCardProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeReadingFeedItem.write(value.item, into: &buf)
+        FfiConverterSequenceTypeReadingFeedInteractorProfile.write(value.interactorProfiles, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadingFeedCardProjectionInput_lift(_ buf: RustBuffer) throws -> ReadingFeedCardProjectionInput {
+    return try FfiConverterTypeReadingFeedCardProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadingFeedCardProjectionInput_lower(_ value: ReadingFeedCardProjectionInput) -> RustBuffer {
+    return FfiConverterTypeReadingFeedCardProjectionInput.lower(value)
+}
+
+
+public struct ReadingFeedInteractorProfile {
+    public var pubkey: String
+    public var profile: ProfileMetadata?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkey: String, profile: ProfileMetadata?) {
+        self.pubkey = pubkey
+        self.profile = profile
+    }
+}
+
+#if compiler(>=6)
+extension ReadingFeedInteractorProfile: Sendable {}
+#endif
+
+
+extension ReadingFeedInteractorProfile: Equatable, Hashable {
+    public static func ==(lhs: ReadingFeedInteractorProfile, rhs: ReadingFeedInteractorProfile) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(profile)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReadingFeedInteractorProfile: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadingFeedInteractorProfile {
+        return
+            try ReadingFeedInteractorProfile(
+                pubkey: FfiConverterString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReadingFeedInteractorProfile, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadingFeedInteractorProfile_lift(_ buf: RustBuffer) throws -> ReadingFeedInteractorProfile {
+    return try FfiConverterTypeReadingFeedInteractorProfile.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReadingFeedInteractorProfile_lower(_ value: ReadingFeedInteractorProfile) -> RustBuffer {
+    return FfiConverterTypeReadingFeedInteractorProfile.lower(value)
+}
+
+
 /**
  * One entry in the Following Reads feed — a NIP-23 article surfaced via
  * the user's NIP-02 follow graph, either because a follow authored it or
@@ -24994,6 +25246,31 @@ fileprivate struct FfiConverterSequenceTypeProfileMetadata: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeReadingFeedInteractorProfile: FfiConverterRustBuffer {
+    typealias SwiftType = [ReadingFeedInteractorProfile]
+
+    public static func write(_ value: [ReadingFeedInteractorProfile], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeReadingFeedInteractorProfile.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ReadingFeedInteractorProfile] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ReadingFeedInteractorProfile]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeReadingFeedInteractorProfile.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeReadingFeedItem: FfiConverterRustBuffer {
     typealias SwiftType = [ReadingFeedItem]
 
@@ -25909,6 +26186,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_public_key_display() != 35557) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_reading_feed_card() != 24078) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relative_time_label() != 33894) {

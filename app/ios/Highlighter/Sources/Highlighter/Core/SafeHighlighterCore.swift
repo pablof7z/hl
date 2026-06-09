@@ -1110,6 +1110,12 @@ actor SafeHighlighterCore {
         await core.getFollowingReads(limit: limit)
     }
 
+    nonisolated func projectReadingFeedCard(
+        input: ReadingFeedCardProjectionInput
+    ) -> ReadingFeedCardProjection {
+        core.projectReadingFeedCard(input: input)
+    }
+
     // MARK: - Following Highlights
 
     func getFollowingHighlights(limit: UInt32 = 120) async -> HydratedHighlightListOutcome {

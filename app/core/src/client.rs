@@ -1696,6 +1696,13 @@ impl HighlighterCore {
         ))
     }
 
+    pub fn project_reading_feed_card(
+        &self,
+        input: reads::ReadingFeedCardProjectionInput,
+    ) -> reads::ReadingFeedCardProjection {
+        reads::reading_feed_card_projection(input)
+    }
+
     /// Highlights home feed — kind:9802 events authored by follows plus
     /// highlights tagged into joined rooms. See
     /// `highlights::query_following_highlights` for semantics.

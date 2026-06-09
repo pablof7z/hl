@@ -20,7 +20,10 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use crate::articles::{build_articles, KIND_LONG_FORM};
 use crate::errors::CoreError;
 use crate::follows;
-use crate::models::{ArticleRecord, ReadingFeedItem};
+use crate::models::{ArticleRecord, ProfileMetadata, ReadingFeedItem};
+use crate::profile::{
+    profile_display_projection, ProfileDisplayFallback, ProfileDisplayProjectionInput,
+};
 
 /// kind:1 — plain note; quote/mention of the article surfaces it.
 pub const KIND_NOTE: u16 = 1;
@@ -39,6 +42,102 @@ pub const INTERACTION_KINDS: [u16; 4] = [
     KIND_GENERIC_REPOST,
     KIND_NIP22_COMMENT,
 ];
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ReadingFeedInteractorProfile {
+    pub pubkey: String,
+    pub profile: Option<ProfileMetadata>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ReadingFeedCardProjectionInput {
+    pub item: ReadingFeedItem,
+    pub interactor_profiles: Vec<ReadingFeedInteractorProfile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ReadingFeedCardProjection {
+    pub meta_bits: Vec<String>,
+    pub show_social_signal: bool,
+    pub visible_interactor_pubkeys: Vec<String>,
+    pub primary_interactor_pubkey: Option<String>,
+    pub social_text: String,
+    pub relative_unix_seconds: Option<u64>,
+}
+
+/// Presentation projection for the following-reads card. Rust owns the
+/// read-time/tag meta bits, social proof copy, interactor cap, and timestamp
+/// source selection; native shells render and apply platform date formatting.
+pub fn reading_feed_card_projection(
+    input: ReadingFeedCardProjectionInput,
+) -> ReadingFeedCardProjection {
+    let item = input.item;
+    let interactor_count = item.interactor_pubkeys.len();
+    let primary_interactor_pubkey = item.interactor_pubkeys.first().cloned();
+    let primary_name = primary_interactor_pubkey
+        .as_ref()
+        .map(|pubkey| interactor_display_name(pubkey, &input.interactor_profiles))
+        .unwrap_or_else(|| "Someone".to_string());
+
+    let social_text = if item.author_followed && item.interactor_pubkeys.is_empty() {
+        "From someone you follow".to_string()
+    } else {
+        match interactor_count {
+            0 => String::new(),
+            1 if item.author_followed => format!("{primary_name} and the author liked this"),
+            1 => format!("{primary_name} liked this"),
+            2 => format!("{primary_name} and 1 other"),
+            _ => format!("{primary_name} and {} others", interactor_count - 1),
+        }
+    };
+
+    ReadingFeedCardProjection {
+        meta_bits: reading_meta_bits(&item.article),
+        show_social_signal: !item.interactor_pubkeys.is_empty()
+            || (item.author_followed && item.interactor_pubkeys.is_empty()),
+        visible_interactor_pubkeys: item.interactor_pubkeys.into_iter().take(3).collect(),
+        primary_interactor_pubkey,
+        social_text,
+        relative_unix_seconds: item
+            .article
+            .published_at
+            .or(item.article.created_at)
+            .filter(|seconds| *seconds > 0),
+    }
+}
+
+fn reading_meta_bits(article: &ArticleRecord) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(minutes) = read_time_minutes(&article.content) {
+        out.push(format!("{minutes} min read"));
+    }
+    if let Some(tag) = article.hashtags.first().filter(|tag| !tag.is_empty()) {
+        out.push(format!("#{tag}"));
+    }
+    out
+}
+
+fn read_time_minutes(content: &str) -> Option<usize> {
+    let words = content.split_whitespace().count();
+    if words > 60 {
+        Some((words / 240).max(1))
+    } else {
+        None
+    }
+}
+
+fn interactor_display_name(pubkey: &str, profiles: &[ReadingFeedInteractorProfile]) -> String {
+    let profile = profiles
+        .iter()
+        .find(|snapshot| snapshot.pubkey == pubkey)
+        .and_then(|snapshot| snapshot.profile.clone());
+    profile_display_projection(ProfileDisplayProjectionInput {
+        pubkey: pubkey.to_string(),
+        profile,
+        fallback: ProfileDisplayFallback::Pubkey10,
+    })
+    .display_name
+}
 
 /// Build the reads feed for the logged-in user from nostrdb. Returns items
 /// sorted by most recent activity first. `limit` caps the final list; the
@@ -556,5 +655,115 @@ mod tests {
         assert_eq!(feed.len(), 2);
         assert_eq!(feed[0].article.identifier, "p4");
         assert_eq!(feed[1].article.identifier, "p3");
+    }
+
+    #[test]
+    fn reading_feed_card_projection_matches_social_signal_policy() {
+        let article = article_record("A title", repeated_words(480), vec!["nostr".into()]);
+        let item = ReadingFeedItem {
+            article,
+            author_followed: false,
+            interactor_pubkeys: vec![
+                "alicepubkey".into(),
+                "bobpubkey".into(),
+                "carolpubkey".into(),
+                "danpubkey".into(),
+            ],
+            latest_activity_at: 500,
+        };
+
+        let projection = reading_feed_card_projection(ReadingFeedCardProjectionInput {
+            item,
+            interactor_profiles: vec![ReadingFeedInteractorProfile {
+                pubkey: "alicepubkey".into(),
+                profile: Some(profile_record("alicepubkey", "alice", "Alice Doe")),
+            }],
+        });
+
+        assert_eq!(
+            projection.meta_bits,
+            vec!["2 min read".to_string(), "#nostr".to_string()]
+        );
+        assert!(projection.show_social_signal);
+        assert_eq!(
+            projection.visible_interactor_pubkeys,
+            vec![
+                "alicepubkey".to_string(),
+                "bobpubkey".to_string(),
+                "carolpubkey".to_string()
+            ]
+        );
+        assert_eq!(
+            projection.primary_interactor_pubkey,
+            Some("alicepubkey".into())
+        );
+        assert_eq!(projection.social_text, "Alice Doe and 3 others");
+        assert_eq!(projection.relative_unix_seconds, Some(123));
+    }
+
+    #[test]
+    fn reading_feed_card_projection_preserves_author_followed_copy() {
+        let mut item = ReadingFeedItem {
+            article: article_record("A title", repeated_words(61), Vec::new()),
+            author_followed: true,
+            interactor_pubkeys: Vec::new(),
+            latest_activity_at: 500,
+        };
+
+        let no_interactors = reading_feed_card_projection(ReadingFeedCardProjectionInput {
+            item: item.clone(),
+            interactor_profiles: Vec::new(),
+        });
+        item.interactor_pubkeys = vec!["alicepubkey".into()];
+        let one_interactor = reading_feed_card_projection(ReadingFeedCardProjectionInput {
+            item,
+            interactor_profiles: vec![ReadingFeedInteractorProfile {
+                pubkey: "alicepubkey".into(),
+                profile: Some(profile_record("alicepubkey", "alice", "")),
+            }],
+        });
+
+        assert_eq!(no_interactors.social_text, "From someone you follow");
+        assert!(no_interactors.show_social_signal);
+        assert_eq!(
+            one_interactor.social_text,
+            "alice and the author liked this"
+        );
+        assert_eq!(one_interactor.meta_bits, vec!["1 min read".to_string()]);
+    }
+
+    fn article_record(title: &str, content: String, hashtags: Vec<String>) -> ArticleRecord {
+        ArticleRecord {
+            event_id: "event".into(),
+            address: "30023:author:d".into(),
+            pubkey: "author".into(),
+            identifier: "d".into(),
+            title: title.into(),
+            summary: String::new(),
+            image: String::new(),
+            content,
+            hashtags,
+            published_at: Some(123),
+            created_at: Some(100),
+        }
+    }
+
+    fn profile_record(pubkey: &str, name: &str, display_name: &str) -> ProfileMetadata {
+        ProfileMetadata {
+            pubkey: pubkey.into(),
+            name: name.into(),
+            display_name: display_name.into(),
+            about: String::new(),
+            picture: String::new(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            created_at: None,
+        }
+    }
+
+    fn repeated_words(count: usize) -> String {
+        vec!["word"; count].join(" ")
     }
 }
