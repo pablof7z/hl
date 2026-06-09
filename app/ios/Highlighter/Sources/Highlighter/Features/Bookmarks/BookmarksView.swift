@@ -1,33 +1,11 @@
 import Kingfisher
 import SwiftUI
 
-enum BookmarkFilter: CaseIterable, Identifiable {
-    case articles, collections, web
-
-    var id: Self { self }
-
-    var label: String {
-        switch self {
-        case .articles:    return "Articles"
-        case .collections: return "Collections"
-        case .web:         return "Web"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .articles:    return "doc.text"
-        case .collections: return "rectangle.stack"
-        case .web:         return "globe"
-        }
-    }
-}
-
 struct BookmarksView: View {
     @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var store = BookmarkStore()
-    @State private var filter: BookmarkFilter = .articles
+    @State private var filter: BookmarkLibraryFilter = .articles
 
     var body: some View {
         NavigationStack {
@@ -69,35 +47,40 @@ struct BookmarksView: View {
     }
 
     private var scopePicker: some View {
-        Picker("Scope", selection: $store.scope) {
-            Text("Mine").tag(BookmarkScope.mine)
-            Text("Explore").tag(BookmarkScope.explore)
+        let projection = libraryProjection
+
+        return Picker("Scope", selection: $store.scope) {
+            ForEach(projection.scopeOptions, id: \.scope) { option in
+                Text(option.label).tag(option.scope)
+            }
         }
         .pickerStyle(.segmented)
         .fixedSize()
     }
 
     private var scrollContent: some View {
-        ScrollView {
+        let projection = libraryProjection
+
+        return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if store.scope == .mine {
-                    filterChipRail
+                    filterChipRail(chips: projection.filterChips)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
                     Divider()
-                    mineContent
+                    mineContent(projection: projection)
                 } else {
-                    exploreContent
+                    exploreContent(projection: projection)
                         .padding(.top, 16)
                 }
             }
         }
     }
 
-    private var filterChipRail: some View {
+    private func filterChipRail(chips: [BookmarkLibraryFilterChipProjection]) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(BookmarkFilter.allCases) { item in
+                ForEach(chips, id: \.filter) { item in
                     chip(for: item)
                 }
             }
@@ -105,13 +88,13 @@ struct BookmarksView: View {
         .scrollClipDisabled()
     }
 
-    private func chip(for item: BookmarkFilter) -> some View {
-        let isActive = filter == item
+    private func chip(for item: BookmarkLibraryFilterChipProjection) -> some View {
+        let isActive = filter == item.filter
         return Button {
-            withAnimation(.spring(duration: 0.22)) { filter = item }
+            withAnimation(.spring(duration: 0.22)) { filter = item.filter }
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: item.icon)
+                Image(systemName: item.iconSystemName)
                     .font(.caption.weight(.semibold))
                 Text(item.label)
                     .font(.subheadline.weight(.medium))
@@ -131,29 +114,26 @@ struct BookmarksView: View {
     }
 
     @ViewBuilder
-    private var mineContent: some View {
-        switch filter {
+    private func mineContent(projection: BookmarkLibraryProjection) -> some View {
+        switch projection.selectedPane {
         case .articles:
-            articlesContent
+            articlesContent(projection: projection)
         case .collections:
             collectionsContent(
                 sets: store.myBookmarkSets + store.myCurationSets,
-                emptyTitle: "No collections yet",
-                emptyMessage: "Create bookmark or curation sets to organise your saved content."
+                projection: projection
             )
         case .web:
-            webContent
+            webContent(projection: projection)
+        case .explore:
+            EmptyView()
         }
     }
 
     @ViewBuilder
-    private var articlesContent: some View {
-        if store.myArticles.isEmpty {
-            unavailableState(
-                icon: "bookmark",
-                title: "No bookmarks yet",
-                message: "Save articles from anywhere in Highlighter to find them here."
-            )
+    private func articlesContent(projection: BookmarkLibraryProjection) -> some View {
+        if projection.isEmpty {
+            unavailableState(projection)
         } else {
             LazyVStack(spacing: 0) {
                 ForEach(store.myArticles, id: \.eventId) { article in
@@ -170,13 +150,9 @@ struct BookmarksView: View {
     }
 
     @ViewBuilder
-    private var webContent: some View {
-        if store.myWebBookmarks.isEmpty {
-            unavailableState(
-                icon: "globe",
-                title: "No web bookmarks yet",
-                message: "Web pages you bookmark via Nostr will appear here."
-            )
+    private func webContent(projection: BookmarkLibraryProjection) -> some View {
+        if projection.isEmpty {
+            unavailableState(projection)
         } else {
             LazyVStack(spacing: 0) {
                 ForEach(store.myWebBookmarks, id: \.url) { bookmark in
@@ -190,26 +166,21 @@ struct BookmarksView: View {
     }
 
     @ViewBuilder
-    private var exploreContent: some View {
-        if store.followingCurationSets.isEmpty {
-            unavailableState(
-                icon: "rectangle.stack",
-                title: "Nothing to explore",
-                message: "People you follow haven't created any curation sets yet."
-            )
+    private func exploreContent(projection: BookmarkLibraryProjection) -> some View {
+        if projection.isEmpty {
+            unavailableState(projection)
         } else {
             collectionsContent(
                 sets: store.followingCurationSets,
-                emptyTitle: "Nothing to explore",
-                emptyMessage: "People you follow haven't created any curation sets yet."
+                projection: projection
             )
         }
     }
 
     @ViewBuilder
-    private func collectionsContent(sets: [BookmarkSetRecord], emptyTitle: String, emptyMessage: String) -> some View {
-        if sets.isEmpty {
-            unavailableState(icon: "rectangle.stack", title: emptyTitle, message: emptyMessage)
+    private func collectionsContent(sets: [BookmarkSetRecord], projection: BookmarkLibraryProjection) -> some View {
+        if projection.isEmpty {
+            unavailableState(projection)
         } else {
             LazyVStack(spacing: 0) {
                 ForEach(sets, id: \.id) { set in
@@ -225,13 +196,26 @@ struct BookmarksView: View {
         }
     }
 
-    private func unavailableState(icon: String, title: String, message: String) -> some View {
+    private func unavailableState(_ projection: BookmarkLibraryProjection) -> some View {
         ContentUnavailableView {
-            Label(title, systemImage: icon)
+            Label(projection.emptyTitle, systemImage: projection.emptyIconSystemName)
         } description: {
-            Text(message)
+            Text(projection.emptyMessage)
         }
         .padding(.top, 40)
+    }
+
+    private var libraryProjection: BookmarkLibraryProjection {
+        app.safeCore.projectBookmarkLibrary(
+            input: BookmarkLibraryProjectionInput(
+                scope: store.scope,
+                selectedFilter: filter,
+                articleCount: UInt64(store.myArticles.count),
+                collectionCount: UInt64(store.myBookmarkSets.count + store.myCurationSets.count),
+                webBookmarkCount: UInt64(store.myWebBookmarks.count),
+                exploreCount: UInt64(store.followingCurationSets.count)
+            )
+        )
     }
 }
 

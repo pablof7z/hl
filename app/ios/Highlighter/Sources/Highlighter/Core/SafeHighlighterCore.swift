@@ -443,6 +443,12 @@ actor SafeHighlighterCore {
         core.projectBookmarkedArticleRow(input: input)
     }
 
+    nonisolated func projectBookmarkLibrary(
+        input: BookmarkLibraryProjectionInput
+    ) -> BookmarkLibraryProjection {
+        core.projectBookmarkLibrary(input: input)
+    }
+
     nonisolated func projectBookmarkSetRow(
         input: BookmarkSetRowProjectionInput
     ) -> BookmarkSetRowProjection {

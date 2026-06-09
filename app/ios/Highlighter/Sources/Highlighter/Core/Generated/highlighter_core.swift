@@ -1451,6 +1451,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectBookPickerQuery(input: BookPickerQueryProjectionInput)  -> BookPickerQueryProjection
 
+    func projectBookmarkLibrary(input: BookmarkLibraryProjectionInput)  -> BookmarkLibraryProjection
+
     func projectBookmarkSetDetail(input: BookmarkSetDetailProjectionInput)  -> BookmarkSetDetailProjection
 
     func projectBookmarkSetRow(input: BookmarkSetRowProjectionInput)  -> BookmarkSetRowProjection
@@ -4535,6 +4537,14 @@ open func projectBookPickerQuery(input: BookPickerQueryProjectionInput) -> BookP
     return try!  FfiConverterTypeBookPickerQueryProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_book_picker_query(self.uniffiClonePointer(),
         FfiConverterTypeBookPickerQueryProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectBookmarkLibrary(input: BookmarkLibraryProjectionInput) -> BookmarkLibraryProjection  {
+    return try!  FfiConverterTypeBookmarkLibraryProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_bookmark_library(self.uniffiClonePointer(),
+        FfiConverterTypeBookmarkLibraryProjectionInput_lower(input),$0
     )
 })
 }
@@ -10135,6 +10145,366 @@ public func FfiConverterTypeBookRouteOutcome_lift(_ buf: RustBuffer) throws -> B
 #endif
 public func FfiConverterTypeBookRouteOutcome_lower(_ value: BookRouteOutcome) -> RustBuffer {
     return FfiConverterTypeBookRouteOutcome.lower(value)
+}
+
+
+public struct BookmarkLibraryFilterChipProjection {
+    public var filter: BookmarkLibraryFilter
+    public var label: String
+    public var iconSystemName: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(filter: BookmarkLibraryFilter, label: String, iconSystemName: String) {
+        self.filter = filter
+        self.label = label
+        self.iconSystemName = iconSystemName
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkLibraryFilterChipProjection: Sendable {}
+#endif
+
+
+extension BookmarkLibraryFilterChipProjection: Equatable, Hashable {
+    public static func ==(lhs: BookmarkLibraryFilterChipProjection, rhs: BookmarkLibraryFilterChipProjection) -> Bool {
+        if lhs.filter != rhs.filter {
+            return false
+        }
+        if lhs.label != rhs.label {
+            return false
+        }
+        if lhs.iconSystemName != rhs.iconSystemName {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(filter)
+        hasher.combine(label)
+        hasher.combine(iconSystemName)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkLibraryFilterChipProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryFilterChipProjection {
+        return
+            try BookmarkLibraryFilterChipProjection(
+                filter: FfiConverterTypeBookmarkLibraryFilter.read(from: &buf),
+                label: FfiConverterString.read(from: &buf),
+                iconSystemName: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkLibraryFilterChipProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeBookmarkLibraryFilter.write(value.filter, into: &buf)
+        FfiConverterString.write(value.label, into: &buf)
+        FfiConverterString.write(value.iconSystemName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryFilterChipProjection_lift(_ buf: RustBuffer) throws -> BookmarkLibraryFilterChipProjection {
+    return try FfiConverterTypeBookmarkLibraryFilterChipProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryFilterChipProjection_lower(_ value: BookmarkLibraryFilterChipProjection) -> RustBuffer {
+    return FfiConverterTypeBookmarkLibraryFilterChipProjection.lower(value)
+}
+
+
+public struct BookmarkLibraryProjection {
+    public var scopeOptions: [BookmarkLibraryScopeOptionProjection]
+    public var filterChips: [BookmarkLibraryFilterChipProjection]
+    public var selectedPane: BookmarkLibraryPane
+    public var isEmpty: Bool
+    public var emptyIconSystemName: String
+    public var emptyTitle: String
+    public var emptyMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(scopeOptions: [BookmarkLibraryScopeOptionProjection], filterChips: [BookmarkLibraryFilterChipProjection], selectedPane: BookmarkLibraryPane, isEmpty: Bool, emptyIconSystemName: String, emptyTitle: String, emptyMessage: String) {
+        self.scopeOptions = scopeOptions
+        self.filterChips = filterChips
+        self.selectedPane = selectedPane
+        self.isEmpty = isEmpty
+        self.emptyIconSystemName = emptyIconSystemName
+        self.emptyTitle = emptyTitle
+        self.emptyMessage = emptyMessage
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkLibraryProjection: Sendable {}
+#endif
+
+
+extension BookmarkLibraryProjection: Equatable, Hashable {
+    public static func ==(lhs: BookmarkLibraryProjection, rhs: BookmarkLibraryProjection) -> Bool {
+        if lhs.scopeOptions != rhs.scopeOptions {
+            return false
+        }
+        if lhs.filterChips != rhs.filterChips {
+            return false
+        }
+        if lhs.selectedPane != rhs.selectedPane {
+            return false
+        }
+        if lhs.isEmpty != rhs.isEmpty {
+            return false
+        }
+        if lhs.emptyIconSystemName != rhs.emptyIconSystemName {
+            return false
+        }
+        if lhs.emptyTitle != rhs.emptyTitle {
+            return false
+        }
+        if lhs.emptyMessage != rhs.emptyMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(scopeOptions)
+        hasher.combine(filterChips)
+        hasher.combine(selectedPane)
+        hasher.combine(isEmpty)
+        hasher.combine(emptyIconSystemName)
+        hasher.combine(emptyTitle)
+        hasher.combine(emptyMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkLibraryProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryProjection {
+        return
+            try BookmarkLibraryProjection(
+                scopeOptions: FfiConverterSequenceTypeBookmarkLibraryScopeOptionProjection.read(from: &buf),
+                filterChips: FfiConverterSequenceTypeBookmarkLibraryFilterChipProjection.read(from: &buf),
+                selectedPane: FfiConverterTypeBookmarkLibraryPane.read(from: &buf),
+                isEmpty: FfiConverterBool.read(from: &buf),
+                emptyIconSystemName: FfiConverterString.read(from: &buf),
+                emptyTitle: FfiConverterString.read(from: &buf),
+                emptyMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkLibraryProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeBookmarkLibraryScopeOptionProjection.write(value.scopeOptions, into: &buf)
+        FfiConverterSequenceTypeBookmarkLibraryFilterChipProjection.write(value.filterChips, into: &buf)
+        FfiConverterTypeBookmarkLibraryPane.write(value.selectedPane, into: &buf)
+        FfiConverterBool.write(value.isEmpty, into: &buf)
+        FfiConverterString.write(value.emptyIconSystemName, into: &buf)
+        FfiConverterString.write(value.emptyTitle, into: &buf)
+        FfiConverterString.write(value.emptyMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryProjection_lift(_ buf: RustBuffer) throws -> BookmarkLibraryProjection {
+    return try FfiConverterTypeBookmarkLibraryProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryProjection_lower(_ value: BookmarkLibraryProjection) -> RustBuffer {
+    return FfiConverterTypeBookmarkLibraryProjection.lower(value)
+}
+
+
+public struct BookmarkLibraryProjectionInput {
+    public var scope: BookmarkLibraryScope
+    public var selectedFilter: BookmarkLibraryFilter
+    public var articleCount: UInt64
+    public var collectionCount: UInt64
+    public var webBookmarkCount: UInt64
+    public var exploreCount: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(scope: BookmarkLibraryScope, selectedFilter: BookmarkLibraryFilter, articleCount: UInt64, collectionCount: UInt64, webBookmarkCount: UInt64, exploreCount: UInt64) {
+        self.scope = scope
+        self.selectedFilter = selectedFilter
+        self.articleCount = articleCount
+        self.collectionCount = collectionCount
+        self.webBookmarkCount = webBookmarkCount
+        self.exploreCount = exploreCount
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkLibraryProjectionInput: Sendable {}
+#endif
+
+
+extension BookmarkLibraryProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: BookmarkLibraryProjectionInput, rhs: BookmarkLibraryProjectionInput) -> Bool {
+        if lhs.scope != rhs.scope {
+            return false
+        }
+        if lhs.selectedFilter != rhs.selectedFilter {
+            return false
+        }
+        if lhs.articleCount != rhs.articleCount {
+            return false
+        }
+        if lhs.collectionCount != rhs.collectionCount {
+            return false
+        }
+        if lhs.webBookmarkCount != rhs.webBookmarkCount {
+            return false
+        }
+        if lhs.exploreCount != rhs.exploreCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(scope)
+        hasher.combine(selectedFilter)
+        hasher.combine(articleCount)
+        hasher.combine(collectionCount)
+        hasher.combine(webBookmarkCount)
+        hasher.combine(exploreCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkLibraryProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryProjectionInput {
+        return
+            try BookmarkLibraryProjectionInput(
+                scope: FfiConverterTypeBookmarkLibraryScope.read(from: &buf),
+                selectedFilter: FfiConverterTypeBookmarkLibraryFilter.read(from: &buf),
+                articleCount: FfiConverterUInt64.read(from: &buf),
+                collectionCount: FfiConverterUInt64.read(from: &buf),
+                webBookmarkCount: FfiConverterUInt64.read(from: &buf),
+                exploreCount: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkLibraryProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeBookmarkLibraryScope.write(value.scope, into: &buf)
+        FfiConverterTypeBookmarkLibraryFilter.write(value.selectedFilter, into: &buf)
+        FfiConverterUInt64.write(value.articleCount, into: &buf)
+        FfiConverterUInt64.write(value.collectionCount, into: &buf)
+        FfiConverterUInt64.write(value.webBookmarkCount, into: &buf)
+        FfiConverterUInt64.write(value.exploreCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryProjectionInput_lift(_ buf: RustBuffer) throws -> BookmarkLibraryProjectionInput {
+    return try FfiConverterTypeBookmarkLibraryProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryProjectionInput_lower(_ value: BookmarkLibraryProjectionInput) -> RustBuffer {
+    return FfiConverterTypeBookmarkLibraryProjectionInput.lower(value)
+}
+
+
+public struct BookmarkLibraryScopeOptionProjection {
+    public var scope: BookmarkLibraryScope
+    public var label: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(scope: BookmarkLibraryScope, label: String) {
+        self.scope = scope
+        self.label = label
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkLibraryScopeOptionProjection: Sendable {}
+#endif
+
+
+extension BookmarkLibraryScopeOptionProjection: Equatable, Hashable {
+    public static func ==(lhs: BookmarkLibraryScopeOptionProjection, rhs: BookmarkLibraryScopeOptionProjection) -> Bool {
+        if lhs.scope != rhs.scope {
+            return false
+        }
+        if lhs.label != rhs.label {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(scope)
+        hasher.combine(label)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkLibraryScopeOptionProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryScopeOptionProjection {
+        return
+            try BookmarkLibraryScopeOptionProjection(
+                scope: FfiConverterTypeBookmarkLibraryScope.read(from: &buf),
+                label: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkLibraryScopeOptionProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeBookmarkLibraryScope.write(value.scope, into: &buf)
+        FfiConverterString.write(value.label, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryScopeOptionProjection_lift(_ buf: RustBuffer) throws -> BookmarkLibraryScopeOptionProjection {
+    return try FfiConverterTypeBookmarkLibraryScopeOptionProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryScopeOptionProjection_lower(_ value: BookmarkLibraryScopeOptionProjection) -> RustBuffer {
+    return FfiConverterTypeBookmarkLibraryScopeOptionProjection.lower(value)
 }
 
 
@@ -32349,6 +32719,237 @@ extension ArtifactDetailTarget: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum BookmarkLibraryFilter {
+
+    case articles
+    case collections
+    case web
+}
+
+
+#if compiler(>=6)
+extension BookmarkLibraryFilter: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkLibraryFilter: FfiConverterRustBuffer {
+    typealias SwiftType = BookmarkLibraryFilter
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryFilter {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .articles
+
+        case 2: return .collections
+
+        case 3: return .web
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BookmarkLibraryFilter, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .articles:
+            writeInt(&buf, Int32(1))
+
+
+        case .collections:
+            writeInt(&buf, Int32(2))
+
+
+        case .web:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryFilter_lift(_ buf: RustBuffer) throws -> BookmarkLibraryFilter {
+    return try FfiConverterTypeBookmarkLibraryFilter.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryFilter_lower(_ value: BookmarkLibraryFilter) -> RustBuffer {
+    return FfiConverterTypeBookmarkLibraryFilter.lower(value)
+}
+
+
+extension BookmarkLibraryFilter: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum BookmarkLibraryPane {
+
+    case articles
+    case collections
+    case web
+    case explore
+}
+
+
+#if compiler(>=6)
+extension BookmarkLibraryPane: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkLibraryPane: FfiConverterRustBuffer {
+    typealias SwiftType = BookmarkLibraryPane
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryPane {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .articles
+
+        case 2: return .collections
+
+        case 3: return .web
+
+        case 4: return .explore
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BookmarkLibraryPane, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .articles:
+            writeInt(&buf, Int32(1))
+
+
+        case .collections:
+            writeInt(&buf, Int32(2))
+
+
+        case .web:
+            writeInt(&buf, Int32(3))
+
+
+        case .explore:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryPane_lift(_ buf: RustBuffer) throws -> BookmarkLibraryPane {
+    return try FfiConverterTypeBookmarkLibraryPane.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryPane_lower(_ value: BookmarkLibraryPane) -> RustBuffer {
+    return FfiConverterTypeBookmarkLibraryPane.lower(value)
+}
+
+
+extension BookmarkLibraryPane: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum BookmarkLibraryScope {
+
+    case mine
+    case explore
+}
+
+
+#if compiler(>=6)
+extension BookmarkLibraryScope: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkLibraryScope: FfiConverterRustBuffer {
+    typealias SwiftType = BookmarkLibraryScope
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryScope {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .mine
+
+        case 2: return .explore
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BookmarkLibraryScope, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .mine:
+            writeInt(&buf, Int32(1))
+
+
+        case .explore:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryScope_lift(_ buf: RustBuffer) throws -> BookmarkLibraryScope {
+    return try FfiConverterTypeBookmarkLibraryScope.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkLibraryScope_lower(_ value: BookmarkLibraryScope) -> RustBuffer {
+    return FfiConverterTypeBookmarkLibraryScope.lower(value)
+}
+
+
+extension BookmarkLibraryScope: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum CapturePublishPhase {
 
     case idle
@@ -35928,6 +36529,56 @@ fileprivate struct FfiConverterSequenceTypeArtifactRecord: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeBookmarkLibraryFilterChipProjection: FfiConverterRustBuffer {
+    typealias SwiftType = [BookmarkLibraryFilterChipProjection]
+
+    public static func write(_ value: [BookmarkLibraryFilterChipProjection], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBookmarkLibraryFilterChipProjection.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BookmarkLibraryFilterChipProjection] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BookmarkLibraryFilterChipProjection]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBookmarkLibraryFilterChipProjection.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeBookmarkLibraryScopeOptionProjection: FfiConverterRustBuffer {
+    typealias SwiftType = [BookmarkLibraryScopeOptionProjection]
+
+    public static func write(_ value: [BookmarkLibraryScopeOptionProjection], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBookmarkLibraryScopeOptionProjection.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BookmarkLibraryScopeOptionProjection] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BookmarkLibraryScopeOptionProjection]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBookmarkLibraryScopeOptionProjection.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeBookmarkSetRecord: FfiConverterRustBuffer {
     typealias SwiftType = [BookmarkSetRecord]
 
@@ -37680,6 +38331,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_book_picker_query() != 18730) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_bookmark_library() != 32437) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_bookmark_set_detail() != 2420) {

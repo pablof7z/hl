@@ -1,9 +1,4 @@
-import Foundation
 import Observation
-
-enum BookmarkScope {
-    case mine, explore
-}
 
 @MainActor
 @Observable
@@ -17,7 +12,7 @@ final class BookmarkStore {
     // Explore-mode data
     var followingCurationSets: [BookmarkSetRecord] = []
 
-    var scope: BookmarkScope = .mine
+    var scope: BookmarkLibraryScope = .mine
     var isLoading = false
 
     private var setsHandle: UInt64?

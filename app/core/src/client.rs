@@ -2978,6 +2978,13 @@ impl HighlighterCore {
         crate::lists::bookmarked_article_row_projection(input)
     }
 
+    pub fn project_bookmark_library(
+        &self,
+        input: crate::lists::BookmarkLibraryProjectionInput,
+    ) -> crate::lists::BookmarkLibraryProjection {
+        crate::lists::bookmark_library_projection(input)
+    }
+
     pub fn project_bookmark_set_row(
         &self,
         input: crate::lists::BookmarkSetRowProjectionInput,

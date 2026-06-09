@@ -22,6 +22,61 @@ pub const KIND_BOOKMARK_SETS: u16 = 30003;
 pub const KIND_CURATION_SETS: u16 = 30004;
 pub const KIND_WEB_BOOKMARK: u16 = 39701;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum BookmarkLibraryScope {
+    Mine,
+    Explore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum BookmarkLibraryFilter {
+    Articles,
+    Collections,
+    Web,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum BookmarkLibraryPane {
+    Articles,
+    Collections,
+    Web,
+    Explore,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkLibraryProjectionInput {
+    pub scope: BookmarkLibraryScope,
+    pub selected_filter: BookmarkLibraryFilter,
+    pub article_count: u64,
+    pub collection_count: u64,
+    pub web_bookmark_count: u64,
+    pub explore_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkLibraryScopeOptionProjection {
+    pub scope: BookmarkLibraryScope,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkLibraryFilterChipProjection {
+    pub filter: BookmarkLibraryFilter,
+    pub label: String,
+    pub icon_system_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkLibraryProjection {
+    pub scope_options: Vec<BookmarkLibraryScopeOptionProjection>,
+    pub filter_chips: Vec<BookmarkLibraryFilterChipProjection>,
+    pub selected_pane: BookmarkLibraryPane,
+    pub is_empty: bool,
+    pub empty_icon_system_name: String,
+    pub empty_title: String,
+    pub empty_message: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct BookmarkedArticleRowProjectionInput {
     pub article: ArticleRecord,
@@ -246,6 +301,49 @@ pub fn curation_menu_items_for_address(
         .collect()
 }
 
+pub fn bookmark_library_projection(
+    input: BookmarkLibraryProjectionInput,
+) -> BookmarkLibraryProjection {
+    let selected_pane = match input.scope {
+        BookmarkLibraryScope::Mine => match input.selected_filter {
+            BookmarkLibraryFilter::Articles => BookmarkLibraryPane::Articles,
+            BookmarkLibraryFilter::Collections => BookmarkLibraryPane::Collections,
+            BookmarkLibraryFilter::Web => BookmarkLibraryPane::Web,
+        },
+        BookmarkLibraryScope::Explore => BookmarkLibraryPane::Explore,
+    };
+    let item_count = match selected_pane {
+        BookmarkLibraryPane::Articles => input.article_count,
+        BookmarkLibraryPane::Collections => input.collection_count,
+        BookmarkLibraryPane::Web => input.web_bookmark_count,
+        BookmarkLibraryPane::Explore => input.explore_count,
+    };
+    let empty = bookmark_library_empty_state(selected_pane);
+
+    BookmarkLibraryProjection {
+        scope_options: vec![
+            BookmarkLibraryScopeOptionProjection {
+                scope: BookmarkLibraryScope::Mine,
+                label: "Mine".into(),
+            },
+            BookmarkLibraryScopeOptionProjection {
+                scope: BookmarkLibraryScope::Explore,
+                label: "Explore".into(),
+            },
+        ],
+        filter_chips: vec![
+            bookmark_library_filter_chip(BookmarkLibraryFilter::Articles),
+            bookmark_library_filter_chip(BookmarkLibraryFilter::Collections),
+            bookmark_library_filter_chip(BookmarkLibraryFilter::Web),
+        ],
+        selected_pane,
+        is_empty: item_count == 0,
+        empty_icon_system_name: empty.0.into(),
+        empty_title: empty.1.into(),
+        empty_message: empty.2.into(),
+    }
+}
+
 pub fn bookmarked_article_row_projection(
     input: BookmarkedArticleRowProjectionInput,
 ) -> BookmarkedArticleRowProjection {
@@ -314,6 +412,48 @@ pub fn web_bookmark_row_projection(
         host: web_bookmark_host(&bookmark.url),
         description: non_empty_string(bookmark.description),
         display_unix_seconds: bookmark.published_at.or(bookmark.created_at),
+    }
+}
+
+fn bookmark_library_filter_chip(
+    filter: BookmarkLibraryFilter,
+) -> BookmarkLibraryFilterChipProjection {
+    let (label, icon_system_name) = match filter {
+        BookmarkLibraryFilter::Articles => ("Articles", "doc.text"),
+        BookmarkLibraryFilter::Collections => ("Collections", "rectangle.stack"),
+        BookmarkLibraryFilter::Web => ("Web", "globe"),
+    };
+    BookmarkLibraryFilterChipProjection {
+        filter,
+        label: label.into(),
+        icon_system_name: icon_system_name.into(),
+    }
+}
+
+fn bookmark_library_empty_state(
+    pane: BookmarkLibraryPane,
+) -> (&'static str, &'static str, &'static str) {
+    match pane {
+        BookmarkLibraryPane::Articles => (
+            "bookmark",
+            "No bookmarks yet",
+            "Save articles from anywhere in Highlighter to find them here.",
+        ),
+        BookmarkLibraryPane::Collections => (
+            "rectangle.stack",
+            "No collections yet",
+            "Create bookmark or curation sets to organise your saved content.",
+        ),
+        BookmarkLibraryPane::Web => (
+            "globe",
+            "No web bookmarks yet",
+            "Web pages you bookmark via Nostr will appear here.",
+        ),
+        BookmarkLibraryPane::Explore => (
+            "rectangle.stack",
+            "Nothing to explore",
+            "People you follow haven't created any curation sets yet.",
+        ),
     }
 }
 
@@ -697,10 +837,12 @@ fn parse_web_bookmark_event(event: Event) -> WebBookmarkRecord {
 #[cfg(test)]
 mod tests {
     use super::{
-        bookmark_set_detail_projection, bookmark_set_row_projection,
+        bookmark_library_projection, bookmark_set_detail_projection, bookmark_set_row_projection,
         bookmarked_article_row_projection, curation_menu_items_for_address,
         curation_set_create_projection, filter_explorable_curation_sets,
-        next_curation_address_membership, web_bookmark_row_projection,
+        next_curation_address_membership, web_bookmark_row_projection, BookmarkLibraryFilter,
+        BookmarkLibraryFilterChipProjection, BookmarkLibraryPane, BookmarkLibraryProjectionInput,
+        BookmarkLibraryScope, BookmarkLibraryScopeOptionProjection,
         BookmarkSetDetailProjectionInput, BookmarkSetRowProjectionInput,
         BookmarkedArticleRowProjectionInput, CurationMembershipChange,
         CurationSetCreateProjectionInput, WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS,
@@ -793,6 +935,115 @@ mod tests {
         assert_eq!(items[1].title, "Untitled");
         assert_eq!(items[2].title, "Named");
         assert!(items.iter().all(|item| !item.is_member));
+    }
+
+    #[test]
+    fn bookmark_library_projection_projects_mine_articles_chrome() {
+        let projection = bookmark_library_projection(BookmarkLibraryProjectionInput {
+            scope: BookmarkLibraryScope::Mine,
+            selected_filter: BookmarkLibraryFilter::Articles,
+            article_count: 0,
+            collection_count: 2,
+            web_bookmark_count: 3,
+            explore_count: 4,
+        });
+
+        assert_eq!(projection.selected_pane, BookmarkLibraryPane::Articles);
+        assert!(projection.is_empty);
+        assert_eq!(
+            projection.scope_options,
+            vec![
+                BookmarkLibraryScopeOptionProjection {
+                    scope: BookmarkLibraryScope::Mine,
+                    label: "Mine".into()
+                },
+                BookmarkLibraryScopeOptionProjection {
+                    scope: BookmarkLibraryScope::Explore,
+                    label: "Explore".into()
+                },
+            ]
+        );
+        assert_eq!(
+            projection.filter_chips,
+            vec![
+                BookmarkLibraryFilterChipProjection {
+                    filter: BookmarkLibraryFilter::Articles,
+                    label: "Articles".into(),
+                    icon_system_name: "doc.text".into()
+                },
+                BookmarkLibraryFilterChipProjection {
+                    filter: BookmarkLibraryFilter::Collections,
+                    label: "Collections".into(),
+                    icon_system_name: "rectangle.stack".into()
+                },
+                BookmarkLibraryFilterChipProjection {
+                    filter: BookmarkLibraryFilter::Web,
+                    label: "Web".into(),
+                    icon_system_name: "globe".into()
+                },
+            ]
+        );
+        assert_eq!(projection.empty_icon_system_name, "bookmark");
+        assert_eq!(projection.empty_title, "No bookmarks yet");
+        assert_eq!(
+            projection.empty_message,
+            "Save articles from anywhere in Highlighter to find them here."
+        );
+    }
+
+    #[test]
+    fn bookmark_library_projection_projects_mine_selected_counts() {
+        let collections = bookmark_library_projection(BookmarkLibraryProjectionInput {
+            scope: BookmarkLibraryScope::Mine,
+            selected_filter: BookmarkLibraryFilter::Collections,
+            article_count: 0,
+            collection_count: 1,
+            web_bookmark_count: 0,
+            explore_count: 0,
+        });
+        let web = bookmark_library_projection(BookmarkLibraryProjectionInput {
+            scope: BookmarkLibraryScope::Mine,
+            selected_filter: BookmarkLibraryFilter::Web,
+            article_count: 0,
+            collection_count: 0,
+            web_bookmark_count: 0,
+            explore_count: 0,
+        });
+
+        assert_eq!(collections.selected_pane, BookmarkLibraryPane::Collections);
+        assert!(!collections.is_empty);
+        assert_eq!(collections.empty_icon_system_name, "rectangle.stack");
+        assert_eq!(collections.empty_title, "No collections yet");
+
+        assert_eq!(web.selected_pane, BookmarkLibraryPane::Web);
+        assert!(web.is_empty);
+        assert_eq!(web.empty_icon_system_name, "globe");
+        assert_eq!(web.empty_title, "No web bookmarks yet");
+        assert_eq!(
+            web.empty_message,
+            "Web pages you bookmark via Nostr will appear here."
+        );
+    }
+
+    #[test]
+    fn bookmark_library_projection_explore_overrides_selected_filter() {
+        let projection = bookmark_library_projection(BookmarkLibraryProjectionInput {
+            scope: BookmarkLibraryScope::Explore,
+            selected_filter: BookmarkLibraryFilter::Articles,
+            article_count: 10,
+            collection_count: 10,
+            web_bookmark_count: 10,
+            explore_count: 0,
+        });
+
+        assert_eq!(projection.selected_pane, BookmarkLibraryPane::Explore);
+        assert!(projection.is_empty);
+        assert_eq!(projection.empty_icon_system_name, "rectangle.stack");
+        assert_eq!(projection.empty_title, "Nothing to explore");
+        assert_eq!(
+            projection.empty_message,
+            "People you follow haven't created any curation sets yet."
+        );
     }
 
     #[test]
