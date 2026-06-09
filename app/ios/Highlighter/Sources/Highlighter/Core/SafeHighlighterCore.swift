@@ -667,6 +667,12 @@ actor SafeHighlighterCore {
         core.projectProfileIdentity(input: input)
     }
 
+    nonisolated func projectProfileUpdate(
+        input: ProfileUpdateProjectionInput
+    ) -> ProfileUpdateProjection {
+        core.projectProfileUpdate(input: input)
+    }
+
     nonisolated func decodeNostrEntity(_ input: String) -> NostrEntityRefOutcome {
         core.decodeNostrEntity(input: input)
     }
@@ -721,6 +727,10 @@ actor SafeHighlighterCore {
         await core.subscribeNostrEntity(entity: entity)
     }
 
+    func updateProfile(draft: ProfileUpdateDraft) async -> ProfileOutcome {
+        await core.updateProfile(draft: draft)
+    }
+
     func updateProfile(
         name: String,
         displayName: String,
@@ -741,7 +751,7 @@ actor SafeHighlighterCore {
             website: website,
             lud16: lud16
         )
-        return await core.updateProfile(draft: draft)
+        return await updateProfile(draft: draft)
     }
 
     nonisolated func normalizeNip05Username(_ input: String) -> String {

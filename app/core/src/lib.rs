@@ -133,7 +133,7 @@ pub use podcast_transcript::{
 pub use profile::{
     ProfileDisplayFallback, ProfileDisplayProjection, ProfileDisplayProjectionInput,
     ProfileDisplayWithLabelProjectionInput, ProfileIdentityProjection,
-    ProfileIdentityProjectionInput,
+    ProfileIdentityProjectionInput, ProfileUpdateProjection, ProfileUpdateProjectionInput,
 };
 pub use reactions::ReactionRecord;
 pub use reads::{

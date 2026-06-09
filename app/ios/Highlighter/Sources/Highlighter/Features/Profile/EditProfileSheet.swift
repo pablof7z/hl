@@ -37,15 +37,23 @@ struct EditProfileSheet: View {
     @State private var saving = false
     @State private var error: String?
 
-    private var isDirty: Bool {
-        displayName != (initial?.displayName ?? "")
-            || name != (initial?.name ?? "")
-            || about != (initial?.about ?? "")
-            || picture != (initial?.picture ?? "")
-            || banner != (initial?.banner ?? "")
-            || nip05 != (initial?.nip05 ?? "")
-            || website != (initial?.website ?? "")
-            || lud16 != (initial?.lud16 ?? "")
+    private var updateProjection: ProfileUpdateProjection {
+        appStore.safeCore.projectProfileUpdate(
+            input: ProfileUpdateProjectionInput(
+                initial: initial,
+                name: name,
+                displayName: displayName,
+                about: about,
+                picture: picture,
+                banner: banner,
+                nip05: nip05,
+                website: website,
+                lud16: lud16,
+                saving: saving,
+                pictureUploading: pictureUploading,
+                bannerUploading: bannerUploading
+            )
+        )
     }
 
     var body: some View {
@@ -340,7 +348,7 @@ struct EditProfileSheet: View {
     // MARK: - Helpers
 
     private var canSave: Bool {
-        isDirty && !saving && !pictureUploading && !bannerUploading
+        updateProjection.canSave
     }
 
     private var errorBinding: Binding<Bool> {
@@ -425,20 +433,12 @@ struct EditProfileSheet: View {
     }
 
     private func save() {
-        guard canSave else { return }
+        let projection = updateProjection
+        guard projection.canSave else { return }
         saving = true
         Task {
             defer { Task { @MainActor in saving = false } }
-            let outcome = await appStore.safeCore.updateProfile(
-                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
-                about: about.trimmingCharacters(in: .whitespacesAndNewlines),
-                picture: picture.trimmingCharacters(in: .whitespacesAndNewlines),
-                banner: banner.trimmingCharacters(in: .whitespacesAndNewlines),
-                nip05: nip05.trimmingCharacters(in: .whitespacesAndNewlines),
-                website: website.trimmingCharacters(in: .whitespacesAndNewlines),
-                lud16: lud16.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
+            let outcome = await appStore.safeCore.updateProfile(draft: projection.draft)
             guard outcome.error.isEmpty, let updated = outcome.value else {
                 await MainActor.run {
                     self.error = outcome.error.isEmpty ? "Unable to update profile." : outcome.error

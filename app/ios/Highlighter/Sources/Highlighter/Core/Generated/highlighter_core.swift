@@ -1502,6 +1502,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectProfileIdentity(input: ProfileIdentityProjectionInput)  -> ProfileIdentityProjection
 
+    /**
+     * Profile edit-form projection. Rust owns draft normalization and save
+     * eligibility; native shells bind controls to the returned projection.
+     */
+    func projectProfileUpdate(input: ProfileUpdateProjectionInput)  -> ProfileUpdateProjection
+
     func projectPublicKeyDisplay(input: PublicKeyDisplayProjectionInput)  -> PublicKeyDisplayProjection
 
     func projectReadingFeedCard(input: ReadingFeedCardProjectionInput)  -> ReadingFeedCardProjection
@@ -4497,6 +4503,18 @@ open func projectProfileIdentity(input: ProfileIdentityProjectionInput) -> Profi
     return try!  FfiConverterTypeProfileIdentityProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_profile_identity(self.uniffiClonePointer(),
         FfiConverterTypeProfileIdentityProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Profile edit-form projection. Rust owns draft normalization and save
+     * eligibility; native shells bind controls to the returned projection.
+     */
+open func projectProfileUpdate(input: ProfileUpdateProjectionInput) -> ProfileUpdateProjection  {
+    return try!  FfiConverterTypeProfileUpdateProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_profile_update(self.uniffiClonePointer(),
+        FfiConverterTypeProfileUpdateProjectionInput_lower(input),$0
     )
 })
 }
@@ -19582,6 +19600,234 @@ public func FfiConverterTypeProfileUpdateDraft_lower(_ value: ProfileUpdateDraft
 }
 
 
+public struct ProfileUpdateProjection {
+    public var draft: ProfileUpdateDraft
+    public var isDirty: Bool
+    public var canSave: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(draft: ProfileUpdateDraft, isDirty: Bool, canSave: Bool) {
+        self.draft = draft
+        self.isDirty = isDirty
+        self.canSave = canSave
+    }
+}
+
+#if compiler(>=6)
+extension ProfileUpdateProjection: Sendable {}
+#endif
+
+
+extension ProfileUpdateProjection: Equatable, Hashable {
+    public static func ==(lhs: ProfileUpdateProjection, rhs: ProfileUpdateProjection) -> Bool {
+        if lhs.draft != rhs.draft {
+            return false
+        }
+        if lhs.isDirty != rhs.isDirty {
+            return false
+        }
+        if lhs.canSave != rhs.canSave {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(draft)
+        hasher.combine(isDirty)
+        hasher.combine(canSave)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileUpdateProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateProjection {
+        return
+            try ProfileUpdateProjection(
+                draft: FfiConverterTypeProfileUpdateDraft.read(from: &buf),
+                isDirty: FfiConverterBool.read(from: &buf),
+                canSave: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileUpdateProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeProfileUpdateDraft.write(value.draft, into: &buf)
+        FfiConverterBool.write(value.isDirty, into: &buf)
+        FfiConverterBool.write(value.canSave, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateProjection_lift(_ buf: RustBuffer) throws -> ProfileUpdateProjection {
+    return try FfiConverterTypeProfileUpdateProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateProjection_lower(_ value: ProfileUpdateProjection) -> RustBuffer {
+    return FfiConverterTypeProfileUpdateProjection.lower(value)
+}
+
+
+public struct ProfileUpdateProjectionInput {
+    public var initial: ProfileMetadata?
+    public var name: String
+    public var displayName: String
+    public var about: String
+    public var picture: String
+    public var banner: String
+    public var nip05: String
+    public var website: String
+    public var lud16: String
+    public var saving: Bool
+    public var pictureUploading: Bool
+    public var bannerUploading: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(initial: ProfileMetadata?, name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String, saving: Bool, pictureUploading: Bool, bannerUploading: Bool) {
+        self.initial = initial
+        self.name = name
+        self.displayName = displayName
+        self.about = about
+        self.picture = picture
+        self.banner = banner
+        self.nip05 = nip05
+        self.website = website
+        self.lud16 = lud16
+        self.saving = saving
+        self.pictureUploading = pictureUploading
+        self.bannerUploading = bannerUploading
+    }
+}
+
+#if compiler(>=6)
+extension ProfileUpdateProjectionInput: Sendable {}
+#endif
+
+
+extension ProfileUpdateProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ProfileUpdateProjectionInput, rhs: ProfileUpdateProjectionInput) -> Bool {
+        if lhs.initial != rhs.initial {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.picture != rhs.picture {
+            return false
+        }
+        if lhs.banner != rhs.banner {
+            return false
+        }
+        if lhs.nip05 != rhs.nip05 {
+            return false
+        }
+        if lhs.website != rhs.website {
+            return false
+        }
+        if lhs.lud16 != rhs.lud16 {
+            return false
+        }
+        if lhs.saving != rhs.saving {
+            return false
+        }
+        if lhs.pictureUploading != rhs.pictureUploading {
+            return false
+        }
+        if lhs.bannerUploading != rhs.bannerUploading {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(initial)
+        hasher.combine(name)
+        hasher.combine(displayName)
+        hasher.combine(about)
+        hasher.combine(picture)
+        hasher.combine(banner)
+        hasher.combine(nip05)
+        hasher.combine(website)
+        hasher.combine(lud16)
+        hasher.combine(saving)
+        hasher.combine(pictureUploading)
+        hasher.combine(bannerUploading)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileUpdateProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateProjectionInput {
+        return
+            try ProfileUpdateProjectionInput(
+                initial: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                picture: FfiConverterString.read(from: &buf),
+                banner: FfiConverterString.read(from: &buf),
+                nip05: FfiConverterString.read(from: &buf),
+                website: FfiConverterString.read(from: &buf),
+                lud16: FfiConverterString.read(from: &buf),
+                saving: FfiConverterBool.read(from: &buf),
+                pictureUploading: FfiConverterBool.read(from: &buf),
+                bannerUploading: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileUpdateProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeProfileMetadata.write(value.initial, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.about, into: &buf)
+        FfiConverterString.write(value.picture, into: &buf)
+        FfiConverterString.write(value.banner, into: &buf)
+        FfiConverterString.write(value.nip05, into: &buf)
+        FfiConverterString.write(value.website, into: &buf)
+        FfiConverterString.write(value.lud16, into: &buf)
+        FfiConverterBool.write(value.saving, into: &buf)
+        FfiConverterBool.write(value.pictureUploading, into: &buf)
+        FfiConverterBool.write(value.bannerUploading, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateProjectionInput_lift(_ buf: RustBuffer) throws -> ProfileUpdateProjectionInput {
+    return try FfiConverterTypeProfileUpdateProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateProjectionInput_lower(_ value: ProfileUpdateProjectionInput) -> RustBuffer {
+    return FfiConverterTypeProfileUpdateProjectionInput.lower(value)
+}
+
+
 public struct PublicKeyDisplayProjection {
     public var compactLabel: String
 
@@ -31098,6 +31344,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_identity() != 18652) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_update() != 16047) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_public_key_display() != 35557) {

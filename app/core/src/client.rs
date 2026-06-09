@@ -1832,6 +1832,15 @@ impl HighlighterCore {
         profile::profile_identity_projection(input)
     }
 
+    /// Profile edit-form projection. Rust owns draft normalization and save
+    /// eligibility; native shells bind controls to the returned projection.
+    pub fn project_profile_update(
+        &self,
+        input: profile::ProfileUpdateProjectionInput,
+    ) -> profile::ProfileUpdateProjection {
+        profile::profile_update_projection(input)
+    }
+
     /// Publish a new kind:0 metadata event for the current user. Preserves
     /// any unknown JSON fields the user had set via other clients —
     /// only the canonical fields the edit form drives get overwritten.

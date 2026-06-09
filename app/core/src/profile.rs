@@ -161,6 +161,29 @@ pub struct ProfileIdentityProjection {
     pub verified_nip05: Option<String>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileUpdateProjectionInput {
+    pub initial: Option<ProfileMetadata>,
+    pub name: String,
+    pub display_name: String,
+    pub about: String,
+    pub picture: String,
+    pub banner: String,
+    pub nip05: String,
+    pub website: String,
+    pub lud16: String,
+    pub saving: bool,
+    pub picture_uploading: bool,
+    pub banner_uploading: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileUpdateProjection {
+    pub draft: ProfileUpdateDraft,
+    pub is_dirty: bool,
+    pub can_save: bool,
+}
+
 /// Pure profile presentation projection. Rust owns profile-name precedence,
 /// pubkey fallback, and avatar source selection; native shells only render.
 pub fn profile_display_projection(
@@ -309,6 +332,41 @@ fn profile_verified_nip05_label(raw: &str) -> Option<String> {
     } else {
         Some(raw.to_string())
     }
+}
+
+/// Profile edit-form projection. Rust owns draft normalization and save
+/// eligibility; native shells only bind text fields and render controls.
+pub fn profile_update_projection(input: ProfileUpdateProjectionInput) -> ProfileUpdateProjection {
+    let is_dirty = profile_update_raw_is_dirty(&input);
+    let can_save = is_dirty && !input.saving && !input.picture_uploading && !input.banner_uploading;
+    let draft = ProfileUpdateDraft {
+        name: input.name.trim().to_string(),
+        display_name: input.display_name.trim().to_string(),
+        about: input.about.trim().to_string(),
+        picture: input.picture.trim().to_string(),
+        banner: input.banner.trim().to_string(),
+        nip05: input.nip05.trim().to_string(),
+        website: input.website.trim().to_string(),
+        lud16: input.lud16.trim().to_string(),
+    };
+
+    ProfileUpdateProjection {
+        draft,
+        is_dirty,
+        can_save,
+    }
+}
+
+fn profile_update_raw_is_dirty(input: &ProfileUpdateProjectionInput) -> bool {
+    let initial = input.initial.as_ref();
+    input.display_name != initial.map(|p| p.display_name.as_str()).unwrap_or("")
+        || input.name != initial.map(|p| p.name.as_str()).unwrap_or("")
+        || input.about != initial.map(|p| p.about.as_str()).unwrap_or("")
+        || input.picture != initial.map(|p| p.picture.as_str()).unwrap_or("")
+        || input.banner != initial.map(|p| p.banner.as_str()).unwrap_or("")
+        || input.nip05 != initial.map(|p| p.nip05.as_str()).unwrap_or("")
+        || input.website != initial.map(|p| p.website.as_str()).unwrap_or("")
+        || input.lud16 != initial.map(|p| p.lud16.as_str()).unwrap_or("")
 }
 
 /// Publish a fresh kind:0 metadata event for the current user. Preserves
@@ -777,5 +835,98 @@ mod tests {
 
         assert_eq!(projection.verified_nip05, None);
         assert!(projection.bio.is_empty());
+    }
+
+    #[test]
+    fn profile_update_projection_trims_draft_and_preserves_raw_dirty_policy() {
+        let projection = profile_update_projection(ProfileUpdateProjectionInput {
+            initial: Some(ProfileMetadata {
+                pubkey: "abcdef123456".to_string(),
+                name: "alice".to_string(),
+                display_name: "Alice".to_string(),
+                about: "Bio".to_string(),
+                picture: "https://example.com/p.png".to_string(),
+                banner: "https://example.com/b.png".to_string(),
+                nip05: "alice@example.com".to_string(),
+                website: "https://example.com".to_string(),
+                lud16: "alice@getalby.com".to_string(),
+                created_at: None,
+            }),
+            name: " alice ".to_string(),
+            display_name: " Alice ".to_string(),
+            about: " Bio ".to_string(),
+            picture: " https://example.com/p.png ".to_string(),
+            banner: " https://example.com/b.png ".to_string(),
+            nip05: " alice@example.com ".to_string(),
+            website: " https://example.com ".to_string(),
+            lud16: " alice@getalby.com ".to_string(),
+            saving: false,
+            picture_uploading: false,
+            banner_uploading: false,
+        });
+
+        assert!(projection.is_dirty);
+        assert!(projection.can_save);
+        assert_eq!(projection.draft.name, "alice");
+        assert_eq!(projection.draft.display_name, "Alice");
+        assert_eq!(projection.draft.about, "Bio");
+        assert_eq!(projection.draft.picture, "https://example.com/p.png");
+        assert_eq!(projection.draft.banner, "https://example.com/b.png");
+        assert_eq!(projection.draft.nip05, "alice@example.com");
+        assert_eq!(projection.draft.website, "https://example.com");
+        assert_eq!(projection.draft.lud16, "alice@getalby.com");
+    }
+
+    #[test]
+    fn profile_update_projection_blocks_clean_or_busy_form() {
+        let clean = profile_update_projection(ProfileUpdateProjectionInput {
+            initial: None,
+            name: String::new(),
+            display_name: String::new(),
+            about: String::new(),
+            picture: String::new(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            saving: false,
+            picture_uploading: false,
+            banner_uploading: false,
+        });
+        let busy = profile_update_projection(ProfileUpdateProjectionInput {
+            initial: None,
+            name: "alice".to_string(),
+            display_name: String::new(),
+            about: String::new(),
+            picture: String::new(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            saving: true,
+            picture_uploading: false,
+            banner_uploading: false,
+        });
+        let uploading = profile_update_projection(ProfileUpdateProjectionInput {
+            initial: None,
+            name: "alice".to_string(),
+            display_name: String::new(),
+            about: String::new(),
+            picture: String::new(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            saving: false,
+            picture_uploading: true,
+            banner_uploading: false,
+        });
+
+        assert!(!clean.is_dirty);
+        assert!(!clean.can_save);
+        assert!(busy.is_dirty);
+        assert!(!busy.can_save);
+        assert!(uploading.is_dirty);
+        assert!(!uploading.can_save);
     }
 }
