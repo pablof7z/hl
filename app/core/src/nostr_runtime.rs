@@ -1003,8 +1003,9 @@ mod tests {
 
     #[test]
     fn target_flags_rooms_only_row_gets_read() {
-        // Rooms-only — PR 2 grants READ for now so current subscriptions
-        // keep working until PR 3 adds per-role subscription targeting.
+        // nostr-sdk exposes read/write/ping transport flags, while Highlighter
+        // owns the rooms/indexer role split above that layer. A rooms relay
+        // still needs READ so NIP-29 subscriptions can receive events.
         let row = RelayConfig {
             url: "wss://a.example".into(),
             read: false,

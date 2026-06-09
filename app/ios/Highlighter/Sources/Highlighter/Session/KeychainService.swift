@@ -1,9 +1,8 @@
 import Foundation
 import Security
 
-/// Minimal iOS Keychain wrapper for the user's nsec (and later, bunker URI).
-/// Simpler than TENEX's cross-platform version because Highlighter v1 is
-/// iPhone-only.
+/// iOS Keychain capability wrapper for the user's nsec and bunker URI.
+/// Swift executes secure-storage calls; Rust owns session restore policy.
 enum KeychainService {
     private static let service = "com.highlighter.app"
     private static let nsecAccount = "nsec"

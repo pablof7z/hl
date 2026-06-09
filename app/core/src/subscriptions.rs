@@ -558,9 +558,10 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             // Two outbox-routed filter sets — articles by follows, then their
             // interactions on any kind:30023 — so each relay only sees the
             // subset of authors it actually hosts. Authors with no cached
-            // kind:10002 fall back to the user's own read relays for now;
-            // the follows-NIP-65 backfill subscription installed at login
-            // is what fills in their relay lists over time.
+            // Authors without cached kind:10002 use the viewer's read relays
+            // as the bounded fallback; the follows-NIP-65 backfill
+            // subscription installed at login fills in author relay lists
+            // over time.
             if follows.is_empty() {
                 return vec![];
             }

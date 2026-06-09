@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Body-only composer for a new feedback thread. Title comes later from the
+/// Body-only composer for a new feedback thread. Title arrives from the
 /// agent's kind:513 metadata; until then the thread row falls back to the
 /// trimmed body content.
 struct FeedbackNewThreadView: View {
