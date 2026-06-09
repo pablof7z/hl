@@ -511,10 +511,8 @@ struct CapturePageView: View {
         }
         let selected = Array(selectableWords[range])
         let quote = appStore.safeCore.joinOcrQuote(selected)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Keep selectionRange so the yellow highlight stays visible.
-        guard !quote.isEmpty else { return }
         store.stashHighlight(quote: quote, context: "", selectedBoxes: selected.map { $0.bbox.cgRect })
     }
 
