@@ -22,7 +22,9 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use crate::articles::KIND_LONG_FORM;
 use crate::errors::CoreError;
 use crate::groups::KIND_GROUP_METADATA;
-use crate::models::{ArticleRecord, CommunitySummary, HighlightRecord, ProfileMetadata};
+use crate::models::{
+    ArticleReaderRoute, ArticleRecord, CommunitySummary, HighlightRecord, ProfileMetadata,
+};
 use crate::profile;
 use crate::relays::highlighter_relay;
 
@@ -52,6 +54,17 @@ pub struct SearchSuggestionsProjectionInput {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SearchSuggestionsProjection {
     pub queries: Vec<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchHighlightRowProjectionInput {
+    pub highlight: HighlightRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchHighlightRowProjection {
+    pub article_route: Option<ArticleReaderRoute>,
+    pub page_image_url: Option<String>,
 }
 
 /// How many candidate notes to pull from ndb before filtering. Higher than the
@@ -96,6 +109,29 @@ fn push_suggestion(queries: &mut Vec<String>, seen: &mut HashSet<String>, value:
     }
     if seen.insert(trimmed.to_lowercase()) {
         queries.push(trimmed);
+    }
+}
+
+pub fn search_highlight_row_projection(
+    input: SearchHighlightRowProjectionInput,
+) -> SearchHighlightRowProjection {
+    SearchHighlightRowProjection {
+        article_route: crate::articles::article_reader_route_from_address(
+            &input.highlight.artifact_address,
+        ),
+        page_image_url: page_image_url(&input.highlight.image_url),
+    }
+}
+
+fn page_image_url(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let parsed = url::Url::parse(trimmed).ok()?;
+    match parsed.scheme() {
+        "http" | "https" => Some(trimmed.to_string()),
+        _ => None,
     }
 }
 
@@ -546,6 +582,27 @@ mod tests {
         }
     }
 
+    fn highlight(artifact_address: &str, image_url: &str) -> HighlightRecord {
+        HighlightRecord {
+            event_id: "event".into(),
+            pubkey: "pubkey".into(),
+            quote: "quote".into(),
+            context: String::new(),
+            note: String::new(),
+            artifact_address: artifact_address.into(),
+            event_reference: String::new(),
+            external_reference: String::new(),
+            source_url: String::new(),
+            source_reference_key: String::new(),
+            clip_start_seconds: None,
+            clip_end_seconds: None,
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: Vec::new(),
+            image_url: image_url.into(),
+            created_at: None,
+        }
+    }
+
     #[test]
     fn search_query_projection_trims_and_blocks_blank_queries() {
         let ready = search_query_projection(SearchQueryProjectionInput {
@@ -585,6 +642,29 @@ mod tests {
             ]
         );
         assert!(projection.queries.len() <= 8);
+    }
+
+    #[test]
+    fn search_highlight_row_projection_projects_route_and_page_image() {
+        let pubkey = "a".repeat(64);
+        let projection = search_highlight_row_projection(SearchHighlightRowProjectionInput {
+            highlight: highlight(
+                &format!("  30023:{pubkey}:essay\n"),
+                " https://example.com/page.jpg ",
+            ),
+        });
+        let invalid = search_highlight_row_projection(SearchHighlightRowProjectionInput {
+            highlight: highlight("bad address", "ftp://example.com/page.jpg"),
+        });
+
+        let route = projection.article_route.expect("article route");
+        assert_eq!(route.address, format!("30023:{pubkey}:essay"));
+        assert_eq!(
+            projection.page_image_url.as_deref(),
+            Some("https://example.com/page.jpg")
+        );
+        assert!(invalid.article_route.is_none());
+        assert!(invalid.page_image_url.is_none());
     }
 
     #[test]

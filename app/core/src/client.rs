@@ -2514,6 +2514,15 @@ impl HighlighterCore {
         crate::search::search_suggestions_projection(input)
     }
 
+    /// Project a search highlight row. Rust owns navigation route and
+    /// page-image URL eligibility.
+    pub fn project_search_highlight_row(
+        &self,
+        input: crate::search::SearchHighlightRowProjectionInput,
+    ) -> crate::search::SearchHighlightRowProjection {
+        crate::search::search_highlight_row_projection(input)
+    }
+
     pub async fn search_highlights(&self, query: String, limit: u32) -> HighlightListOutcome {
         highlight_list_outcome(crate::search::search_highlights(
             self.runtime.ndb(),

@@ -187,8 +187,8 @@ pub use room_preview::{
     RoomPreviewArtifactsProjectionInput,
 };
 pub use search::{
-    SearchQueryProjection, SearchQueryProjectionInput, SearchSuggestionsProjection,
-    SearchSuggestionsProjectionInput,
+    SearchHighlightRowProjection, SearchHighlightRowProjectionInput, SearchQueryProjection,
+    SearchQueryProjectionInput, SearchSuggestionsProjection, SearchSuggestionsProjectionInput,
 };
 pub use session::{
     PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,

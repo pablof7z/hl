@@ -1599,6 +1599,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput)  -> RoomRecommendationCardProjection
 
     /**
+     * Project a search highlight row. Rust owns navigation route and
+     * page-image URL eligibility.
+     */
+    func projectSearchHighlightRow(input: SearchHighlightRowProjectionInput)  -> SearchHighlightRowProjection
+
+    /**
      * Project native search field state. Rust owns query trimming and whether
      * a search should run.
      */
@@ -4862,6 +4868,18 @@ open func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionI
     return try!  FfiConverterTypeRoomRecommendationCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_recommendation_card(self.uniffiClonePointer(),
         FfiConverterTypeRoomRecommendationCardProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project a search highlight row. Rust owns navigation route and
+     * page-image URL eligibility.
+     */
+open func projectSearchHighlightRow(input: SearchHighlightRowProjectionInput) -> SearchHighlightRowProjection  {
+    return try!  FfiConverterTypeSearchHighlightRowProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_search_highlight_row(self.uniffiClonePointer(),
+        FfiConverterTypeSearchHighlightRowProjectionInput_lower(input),$0
     )
 })
 }
@@ -27009,6 +27027,138 @@ public func FfiConverterTypeRoomRecommendationReasonProfile_lower(_ value: RoomR
 }
 
 
+public struct SearchHighlightRowProjection {
+    public var articleRoute: ArticleReaderRoute?
+    public var pageImageUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(articleRoute: ArticleReaderRoute?, pageImageUrl: String?) {
+        self.articleRoute = articleRoute
+        self.pageImageUrl = pageImageUrl
+    }
+}
+
+#if compiler(>=6)
+extension SearchHighlightRowProjection: Sendable {}
+#endif
+
+
+extension SearchHighlightRowProjection: Equatable, Hashable {
+    public static func ==(lhs: SearchHighlightRowProjection, rhs: SearchHighlightRowProjection) -> Bool {
+        if lhs.articleRoute != rhs.articleRoute {
+            return false
+        }
+        if lhs.pageImageUrl != rhs.pageImageUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(articleRoute)
+        hasher.combine(pageImageUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchHighlightRowProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchHighlightRowProjection {
+        return
+            try SearchHighlightRowProjection(
+                articleRoute: FfiConverterOptionTypeArticleReaderRoute.read(from: &buf),
+                pageImageUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchHighlightRowProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArticleReaderRoute.write(value.articleRoute, into: &buf)
+        FfiConverterOptionString.write(value.pageImageUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchHighlightRowProjection_lift(_ buf: RustBuffer) throws -> SearchHighlightRowProjection {
+    return try FfiConverterTypeSearchHighlightRowProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchHighlightRowProjection_lower(_ value: SearchHighlightRowProjection) -> RustBuffer {
+    return FfiConverterTypeSearchHighlightRowProjection.lower(value)
+}
+
+
+public struct SearchHighlightRowProjectionInput {
+    public var highlight: HighlightRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(highlight: HighlightRecord) {
+        self.highlight = highlight
+    }
+}
+
+#if compiler(>=6)
+extension SearchHighlightRowProjectionInput: Sendable {}
+#endif
+
+
+extension SearchHighlightRowProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: SearchHighlightRowProjectionInput, rhs: SearchHighlightRowProjectionInput) -> Bool {
+        if lhs.highlight != rhs.highlight {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(highlight)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchHighlightRowProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchHighlightRowProjectionInput {
+        return
+            try SearchHighlightRowProjectionInput(
+                highlight: FfiConverterTypeHighlightRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchHighlightRowProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeHighlightRecord.write(value.highlight, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchHighlightRowProjectionInput_lift(_ buf: RustBuffer) throws -> SearchHighlightRowProjectionInput {
+    return try FfiConverterTypeSearchHighlightRowProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchHighlightRowProjectionInput_lower(_ value: SearchHighlightRowProjectionInput) -> RustBuffer {
+    return FfiConverterTypeSearchHighlightRowProjectionInput.lower(value)
+}
+
+
 public struct SearchQueryProjection {
     public var searchQuery: String
     public var hasQuery: Bool
@@ -34566,6 +34716,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_recommendation_card() != 50552) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_highlight_row() != 8706) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_query() != 17921) {

@@ -407,13 +407,24 @@ struct SearchView: View {
 
     @ViewBuilder
     private func highlightRow(_ h: HighlightRecord) -> some View {
-        if let target = articleReaderTarget(for: h) {
-            NavigationLink(value: target) {
-                SearchHighlightRow(highlight: h, query: store?.query ?? "")
+        let projection = app.safeCore.projectSearchHighlightRow(
+            input: SearchHighlightRowProjectionInput(highlight: h)
+        )
+        if let route = projection.articleRoute {
+            NavigationLink(value: ArticleReaderTarget(route: route)) {
+                SearchHighlightRow(
+                    highlight: h,
+                    query: store?.query ?? "",
+                    pageImageUrl: projection.pageImageUrl
+                )
             }
             .buttonStyle(.plain)
         } else {
-            SearchHighlightRow(highlight: h, query: store?.query ?? "")
+            SearchHighlightRow(
+                highlight: h,
+                query: store?.query ?? "",
+                pageImageUrl: projection.pageImageUrl
+            )
         }
     }
 
@@ -455,14 +466,6 @@ struct SearchView: View {
             && store.articles.isEmpty
             && store.communities.isEmpty
             && store.profiles.isEmpty
-    }
-
-    private func articleReaderTarget(for h: HighlightRecord) -> ArticleReaderTarget? {
-        let addr = h.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let outcome = app.core.getArticleReaderRoute(address: addr)
-        guard outcome.error.isEmpty, let route = outcome.value else { return nil }
-        return ArticleReaderTarget(route: route)
     }
 
     private func suggestedQueries() -> [String] {
@@ -635,6 +638,7 @@ private struct RoomCoverArt: View {
 private struct SearchHighlightRow: View {
     let highlight: HighlightRecord
     let query: String
+    let pageImageUrl: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -669,9 +673,7 @@ private struct SearchHighlightRow: View {
     }
 
     private var pageImageURL: URL? {
-        let raw = highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return nil }
-        return URL(string: raw)
+        pageImageUrl.flatMap(URL.init(string:))
     }
 }
 

@@ -49,13 +49,24 @@ struct SearchSeeAllView: View {
 
     @ViewBuilder
     private func row(for h: HighlightRecord) -> some View {
-        if let target = articleReaderTarget(for: h) {
-            NavigationLink(value: target) {
-                SeeAllHighlightRow(highlight: h, query: target.dTag.isEmpty ? store.query : store.query)
+        let projection = app.safeCore.projectSearchHighlightRow(
+            input: SearchHighlightRowProjectionInput(highlight: h)
+        )
+        if let route = projection.articleRoute {
+            NavigationLink(value: ArticleReaderTarget(route: route)) {
+                SeeAllHighlightRow(
+                    highlight: h,
+                    query: store.query,
+                    pageImageUrl: projection.pageImageUrl
+                )
             }
             .buttonStyle(.plain)
         } else {
-            SeeAllHighlightRow(highlight: h, query: store.query)
+            SeeAllHighlightRow(
+                highlight: h,
+                query: store.query,
+                pageImageUrl: projection.pageImageUrl
+            )
         }
     }
 
@@ -125,15 +136,6 @@ struct SearchSeeAllView: View {
         }
     }
 
-    // MARK: - Helpers
-
-    private func articleReaderTarget(for h: HighlightRecord) -> ArticleReaderTarget? {
-        let addr = h.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let outcome = app.core.getArticleReaderRoute(address: addr)
-        guard outcome.error.isEmpty, let route = outcome.value else { return nil }
-        return ArticleReaderTarget(route: route)
-    }
 }
 
 // MARK: - See-all row variants (a touch denser than the preview rows)
@@ -141,6 +143,7 @@ struct SearchSeeAllView: View {
 private struct SeeAllHighlightRow: View {
     let highlight: HighlightRecord
     let query: String
+    let pageImageUrl: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -171,9 +174,7 @@ private struct SeeAllHighlightRow: View {
     }
 
     private var pageImageURL: URL? {
-        let raw = highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return nil }
-        return URL(string: raw)
+        pageImageUrl.flatMap(URL.init(string:))
     }
 }
 
