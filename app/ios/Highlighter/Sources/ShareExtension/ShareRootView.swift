@@ -108,7 +108,7 @@ struct ShareRootView: View {
         let share = PendingShare(
             groupId: groupId,
             url: url.absoluteString,
-            note: note.trimmingCharacters(in: .whitespaces)
+            note: note
         )
         onSubmit(share)
     }
