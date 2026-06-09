@@ -1509,7 +1509,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * return the refreshed reader snapshot. Rust owns article artifact
      * derivation, optimistic highlight insertion, and duplicate suppression.
      */
-    func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String, article: ArticleRecord?, quote: String, note: String, context: String) async  -> ArticleReaderHighlightPublishSnapshotOutcome
+    func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String, article: ArticleRecord?, quote: String, note: String, context: String) async  -> ArticleReaderHighlightPublishSnapshot
 
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactPublishSnapshot
 
@@ -4335,7 +4335,7 @@ open func projectWebMetadataRequest(input: WebMetadataRequestProjectionInput) ->
      * return the refreshed reader snapshot. Rust owns article artifact
      * derivation, optimistic highlight insertion, and duplicate suppression.
      */
-open func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String, article: ArticleRecord?, quote: String, note: String, context: String)async  -> ArticleReaderHighlightPublishSnapshotOutcome  {
+open func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String, article: ArticleRecord?, quote: String, note: String, context: String)async  -> ArticleReaderHighlightPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4347,7 +4347,7 @@ open func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String,
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome_lift,
+            liftFunc: FfiConverterTypeArticleReaderHighlightPublishSnapshot_lift,
             errorHandler: nil
 
         )
@@ -6918,7 +6918,7 @@ public func FfiConverterTypeArticleReaderHeaderProjectionInput_lower(_ value: Ar
 }
 
 
-public struct ArticleReaderHighlightPublishSnapshotOutcome {
+public struct ArticleReaderHighlightPublishSnapshot {
     public var snapshot: ArticleReaderSnapshot
     public var publishedHighlightId: String
     public var error: String
@@ -6933,12 +6933,12 @@ public struct ArticleReaderHighlightPublishSnapshotOutcome {
 }
 
 #if compiler(>=6)
-extension ArticleReaderHighlightPublishSnapshotOutcome: Sendable {}
+extension ArticleReaderHighlightPublishSnapshot: Sendable {}
 #endif
 
 
-extension ArticleReaderHighlightPublishSnapshotOutcome: Equatable, Hashable {
-    public static func ==(lhs: ArticleReaderHighlightPublishSnapshotOutcome, rhs: ArticleReaderHighlightPublishSnapshotOutcome) -> Bool {
+extension ArticleReaderHighlightPublishSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderHighlightPublishSnapshot, rhs: ArticleReaderHighlightPublishSnapshot) -> Bool {
         if lhs.snapshot != rhs.snapshot {
             return false
         }
@@ -6963,17 +6963,17 @@ extension ArticleReaderHighlightPublishSnapshotOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderHighlightPublishSnapshotOutcome {
+public struct FfiConverterTypeArticleReaderHighlightPublishSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderHighlightPublishSnapshot {
         return
-            try ArticleReaderHighlightPublishSnapshotOutcome(
+            try ArticleReaderHighlightPublishSnapshot(
                 snapshot: FfiConverterTypeArticleReaderSnapshot.read(from: &buf),
                 publishedHighlightId: FfiConverterString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: ArticleReaderHighlightPublishSnapshotOutcome, into buf: inout [UInt8]) {
+    public static func write(_ value: ArticleReaderHighlightPublishSnapshot, into buf: inout [UInt8]) {
         FfiConverterTypeArticleReaderSnapshot.write(value.snapshot, into: &buf)
         FfiConverterString.write(value.publishedHighlightId, into: &buf)
         FfiConverterString.write(value.error, into: &buf)
@@ -6984,15 +6984,15 @@ public struct FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome: FfiC
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome_lift(_ buf: RustBuffer) throws -> ArticleReaderHighlightPublishSnapshotOutcome {
-    return try FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome.lift(buf)
+public func FfiConverterTypeArticleReaderHighlightPublishSnapshot_lift(_ buf: RustBuffer) throws -> ArticleReaderHighlightPublishSnapshot {
+    return try FfiConverterTypeArticleReaderHighlightPublishSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome_lower(_ value: ArticleReaderHighlightPublishSnapshotOutcome) -> RustBuffer {
-    return FfiConverterTypeArticleReaderHighlightPublishSnapshotOutcome.lower(value)
+public func FfiConverterTypeArticleReaderHighlightPublishSnapshot_lower(_ value: ArticleReaderHighlightPublishSnapshot) -> RustBuffer {
+    return FfiConverterTypeArticleReaderHighlightPublishSnapshot.lower(value)
 }
 
 
@@ -39091,7 +39091,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_web_metadata_request() != 53856) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_article_reader_highlight_snapshot() != 59085) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_article_reader_highlight_snapshot() != 63466) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 32184) {

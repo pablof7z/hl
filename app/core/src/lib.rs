@@ -63,7 +63,7 @@ pub mod time_labels;
 pub mod web_metadata;
 pub mod whats_new;
 
-pub use article_reader::{ArticleReaderHighlightPublishSnapshotOutcome, ArticleReaderSnapshot};
+pub use article_reader::{ArticleReaderHighlightPublishSnapshot, ArticleReaderSnapshot};
 pub use articles::{
     ArticleProfileCardProjection, ArticleProfileCardProjectionInput, ArticleReaderHeaderProjection,
     ArticleReaderHeaderProjectionInput,

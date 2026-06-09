@@ -18,7 +18,7 @@ pub struct ArticleReaderSnapshot {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct ArticleReaderHighlightPublishSnapshotOutcome {
+pub struct ArticleReaderHighlightPublishSnapshot {
     pub snapshot: ArticleReaderSnapshot,
     pub published_highlight_id: String,
     pub error: String,

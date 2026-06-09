@@ -2798,11 +2798,11 @@ impl HighlighterCore {
         quote: String,
         note: String,
         context: String,
-    ) -> article_reader::ArticleReaderHighlightPublishSnapshotOutcome {
+    ) -> article_reader::ArticleReaderHighlightPublishSnapshot {
         let base_snapshot =
             article_reader::query_article_reader_snapshot(self.runtime.ndb(), &pubkey_hex, &d_tag);
         if let Err(error) = self.require_user_pubkey() {
-            return article_reader::ArticleReaderHighlightPublishSnapshotOutcome {
+            return article_reader::ArticleReaderHighlightPublishSnapshot {
                 snapshot: base_snapshot,
                 published_highlight_id: String::new(),
                 error: error.to_string(),
@@ -2819,12 +2819,12 @@ impl HighlighterCore {
         }
         .await;
         match result {
-            Ok(record) => article_reader::ArticleReaderHighlightPublishSnapshotOutcome {
+            Ok(record) => article_reader::ArticleReaderHighlightPublishSnapshot {
                 snapshot: article_reader::snapshot_with_published_highlight(base_snapshot, &record),
                 published_highlight_id: record.event_id,
                 error: String::new(),
             },
-            Err(error) => article_reader::ArticleReaderHighlightPublishSnapshotOutcome {
+            Err(error) => article_reader::ArticleReaderHighlightPublishSnapshot {
                 snapshot: base_snapshot,
                 published_highlight_id: String::new(),
                 error: error.to_string(),

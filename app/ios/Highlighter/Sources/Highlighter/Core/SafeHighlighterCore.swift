@@ -1289,7 +1289,7 @@ actor SafeHighlighterCore {
         quote: String,
         note: String,
         context: String
-    ) async -> ArticleReaderHighlightPublishSnapshotOutcome {
+    ) async -> ArticleReaderHighlightPublishSnapshot {
         await core.publishArticleReaderHighlightSnapshot(
             pubkeyHex: pubkeyHex,
             dTag: dTag,

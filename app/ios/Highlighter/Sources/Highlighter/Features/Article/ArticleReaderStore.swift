@@ -135,7 +135,7 @@ final class ArticleReaderStore {
         quote: String,
         note: String,
         context: String
-    ) async -> ArticleReaderHighlightPublishSnapshotOutcome {
+    ) async -> ArticleReaderHighlightPublishSnapshot {
         let outcome = await safeCore.publishArticleReaderHighlightSnapshot(
             pubkeyHex: target.pubkey,
             dTag: target.dTag,
