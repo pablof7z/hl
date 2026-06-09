@@ -71,7 +71,7 @@ actor SafeHighlighterCore {
         core.isWifiOnlyEnabled()
     }
 
-    func setWifiOnlyEnabled(_ enabled: Bool) -> MutationOutcome {
+    func setWifiOnlyEnabled(_ enabled: Bool) -> NetworkSettingsMutationSnapshot {
         core.setWifiOnlyEnabled(enabled: enabled)
     }
 
@@ -1415,11 +1415,11 @@ actor SafeHighlighterCore {
         await core.getRelays()
     }
 
-    func upsertRelay(_ cfg: RelayConfig) async -> MutationOutcome {
+    func upsertRelay(_ cfg: RelayConfig) async -> NetworkSettingsMutationSnapshot {
         await core.upsertRelay(cfg: cfg)
     }
 
-    func removeRelay(_ url: String) async -> MutationOutcome {
+    func removeRelay(_ url: String) async -> NetworkSettingsMutationSnapshot {
         await core.removeRelay(url: url)
     }
 
@@ -1429,7 +1429,7 @@ actor SafeHighlighterCore {
         write: Bool,
         rooms: Bool,
         indexer: Bool
-    ) async -> MutationOutcome {
+    ) async -> NetworkSettingsMutationSnapshot {
         await core.setRelayRoles(
             url: url,
             read: read,
@@ -1517,11 +1517,11 @@ actor SafeHighlighterCore {
         await core.subscribeRelayStatus()
     }
 
-    func reconnectAll() async -> MutationOutcome {
+    func reconnectAll() async -> NetworkSettingsMutationSnapshot {
         await core.reconnectAll()
     }
 
-    func disconnectAll() async -> MutationOutcome {
+    func disconnectAll() async -> NetworkSettingsMutationSnapshot {
         await core.disconnectAll()
     }
 

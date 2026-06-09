@@ -79,9 +79,9 @@ final class NetworkSettingsStore {
 
     /// Kick the pool to attempt a reconnect on every disconnected relay.
     func reconnectAll() async {
-        let outcome = await core.reconnectAll()
-        if !outcome.error.isEmpty {
-            lastError = "Couldn't reconnect — \(outcome.error)"
+        let snapshot = await core.reconnectAll()
+        if !snapshot.errorMessage.isEmpty {
+            lastError = snapshot.errorMessage
         }
     }
 
@@ -92,11 +92,11 @@ final class NetworkSettingsStore {
         let previous = wifiOnlyEnabled
         wifiOnlyEnabled = on
         applyWifiOnlyEnforcement(on)
-        let outcome = await core.setWifiOnlyEnabled(on)
-        if !outcome.applied {
+        let snapshot = await core.setWifiOnlyEnabled(on)
+        if !snapshot.applied {
             wifiOnlyEnabled = previous
             applyWifiOnlyEnforcement(previous)
-            lastError = "Couldn't update Wi-Fi-only mode — \(outcome.error)"
+            lastError = snapshot.errorMessage
         }
     }
 
@@ -198,20 +198,20 @@ final class NetworkSettingsStore {
     // MARK: - Writes
 
     func upsert(_ cfg: RelayConfig) async {
-        let outcome = await core.upsertRelay(cfg)
-        if outcome.error.isEmpty {
+        let snapshot = await core.upsertRelay(cfg)
+        if snapshot.shouldReload {
             await load()
-        } else {
-            lastError = "Couldn't add relay — \(outcome.error)"
+        } else if !snapshot.errorMessage.isEmpty {
+            lastError = snapshot.errorMessage
         }
     }
 
     func remove(_ url: String) async {
-        let outcome = await core.removeRelay(url)
-        if outcome.error.isEmpty {
+        let snapshot = await core.removeRelay(url)
+        if snapshot.shouldReload {
             await load()
-        } else {
-            lastError = "Couldn't remove relay — \(outcome.error)"
+        } else if !snapshot.errorMessage.isEmpty {
+            lastError = snapshot.errorMessage
         }
     }
 
@@ -224,13 +224,13 @@ final class NetworkSettingsStore {
     }
 
     func setRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async {
-        let outcome = await core.setRelayRoles(
+        let snapshot = await core.setRelayRoles(
             url: url, read: read, write: write, rooms: rooms, indexer: indexer
         )
-        if outcome.error.isEmpty {
+        if snapshot.shouldReload {
             await load()
-        } else {
-            lastError = "Couldn't update roles — \(outcome.error)"
+        } else if !snapshot.errorMessage.isEmpty {
+            lastError = snapshot.errorMessage
         }
     }
 

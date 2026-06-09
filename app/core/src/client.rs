@@ -859,8 +859,15 @@ impl HighlighterCore {
         self.network_preferences.wifi_only_enabled()
     }
 
-    pub fn set_wifi_only_enabled(&self, enabled: bool) -> MutationOutcome {
-        mutation_outcome(self.network_preferences.set_wifi_only_enabled(enabled))
+    pub fn set_wifi_only_enabled(
+        &self,
+        enabled: bool,
+    ) -> crate::relays::NetworkSettingsMutationSnapshot {
+        crate::relays::network_settings_mutation_snapshot(
+            self.network_preferences.set_wifi_only_enabled(enabled),
+            false,
+            "Couldn't update Wi-Fi-only mode",
+        )
     }
 
     pub fn get_podcast_position(&self) -> Option<PodcastPositionRecord> {
@@ -3885,7 +3892,10 @@ impl HighlighterCore {
     /// Insert-or-update a single relay. Replaces the row with matching URL or
     /// appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
     /// the live relay pool so the change takes effect immediately.
-    pub async fn upsert_relay(&self, cfg: crate::relays::RelayConfig) -> MutationOutcome {
+    pub async fn upsert_relay(
+        &self,
+        cfg: crate::relays::RelayConfig,
+    ) -> crate::relays::NetworkSettingsMutationSnapshot {
         let result: Result<(), CoreError> = async {
             let user = self
                 .inner
@@ -3898,11 +3908,14 @@ impl HighlighterCore {
             Ok(())
         }
         .await;
-        mutation_outcome(result)
+        crate::relays::network_settings_mutation_snapshot(result, true, "Couldn't add relay")
     }
 
     /// Remove a relay by URL.
-    pub async fn remove_relay(&self, url: String) -> MutationOutcome {
+    pub async fn remove_relay(
+        &self,
+        url: String,
+    ) -> crate::relays::NetworkSettingsMutationSnapshot {
         let result: Result<(), CoreError> = async {
             let user = self
                 .inner
@@ -3915,7 +3928,7 @@ impl HighlighterCore {
             Ok(())
         }
         .await;
-        mutation_outcome(result)
+        crate::relays::network_settings_mutation_snapshot(result, true, "Couldn't remove relay")
     }
 
     /// Atomically update a single relay's role flags.
@@ -3926,7 +3939,7 @@ impl HighlighterCore {
         write: bool,
         rooms: bool,
         indexer: bool,
-    ) -> MutationOutcome {
+    ) -> crate::relays::NetworkSettingsMutationSnapshot {
         let result: Result<(), CoreError> = async {
             let user = self
                 .inner
@@ -3948,7 +3961,7 @@ impl HighlighterCore {
             Ok(())
         }
         .await;
-        mutation_outcome(result)
+        crate::relays::network_settings_mutation_snapshot(result, true, "Couldn't update roles")
     }
 
     // -- Relay telemetry --
@@ -4063,17 +4076,17 @@ impl HighlighterCore {
     /// relay. `Client::connect` is idempotent — already-connected relays
     /// are unaffected; disconnected / terminated / banned relays get a
     /// fresh WebSocket attempt.
-    pub async fn reconnect_all(&self) -> MutationOutcome {
+    pub async fn reconnect_all(&self) -> crate::relays::NetworkSettingsMutationSnapshot {
         self.runtime.client().connect().await;
-        mutation_outcome(Ok(()))
+        crate::relays::network_settings_mutation_snapshot(Ok(()), false, "Couldn't reconnect")
     }
 
     /// Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
     /// when the device drops off Wi-Fi — the Swift side re-enables by
     /// calling `reconnect_all` once the path monitor reports Wi-Fi back.
-    pub async fn disconnect_all(&self) -> MutationOutcome {
+    pub async fn disconnect_all(&self) -> crate::relays::NetworkSettingsMutationSnapshot {
         self.runtime.client().disconnect().await;
-        mutation_outcome(Ok(()))
+        crate::relays::network_settings_mutation_snapshot(Ok(()), false, "Couldn't disconnect")
     }
 
     /// Fetch the target relay's NIP-11 information document via an HTTPS

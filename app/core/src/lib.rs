@@ -192,9 +192,9 @@ pub use recommendations::{
 pub use relays::{
     AddRelayProbeStatus, AddRelaySheetProjection, AddRelaySheetProjectionInput, ImportRelayRow,
     ImportRelaysProjection, ImportRelaysProjectionInput, ImportRelaysSourceProjection,
-    ImportRelaysSourceProjectionInput, RelayAvatarProjection, RelayConfig, RelayDetailProjection,
-    RelayDetailProjectionInput, RelayHostedRoomsSnapshot, RelayRemoveProjection,
-    RelayRemoveProjectionInput, RelayRowProjection, RelayRowProjectionInput,
+    ImportRelaysSourceProjectionInput, NetworkSettingsMutationSnapshot, RelayAvatarProjection,
+    RelayConfig, RelayDetailProjection, RelayDetailProjectionInput, RelayHostedRoomsSnapshot,
+    RelayRemoveProjection, RelayRemoveProjectionInput, RelayRowProjection, RelayRowProjectionInput,
     RelaySettingsProjection, RelayStatusTone,
 };
 pub use room_explorer::{RoomBrowseSnapshot, RoomExplorerSnapshot};

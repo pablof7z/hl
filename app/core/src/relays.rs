@@ -211,6 +211,13 @@ pub struct RelayHostedRoomsSnapshot {
     pub error_message: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NetworkSettingsMutationSnapshot {
+    pub applied: bool,
+    pub should_reload: bool,
+    pub error_message: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct RelayRemoveProjectionInput {
     pub url: String,
@@ -515,6 +522,25 @@ pub fn relay_hosted_rooms_snapshot(
         Err(error) => RelayHostedRoomsSnapshot {
             room_names: Vec::new(),
             error_message: error.to_string(),
+        },
+    }
+}
+
+pub fn network_settings_mutation_snapshot(
+    result: Result<(), CoreError>,
+    should_reload_on_success: bool,
+    error_prefix: &str,
+) -> NetworkSettingsMutationSnapshot {
+    match result {
+        Ok(()) => NetworkSettingsMutationSnapshot {
+            applied: true,
+            should_reload: should_reload_on_success,
+            error_message: String::new(),
+        },
+        Err(error) => NetworkSettingsMutationSnapshot {
+            applied: false,
+            should_reload: false,
+            error_message: format!("{error_prefix} — {error}"),
         },
     }
 }
@@ -1491,6 +1517,30 @@ mod tests {
         let failure = relay_hosted_rooms_snapshot(Err(CoreError::NotAuthenticated));
         assert!(failure.room_names.is_empty());
         assert_eq!(failure.error_message, "not authenticated");
+    }
+
+    #[test]
+    fn network_settings_mutation_snapshot_projects_reload_and_error_copy() {
+        let success = network_settings_mutation_snapshot(Ok(()), true, "Couldn't add relay");
+        assert!(success.applied);
+        assert!(success.should_reload);
+        assert!(success.error_message.is_empty());
+
+        let no_reload = network_settings_mutation_snapshot(Ok(()), false, "Couldn't reconnect");
+        assert!(no_reload.applied);
+        assert!(!no_reload.should_reload);
+
+        let failure = network_settings_mutation_snapshot(
+            Err(CoreError::Relay("offline".into())),
+            true,
+            "Couldn't remove relay",
+        );
+        assert!(!failure.applied);
+        assert!(!failure.should_reload);
+        assert_eq!(
+            failure.error_message,
+            "Couldn't remove relay — relay error: offline"
+        );
     }
 
     #[test]

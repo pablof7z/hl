@@ -847,7 +847,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * when the device drops off Wi-Fi — the Swift side re-enables by
      * calling `reconnect_all` once the path monitor reports Wi-Fi back.
      */
-    func disconnectAll() async  -> MutationOutcome
+    func disconnectAll() async  -> NetworkSettingsMutationSnapshot
 
     func downloadPodcastArtwork(url: String) async  -> DataOutcome
 
@@ -1636,7 +1636,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * are unaffected; disconnected / terminated / banned relays get a
      * fresh WebSocket attempt.
      */
-    func reconnectAll() async  -> MutationOutcome
+    func reconnectAll() async  -> NetworkSettingsMutationSnapshot
 
     func reconstructOcrMarkdown(lines: [OcrLine])  -> String
 
@@ -1647,7 +1647,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     /**
      * Remove a relay by URL.
      */
-    func removeRelay(url: String) async  -> MutationOutcome
+    func removeRelay(url: String) async  -> NetworkSettingsMutationSnapshot
 
     /**
      * Publish a NIP-29 kind:9021 join-request for `group_id`. Rust owns the
@@ -1690,9 +1690,9 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     /**
      * Atomically update a single relay's role flags.
      */
-    func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async  -> MutationOutcome
+    func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async  -> NetworkSettingsMutationSnapshot
 
-    func setWifiOnlyEnabled(enabled: Bool)  -> MutationOutcome
+    func setWifiOnlyEnabled(enabled: Bool)  -> NetworkSettingsMutationSnapshot
 
     func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary])  -> Data
 
@@ -1937,7 +1937,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
      * the live relay pool so the change takes effect immediately.
      */
-    func upsertRelay(cfg: RelayConfig) async  -> MutationOutcome
+    func upsertRelay(cfg: RelayConfig) async  -> NetworkSettingsMutationSnapshot
 
 }
 open class HighlighterCore: HighlighterCoreProtocol, @unchecked Sendable {
@@ -2286,7 +2286,7 @@ open func detectOcrActivePage(lines: [OcrLine]) -> OcrPageDetection?  {
      * when the device drops off Wi-Fi — the Swift side re-enables by
      * calling `reconnect_all` once the path monitor reports Wi-Fi back.
      */
-open func disconnectAll()async  -> MutationOutcome  {
+open func disconnectAll()async  -> NetworkSettingsMutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2298,7 +2298,7 @@ open func disconnectAll()async  -> MutationOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -4843,7 +4843,7 @@ open func publishPodcastComposerClip(input: PodcastClipComposerPublishInput)asyn
      * are unaffected; disconnected / terminated / banned relays get a
      * fresh WebSocket attempt.
      */
-open func reconnectAll()async  -> MutationOutcome  {
+open func reconnectAll()async  -> NetworkSettingsMutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4855,7 +4855,7 @@ open func reconnectAll()async  -> MutationOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -4908,7 +4908,7 @@ open func registerNip05(name: String, domain: String)async  -> StringOutcome  {
     /**
      * Remove a relay by URL.
      */
-open func removeRelay(url: String)async  -> MutationOutcome  {
+open func removeRelay(url: String)async  -> NetworkSettingsMutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4920,7 +4920,7 @@ open func removeRelay(url: String)async  -> MutationOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5078,7 +5078,7 @@ open func setPodcastClipStart(selection: PodcastClipSelection, value: Double) ->
     /**
      * Atomically update a single relay's role flags.
      */
-open func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool)async  -> MutationOutcome  {
+open func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool)async  -> NetworkSettingsMutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5090,14 +5090,14 @@ open func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, index
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
 
         )
 }
 
-open func setWifiOnlyEnabled(enabled: Bool) -> MutationOutcome  {
-    return try!  FfiConverterTypeMutationOutcome_lift(try! rustCall() {
+open func setWifiOnlyEnabled(enabled: Bool) -> NetworkSettingsMutationSnapshot  {
+    return try!  FfiConverterTypeNetworkSettingsMutationSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_set_wifi_only_enabled(self.uniffiClonePointer(),
         FfiConverterBool.lower(enabled),$0
     )
@@ -5891,7 +5891,7 @@ open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, 
      * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
      * the live relay pool so the change takes effect immediately.
      */
-open func upsertRelay(cfg: RelayConfig)async  -> MutationOutcome  {
+open func upsertRelay(cfg: RelayConfig)async  -> NetworkSettingsMutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5903,7 +5903,7 @@ open func upsertRelay(cfg: RelayConfig)async  -> MutationOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -19819,6 +19819,84 @@ public func FfiConverterTypeMutationOutcome_lift(_ buf: RustBuffer) throws -> Mu
 #endif
 public func FfiConverterTypeMutationOutcome_lower(_ value: MutationOutcome) -> RustBuffer {
     return FfiConverterTypeMutationOutcome.lower(value)
+}
+
+
+public struct NetworkSettingsMutationSnapshot {
+    public var applied: Bool
+    public var shouldReload: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(applied: Bool, shouldReload: Bool, errorMessage: String) {
+        self.applied = applied
+        self.shouldReload = shouldReload
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension NetworkSettingsMutationSnapshot: Sendable {}
+#endif
+
+
+extension NetworkSettingsMutationSnapshot: Equatable, Hashable {
+    public static func ==(lhs: NetworkSettingsMutationSnapshot, rhs: NetworkSettingsMutationSnapshot) -> Bool {
+        if lhs.applied != rhs.applied {
+            return false
+        }
+        if lhs.shouldReload != rhs.shouldReload {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(applied)
+        hasher.combine(shouldReload)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkSettingsMutationSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkSettingsMutationSnapshot {
+        return
+            try NetworkSettingsMutationSnapshot(
+                applied: FfiConverterBool.read(from: &buf),
+                shouldReload: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkSettingsMutationSnapshot, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.applied, into: &buf)
+        FfiConverterBool.write(value.shouldReload, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsMutationSnapshot_lift(_ buf: RustBuffer) throws -> NetworkSettingsMutationSnapshot {
+    return try FfiConverterTypeNetworkSettingsMutationSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsMutationSnapshot_lower(_ value: NetworkSettingsMutationSnapshot) -> RustBuffer {
+    return FfiConverterTypeNetworkSettingsMutationSnapshot.lower(value)
 }
 
 
@@ -38295,7 +38373,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_detect_ocr_active_page() != 8731) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 56544) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 27013) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_download_podcast_artwork() != 30059) {
@@ -38871,7 +38949,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_composer_clip() != 62896) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 432) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 13020) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconstruct_ocr_markdown() != 15497) {
@@ -38883,7 +38961,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_register_nip05() != 29734) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 56840) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 35958) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_request_join_room() != 5056) {
@@ -38919,10 +38997,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_podcast_clip_start() != 31323) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_relay_roles() != 6600) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_relay_roles() != 30185) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_wifi_only_enabled() != 42691) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_wifi_only_enabled() != 35813) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_extension_communities_snapshot() != 38830) {
@@ -39042,7 +39120,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 28046) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 53820) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 45711) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_constructor_highlightercore_new() != 37739) {
