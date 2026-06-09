@@ -95,33 +95,37 @@ struct ThreadView: View {
 
     @ViewBuilder
     private func inlineReplyPreview(for parent: CommentNode) -> some View {
-        if let mostRecent = parent.mostRecentReply {
-            let isAuthorReply = (artifactAuthorPubkey != nil)
-                && (mostRecent.record.pubkey == artifactAuthorPubkey)
+        let chrome = app.safeCore.projectCommentNodeChrome(
+            input: CommentNodeChromeProjectionInput(
+                node: parent,
+                artifactAuthorPubkey: artifactAuthorPubkey
+            )
+        )
+        if let mostRecent = chrome.mostRecentReply {
             CommentRow(
                 node: mostRecent,
                 depth: 1,
-                isAuthorReply: isAuthorReply,
+                isAuthorReply: chrome.isMostRecentAuthorReply,
                 onTap: { focusOn(mostRecent) },
                 store: store
             )
             .padding(.leading, 18)
             .padding(.trailing, 18)
 
-            if parent.children.count > 1 {
-                moreRepliesChip(parent: parent)
+            if chrome.hasMoreReplies {
+                moreRepliesChip(parent: parent, label: chrome.moreRepliesLabel)
             }
         }
     }
 
-    private func moreRepliesChip(parent: CommentNode) -> some View {
+    private func moreRepliesChip(parent: CommentNode, label: String) -> some View {
         Button {
             focusOn(parent)
         } label: {
             HStack(spacing: 6) {
                 Spacer()
                     .frame(width: 36 + 18 + 12, alignment: .leading)
-                Text("View \(parent.children.count - 1) more \(parent.children.count - 1 == 1 ? "reply" : "replies")")
+                Text(label)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Color.highlighterAccent)
                 Image(systemName: "chevron.right")

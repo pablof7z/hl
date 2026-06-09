@@ -76,6 +76,7 @@ struct CommentRow: View {
     @ViewBuilder
     private var headerLine: some View {
         let author = authorDisplay
+        let chrome = nodeChrome
 
         HStack(spacing: 6) {
             Text(author.displayName)
@@ -90,15 +91,15 @@ struct CommentRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
-            if !node.children.isEmpty {
-                replyChevron
+            if chrome.showsReplyChevron {
+                replyChevron(count: Int(chrome.replyCount))
             }
         }
     }
 
-    private var replyChevron: some View {
+    private func replyChevron(count: Int) -> some View {
         HStack(spacing: 2) {
-            Text("\(node.children.count)")
+            Text("\(count)")
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(Color.highlighterInkMuted)
                 .monospacedDigit()
@@ -180,6 +181,15 @@ struct CommentRow: View {
     }
 
     // MARK: - Helpers
+
+    private var nodeChrome: CommentNodeChromeProjection {
+        app.safeCore.projectCommentNodeChrome(
+            input: CommentNodeChromeProjectionInput(
+                node: node,
+                artifactAuthorPubkey: nil
+            )
+        )
+    }
 
     private var authorDisplay: ProfileDisplayProjection {
         app.safeCore.projectProfileDisplay(

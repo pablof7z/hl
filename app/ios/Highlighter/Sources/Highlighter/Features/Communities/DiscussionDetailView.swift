@@ -188,7 +188,7 @@ struct DiscussionDetailView: View {
                     CommentRow(
                         node: node,
                         depth: 0,
-                        isAuthorReply: node.record.pubkey == discussion.pubkey,
+                        isAuthorReply: false,
                         onTap: { focusedNode = node },
                         store: store
                     )
@@ -202,22 +202,28 @@ struct DiscussionDetailView: View {
 
     @ViewBuilder
     private func inlineReplyPreview(for parent: CommentNode) -> some View {
-        if let mostRecent = parent.mostRecentReply {
+        let chrome = app.safeCore.projectCommentNodeChrome(
+            input: CommentNodeChromeProjectionInput(
+                node: parent,
+                artifactAuthorPubkey: discussion.pubkey
+            )
+        )
+        if let mostRecent = chrome.mostRecentReply {
             CommentRow(
                 node: mostRecent,
                 depth: 1,
-                isAuthorReply: mostRecent.record.pubkey == discussion.pubkey,
+                isAuthorReply: chrome.isMostRecentAuthorReply,
                 onTap: { focusedNode = mostRecent },
                 store: store
             )
             .padding(.leading, 18)
             .padding(.trailing, 18)
 
-            if parent.children.count > 1 {
+            if chrome.hasMoreReplies {
                 Button { focusedNode = parent } label: {
                     HStack(spacing: 6) {
                         Spacer().frame(width: 36 + 18 + 12)
-                        Text("View \(parent.children.count - 1) more \(parent.children.count - 1 == 1 ? "reply" : "replies")")
+                        Text(chrome.moreRepliesLabel)
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Color.highlighterAccent)
                         Image(systemName: "chevron.right")

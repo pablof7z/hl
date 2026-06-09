@@ -49,6 +49,22 @@ pub struct CommentThreadViewProjection {
     pub reply_count_label: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentNodeChromeProjectionInput {
+    pub node: CommentThreadNode,
+    pub artifact_author_pubkey: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentNodeChromeProjection {
+    pub reply_count: u32,
+    pub shows_reply_chevron: bool,
+    pub most_recent_reply: Option<CommentThreadNode>,
+    pub has_more_replies: bool,
+    pub more_replies_label: String,
+    pub is_most_recent_author_reply: bool,
+}
+
 /// Comment composer projection. Rust owns draft normalization and submit
 /// eligibility; native shells render the composer affordance.
 pub fn comment_composer_projection(
@@ -58,6 +74,43 @@ pub fn comment_composer_projection(
     CommentComposerProjection {
         can_submit: !submit_body.is_empty() && !input.is_publishing,
         submit_body,
+    }
+}
+
+/// Project per-row reply affordances from a Rust-built thread node.
+/// Native shells render the row and receive platform taps; Rust owns child
+/// counts, preview choice, "more replies" copy, and author-reply matching.
+pub fn comment_node_chrome_projection(
+    input: CommentNodeChromeProjectionInput,
+) -> CommentNodeChromeProjection {
+    let reply_count = input.node.children.len();
+    let most_recent_reply = input.node.children.last().cloned();
+    let more_count = reply_count.saturating_sub(1);
+    let artifact_author_pubkey = input
+        .artifact_author_pubkey
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let is_most_recent_author_reply = most_recent_reply
+        .as_ref()
+        .and_then(|reply| artifact_author_pubkey.map(|author| reply.record.pubkey == author))
+        .unwrap_or(false);
+
+    CommentNodeChromeProjection {
+        reply_count: reply_count.min(u32::MAX as usize) as u32,
+        shows_reply_chevron: reply_count > 0,
+        has_more_replies: more_count > 0,
+        more_replies_label: more_replies_label(more_count),
+        most_recent_reply,
+        is_most_recent_author_reply,
+    }
+}
+
+fn more_replies_label(count: usize) -> String {
+    match count {
+        0 => String::new(),
+        1 => "View 1 more reply".into(),
+        count => format!("View {count} more replies"),
     }
 }
 
@@ -760,6 +813,52 @@ mod tests {
         assert_eq!(projection.empty_state_label, "Be the first to reply.");
         assert_eq!(projection.composer_placeholder, "Reply…");
         assert_eq!(projection.reply_count_label, "2 replies");
+    }
+
+    #[test]
+    fn comment_node_chrome_projection_returns_reply_affordances() {
+        let root = "root";
+        let top = comment("top", root, Some(1));
+        let first_reply = comment("first-reply", "top", Some(2));
+        let mut second_reply = comment("second-reply", "top", Some(3));
+        second_reply.pubkey = "author".into();
+        let tree = build_thread(&[top, first_reply, second_reply], root);
+
+        let projection = comment_node_chrome_projection(CommentNodeChromeProjectionInput {
+            node: tree[0].clone(),
+            artifact_author_pubkey: Some(" author ".into()),
+        });
+
+        assert_eq!(projection.reply_count, 2);
+        assert!(projection.shows_reply_chevron);
+        assert_eq!(
+            projection
+                .most_recent_reply
+                .as_ref()
+                .map(|node| node.record.event_id.as_str()),
+            Some("second-reply")
+        );
+        assert!(projection.has_more_replies);
+        assert_eq!(projection.more_replies_label, "View 1 more reply");
+        assert!(projection.is_most_recent_author_reply);
+    }
+
+    #[test]
+    fn comment_node_chrome_projection_omits_reply_affordances_without_children() {
+        let projection = comment_node_chrome_projection(CommentNodeChromeProjectionInput {
+            node: CommentThreadNode {
+                record: comment("top", "root", Some(1)),
+                children: Vec::new(),
+            },
+            artifact_author_pubkey: None,
+        });
+
+        assert_eq!(projection.reply_count, 0);
+        assert!(!projection.shows_reply_chevron);
+        assert!(projection.most_recent_reply.is_none());
+        assert!(!projection.has_more_replies);
+        assert_eq!(projection.more_replies_label, "");
+        assert!(!projection.is_most_recent_author_reply);
     }
 
     #[test]

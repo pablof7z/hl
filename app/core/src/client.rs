@@ -2380,6 +2380,15 @@ impl HighlighterCore {
         comments::comment_thread_view_projection(input)
     }
 
+    /// Project per-comment reply chrome. Rust owns child counts, preview
+    /// choice, "more replies" copy, and author-reply matching.
+    pub fn project_comment_node_chrome(
+        &self,
+        input: comments::CommentNodeChromeProjectionInput,
+    ) -> comments::CommentNodeChromeProjection {
+        comments::comment_node_chrome_projection(input)
+    }
+
     /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
     pub async fn get_comments_for_scope(
         &self,

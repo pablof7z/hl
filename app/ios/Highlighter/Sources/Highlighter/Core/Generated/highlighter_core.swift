@@ -1475,6 +1475,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectCommentLikeState(input: CommentLikeStateProjectionInput)  -> CommentLikeStateProjection
 
     /**
+     * Project per-comment reply chrome. Rust owns child counts, preview
+     * choice, "more replies" copy, and author-reply matching.
+     */
+    func projectCommentNodeChrome(input: CommentNodeChromeProjectionInput)  -> CommentNodeChromeProjection
+
+    /**
      * Project a comment thread screen. Rust owns focused-node lookup,
      * visible child selection, and thread chrome labels.
      */
@@ -4590,6 +4596,18 @@ open func projectCommentLikeState(input: CommentLikeStateProjectionInput) -> Com
     return try!  FfiConverterTypeCommentLikeStateProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_comment_like_state(self.uniffiClonePointer(),
         FfiConverterTypeCommentLikeStateProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project per-comment reply chrome. Rust owns child counts, preview
+     * choice, "more replies" copy, and author-reply matching.
+     */
+open func projectCommentNodeChrome(input: CommentNodeChromeProjectionInput) -> CommentNodeChromeProjection  {
+    return try!  FfiConverterTypeCommentNodeChromeProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_comment_node_chrome(self.uniffiClonePointer(),
+        FfiConverterTypeCommentNodeChromeProjectionInput_lower(input),$0
     )
 })
 }
@@ -12486,6 +12504,178 @@ public func FfiConverterTypeCommentListOutcome_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeCommentListOutcome_lower(_ value: CommentListOutcome) -> RustBuffer {
     return FfiConverterTypeCommentListOutcome.lower(value)
+}
+
+
+public struct CommentNodeChromeProjection {
+    public var replyCount: UInt32
+    public var showsReplyChevron: Bool
+    public var mostRecentReply: CommentThreadNode?
+    public var hasMoreReplies: Bool
+    public var moreRepliesLabel: String
+    public var isMostRecentAuthorReply: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(replyCount: UInt32, showsReplyChevron: Bool, mostRecentReply: CommentThreadNode?, hasMoreReplies: Bool, moreRepliesLabel: String, isMostRecentAuthorReply: Bool) {
+        self.replyCount = replyCount
+        self.showsReplyChevron = showsReplyChevron
+        self.mostRecentReply = mostRecentReply
+        self.hasMoreReplies = hasMoreReplies
+        self.moreRepliesLabel = moreRepliesLabel
+        self.isMostRecentAuthorReply = isMostRecentAuthorReply
+    }
+}
+
+#if compiler(>=6)
+extension CommentNodeChromeProjection: Sendable {}
+#endif
+
+
+extension CommentNodeChromeProjection: Equatable, Hashable {
+    public static func ==(lhs: CommentNodeChromeProjection, rhs: CommentNodeChromeProjection) -> Bool {
+        if lhs.replyCount != rhs.replyCount {
+            return false
+        }
+        if lhs.showsReplyChevron != rhs.showsReplyChevron {
+            return false
+        }
+        if lhs.mostRecentReply != rhs.mostRecentReply {
+            return false
+        }
+        if lhs.hasMoreReplies != rhs.hasMoreReplies {
+            return false
+        }
+        if lhs.moreRepliesLabel != rhs.moreRepliesLabel {
+            return false
+        }
+        if lhs.isMostRecentAuthorReply != rhs.isMostRecentAuthorReply {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(replyCount)
+        hasher.combine(showsReplyChevron)
+        hasher.combine(mostRecentReply)
+        hasher.combine(hasMoreReplies)
+        hasher.combine(moreRepliesLabel)
+        hasher.combine(isMostRecentAuthorReply)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentNodeChromeProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentNodeChromeProjection {
+        return
+            try CommentNodeChromeProjection(
+                replyCount: FfiConverterUInt32.read(from: &buf),
+                showsReplyChevron: FfiConverterBool.read(from: &buf),
+                mostRecentReply: FfiConverterOptionTypeCommentThreadNode.read(from: &buf),
+                hasMoreReplies: FfiConverterBool.read(from: &buf),
+                moreRepliesLabel: FfiConverterString.read(from: &buf),
+                isMostRecentAuthorReply: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentNodeChromeProjection, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.replyCount, into: &buf)
+        FfiConverterBool.write(value.showsReplyChevron, into: &buf)
+        FfiConverterOptionTypeCommentThreadNode.write(value.mostRecentReply, into: &buf)
+        FfiConverterBool.write(value.hasMoreReplies, into: &buf)
+        FfiConverterString.write(value.moreRepliesLabel, into: &buf)
+        FfiConverterBool.write(value.isMostRecentAuthorReply, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentNodeChromeProjection_lift(_ buf: RustBuffer) throws -> CommentNodeChromeProjection {
+    return try FfiConverterTypeCommentNodeChromeProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentNodeChromeProjection_lower(_ value: CommentNodeChromeProjection) -> RustBuffer {
+    return FfiConverterTypeCommentNodeChromeProjection.lower(value)
+}
+
+
+public struct CommentNodeChromeProjectionInput {
+    public var node: CommentThreadNode
+    public var artifactAuthorPubkey: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(node: CommentThreadNode, artifactAuthorPubkey: String?) {
+        self.node = node
+        self.artifactAuthorPubkey = artifactAuthorPubkey
+    }
+}
+
+#if compiler(>=6)
+extension CommentNodeChromeProjectionInput: Sendable {}
+#endif
+
+
+extension CommentNodeChromeProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CommentNodeChromeProjectionInput, rhs: CommentNodeChromeProjectionInput) -> Bool {
+        if lhs.node != rhs.node {
+            return false
+        }
+        if lhs.artifactAuthorPubkey != rhs.artifactAuthorPubkey {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(node)
+        hasher.combine(artifactAuthorPubkey)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentNodeChromeProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentNodeChromeProjectionInput {
+        return
+            try CommentNodeChromeProjectionInput(
+                node: FfiConverterTypeCommentThreadNode.read(from: &buf),
+                artifactAuthorPubkey: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentNodeChromeProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeCommentThreadNode.write(value.node, into: &buf)
+        FfiConverterOptionString.write(value.artifactAuthorPubkey, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentNodeChromeProjectionInput_lift(_ buf: RustBuffer) throws -> CommentNodeChromeProjectionInput {
+    return try FfiConverterTypeCommentNodeChromeProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentNodeChromeProjectionInput_lower(_ value: CommentNodeChromeProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCommentNodeChromeProjectionInput.lower(value)
 }
 
 
@@ -36935,6 +37125,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_like_state() != 52827) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_node_chrome() != 45537) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_thread_view() != 58541) {
