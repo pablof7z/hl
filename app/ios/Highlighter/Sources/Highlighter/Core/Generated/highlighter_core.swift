@@ -927,7 +927,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Project a NIP-23 article address into the NIP-22 root scope used by
      * comment reads/writes.
      */
-    func getArticleCommentScope(address: String)  -> CommentScopeOutcome
+    func getArticleCommentScope(address: String)  -> CommentScopeSnapshot
 
     /**
      * Resolve a full NIP-23 article address into the native reader route.
@@ -951,7 +951,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Project an artifact preview into a NIP-22 root scope using the
      * preview's Rust-owned protocol reference fields.
      */
-    func getArtifactCommentScope(preview: ArtifactPreview)  -> CommentScopeOutcome
+    func getArtifactCommentScope(preview: ArtifactPreview)  -> CommentScopeSnapshot
 
     func getArtifactDetailProjection(artifact: ArtifactRecord)  -> ArtifactDetailProjection
 
@@ -1022,7 +1022,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Project a kind:11 discussion event id into the NIP-22 root scope used
      * by comment reads/writes.
      */
-    func getDiscussionCommentScope(eventIdHex: String)  -> CommentScopeOutcome
+    func getDiscussionCommentScope(eventIdHex: String)  -> CommentScopeSnapshot
 
     /**
      * Bounded open-thread read model. Rust owns oldest-first ordering and
@@ -1046,7 +1046,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Project a NIP-84 highlight event id into the NIP-22 root scope used by
      * comment reads/writes.
      */
-    func getHighlightCommentScope(eventIdHex: String)  -> CommentScopeOutcome
+    func getHighlightCommentScope(eventIdHex: String)  -> CommentScopeSnapshot
 
     /**
      * Classify a highlight source for native icon/label rendering. Rust owns
@@ -1188,14 +1188,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Project a web URL into the external NIP-22 root scope used by comment
      * reads/writes.
      */
-    func getWebCommentScope(url: String)  -> CommentScopeOutcome
-
-    /**
-     * Project a web URL into a screen-shaped NIP-22 comment attachment
-     * snapshot. Native shells use `attach` to decide whether to apply the
-     * comment modifier and keep the protocol scope opaque.
-     */
-    func getWebCommentScopeSnapshot(url: String)  -> CommentScopeSnapshot
+    func getWebCommentScope(url: String)  -> CommentScopeSnapshot
 
     /**
      * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
@@ -2568,8 +2561,8 @@ open func getArticleByAddress(address: String)async  -> ArticleOutcome  {
      * Project a NIP-23 article address into the NIP-22 root scope used by
      * comment reads/writes.
      */
-open func getArticleCommentScope(address: String) -> CommentScopeOutcome  {
-    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
+open func getArticleCommentScope(address: String) -> CommentScopeSnapshot  {
+    return try!  FfiConverterTypeCommentScopeSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_article_comment_scope(self.uniffiClonePointer(),
         FfiConverterString.lower(address),$0
     )
@@ -2627,8 +2620,8 @@ open func getArticleReaderSnapshot(pubkeyHex: String, dTag: String)async  -> Art
      * Project an artifact preview into a NIP-22 root scope using the
      * preview's Rust-owned protocol reference fields.
      */
-open func getArtifactCommentScope(preview: ArtifactPreview) -> CommentScopeOutcome  {
-    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
+open func getArtifactCommentScope(preview: ArtifactPreview) -> CommentScopeSnapshot  {
+    return try!  FfiConverterTypeCommentScopeSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_artifact_comment_scope(self.uniffiClonePointer(),
         FfiConverterTypeArtifactPreview_lower(preview),$0
     )
@@ -2866,8 +2859,8 @@ open func getCurationMenuSnapshot(address: String)async  -> CurationMenuSnapshot
      * Project a kind:11 discussion event id into the NIP-22 root scope used
      * by comment reads/writes.
      */
-open func getDiscussionCommentScope(eventIdHex: String) -> CommentScopeOutcome  {
-    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
+open func getDiscussionCommentScope(eventIdHex: String) -> CommentScopeSnapshot  {
+    return try!  FfiConverterTypeCommentScopeSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_discussion_comment_scope(self.uniffiClonePointer(),
         FfiConverterString.lower(eventIdHex),$0
     )
@@ -2935,8 +2928,8 @@ open func getHighlightBookRoute(externalReference: String, artifactAddress: Stri
      * Project a NIP-84 highlight event id into the NIP-22 root scope used by
      * comment reads/writes.
      */
-open func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome  {
-    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
+open func getHighlightCommentScope(eventIdHex: String) -> CommentScopeSnapshot  {
+    return try!  FfiConverterTypeCommentScopeSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_highlight_comment_scope(self.uniffiClonePointer(),
         FfiConverterString.lower(eventIdHex),$0
     )
@@ -3508,22 +3501,9 @@ open func getUserProfile(pubkeyHex: String)async  -> ProfileOutcome  {
      * Project a web URL into the external NIP-22 root scope used by comment
      * reads/writes.
      */
-open func getWebCommentScope(url: String) -> CommentScopeOutcome  {
-    return try!  FfiConverterTypeCommentScopeOutcome_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_web_comment_scope(self.uniffiClonePointer(),
-        FfiConverterString.lower(url),$0
-    )
-})
-}
-
-    /**
-     * Project a web URL into a screen-shaped NIP-22 comment attachment
-     * snapshot. Native shells use `attach` to decide whether to apply the
-     * comment modifier and keep the protocol scope opaque.
-     */
-open func getWebCommentScopeSnapshot(url: String) -> CommentScopeSnapshot  {
+open func getWebCommentScope(url: String) -> CommentScopeSnapshot  {
     return try!  FfiConverterTypeCommentScopeSnapshot_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_web_comment_scope_snapshot(self.uniffiClonePointer(),
+    uniffi_highlighter_core_fn_method_highlightercore_get_web_comment_scope(self.uniffiClonePointer(),
         FfiConverterString.lower(url),$0
     )
 })
@@ -13501,76 +13481,6 @@ public func FfiConverterTypeCommentScope_lift(_ buf: RustBuffer) throws -> Comme
 #endif
 public func FfiConverterTypeCommentScope_lower(_ value: CommentScope) -> RustBuffer {
     return FfiConverterTypeCommentScope.lower(value)
-}
-
-
-public struct CommentScopeOutcome {
-    public var value: CommentScope?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: CommentScope?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension CommentScopeOutcome: Sendable {}
-#endif
-
-
-extension CommentScopeOutcome: Equatable, Hashable {
-    public static func ==(lhs: CommentScopeOutcome, rhs: CommentScopeOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeCommentScopeOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentScopeOutcome {
-        return
-            try CommentScopeOutcome(
-                value: FfiConverterOptionTypeCommentScope.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: CommentScopeOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeCommentScope.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommentScopeOutcome_lift(_ buf: RustBuffer) throws -> CommentScopeOutcome {
-    return try FfiConverterTypeCommentScopeOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeCommentScopeOutcome_lower(_ value: CommentScopeOutcome) -> RustBuffer {
-    return FfiConverterTypeCommentScopeOutcome.lower(value)
 }
 
 
@@ -39323,7 +39233,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_by_address() != 8240) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_comment_scope() != 52849) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_comment_scope() != 12928) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_route() != 34058) {
@@ -39335,7 +39245,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_snapshot() != 58821) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_comment_scope() != 41998) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_comment_scope() != 7691) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_projection() != 56154) {
@@ -39374,7 +39284,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_curation_menu_snapshot() != 4693) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussion_comment_scope() != 65057) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussion_comment_scope() != 31878) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_feedback_thread_snapshot() != 18194) {
@@ -39386,7 +39296,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_book_route() != 28768) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_comment_scope() != 65340) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_comment_scope() != 17710) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_source_kind() != 42257) {
@@ -39491,10 +39401,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 11410) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_comment_scope() != 47386) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_comment_scope_snapshot() != 56800) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_comment_scope() != 47583) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 12216) {

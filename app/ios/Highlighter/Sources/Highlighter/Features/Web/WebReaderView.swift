@@ -115,7 +115,7 @@ private struct WebCommentsScopeModifier: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        let snapshot = app.safeCore.getWebCommentScopeSnapshot(url: url.absoluteString)
+        let snapshot = app.safeCore.getWebCommentScope(url: url.absoluteString)
         if snapshot.attach, let scope = snapshot.scope {
             content.commentsAttachment(scope: scope)
         } else {

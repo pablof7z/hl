@@ -331,7 +331,8 @@ struct HighlightDetailView: View {
     // MARK: - Comments scope
 
     private var commentsScope: CommentScope? {
-        app.safeCore.getHighlightCommentScope(eventIdHex: highlight.eventId).value
+        let snapshot = app.safeCore.getHighlightCommentScope(eventIdHex: highlight.eventId)
+        return snapshot.attach ? snapshot.scope : nil
     }
 
     /// Public web URL that the share sheet hands to other apps. The

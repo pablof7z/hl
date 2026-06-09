@@ -93,9 +93,9 @@ struct ClipThreadView: View {
         sendError = nil
         let id = clipEventId
         Task {
-            let scopeOutcome = app.safeCore.getHighlightCommentScope(eventIdHex: id)
-            guard scopeOutcome.error.isEmpty, let scope = scopeOutcome.value else {
-                sendError = scopeOutcome.error
+            let scopeSnapshot = app.safeCore.getHighlightCommentScope(eventIdHex: id)
+            guard scopeSnapshot.attach, let scope = scopeSnapshot.scope else {
+                sendError = scopeSnapshot.errorMessage
                 isSending = false
                 return
             }

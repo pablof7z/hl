@@ -28,10 +28,10 @@ use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactPreviewOutcome,
     ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome,
-    BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommentScopeOutcome,
-    CommunityListOutcome, CommunitySummary, CurrentUser, DataOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackThreadRecord, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
+    BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommunityListOutcome,
+    CommunitySummary, CurrentUser, DataOutcome, DiscussionOutcome, DiscussionRecord,
+    FeedbackThreadRecord, HighlightListOutcome, HighlightOutcome, HighlightRecord,
+    HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
     OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
     OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
     ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
@@ -286,19 +286,6 @@ fn blossom_upload_outcome(result: Result<BlossomUpload, CoreError>) -> BlossomUp
             error: String::new(),
         },
         Err(error) => BlossomUploadOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn comment_scope_outcome(result: Result<CommentScope, CoreError>) -> CommentScopeOutcome {
-    match result {
-        Ok(value) => CommentScopeOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => CommentScopeOutcome {
             value: None,
             error: error.to_string(),
         },
@@ -1686,39 +1673,41 @@ impl HighlighterCore {
 
     /// Project a NIP-23 article address into the NIP-22 root scope used by
     /// comment reads/writes.
-    pub fn get_article_comment_scope(&self, address: String) -> CommentScopeOutcome {
-        comment_scope_outcome(comments::article_scope(&address))
+    pub fn get_article_comment_scope(&self, address: String) -> comments::CommentScopeSnapshot {
+        comments::scope_snapshot(comments::article_scope(&address))
     }
 
     /// Project a NIP-84 highlight event id into the NIP-22 root scope used by
     /// comment reads/writes.
-    pub fn get_highlight_comment_scope(&self, event_id_hex: String) -> CommentScopeOutcome {
-        comment_scope_outcome(comments::highlight_scope(&event_id_hex))
+    pub fn get_highlight_comment_scope(
+        &self,
+        event_id_hex: String,
+    ) -> comments::CommentScopeSnapshot {
+        comments::scope_snapshot(comments::highlight_scope(&event_id_hex))
     }
 
     /// Project a kind:11 discussion event id into the NIP-22 root scope used
     /// by comment reads/writes.
-    pub fn get_discussion_comment_scope(&self, event_id_hex: String) -> CommentScopeOutcome {
-        comment_scope_outcome(comments::discussion_scope(&event_id_hex))
+    pub fn get_discussion_comment_scope(
+        &self,
+        event_id_hex: String,
+    ) -> comments::CommentScopeSnapshot {
+        comments::scope_snapshot(comments::discussion_scope(&event_id_hex))
     }
 
     /// Project a web URL into the external NIP-22 root scope used by comment
     /// reads/writes.
-    pub fn get_web_comment_scope(&self, url: String) -> CommentScopeOutcome {
-        comment_scope_outcome(comments::web_scope(&url))
-    }
-
-    /// Project a web URL into a screen-shaped NIP-22 comment attachment
-    /// snapshot. Native shells use `attach` to decide whether to apply the
-    /// comment modifier and keep the protocol scope opaque.
-    pub fn get_web_comment_scope_snapshot(&self, url: String) -> comments::CommentScopeSnapshot {
+    pub fn get_web_comment_scope(&self, url: String) -> comments::CommentScopeSnapshot {
         comments::scope_snapshot(comments::web_scope(&url))
     }
 
     /// Project an artifact preview into a NIP-22 root scope using the
     /// preview's Rust-owned protocol reference fields.
-    pub fn get_artifact_comment_scope(&self, preview: ArtifactPreview) -> CommentScopeOutcome {
-        comment_scope_outcome(comments::scope_from_preview(&preview))
+    pub fn get_artifact_comment_scope(
+        &self,
+        preview: ArtifactPreview,
+    ) -> comments::CommentScopeSnapshot {
+        comments::scope_snapshot(comments::scope_from_preview(&preview))
     }
 
     pub fn project_room_library_article_card(

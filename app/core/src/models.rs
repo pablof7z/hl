@@ -129,12 +129,6 @@ pub struct BlossomUploadOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct CommentScopeOutcome {
-    pub value: Option<CommentScope>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct ArticleOutcome {
     pub value: Option<ArticleRecord>,
     pub error: String,

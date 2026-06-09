@@ -199,8 +199,8 @@ private struct ArticleCommentsAttachmentModifier: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        let outcome = app.safeCore.getArticleCommentScope(address: target.address)
-        if outcome.error.isEmpty, let scope = outcome.value {
+        let snapshot = app.safeCore.getArticleCommentScope(address: target.address)
+        if snapshot.attach, let scope = snapshot.scope {
             content.commentsAttachment(
                 scope: scope,
                 artifactAuthorPubkey: target.pubkey

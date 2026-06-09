@@ -109,8 +109,8 @@ struct MemberClipRow: View {
             let id = highlight.eventId
             guard app.podcastPlayer.comments[id] == nil else { return }
             Task {
-                let scopeOutcome = app.safeCore.getHighlightCommentScope(eventIdHex: id)
-                guard scopeOutcome.error.isEmpty, let scope = scopeOutcome.value else {
+                let scopeSnapshot = app.safeCore.getHighlightCommentScope(eventIdHex: id)
+                guard scopeSnapshot.attach, let scope = scopeSnapshot.scope else {
                     app.podcastPlayer.comments[id] = []
                     return
                 }

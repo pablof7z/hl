@@ -946,11 +946,11 @@ actor SafeHighlighterCore {
         core.getProfileUpdateAction(kind: kind)
     }
 
-    nonisolated func getArticleCommentScope(address: String) -> CommentScopeOutcome {
+    nonisolated func getArticleCommentScope(address: String) -> CommentScopeSnapshot {
         core.getArticleCommentScope(address: address)
     }
 
-    nonisolated func getArtifactCommentScope(preview: ArtifactPreview) -> CommentScopeOutcome {
+    nonisolated func getArtifactCommentScope(preview: ArtifactPreview) -> CommentScopeSnapshot {
         core.getArtifactCommentScope(preview: preview)
     }
 
@@ -1007,20 +1007,16 @@ actor SafeHighlighterCore {
         core.projectCommentActionChrome(input: input)
     }
 
-    nonisolated func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome {
+    nonisolated func getHighlightCommentScope(eventIdHex: String) -> CommentScopeSnapshot {
         core.getHighlightCommentScope(eventIdHex: eventIdHex)
     }
 
-    nonisolated func getDiscussionCommentScope(eventIdHex: String) -> CommentScopeOutcome {
+    nonisolated func getDiscussionCommentScope(eventIdHex: String) -> CommentScopeSnapshot {
         core.getDiscussionCommentScope(eventIdHex: eventIdHex)
     }
 
-    nonisolated func getWebCommentScope(url: String) -> CommentScopeOutcome {
+    nonisolated func getWebCommentScope(url: String) -> CommentScopeSnapshot {
         core.getWebCommentScope(url: url)
-    }
-
-    nonisolated func getWebCommentScopeSnapshot(url: String) -> CommentScopeSnapshot {
-        core.getWebCommentScopeSnapshot(url: url)
     }
 
     func getCommentThreadSnapshot(
