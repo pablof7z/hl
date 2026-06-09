@@ -806,11 +806,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func countArtifactComments(artifact: ArtifactRecord, commentsByReference: [CommentReferenceBucket])  -> UInt32
 
     /**
-     * Create a new empty kind:30004 curation set with `title`. Returns
-     * the freshly published record so the UI can immediately use its
-     * `id` (d-tag) to add items.
+     * Create a collection with `address` already included and return the
+     * refreshed menu snapshot. Rust publishes one real curation-set event; no
+     * native-side create-then-set choreography is needed.
      */
-    func createCurationSet(title: String) async  -> BookmarkSetOutcome
+    func createCurationSetWithAddressSnapshot(title: String, address: String) async  -> CurationMenuSnapshot
 
     func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async  -> StringOutcome
 
@@ -1012,10 +1012,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getCommentThreadSnapshot(scope: CommentScope, limit: UInt32) async  -> CommentThreadSnapshot
 
     /**
-     * Return current user's curation sets projected for the bookmark menu.
-     * Rust owns display fallback, current membership, and ordering.
+     * Screen-shaped snapshot for the bookmark menu's collection picker. Rust
+     * owns current-user lookup, set ordering, title fallback, and membership.
      */
-    func getCurationMenuItems(address: String) async  -> CurationMenuItemListOutcome
+    func getCurationMenuSnapshot(address: String) async  -> CurationMenuSnapshot
 
     /**
      * Project a kind:11 discussion event id into the NIP-22 root scope used
@@ -1698,14 +1698,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func selectableOcrWords(lines: [OcrLine])  -> [OcrWord]
 
     /**
-     * Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
-     * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
-     * by `d_tag`. `member == true` ensures presence; `false` ensures
-     * absence. Returns the new membership state.
-     */
-    func setAddressInCurationSet(dTag: String, address: String, member: Bool) async  -> BoolOutcome
-
-    /**
      * Replace the user's Blossom server list with `servers` (must be
      * non-empty). Order is preserved — first server is the upload default.
      */
@@ -1910,14 +1902,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func suggestNip05Username(displayName: String)  -> String
 
     /**
-     * Toggle membership of `address` (NIP-33 a-tag value, e.g.
-     * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
-     * by `d_tag`. Rust owns the current-membership read and returns the
-     * new membership state.
-     */
-    func toggleAddressInCurationSet(dTag: String, address: String) async  -> BoolOutcome
-
-    /**
      * Toggle `address` in the user's kind:10003 list. Returns the new
      * membership state — `true` if the address is now bookmarked, `false`
      * if it was removed.
@@ -1937,6 +1921,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, authorPubkeyHex: String) async  -> CommentInteractionMutationOutcome
 
     func toggleCommentLikeState(eventId: String, authorPubkeyHex: String) async throws  -> Bool
+
+    /**
+     * Toggle a menu row and return the refreshed menu snapshot. Rust owns the
+     * membership mutation and applies the returned state over the cached
+     * snapshot so native shells do not sequence a follow-up read.
+     */
+    func toggleCurationMenuItemSnapshot(dTag: String, address: String) async  -> CurationMenuSnapshot
 
     func toggleEventBookmarkState(eventIdHex: String) async throws  -> Bool
 
@@ -2204,23 +2195,23 @@ open func countArtifactComments(artifact: ArtifactRecord, commentsByReference: [
 }
 
     /**
-     * Create a new empty kind:30004 curation set with `title`. Returns
-     * the freshly published record so the UI can immediately use its
-     * `id` (d-tag) to add items.
+     * Create a collection with `address` already included and return the
+     * refreshed menu snapshot. Rust publishes one real curation-set event; no
+     * native-side create-then-set choreography is needed.
      */
-open func createCurationSet(title: String)async  -> BookmarkSetOutcome  {
+open func createCurationSetWithAddressSnapshot(title: String, address: String)async  -> CurationMenuSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_create_curation_set(
+                uniffi_highlighter_core_fn_method_highlightercore_create_curation_set_with_address_snapshot(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(title)
+                    FfiConverterString.lower(title),FfiConverterString.lower(address)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBookmarkSetOutcome_lift,
+            liftFunc: FfiConverterTypeCurationMenuSnapshot_lift,
             errorHandler: nil
 
         )
@@ -2848,14 +2839,14 @@ open func getCommentThreadSnapshot(scope: CommentScope, limit: UInt32)async  -> 
 }
 
     /**
-     * Return current user's curation sets projected for the bookmark menu.
-     * Rust owns display fallback, current membership, and ordering.
+     * Screen-shaped snapshot for the bookmark menu's collection picker. Rust
+     * owns current-user lookup, set ordering, title fallback, and membership.
      */
-open func getCurationMenuItems(address: String)async  -> CurationMenuItemListOutcome  {
+open func getCurationMenuSnapshot(address: String)async  -> CurationMenuSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_curation_menu_items(
+                uniffi_highlighter_core_fn_method_highlightercore_get_curation_menu_snapshot(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(address)
                 )
@@ -2863,7 +2854,7 @@ open func getCurationMenuItems(address: String)async  -> CurationMenuItemListOut
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCurationMenuItemListOutcome_lift,
+            liftFunc: FfiConverterTypeCurationMenuSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5145,30 +5136,6 @@ open func selectableOcrWords(lines: [OcrLine]) -> [OcrWord]  {
 }
 
     /**
-     * Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
-     * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
-     * by `d_tag`. `member == true` ensures presence; `false` ensures
-     * absence. Returns the new membership state.
-     */
-open func setAddressInCurationSet(dTag: String, address: String, member: Bool)async  -> BoolOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_set_address_in_curation_set(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(dTag),FfiConverterString.lower(address),FfiConverterBool.lower(member)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBoolOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Replace the user's Blossom server list with `servers` (must be
      * non-empty). Order is preserved — first server is the upload default.
      */
@@ -5839,30 +5806,6 @@ open func suggestNip05Username(displayName: String) -> String  {
 }
 
     /**
-     * Toggle membership of `address` (NIP-33 a-tag value, e.g.
-     * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
-     * by `d_tag`. Rust owns the current-membership read and returns the
-     * new membership state.
-     */
-open func toggleAddressInCurationSet(dTag: String, address: String)async  -> BoolOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_toggle_address_in_curation_set(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(dTag),FfiConverterString.lower(address)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBoolOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Toggle `address` in the user's kind:10003 list. Returns the new
      * membership state — `true` if the address is now bookmarked, `false`
      * if it was removed.
@@ -5943,6 +5886,29 @@ open func toggleCommentLikeState(eventId: String, authorPubkeyHex: String)async 
             freeFunc: ffi_highlighter_core_rust_future_free_i8,
             liftFunc: FfiConverterBool.lift,
             errorHandler: FfiConverterTypeCoreError_lift
+        )
+}
+
+    /**
+     * Toggle a menu row and return the refreshed menu snapshot. Rust owns the
+     * membership mutation and applies the returned state over the cached
+     * snapshot so native shells do not sequence a follow-up read.
+     */
+open func toggleCurationMenuItemSnapshot(dTag: String, address: String)async  -> CurationMenuSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_toggle_curation_menu_item_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(dTag),FfiConverterString.lower(address)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeCurationMenuSnapshot_lift,
+            errorHandler: nil
+
         )
 }
 
@@ -10269,76 +10235,6 @@ public func FfiConverterTypeBookmarkSetDetailSnapshot_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeBookmarkSetDetailSnapshot_lower(_ value: BookmarkSetDetailSnapshot) -> RustBuffer {
     return FfiConverterTypeBookmarkSetDetailSnapshot.lower(value)
-}
-
-
-public struct BookmarkSetOutcome {
-    public var value: BookmarkSetRecord?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: BookmarkSetRecord?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension BookmarkSetOutcome: Sendable {}
-#endif
-
-
-extension BookmarkSetOutcome: Equatable, Hashable {
-    public static func ==(lhs: BookmarkSetOutcome, rhs: BookmarkSetOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeBookmarkSetOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetOutcome {
-        return
-            try BookmarkSetOutcome(
-                value: FfiConverterOptionTypeBookmarkSetRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: BookmarkSetOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeBookmarkSetRecord.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBookmarkSetOutcome_lift(_ buf: RustBuffer) throws -> BookmarkSetOutcome {
-    return try FfiConverterTypeBookmarkSetOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBookmarkSetOutcome_lower(_ value: BookmarkSetOutcome) -> RustBuffer {
-    return FfiConverterTypeBookmarkSetOutcome.lower(value)
 }
 
 
@@ -14785,26 +14681,26 @@ public func FfiConverterTypeCurationMenuItem_lower(_ value: CurationMenuItem) ->
 }
 
 
-public struct CurationMenuItemListOutcome {
-    public var values: [CurationMenuItem]
+public struct CurationMenuSnapshot {
+    public var items: [CurationMenuItem]
     public var error: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(values: [CurationMenuItem], error: String) {
-        self.values = values
+    public init(items: [CurationMenuItem], error: String) {
+        self.items = items
         self.error = error
     }
 }
 
 #if compiler(>=6)
-extension CurationMenuItemListOutcome: Sendable {}
+extension CurationMenuSnapshot: Sendable {}
 #endif
 
 
-extension CurationMenuItemListOutcome: Equatable, Hashable {
-    public static func ==(lhs: CurationMenuItemListOutcome, rhs: CurationMenuItemListOutcome) -> Bool {
-        if lhs.values != rhs.values {
+extension CurationMenuSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CurationMenuSnapshot, rhs: CurationMenuSnapshot) -> Bool {
+        if lhs.items != rhs.items {
             return false
         }
         if lhs.error != rhs.error {
@@ -14814,7 +14710,7 @@ extension CurationMenuItemListOutcome: Equatable, Hashable {
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
+        hasher.combine(items)
         hasher.combine(error)
     }
 }
@@ -14824,17 +14720,17 @@ extension CurationMenuItemListOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeCurationMenuItemListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationMenuItemListOutcome {
+public struct FfiConverterTypeCurationMenuSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationMenuSnapshot {
         return
-            try CurationMenuItemListOutcome(
-                values: FfiConverterSequenceTypeCurationMenuItem.read(from: &buf),
+            try CurationMenuSnapshot(
+                items: FfiConverterSequenceTypeCurationMenuItem.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: CurationMenuItemListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeCurationMenuItem.write(value.values, into: &buf)
+    public static func write(_ value: CurationMenuSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCurationMenuItem.write(value.items, into: &buf)
         FfiConverterString.write(value.error, into: &buf)
     }
 }
@@ -14843,15 +14739,15 @@ public struct FfiConverterTypeCurationMenuItemListOutcome: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCurationMenuItemListOutcome_lift(_ buf: RustBuffer) throws -> CurationMenuItemListOutcome {
-    return try FfiConverterTypeCurationMenuItemListOutcome.lift(buf)
+public func FfiConverterTypeCurationMenuSnapshot_lift(_ buf: RustBuffer) throws -> CurationMenuSnapshot {
+    return try FfiConverterTypeCurationMenuSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCurationMenuItemListOutcome_lower(_ value: CurationMenuItemListOutcome) -> RustBuffer {
-    return FfiConverterTypeCurationMenuItemListOutcome.lower(value)
+public func FfiConverterTypeCurationMenuSnapshot_lower(_ value: CurationMenuSnapshot) -> RustBuffer {
+    return FfiConverterTypeCurationMenuSnapshot.lower(value)
 }
 
 
@@ -35786,30 +35682,6 @@ fileprivate struct FfiConverterOptionTypeBookRoute: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeBookmarkSetRecord: FfiConverterRustBuffer {
-    typealias SwiftType = BookmarkSetRecord?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeBookmarkSetRecord.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeBookmarkSetRecord.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeCacheStats: FfiConverterRustBuffer {
     typealias SwiftType = CacheStats?
 
@@ -37831,7 +37703,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_count_artifact_comments() != 14471) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set() != 614) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set_with_address_snapshot() != 31730) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 37226) {
@@ -37957,7 +37829,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_comment_thread_snapshot() != 50818) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_curation_menu_items() != 34499) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_curation_menu_snapshot() != 4693) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussion_comment_scope() != 65057) {
@@ -38485,9 +38357,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_selectable_ocr_words() != 2832) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_address_in_curation_set() != 8659) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_blossom_servers() != 36821) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38590,9 +38459,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_suggest_nip05_username() != 36133) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_address_in_curation_set() != 15884) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark() != 27334) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38603,6 +38469,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_comment_like_state() != 57062) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_curation_menu_item_snapshot() != 16580) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark_state() != 26299) {

@@ -132,6 +132,12 @@ pub struct BookmarkSetDetailSnapshot {
     pub error: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CurationMenuSnapshot {
+    pub items: Vec<CurationMenuItem>,
+    pub error: String,
+}
+
 /// Native create-collection sheet input. Rust owns title normalization.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CurationSetCreateProjectionInput {
@@ -405,6 +411,23 @@ pub fn curation_menu_items_for_address(
         .collect()
 }
 
+pub fn curation_menu_snapshot_for_address(
+    sets: Vec<BookmarkSetRecord>,
+    address: &str,
+) -> CurationMenuSnapshot {
+    CurationMenuSnapshot {
+        items: curation_menu_items_for_address(sets, address),
+        error: String::new(),
+    }
+}
+
+pub fn curation_menu_error_snapshot(error: impl ToString) -> CurationMenuSnapshot {
+    CurationMenuSnapshot {
+        items: Vec::new(),
+        error: error.to_string(),
+    }
+}
+
 pub fn bookmark_library_projection(
     input: BookmarkLibraryProjectionInput,
 ) -> BookmarkLibraryProjection {
@@ -633,15 +656,29 @@ fn web_bookmark_host(url: &str) -> Option<String> {
 
 // -- Publish API (curation sets) --------------------------------------------
 
-/// Create a brand-new empty kind:30004 curation set authored by the
-/// current user. `title` is the user-supplied display name; description /
-/// image stay empty (those are layered later via the editor). Returns the
-/// freshly published record so the caller can optimistically insert it
-/// into a list and immediately use its `id` (d-tag) for further edits.
-pub async fn create_curation_set(
+/// Create a kind:30004 curation set and include `address` in the published
+/// event from the start. Used by the native bookmark menu so creation and
+/// membership are one atomic Rust operation.
+pub async fn create_curation_set_with_address(
     runtime: &NostrRuntime,
     user_hex: &str,
     title: &str,
+    address: &str,
+    clock: &dyn Clock,
+) -> Result<BookmarkSetRecord, CoreError> {
+    let address = address.trim();
+    if address.is_empty() {
+        return Err(CoreError::InvalidInput("address must not be empty".into()));
+    }
+    create_curation_set_with_addresses(runtime, user_hex, title, vec![address.to_string()], clock)
+        .await
+}
+
+async fn create_curation_set_with_addresses(
+    runtime: &NostrRuntime,
+    user_hex: &str,
+    title: &str,
+    article_addresses: Vec<String>,
     clock: &dyn Clock,
 ) -> Result<BookmarkSetRecord, CoreError> {
     let title = title.trim();
@@ -657,12 +694,24 @@ pub async fn create_curation_set(
     let nanos = clock.now_unix_nanos();
     let d_tag = format!("c-{nanos:x}");
 
-    let tags = vec![
+    let mut tags = vec![
         Tag::parse(vec!["d".to_string(), d_tag.clone()])
             .map_err(|e| CoreError::Other(format!("build d tag: {e}")))?,
         Tag::parse(vec!["title".to_string(), title.to_string()])
             .map_err(|e| CoreError::Other(format!("build title tag: {e}")))?,
     ];
+    let mut normalized_addresses = Vec::new();
+    for address in article_addresses {
+        let address = address.trim();
+        if address.is_empty() {
+            continue;
+        }
+        tags.push(
+            Tag::parse(vec!["a".to_string(), address.to_string()])
+                .map_err(|e| CoreError::Other(format!("build article tag: {e}")))?,
+        );
+        normalized_addresses.push(address.to_string());
+    }
 
     let builder = EventBuilder::new(Kind::Custom(KIND_CURATION_SETS), "").tags(tags);
     let client = runtime.client();
@@ -683,7 +732,7 @@ pub async fn create_curation_set(
         title: title.to_string(),
         description: String::new(),
         image: String::new(),
-        article_addresses: Vec::new(),
+        article_addresses: normalized_addresses,
         note_ids: Vec::new(),
         created_at: Some(event.created_at.as_secs()),
     })
@@ -699,45 +748,7 @@ pub async fn toggle_address_in_curation_set(
     d_tag: &str,
     address: &str,
 ) -> Result<bool, CoreError> {
-    update_address_in_curation_set(
-        runtime,
-        user_hex,
-        d_tag,
-        address,
-        CurationMembershipChange::Toggle,
-    )
-    .await
-}
-
-/// Idempotently add or remove an `a`-tag (NIP-33 article address) from
-/// the curation set keyed by `(user_hex, d_tag)`. Reads the newest
-/// cached version, mutates the membership, re-publishes the full set
-/// preserving every other tag. Returns the new membership state.
-///
-/// `member == true` ensures the address is present; `member == false`
-/// ensures it's absent. No-op if already in the desired state — still
-/// returns the current state without re-publishing.
-pub async fn set_address_in_curation_set(
-    runtime: &NostrRuntime,
-    user_hex: &str,
-    d_tag: &str,
-    address: &str,
-    member: bool,
-) -> Result<bool, CoreError> {
-    update_address_in_curation_set(
-        runtime,
-        user_hex,
-        d_tag,
-        address,
-        CurationMembershipChange::Set(member),
-    )
-    .await
-}
-
-#[derive(Clone, Copy)]
-enum CurationMembershipChange {
-    Set(bool),
-    Toggle,
+    update_address_in_curation_set(runtime, user_hex, d_tag, address).await
 }
 
 async fn update_address_in_curation_set(
@@ -745,7 +756,6 @@ async fn update_address_in_curation_set(
     user_hex: &str,
     d_tag: &str,
     address: &str,
-    change: CurationMembershipChange,
 ) -> Result<bool, CoreError> {
     let d_tag = d_tag.trim();
     let address = address.trim();
@@ -779,10 +789,7 @@ async fn update_address_in_curation_set(
     }
 
     let was_present = a_addresses.iter().any(|a| a == address);
-    let next_member = next_curation_address_membership(was_present, change);
-    if was_present == next_member {
-        return Ok(next_member);
-    }
+    let next_member = !was_present;
     if next_member {
         a_addresses.push(address.to_string());
     } else {
@@ -815,13 +822,6 @@ async fn update_address_in_curation_set(
         .map_err(|e| CoreError::Relay(format!("publish curation set: {e}")))?;
 
     Ok(next_member)
-}
-
-fn next_curation_address_membership(was_present: bool, change: CurationMembershipChange) -> bool {
-    match change {
-        CurationMembershipChange::Set(member) => member,
-        CurationMembershipChange::Toggle => !was_present,
-    }
 }
 
 /// Read the newest cached event for `(user_hex, kind, d_tag)`. Used by
@@ -940,15 +940,15 @@ fn parse_web_bookmark_event(event: Event) -> WebBookmarkRecord {
 mod tests {
     use super::{
         bookmark_library_projection, bookmark_set_row_projection,
-        bookmarked_article_row_projection, curation_menu_items_for_address,
+        bookmarked_article_row_projection, curation_menu_error_snapshot,
+        curation_menu_items_for_address, curation_menu_snapshot_for_address,
         curation_set_create_projection, filter_explorable_curation_sets,
-        next_curation_address_membership, query_bookmark_library_snapshot,
-        query_bookmark_set_detail_snapshot, web_bookmark_row_projection, BookmarkLibraryFilter,
-        BookmarkLibraryFilterChipProjection, BookmarkLibraryPane, BookmarkLibraryProjectionInput,
-        BookmarkLibraryScope, BookmarkLibraryScopeOptionProjection, BookmarkSetRowProjectionInput,
-        BookmarkedArticleRowProjectionInput, CurationMembershipChange,
-        CurationSetCreateProjectionInput, WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS,
-        KIND_CURATION_SETS, KIND_WEB_BOOKMARK,
+        query_bookmark_library_snapshot, query_bookmark_set_detail_snapshot,
+        web_bookmark_row_projection, BookmarkLibraryFilter, BookmarkLibraryFilterChipProjection,
+        BookmarkLibraryPane, BookmarkLibraryProjectionInput, BookmarkLibraryScope,
+        BookmarkLibraryScopeOptionProjection, BookmarkSetRowProjectionInput,
+        BookmarkedArticleRowProjectionInput, CurationSetCreateProjectionInput,
+        WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS, KIND_CURATION_SETS, KIND_WEB_BOOKMARK,
     };
     use crate::models::{ArticleRecord, BookmarkSetRecord, WebBookmarkRecord};
     use nostr_sdk::prelude::*;
@@ -991,38 +991,6 @@ mod tests {
     }
 
     #[test]
-    fn curation_membership_toggle_flips_current_state() {
-        assert!(next_curation_address_membership(
-            false,
-            CurationMembershipChange::Toggle
-        ));
-        assert!(!next_curation_address_membership(
-            true,
-            CurationMembershipChange::Toggle
-        ));
-    }
-
-    #[test]
-    fn curation_membership_set_uses_requested_state() {
-        assert!(next_curation_address_membership(
-            false,
-            CurationMembershipChange::Set(true)
-        ));
-        assert!(next_curation_address_membership(
-            true,
-            CurationMembershipChange::Set(true)
-        ));
-        assert!(!next_curation_address_membership(
-            false,
-            CurationMembershipChange::Set(false)
-        ));
-        assert!(!next_curation_address_membership(
-            true,
-            CurationMembershipChange::Set(false)
-        ));
-    }
-
-    #[test]
     fn curation_menu_items_project_exact_membership() {
         let items = curation_menu_items_for_address(
             vec![
@@ -1052,6 +1020,27 @@ mod tests {
         assert_eq!(items[1].title, "Untitled");
         assert_eq!(items[2].title, "Named");
         assert!(items.iter().all(|item| !item.is_member));
+    }
+
+    #[test]
+    fn curation_menu_snapshot_wraps_projected_rows() {
+        let snapshot = curation_menu_snapshot_for_address(
+            vec![set("first", "First", vec!["30023:abc:one"])],
+            "30023:abc:one",
+        );
+
+        assert!(snapshot.error.is_empty());
+        assert_eq!(snapshot.items.len(), 1);
+        assert_eq!(snapshot.items[0].title, "First");
+        assert!(snapshot.items[0].is_member);
+    }
+
+    #[test]
+    fn curation_menu_error_snapshot_preserves_error() {
+        let snapshot = curation_menu_error_snapshot("cache unavailable");
+
+        assert!(snapshot.items.is_empty());
+        assert_eq!(snapshot.error, "cache unavailable");
     }
 
     #[test]

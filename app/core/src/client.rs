@@ -28,18 +28,17 @@ use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome, ArtifactPreview,
     ArtifactPreviewOutcome, ArtifactRecord, BlossomUpload, BlossomUploadOutcome, BookRoute,
-    BookRouteOutcome, BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome,
-    CommentRecord, CommentReferenceBucket, CommentScope, CommentScopeOutcome, CommunityListOutcome,
-    CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome, CurrentUser,
-    CurrentUserOutcome, DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord,
-    GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
-    HighlightSourceKind, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
-    Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
-    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
-    OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
-    ProfileUpdateAction, ProfileUpdateDraft, RelayConfigListOutcome, RelayDiagnostic,
-    RelayDiagnosticListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    BookRouteOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, CommentRecord,
+    CommentReferenceBucket, CommentScope, CommentScopeOutcome, CommunityListOutcome,
+    CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionOutcome,
+    DiscussionRecord, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightListOutcome,
+    HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome,
+    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
+    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestProjection,
+    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayConfigListOutcome,
+    RelayDiagnostic, RelayDiagnosticListOutcome, StringListOutcome, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -268,34 +267,6 @@ fn subscription_outcome(result: Result<u64, CoreError>) -> SubscriptionOutcome {
         },
         Err(error) => SubscriptionOutcome {
             handle: 0,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn curation_menu_item_list_outcome(
-    result: Result<Vec<CurationMenuItem>, CoreError>,
-) -> CurationMenuItemListOutcome {
-    match result {
-        Ok(values) => CurationMenuItemListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => CurationMenuItemListOutcome {
-            values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
-fn bookmark_set_outcome(result: Result<BookmarkSetRecord, CoreError>) -> BookmarkSetOutcome {
-    match result {
-        Ok(value) => BookmarkSetOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => BookmarkSetOutcome {
-            value: None,
             error: error.to_string(),
         },
     }
@@ -2497,26 +2468,100 @@ impl HighlighterCore {
         crate::lists::query_bookmark_set_detail_snapshot(self.runtime.ndb(), record)
     }
 
-    /// Return current user's curation sets projected for the bookmark menu.
-    /// Rust owns display fallback, current membership, and ordering.
-    pub async fn get_curation_menu_items(&self, address: String) -> CurationMenuItemListOutcome {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .unwrap_or_default();
-        curation_menu_item_list_outcome((|| {
-            let sets = crate::lists::query_user_sets(
+    /// Screen-shaped snapshot for the bookmark menu's collection picker. Rust
+    /// owns current-user lookup, set ordering, title fallback, and membership.
+    pub async fn get_curation_menu_snapshot(
+        &self,
+        address: String,
+    ) -> crate::lists::CurationMenuSnapshot {
+        let result = {
+            let user_hex = self.current_user_pubkey_hex().unwrap_or_default();
+            self.curation_menu_snapshot_for_user(&user_hex, &address)
+        };
+        match result {
+            Ok(snapshot) => snapshot,
+            Err(error) => crate::lists::curation_menu_error_snapshot(error),
+        }
+    }
+
+    /// Toggle a menu row and return the refreshed menu snapshot. Rust owns the
+    /// membership mutation and applies the returned state over the cached
+    /// snapshot so native shells do not sequence a follow-up read.
+    pub async fn toggle_curation_menu_item_snapshot(
+        &self,
+        d_tag: String,
+        address: String,
+    ) -> crate::lists::CurationMenuSnapshot {
+        let result: Result<crate::lists::CurationMenuSnapshot, CoreError> = async {
+            let user_hex = self
+                .current_user_pubkey_hex()
+                .ok_or(CoreError::NotAuthenticated)?;
+            let member = crate::lists::toggle_address_in_curation_set(
+                &self.runtime,
+                &user_hex,
+                d_tag.trim(),
+                address.trim(),
+            )
+            .await?;
+            let mut snapshot = self.curation_menu_snapshot_for_user(&user_hex, &address)?;
+            for item in &mut snapshot.items {
+                if item.id == d_tag.trim() {
+                    item.is_member = member;
+                }
+            }
+            Ok(snapshot)
+        }
+        .await;
+        match result {
+            Ok(snapshot) => snapshot,
+            Err(error) => crate::lists::curation_menu_error_snapshot(error),
+        }
+    }
+
+    /// Create a collection with `address` already included and return the
+    /// refreshed menu snapshot. Rust publishes one real curation-set event; no
+    /// native-side create-then-set choreography is needed.
+    pub async fn create_curation_set_with_address_snapshot(
+        &self,
+        title: String,
+        address: String,
+    ) -> crate::lists::CurationMenuSnapshot {
+        let result: Result<crate::lists::CurationMenuSnapshot, CoreError> = async {
+            let user_hex = self
+                .current_user_pubkey_hex()
+                .ok_or(CoreError::NotAuthenticated)?;
+            let created = crate::lists::create_curation_set_with_address(
+                &self.runtime,
+                &user_hex,
+                title.trim(),
+                address.trim(),
+                self.clock.as_ref(),
+            )
+            .await?;
+            let mut sets = match crate::lists::query_user_sets(
                 self.runtime.ndb(),
                 &user_hex,
                 crate::lists::KIND_CURATION_SETS,
-            )?;
-            Ok(crate::lists::curation_menu_items_for_address(
+            ) {
+                Ok(sets) => sets,
+                Err(error) => {
+                    let mut snapshot =
+                        crate::lists::curation_menu_snapshot_for_address(vec![created], &address);
+                    snapshot.error = error.to_string();
+                    return Ok(snapshot);
+                }
+            };
+            sets.retain(|set| !(set.pubkey == created.pubkey && set.id == created.id));
+            sets.insert(0, created);
+            Ok(crate::lists::curation_menu_snapshot_for_address(
                 sets, &address,
             ))
-        })())
+        }
+        .await;
+        match result {
+            Ok(snapshot) => snapshot,
+            Err(error) => crate::lists::curation_menu_error_snapshot(error),
+        }
     }
 
     pub fn project_bookmarked_article_row(
@@ -2554,90 +2599,6 @@ impl HighlighterCore {
         input: crate::lists::WebBookmarkRowProjectionInput,
     ) -> crate::lists::WebBookmarkRowProjection {
         crate::lists::web_bookmark_row_projection(input)
-    }
-
-    /// Create a new empty kind:30004 curation set with `title`. Returns
-    /// the freshly published record so the UI can immediately use its
-    /// `id` (d-tag) to add items.
-    pub async fn create_curation_set(&self, title: String) -> BookmarkSetOutcome {
-        let result: Result<BookmarkSetRecord, CoreError> = async {
-            let user_hex = self
-                .inner
-                .read()
-                .session
-                .current_user()
-                .map(|u| u.pubkey)
-                .ok_or(CoreError::NotAuthenticated)?;
-            crate::lists::create_curation_set(
-                &self.runtime,
-                &user_hex,
-                title.trim(),
-                self.clock.as_ref(),
-            )
-            .await
-        }
-        .await;
-        bookmark_set_outcome(result)
-    }
-
-    /// Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
-    /// `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
-    /// by `d_tag`. `member == true` ensures presence; `false` ensures
-    /// absence. Returns the new membership state.
-    pub async fn set_address_in_curation_set(
-        &self,
-        d_tag: String,
-        address: String,
-        member: bool,
-    ) -> BoolOutcome {
-        let result: Result<bool, CoreError> = async {
-            let user_hex = self
-                .inner
-                .read()
-                .session
-                .current_user()
-                .map(|u| u.pubkey)
-                .ok_or(CoreError::NotAuthenticated)?;
-            crate::lists::set_address_in_curation_set(
-                &self.runtime,
-                &user_hex,
-                d_tag.trim(),
-                address.trim(),
-                member,
-            )
-            .await
-        }
-        .await;
-        bool_outcome(result)
-    }
-
-    /// Toggle membership of `address` (NIP-33 a-tag value, e.g.
-    /// `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
-    /// by `d_tag`. Rust owns the current-membership read and returns the
-    /// new membership state.
-    pub async fn toggle_address_in_curation_set(
-        &self,
-        d_tag: String,
-        address: String,
-    ) -> BoolOutcome {
-        let result: Result<bool, CoreError> = async {
-            let user_hex = self
-                .inner
-                .read()
-                .session
-                .current_user()
-                .map(|u| u.pubkey)
-                .ok_or(CoreError::NotAuthenticated)?;
-            crate::lists::toggle_address_in_curation_set(
-                &self.runtime,
-                &user_hex,
-                d_tag.trim(),
-                address.trim(),
-            )
-            .await
-        }
-        .await;
-        bool_outcome(result)
     }
 
     /// Open a live subscription for the current user's kind:30003/30004 sets.
@@ -4335,6 +4296,21 @@ impl HighlighterCore {
             .session
             .current_user()
             .map(|user| user.pubkey)
+    }
+
+    fn curation_menu_snapshot_for_user(
+        &self,
+        user_hex: &str,
+        address: &str,
+    ) -> Result<crate::lists::CurationMenuSnapshot, CoreError> {
+        let sets = crate::lists::query_user_sets(
+            self.runtime.ndb(),
+            user_hex,
+            crate::lists::KIND_CURATION_SETS,
+        )?;
+        Ok(crate::lists::curation_menu_snapshot_for_address(
+            sets, address,
+        ))
     }
 
     fn feedback_agent_pubkey_for(&self, coordinate: &str) -> Option<String> {

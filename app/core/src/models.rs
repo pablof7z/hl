@@ -135,18 +135,6 @@ pub struct SubscriptionOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct CurationMenuItemListOutcome {
-    pub values: Vec<CurationMenuItem>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct BookmarkSetOutcome {
-    pub value: Option<BookmarkSetRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct WebMetadataOutcome {
     pub value: Option<crate::web_metadata::WebMetadata>,
     pub error: String,

@@ -88,40 +88,32 @@ struct BookmarkMenuButton: View {
     // MARK: - Actions
 
     private func loadCurations() async {
-        let outcome = await app.safeCore.getCurationMenuItems(address: articleAddress)
-        if outcome.error.isEmpty {
-            curationItems = outcome.values
-        }
+        apply(await app.safeCore.getCurationMenuSnapshot(address: articleAddress))
     }
 
     private func toggleInCuration(_ item: CurationMenuItem) async {
-        let outcome = await app.safeCore.toggleAddressInCurationSet(
+        let snapshot = await app.safeCore.toggleCurationMenuItemSnapshot(
             dTag: item.id,
             address: articleAddress
         )
-        guard outcome.error.isEmpty else {
-            errorMessage = "Couldn't update collection — \(outcome.error)"
-            return
-        }
-        await loadCurations()
+        apply(snapshot, errorPrefix: "Couldn't update collection")
     }
 
     private func createAndAdd(title: String) async {
-        let createOutcome = await app.safeCore.createCurationSet(title: title)
-        guard createOutcome.error.isEmpty, let newSet = createOutcome.value else {
-            errorMessage = "Couldn't create collection — \(createOutcome.error)"
-            return
-        }
-        let updateOutcome = await app.safeCore.setAddressInCurationSet(
-            dTag: newSet.id,
-            address: articleAddress,
-            member: true
+        let snapshot = await app.safeCore.createCurationSetWithAddressSnapshot(
+            title: title,
+            address: articleAddress
         )
-        guard updateOutcome.error.isEmpty else {
-            errorMessage = "Couldn't create collection — \(updateOutcome.error)"
-            return
+        apply(snapshot, errorPrefix: "Couldn't create collection")
+    }
+
+    private func apply(_ snapshot: CurationMenuSnapshot, errorPrefix: String? = nil) {
+        curationItems = snapshot.items
+        if snapshot.error.isEmpty {
+            errorMessage = nil
+        } else if let errorPrefix {
+            errorMessage = "\(errorPrefix) — \(snapshot.error)"
         }
-        await loadCurations()
     }
 }
 

@@ -348,26 +348,22 @@ actor SafeHighlighterCore {
         await core.getBookmarkLibrarySnapshot()
     }
 
-    func getCurationMenuItems(address: String) async -> CurationMenuItemListOutcome {
-        await core.getCurationMenuItems(address: address)
+    func getCurationMenuSnapshot(address: String) async -> CurationMenuSnapshot {
+        await core.getCurationMenuSnapshot(address: address)
     }
 
-    func createCurationSet(title: String) async -> BookmarkSetOutcome {
-        await core.createCurationSet(title: title)
+    func createCurationSetWithAddressSnapshot(
+        title: String,
+        address: String
+    ) async -> CurationMenuSnapshot {
+        await core.createCurationSetWithAddressSnapshot(title: title, address: address)
     }
 
-    @discardableResult
-    func setAddressInCurationSet(
+    func toggleCurationMenuItemSnapshot(
         dTag: String,
-        address: String,
-        member: Bool
-    ) async -> BoolOutcome {
-        await core.setAddressInCurationSet(dTag: dTag, address: address, member: member)
-    }
-
-    @discardableResult
-    func toggleAddressInCurationSet(dTag: String, address: String) async -> BoolOutcome {
-        await core.toggleAddressInCurationSet(dTag: dTag, address: address)
+        address: String
+    ) async -> CurationMenuSnapshot {
+        await core.toggleCurationMenuItemSnapshot(dTag: dTag, address: address)
     }
 
     nonisolated func projectBookmarkedArticleRow(
