@@ -359,7 +359,7 @@ private struct ChatMessageRow: View {
     private var rowContent: some View {
         HStack(alignment: .top, spacing: 10) {
             if showHeader {
-                ProfileAvatar(display: authorDisplay, pubkey: message.authorPubkey, size: 28)
+                ProfileAvatar(display: authorDisplay, size: 28)
             } else {
                 Color.clear.frame(width: 28, height: 1)
             }
@@ -433,7 +433,6 @@ private struct ChatMessageRow: View {
 
 private struct ProfileAvatar: View {
     let display: ProfileDisplayProjection
-    let pubkey: String
     let size: CGFloat
 
     var body: some View {
@@ -459,14 +458,9 @@ private struct ProfileAvatar: View {
     private var placeholder: some View {
         ZStack {
             Color.highlighterRule.opacity(0.5)
-            Text(initial)
+            Text(display.displayInitial)
                 .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.highlighterInkMuted)
         }
-    }
-
-    private var initial: String {
-        let source = display.displayInitial.isEmpty ? pubkey : display.displayInitial
-        return source.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() } ?? ""
     }
 }
