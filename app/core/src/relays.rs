@@ -205,6 +205,12 @@ pub struct RelayRemoveProjection {
     pub orphan_summary: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RelayHostedRoomsSnapshot {
+    pub room_names: Vec<String>,
+    pub error_message: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct RelayRemoveProjectionInput {
     pub url: String,
@@ -495,6 +501,21 @@ pub fn relay_remove_projection(input: RelayRemoveProjectionInput) -> RelayRemove
             joined_limited_names(&input.orphaned_room_names, 3)
         ),
         orphan_summary: Some(joined_limited_names(&input.orphaned_room_names, 5)),
+    }
+}
+
+pub fn relay_hosted_rooms_snapshot(
+    result: Result<Vec<String>, CoreError>,
+) -> RelayHostedRoomsSnapshot {
+    match result {
+        Ok(room_names) => RelayHostedRoomsSnapshot {
+            room_names,
+            error_message: String::new(),
+        },
+        Err(error) => RelayHostedRoomsSnapshot {
+            room_names: Vec::new(),
+            error_message: error.to_string(),
+        },
     }
 }
 
@@ -1459,6 +1480,17 @@ mod tests {
             detail_projection.remove.message,
             "Highlighter will stop sending and receiving events through this relay."
         );
+    }
+
+    #[test]
+    fn relay_hosted_rooms_snapshot_surfaces_room_names_and_errors() {
+        let success = relay_hosted_rooms_snapshot(Ok(vec!["Books".into(), "Podcasts".into()]));
+        assert_eq!(success.room_names, vec!["Books", "Podcasts"]);
+        assert!(success.error_message.is_empty());
+
+        let failure = relay_hosted_rooms_snapshot(Err(CoreError::NotAuthenticated));
+        assert!(failure.room_names.is_empty());
+        assert_eq!(failure.error_message, "not authenticated");
     }
 
     #[test]

@@ -158,8 +158,8 @@ pub use models::{
     OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
     ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RelayConfigListOutcome,
     RelayDiagnosticListOutcome, RoomLane, RoomRecommendation, RoomRecommendationReason,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkRecord,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::{
     Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,
@@ -193,8 +193,9 @@ pub use relays::{
     AddRelayProbeStatus, AddRelaySheetProjection, AddRelaySheetProjectionInput, ImportRelayRow,
     ImportRelaysProjection, ImportRelaysProjectionInput, ImportRelaysSourceProjection,
     ImportRelaysSourceProjectionInput, RelayAvatarProjection, RelayConfig, RelayDetailProjection,
-    RelayDetailProjectionInput, RelayRemoveProjection, RelayRemoveProjectionInput,
-    RelayRowProjection, RelayRowProjectionInput, RelaySettingsProjection, RelayStatusTone,
+    RelayDetailProjectionInput, RelayHostedRoomsSnapshot, RelayRemoveProjection,
+    RelayRemoveProjectionInput, RelayRowProjection, RelayRowProjectionInput,
+    RelaySettingsProjection, RelayStatusTone,
 };
 pub use room_explorer::{RoomBrowseSnapshot, RoomExplorerSnapshot};
 pub use room_home::RoomHomeSnapshot;

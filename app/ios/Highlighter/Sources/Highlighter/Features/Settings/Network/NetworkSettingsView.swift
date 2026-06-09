@@ -127,12 +127,12 @@ struct NetworkSettingsView: View {
                 for idx in indexSet where idx < store.relays.count {
                     let url = store.relays[idx].url
                     Task {
-                        let orphans = await store.joinedRoomNames(hostedOnRelay: url)
+                        let snapshot = await store.relayHostedRooms(hostedOnRelay: url)
                         pendingRemove = PendingRemove(
                             url: url,
                             projection: store.relayRemoveProjection(
                                 url: url,
-                                orphanedRoomNames: orphans
+                                orphanedRoomNames: snapshot.roomNames
                             )
                         )
                     }

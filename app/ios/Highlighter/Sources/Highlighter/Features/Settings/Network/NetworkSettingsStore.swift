@@ -215,13 +215,12 @@ final class NetworkSettingsStore {
         }
     }
 
-    func joinedRoomNames(hostedOnRelay url: String) async -> [String] {
-        let outcome = await core.joinedRoomNames(hostedOnRelay: url)
-        if outcome.error.isEmpty {
-            return outcome.values
+    func relayHostedRooms(hostedOnRelay url: String) async -> RelayHostedRoomsSnapshot {
+        let snapshot = await core.getRelayHostedRoomsSnapshot(hostedOnRelay: url)
+        if !snapshot.errorMessage.isEmpty {
+            lastError = snapshot.errorMessage
         }
-        lastError = outcome.error
-        return []
+        return snapshot
     }
 
     func setRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async {

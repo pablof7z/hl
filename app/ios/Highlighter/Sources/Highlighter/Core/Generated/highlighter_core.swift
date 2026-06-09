@@ -1069,8 +1069,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getJoinedCommunities() async  -> CommunityListOutcome
 
-    func getJoinedRoomNamesForRelay(url: String) async  -> StringListOutcome
-
     func getMyHighlights(limit: UInt32) async  -> HighlightListOutcome
 
     func getOnboardingInterestProjection(selectedIds: [String])  -> OnboardingInterestProjection
@@ -1109,6 +1107,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * diagnostics poller at least once per second.
      */
     func getRelayDiagnostics() async  -> RelayDiagnosticListOutcome
+
+    func getRelayHostedRoomsSnapshot(url: String) async  -> RelayHostedRoomsSnapshot
 
     /**
      * Return the user's effective relay list, merging NIP-65 (read/write)
@@ -2988,24 +2988,6 @@ open func getJoinedCommunities()async  -> CommunityListOutcome  {
         )
 }
 
-open func getJoinedRoomNamesForRelay(url: String)async  -> StringListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_joined_room_names_for_relay(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(url)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
 open func getMyHighlights(limit: UInt32)async  -> HighlightListOutcome  {
     return
         try!  await uniffiRustCallAsync(
@@ -3156,6 +3138,24 @@ open func getRelayDiagnostics()async  -> RelayDiagnosticListOutcome  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRelayDiagnosticListOutcome_lift,
+            errorHandler: nil
+
+        )
+}
+
+open func getRelayHostedRoomsSnapshot(url: String)async  -> RelayHostedRoomsSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_relay_hosted_rooms_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(url)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRelayHostedRoomsSnapshot_lift,
             errorHandler: nil
 
         )
@@ -25752,6 +25752,76 @@ public func FfiConverterTypeRelayDiagnosticListOutcome_lower(_ value: RelayDiagn
 }
 
 
+public struct RelayHostedRoomsSnapshot {
+    public var roomNames: [String]
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(roomNames: [String], errorMessage: String) {
+        self.roomNames = roomNames
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension RelayHostedRoomsSnapshot: Sendable {}
+#endif
+
+
+extension RelayHostedRoomsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RelayHostedRoomsSnapshot, rhs: RelayHostedRoomsSnapshot) -> Bool {
+        if lhs.roomNames != rhs.roomNames {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(roomNames)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayHostedRoomsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayHostedRoomsSnapshot {
+        return
+            try RelayHostedRoomsSnapshot(
+                roomNames: FfiConverterSequenceString.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayHostedRoomsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.roomNames, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayHostedRoomsSnapshot_lift(_ buf: RustBuffer) throws -> RelayHostedRoomsSnapshot {
+    return try FfiConverterTypeRelayHostedRoomsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayHostedRoomsSnapshot_lower(_ value: RelayHostedRoomsSnapshot) -> RustBuffer {
+    return FfiConverterTypeRelayHostedRoomsSnapshot.lower(value)
+}
+
+
 public struct RelayNip11ProbePlan {
     public var urlsToProbe: [String]
     public var inFlightUrls: [String]
@@ -31919,76 +31989,6 @@ public func FfiConverterTypeShareWebReaderTargetProjectionInput_lift(_ buf: Rust
 #endif
 public func FfiConverterTypeShareWebReaderTargetProjectionInput_lower(_ value: ShareWebReaderTargetProjectionInput) -> RustBuffer {
     return FfiConverterTypeShareWebReaderTargetProjectionInput.lower(value)
-}
-
-
-public struct StringListOutcome {
-    public var values: [String]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [String], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension StringListOutcome: Sendable {}
-#endif
-
-
-extension StringListOutcome: Equatable, Hashable {
-    public static func ==(lhs: StringListOutcome, rhs: StringListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeStringListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StringListOutcome {
-        return
-            try StringListOutcome(
-                values: FfiConverterSequenceString.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: StringListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceString.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeStringListOutcome_lift(_ buf: RustBuffer) throws -> StringListOutcome {
-    return try FfiConverterTypeStringListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeStringListOutcome_lower(_ value: StringListOutcome) -> RustBuffer {
-    return FfiConverterTypeStringListOutcome.lower(value)
 }
 
 
@@ -38421,9 +38421,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 28655) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_room_names_for_relay() != 42927) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_highlights() != 57472) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38461,6 +38458,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relay_diagnostics() != 36575) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_relay_hosted_rooms_snapshot() != 43219) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relays() != 2197) {

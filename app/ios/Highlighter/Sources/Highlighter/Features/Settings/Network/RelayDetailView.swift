@@ -25,7 +25,8 @@ struct RelayDetailView: View {
         .navigationTitle("Relay")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: url) {
-            orphanedRoomNames = await store.joinedRoomNames(hostedOnRelay: url)
+            let snapshot = await store.relayHostedRooms(hostedOnRelay: url)
+            orphanedRoomNames = snapshot.roomNames
         }
         .confirmationDialog(
             currentProjection.remove.title,

@@ -214,8 +214,8 @@ actor SafeHighlighterCore {
         await core.getJoinedCommunities()
     }
 
-    func joinedRoomNames(hostedOnRelay url: String) async -> StringListOutcome {
-        await core.getJoinedRoomNamesForRelay(url: url)
+    func getRelayHostedRoomsSnapshot(hostedOnRelay url: String) async -> RelayHostedRoomsSnapshot {
+        await core.getRelayHostedRoomsSnapshot(url: url)
     }
 
     func getRoomHomeSnapshot(groupId: String) async -> RoomHomeSnapshot {

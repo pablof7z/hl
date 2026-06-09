@@ -37,8 +37,8 @@ use crate::models::{
     OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
     OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
     ProfileUpdateAction, ProfileUpdateDraft, RelayConfigListOutcome, RelayDiagnostic,
-    RelayDiagnosticListOutcome, StringListOutcome, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    RelayDiagnosticListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -121,19 +121,6 @@ fn book_route_outcome(result: Result<Option<BookRoute>, CoreError>) -> BookRoute
         },
         Err(error) => BookRouteOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn string_list_outcome(result: Result<Vec<String>, CoreError>) -> StringListOutcome {
-    match result {
-        Ok(values) => StringListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => StringListOutcome {
-            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -1333,8 +1320,11 @@ impl HighlighterCore {
         })())
     }
 
-    pub async fn get_joined_room_names_for_relay(&self, url: String) -> StringListOutcome {
-        string_list_outcome((|| {
+    pub async fn get_relay_hosted_rooms_snapshot(
+        &self,
+        url: String,
+    ) -> crate::relays::RelayHostedRoomsSnapshot {
+        let result = (|| {
             let Some(user) = self.inner.read().session.current_user() else {
                 return Err(CoreError::NotAuthenticated);
             };
@@ -1343,7 +1333,8 @@ impl HighlighterCore {
                 &user.pubkey,
                 &url,
             )
-        })())
+        })();
+        crate::relays::relay_hosted_rooms_snapshot(result)
     }
 
     /// Full room-home read model for one community. Rust owns artifact and

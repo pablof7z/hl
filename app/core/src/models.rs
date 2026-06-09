@@ -87,12 +87,6 @@ pub struct BookRouteOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct StringListOutcome {
-    pub values: Vec<String>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct StringOutcome {
     pub value: String,
     pub error: String,
