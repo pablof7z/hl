@@ -24,6 +24,13 @@ struct ImportRelaysSheet: View {
         ))
     }
 
+    private var sourceProjection: ImportRelaysSourceProjection {
+        appStore.safeCore.projectImportRelaysSource(input: ImportRelaysSourceProjectionInput(
+            npub: npubText,
+            isFetching: isFetching
+        ))
+    }
+
     var body: some View {
         let currentProjection = projection
 
@@ -73,7 +80,7 @@ struct ImportRelaysSheet: View {
                     Label("Fetch relays", systemImage: "arrow.down.circle")
                 }
             }
-            .disabled(npubText.trimmingCharacters(in: .whitespaces).isEmpty || isFetching)
+            .disabled(!sourceProjection.canFetch)
         } header: {
             Text("Source")
         } footer: {
@@ -122,13 +129,15 @@ struct ImportRelaysSheet: View {
     // MARK: - Actions
 
     private func fetch() async {
+        let source = sourceProjection
+        guard source.canFetch else { return }
         errorText = nil
         fetched = []
         selected = []
         isFetching = true
         defer { isFetching = false }
         let outcome = await appStore.safeCore
-            .importRelaysFromNpub(npubText.trimmingCharacters(in: .whitespaces))
+            .importRelaysFromNpub(source.submitNpub)
         if outcome.error.isEmpty {
             fetched = outcome.values
             selected = Set(appStore.safeCore.defaultImportRelaySelection(relays: outcome.values))

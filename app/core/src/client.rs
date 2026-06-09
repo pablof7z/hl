@@ -4185,6 +4185,15 @@ impl HighlighterCore {
         crate::relays::default_import_relay_selection(relays)
     }
 
+    /// Project import-relays source input. Rust owns source trimming and fetch
+    /// eligibility; native shells render and execute the fetch action.
+    pub fn project_import_relays_source(
+        &self,
+        input: crate::relays::ImportRelaysSourceProjectionInput,
+    ) -> crate::relays::ImportRelaysSourceProjection {
+        crate::relays::import_relays_source_projection(input)
+    }
+
     pub fn project_import_relays(
         &self,
         input: crate::relays::ImportRelaysProjectionInput,

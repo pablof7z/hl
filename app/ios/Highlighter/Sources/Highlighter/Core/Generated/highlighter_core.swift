@@ -1509,6 +1509,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
+    /**
+     * Project import-relays source input. Rust owns source trimming and fetch
+     * eligibility; native shells render and execute the fetch action.
+     */
+    func projectImportRelaysSource(input: ImportRelaysSourceProjectionInput)  -> ImportRelaysSourceProjection
+
     func projectIsbnManualPreview(input: IsbnManualPreviewProjectionInput)  -> IsbnManualPreviewProjection
 
     func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput)  -> NostrEntityArticleCardProjection
@@ -4578,6 +4584,18 @@ open func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelay
     return try!  FfiConverterTypeImportRelaysProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_import_relays(self.uniffiClonePointer(),
         FfiConverterTypeImportRelaysProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project import-relays source input. Rust owns source trimming and fetch
+     * eligibility; native shells render and execute the fetch action.
+     */
+open func projectImportRelaysSource(input: ImportRelaysSourceProjectionInput) -> ImportRelaysSourceProjection  {
+    return try!  FfiConverterTypeImportRelaysSourceProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_import_relays_source(self.uniffiClonePointer(),
+        FfiConverterTypeImportRelaysSourceProjectionInput_lower(input),$0
     )
 })
 }
@@ -17414,6 +17432,153 @@ public func FfiConverterTypeImportRelaysProjectionInput_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeImportRelaysProjectionInput_lower(_ value: ImportRelaysProjectionInput) -> RustBuffer {
     return FfiConverterTypeImportRelaysProjectionInput.lower(value)
+}
+
+
+/**
+ * Native import-relays source field projection. Rust owns the canonical
+ * source input and whether fetching can start.
+ */
+public struct ImportRelaysSourceProjection {
+    public var submitNpub: String
+    public var canFetch: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(submitNpub: String, canFetch: Bool) {
+        self.submitNpub = submitNpub
+        self.canFetch = canFetch
+    }
+}
+
+#if compiler(>=6)
+extension ImportRelaysSourceProjection: Sendable {}
+#endif
+
+
+extension ImportRelaysSourceProjection: Equatable, Hashable {
+    public static func ==(lhs: ImportRelaysSourceProjection, rhs: ImportRelaysSourceProjection) -> Bool {
+        if lhs.submitNpub != rhs.submitNpub {
+            return false
+        }
+        if lhs.canFetch != rhs.canFetch {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(submitNpub)
+        hasher.combine(canFetch)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRelaysSourceProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysSourceProjection {
+        return
+            try ImportRelaysSourceProjection(
+                submitNpub: FfiConverterString.read(from: &buf),
+                canFetch: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ImportRelaysSourceProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.submitNpub, into: &buf)
+        FfiConverterBool.write(value.canFetch, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysSourceProjection_lift(_ buf: RustBuffer) throws -> ImportRelaysSourceProjection {
+    return try FfiConverterTypeImportRelaysSourceProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysSourceProjection_lower(_ value: ImportRelaysSourceProjection) -> RustBuffer {
+    return FfiConverterTypeImportRelaysSourceProjection.lower(value)
+}
+
+
+/**
+ * Native import-relays source field input.
+ */
+public struct ImportRelaysSourceProjectionInput {
+    public var npub: String
+    public var isFetching: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(npub: String, isFetching: Bool) {
+        self.npub = npub
+        self.isFetching = isFetching
+    }
+}
+
+#if compiler(>=6)
+extension ImportRelaysSourceProjectionInput: Sendable {}
+#endif
+
+
+extension ImportRelaysSourceProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ImportRelaysSourceProjectionInput, rhs: ImportRelaysSourceProjectionInput) -> Bool {
+        if lhs.npub != rhs.npub {
+            return false
+        }
+        if lhs.isFetching != rhs.isFetching {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(npub)
+        hasher.combine(isFetching)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRelaysSourceProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysSourceProjectionInput {
+        return
+            try ImportRelaysSourceProjectionInput(
+                npub: FfiConverterString.read(from: &buf),
+                isFetching: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ImportRelaysSourceProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.npub, into: &buf)
+        FfiConverterBool.write(value.isFetching, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysSourceProjectionInput_lift(_ buf: RustBuffer) throws -> ImportRelaysSourceProjectionInput {
+    return try FfiConverterTypeImportRelaysSourceProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysSourceProjectionInput_lower(_ value: ImportRelaysSourceProjectionInput) -> RustBuffer {
+    return FfiConverterTypeImportRelaysSourceProjectionInput.lower(value)
 }
 
 
@@ -33329,6 +33494,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays_source() != 18021) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_isbn_manual_preview() != 64480) {

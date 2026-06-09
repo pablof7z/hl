@@ -281,6 +281,21 @@ pub struct ImportRelaysProjection {
     pub selected_configs: Vec<RelayConfig>,
 }
 
+/// Native import-relays source field projection. Rust owns the canonical
+/// source input and whether fetching can start.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ImportRelaysSourceProjection {
+    pub submit_npub: String,
+    pub can_fetch: bool,
+}
+
+/// Native import-relays source field input.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ImportRelaysSourceProjectionInput {
+    pub npub: String,
+    pub is_fetching: bool,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ImportRelaysProjectionInput {
     pub fetched: Vec<RelayConfig>,
@@ -504,6 +519,18 @@ pub fn add_relay_sheet_projection(input: AddRelaySheetProjectionInput) -> AddRel
 
 pub fn default_import_relay_selection(relays: Vec<RelayConfig>) -> Vec<String> {
     relays.into_iter().map(|relay| relay.url).collect()
+}
+
+/// Project the source field for importing another user's relay list. Native
+/// shells render `can_fetch` and pass `submit_npub` to the fetch action.
+pub fn import_relays_source_projection(
+    input: ImportRelaysSourceProjectionInput,
+) -> ImportRelaysSourceProjection {
+    let submit_npub = input.npub.trim().to_string();
+    ImportRelaysSourceProjection {
+        can_fetch: !submit_npub.is_empty() && !input.is_fetching,
+        submit_npub,
+    }
 }
 
 pub fn import_relays_projection(input: ImportRelaysProjectionInput) -> ImportRelaysProjection {
@@ -1523,6 +1550,28 @@ mod tests {
         assert_eq!(single.found_title, "Found 1 relay");
         assert_eq!(single.selected_count, 1);
         assert!(single.can_apply);
+    }
+
+    #[test]
+    fn import_relays_source_projection_trims_and_blocks_empty_or_fetching() {
+        let ready = import_relays_source_projection(ImportRelaysSourceProjectionInput {
+            npub: "  npub1example  ".into(),
+            is_fetching: false,
+        });
+        let blank = import_relays_source_projection(ImportRelaysSourceProjectionInput {
+            npub: " \n ".into(),
+            is_fetching: false,
+        });
+        let fetching = import_relays_source_projection(ImportRelaysSourceProjectionInput {
+            npub: "npub1example".into(),
+            is_fetching: true,
+        });
+
+        assert_eq!(ready.submit_npub, "npub1example");
+        assert!(ready.can_fetch);
+        assert_eq!(blank.submit_npub, "");
+        assert!(!blank.can_fetch);
+        assert!(!fetching.can_fetch);
     }
 
     #[test]

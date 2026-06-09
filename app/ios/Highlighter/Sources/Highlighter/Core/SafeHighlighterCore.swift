@@ -1586,6 +1586,12 @@ actor SafeHighlighterCore {
         core.defaultImportRelaySelection(relays: relays)
     }
 
+    nonisolated func projectImportRelaysSource(
+        input: ImportRelaysSourceProjectionInput
+    ) -> ImportRelaysSourceProjection {
+        core.projectImportRelaysSource(input: input)
+    }
+
     nonisolated func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelaysProjection {
         core.projectImportRelays(input: input)
     }
