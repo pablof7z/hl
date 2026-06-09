@@ -1,4 +1,4 @@
-use crate::models::ArtifactPreview;
+use crate::models::{ArtifactPreview, CommunitySummary};
 
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CaptureBookDisplayProjectionInput {
@@ -10,6 +10,18 @@ pub struct CaptureBookDisplayProjection {
     pub display_title: String,
     pub author: Option<String>,
     pub image_url: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CaptureCommunitySelectionProjectionInput {
+    pub selected_group_id: Option<String>,
+    pub joined_communities: Vec<CommunitySummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CaptureCommunitySelectionProjection {
+    pub display_name: String,
+    pub has_selection: bool,
 }
 
 /// Project book labels used by capture selection and search rows. Rust owns
@@ -29,12 +41,46 @@ pub fn book_display_projection(
     }
 }
 
+/// Project capture destination display. Rust owns the optional target fallback
+/// and selected room name/id resolution; native owns row styling.
+pub fn community_selection_projection(
+    input: CaptureCommunitySelectionProjectionInput,
+) -> CaptureCommunitySelectionProjection {
+    let selected_group_id = input
+        .selected_group_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty());
+    let display_name = selected_group_id
+        .map(|id| community_name_for_id(id, &input.joined_communities))
+        .unwrap_or_else(|| "Optional".to_string());
+
+    CaptureCommunitySelectionProjection {
+        display_name,
+        has_selection: selected_group_id.is_some(),
+    }
+}
+
 fn non_empty_string(value: String) -> Option<String> {
     if value.is_empty() {
         None
     } else {
         Some(value)
     }
+}
+
+fn community_name_for_id(id: &str, joined_communities: &[CommunitySummary]) -> String {
+    joined_communities
+        .iter()
+        .find(|community| community.id == id)
+        .map(|community| {
+            if community.name.is_empty() {
+                id.to_string()
+            } else {
+                community.name.clone()
+            }
+        })
+        .unwrap_or_else(|| id.to_string())
 }
 
 #[cfg(test)]
@@ -62,6 +108,33 @@ mod tests {
             projection.image_url,
             Some("https://img.example/book.jpg".into())
         );
+    }
+
+    #[test]
+    fn community_selection_projection_preserves_optional_and_room_fallbacks() {
+        let projection = community_selection_projection(CaptureCommunitySelectionProjectionInput {
+            selected_group_id: None,
+            joined_communities: Vec::new(),
+        });
+
+        assert_eq!(projection.display_name, "Optional");
+        assert!(!projection.has_selection);
+
+        let projection = community_selection_projection(CaptureCommunitySelectionProjectionInput {
+            selected_group_id: Some("room".into()),
+            joined_communities: vec![community("room", "Room name")],
+        });
+
+        assert_eq!(projection.display_name, "Room name");
+        assert!(projection.has_selection);
+
+        let projection = community_selection_projection(CaptureCommunitySelectionProjectionInput {
+            selected_group_id: Some("missing".into()),
+            joined_communities: vec![community("other", "")],
+        });
+
+        assert_eq!(projection.display_name, "missing");
+        assert!(projection.has_selection);
     }
 
     fn preview(title: &str, author: &str, image: &str) -> ArtifactPreview {
@@ -92,6 +165,22 @@ mod tests {
             highlight_tag_value: "isbn:9780593716717".into(),
             highlight_reference_key: "i:isbn:9780593716717".into(),
             chapters: Vec::<Chapter>::new(),
+        }
+    }
+
+    fn community(id: &str, name: &str) -> CommunitySummary {
+        CommunitySummary {
+            id: id.into(),
+            name: name.into(),
+            about: String::new(),
+            picture: String::new(),
+            access: "open".into(),
+            visibility: "public".into(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: "wss://relay.example".into(),
+            metadata_event_id: String::new(),
+            created_at: Some(1),
         }
     }
 }

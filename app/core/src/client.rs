@@ -2976,6 +2976,13 @@ impl HighlighterCore {
         crate::capture::book_display_projection(input)
     }
 
+    pub fn project_capture_community_selection(
+        &self,
+        input: crate::capture::CaptureCommunitySelectionProjectionInput,
+    ) -> crate::capture::CaptureCommunitySelectionProjection {
+        crate::capture::community_selection_projection(input)
+    }
+
     pub fn reconstruct_ocr_markdown(&self, lines: Vec<crate::ocr::OcrLine>) -> String {
         crate::ocr::reconstruct_markdown(&lines)
     }

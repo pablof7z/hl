@@ -1416,6 +1416,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectCaptureBookDisplay(input: CaptureBookDisplayProjectionInput)  -> CaptureBookDisplayProjection
 
+    func projectCaptureCommunitySelection(input: CaptureCommunitySelectionProjectionInput)  -> CaptureCommunitySelectionProjection
+
     /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
      * kind:9002 (edit-metadata) signed by the current user. Returns the
@@ -4273,6 +4275,14 @@ open func projectCaptureBookDisplay(input: CaptureBookDisplayProjectionInput) ->
     return try!  FfiConverterTypeCaptureBookDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_capture_book_display(self.uniffiClonePointer(),
         FfiConverterTypeCaptureBookDisplayProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectCaptureCommunitySelection(input: CaptureCommunitySelectionProjectionInput) -> CaptureCommunitySelectionProjection  {
+    return try!  FfiConverterTypeCaptureCommunitySelectionProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_capture_community_selection(self.uniffiClonePointer(),
+        FfiConverterTypeCaptureCommunitySelectionProjectionInput_lower(input),$0
     )
 })
 }
@@ -9428,6 +9438,146 @@ public func FfiConverterTypeCaptureBookDisplayProjectionInput_lift(_ buf: RustBu
 #endif
 public func FfiConverterTypeCaptureBookDisplayProjectionInput_lower(_ value: CaptureBookDisplayProjectionInput) -> RustBuffer {
     return FfiConverterTypeCaptureBookDisplayProjectionInput.lower(value)
+}
+
+
+public struct CaptureCommunitySelectionProjection {
+    public var displayName: String
+    public var hasSelection: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayName: String, hasSelection: Bool) {
+        self.displayName = displayName
+        self.hasSelection = hasSelection
+    }
+}
+
+#if compiler(>=6)
+extension CaptureCommunitySelectionProjection: Sendable {}
+#endif
+
+
+extension CaptureCommunitySelectionProjection: Equatable, Hashable {
+    public static func ==(lhs: CaptureCommunitySelectionProjection, rhs: CaptureCommunitySelectionProjection) -> Bool {
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.hasSelection != rhs.hasSelection {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayName)
+        hasher.combine(hasSelection)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCaptureCommunitySelectionProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureCommunitySelectionProjection {
+        return
+            try CaptureCommunitySelectionProjection(
+                displayName: FfiConverterString.read(from: &buf),
+                hasSelection: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CaptureCommunitySelectionProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterBool.write(value.hasSelection, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureCommunitySelectionProjection_lift(_ buf: RustBuffer) throws -> CaptureCommunitySelectionProjection {
+    return try FfiConverterTypeCaptureCommunitySelectionProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureCommunitySelectionProjection_lower(_ value: CaptureCommunitySelectionProjection) -> RustBuffer {
+    return FfiConverterTypeCaptureCommunitySelectionProjection.lower(value)
+}
+
+
+public struct CaptureCommunitySelectionProjectionInput {
+    public var selectedGroupId: String?
+    public var joinedCommunities: [CommunitySummary]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(selectedGroupId: String?, joinedCommunities: [CommunitySummary]) {
+        self.selectedGroupId = selectedGroupId
+        self.joinedCommunities = joinedCommunities
+    }
+}
+
+#if compiler(>=6)
+extension CaptureCommunitySelectionProjectionInput: Sendable {}
+#endif
+
+
+extension CaptureCommunitySelectionProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CaptureCommunitySelectionProjectionInput, rhs: CaptureCommunitySelectionProjectionInput) -> Bool {
+        if lhs.selectedGroupId != rhs.selectedGroupId {
+            return false
+        }
+        if lhs.joinedCommunities != rhs.joinedCommunities {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(selectedGroupId)
+        hasher.combine(joinedCommunities)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCaptureCommunitySelectionProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureCommunitySelectionProjectionInput {
+        return
+            try CaptureCommunitySelectionProjectionInput(
+                selectedGroupId: FfiConverterOptionString.read(from: &buf),
+                joinedCommunities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CaptureCommunitySelectionProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.selectedGroupId, into: &buf)
+        FfiConverterSequenceTypeCommunitySummary.write(value.joinedCommunities, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureCommunitySelectionProjectionInput_lift(_ buf: RustBuffer) throws -> CaptureCommunitySelectionProjectionInput {
+    return try FfiConverterTypeCaptureCommunitySelectionProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureCommunitySelectionProjectionInput_lower(_ value: CaptureCommunitySelectionProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCaptureCommunitySelectionProjectionInput.lower(value)
 }
 
 
@@ -30294,6 +30444,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_book_display() != 26332) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_community_selection() != 38232) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room() != 12904) {

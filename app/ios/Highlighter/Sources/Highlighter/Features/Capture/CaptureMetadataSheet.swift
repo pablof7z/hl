@@ -161,7 +161,9 @@ struct CaptureMetadataSheet: View {
     // MARK: - Community row
 
     private var communityRow: some View {
-        Button { showCommunityPicker = true } label: {
+        let projection = communitySelection
+
+        return Button { showCommunityPicker = true } label: {
             HStack(spacing: 8) {
                 Image(systemName: "number")
                     .font(.caption)
@@ -171,9 +173,9 @@ struct CaptureMetadataSheet: View {
                     .font(.callout)
                     .foregroundStyle(Color.highlighterInkStrong)
                 Spacer()
-                Text(communityName.isEmpty ? "Optional" : communityName)
+                Text(projection.displayName)
                     .font(.callout)
-                    .foregroundStyle(communityName.isEmpty ? Color.highlighterInkMuted : Color.highlighterAccent)
+                    .foregroundStyle(projection.hasSelection ? Color.highlighterAccent : Color.highlighterInkMuted)
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.medium))
@@ -188,9 +190,13 @@ struct CaptureMetadataSheet: View {
         .padding(.horizontal, 16)
     }
 
-    private var communityName: String {
-        guard let id = store.selectedGroupId else { return "" }
-        return appStore.joinedCommunities.first(where: { $0.id == id })?.name ?? id
+    private var communitySelection: CaptureCommunitySelectionProjection {
+        appStore.safeCore.projectCaptureCommunitySelection(
+            input: CaptureCommunitySelectionProjectionInput(
+                selectedGroupId: store.selectedGroupId,
+                joinedCommunities: appStore.joinedCommunities
+            )
+        )
     }
 
     private func bookDisplay(_ selection: BookSelection) -> CaptureBookDisplayProjection {

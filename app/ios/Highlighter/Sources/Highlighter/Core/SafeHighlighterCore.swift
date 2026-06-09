@@ -499,6 +499,12 @@ actor SafeHighlighterCore {
         core.projectCaptureBookDisplay(input: input)
     }
 
+    nonisolated func projectCaptureCommunitySelection(
+        input: CaptureCommunitySelectionProjectionInput
+    ) -> CaptureCommunitySelectionProjection {
+        core.projectCaptureCommunitySelection(input: input)
+    }
+
     func buildPreviewFromUrl(_ url: String) async -> ArtifactPreviewOutcome {
         await core.buildPreviewFromUrl(url: url)
     }

@@ -63,7 +63,10 @@ pub use articles::{
     ArticleReaderHeaderProjectionInput,
 };
 pub use artifact_detail::ArtifactDetailProjection;
-pub use capture::{CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput};
+pub use capture::{
+    CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput,
+    CaptureCommunitySelectionProjection, CaptureCommunitySelectionProjectionInput,
+};
 pub use client::HighlighterCore;
 pub use discussions::{DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput};
 pub use errors::CoreError;
