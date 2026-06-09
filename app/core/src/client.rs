@@ -2558,6 +2558,15 @@ impl HighlighterCore {
         crate::search::search_highlight_row_projection(input)
     }
 
+    /// Project matched text spans for search result rendering. Rust owns query
+    /// trimming and case-insensitive matching; native shells apply styling.
+    pub fn project_search_text_matches(
+        &self,
+        input: crate::search::SearchTextMatchesProjectionInput,
+    ) -> crate::search::SearchTextMatchesProjection {
+        crate::search::search_text_matches_projection(input)
+    }
+
     pub async fn search_highlights(&self, query: String, limit: u32) -> HighlightListOutcome {
         highlight_list_outcome(crate::search::search_highlights(
             self.runtime.ndb(),

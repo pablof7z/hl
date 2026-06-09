@@ -1634,6 +1634,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectSearchSuggestions(input: SearchSuggestionsProjectionInput)  -> SearchSuggestionsProjection
 
+    /**
+     * Project matched text spans for search result rendering. Rust owns query
+     * trimming and case-insensitive matching; native shells apply styling.
+     */
+    func projectSearchTextMatches(input: SearchTextMatchesProjectionInput)  -> SearchTextMatchesProjection
+
     func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput)  -> SecretKeyDisplayProjection
 
     func projectShareArticleTarget(input: ShareArticleTargetProjectionInput)  -> ShareArtifactTargetProjection
@@ -4960,6 +4966,18 @@ open func projectSearchSuggestions(input: SearchSuggestionsProjectionInput) -> S
     return try!  FfiConverterTypeSearchSuggestionsProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_search_suggestions(self.uniffiClonePointer(),
         FfiConverterTypeSearchSuggestionsProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project matched text spans for search result rendering. Rust owns query
+     * trimming and case-insensitive matching; native shells apply styling.
+     */
+open func projectSearchTextMatches(input: SearchTextMatchesProjectionInput) -> SearchTextMatchesProjection  {
+    return try!  FfiConverterTypeSearchTextMatchesProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_search_text_matches(self.uniffiClonePointer(),
+        FfiConverterTypeSearchTextMatchesProjectionInput_lower(input),$0
     )
 })
 }
@@ -27870,6 +27888,208 @@ public func FfiConverterTypeSearchSuggestionsProjectionInput_lower(_ value: Sear
 }
 
 
+public struct SearchTextMatchSpan {
+    public var start: UInt32
+    public var end: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(start: UInt32, end: UInt32) {
+        self.start = start
+        self.end = end
+    }
+}
+
+#if compiler(>=6)
+extension SearchTextMatchSpan: Sendable {}
+#endif
+
+
+extension SearchTextMatchSpan: Equatable, Hashable {
+    public static func ==(lhs: SearchTextMatchSpan, rhs: SearchTextMatchSpan) -> Bool {
+        if lhs.start != rhs.start {
+            return false
+        }
+        if lhs.end != rhs.end {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(start)
+        hasher.combine(end)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchTextMatchSpan: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchTextMatchSpan {
+        return
+            try SearchTextMatchSpan(
+                start: FfiConverterUInt32.read(from: &buf),
+                end: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchTextMatchSpan, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.start, into: &buf)
+        FfiConverterUInt32.write(value.end, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchTextMatchSpan_lift(_ buf: RustBuffer) throws -> SearchTextMatchSpan {
+    return try FfiConverterTypeSearchTextMatchSpan.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchTextMatchSpan_lower(_ value: SearchTextMatchSpan) -> RustBuffer {
+    return FfiConverterTypeSearchTextMatchSpan.lower(value)
+}
+
+
+public struct SearchTextMatchesProjection {
+    public var spans: [SearchTextMatchSpan]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(spans: [SearchTextMatchSpan]) {
+        self.spans = spans
+    }
+}
+
+#if compiler(>=6)
+extension SearchTextMatchesProjection: Sendable {}
+#endif
+
+
+extension SearchTextMatchesProjection: Equatable, Hashable {
+    public static func ==(lhs: SearchTextMatchesProjection, rhs: SearchTextMatchesProjection) -> Bool {
+        if lhs.spans != rhs.spans {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(spans)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchTextMatchesProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchTextMatchesProjection {
+        return
+            try SearchTextMatchesProjection(
+                spans: FfiConverterSequenceTypeSearchTextMatchSpan.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchTextMatchesProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeSearchTextMatchSpan.write(value.spans, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchTextMatchesProjection_lift(_ buf: RustBuffer) throws -> SearchTextMatchesProjection {
+    return try FfiConverterTypeSearchTextMatchesProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchTextMatchesProjection_lower(_ value: SearchTextMatchesProjection) -> RustBuffer {
+    return FfiConverterTypeSearchTextMatchesProjection.lower(value)
+}
+
+
+public struct SearchTextMatchesProjectionInput {
+    public var text: String
+    public var query: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(text: String, query: String) {
+        self.text = text
+        self.query = query
+    }
+}
+
+#if compiler(>=6)
+extension SearchTextMatchesProjectionInput: Sendable {}
+#endif
+
+
+extension SearchTextMatchesProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: SearchTextMatchesProjectionInput, rhs: SearchTextMatchesProjectionInput) -> Bool {
+        if lhs.text != rhs.text {
+            return false
+        }
+        if lhs.query != rhs.query {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(text)
+        hasher.combine(query)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchTextMatchesProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchTextMatchesProjectionInput {
+        return
+            try SearchTextMatchesProjectionInput(
+                text: FfiConverterString.read(from: &buf),
+                query: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchTextMatchesProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.text, into: &buf)
+        FfiConverterString.write(value.query, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchTextMatchesProjectionInput_lift(_ buf: RustBuffer) throws -> SearchTextMatchesProjectionInput {
+    return try FfiConverterTypeSearchTextMatchesProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchTextMatchesProjectionInput_lower(_ value: SearchTextMatchesProjectionInput) -> RustBuffer {
+    return FfiConverterTypeSearchTextMatchesProjectionInput.lower(value)
+}
+
+
 public struct SecretKeyDisplayProjection {
     public var displayValue: String
 
@@ -34387,6 +34607,31 @@ fileprivate struct FfiConverterSequenceTypeRoomRecommendationReasonProfile: FfiC
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeSearchTextMatchSpan: FfiConverterRustBuffer {
+    typealias SwiftType = [SearchTextMatchSpan]
+
+    public static func write(_ value: [SearchTextMatchSpan], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSearchTextMatchSpan.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SearchTextMatchSpan] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SearchTextMatchSpan]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSearchTextMatchSpan.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTranscriptSegment: FfiConverterRustBuffer {
     typealias SwiftType = [TranscriptSegment]
 
@@ -35189,6 +35434,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_suggestions() != 46024) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_text_matches() != 7920) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_secret_key_display() != 28126) {

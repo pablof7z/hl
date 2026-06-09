@@ -415,7 +415,8 @@ struct SearchView: View {
                 SearchHighlightRow(
                     highlight: h,
                     query: store?.query ?? "",
-                    pageImageUrl: projection.pageImageUrl
+                    pageImageUrl: projection.pageImageUrl,
+                    safeCore: app.safeCore
                 )
             }
             .buttonStyle(.plain)
@@ -423,7 +424,8 @@ struct SearchView: View {
             SearchHighlightRow(
                 highlight: h,
                 query: store?.query ?? "",
-                pageImageUrl: projection.pageImageUrl
+                pageImageUrl: projection.pageImageUrl,
+                safeCore: app.safeCore
             )
         }
     }
@@ -639,6 +641,7 @@ private struct SearchHighlightRow: View {
     let highlight: HighlightRecord
     let query: String
     let pageImageUrl: String?
+    let safeCore: SafeHighlighterCore
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -654,7 +657,8 @@ private struct SearchHighlightRow: View {
                 HighlightMatchedText(
                     text: highlight.quote,
                     query: query,
-                    font: .system(size: 18, design: .default).italic()
+                    font: .system(size: 18, design: .default).italic(),
+                    safeCore: safeCore
                 )
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineSpacing(3)
@@ -776,6 +780,7 @@ private struct HighlightMatchedText: View {
     let text: String
     let query: String
     let font: Font
+    let safeCore: SafeHighlighterCore
 
     var body: some View {
         Text(attributed)
@@ -784,22 +789,16 @@ private struct HighlightMatchedText: View {
 
     private var attributed: AttributedString {
         var out = AttributedString(text)
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return out }
-
-        let lowerText = text.lowercased()
-        let lowerQuery = trimmed.lowercased()
-        var searchRange = lowerText.startIndex..<lowerText.endIndex
-        while let match = lowerText.range(of: lowerQuery, range: searchRange) {
-            let startOffset = lowerText.distance(from: lowerText.startIndex, to: match.lowerBound)
-            let endOffset = lowerText.distance(from: lowerText.startIndex, to: match.upperBound)
-            if let s = out.index(out.startIndex, offsetByCharacters: startOffset),
-               let e = out.index(out.startIndex, offsetByCharacters: endOffset),
+        let projection = safeCore.projectSearchTextMatches(
+            input: SearchTextMatchesProjectionInput(text: text, query: query)
+        )
+        for span in projection.spans {
+            if let s = out.index(out.startIndex, offsetByCharacters: Int(span.start)),
+               let e = out.index(out.startIndex, offsetByCharacters: Int(span.end)),
                s < e {
                 out[s..<e].foregroundColor = .highlighterAccent
                 out[s..<e].backgroundColor = Color.laneArticleHighlightFill
             }
-            searchRange = match.upperBound..<lowerText.endIndex
         }
         return out
     }

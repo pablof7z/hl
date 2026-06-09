@@ -57,7 +57,8 @@ struct SearchSeeAllView: View {
                 SeeAllHighlightRow(
                     highlight: h,
                     query: store.query,
-                    pageImageUrl: projection.pageImageUrl
+                    pageImageUrl: projection.pageImageUrl,
+                    safeCore: app.safeCore
                 )
             }
             .buttonStyle(.plain)
@@ -65,7 +66,8 @@ struct SearchSeeAllView: View {
             SeeAllHighlightRow(
                 highlight: h,
                 query: store.query,
-                pageImageUrl: projection.pageImageUrl
+                pageImageUrl: projection.pageImageUrl,
+                safeCore: app.safeCore
             )
         }
     }
@@ -144,6 +146,7 @@ private struct SeeAllHighlightRow: View {
     let highlight: HighlightRecord
     let query: String
     let pageImageUrl: String?
+    let safeCore: SafeHighlighterCore
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -156,7 +159,7 @@ private struct SeeAllHighlightRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 1.25))
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(matched(highlight.quote, query))
+                Text(matched(highlight.quote, query, safeCore: safeCore))
                     .font(.system(size: 17, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(3)
@@ -301,30 +304,28 @@ private struct SeeAllPersonRow: View {
 
 /// Build an `AttributedString` highlighting every case-insensitive occurrence
 /// of `query` within `text`. Free function so every row view can reuse it.
-fileprivate func matched(_ text: String, _ query: String) -> AttributedString {
+fileprivate func matched(
+    _ text: String,
+    _ query: String,
+    safeCore: SafeHighlighterCore
+) -> AttributedString {
     var out = AttributedString(text)
-    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return out }
-
-    let lowerText = text.lowercased()
-    let lowerQuery = trimmed.lowercased()
-    var searchRange = lowerText.startIndex..<lowerText.endIndex
-    while let match = lowerText.range(of: lowerQuery, range: searchRange) {
-        let startOffset = lowerText.distance(from: lowerText.startIndex, to: match.lowerBound)
-        let endOffset = lowerText.distance(from: lowerText.startIndex, to: match.upperBound)
+    let projection = safeCore.projectSearchTextMatches(
+        input: SearchTextMatchesProjectionInput(text: text, query: query)
+    )
+    for span in projection.spans {
         let chars = out.characters
         var s = out.startIndex
         var e = out.startIndex
         var idx = 0
-        while idx < startOffset, s < out.endIndex { s = chars.index(after: s); idx += 1 }
+        while idx < Int(span.start), s < out.endIndex { s = chars.index(after: s); idx += 1 }
         idx = 0
         e = s
-        while idx < (endOffset - startOffset), e < out.endIndex { e = chars.index(after: e); idx += 1 }
+        while idx < Int(span.end - span.start), e < out.endIndex { e = chars.index(after: e); idx += 1 }
         if s < e {
             out[s..<e].foregroundColor = .highlighterAccent
             out[s..<e].backgroundColor = Color.laneArticleHighlightFill
         }
-        searchRange = match.upperBound..<lowerText.endIndex
     }
     return out
 }

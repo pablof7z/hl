@@ -193,6 +193,7 @@ pub use room_preview::{
 pub use search::{
     SearchHighlightRowProjection, SearchHighlightRowProjectionInput, SearchQueryProjection,
     SearchQueryProjectionInput, SearchSuggestionsProjection, SearchSuggestionsProjectionInput,
+    SearchTextMatchSpan, SearchTextMatchesProjection, SearchTextMatchesProjectionInput,
 };
 pub use session::{
     PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,

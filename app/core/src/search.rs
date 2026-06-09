@@ -67,6 +67,23 @@ pub struct SearchHighlightRowProjection {
     pub page_image_url: Option<String>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchTextMatchesProjectionInput {
+    pub text: String,
+    pub query: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchTextMatchSpan {
+    pub start: u32,
+    pub end: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchTextMatchesProjection {
+    pub spans: Vec<SearchTextMatchSpan>,
+}
+
 /// How many candidate notes to pull from ndb before filtering. Higher than the
 /// final `limit` so substring matches still surface when the candidate set is
 /// dominated by non-matching notes.
@@ -121,6 +138,34 @@ pub fn search_highlight_row_projection(
         ),
         page_image_url: page_image_url(&input.highlight.image_url),
     }
+}
+
+pub fn search_text_matches_projection(
+    input: SearchTextMatchesProjectionInput,
+) -> SearchTextMatchesProjection {
+    let query = input.query.trim().to_lowercase();
+    if query.is_empty() {
+        return SearchTextMatchesProjection { spans: Vec::new() };
+    }
+
+    let lower_text = input.text.to_lowercase();
+    let mut spans = Vec::new();
+    let mut search_start = 0usize;
+    while search_start < lower_text.len() {
+        let Some(relative_start) = lower_text[search_start..].find(&query) else {
+            break;
+        };
+        let start_byte = search_start + relative_start;
+        let end_byte = start_byte + query.len();
+        let start = lower_text[..start_byte].chars().count() as u32;
+        let end = lower_text[..end_byte].chars().count() as u32;
+        if start < end {
+            spans.push(SearchTextMatchSpan { start, end });
+        }
+        search_start = end_byte;
+    }
+
+    SearchTextMatchesProjection { spans }
 }
 
 fn page_image_url(value: &str) -> Option<String> {
@@ -616,6 +661,27 @@ mod tests {
         assert!(ready.has_query);
         assert_eq!(blank.search_query, "");
         assert!(!blank.has_query);
+    }
+
+    #[test]
+    fn search_text_matches_projection_returns_case_insensitive_character_spans() {
+        let projection = search_text_matches_projection(SearchTextMatchesProjectionInput {
+            text: "Alpha beta ALPHA".into(),
+            query: " alpha ".into(),
+        });
+        let blank = search_text_matches_projection(SearchTextMatchesProjectionInput {
+            text: "Alpha".into(),
+            query: " ".into(),
+        });
+
+        assert_eq!(
+            projection.spans,
+            vec![
+                SearchTextMatchSpan { start: 0, end: 5 },
+                SearchTextMatchSpan { start: 11, end: 16 },
+            ]
+        );
+        assert!(blank.spans.is_empty());
     }
 
     #[test]
