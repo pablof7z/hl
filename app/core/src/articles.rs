@@ -11,6 +11,55 @@ use crate::models::{ArticleReaderRoute, ArticleRecord, ArtifactPreview, Artifact
 
 pub const KIND_LONG_FORM: u16 = 30023;
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleReaderHeaderProjectionInput {
+    pub article: ArticleRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleReaderHeaderProjection {
+    pub title: String,
+    pub hashtag_labels: Vec<String>,
+    pub display_unix_seconds: Option<u64>,
+    pub read_time_minutes: Option<u32>,
+}
+
+/// Presentation projection for the article reader header. Rust owns title
+/// fallback, visible hashtag cap, timestamp source selection, and read-time
+/// estimate; native shells render and apply localized date formatting.
+pub fn article_reader_header_projection(
+    input: ArticleReaderHeaderProjectionInput,
+) -> ArticleReaderHeaderProjection {
+    let article = input.article;
+    ArticleReaderHeaderProjection {
+        title: if article.title.is_empty() {
+            "Untitled".to_string()
+        } else {
+            article.title
+        },
+        hashtag_labels: article
+            .hashtags
+            .iter()
+            .take(12)
+            .map(|tag| format!("#{tag}"))
+            .collect(),
+        display_unix_seconds: article
+            .published_at
+            .or(article.created_at)
+            .filter(|seconds| *seconds > 0),
+        read_time_minutes: read_time_minutes(&article.content),
+    }
+}
+
+fn read_time_minutes(content: &str) -> Option<u32> {
+    let words = content.split_whitespace().count();
+    if words > 60 {
+        Some(((words / 240).max(1)) as u32)
+    } else {
+        None
+    }
+}
+
 /// Read a single NIP-23 article by its NIP-33 addressable id (`pubkey:d`).
 /// Returns the newest `created_at` event with a matching `d` tag. `None` if
 /// nostrdb has no matching event cached — the reader view spawns a relay
@@ -376,6 +425,26 @@ mod tests {
         Tag::parse(vec![name.to_string(), value.to_string()]).expect("named tag")
     }
 
+    fn article_record(title: &str, content: String, hashtags: Vec<String>) -> ArticleRecord {
+        ArticleRecord {
+            event_id: "event".into(),
+            address: article_address("author", "d"),
+            pubkey: "author".into(),
+            identifier: "d".into(),
+            title: title.into(),
+            summary: String::new(),
+            image: String::new(),
+            content,
+            hashtags,
+            published_at: Some(123),
+            created_at: Some(100),
+        }
+    }
+
+    fn repeated_words(count: usize) -> String {
+        vec!["word"; count].join(" ")
+    }
+
     #[test]
     fn dedupes_by_d_keeping_newest() {
         let keys = Keys::generate();
@@ -457,6 +526,36 @@ mod tests {
         );
         let out = build_articles(&[event], 10);
         assert_eq!(out[0].hashtags, vec!["nostr", "rust"]);
+    }
+
+    #[test]
+    fn article_reader_header_projection_matches_reader_header_policy() {
+        let hashtags: Vec<String> = (0..14).map(|idx| format!("tag{idx}")).collect();
+        let projection = article_reader_header_projection(ArticleReaderHeaderProjectionInput {
+            article: article_record("", repeated_words(480), hashtags),
+        });
+
+        assert_eq!(projection.title, "Untitled");
+        assert_eq!(projection.hashtag_labels.len(), 12);
+        assert_eq!(projection.hashtag_labels[0], "#tag0");
+        assert_eq!(projection.hashtag_labels[11], "#tag11");
+        assert_eq!(projection.display_unix_seconds, Some(123));
+        assert_eq!(projection.read_time_minutes, Some(2));
+    }
+
+    #[test]
+    fn article_reader_header_projection_hides_invalid_time_and_short_read_time() {
+        let mut article = article_record("A title", repeated_words(60), vec!["nostr".into()]);
+        article.published_at = None;
+        article.created_at = Some(0);
+
+        let projection =
+            article_reader_header_projection(ArticleReaderHeaderProjectionInput { article });
+
+        assert_eq!(projection.title, "A title");
+        assert_eq!(projection.hashtag_labels, vec!["#nostr".to_string()]);
+        assert_eq!(projection.display_unix_seconds, None);
+        assert_eq!(projection.read_time_minutes, None);
     }
 
     #[test]

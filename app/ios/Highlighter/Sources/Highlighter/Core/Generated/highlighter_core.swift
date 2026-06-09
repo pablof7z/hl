@@ -1400,6 +1400,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
 
+    func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput)  -> ArticleReaderHeaderProjection
+
     /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
      * kind:9002 (edit-metadata) signed by the current user. Returns the
@@ -4167,6 +4169,14 @@ open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelayS
 })
 }
 
+open func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput) -> ArticleReaderHeaderProjection  {
+    return try!  FfiConverterTypeArticleReaderHeaderProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_header(self.uniffiClonePointer(),
+        FfiConverterTypeArticleReaderHeaderProjectionInput_lower(input),$0
+    )
+})
+}
+
     /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
      * kind:9002 (edit-metadata) signed by the current user. Returns the
@@ -6260,6 +6270,154 @@ public func FfiConverterTypeArticleOutcome_lift(_ buf: RustBuffer) throws -> Art
 #endif
 public func FfiConverterTypeArticleOutcome_lower(_ value: ArticleOutcome) -> RustBuffer {
     return FfiConverterTypeArticleOutcome.lower(value)
+}
+
+
+public struct ArticleReaderHeaderProjection {
+    public var title: String
+    public var hashtagLabels: [String]
+    public var displayUnixSeconds: UInt64?
+    public var readTimeMinutes: UInt32?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(title: String, hashtagLabels: [String], displayUnixSeconds: UInt64?, readTimeMinutes: UInt32?) {
+        self.title = title
+        self.hashtagLabels = hashtagLabels
+        self.displayUnixSeconds = displayUnixSeconds
+        self.readTimeMinutes = readTimeMinutes
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderHeaderProjection: Sendable {}
+#endif
+
+
+extension ArticleReaderHeaderProjection: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderHeaderProjection, rhs: ArticleReaderHeaderProjection) -> Bool {
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.hashtagLabels != rhs.hashtagLabels {
+            return false
+        }
+        if lhs.displayUnixSeconds != rhs.displayUnixSeconds {
+            return false
+        }
+        if lhs.readTimeMinutes != rhs.readTimeMinutes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(title)
+        hasher.combine(hashtagLabels)
+        hasher.combine(displayUnixSeconds)
+        hasher.combine(readTimeMinutes)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderHeaderProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderHeaderProjection {
+        return
+            try ArticleReaderHeaderProjection(
+                title: FfiConverterString.read(from: &buf),
+                hashtagLabels: FfiConverterSequenceString.read(from: &buf),
+                displayUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
+                readTimeMinutes: FfiConverterOptionUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderHeaderProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterSequenceString.write(value.hashtagLabels, into: &buf)
+        FfiConverterOptionUInt64.write(value.displayUnixSeconds, into: &buf)
+        FfiConverterOptionUInt32.write(value.readTimeMinutes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderHeaderProjection_lift(_ buf: RustBuffer) throws -> ArticleReaderHeaderProjection {
+    return try FfiConverterTypeArticleReaderHeaderProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderHeaderProjection_lower(_ value: ArticleReaderHeaderProjection) -> RustBuffer {
+    return FfiConverterTypeArticleReaderHeaderProjection.lower(value)
+}
+
+
+public struct ArticleReaderHeaderProjectionInput {
+    public var article: ArticleRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(article: ArticleRecord) {
+        self.article = article
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderHeaderProjectionInput: Sendable {}
+#endif
+
+
+extension ArticleReaderHeaderProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderHeaderProjectionInput, rhs: ArticleReaderHeaderProjectionInput) -> Bool {
+        if lhs.article != rhs.article {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(article)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderHeaderProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderHeaderProjectionInput {
+        return
+            try ArticleReaderHeaderProjectionInput(
+                article: FfiConverterTypeArticleRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderHeaderProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArticleRecord.write(value.article, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderHeaderProjectionInput_lift(_ buf: RustBuffer) throws -> ArticleReaderHeaderProjectionInput {
+    return try FfiConverterTypeArticleReaderHeaderProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderHeaderProjectionInput_lower(_ value: ArticleReaderHeaderProjectionInput) -> RustBuffer {
+    return FfiConverterTypeArticleReaderHeaderProjectionInput.lower(value)
 }
 
 
@@ -26623,6 +26781,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_add_relay_sheet() != 14886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_header() != 55976) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room() != 12904) {

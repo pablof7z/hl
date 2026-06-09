@@ -422,8 +422,10 @@ private struct Header: View {
     @Environment(HighlighterStore.self) private var app
 
     var body: some View {
+        let projection = headerProjection
+
         VStack(alignment: .leading, spacing: 14) {
-            Text(article.title.isEmpty ? "Untitled" : article.title)
+            Text(projection.title)
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .fixedSize(horizontal: false, vertical: true)
@@ -435,13 +437,13 @@ private struct Header: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            authorRow
+            authorRow(projection)
 
-            if !article.hashtags.isEmpty {
+            if !projection.hashtagLabels.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(article.hashtags.prefix(12), id: \.self) { tag in
-                            Text("#\(tag)")
+                        ForEach(projection.hashtagLabels, id: \.self) { tag in
+                            Text(tag)
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(Color.highlighterAccent)
                                 .padding(.horizontal, 10)
@@ -462,7 +464,7 @@ private struct Header: View {
     }
 
     @ViewBuilder
-    private var authorRow: some View {
+    private func authorRow(_ projection: ArticleReaderHeaderProjection) -> some View {
         let author = authorDisplay
 
         NavigationLink(value: ProfileDestination.pubkey(article.pubkey)) {
@@ -480,10 +482,10 @@ private struct Header: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
                     HStack(spacing: 6) {
-                        if let date = displayDate {
+                        if let date = displayDate(projection.displayUnixSeconds) {
                             Text(date)
                         }
-                        if let mins = readTimeMinutes {
+                        if let mins = projection.readTimeMinutes {
                             Text("·")
                             Text("\(mins) min read")
                         }
@@ -507,21 +509,19 @@ private struct Header: View {
         )
     }
 
-    private var displayDate: String? {
-        let seconds = article.publishedAt ?? article.createdAt ?? 0
-        guard seconds > 0 else { return nil }
+    private var headerProjection: ArticleReaderHeaderProjection {
+        app.safeCore.projectArticleReaderHeader(
+            input: ArticleReaderHeaderProjectionInput(article: article)
+        )
+    }
+
+    private func displayDate(_ seconds: UInt64?) -> String? {
+        guard let seconds else { return nil }
         let date = Date(timeIntervalSince1970: TimeInterval(seconds))
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
-    }
-
-    /// Rough read-time estimate: 240 wpm.
-    private var readTimeMinutes: Int? {
-        let words = article.content.split(whereSeparator: { $0.isWhitespace }).count
-        guard words > 60 else { return nil }
-        return max(1, words / 240)
     }
 }
 

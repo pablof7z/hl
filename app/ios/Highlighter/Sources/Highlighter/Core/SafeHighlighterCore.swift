@@ -734,6 +734,12 @@ actor SafeHighlighterCore {
         core.getArticleReaderRouteForArticle(pubkeyHex: pubkeyHex, dTag: dTag)
     }
 
+    nonisolated func projectArticleReaderHeader(
+        input: ArticleReaderHeaderProjectionInput
+    ) -> ArticleReaderHeaderProjection {
+        core.projectArticleReaderHeader(input: input)
+    }
+
     nonisolated func getArticleArtifactPreview(article: ArticleRecord) -> ArtifactPreviewOutcome {
         core.getArticleArtifactPreview(article: article)
     }

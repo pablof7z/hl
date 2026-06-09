@@ -55,6 +55,7 @@ pub mod time_labels;
 pub mod web_metadata;
 pub mod whats_new;
 
+pub use articles::{ArticleReaderHeaderProjection, ArticleReaderHeaderProjectionInput};
 pub use client::HighlighterCore;
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
