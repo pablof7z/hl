@@ -44,26 +44,26 @@ struct FeedbackThreadDetailView: View {
                             .padding(.top, 8)
                             .padding(.bottom, 6)
                     }
-                    ForEach(Array(detailStore.events.enumerated()), id: \.element.eventId) { index, event in
+                    ForEach(detailStore.rows, id: \.event.eventId) { row in
                         FeedbackMessageBubble(
-                            event: event,
-                            projection: messagePresentation(for: event, at: index)
+                            event: row.event,
+                            projection: messagePresentation(for: row)
                         )
-                        .id(event.eventId)
-                        .task(id: event.authorPubkey) {
-                            await app.requestProfile(pubkeyHex: event.authorPubkey)
+                        .id(row.event.eventId)
+                        .task(id: row.event.authorPubkey) {
+                            await app.requestProfile(pubkeyHex: row.event.authorPubkey)
                         }
                     }
-                    if detailStore.isLoading && detailStore.events.isEmpty {
+                    if detailStore.isLoading && detailStore.rows.isEmpty {
                         ProgressView().padding()
                     }
                 }
                 .padding(.vertical, 8)
             }
-            .onChange(of: detailStore.events.count) { _, _ in
-                if let last = detailStore.events.last {
+            .onChange(of: detailStore.rows.count) { _, _ in
+                if let last = detailStore.rows.last {
                     withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(last.eventId, anchor: .bottom)
+                        proxy.scrollTo(last.event.eventId, anchor: .bottom)
                     }
                 }
             }
@@ -131,15 +131,14 @@ struct FeedbackThreadDetailView: View {
     }
 
     private func messagePresentation(
-        for event: FeedbackEventRecord,
-        at index: Int
+        for row: FeedbackMessageRowProjection
     ) -> FeedbackMessagePresentationProjection {
         app.safeCore.projectFeedbackMessagePresentation(
             input: FeedbackMessagePresentationInput(
-                event: event,
-                previousEvent: index > 0 ? detailStore.events[index - 1] : nil,
+                event: row.event,
+                showHeader: row.showHeader,
                 currentUserPubkey: app.currentUser?.pubkey,
-                profile: app.profileSnapshots[event.authorPubkey]
+                profile: app.profileSnapshots[row.event.authorPubkey]
             )
         )
     }

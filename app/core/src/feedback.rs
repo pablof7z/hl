@@ -22,6 +22,39 @@ pub const HIGHLIGHTER_PROJECT_COORDINATE: &str =
 pub const KIND_FEEDBACK_NOTE: u16 = 1;
 pub const KIND_FEEDBACK_THREAD_META: u16 = 513;
 pub const KIND_PROJECT_DEFINITION: u16 = 31933;
+pub const FEEDBACK_THREAD_LIMIT: i32 = 256;
+pub const FEEDBACK_THREAD_META_LIMIT: i32 = 512;
+pub const FEEDBACK_THREAD_EVENT_LIMIT: i32 = 4096;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackThreadsSnapshot {
+    pub threads: Vec<FeedbackThreadRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackMessageRowProjection {
+    pub event: FeedbackEventRecord,
+    pub show_header: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackThreadSnapshot {
+    pub rows: Vec<FeedbackMessageRowProjection>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackRootPublishSnapshotOutcome {
+    pub snapshot: FeedbackThreadsSnapshot,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackReplyPublishSnapshotOutcome {
+    pub snapshot: FeedbackThreadSnapshot,
+    pub error: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FeedbackComposerProjectionInput {
@@ -47,7 +80,7 @@ pub struct FeedbackThreadPresentationProjection {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct FeedbackMessagePresentationInput {
     pub event: FeedbackEventRecord,
-    pub previous_event: Option<FeedbackEventRecord>,
+    pub show_header: bool,
     pub current_user_pubkey: Option<String>,
     pub profile: Option<ProfileMetadata>,
 }
@@ -78,10 +111,6 @@ pub fn feedback_message_presentation(
         .current_user_pubkey
         .as_deref()
         .is_some_and(|pubkey| pubkey == input.event.author_pubkey);
-    let show_header = input.previous_event.as_ref().is_none_or(|previous| {
-        previous.author_pubkey != input.event.author_pubkey
-            || input.event.created_at > previous.created_at.saturating_add(300)
-    });
     let display_name = profile_display_name(input.profile.as_ref(), &input.event.author_pubkey);
     let display_initial = display_initial(&display_name);
     let picture_url = input
@@ -92,7 +121,7 @@ pub fn feedback_message_presentation(
 
     FeedbackMessagePresentationProjection {
         is_from_me,
-        show_header,
+        show_header: input.show_header,
         display_name,
         display_initial,
         picture_url,
@@ -123,6 +152,62 @@ pub fn feedback_thread_presentation(
         row_secondary_text,
         detail_summary,
         status_label,
+    }
+}
+
+pub fn query_threads_snapshot(
+    ndb: &Ndb,
+    coordinate: &str,
+    current_user_pubkey: Option<&str>,
+) -> FeedbackThreadsSnapshot {
+    let current_user_pubkey = current_user_pubkey.unwrap_or_default().trim();
+    if current_user_pubkey.is_empty() {
+        return FeedbackThreadsSnapshot {
+            threads: Vec::new(),
+            error: String::new(),
+        };
+    }
+
+    match query_threads(ndb, coordinate, current_user_pubkey) {
+        Ok(threads) => FeedbackThreadsSnapshot {
+            threads,
+            error: String::new(),
+        },
+        Err(error) => FeedbackThreadsSnapshot {
+            threads: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+pub fn query_thread_snapshot(ndb: &Ndb, root_event_id: &str) -> FeedbackThreadSnapshot {
+    match query_thread_events(ndb, root_event_id) {
+        Ok(events) => snapshot_from_events(events, String::new()),
+        Err(error) => FeedbackThreadSnapshot {
+            rows: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+pub fn threads_snapshot_with_root(
+    snapshot: FeedbackThreadsSnapshot,
+    root_event: &FeedbackEventRecord,
+) -> FeedbackThreadsSnapshot {
+    FeedbackThreadsSnapshot {
+        threads: optimistically_insert_root_thread(&snapshot.threads, root_event),
+        error: snapshot.error,
+    }
+}
+
+pub fn thread_snapshot_with_event(
+    snapshot: FeedbackThreadSnapshot,
+    event: &FeedbackEventRecord,
+) -> FeedbackThreadSnapshot {
+    let events: Vec<FeedbackEventRecord> = snapshot.rows.into_iter().map(|row| row.event).collect();
+    FeedbackThreadSnapshot {
+        rows: rows_for_events(upsert_thread_event(&events, event)),
+        error: snapshot.error,
     }
 }
 
@@ -163,10 +248,10 @@ pub fn query_threads(
         .build();
 
     let root_results = ndb
-        .query(&txn, &[roots_filter], 256)
+        .query(&txn, &[roots_filter], FEEDBACK_THREAD_LIMIT)
         .map_err(|e| CoreError::Cache(format!("query feedback roots: {e}")))?;
     let meta_results = ndb
-        .query(&txn, &[meta_filter], 512)
+        .query(&txn, &[meta_filter], FEEDBACK_THREAD_META_LIMIT)
         .map_err(|e| CoreError::Cache(format!("query feedback meta: {e}")))?;
 
     let mut roots: Vec<Event> = Vec::with_capacity(root_results.len());
@@ -255,7 +340,7 @@ pub fn query_thread_events(
         events.push(event);
     }
     let reply_results = ndb
-        .query(&txn, &[replies_filter], 4096)
+        .query(&txn, &[replies_filter], FEEDBACK_THREAD_EVENT_LIMIT)
         .map_err(|e| CoreError::Cache(format!("query feedback replies: {e}")))?;
     for r in &reply_results {
         let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
@@ -467,6 +552,29 @@ pub fn upsert_thread_event(
 
 // --- helpers ---------------------------------------------------------------
 
+fn snapshot_from_events(events: Vec<FeedbackEventRecord>, error: String) -> FeedbackThreadSnapshot {
+    FeedbackThreadSnapshot {
+        rows: rows_for_events(events),
+        error,
+    }
+}
+
+fn rows_for_events(events: Vec<FeedbackEventRecord>) -> Vec<FeedbackMessageRowProjection> {
+    events
+        .iter()
+        .enumerate()
+        .map(|(index, event)| {
+            let show_header = index == 0
+                || events[index - 1].author_pubkey != event.author_pubkey
+                || event.created_at > events[index - 1].created_at.saturating_add(300);
+            FeedbackMessageRowProjection {
+                event: event.clone(),
+                show_header,
+            }
+        })
+        .collect()
+}
+
 fn record_from_root(root: &Event, latest_meta: Option<&Event>) -> FeedbackThreadRecord {
     let title = latest_meta.and_then(|m| {
         first_tag_value(m, "title")
@@ -500,12 +608,6 @@ fn record_from_root(root: &Event, latest_meta: Option<&Event>) -> FeedbackThread
         status_label,
         preview: trim_preview(&root.content),
     }
-}
-
-/// Public shim used by the subscription pump's `build_change` to materialise
-/// a delta payload from a streamed event without re-querying ndb.
-pub(crate) fn event_record_for_delta(event: &Event, root_event_id: &str) -> FeedbackEventRecord {
-    event_record(event, root_event_id)
 }
 
 fn event_record(event: &Event, root_event_id: &str) -> FeedbackEventRecord {
@@ -602,12 +704,12 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
 mod tests {
     use super::*;
     use nostrdb::{Config as NdbConfig, Ndb};
-    use tempfile::tempdir;
+    use tempfile::{tempdir, TempDir};
 
     const TEST_COORD: &str =
         "31933:0000000000000000000000000000000000000000000000000000000000000001:demo";
 
-    fn open_ndb() -> (Ndb, tempfile::TempDir) {
+    fn open_ndb() -> (Ndb, TempDir) {
         let tmp = tempdir().expect("tempdir");
         let ndb = Ndb::new(
             tmp.path().to_str().unwrap(),
@@ -617,9 +719,34 @@ mod tests {
         (ndb, tmp)
     }
 
-    fn process(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
+    fn ndb_with_events(events: &[&Event]) -> (Ndb, TempDir) {
+        let tmp = tempdir().expect("tempdir");
+        let cfg = NdbConfig::new().set_mapsize(64 * 1024 * 1024);
+        let db_path = tmp.path().to_str().unwrap().to_owned();
+        {
+            let ndb = Ndb::new(&db_path, &cfg).expect("open ndb");
+            for event in events {
+                let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
+                ndb.process_event(&line).expect("process event");
+            }
+        }
+        let ndb = Ndb::new(&db_path, &cfg).expect("reopen ndb");
+        (ndb, tmp)
+    }
+
+    fn ndb_with_json_events(json_events: &[&str]) -> (Ndb, TempDir) {
+        let tmp = tempdir().expect("tempdir");
+        let cfg = NdbConfig::new().set_mapsize(64 * 1024 * 1024);
+        let db_path = tmp.path().to_str().unwrap().to_owned();
+        {
+            let ndb = Ndb::new(&db_path, &cfg).expect("open ndb");
+            for json in json_events {
+                let line = format!("[\"EVENT\",\"sub\",{}]", json);
+                ndb.process_event(&line).expect("process event");
+            }
+        }
+        let ndb = Ndb::new(&db_path, &cfg).expect("reopen ndb");
+        (ndb, tmp)
     }
 
     fn sign(keys: &Keys, kind: u16, tags: Vec<Tag>, content: &str, ts: u64) -> Event {
@@ -634,13 +761,8 @@ mod tests {
         parse_tag(parts).expect("tag")
     }
 
-    fn flush() {
-        std::thread::sleep(std::time::Duration::from_millis(150));
-    }
-
     #[test]
     fn query_threads_filters_by_author_and_coordinate_and_picks_latest_meta() {
-        let (ndb, _tmp) = open_ndb();
         let me = Keys::generate();
         let agent = Keys::generate();
         let other = Keys::generate();
@@ -706,16 +828,13 @@ mod tests {
             2_000,
         );
 
-        for e in [
+        let (ndb, _tmp) = ndb_with_events(&[
             &root,
             &other_root,
             &other_project_root,
             &earlier_meta,
             &later_meta,
-        ] {
-            process(&ndb, e);
-        }
-        flush();
+        ]);
 
         let threads =
             query_threads(&ndb, TEST_COORD, &me.public_key().to_hex()).expect("query_threads");
@@ -731,7 +850,6 @@ mod tests {
 
     #[test]
     fn query_threads_drops_replies_so_they_dont_appear_as_their_own_thread() {
-        let (ndb, _tmp) = open_ndb();
         let me = Keys::generate();
         let agent = Keys::generate();
 
@@ -756,9 +874,7 @@ mod tests {
             "follow up from me",
             1_500,
         );
-        process(&ndb, &root);
-        process(&ndb, &reply);
-        flush();
+        let (ndb, _tmp) = ndb_with_events(&[&root, &reply]);
 
         let threads =
             query_threads(&ndb, TEST_COORD, &me.public_key().to_hex()).expect("query_threads");
@@ -768,7 +884,6 @@ mod tests {
 
     #[test]
     fn query_thread_events_returns_root_plus_every_e_tagged_reply_regardless_of_author() {
-        let (ndb, _tmp) = open_ndb();
         let me = Keys::generate();
         let agent = Keys::generate();
 
@@ -815,11 +930,7 @@ mod tests {
             "different thread",
             2_500,
         );
-        process(&ndb, &root);
-        process(&ndb, &agent_reply);
-        process(&ndb, &user_followup);
-        process(&ndb, &unrelated);
-        flush();
+        let (ndb, _tmp) = ndb_with_events(&[&root, &agent_reply, &user_followup, &unrelated]);
 
         let events = query_thread_events(&ndb, &root.id.to_hex()).expect("query_thread_events");
         let order: Vec<&str> = events.iter().map(|e| e.content.as_str()).collect();
@@ -827,8 +938,64 @@ mod tests {
     }
 
     #[test]
-    fn query_first_agent_pubkey_returns_first_p_tag_of_latest_project_event() {
+    fn query_thread_snapshot_projects_message_rows() {
+        let me = Keys::generate();
+        let agent = Keys::generate();
+
+        let root = sign(
+            &me,
+            KIND_FEEDBACK_NOTE,
+            vec![tag(&["a", TEST_COORD])],
+            "root",
+            1_000,
+        );
+        let grouped_reply = sign(
+            &me,
+            KIND_FEEDBACK_NOTE,
+            vec![tag(&["e", &root.id.to_hex(), "", "root"])],
+            "grouped",
+            1_050,
+        );
+        let agent_reply = sign(
+            &agent,
+            KIND_FEEDBACK_NOTE,
+            vec![tag(&["e", &root.id.to_hex(), "", "root"])],
+            "agent",
+            1_100,
+        );
+        let (ndb, _tmp) = ndb_with_events(&[&root, &grouped_reply, &agent_reply]);
+
+        let snapshot = query_thread_snapshot(&ndb, &root.id.to_hex());
+
+        assert!(snapshot.error.is_empty());
+        assert_eq!(
+            snapshot
+                .rows
+                .iter()
+                .map(|row| row.event.content.as_str())
+                .collect::<Vec<_>>(),
+            vec!["root", "grouped", "agent"]
+        );
+        assert!(snapshot.rows[0].show_header);
+        assert!(!snapshot.rows[1].show_header);
+        assert!(snapshot.rows[2].show_header);
+    }
+
+    #[test]
+    fn query_snapshot_returns_error_state_for_invalid_inputs() {
         let (ndb, _tmp) = open_ndb();
+
+        let threads = query_threads_snapshot(&ndb, "bad-coordinate", Some("also-bad-pubkey"));
+        let events = query_thread_snapshot(&ndb, "not-an-event-id");
+
+        assert!(threads.threads.is_empty());
+        assert!(!threads.error.is_empty());
+        assert!(events.rows.is_empty());
+        assert!(!events.error.is_empty());
+    }
+
+    #[test]
+    fn query_first_agent_pubkey_returns_first_p_tag_of_latest_project_event() {
         // We need keys that match the coordinate's pubkey, so derive the
         // coordinate from the actual key pair.
         let project = Keys::generate();
@@ -853,8 +1020,7 @@ mod tests {
             "",
             1_000,
         );
-        process(&ndb, &project_event);
-        flush();
+        let (ndb, _tmp) = ndb_with_events(&[&project_event]);
 
         let agent = query_first_agent_pubkey(&ndb, &coord)
             .expect("query")
@@ -972,7 +1138,7 @@ mod tests {
                 author_pubkey: "me".into(),
                 ..event
             },
-            previous_event: None,
+            show_header: true,
             current_user_pubkey: Some("me".into()),
             profile: Some(profile("alice", "Alice Smith", "https://example.com/a.png")),
         });
@@ -1000,14 +1166,14 @@ mod tests {
         };
 
         let grouped = feedback_message_presentation(FeedbackMessagePresentationInput {
-            event: current,
-            previous_event: Some(previous.clone()),
+            event: current.clone(),
+            show_header: rows_for_events(vec![previous.clone(), current])[1].show_header,
             current_user_pubkey: Some("me".into()),
             profile: Some(profile("agent-name", "", "")),
         });
         let separated = feedback_message_presentation(FeedbackMessagePresentationInput {
-            event: later,
-            previous_event: Some(previous),
+            event: later.clone(),
+            show_header: rows_for_events(vec![previous, later])[1].show_header,
             current_user_pubkey: Some("me".into()),
             profile: None,
         });
@@ -1033,8 +1199,8 @@ mod tests {
         };
 
         let projection = feedback_message_presentation(FeedbackMessagePresentationInput {
-            event: current,
-            previous_event: Some(previous),
+            event: current.clone(),
+            show_header: rows_for_events(vec![previous, current])[1].show_header,
             current_user_pubkey: None,
             profile: None,
         });
@@ -1103,17 +1269,11 @@ mod tests {
     /// the relay and verify `query_thread_events` returns all three.
     #[test]
     fn query_thread_events_returns_replies_from_real_relay_payload() {
-        let (ndb, _tmp) = open_ndb();
-
         let root_json = r#"{"kind":1,"id":"4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949","pubkey":"fcccc04fd113df1e58740c270733b33b211d1dfe2f730861ac7080125f86503f","created_at":1777553395,"tags":[["a","31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter"]],"content":"Sending from outside","sig":"5eb7e2be92a0b46feeb82383c6144083c2ed5b6b5de91964f0e7f0b2f1956de54baee92be5e4010d9926c3d81540052f0699175037c246678f70489ae1f48abe"}"#;
         let user_followup_json = r#"{"kind":1,"id":"58c920d4533c45e1354c861182ada0d8441235356a24630928c07d62452ed6bc","pubkey":"09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7","created_at":1777553426,"tags":[["e","4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949","","root"],["a","31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter"],["client","tenex-tui"],["p","4108cd882d5bd7446b4b5cb0688b14694f3d0dbb52bd24f16e1e29ff1636adab"]],"content":"from where did I send this?","sig":"fe430bcf9e064819f942d15f033ed4261ecd7cf1a3cadaecb37b12cb774c55a37ea8c601e30402251dfa48d3b2fb9ff4dbdb56c364c1dbe2cf63b9f816ad0a21"}"#;
         let agent_reply_json = r##"{"kind":1,"id":"7035a5148075421b71eda6f76426c89bc49bce7d3a89a3122e8d859dc1963cd1","pubkey":"4108cd882d5bd7446b4b5cb0688b14694f3d0dbb52bd24f16e1e29ff1636adab","created_at":1777553548,"tags":[["e","4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949","","root"],["e","58c920d4533c45e1354c861182ada0d8441235356a24630928c07d62452ed6bc","","reply"],["p","09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7"],["status","completed"],["llm-prompt-tokens","10711"],["llm-completion-tokens","126"],["llm-total-tokens","10837"],["llm-cached-input-tokens","0"],["a","31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter"],["llm-model","openrouter:openai/gpt-4o-mini"],["llm-ral","1"],["branch","main"]],"content":"It looks like the message you sent may have originated from one of the active conversations in the \"Highlighter\" project. Here are the currently active conversations:\n\n1. **Message from Tenex-TUI** [id: 0cbd143a] — last activity 2 minutes ago\n2. **Agent Category Discussion** [id: 28640a67] — last activity 7 minutes ago\n3. **Initial Greeting** [id: d89c7624] — last activity 11 minutes ago\n\nIf you have a specific message in mind, could you clarify which one you are referring to?","sig":"016faba108484dbb1a00a12372d428e6f9980d54a41c5889fd2e0e9fb6296690bb25bb3873e5a38e49ecc3feb05258216114e93ccb4fc2a1232b501516026c5f"}"##;
 
-        for json in [root_json, user_followup_json, agent_reply_json] {
-            let line = format!("[\"EVENT\",\"sub\",{}]", json);
-            ndb.process_event(&line).expect("process event");
-        }
-        flush();
+        let (ndb, _tmp) = ndb_with_json_events(&[root_json, user_followup_json, agent_reply_json]);
 
         let root_id = "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949";
         let events = query_thread_events(&ndb, root_id).expect("query");
@@ -1180,7 +1340,7 @@ mod tests {
 
     /// Mirrors the iOS app's full path: spin up a real `HighlighterCore`,
     /// call `subscribe_feedback_thread`, wait, then call
-    /// `get_feedback_thread_events` — the same Swift-facing functions
+    /// `get_feedback_thread_snapshot` — the same Swift-facing functions
     /// `FeedbackThreadStore.start()` calls in order. Verifies the events the
     /// user is missing actually surface end-to-end.
     /// Requires network — run with `--ignored --nocapture`.
@@ -1194,9 +1354,9 @@ mod tests {
             "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949".to_string();
 
         // Step 1 (cache miss expected on a fresh ndb).
-        let initial = core.get_feedback_thread_events(root_hex.clone()).await;
+        let initial = core.get_feedback_thread_snapshot(root_hex.clone()).await;
         assert!(initial.error.is_empty(), "initial query: {}", initial.error);
-        let initial = initial.values;
+        let initial = initial.rows;
         eprintln!("initial cache events: {}", initial.len());
 
         // Step 2: open the subscription — this is where ensure_feedback_relay
@@ -1209,11 +1369,12 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
 
         // Step 3: re-query — by now the subscription should have populated ndb.
-        let after = core.get_feedback_thread_events(root_hex.clone()).await;
+        let after = core.get_feedback_thread_snapshot(root_hex.clone()).await;
         assert!(after.error.is_empty(), "after query: {}", after.error);
-        let after = after.values;
+        let after = after.rows;
         eprintln!("after subscription: {} events", after.len());
-        for e in &after {
+        for row in &after {
+            let e = &row.event;
             eprintln!("  id={} content={:?}", e.event_id, e.content);
         }
         assert!(

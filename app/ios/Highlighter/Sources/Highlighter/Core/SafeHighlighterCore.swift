@@ -592,12 +592,12 @@ actor SafeHighlighterCore {
 
     // MARK: - Feedback (shake-to-share)
 
-    func getFeedbackThreads(coordinate: String) async -> FeedbackThreadListOutcome {
-        await core.getFeedbackThreads(coordinate: coordinate)
+    func getFeedbackThreadsSnapshot(coordinate: String) async -> FeedbackThreadsSnapshot {
+        await core.getFeedbackThreadsSnapshot(coordinate: coordinate)
     }
 
-    func getFeedbackThreadEvents(rootEventId: String) async -> FeedbackEventListOutcome {
-        await core.getFeedbackThreadEvents(rootEventId: rootEventId)
+    func getFeedbackThreadSnapshot(rootEventId: String) async -> FeedbackThreadSnapshot {
+        await core.getFeedbackThreadSnapshot(rootEventId: rootEventId)
     }
 
     nonisolated func projectFeedbackComposer(
@@ -618,42 +618,22 @@ actor SafeHighlighterCore {
         core.projectFeedbackMessagePresentation(input: input)
     }
 
-    nonisolated func optimisticallyInsertFeedbackRootThread(
-        threads: [FeedbackThreadRecord],
-        rootEvent: FeedbackEventRecord
-    ) -> [FeedbackThreadRecord] {
-        core.optimisticallyInsertFeedbackRootThread(
-            threads: threads,
-            rootEvent: rootEvent
-        )
-    }
-
-    nonisolated func upsertFeedbackThreadEvent(
-        events: [FeedbackEventRecord],
-        event: FeedbackEventRecord
-    ) -> [FeedbackEventRecord] {
-        core.upsertFeedbackThreadEvent(
-            events: events,
-            event: event
-        )
-    }
-
-    func publishFeedbackRootNote(
+    func publishFeedbackRootNoteSnapshot(
         coordinate: String,
         body: String
-    ) async -> FeedbackEventOutcome {
-        await core.publishFeedbackRootNote(
+    ) async -> FeedbackRootPublishSnapshotOutcome {
+        await core.publishFeedbackRootNoteSnapshot(
             coordinate: coordinate,
             body: body
         )
     }
 
-    func publishFeedbackThreadReply(
+    func publishFeedbackThreadReplySnapshot(
         coordinate: String,
         parentEventId: String,
         body: String
-    ) async -> FeedbackEventOutcome {
-        await core.publishFeedbackThreadReply(
+    ) async -> FeedbackReplyPublishSnapshotOutcome {
+        await core.publishFeedbackThreadReplySnapshot(
             coordinate: coordinate,
             parentEventId: parentEventId,
             body: body

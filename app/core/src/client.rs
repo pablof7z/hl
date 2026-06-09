@@ -32,8 +32,7 @@ use crate::models::{
     CommentListOutcome, CommentOutcome, CommentRecord, CommentReferenceBucket, CommentScope,
     CommentScopeOutcome, CommentThreadNode, CommentThreadProjection, CommunityListOutcome,
     CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome, CurrentUser,
-    CurrentUserOutcome, DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
-    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
+    CurrentUserOutcome, DataOutcome, DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord,
     GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
     HighlightSourceKind, HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome,
     LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
@@ -531,49 +530,6 @@ fn discussion_outcome(result: Result<DiscussionRecord, CoreError>) -> Discussion
         },
         Err(error) => DiscussionOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn feedback_event_outcome(result: Result<FeedbackEventRecord, CoreError>) -> FeedbackEventOutcome {
-    match result {
-        Ok(value) => FeedbackEventOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => FeedbackEventOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn feedback_event_list_outcome(
-    result: Result<Vec<FeedbackEventRecord>, CoreError>,
-) -> FeedbackEventListOutcome {
-    match result {
-        Ok(values) => FeedbackEventListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => FeedbackEventListOutcome {
-            values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
-fn feedback_thread_list_outcome(
-    result: Result<Vec<FeedbackThreadRecord>, CoreError>,
-) -> FeedbackThreadListOutcome {
-    match result {
-        Ok(values) => FeedbackThreadListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => FeedbackThreadListOutcome {
-            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -1448,8 +1404,8 @@ impl HighlighterCore {
         })())
     }
 
-    /// Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
-    /// deltas for every kind:1 `e`-tagged to the root (regardless of author).
+    /// Per-thread feedback subscription. Fires `FeedbackThreadUpdated` deltas
+    /// for every kind:1 `e`-tagged to the root (regardless of author).
     pub async fn subscribe_feedback_thread(&self, root_event_id: String) -> SubscriptionOutcome {
         subscription_outcome((|| {
             let root_event_id = root_event_id.trim();
@@ -3165,28 +3121,22 @@ impl HighlighterCore {
 
     // -- Feedback (shake-to-share) --
 
-    /// Threads scoped to `coordinate` authored by the current user. Returns
-    /// an empty list if not logged in.
-    pub async fn get_feedback_threads(&self, coordinate: String) -> FeedbackThreadListOutcome {
-        let result: Result<Vec<FeedbackThreadRecord>, CoreError> = (|| {
-            let user = match self.inner.read().session.current_user() {
-                Some(u) => u,
-                None => return Ok(Vec::new()),
-            };
-            feedback::query_threads(self.runtime.ndb(), &coordinate, &user.pubkey)
-        })();
-        feedback_thread_list_outcome(result)
+    /// Threads scoped to `coordinate` authored by the current user. Rust owns
+    /// error collapse and returns an empty snapshot when logged out.
+    pub async fn get_feedback_threads_snapshot(
+        &self,
+        coordinate: String,
+    ) -> feedback::FeedbackThreadsSnapshot {
+        self.feedback_threads_snapshot_for_current_user(&coordinate)
     }
 
-    /// Every message in a feedback thread, ordered ascending by `created_at`.
-    pub async fn get_feedback_thread_events(
+    /// Bounded open-thread read model. Rust owns oldest-first ordering and
+    /// message-group header derivation; native shells render rows.
+    pub async fn get_feedback_thread_snapshot(
         &self,
         root_event_id: String,
-    ) -> FeedbackEventListOutcome {
-        feedback_event_list_outcome(feedback::query_thread_events(
-            self.runtime.ndb(),
-            &root_event_id,
-        ))
+    ) -> feedback::FeedbackThreadSnapshot {
+        feedback::query_thread_snapshot(self.runtime.ndb(), &root_event_id)
     }
 
     /// Feedback composer projection shared by new-thread and reply surfaces.
@@ -3217,32 +3167,6 @@ impl HighlighterCore {
         input: feedback::FeedbackMessagePresentationInput,
     ) -> feedback::FeedbackMessagePresentationProjection {
         feedback::feedback_message_presentation(input)
-    }
-
-    /// Optimistically insert a newly-published feedback root into the thread
-    /// list. Rust owns root validation, preview text, dedupe, and ordering.
-    pub fn optimistically_insert_feedback_root_thread(
-        &self,
-        threads: Vec<FeedbackThreadRecord>,
-        root_event: FeedbackEventRecord,
-    ) -> Vec<FeedbackThreadRecord> {
-        feedback::optimistically_insert_root_thread(&threads, &root_event)
-    }
-
-    /// Upsert a streamed feedback thread event into the open thread list.
-    /// Rust owns replacement identity and oldest-first ordering.
-    pub fn upsert_feedback_thread_event(
-        &self,
-        events: Vec<FeedbackEventRecord>,
-        event: FeedbackEventRecord,
-    ) -> Vec<FeedbackEventRecord> {
-        feedback::upsert_thread_event(&events, &event)
-    }
-
-    fn feedback_agent_pubkey_for(&self, coordinate: &str) -> Option<String> {
-        feedback::query_first_agent_pubkey(self.runtime.ndb(), coordinate)
-            .ok()
-            .flatten()
     }
 
     // -- Writes --
@@ -3354,52 +3278,79 @@ impl HighlighterCore {
         .await
     }
 
-    /// Publish a feedback root note. Rust resolves the current project agent
-    /// pubkey from nostrdb and deliberately publishes without a `p` tag when
-    /// the project event is not cached yet.
-    pub async fn publish_feedback_root_note(
+    /// Publish a feedback root note and return the refreshed bounded thread
+    /// snapshot. Rust resolves the optional project agent `p` tag and owns the
+    /// optimistic insertion of the signed root before relay echo.
+    pub async fn publish_feedback_root_note_snapshot(
         &self,
         coordinate: String,
         body: String,
-    ) -> FeedbackEventOutcome {
-        let result: Result<FeedbackEventRecord, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            let agent_pubkey = self.feedback_agent_pubkey_for(&coordinate);
-            feedback::publish_note(
-                &self.runtime,
-                &coordinate,
-                agent_pubkey.as_deref(),
-                None,
-                &body,
-            )
-            .await
+    ) -> feedback::FeedbackRootPublishSnapshotOutcome {
+        let base_snapshot = self.feedback_threads_snapshot_for_current_user(&coordinate);
+        if let Err(error) = self.require_user_pubkey() {
+            return feedback::FeedbackRootPublishSnapshotOutcome {
+                snapshot: base_snapshot,
+                error: error.to_string(),
+            };
         }
-        .await;
-        feedback_event_outcome(result)
+
+        let agent_pubkey = self.feedback_agent_pubkey_for(&coordinate);
+        match feedback::publish_note(
+            &self.runtime,
+            &coordinate,
+            agent_pubkey.as_deref(),
+            None,
+            &body,
+        )
+        .await
+        {
+            Ok(record) => feedback::FeedbackRootPublishSnapshotOutcome {
+                snapshot: feedback::threads_snapshot_with_root(base_snapshot, &record),
+                error: String::new(),
+            },
+            Err(error) => feedback::FeedbackRootPublishSnapshotOutcome {
+                snapshot: base_snapshot,
+                error: error.to_string(),
+            },
+        }
     }
 
-    /// Publish a feedback reply into an existing root thread. Rust resolves
-    /// the optional project agent `p` tag and owns the NIP-10 root marker.
-    pub async fn publish_feedback_thread_reply(
+    /// Publish a feedback reply into an existing root thread and return the
+    /// refreshed bounded thread snapshot. Rust owns the NIP-10 root marker and
+    /// optimistic merge of the signed reply.
+    pub async fn publish_feedback_thread_reply_snapshot(
         &self,
         coordinate: String,
         parent_event_id: String,
         body: String,
-    ) -> FeedbackEventOutcome {
-        let result: Result<FeedbackEventRecord, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            let agent_pubkey = self.feedback_agent_pubkey_for(&coordinate);
-            feedback::publish_note(
-                &self.runtime,
-                &coordinate,
-                agent_pubkey.as_deref(),
-                Some(parent_event_id.as_str()),
-                &body,
-            )
-            .await
+    ) -> feedback::FeedbackReplyPublishSnapshotOutcome {
+        let base_snapshot = feedback::query_thread_snapshot(self.runtime.ndb(), &parent_event_id);
+        if let Err(error) = self.require_user_pubkey() {
+            return feedback::FeedbackReplyPublishSnapshotOutcome {
+                snapshot: base_snapshot,
+                error: error.to_string(),
+            };
         }
-        .await;
-        feedback_event_outcome(result)
+
+        let agent_pubkey = self.feedback_agent_pubkey_for(&coordinate);
+        match feedback::publish_note(
+            &self.runtime,
+            &coordinate,
+            agent_pubkey.as_deref(),
+            Some(parent_event_id.as_str()),
+            &body,
+        )
+        .await
+        {
+            Ok(record) => feedback::FeedbackReplyPublishSnapshotOutcome {
+                snapshot: feedback::thread_snapshot_with_event(base_snapshot, &record),
+                error: String::new(),
+            },
+            Err(error) => feedback::FeedbackReplyPublishSnapshotOutcome {
+                snapshot: base_snapshot,
+                error: error.to_string(),
+            },
+        }
     }
 
     /// Publish and share one podcast clip highlight. Rust owns clip draft
@@ -4475,6 +4426,29 @@ impl HighlighterCore {
             .ok_or(CoreError::NotAuthenticated)?;
         PublicKey::from_hex(&user.pubkey)
             .map_err(|e| CoreError::Other(format!("invalid current user pubkey: {e}")))
+    }
+
+    fn feedback_agent_pubkey_for(&self, coordinate: &str) -> Option<String> {
+        feedback::query_first_agent_pubkey(self.runtime.ndb(), coordinate)
+            .ok()
+            .flatten()
+    }
+
+    fn feedback_threads_snapshot_for_current_user(
+        &self,
+        coordinate: &str,
+    ) -> feedback::FeedbackThreadsSnapshot {
+        let current_user_pubkey = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|user| user.pubkey.clone());
+        feedback::query_threads_snapshot(
+            self.runtime.ndb(),
+            coordinate,
+            current_user_pubkey.as_deref(),
+        )
     }
 }
 

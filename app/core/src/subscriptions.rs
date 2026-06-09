@@ -1577,8 +1577,7 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             if !matches_root {
                 return None;
             }
-            let record = crate::feedback::event_record_for_delta(event, &root_hex);
-            Some(DataChangeType::FeedbackThreadEventUpserted { event: record })
+            Some(DataChangeType::FeedbackThreadUpdated)
         }
     }
 }

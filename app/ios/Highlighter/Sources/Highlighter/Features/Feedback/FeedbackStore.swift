@@ -1,10 +1,8 @@
 import Foundation
 import Observation
 
-/// View-scoped reactive state for the shake-to-share feedback list. Mirrors
-/// `RoomStore` / `DiscussionStore`: owns a per-view nostrdb read plus a
-/// subscription handle, and refreshes the thread list whenever the bridge
-/// routes a `feedbackThreadsUpdated` delta.
+/// View-scoped reactive state for the shake-to-share feedback list. Rust owns
+/// the bounded thread snapshot; Swift keeps only loading/subscription flags.
 @MainActor
 @Observable
 final class FeedbackStore {
@@ -24,11 +22,11 @@ final class FeedbackStore {
         isLoading = true
         loadError = nil
 
-        let threadsOutcome = await core.getFeedbackThreads(coordinate: coordinate)
-        if threadsOutcome.error.isEmpty {
-            threads = threadsOutcome.values
+        let snapshot = await core.getFeedbackThreadsSnapshot(coordinate: coordinate)
+        if snapshot.error.isEmpty {
+            apply(snapshot: snapshot)
         } else {
-            loadError = threadsOutcome.error
+            loadError = snapshot.error
         }
         isLoading = false
 
@@ -49,26 +47,19 @@ final class FeedbackStore {
         subscriptionHandle = nil
     }
 
-    /// Re-query the thread list from nostrdb. Called by the bridge when a new
-    /// kind:1 root or kind:513 metadata event lands.
+    /// Re-query the Rust snapshot from nostrdb. Called by the bridge when a
+    /// new kind:1 root or kind:513 metadata event lands.
     func refreshThreads() async {
         guard let core, let coordinate else { return }
-        let outcome = await core.getFeedbackThreads(coordinate: coordinate)
-        if outcome.error.isEmpty {
-            threads = outcome.values
+        let snapshot = await core.getFeedbackThreadsSnapshot(coordinate: coordinate)
+        if snapshot.error.isEmpty {
+            apply(snapshot: snapshot)
         }
     }
 
-    /// Optimistically insert a freshly-published root note so the UI updates
-    /// immediately, then let the subscription's eventual delta reconcile.
-    func optimisticallyInsert(rootEvent: FeedbackEventRecord) {
-        guard let core else {
-            preconditionFailure("FeedbackStore.optimisticallyInsert called before start")
-        }
-        threads = core.optimisticallyInsertFeedbackRootThread(
-            threads: threads,
-            rootEvent: rootEvent
-        )
+    func apply(snapshot: FeedbackThreadsSnapshot) {
+        threads = snapshot.threads
+        loadError = snapshot.error.isEmpty ? nil : snapshot.error
     }
 
 }

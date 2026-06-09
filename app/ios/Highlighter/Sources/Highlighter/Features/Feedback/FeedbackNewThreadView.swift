@@ -76,16 +76,15 @@ struct FeedbackNewThreadView: View {
         errorMessage = nil
         defer { isPublishing = false }
 
-        let outcome = await app.safeCore.publishFeedbackRootNote(
+        let outcome = await app.safeCore.publishFeedbackRootNoteSnapshot(
             coordinate: FeedbackProject.coordinate,
             body: projection.submitBody
         )
-        guard outcome.error.isEmpty, let record = outcome.value else {
+        guard outcome.error.isEmpty else {
             errorMessage = outcome.error.isEmpty ? "Failed to publish." : outcome.error
             return
         }
-        store.optimisticallyInsert(rootEvent: record)
-        await store.refreshThreads()
+        store.apply(snapshot: outcome.snapshot)
         dismiss()
         onSent(false)
     }

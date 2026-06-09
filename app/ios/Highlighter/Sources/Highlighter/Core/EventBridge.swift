@@ -291,8 +291,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
 
     @MainActor
     private func dispatchFeedbackThread(_ change: DataChangeType, store: FeedbackThreadStore) {
-        if case .feedbackThreadEventUpserted(let event) = change {
-            store.apply(event: event)
+        if case .feedbackThreadUpdated = change {
+            Task { await store.refreshThread() }
         }
     }
 

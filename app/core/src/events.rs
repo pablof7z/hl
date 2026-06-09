@@ -6,8 +6,7 @@
 
 use crate::models::{
     ArtifactRecord, ChatMessageRecord, CommunitySummary, CurrentUser, DiscussionRecord,
-    FeedbackEventRecord, HighlightRecord, HydratedHighlight, ProfileUpdateAction, RelayDiagnostic,
-    RelayStatus,
+    HighlightRecord, HydratedHighlight, ProfileUpdateAction, RelayDiagnostic, RelayStatus,
 };
 use crate::nostr_entities::NostrEntityEvent;
 
@@ -101,11 +100,10 @@ pub enum DataChangeType {
     /// existing row, which is easier to handle with a re-query than an in-place
     /// patch).
     FeedbackThreadsUpdated,
-    /// A kind:1 message inside an open feedback thread arrived. The Swift
-    /// store inserts/upserts it into the chat view ordered by `created_at`.
-    FeedbackThreadEventUpserted {
-        event: FeedbackEventRecord,
-    },
+    /// A kind:1 message inside an open feedback thread arrived. Native
+    /// stores re-read Rust's bounded feedback-thread snapshot for the open
+    /// thread.
+    FeedbackThreadUpdated,
     /// A NIP-50 relay search returned new kind:30023 events. The Swift store
     /// re-reads Rust's article snapshot on receipt; payload is the query the
     /// subscription was opened with (so a stale pump can't update a newer

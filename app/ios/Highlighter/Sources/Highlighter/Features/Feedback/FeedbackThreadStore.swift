@@ -1,13 +1,12 @@
 import Foundation
 import Observation
 
-/// View-scoped store backing the open-thread chat view. Loads every kind:1
-/// `e`-tagged to the root (regardless of author so agent replies appear),
-/// then receives per-event upserts from the bridge.
+/// View-scoped store backing the open-thread chat view. Rust owns the bounded
+/// row snapshot and message grouping; Swift keeps composer/subscription flags.
 @MainActor
 @Observable
 final class FeedbackThreadStore {
-    private(set) var events: [FeedbackEventRecord] = []
+    private(set) var rows: [FeedbackMessageRowProjection] = []
     private(set) var isLoading: Bool = true
     private(set) var loadError: String?
     private(set) var isPublishing: Bool = false
@@ -31,11 +30,11 @@ final class FeedbackThreadStore {
         isLoading = true
         loadError = nil
 
-        let eventsOutcome = await core.getFeedbackThreadEvents(rootEventId: rootEventId)
-        if eventsOutcome.error.isEmpty {
-            events = eventsOutcome.values
+        let snapshot = await core.getFeedbackThreadSnapshot(rootEventId: rootEventId)
+        if snapshot.error.isEmpty {
+            apply(snapshot: snapshot)
         } else {
-            loadError = eventsOutcome.error
+            loadError = snapshot.error
         }
         isLoading = false
 
@@ -56,20 +55,23 @@ final class FeedbackThreadStore {
         subscriptionHandle = nil
     }
 
-    func apply(event: FeedbackEventRecord) {
-        guard let core else {
-            preconditionFailure("FeedbackThreadStore.apply called before start")
+    func refreshThread() async {
+        guard let core, let rootEventId else { return }
+        let snapshot = await core.getFeedbackThreadSnapshot(rootEventId: rootEventId)
+        if snapshot.error.isEmpty {
+            apply(snapshot: snapshot)
         }
-        events = core.upsertFeedbackThreadEvent(
-            events: events,
-            event: event
-        )
+    }
+
+    func apply(snapshot: FeedbackThreadSnapshot) {
+        rows = snapshot.rows
+        loadError = snapshot.error.isEmpty ? nil : snapshot.error
     }
 
     /// Send a reply into the open thread. Rust resolves feedback agent
     /// routing and NIP-10 root tagging.
     @discardableResult
-    func sendReply(body: String) async -> FeedbackEventOutcome? {
+    func sendReply(body: String) async -> FeedbackReplyPublishSnapshotOutcome? {
         guard let core, let coordinate, let rootEventId else {
             return nil
         }
@@ -77,13 +79,14 @@ final class FeedbackThreadStore {
         isPublishing = true
         defer { isPublishing = false }
 
-        let outcome = await core.publishFeedbackThreadReply(
+        let outcome = await core.publishFeedbackThreadReplySnapshot(
             coordinate: coordinate,
             parentEventId: rootEventId,
             body: body
         )
-        guard outcome.error.isEmpty, let record = outcome.value else { return outcome }
-        apply(event: record)
+        if outcome.error.isEmpty {
+            apply(snapshot: outcome.snapshot)
+        }
         return outcome
     }
 }

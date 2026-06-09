@@ -103,7 +103,9 @@ pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
 pub use feedback::{
     FeedbackComposerProjection, FeedbackComposerProjectionInput, FeedbackMessagePresentationInput,
-    FeedbackMessagePresentationProjection, FeedbackThreadPresentationProjection,
+    FeedbackMessagePresentationProjection, FeedbackMessageRowProjection,
+    FeedbackReplyPublishSnapshotOutcome, FeedbackRootPublishSnapshotOutcome,
+    FeedbackThreadPresentationProjection, FeedbackThreadSnapshot, FeedbackThreadsSnapshot,
 };
 pub use groups::{
     CommunityRowProjection, CommunityRowProjectionInput, CreateRoomProjection,
@@ -146,18 +148,17 @@ pub use models::{
     CommentThreadProjection, CommunityListOutcome, CommunitySummary, CurationMenuItem,
     CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
     DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
-    FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome,
-    FeedbackThreadRecord, GeneratedAccount, GeneratedAccountOutcome, HighlightListOutcome,
-    HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
-    HighlightSourceKind, HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome,
-    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
-    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
-    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
-    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
-    ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
-    RelayDiagnosticListOutcome, RoomLane, RoomRecommendation, RoomRecommendationReason,
-    StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, GeneratedAccountOutcome,
+    HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightReferenceBucket,
+    HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem, HydratedHighlight,
+    HydratedHighlightListOutcome, LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome,
+    Nip11DocumentOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
+    OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
+    RelayConfigListOutcome, RelayDiagnosticListOutcome, RoomLane, RoomRecommendation,
+    RoomRecommendationReason, StringListOutcome, StringOutcome, SubscriptionOutcome,
+    TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 pub use nip05::{
     Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,

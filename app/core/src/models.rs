@@ -255,24 +255,6 @@ pub struct DiscussionListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct FeedbackEventOutcome {
-    pub value: Option<FeedbackEventRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct FeedbackEventListOutcome {
-    pub values: Vec<FeedbackEventRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct FeedbackThreadListOutcome {
-    pub values: Vec<FeedbackThreadRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct HighlightListOutcome {
     pub values: Vec<HighlightRecord>,
     pub error: String,
