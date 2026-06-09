@@ -235,12 +235,6 @@ pub struct NostrEntityEventOutcome {
     pub error: String,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct WhatsNewEntriesOutcome {
-    pub entries: Vec<crate::whats_new::WhatsNewEntry>,
-    pub error: String,
-}
-
 /// Mirrors `CommunitySummary` in `web/src/lib/ndk/groups.ts:23-35`.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CommunitySummary {

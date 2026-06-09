@@ -20,6 +20,13 @@ pub struct WhatsNewEntry {
     pub lines: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WhatsNewPresentationSnapshot {
+    pub entries: Vec<WhatsNewEntry>,
+    pub should_present: bool,
+    pub error_message: String,
+}
+
 pub struct WhatsNewStore {
     path: PathBuf,
     last_seen: Mutex<Option<Option<u64>>>,
@@ -71,6 +78,23 @@ impl WhatsNewStore {
         persist_state(&self.path, next).await?;
         *guard = Some(Some(next));
         Ok(())
+    }
+}
+
+pub fn presentation_snapshot(
+    result: Result<Vec<WhatsNewEntry>, CoreError>,
+) -> WhatsNewPresentationSnapshot {
+    match result {
+        Ok(entries) => WhatsNewPresentationSnapshot {
+            should_present: !entries.is_empty(),
+            entries,
+            error_message: String::new(),
+        },
+        Err(error) => WhatsNewPresentationSnapshot {
+            entries: Vec::new(),
+            should_present: false,
+            error_message: error.to_string(),
+        },
     }
 }
 
@@ -241,6 +265,29 @@ mod tests {
             Some(1_778_795_100)
         );
         assert_eq!(parse_iso8601_utc("2026-02-29T00:00:00Z"), None);
+    }
+
+    #[test]
+    fn presentation_snapshot_projects_entries_empty_and_error_states() {
+        let entry = WhatsNewEntry {
+            shipped_at_iso: "2026-05-14T21:45:00Z".into(),
+            shipped_at_unix_seconds: 1_778_795_100,
+            lines: vec!["One".into()],
+        };
+        let success = presentation_snapshot(Ok(vec![entry.clone()]));
+        assert_eq!(success.entries, vec![entry]);
+        assert!(success.should_present);
+        assert!(success.error_message.is_empty());
+
+        let empty = presentation_snapshot(Ok(Vec::new()));
+        assert!(empty.entries.is_empty());
+        assert!(!empty.should_present);
+        assert!(empty.error_message.is_empty());
+
+        let failure = presentation_snapshot(Err(CoreError::Cache("bad payload".into())));
+        assert!(failure.entries.is_empty());
+        assert!(!failure.should_present);
+        assert_eq!(failure.error_message, "cache error: bad payload");
     }
 
     #[tokio::test]

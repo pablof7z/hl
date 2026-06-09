@@ -196,7 +196,7 @@ actor SafeHighlighterCore {
         await core.downloadPodcastArtwork(url: url)
     }
 
-    func prepareWhatsNew() async -> WhatsNewEntriesOutcome {
+    func prepareWhatsNew() async -> WhatsNewPresentationSnapshot {
         await core.prepareWhatsNew()
     }
 

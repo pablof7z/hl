@@ -36,7 +36,7 @@ use crate::models::{
     NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestProjection,
     OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
     ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -461,21 +461,6 @@ fn nostr_entity_event_outcome(
         },
         Err(error) => NostrEntityEventOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn whats_new_entries_outcome(
-    result: Result<Vec<whats_new::WhatsNewEntry>, CoreError>,
-) -> WhatsNewEntriesOutcome {
-    match result {
-        Ok(entries) => WhatsNewEntriesOutcome {
-            entries,
-            error: String::new(),
-        },
-        Err(error) => WhatsNewEntriesOutcome {
-            entries: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -953,8 +938,8 @@ impl HighlighterCore {
         crate::share_extension::share_queue_drain_projection(input)
     }
 
-    pub async fn prepare_whats_new(&self) -> WhatsNewEntriesOutcome {
-        whats_new_entries_outcome(self.whats_new.prepare().await)
+    pub async fn prepare_whats_new(&self) -> whats_new::WhatsNewPresentationSnapshot {
+        whats_new::presentation_snapshot(self.whats_new.prepare().await)
     }
 
     pub async fn mark_whats_new_seen(&self, shipped_at_unix_seconds: u64) -> MutationOutcome {

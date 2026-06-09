@@ -1253,7 +1253,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func planRelayNip11Probes(input: RelayNip11ProbePlanInput)  -> RelayNip11ProbePlan
 
-    func prepareWhatsNew() async  -> WhatsNewEntriesOutcome
+    func prepareWhatsNew() async  -> WhatsNewPresentationSnapshot
 
     /**
      * Fetch the target relay's NIP-11 information document via an HTTPS
@@ -3743,7 +3743,7 @@ open func planRelayNip11Probes(input: RelayNip11ProbePlanInput) -> RelayNip11Pro
 })
 }
 
-open func prepareWhatsNew()async  -> WhatsNewEntriesOutcome  {
+open func prepareWhatsNew()async  -> WhatsNewPresentationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -3755,7 +3755,7 @@ open func prepareWhatsNew()async  -> WhatsNewEntriesOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeWhatsNewEntriesOutcome_lift,
+            liftFunc: FfiConverterTypeWhatsNewPresentationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -33322,76 +33322,6 @@ public func FfiConverterTypeWebMetadataRequestProjectionInput_lower(_ value: Web
 }
 
 
-public struct WhatsNewEntriesOutcome {
-    public var entries: [WhatsNewEntry]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(entries: [WhatsNewEntry], error: String) {
-        self.entries = entries
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension WhatsNewEntriesOutcome: Sendable {}
-#endif
-
-
-extension WhatsNewEntriesOutcome: Equatable, Hashable {
-    public static func ==(lhs: WhatsNewEntriesOutcome, rhs: WhatsNewEntriesOutcome) -> Bool {
-        if lhs.entries != rhs.entries {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(entries)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWhatsNewEntriesOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhatsNewEntriesOutcome {
-        return
-            try WhatsNewEntriesOutcome(
-                entries: FfiConverterSequenceTypeWhatsNewEntry.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: WhatsNewEntriesOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeWhatsNewEntry.write(value.entries, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWhatsNewEntriesOutcome_lift(_ buf: RustBuffer) throws -> WhatsNewEntriesOutcome {
-    return try FfiConverterTypeWhatsNewEntriesOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWhatsNewEntriesOutcome_lower(_ value: WhatsNewEntriesOutcome) -> RustBuffer {
-    return FfiConverterTypeWhatsNewEntriesOutcome.lower(value)
-}
-
-
 public struct WhatsNewEntry {
     public var shippedAtIso: String
     public var shippedAtUnixSeconds: UInt64
@@ -33467,6 +33397,84 @@ public func FfiConverterTypeWhatsNewEntry_lift(_ buf: RustBuffer) throws -> What
 #endif
 public func FfiConverterTypeWhatsNewEntry_lower(_ value: WhatsNewEntry) -> RustBuffer {
     return FfiConverterTypeWhatsNewEntry.lower(value)
+}
+
+
+public struct WhatsNewPresentationSnapshot {
+    public var entries: [WhatsNewEntry]
+    public var shouldPresent: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entries: [WhatsNewEntry], shouldPresent: Bool, errorMessage: String) {
+        self.entries = entries
+        self.shouldPresent = shouldPresent
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension WhatsNewPresentationSnapshot: Sendable {}
+#endif
+
+
+extension WhatsNewPresentationSnapshot: Equatable, Hashable {
+    public static func ==(lhs: WhatsNewPresentationSnapshot, rhs: WhatsNewPresentationSnapshot) -> Bool {
+        if lhs.entries != rhs.entries {
+            return false
+        }
+        if lhs.shouldPresent != rhs.shouldPresent {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(entries)
+        hasher.combine(shouldPresent)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWhatsNewPresentationSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhatsNewPresentationSnapshot {
+        return
+            try WhatsNewPresentationSnapshot(
+                entries: FfiConverterSequenceTypeWhatsNewEntry.read(from: &buf),
+                shouldPresent: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WhatsNewPresentationSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeWhatsNewEntry.write(value.entries, into: &buf)
+        FfiConverterBool.write(value.shouldPresent, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhatsNewPresentationSnapshot_lift(_ buf: RustBuffer) throws -> WhatsNewPresentationSnapshot {
+    return try FfiConverterTypeWhatsNewPresentationSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhatsNewPresentationSnapshot_lower(_ value: WhatsNewPresentationSnapshot) -> RustBuffer {
+    return FfiConverterTypeWhatsNewPresentationSnapshot.lower(value)
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -39058,7 +39066,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_plan_relay_nip11_probes() != 54478) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_prepare_whats_new() != 21865) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_prepare_whats_new() != 28000) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_probe_relay_nip11_snapshot() != 46156) {

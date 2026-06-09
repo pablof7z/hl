@@ -158,7 +158,6 @@ pub use models::{
     PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
     ReadingFeedItem, RoomLane, RoomRecommendation, RoomRecommendationReason, StringOutcome,
     SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome,
-    WhatsNewEntriesOutcome,
 };
 pub use nip05::{
     Nip05Availability, OnboardingCreateAccountProjection, OnboardingCreateAccountProjectionInput,
@@ -248,4 +247,4 @@ pub use time_labels::{
 pub use web_metadata::{
     WebMetadata, WebMetadataRequestProjection, WebMetadataRequestProjectionInput,
 };
-pub use whats_new::WhatsNewEntry;
+pub use whats_new::{WhatsNewEntry, WhatsNewPresentationSnapshot};
