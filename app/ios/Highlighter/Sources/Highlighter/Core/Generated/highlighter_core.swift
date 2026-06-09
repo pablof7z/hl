@@ -1551,14 +1551,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * construction, NIP-29 repost publication, and single-record outcome
      * collapse for native player controls.
      */
-    func publishPodcastClipHighlight(input: PodcastClipPublishInput) async  -> HighlightOutcome
+    func publishPodcastClipHighlight(input: PodcastClipPublishInput) async  -> PodcastClipPublishSnapshot
 
     /**
      * Publish a podcast clip from the composer sheet. Rust owns draft
      * construction and whether the clip is solo-published or also reposted
      * into a NIP-29 room.
      */
-    func publishPodcastComposerClip(input: PodcastClipComposerPublishInput) async  -> HighlightOutcome
+    func publishPodcastComposerClip(input: PodcastClipComposerPublishInput) async  -> PodcastClipPublishSnapshot
 
     /**
      * Publish a queued iOS share-extension handoff. Rust owns URL preview
@@ -4521,7 +4521,7 @@ open func publishFeedbackThreadReplySnapshot(coordinate: String, parentEventId: 
      * construction, NIP-29 repost publication, and single-record outcome
      * collapse for native player controls.
      */
-open func publishPodcastClipHighlight(input: PodcastClipPublishInput)async  -> HighlightOutcome  {
+open func publishPodcastClipHighlight(input: PodcastClipPublishInput)async  -> PodcastClipPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4533,7 +4533,7 @@ open func publishPodcastClipHighlight(input: PodcastClipPublishInput)async  -> H
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightOutcome_lift,
+            liftFunc: FfiConverterTypePodcastClipPublishSnapshot_lift,
             errorHandler: nil
 
         )
@@ -4544,7 +4544,7 @@ open func publishPodcastClipHighlight(input: PodcastClipPublishInput)async  -> H
      * construction and whether the clip is solo-published or also reposted
      * into a NIP-29 room.
      */
-open func publishPodcastComposerClip(input: PodcastClipComposerPublishInput)async  -> HighlightOutcome  {
+open func publishPodcastComposerClip(input: PodcastClipComposerPublishInput)async  -> PodcastClipPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4556,7 +4556,7 @@ open func publishPodcastComposerClip(input: PodcastClipComposerPublishInput)asyn
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightOutcome_lift,
+            liftFunc: FfiConverterTypePodcastClipPublishSnapshot_lift,
             errorHandler: nil
 
         )
@@ -17396,76 +17396,6 @@ public func FfiConverterTypeHighlightGroupLabelSegment_lower(_ value: HighlightG
 }
 
 
-public struct HighlightOutcome {
-    public var value: HighlightRecord?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: HighlightRecord?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension HighlightOutcome: Sendable {}
-#endif
-
-
-extension HighlightOutcome: Equatable, Hashable {
-    public static func ==(lhs: HighlightOutcome, rhs: HighlightOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHighlightOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightOutcome {
-        return
-            try HighlightOutcome(
-                value: FfiConverterOptionTypeHighlightRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: HighlightOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeHighlightRecord.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHighlightOutcome_lift(_ buf: RustBuffer) throws -> HighlightOutcome {
-    return try FfiConverterTypeHighlightOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHighlightOutcome_lower(_ value: HighlightOutcome) -> RustBuffer {
-    return FfiConverterTypeHighlightOutcome.lower(value)
-}
-
-
 /**
  * Mirrors `HighlightRecord` in `web/src/lib/ndk/highlights.ts:19-44`.
  */
@@ -22307,6 +22237,76 @@ public func FfiConverterTypePodcastClipPublishInput_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypePodcastClipPublishInput_lower(_ value: PodcastClipPublishInput) -> RustBuffer {
     return FfiConverterTypePodcastClipPublishInput.lower(value)
+}
+
+
+public struct PodcastClipPublishSnapshot {
+    public var highlight: HighlightRecord?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(highlight: HighlightRecord?, error: String) {
+        self.highlight = highlight
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension PodcastClipPublishSnapshot: Sendable {}
+#endif
+
+
+extension PodcastClipPublishSnapshot: Equatable, Hashable {
+    public static func ==(lhs: PodcastClipPublishSnapshot, rhs: PodcastClipPublishSnapshot) -> Bool {
+        if lhs.highlight != rhs.highlight {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(highlight)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastClipPublishSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipPublishSnapshot {
+        return
+            try PodcastClipPublishSnapshot(
+                highlight: FfiConverterOptionTypeHighlightRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastClipPublishSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeHighlightRecord.write(value.highlight, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipPublishSnapshot_lift(_ buf: RustBuffer) throws -> PodcastClipPublishSnapshot {
+    return try FfiConverterTypePodcastClipPublishSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastClipPublishSnapshot_lower(_ value: PodcastClipPublishSnapshot) -> RustBuffer {
+    return FfiConverterTypePodcastClipPublishSnapshot.lower(value)
 }
 
 
@@ -39118,10 +39118,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_thread_reply_snapshot() != 62503) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_clip_highlight() != 12471) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_clip_highlight() != 38748) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_composer_clip() != 62896) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_composer_clip() != 13940) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_share_queue_item() != 64561) {

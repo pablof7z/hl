@@ -304,7 +304,7 @@ final class PodcastPlayerStore {
         note: String,
         segments: [TranscriptSegment],
         core: SafeHighlighterCore
-    ) async -> HighlightOutcome {
+    ) async -> PodcastClipPublishSnapshot {
         isPublishing = true
         publishError = nil
         defer { isPublishing = false }

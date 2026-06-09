@@ -27,11 +27,10 @@ use crate::isbn_lookup;
 use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactPreview, ArtifactRecord, BlossomUpload, BookRoute,
     BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommunitySummary,
-    CurrentUser, DiscussionRecord, FeedbackThreadRecord, HighlightOutcome, HighlightRecord,
-    HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
-    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
-    PodcastPositionRecord, ProfileMetadata, ProfileUpdateAction, ProfileUpdateDraft,
-    RelayDiagnostic, SubscriptionOutcome,
+    CurrentUser, DiscussionRecord, FeedbackThreadRecord, HighlightRecord, HighlightSourceKind,
+    LoginInputAction, MutationOutcome, NostrConnectOptions, OnboardingInterest,
+    OnboardingInterestProjection, OnboardingInterestSelection, PodcastPositionRecord,
+    ProfileMetadata, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, SubscriptionOutcome,
 };
 use crate::network_preferences;
 use crate::nip05;
@@ -133,19 +132,6 @@ fn one_highlight_record(records: Vec<HighlightRecord>) -> Result<HighlightRecord
         .into_iter()
         .next()
         .ok_or_else(|| CoreError::Relay("No highlight returned from publish.".into()))
-}
-
-fn highlight_outcome(result: Result<HighlightRecord, CoreError>) -> HighlightOutcome {
-    match result {
-        Ok(value) => HighlightOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => HighlightOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
 }
 
 impl HighlighterCore {
@@ -2714,7 +2700,7 @@ impl HighlighterCore {
     pub async fn publish_podcast_clip_highlight(
         &self,
         input: podcast_transcript::PodcastClipPublishInput,
-    ) -> HighlightOutcome {
+    ) -> podcast_transcript::PodcastClipPublishSnapshot {
         let result: Result<HighlightRecord, CoreError> = async {
             let _ = self.require_user_pubkey()?;
             let draft = podcast_transcript::clip_highlight_draft(
@@ -2735,7 +2721,7 @@ impl HighlighterCore {
             one_highlight_record(records)
         }
         .await;
-        highlight_outcome(result)
+        podcast_transcript::clip_publish_snapshot(result)
     }
 
     /// Publish a podcast clip from the composer sheet. Rust owns draft
@@ -2744,7 +2730,7 @@ impl HighlighterCore {
     pub async fn publish_podcast_composer_clip(
         &self,
         input: podcast_transcript::PodcastClipComposerPublishInput,
-    ) -> HighlightOutcome {
+    ) -> podcast_transcript::PodcastClipPublishSnapshot {
         let result: Result<HighlightRecord, CoreError> = async {
             let _ = self.require_user_pubkey()?;
             let draft = podcast_transcript::clip_composer_highlight_draft(
@@ -2769,7 +2755,7 @@ impl HighlighterCore {
             }
         }
         .await;
-        highlight_outcome(result)
+        podcast_transcript::clip_publish_snapshot(result)
     }
 
     /// Re-share an existing kind:9802 highlight into a NIP-29 room as a

@@ -85,12 +85,6 @@ pub enum HighlightSourceKind {
     Unknown,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct HighlightOutcome {
-    pub value: Option<HighlightRecord>,
-    pub error: String,
-}
-
 /// Mirrors `CommunitySummary` in `web/src/lib/ndk/groups.ts:23-35`.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CommunitySummary {

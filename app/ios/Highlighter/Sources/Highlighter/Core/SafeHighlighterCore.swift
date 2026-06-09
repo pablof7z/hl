@@ -1272,13 +1272,13 @@ actor SafeHighlighterCore {
 
     func publishPodcastClipHighlight(
         input: PodcastClipPublishInput
-    ) async -> HighlightOutcome {
+    ) async -> PodcastClipPublishSnapshot {
         await core.publishPodcastClipHighlight(input: input)
     }
 
     func publishPodcastComposerClip(
         input: PodcastClipComposerPublishInput
-    ) async -> HighlightOutcome {
+    ) async -> PodcastClipPublishSnapshot {
         await core.publishPodcastComposerClip(input: input)
     }
 

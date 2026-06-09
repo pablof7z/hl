@@ -104,6 +104,12 @@ pub struct PodcastClipComposerPublishInput {
     pub target_group_id: Option<String>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastClipPublishSnapshot {
+    pub highlight: Option<HighlightRecord>,
+    pub error: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum PodcastTimelineRowKind {
     Chapter,
@@ -250,6 +256,21 @@ pub fn transcript_load_snapshot(
         Err(error) => PodcastTranscriptLoadSnapshot {
             segments: Vec::new(),
             availability: PodcastTranscriptAvailability::Unavailable,
+            error: error.to_string(),
+        },
+    }
+}
+
+pub fn clip_publish_snapshot(
+    result: Result<HighlightRecord, CoreError>,
+) -> PodcastClipPublishSnapshot {
+    match result {
+        Ok(highlight) => PodcastClipPublishSnapshot {
+            highlight: Some(highlight),
+            error: String::new(),
+        },
+        Err(error) => PodcastClipPublishSnapshot {
+            highlight: None,
             error: error.to_string(),
         },
     }
@@ -1267,6 +1288,41 @@ mod tests {
         );
         assert!(failed.segments.is_empty());
         assert_eq!(failed.error, "network error: offline");
+    }
+
+    #[test]
+    fn clip_publish_snapshot_projects_highlight_or_error_state() {
+        let highlight = HighlightRecord {
+            event_id: "event123".into(),
+            pubkey: "pubkey".into(),
+            quote: "clip quote".into(),
+            context: "context".into(),
+            note: "note".into(),
+            artifact_address: "kind:pubkey:d".into(),
+            event_reference: "nevent1".into(),
+            external_reference: "podcast:item:guid:episode".into(),
+            source_url: "https://example.com/episode".into(),
+            source_reference_key: "podcast:item:guid:episode".into(),
+            clip_start_seconds: Some(12.0),
+            clip_end_seconds: Some(18.0),
+            clip_speaker: "Host".into(),
+            clip_transcript_segment_ids: vec!["s1".into()],
+            image_url: "https://example.com/image.jpg".into(),
+            created_at: Some(42),
+        };
+
+        let ok = clip_publish_snapshot(Ok(highlight));
+        assert_eq!(
+            ok.highlight
+                .as_ref()
+                .map(|highlight| highlight.event_id.as_str()),
+            Some("event123")
+        );
+        assert!(ok.error.is_empty());
+
+        let err = clip_publish_snapshot(Err(CoreError::Relay("offline".into())));
+        assert!(err.highlight.is_none());
+        assert_eq!(err.error, "relay error: offline");
     }
 
     #[test]
