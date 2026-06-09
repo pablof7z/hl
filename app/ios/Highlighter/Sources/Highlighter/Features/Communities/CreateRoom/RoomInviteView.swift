@@ -236,7 +236,7 @@ struct RoomInviteView: View {
                         if sending {
                             ProgressView().tint(.white)
                         } else {
-                            Text(selected.count == 1 ? "Add 1 person" : "Add \(selected.count) people")
+                            Text(selectionChrome.addButtonLabel)
                                 .font(.headline)
                                 .foregroundStyle(.white)
                         }
@@ -313,6 +313,12 @@ struct RoomInviteView: View {
                 followsLoaded: followsLoaded,
                 limit: 50
             )
+        )
+    }
+
+    private var selectionChrome: RoomInviteSelectionChromeProjection {
+        appStore.safeCore.projectRoomInviteSelectionChrome(
+            input: RoomInviteSelectionChromeInput(selectedCount: UInt64(selected.count))
         )
     }
 

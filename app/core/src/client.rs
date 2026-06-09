@@ -4042,6 +4042,13 @@ impl HighlighterCore {
         crate::room_invites::project_selection(input)
     }
 
+    pub fn project_room_invite_selection_chrome(
+        &self,
+        input: crate::room_invites::RoomInviteSelectionChromeInput,
+    ) -> crate::room_invites::RoomInviteSelectionChromeProjection {
+        crate::room_invites::project_selection_chrome(input)
+    }
+
     pub fn get_room_invite_send_result(
         &self,
         selected: Vec<crate::room_invites::RoomInviteCandidate>,

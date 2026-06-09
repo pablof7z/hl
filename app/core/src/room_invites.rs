@@ -103,6 +103,16 @@ pub struct RoomInviteSelectionProjection {
     pub selection_changed: bool,
 }
 
+#[derive(Debug, Clone, Copy, uniffi::Record)]
+pub struct RoomInviteSelectionChromeInput {
+    pub selected_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomInviteSelectionChromeProjection {
+    pub add_button_label: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RoomInviteSendResultProjection {
     pub all_succeeded: bool,
@@ -291,6 +301,14 @@ pub fn project_selection(input: RoomInviteSelectionInput) -> RoomInviteSelection
     }
 }
 
+pub fn project_selection_chrome(
+    input: RoomInviteSelectionChromeInput,
+) -> RoomInviteSelectionChromeProjection {
+    RoomInviteSelectionChromeProjection {
+        add_button_label: invite_add_button_label(input.selected_count),
+    }
+}
+
 pub fn project_send_result(
     selected: &[RoomInviteCandidate],
     failed_pubkeys: &[String],
@@ -329,6 +347,14 @@ pub fn project_send_result(
             String::new()
         },
         remaining_selected,
+    }
+}
+
+fn invite_add_button_label(count: u64) -> String {
+    if count == 1 {
+        "Add 1 person".into()
+    } else {
+        format!("Add {count} people")
     }
 }
 
@@ -673,6 +699,15 @@ mod tests {
         });
         assert!(removed.selection_changed);
         assert!(removed.selected.is_empty());
+    }
+
+    #[test]
+    fn selection_chrome_projects_add_button_label() {
+        let one = project_selection_chrome(RoomInviteSelectionChromeInput { selected_count: 1 });
+        assert_eq!(one.add_button_label, "Add 1 person");
+
+        let many = project_selection_chrome(RoomInviteSelectionChromeInput { selected_count: 3 });
+        assert_eq!(many.add_button_label, "Add 3 people");
     }
 
     #[test]

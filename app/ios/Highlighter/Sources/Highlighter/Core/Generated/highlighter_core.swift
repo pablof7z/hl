@@ -1648,6 +1648,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomInviteSelection(input: RoomInviteSelectionInput)  -> RoomInviteSelectionProjection
 
+    func projectRoomInviteSelectionChrome(input: RoomInviteSelectionChromeInput)  -> RoomInviteSelectionChromeProjection
+
     func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput)  -> RoomLibraryArticleCardProjection
 
     func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput)  -> RoomLibraryBookCardProjection
@@ -5053,6 +5055,14 @@ open func projectRoomInviteSelection(input: RoomInviteSelectionInput) -> RoomInv
     return try!  FfiConverterTypeRoomInviteSelectionProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_invite_selection(self.uniffiClonePointer(),
         FfiConverterTypeRoomInviteSelectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomInviteSelectionChrome(input: RoomInviteSelectionChromeInput) -> RoomInviteSelectionChromeProjection  {
+    return try!  FfiConverterTypeRoomInviteSelectionChromeProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_invite_selection_chrome(self.uniffiClonePointer(),
+        FfiConverterTypeRoomInviteSelectionChromeInput_lower(input),$0
     )
 })
 }
@@ -27949,6 +27959,130 @@ public func FfiConverterTypeRoomInviteResolvedCandidate_lower(_ value: RoomInvit
 }
 
 
+public struct RoomInviteSelectionChromeInput {
+    public var selectedCount: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(selectedCount: UInt64) {
+        self.selectedCount = selectedCount
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteSelectionChromeInput: Sendable {}
+#endif
+
+
+extension RoomInviteSelectionChromeInput: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteSelectionChromeInput, rhs: RoomInviteSelectionChromeInput) -> Bool {
+        if lhs.selectedCount != rhs.selectedCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(selectedCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteSelectionChromeInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSelectionChromeInput {
+        return
+            try RoomInviteSelectionChromeInput(
+                selectedCount: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteSelectionChromeInput, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.selectedCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSelectionChromeInput_lift(_ buf: RustBuffer) throws -> RoomInviteSelectionChromeInput {
+    return try FfiConverterTypeRoomInviteSelectionChromeInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSelectionChromeInput_lower(_ value: RoomInviteSelectionChromeInput) -> RustBuffer {
+    return FfiConverterTypeRoomInviteSelectionChromeInput.lower(value)
+}
+
+
+public struct RoomInviteSelectionChromeProjection {
+    public var addButtonLabel: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(addButtonLabel: String) {
+        self.addButtonLabel = addButtonLabel
+    }
+}
+
+#if compiler(>=6)
+extension RoomInviteSelectionChromeProjection: Sendable {}
+#endif
+
+
+extension RoomInviteSelectionChromeProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomInviteSelectionChromeProjection, rhs: RoomInviteSelectionChromeProjection) -> Bool {
+        if lhs.addButtonLabel != rhs.addButtonLabel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(addButtonLabel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomInviteSelectionChromeProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSelectionChromeProjection {
+        return
+            try RoomInviteSelectionChromeProjection(
+                addButtonLabel: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomInviteSelectionChromeProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.addButtonLabel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSelectionChromeProjection_lift(_ buf: RustBuffer) throws -> RoomInviteSelectionChromeProjection {
+    return try FfiConverterTypeRoomInviteSelectionChromeProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomInviteSelectionChromeProjection_lower(_ value: RoomInviteSelectionChromeProjection) -> RustBuffer {
+    return FfiConverterTypeRoomInviteSelectionChromeProjection.lower(value)
+}
+
+
 public struct RoomInviteSelectionInput {
     public var selected: [RoomInviteCandidate]
     public var candidate: RoomInviteCandidate
@@ -39069,6 +39203,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_invite_selection() != 36933) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_invite_selection_chrome() != 38192) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_article_card() != 56696) {

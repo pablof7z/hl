@@ -1417,6 +1417,12 @@ actor SafeHighlighterCore {
         core.projectRoomInviteSelection(input: input)
     }
 
+    nonisolated func projectRoomInviteSelectionChrome(
+        input: RoomInviteSelectionChromeInput
+    ) -> RoomInviteSelectionChromeProjection {
+        core.projectRoomInviteSelectionChrome(input: input)
+    }
+
     nonisolated func getRoomInviteSendResult(
         selected: [RoomInviteCandidate],
         failedPubkeys: [String]
