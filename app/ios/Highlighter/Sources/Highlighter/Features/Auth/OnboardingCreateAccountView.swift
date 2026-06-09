@@ -220,18 +220,17 @@ struct OnboardingCreateAccountView: View {
     }
 
     private func checkAvailability(name: String) async {
-        let outcome = await store.safeCore.checkNip05Availability(name: name)
+        let snapshot = await store.safeCore.checkNip05Availability(name: name)
         let current = store.safeCore.projectOnboardingUsernameCheck(username: username)
         guard current.username == name else { return }
-        guard outcome.error.isEmpty, let decoded = outcome.value else {
+        switch snapshot.state {
+        case .idle:
             usernameState = .idle
-            return
-        }
-        if !decoded.valid {
+        case .invalid:
             usernameState = .invalid
-        } else if decoded.available {
-            usernameState = .available(identifier: decoded.identifier, domain: decoded.domain)
-        } else {
+        case .available:
+            usernameState = .available(identifier: snapshot.identifier, domain: snapshot.domain)
+        case .taken:
             usernameState = .taken
         }
     }

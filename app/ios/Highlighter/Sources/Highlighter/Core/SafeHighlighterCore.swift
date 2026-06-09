@@ -812,7 +812,7 @@ actor SafeHighlighterCore {
         core.projectOnboardingUsernameCheck(username: username)
     }
 
-    func checkNip05Availability(name: String) async -> Nip05AvailabilityOutcome {
+    func checkNip05Availability(name: String) async -> Nip05AvailabilitySnapshot {
         await core.checkNip05Availability(name: name)
     }
 

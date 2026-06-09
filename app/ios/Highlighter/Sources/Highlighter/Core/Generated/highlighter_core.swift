@@ -790,7 +790,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func buildPreviewFromUrl(url: String) async  -> ArtifactPreviewOutcome
 
-    func checkNip05Availability(name: String) async  -> Nip05AvailabilityOutcome
+    func checkNip05Availability(name: String) async  -> Nip05AvailabilitySnapshot
 
     func classifyLoginInput(input: String)  -> LoginInputAction
 
@@ -2100,7 +2100,7 @@ open func buildPreviewFromUrl(url: String)async  -> ArtifactPreviewOutcome  {
         )
 }
 
-open func checkNip05Availability(name: String)async  -> Nip05AvailabilityOutcome  {
+open func checkNip05Availability(name: String)async  -> Nip05AvailabilitySnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2112,7 +2112,7 @@ open func checkNip05Availability(name: String)async  -> Nip05AvailabilityOutcome
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeNip05AvailabilityOutcome_lift,
+            liftFunc: FfiConverterTypeNip05AvailabilitySnapshot_lift,
             errorHandler: nil
 
         )
@@ -20463,37 +20463,49 @@ public func FfiConverterTypeNip05Availability_lower(_ value: Nip05Availability) 
 }
 
 
-public struct Nip05AvailabilityOutcome {
-    public var value: Nip05Availability?
-    public var error: String
+public struct Nip05AvailabilitySnapshot {
+    public var state: Nip05AvailabilityState
+    public var identifier: String
+    public var domain: String
+    public var errorMessage: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(value: Nip05Availability?, error: String) {
-        self.value = value
-        self.error = error
+    public init(state: Nip05AvailabilityState, identifier: String, domain: String, errorMessage: String) {
+        self.state = state
+        self.identifier = identifier
+        self.domain = domain
+        self.errorMessage = errorMessage
     }
 }
 
 #if compiler(>=6)
-extension Nip05AvailabilityOutcome: Sendable {}
+extension Nip05AvailabilitySnapshot: Sendable {}
 #endif
 
 
-extension Nip05AvailabilityOutcome: Equatable, Hashable {
-    public static func ==(lhs: Nip05AvailabilityOutcome, rhs: Nip05AvailabilityOutcome) -> Bool {
-        if lhs.value != rhs.value {
+extension Nip05AvailabilitySnapshot: Equatable, Hashable {
+    public static func ==(lhs: Nip05AvailabilitySnapshot, rhs: Nip05AvailabilitySnapshot) -> Bool {
+        if lhs.state != rhs.state {
             return false
         }
-        if lhs.error != rhs.error {
+        if lhs.identifier != rhs.identifier {
+            return false
+        }
+        if lhs.domain != rhs.domain {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
+        hasher.combine(state)
+        hasher.combine(identifier)
+        hasher.combine(domain)
+        hasher.combine(errorMessage)
     }
 }
 
@@ -20502,18 +20514,22 @@ extension Nip05AvailabilityOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeNip05AvailabilityOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05AvailabilityOutcome {
+public struct FfiConverterTypeNip05AvailabilitySnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05AvailabilitySnapshot {
         return
-            try Nip05AvailabilityOutcome(
-                value: FfiConverterOptionTypeNip05Availability.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
+            try Nip05AvailabilitySnapshot(
+                state: FfiConverterTypeNip05AvailabilityState.read(from: &buf),
+                identifier: FfiConverterString.read(from: &buf),
+                domain: FfiConverterString.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: Nip05AvailabilityOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeNip05Availability.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
+    public static func write(_ value: Nip05AvailabilitySnapshot, into buf: inout [UInt8]) {
+        FfiConverterTypeNip05AvailabilityState.write(value.state, into: &buf)
+        FfiConverterString.write(value.identifier, into: &buf)
+        FfiConverterString.write(value.domain, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
     }
 }
 
@@ -20521,15 +20537,15 @@ public struct FfiConverterTypeNip05AvailabilityOutcome: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNip05AvailabilityOutcome_lift(_ buf: RustBuffer) throws -> Nip05AvailabilityOutcome {
-    return try FfiConverterTypeNip05AvailabilityOutcome.lift(buf)
+public func FfiConverterTypeNip05AvailabilitySnapshot_lift(_ buf: RustBuffer) throws -> Nip05AvailabilitySnapshot {
+    return try FfiConverterTypeNip05AvailabilitySnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNip05AvailabilityOutcome_lower(_ value: Nip05AvailabilityOutcome) -> RustBuffer {
-    return FfiConverterTypeNip05AvailabilityOutcome.lower(value)
+public func FfiConverterTypeNip05AvailabilitySnapshot_lower(_ value: Nip05AvailabilitySnapshot) -> RustBuffer {
+    return FfiConverterTypeNip05AvailabilitySnapshot.lower(value)
 }
 
 
@@ -34885,6 +34901,90 @@ extension NetworkRelayConnectionPolicyAction: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum Nip05AvailabilityState {
+
+    case idle
+    case invalid
+    case available
+    case taken
+}
+
+
+#if compiler(>=6)
+extension Nip05AvailabilityState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNip05AvailabilityState: FfiConverterRustBuffer {
+    typealias SwiftType = Nip05AvailabilityState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05AvailabilityState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .idle
+
+        case 2: return .invalid
+
+        case 3: return .available
+
+        case 4: return .taken
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Nip05AvailabilityState, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .idle:
+            writeInt(&buf, Int32(1))
+
+
+        case .invalid:
+            writeInt(&buf, Int32(2))
+
+
+        case .available:
+            writeInt(&buf, Int32(3))
+
+
+        case .taken:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNip05AvailabilityState_lift(_ buf: RustBuffer) throws -> Nip05AvailabilityState {
+    return try FfiConverterTypeNip05AvailabilityState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNip05AvailabilityState_lower(_ value: Nip05AvailabilityState) -> RustBuffer {
+    return FfiConverterTypeNip05AvailabilityState.lower(value)
+}
+
+
+extension Nip05AvailabilityState: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum NostrContentRun {
 
     case text(value: String
@@ -37022,30 +37122,6 @@ fileprivate struct FfiConverterOptionTypeHighlightRecord: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeNip05Availability: FfiConverterRustBuffer {
-    typealias SwiftType = Nip05Availability?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeNip05Availability.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeNip05Availability.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeNip11Document: FfiConverterRustBuffer {
     typealias SwiftType = Nip11Document?
 
@@ -38833,7 +38909,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 40366) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 22195) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_check_nip05_availability() != 31035) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_classify_login_input() != 60539) {

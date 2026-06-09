@@ -81,12 +81,6 @@ pub struct StringOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct Nip05AvailabilityOutcome {
-    pub value: Option<crate::nip05::Nip05Availability>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct OptionalStringOutcome {
     pub value: Option<String>,
     pub error: String,

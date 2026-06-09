@@ -152,15 +152,15 @@ pub use models::{
     FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightListOutcome,
     HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
     HighlightSourceKind, HomeFeedItem, HydratedHighlight, LoginInputAction, MutationOutcome,
-    Nip05AvailabilityOutcome, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
-    OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
-    OptionalStringOutcome, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RoomLane, RoomRecommendation,
-    RoomRecommendationReason, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
-    WebBookmarkRecord, WebMetadataOutcome,
+    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
+    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
+    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
+    ReadingFeedItem, RoomLane, RoomRecommendation, RoomRecommendationReason, StringOutcome,
+    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome,
 };
 pub use nip05::{
-    Nip05Availability, Nip05RegistrationSnapshot, OnboardingCreateAccountProjection,
+    Nip05Availability, Nip05AvailabilitySnapshot, Nip05AvailabilityState,
+    Nip05RegistrationSnapshot, OnboardingCreateAccountProjection,
     OnboardingCreateAccountProjectionInput, OnboardingUsernameCheckProjection,
 };
 pub use nostr_entities::{NostrEntityArticleCardProjection, NostrEntityArticleCardProjectionInput};

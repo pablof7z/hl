@@ -31,15 +31,15 @@ use crate::models::{
     BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommentScopeOutcome,
     CommunityListOutcome, CommunitySummary, CurrentUser, DataOutcome, DiscussionOutcome,
     DiscussionRecord, FeedbackThreadRecord, HighlightListOutcome, HighlightOutcome,
-    HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome,
-    Nip05AvailabilityOutcome, NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome,
-    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
-    OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata, ProfileOutcome,
-    ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
+    HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
+    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
+    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
+    ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
     TranscriptSegmentListOutcome, WebMetadataOutcome,
 };
 use crate::network_preferences;
-use crate::nip05::{self, Nip05Availability};
+use crate::nip05;
 use crate::nip46::{self, BunkerSigner};
 use crate::nostr_runtime::NostrRuntime;
 use crate::onboarding;
@@ -132,21 +132,6 @@ fn string_outcome(result: Result<String, CoreError>) -> StringOutcome {
         },
         Err(error) => StringOutcome {
             value: String::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
-fn nip05_availability_outcome(
-    result: Result<Nip05Availability, CoreError>,
-) -> Nip05AvailabilityOutcome {
-    match result {
-        Ok(value) => Nip05AvailabilityOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => Nip05AvailabilityOutcome {
-            value: None,
             error: error.to_string(),
         },
     }
@@ -1498,8 +1483,8 @@ impl HighlighterCore {
         nip05::onboarding_username_check_projection(&username)
     }
 
-    pub async fn check_nip05_availability(&self, name: String) -> Nip05AvailabilityOutcome {
-        nip05_availability_outcome(nip05::check_availability(&name).await)
+    pub async fn check_nip05_availability(&self, name: String) -> nip05::Nip05AvailabilitySnapshot {
+        nip05::availability_snapshot(nip05::check_availability(&name).await)
     }
 
     pub async fn register_nip05(

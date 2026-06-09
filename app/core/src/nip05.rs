@@ -23,6 +23,22 @@ pub struct Nip05Availability {
     pub domain: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Nip05AvailabilityState {
+    Idle,
+    Invalid,
+    Available,
+    Taken,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Nip05AvailabilitySnapshot {
+    pub state: Nip05AvailabilityState,
+    pub identifier: String,
+    pub domain: String,
+    pub error_message: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct OnboardingCreateAccountProjectionInput {
     pub display_name: String,
@@ -136,6 +152,37 @@ pub fn registration_snapshot(result: Result<String, CoreError>) -> Nip05Registra
         Err(error) => Nip05RegistrationSnapshot {
             identifier: String::new(),
             succeeded: false,
+            error_message: error.to_string(),
+        },
+    }
+}
+
+pub fn availability_snapshot(
+    result: Result<Nip05Availability, CoreError>,
+) -> Nip05AvailabilitySnapshot {
+    match result {
+        Ok(availability) if !availability.valid => Nip05AvailabilitySnapshot {
+            state: Nip05AvailabilityState::Invalid,
+            identifier: String::new(),
+            domain: String::new(),
+            error_message: String::new(),
+        },
+        Ok(availability) if availability.available => Nip05AvailabilitySnapshot {
+            state: Nip05AvailabilityState::Available,
+            identifier: availability.identifier,
+            domain: availability.domain,
+            error_message: String::new(),
+        },
+        Ok(_) => Nip05AvailabilitySnapshot {
+            state: Nip05AvailabilityState::Taken,
+            identifier: String::new(),
+            domain: String::new(),
+            error_message: String::new(),
+        },
+        Err(error) => Nip05AvailabilitySnapshot {
+            state: Nip05AvailabilityState::Idle,
+            identifier: String::new(),
+            domain: String::new(),
             error_message: error.to_string(),
         },
     }
@@ -348,5 +395,40 @@ mod tests {
         assert!(failure.identifier.is_empty());
         assert!(!failure.succeeded);
         assert_eq!(failure.error_message, "network error: taken");
+    }
+
+    #[test]
+    fn availability_snapshot_projects_username_states_and_errors() {
+        let invalid = availability_snapshot(Ok(Nip05Availability {
+            valid: false,
+            available: false,
+            identifier: String::new(),
+            domain: String::new(),
+        }));
+        assert_eq!(invalid.state, Nip05AvailabilityState::Invalid);
+        assert!(invalid.identifier.is_empty());
+
+        let available = availability_snapshot(Ok(Nip05Availability {
+            valid: true,
+            available: true,
+            identifier: "alice@highlighter.com".into(),
+            domain: "highlighter.com".into(),
+        }));
+        assert_eq!(available.state, Nip05AvailabilityState::Available);
+        assert_eq!(available.identifier, "alice@highlighter.com");
+        assert_eq!(available.domain, "highlighter.com");
+
+        let taken = availability_snapshot(Ok(Nip05Availability {
+            valid: true,
+            available: false,
+            identifier: "alice@highlighter.com".into(),
+            domain: "highlighter.com".into(),
+        }));
+        assert_eq!(taken.state, Nip05AvailabilityState::Taken);
+        assert!(taken.identifier.is_empty());
+
+        let failure = availability_snapshot(Err(CoreError::Network("offline".into())));
+        assert_eq!(failure.state, Nip05AvailabilityState::Idle);
+        assert_eq!(failure.error_message, "network error: offline");
     }
 }
