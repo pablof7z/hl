@@ -12,7 +12,7 @@ struct ImportRelaysSheet: View {
 
     @State private var npubText: String = ""
     @State private var fetched: [RelayConfig] = []
-    @State private var selected: Set<String> = []
+    @State private var selectedUrls: [String] = []
     @State private var isFetching = false
     @State private var errorText: String?
     @State private var isApplying = false
@@ -20,7 +20,7 @@ struct ImportRelaysSheet: View {
     private var projection: ImportRelaysProjection {
         appStore.safeCore.projectImportRelays(input: ImportRelaysProjectionInput(
             fetched: fetched,
-            selectedUrls: Array(selected)
+            selectedUrls: selectedUrls
         ))
     }
 
@@ -133,14 +133,14 @@ struct ImportRelaysSheet: View {
         guard source.canFetch else { return }
         errorText = nil
         fetched = []
-        selected = []
+        selectedUrls = []
         isFetching = true
         defer { isFetching = false }
         let outcome = await appStore.safeCore
             .importRelaysFromNpub(source.submitNpub)
         if outcome.error.isEmpty {
             fetched = outcome.values
-            selected = Set(appStore.safeCore.defaultImportRelaySelection(relays: outcome.values))
+            selectedUrls = appStore.safeCore.defaultImportRelaySelection(relays: outcome.values)
         } else {
             errorText = outcome.error
         }
@@ -157,10 +157,10 @@ struct ImportRelaysSheet: View {
     }
 
     private func toggle(_ url: String) {
-        if selected.contains(url) {
-            selected.remove(url)
-        } else {
-            selected.insert(url)
-        }
+        selectedUrls = appStore.safeCore.toggleImportRelaySelection(
+            fetched: fetched,
+            selectedUrls: selectedUrls,
+            url: url
+        )
     }
 }

@@ -521,6 +521,23 @@ pub fn default_import_relay_selection(relays: Vec<RelayConfig>) -> Vec<String> {
     relays.into_iter().map(|relay| relay.url).collect()
 }
 
+pub fn toggle_import_relay_selection(
+    fetched: Vec<RelayConfig>,
+    selected_urls: Vec<String>,
+    url: String,
+) -> Vec<String> {
+    let mut selected = selected_urls.into_iter().collect::<BTreeSet<_>>();
+    let known = fetched.iter().any(|relay| relay.url == url);
+    if known {
+        if selected.contains(&url) {
+            selected.remove(&url);
+        } else {
+            selected.insert(url);
+        }
+    }
+    selected_import_urls_for_fetched(&fetched, &selected)
+}
+
 /// Project the source field for importing another user's relay list. Native
 /// shells render `can_fetch` and pass `submit_npub` to the fetch action.
 pub fn import_relays_source_projection(
@@ -564,6 +581,16 @@ pub fn import_relays_projection(input: ImportRelaysProjectionInput) -> ImportRel
         can_apply: selected_count > 0,
         selected_configs,
     }
+}
+
+fn selected_import_urls_for_fetched(
+    fetched: &[RelayConfig],
+    selected: &BTreeSet<String>,
+) -> Vec<String> {
+    fetched
+        .iter()
+        .filter_map(|relay| selected.contains(&relay.url).then_some(relay.url.clone()))
+        .collect()
 }
 
 fn display_relay_url(raw: &str) -> String {
@@ -1484,6 +1511,29 @@ mod tests {
             default_import_relay_selection(rows),
             vec!["wss://one.example", "wss://two.example"]
         );
+    }
+
+    #[test]
+    fn toggle_import_relay_selection_canonicalizes_to_fetched_order() {
+        let fetched = vec![
+            RelayConfig::read_write("wss://one.example"),
+            RelayConfig::read_write("wss://two.example"),
+            RelayConfig::read_write("wss://three.example"),
+        ];
+        let selected = toggle_import_relay_selection(
+            fetched.clone(),
+            vec!["wss://two.example".into(), "wss://missing.example".into()],
+            "wss://one.example".into(),
+        );
+        assert_eq!(selected, vec!["wss://one.example", "wss://two.example"]);
+
+        let selected =
+            toggle_import_relay_selection(fetched.clone(), selected, "wss://two.example".into());
+        assert_eq!(selected, vec!["wss://one.example"]);
+
+        let selected =
+            toggle_import_relay_selection(fetched, selected, "wss://missing.example".into());
+        assert_eq!(selected, vec!["wss://one.example"]);
     }
 
     #[test]

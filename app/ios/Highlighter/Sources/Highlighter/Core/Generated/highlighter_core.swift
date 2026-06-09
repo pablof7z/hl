@@ -2011,6 +2011,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func toggleEventBookmark(eventIdHex: String) async  -> BoolOutcome
 
+    func toggleImportRelaySelection(fetched: [RelayConfig], selectedUrls: [String], url: String)  -> [String]
+
     func toggleOnboardingInterestSelection(selectedIds: [String], interestId: String)  -> [String]
 
     func tokenizeNostrContent(content: String)  -> [NostrContentRun]
@@ -6315,6 +6317,16 @@ open func toggleEventBookmark(eventIdHex: String)async  -> BoolOutcome  {
             errorHandler: nil
 
         )
+}
+
+open func toggleImportRelaySelection(fetched: [RelayConfig], selectedUrls: [String], url: String) -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_toggle_import_relay_selection(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeRelayConfig.lower(fetched),
+        FfiConverterSequenceString.lower(selectedUrls),
+        FfiConverterString.lower(url),$0
+    )
+})
 }
 
 open func toggleOnboardingInterestSelection(selectedIds: [String], interestId: String) -> [String]  {
@@ -35656,6 +35668,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark() != 58235) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_import_relay_selection() != 16615) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_onboarding_interest_selection() != 9632) {

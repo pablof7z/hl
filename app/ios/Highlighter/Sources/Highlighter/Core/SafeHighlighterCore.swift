@@ -1659,6 +1659,18 @@ actor SafeHighlighterCore {
         core.defaultImportRelaySelection(relays: relays)
     }
 
+    nonisolated func toggleImportRelaySelection(
+        fetched: [RelayConfig],
+        selectedUrls: [String],
+        url: String
+    ) -> [String] {
+        core.toggleImportRelaySelection(
+            fetched: fetched,
+            selectedUrls: selectedUrls,
+            url: url
+        )
+    }
+
     nonisolated func projectImportRelaysSource(
         input: ImportRelaysSourceProjectionInput
     ) -> ImportRelaysSourceProjection {

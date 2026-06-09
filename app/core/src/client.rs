@@ -4290,6 +4290,15 @@ impl HighlighterCore {
         crate::relays::default_import_relay_selection(relays)
     }
 
+    pub fn toggle_import_relay_selection(
+        &self,
+        fetched: Vec<crate::relays::RelayConfig>,
+        selected_urls: Vec<String>,
+        url: String,
+    ) -> Vec<String> {
+        crate::relays::toggle_import_relay_selection(fetched, selected_urls, url)
+    }
+
     /// Project import-relays source input. Rust owns source trimming and fetch
     /// eligibility; native shells render and execute the fetch action.
     pub fn project_import_relays_source(
