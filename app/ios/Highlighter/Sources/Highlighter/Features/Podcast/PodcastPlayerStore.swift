@@ -21,7 +21,7 @@ final class PodcastPlayerStore {
     private(set) var clipStart: TimeInterval?
     private(set) var clipEnd: TimeInterval?
     var speaker: String = ""
-    private(set) var selectedSegmentIds: Set<String> = []
+    private(set) var selectedSegmentIds: [String] = []
     private(set) var isPublishing: Bool = false
     private(set) var publishError: String?
 
@@ -233,7 +233,7 @@ final class PodcastPlayerStore {
             clipStartSeconds: clipStart,
             clipEndSeconds: clipEnd,
             speaker: speaker,
-            selectedSegmentIds: Array(selectedSegmentIds)
+            selectedSegmentIds: selectedSegmentIds
         )
     }
 
@@ -241,7 +241,7 @@ final class PodcastPlayerStore {
         clipStart = selection.clipStartSeconds
         clipEnd = selection.clipEndSeconds
         speaker = selection.speaker
-        selectedSegmentIds = Set(selection.selectedSegmentIds)
+        selectedSegmentIds = selection.selectedSegmentIds
     }
 
     // MARK: - Clip selection
@@ -311,7 +311,7 @@ final class PodcastPlayerStore {
 
         let draft = core.getPodcastClipHighlightDraft(
             segments: segments,
-            selectedSegmentIds: Array(selectedSegmentIds),
+            selectedSegmentIds: selectedSegmentIds,
             note: note,
             clipStartSeconds: clipStart,
             clipEndSeconds: clipEnd,
