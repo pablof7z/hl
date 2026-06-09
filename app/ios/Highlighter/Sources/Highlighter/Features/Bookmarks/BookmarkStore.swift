@@ -22,7 +22,7 @@ final class BookmarkStore {
     private weak var bridge: EventBridge?
     private var core: SafeHighlighterCore?
 
-    func start(addresses: [String], core: SafeHighlighterCore, bridge: EventBridge) async {
+    func start(core: SafeHighlighterCore, bridge: EventBridge) async {
         self.core = core
         self.bridge = bridge
 
@@ -42,10 +42,7 @@ final class BookmarkStore {
             bridge.registerBookmarkStore(self, handle: webOutcome.handle)
         }
 
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { await self.reload() }
-            group.addTask { await self.loadArticles(addresses: addresses) }
-        }
+        await reload()
     }
 
     func stop() {
@@ -59,28 +56,11 @@ final class BookmarkStore {
         isLoading = true
         defer { isLoading = false }
 
-        async let setsOutcome = core.getMyBookmarkSets()
-        async let curationsOutcome = core.getMyCurationSets()
-        async let websOutcome = core.getMyWebBookmarks()
-        async let followingOutcome = core.getFollowingCurationSets()
-
-        let sets = await setsOutcome
-        let curations = await curationsOutcome
-        let webs = await websOutcome
-        myBookmarkSets = sets.error.isEmpty ? sets.values : []
-        myCurationSets = curations.error.isEmpty ? curations.values : []
-        myWebBookmarks = webs.error.isEmpty ? webs.values : []
-
-        let following = await followingOutcome
-        followingCurationSets = following.error.isEmpty ? following.values : []
-    }
-
-    func loadArticles(addresses: [String]) async {
-        guard let core, !addresses.isEmpty else {
-            myArticles = []
-            return
-        }
-        let outcome = await core.getBookmarkedArticles(addresses: addresses)
-        myArticles = outcome.error.isEmpty ? outcome.values : []
+        let snapshot = await core.getBookmarkLibrarySnapshot()
+        myArticles = snapshot.myArticles
+        myBookmarkSets = snapshot.myBookmarkSets
+        myCurationSets = snapshot.myCurationSets
+        myWebBookmarks = snapshot.myWebBookmarks
+        followingCurationSets = snapshot.followingCurationSets
     }
 }

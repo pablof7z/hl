@@ -27,24 +27,23 @@ use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
     ArticleRecord, ArticleUpdateAction, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome,
     ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget,
-    BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetListOutcome,
-    BookmarkSetOutcome, BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome,
-    ChatMessageOutcome, ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord,
-    CommentReferenceBucket, CommentScope, CommentScopeOutcome, CommentThreadNode,
-    CommentThreadProjection, CommunityListOutcome, CommunitySummary, CurationMenuItem,
-    CurationMenuItemListOutcome, CurrentUser, CurrentUserOutcome, DataOutcome,
-    DiscussionListOutcome, DiscussionOutcome, DiscussionRecord, FeedbackEventListOutcome,
-    FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome, FeedbackThreadRecord,
-    GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome, HighlightRecord,
-    HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem,
-    HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction, MutationOutcome,
-    Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions, NostrEntityEventOutcome,
-    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestProjection,
-    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, ReactionOutcome,
-    ReactionSummaryOutcome, ReadingFeedItem, ReadingFeedListOutcome, RelayConfigListOutcome,
-    RelayDiagnostic, RelayDiagnosticListOutcome, RoomLane, StringListOutcome, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkListOutcome, WebBookmarkRecord,
+    BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetOutcome,
+    BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome,
+    ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord, CommentReferenceBucket,
+    CommentScope, CommentScopeOutcome, CommentThreadNode, CommentThreadProjection,
+    CommunityListOutcome, CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome,
+    CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
+    DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
+    FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightListOutcome,
+    HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
+    HighlightSourceKind, HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome,
+    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
+    NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
+    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
+    ProfileUpdateDraft, ReactionOutcome, ReactionSummaryOutcome, ReadingFeedItem,
+    ReadingFeedListOutcome, RelayConfigListOutcome, RelayDiagnostic, RelayDiagnosticListOutcome,
+    RoomLane, StringListOutcome, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
     WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
@@ -280,21 +279,6 @@ fn subscription_outcome(result: Result<u64, CoreError>) -> SubscriptionOutcome {
     }
 }
 
-fn bookmark_set_list_outcome(
-    result: Result<Vec<BookmarkSetRecord>, CoreError>,
-) -> BookmarkSetListOutcome {
-    match result {
-        Ok(values) => BookmarkSetListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => BookmarkSetListOutcome {
-            values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
 fn curation_menu_item_list_outcome(
     result: Result<Vec<CurationMenuItem>, CoreError>,
 ) -> CurationMenuItemListOutcome {
@@ -318,21 +302,6 @@ fn bookmark_set_outcome(result: Result<BookmarkSetRecord, CoreError>) -> Bookmar
         },
         Err(error) => BookmarkSetOutcome {
             value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn web_bookmark_list_outcome(
-    result: Result<Vec<WebBookmarkRecord>, CoreError>,
-) -> WebBookmarkListOutcome {
-    match result {
-        Ok(values) => WebBookmarkListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => WebBookmarkListOutcome {
-            values: Vec::new(),
             error: error.to_string(),
         },
     }
@@ -2809,8 +2778,10 @@ impl HighlighterCore {
 
     // -- NIP-51 Bookmark sets (kind:30003) / Curation sets (kind:30004) -----
 
-    /// Return all kind:30003 bookmark sets authored by the current user.
-    pub async fn get_my_bookmark_sets(&self) -> BookmarkSetListOutcome {
+    /// Full bookmark library read model for the current user. Rust owns
+    /// bookmark address resolution, set/web/explore section reads, and
+    /// per-section cache failure fallback.
+    pub async fn get_bookmark_library_snapshot(&self) -> crate::lists::BookmarkLibrarySnapshot {
         let user_hex = self
             .inner
             .read()
@@ -2818,11 +2789,7 @@ impl HighlighterCore {
             .current_user()
             .map(|u| u.pubkey)
             .unwrap_or_default();
-        bookmark_set_list_outcome(crate::lists::query_user_sets(
-            self.runtime.ndb(),
-            &user_hex,
-            crate::lists::KIND_BOOKMARK_SETS,
-        ))
+        crate::lists::query_bookmark_library_snapshot(self.runtime.ndb(), &user_hex)
     }
 
     /// Resolve the cached article rows referenced by a bookmark/curation set.
@@ -2831,31 +2798,6 @@ impl HighlighterCore {
         article_list_outcome(articles::query_articles_for_addresses(
             self.runtime.ndb(),
             &record.article_addresses,
-        ))
-    }
-
-    /// Resolve cached article rows for the current user's kind:10003 article
-    /// bookmark addresses. Rust owns NIP-33 parsing and newest-first ordering.
-    pub async fn get_bookmarked_articles(&self, addresses: Vec<String>) -> ArticleListOutcome {
-        article_list_outcome(articles::query_articles_for_addresses(
-            self.runtime.ndb(),
-            &addresses,
-        ))
-    }
-
-    /// Return all kind:30004 curation sets authored by the current user.
-    pub async fn get_my_curation_sets(&self) -> BookmarkSetListOutcome {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .unwrap_or_default();
-        bookmark_set_list_outcome(crate::lists::query_user_sets(
-            self.runtime.ndb(),
-            &user_hex,
-            crate::lists::KIND_CURATION_SETS,
         ))
     }
 
@@ -2877,25 +2819,6 @@ impl HighlighterCore {
             )?;
             Ok(crate::lists::curation_menu_items_for_address(
                 sets, &address,
-            ))
-        })())
-    }
-
-    /// Return kind:30004 curation sets from users the current user follows.
-    pub async fn get_following_curation_sets(&self) -> BookmarkSetListOutcome {
-        bookmark_set_list_outcome((|| {
-            let user_hex = self
-                .inner
-                .read()
-                .session
-                .current_user()
-                .map(|u| u.pubkey)
-                .unwrap_or_default();
-            let follows = crate::follows::query_follows(self.runtime.ndb(), &user_hex)?;
-            let sets = crate::lists::query_following_curation_sets(self.runtime.ndb(), &follows)?;
-            Ok(crate::lists::explorable_curation_sets(
-                self.runtime.ndb(),
-                sets,
             ))
         })())
     }
@@ -3069,23 +2992,6 @@ impl HighlighterCore {
                 SubscriptionKind::FollowingCurationSets { follows },
             )
         })())
-    }
-
-    // -- NIP-B0 Web bookmarks (kind:39701) -----------------------------------
-
-    /// Return all NIP-B0 kind:39701 web bookmarks authored by the current user.
-    pub async fn get_my_web_bookmarks(&self) -> WebBookmarkListOutcome {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .unwrap_or_default();
-        web_bookmark_list_outcome(crate::lists::query_user_web_bookmarks(
-            self.runtime.ndb(),
-            &user_hex,
-        ))
     }
 
     /// Open a live subscription for the current user's NIP-B0 kind:39701 events.

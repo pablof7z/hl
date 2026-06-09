@@ -355,28 +355,16 @@ actor SafeHighlighterCore {
 
     // MARK: - Bookmark sets (kind:30003/30004) + NIP-B0 (kind:39701)
 
-    func getMyBookmarkSets() async -> BookmarkSetListOutcome {
-        await core.getMyBookmarkSets()
-    }
-
     func getBookmarkSetArticles(record: BookmarkSetRecord) async -> ArticleListOutcome {
         await core.getBookmarkSetArticles(record: record)
     }
 
-    func getBookmarkedArticles(addresses: [String]) async -> ArticleListOutcome {
-        await core.getBookmarkedArticles(addresses: addresses)
-    }
-
-    func getMyCurationSets() async -> BookmarkSetListOutcome {
-        await core.getMyCurationSets()
+    func getBookmarkLibrarySnapshot() async -> BookmarkLibrarySnapshot {
+        await core.getBookmarkLibrarySnapshot()
     }
 
     func getCurationMenuItems(address: String) async -> CurationMenuItemListOutcome {
         await core.getCurationMenuItems(address: address)
-    }
-
-    func getFollowingCurationSets() async -> BookmarkSetListOutcome {
-        await core.getFollowingCurationSets()
     }
 
     func createCurationSet(title: String) async -> BookmarkSetOutcome {
@@ -395,10 +383,6 @@ actor SafeHighlighterCore {
     @discardableResult
     func toggleAddressInCurationSet(dTag: String, address: String) async -> BoolOutcome {
         await core.toggleAddressInCurationSet(dTag: dTag, address: address)
-    }
-
-    func getMyWebBookmarks() async -> WebBookmarkListOutcome {
-        await core.getMyWebBookmarks()
     }
 
     nonisolated func projectBookmarkedArticleRow(

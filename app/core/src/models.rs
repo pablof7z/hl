@@ -142,12 +142,6 @@ pub struct SubscriptionOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct BookmarkSetListOutcome {
-    pub values: Vec<BookmarkSetRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct CurationMenuItemListOutcome {
     pub values: Vec<CurationMenuItem>,
     pub error: String,
@@ -156,12 +150,6 @@ pub struct CurationMenuItemListOutcome {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct BookmarkSetOutcome {
     pub value: Option<BookmarkSetRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct WebBookmarkListOutcome {
-    pub values: Vec<WebBookmarkRecord>,
     pub error: String,
 }
 

@@ -38,7 +38,6 @@ struct BookmarksView: View {
         .task(id: app.bookmarkedArticleAddresses) {
             guard let bridge = app.eventBridge else { return }
             await store.start(
-                addresses: app.bookmarkedArticleAddresses,
                 core: app.safeCore,
                 bridge: bridge
             )
