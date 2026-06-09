@@ -5,9 +5,9 @@
 //! that installed the subscription.
 
 use crate::models::{
-    ArticleUpdateAction, ArtifactRecord, ChatMessageRecord, CommunitySummary, CurrentUser,
-    DiscussionRecord, FeedbackEventRecord, HighlightRecord, HydratedHighlight, ProfileUpdateAction,
-    RelayDiagnostic, RelayStatus,
+    ArtifactRecord, ChatMessageRecord, CommunitySummary, CurrentUser, DiscussionRecord,
+    FeedbackEventRecord, HighlightRecord, HydratedHighlight, ProfileUpdateAction, RelayDiagnostic,
+    RelayStatus,
 };
 use crate::nostr_entities::NostrEntityEvent;
 
@@ -17,14 +17,6 @@ const KIND_HIGHLIGHT: u32 = 9802;
 const KIND_LONG_FORM: u32 = 30023;
 const KIND_GROUP_ADMINS: u32 = 39001;
 const KIND_GROUP_MEMBERS: u32 = 39002;
-
-pub fn article_update_action(kind: u32) -> ArticleUpdateAction {
-    match kind {
-        KIND_LONG_FORM => ArticleUpdateAction::RefreshArticle,
-        KIND_HIGHLIGHT => ArticleUpdateAction::RefreshHighlights,
-        _ => ArticleUpdateAction::Ignore,
-    }
-}
 
 pub fn profile_update_action(kind: u32) -> ProfileUpdateAction {
     match kind {
@@ -89,8 +81,8 @@ pub enum DataChangeType {
         kind: u32,
     },
     /// Something that affects the article reader for `address`
-    /// (`30023:<pubkey>:<d>`) arrived. `kind` is the event kind; Rust's
-    /// `article_update_action` defines which reader slice to refresh.
+    /// (`30023:<pubkey>:<d>`) arrived. `kind` is retained for diagnostics;
+    /// native shells refresh Rust's reader snapshot instead of branching on it.
     ArticleUpdated {
         address: String,
         kind: u32,
@@ -184,19 +176,6 @@ pub trait EventCallback: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn article_update_action_maps_reader_slices() {
-        assert_eq!(
-            article_update_action(KIND_LONG_FORM),
-            ArticleUpdateAction::RefreshArticle
-        );
-        assert_eq!(
-            article_update_action(KIND_HIGHLIGHT),
-            ArticleUpdateAction::RefreshHighlights
-        );
-        assert_eq!(article_update_action(1), ArticleUpdateAction::Ignore);
-    }
 
     #[test]
     fn profile_update_action_maps_profile_slices() {

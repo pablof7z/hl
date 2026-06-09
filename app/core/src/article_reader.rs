@@ -1,0 +1,165 @@
+//! Article reader read model. The native shell owns the scroll/rendering
+//! surface; Rust owns the cache queries, section limits, and partial-failure
+//! fallback for the reader's data dependencies.
+
+use nostrdb::Ndb;
+
+use crate::errors::CoreError;
+use crate::models::{ArticleRecord, HighlightRecord, ProfileMetadata};
+use crate::{articles, highlights, profile};
+
+pub const ARTICLE_READER_HIGHLIGHT_LIMIT: u32 = 128;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleReaderSnapshot {
+    pub article: Option<ArticleRecord>,
+    pub author_profile: Option<ProfileMetadata>,
+    pub highlights: Vec<HighlightRecord>,
+}
+
+impl ArticleReaderSnapshot {
+    fn empty() -> Self {
+        Self {
+            article: None,
+            author_profile: None,
+            highlights: Vec::new(),
+        }
+    }
+}
+
+/// Full reader snapshot for one NIP-23 article. Individual cache failures are
+/// non-fatal: a missing or failed article/profile becomes `None`, and a failed
+/// highlight query becomes an empty overlay list. That matches the reader's
+/// network-backfill behavior while keeping the fallback policy in Rust.
+pub fn query_article_reader_snapshot(
+    ndb: &Ndb,
+    pubkey_hex: &str,
+    d_tag: &str,
+) -> ArticleReaderSnapshot {
+    let pubkey = pubkey_hex.trim();
+    let d_tag = d_tag.trim();
+    if pubkey.is_empty() || d_tag.is_empty() {
+        return ArticleReaderSnapshot::empty();
+    }
+    let address = articles::article_address(pubkey, d_tag);
+
+    ArticleReaderSnapshot {
+        article: optional_section_or_none("article", articles::query_article(ndb, pubkey, d_tag)),
+        author_profile: optional_section_or_none(
+            "author_profile",
+            profile::query_profile_from_ndb(ndb, pubkey),
+        ),
+        highlights: list_section_or_empty(
+            "highlights",
+            highlights::query_for_article(ndb, &address, ARTICLE_READER_HIGHLIGHT_LIMIT),
+        ),
+    }
+}
+
+fn optional_section_or_none<T>(
+    section: &'static str,
+    result: Result<Option<T>, CoreError>,
+) -> Option<T> {
+    match result {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::warn!(section, error = %error, "article reader snapshot section failed");
+            None
+        }
+    }
+}
+
+fn list_section_or_empty<T>(section: &'static str, result: Result<Vec<T>, CoreError>) -> Vec<T> {
+    match result {
+        Ok(values) => values,
+        Err(error) => {
+            tracing::warn!(section, error = %error, "article reader snapshot section failed");
+            Vec::new()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nostr_sdk::prelude::*;
+    use tempfile::TempDir;
+
+    fn fresh_ndb() -> (Ndb, TempDir) {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = nostrdb::Config::new().set_mapsize(64 * 1024 * 1024);
+        let ndb = Ndb::new(tmp.path().to_str().unwrap(), &cfg).unwrap();
+        (ndb, tmp)
+    }
+
+    fn process(ndb: &Ndb, event: &Event) {
+        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
+        ndb.process_event(&line).unwrap();
+    }
+
+    fn named(name: &str, value: &str) -> Tag {
+        Tag::parse(vec![name.to_string(), value.to_string()]).unwrap()
+    }
+
+    #[test]
+    fn article_reader_snapshot_hydrates_reader_dependencies() {
+        let (ndb, _tmp) = fresh_ndb();
+        let author = Keys::generate();
+        let highlighter = Keys::generate();
+        let address = articles::article_address(&author.public_key().to_hex(), "essay");
+
+        let article = EventBuilder::new(Kind::Custom(articles::KIND_LONG_FORM), "body")
+            .tags(vec![
+                Tag::identifier("essay"),
+                named("title", "Reader title"),
+                named("published_at", "1000"),
+            ])
+            .custom_created_at(Timestamp::from(1_100))
+            .sign_with_keys(&author)
+            .unwrap();
+        let profile = EventBuilder::new(
+            Kind::Custom(0),
+            r#"{"display_name":"Reader Author","name":"author"}"#,
+        )
+        .custom_created_at(Timestamp::from(1_200))
+        .sign_with_keys(&author)
+        .unwrap();
+        let highlight = EventBuilder::new(Kind::Custom(9802), "quote")
+            .tags(vec![named("a", &address), named("comment", "note")])
+            .custom_created_at(Timestamp::from(1_300))
+            .sign_with_keys(&highlighter)
+            .unwrap();
+
+        for event in [&article, &profile, &highlight] {
+            process(&ndb, event);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        let snapshot = query_article_reader_snapshot(&ndb, &author.public_key().to_hex(), "essay");
+
+        assert_eq!(
+            snapshot.article.as_ref().map(|a| a.title.as_str()),
+            Some("Reader title")
+        );
+        assert_eq!(
+            snapshot
+                .author_profile
+                .as_ref()
+                .map(|profile| profile.display_name.as_str()),
+            Some("Reader Author")
+        );
+        assert_eq!(snapshot.highlights.len(), 1);
+        assert_eq!(snapshot.highlights[0].quote, "quote");
+        assert_eq!(snapshot.highlights[0].note, "note");
+    }
+
+    #[test]
+    fn article_reader_snapshot_uses_empty_state_for_blank_target() {
+        let (ndb, _tmp) = fresh_ndb();
+        let snapshot = query_article_reader_snapshot(&ndb, "", "");
+
+        assert!(snapshot.article.is_none());
+        assert!(snapshot.author_profile.is_none());
+        assert!(snapshot.highlights.is_empty());
+    }
+}

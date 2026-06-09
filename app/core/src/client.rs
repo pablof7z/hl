@@ -10,6 +10,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use nostr_sdk::prelude::*;
 use parking_lot::RwLock;
 
+use crate::article_reader;
 use crate::articles;
 use crate::blossom;
 use crate::clock::{Clock, SystemClock};
@@ -25,20 +26,20 @@ use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
     ArticleListOutcome, ArticleOutcome, ArticleReaderRoute, ArticleReaderRouteOutcome,
-    ArticleRecord, ArticleUpdateAction, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome,
-    ArtifactPreview, ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget,
-    BlossomUpload, BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetOutcome,
-    BookmarkSetRecord, BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome,
-    ChatMessageRecord, CommentListOutcome, CommentOutcome, CommentRecord, CommentReferenceBucket,
-    CommentScope, CommentScopeOutcome, CommentThreadNode, CommentThreadProjection,
-    CommunityListOutcome, CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome,
-    CurrentUser, CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord,
-    FeedbackThreadListOutcome, FeedbackThreadRecord, GeneratedAccountOutcome, HighlightListOutcome,
-    HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
-    HighlightSourceKind, HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome,
-    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
-    NostrConnectOptions, NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
+    ArticleRecord, ArtifactDetailRoute, ArtifactListOutcome, ArtifactOutcome, ArtifactPreview,
+    ArtifactPreviewOutcome, ArtifactRecord, ArtifactReferenceTarget, BlossomUpload,
+    BlossomUploadOutcome, BookRoute, BookRouteOutcome, BookmarkSetOutcome, BookmarkSetRecord,
+    BoolOutcome, CacheStatsOutcome, ChatMessageListOutcome, ChatMessageOutcome, ChatMessageRecord,
+    CommentListOutcome, CommentOutcome, CommentRecord, CommentReferenceBucket, CommentScope,
+    CommentScopeOutcome, CommentThreadNode, CommentThreadProjection, CommunityListOutcome,
+    CommunitySummary, CurationMenuItem, CurationMenuItemListOutcome, CurrentUser,
+    CurrentUserOutcome, DataOutcome, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
+    FeedbackEventListOutcome, FeedbackEventOutcome, FeedbackEventRecord, FeedbackThreadListOutcome,
+    FeedbackThreadRecord, GeneratedAccountOutcome, HighlightListOutcome, HighlightOutcome,
+    HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind,
+    HomeFeedItem, HydratedHighlight, HydratedHighlightListOutcome, LoginInputAction,
+    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
+    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
     OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
     PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
     ProfileUpdateDraft, ReactionOutcome, ReadingFeedItem, ReadingFeedListOutcome,
@@ -1839,6 +1840,20 @@ impl HighlighterCore {
         ))
     }
 
+    /// Full article-reader read model. Rust owns article/profile/highlight
+    /// cache reads, the highlight limit, and partial-failure fallback.
+    pub async fn get_article_reader_snapshot(
+        &self,
+        pubkey_hex: String,
+        d_tag: String,
+    ) -> article_reader::ArticleReaderSnapshot {
+        article_reader::query_article_reader_snapshot(
+            self.runtime.ndb(),
+            pubkey_hex.trim(),
+            d_tag.trim(),
+        )
+    }
+
     /// Read a single NIP-23 article by its full NIP-33 address
     /// (`30023:<pubkey>:<d>`) from nostrdb.
     pub async fn get_article_by_address(&self, address: String) -> ArticleOutcome {
@@ -2025,12 +2040,6 @@ impl HighlighterCore {
             catalog_id.trim(),
             limit,
         ))
-    }
-
-    /// Classify a subscription event kind into the exact article reader slice
-    /// that native shells should refresh.
-    pub fn get_article_update_action(&self, kind: u32) -> ArticleUpdateAction {
-        crate::events::article_update_action(kind)
     }
 
     /// Project an optimistically published highlight into the current visible

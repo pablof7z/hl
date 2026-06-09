@@ -1,5 +1,6 @@
 uniffi::setup_scaffolding!();
 
+pub mod article_reader;
 pub mod articles;
 pub mod artifact_detail;
 pub mod artifacts;
@@ -59,6 +60,7 @@ pub mod time_labels;
 pub mod web_metadata;
 pub mod whats_new;
 
+pub use article_reader::ArticleReaderSnapshot;
 pub use articles::{
     ArticleProfileCardProjection, ArticleProfileCardProjectionInput, ArticleReaderHeaderProjection,
     ArticleReaderHeaderProjectionInput,

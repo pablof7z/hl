@@ -71,13 +71,6 @@ pub struct BoolOutcome {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum ArticleUpdateAction {
-    RefreshArticle,
-    RefreshHighlights,
-    Ignore,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum ProfileUpdateAction {
     RefreshProfile,
     RefreshFollowState,

@@ -965,10 +965,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getArticleReaderRouteForArticle(pubkeyHex: String, dTag: String)  -> ArticleReaderRouteOutcome
 
     /**
-     * Classify a subscription event kind into the exact article reader slice
-     * that native shells should refresh.
+     * Full article-reader read model. Rust owns article/profile/highlight
+     * cache reads, the highlight limit, and partial-failure fallback.
      */
-    func getArticleUpdateAction(kind: UInt32)  -> ArticleUpdateAction
+    func getArticleReaderSnapshot(pubkeyHex: String, dTag: String) async  -> ArticleReaderSnapshot
 
     /**
      * Project an artifact preview into a NIP-22 root scope using the
@@ -2777,15 +2777,25 @@ open func getArticleReaderRouteForArticle(pubkeyHex: String, dTag: String) -> Ar
 }
 
     /**
-     * Classify a subscription event kind into the exact article reader slice
-     * that native shells should refresh.
+     * Full article-reader read model. Rust owns article/profile/highlight
+     * cache reads, the highlight limit, and partial-failure fallback.
      */
-open func getArticleUpdateAction(kind: UInt32) -> ArticleUpdateAction  {
-    return try!  FfiConverterTypeArticleUpdateAction_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_article_update_action(self.uniffiClonePointer(),
-        FfiConverterUInt32.lower(kind),$0
-    )
-})
+open func getArticleReaderSnapshot(pubkeyHex: String, dTag: String)async  -> ArticleReaderSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_get_article_reader_snapshot(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(pubkeyHex),FfiConverterString.lower(dTag)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeArticleReaderSnapshot_lift,
+            errorHandler: nil
+
+        )
 }
 
     /**
@@ -7968,6 +7978,84 @@ public func FfiConverterTypeArticleReaderSelectionProjectionInput_lift(_ buf: Ru
 #endif
 public func FfiConverterTypeArticleReaderSelectionProjectionInput_lower(_ value: ArticleReaderSelectionProjectionInput) -> RustBuffer {
     return FfiConverterTypeArticleReaderSelectionProjectionInput.lower(value)
+}
+
+
+public struct ArticleReaderSnapshot {
+    public var article: ArticleRecord?
+    public var authorProfile: ProfileMetadata?
+    public var highlights: [HighlightRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(article: ArticleRecord?, authorProfile: ProfileMetadata?, highlights: [HighlightRecord]) {
+        self.article = article
+        self.authorProfile = authorProfile
+        self.highlights = highlights
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderSnapshot: Sendable {}
+#endif
+
+
+extension ArticleReaderSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderSnapshot, rhs: ArticleReaderSnapshot) -> Bool {
+        if lhs.article != rhs.article {
+            return false
+        }
+        if lhs.authorProfile != rhs.authorProfile {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(article)
+        hasher.combine(authorProfile)
+        hasher.combine(highlights)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderSnapshot {
+        return
+            try ArticleReaderSnapshot(
+                article: FfiConverterOptionTypeArticleRecord.read(from: &buf),
+                authorProfile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArticleRecord.write(value.article, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.authorProfile, into: &buf)
+        FfiConverterSequenceTypeHighlightRecord.write(value.highlights, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderSnapshot_lift(_ buf: RustBuffer) throws -> ArticleReaderSnapshot {
+    return try FfiConverterTypeArticleReaderSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderSnapshot_lower(_ value: ArticleReaderSnapshot) -> RustBuffer {
+    return FfiConverterTypeArticleReaderSnapshot.lower(value)
 }
 
 
@@ -32852,83 +32940,6 @@ extension AddRelayProbeStatus: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum ArticleUpdateAction {
-
-    case refreshArticle
-    case refreshHighlights
-    case ignore
-}
-
-
-#if compiler(>=6)
-extension ArticleUpdateAction: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeArticleUpdateAction: FfiConverterRustBuffer {
-    typealias SwiftType = ArticleUpdateAction
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleUpdateAction {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        case 1: return .refreshArticle
-
-        case 2: return .refreshHighlights
-
-        case 3: return .ignore
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: ArticleUpdateAction, into buf: inout [UInt8]) {
-        switch value {
-
-
-        case .refreshArticle:
-            writeInt(&buf, Int32(1))
-
-
-        case .refreshHighlights:
-            writeInt(&buf, Int32(2))
-
-
-        case .ignore:
-            writeInt(&buf, Int32(3))
-
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArticleUpdateAction_lift(_ buf: RustBuffer) throws -> ArticleUpdateAction {
-    return try FfiConverterTypeArticleUpdateAction.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArticleUpdateAction_lower(_ value: ArticleUpdateAction) -> RustBuffer {
-    return FfiConverterTypeArticleUpdateAction.lower(value)
-}
-
-
-extension ArticleUpdateAction: Equatable, Hashable {}
-
-
-
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Native-shell destination for an artifact detail tap. Rust owns the
  * NIP/source/reference interpretation; platform shells only render the
@@ -33535,8 +33546,8 @@ public enum DataChangeType {
     )
     /**
      * Something that affects the article reader for `address`
-     * (`30023:<pubkey>:<d>`) arrived. `kind` is the event kind; Rust's
-     * `article_update_action` defines which reader slice to refresh.
+     * (`30023:<pubkey>:<d>`) arrived. `kind` is retained for diagnostics;
+     * native shells refresh Rust's reader snapshot instead of branching on it.
      */
     case articleUpdated(address: String, kind: UInt32
     )
@@ -38316,7 +38327,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_route_for_article() != 30297) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_update_action() != 29382) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article_reader_snapshot() != 58821) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_comment_scope() != 41998) {

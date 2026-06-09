@@ -63,7 +63,6 @@ final class ArticleReaderStore {
     var authorProfile: ProfileMetadata?
     var highlights: [HighlightRecord] = []
     var isLoadingInitial: Bool = true
-    var loadError: String?
     /// Transient flash when a highlight the user just published echoes back.
     var lastPublishedHighlightId: String?
 
@@ -101,49 +100,24 @@ final class ArticleReaderStore {
     // MARK: - Loads
 
     func loadAll() async {
-        async let articleTask: ArticleRecord? = {
-            let outcome = await safeCore.getArticle(pubkeyHex: target.pubkey, dTag: target.dTag)
-            return outcome.error.isEmpty ? outcome.value : nil
-        }()
-        async let highlightsTask: [HighlightRecord] = {
-            let outcome = await safeCore.getHighlightsForArticle(address: target.address)
-            return outcome.error.isEmpty ? outcome.values : []
-        }()
-        async let profileTask: ProfileMetadata? = {
-            let outcome = await safeCore.getUserProfile(pubkeyHex: target.pubkey)
-            return outcome.error.isEmpty ? outcome.value : nil
-        }()
-
-        let (article, highlights, profile) = await (articleTask, highlightsTask, profileTask)
-        if let article {
-            self.article = article
+        let snapshot = await safeCore.getArticleReaderSnapshot(
+            pubkeyHex: target.pubkey,
+            dTag: target.dTag
+        )
+        if let loadedArticle = snapshot.article {
+            article = loadedArticle
         }
-        self.highlights = highlights
-        if let profile {
-            self.authorProfile = profile
+        highlights = snapshot.highlights
+        if let profile = snapshot.authorProfile {
+            authorProfile = profile
         }
     }
 
     /// Called by `EventBridge` when an `ArticleUpdated` delta arrives.
-    /// Re-queries only the slice Rust says is affected by the event kind.
-    func applyUpdate(kind: UInt32) async {
-        switch safeCore.getArticleUpdateAction(kind: kind) {
-        case .refreshArticle:
-            let outcome = await safeCore.getArticle(
-                pubkeyHex: target.pubkey,
-                dTag: target.dTag
-            )
-            if outcome.error.isEmpty, let article = outcome.value {
-                self.article = article
-            }
-        case .refreshHighlights:
-            let outcome = await safeCore.getHighlightsForArticle(address: target.address)
-            if outcome.error.isEmpty {
-                self.highlights = outcome.values
-            }
-        case .ignore:
-            break
-        }
+    /// Re-queries Rust's full reader snapshot so native code does not branch
+    /// on protocol event kinds.
+    func applyUpdate() async {
+        await loadAll()
     }
 
     // MARK: - Writes

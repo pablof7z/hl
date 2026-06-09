@@ -298,8 +298,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
 
     @MainActor
     private func dispatchArticle(_ change: DataChangeType, store: ArticleReaderStore) {
-        if case .articleUpdated(_, let kind) = change {
-            Task { await store.applyUpdate(kind: kind) }
+        if case .articleUpdated = change {
+            Task { await store.applyUpdate() }
         }
     }
 

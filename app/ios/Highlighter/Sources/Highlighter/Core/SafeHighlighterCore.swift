@@ -847,6 +847,10 @@ actor SafeHighlighterCore {
         await core.getArticle(pubkeyHex: pubkeyHex, dTag: dTag)
     }
 
+    func getArticleReaderSnapshot(pubkeyHex: String, dTag: String) async -> ArticleReaderSnapshot {
+        await core.getArticleReaderSnapshot(pubkeyHex: pubkeyHex, dTag: dTag)
+    }
+
     func getArticleByAddress(address: String) async -> ArticleOutcome {
         await core.getArticleByAddress(address: address)
     }
@@ -955,10 +959,6 @@ actor SafeHighlighterCore {
 
     func getBookHighlights(catalogId: String, limit: UInt32 = 64) async -> HighlightListOutcome {
         await core.getBookHighlights(catalogId: catalogId, limit: limit)
-    }
-
-    nonisolated func getArticleUpdateAction(kind: UInt32) -> ArticleUpdateAction {
-        core.getArticleUpdateAction(kind: kind)
     }
 
     nonisolated func insertUniqueHighlightFront(
