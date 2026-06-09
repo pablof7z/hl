@@ -1725,7 +1725,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Rust owns article artifact derivation and draft defaults; native shells
      * only provide the raw selected text fields.
      */
-    func publishArticleReaderHighlight(article: ArticleRecord, quote: String, note: String, context: String) async  -> HighlightOutcome
+    func publishArticleReaderHighlight(article: ArticleRecord?, quote: String, note: String, context: String) async  -> HighlightOutcome
 
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactOutcome
 
@@ -5307,13 +5307,13 @@ open func projectWebMetadataRequest(input: WebMetadataRequestProjectionInput) ->
      * Rust owns article artifact derivation and draft defaults; native shells
      * only provide the raw selected text fields.
      */
-open func publishArticleReaderHighlight(article: ArticleRecord, quote: String, note: String, context: String)async  -> HighlightOutcome  {
+open func publishArticleReaderHighlight(article: ArticleRecord?, quote: String, note: String, context: String)async  -> HighlightOutcome  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_publish_article_reader_highlight(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeArticleRecord_lower(article),FfiConverterString.lower(quote),FfiConverterString.lower(note),FfiConverterString.lower(context)
+                    FfiConverterOptionTypeArticleRecord.lower(article),FfiConverterString.lower(quote),FfiConverterString.lower(note),FfiConverterString.lower(context)
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -39769,7 +39769,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_web_metadata_request() != 53856) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_article_reader_highlight() != 29161) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_article_reader_highlight() != 20796) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 1182) {

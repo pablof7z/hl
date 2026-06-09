@@ -1597,7 +1597,7 @@ actor SafeHighlighterCore {
     }
 
     func publishArticleReaderHighlight(
-        article: ArticleRecord,
+        article: ArticleRecord?,
         quote: String,
         note: String,
         context: String

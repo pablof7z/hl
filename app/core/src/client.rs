@@ -3754,13 +3754,15 @@ impl HighlighterCore {
     /// only provide the raw selected text fields.
     pub async fn publish_article_reader_highlight(
         &self,
-        article: ArticleRecord,
+        article: Option<ArticleRecord>,
         quote: String,
         note: String,
         context: String,
     ) -> HighlightOutcome {
         let result: Result<HighlightRecord, CoreError> = async {
             let _ = self.require_user_pubkey()?;
+            let article =
+                article.ok_or_else(|| CoreError::InvalidInput("Article not yet loaded.".into()))?;
             let artifact = articles::article_artifact_record(&article);
             let draft = highlights::article_reader_highlight_draft(quote, note, context);
             crate::highlights::publish(&self.runtime, draft, artifact).await

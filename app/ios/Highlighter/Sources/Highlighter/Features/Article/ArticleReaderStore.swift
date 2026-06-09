@@ -154,9 +154,6 @@ final class ArticleReaderStore {
     ///
     /// Returns outcome state so the caller can surface publish failures in a toast.
     func publishHighlight(quote: String, note: String, context: String) async -> HighlightOutcome {
-        guard let article else {
-            return HighlightOutcome(value: nil, error: "Article not yet loaded.")
-        }
         let outcome = await safeCore.publishArticleReaderHighlight(
             article: article,
             quote: quote,
