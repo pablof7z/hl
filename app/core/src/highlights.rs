@@ -79,6 +79,7 @@ pub struct HighlightResourceHeaderProjectionInput {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct HighlightResourceHeaderProjection {
     pub source_kind: HighlightSourceKind,
+    pub icon_system_name: String,
     pub title: String,
     pub author_or_domain: String,
     pub time_label: Option<String>,
@@ -98,6 +99,7 @@ pub struct HighlightDetailResourceProjectionInput {
 pub struct HighlightDetailResourceProjection {
     pub source_kind: HighlightSourceKind,
     pub kind_label: String,
+    pub icon_system_name: String,
     pub title: String,
     pub author: String,
     pub cover_url: Option<String>,
@@ -336,6 +338,7 @@ pub fn highlight_resource_header_projection(
 
     HighlightResourceHeaderProjection {
         source_kind,
+        icon_system_name: source_kind_icon_name(source_kind).to_string(),
         title: resource_title(
             source_kind,
             preview,
@@ -394,6 +397,7 @@ pub fn highlight_detail_resource_projection(
     HighlightDetailResourceProjection {
         source_kind,
         kind_label: detail_kind_label(source_kind).to_string(),
+        icon_system_name: source_kind_icon_name(source_kind).to_string(),
         title: preview
             .and_then(|p| non_empty(&p.title))
             .or(url_host.clone())
@@ -407,6 +411,18 @@ pub fn highlight_detail_resource_projection(
         article_route,
         book_catalog_id,
         web_url,
+    }
+}
+
+fn source_kind_icon_name(kind: HighlightSourceKind) -> &'static str {
+    match kind {
+        HighlightSourceKind::Article => "doc.text",
+        HighlightSourceKind::Web => "globe",
+        HighlightSourceKind::Podcast => "waveform",
+        HighlightSourceKind::Book => "book.closed",
+        HighlightSourceKind::Video => "play.rectangle",
+        HighlightSourceKind::Paper => "doc.richtext",
+        HighlightSourceKind::Unknown => "quote.bubble",
     }
 }
 
@@ -1853,6 +1869,7 @@ mod tests {
             });
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Article);
+        assert_eq!(projection.icon_system_name, "doc.text");
         assert_eq!(projection.title, "Article title");
         assert_eq!(projection.author_or_domain, "Profile Author");
         assert_eq!(
@@ -1889,6 +1906,7 @@ mod tests {
             });
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Web);
+        assert_eq!(projection.icon_system_name, "globe");
         assert_eq!(projection.title, "OpenGraph title");
         assert_eq!(projection.author_or_domain, "Example Site");
         assert_eq!(
@@ -1918,6 +1936,7 @@ mod tests {
             });
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Podcast);
+        assert_eq!(projection.icon_system_name, "waveform");
         assert_eq!(projection.title, "Episode 1");
         assert_eq!(projection.author_or_domain, "Show");
         assert_eq!(projection.time_label, Some("1h 0m".into()));
@@ -1946,6 +1965,7 @@ mod tests {
             });
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Book);
+        assert_eq!(projection.icon_system_name, "book.closed");
         assert_eq!(projection.title, "Book title");
         assert_eq!(projection.author_or_domain, "Book author");
         assert_eq!(
@@ -1978,6 +1998,7 @@ mod tests {
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Article);
         assert_eq!(projection.kind_label, "Article");
+        assert_eq!(projection.icon_system_name, "doc.text");
         assert_eq!(projection.title, "Preview essay");
         assert_eq!(projection.author, "example.com");
         assert_eq!(
@@ -2013,6 +2034,7 @@ mod tests {
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Book);
         assert_eq!(projection.kind_label, "Book");
+        assert_eq!(projection.icon_system_name, "book.closed");
         assert_eq!(projection.title, "Untitled");
         assert_eq!(
             projection.book_catalog_id,
@@ -2039,6 +2061,7 @@ mod tests {
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Web);
         assert_eq!(projection.kind_label, "Web");
+        assert_eq!(projection.icon_system_name, "globe");
         assert_eq!(projection.title, "example.com");
         assert_eq!(projection.author, "example.com");
         assert_eq!(projection.web_url, Some("https://example.com/read".into()));
@@ -2061,6 +2084,7 @@ mod tests {
             });
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Web);
+        assert_eq!(projection.icon_system_name, "globe");
         assert_eq!(projection.web_url, None);
     }
 

@@ -175,7 +175,7 @@ struct HighlightDetailView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: kindIconName(resource.sourceKind))
+            Image(systemName: resource.iconSystemName)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Color.highlighterInkStrong.opacity(0.55))
         }
@@ -380,18 +380,6 @@ struct HighlightDetailView: View {
     private func pageImageURL(_ content: HighlightDetailContentProjection) -> URL? {
         guard let raw = content.pageImageUrl else { return nil }
         return URL(string: raw)
-    }
-
-    private func kindIconName(_ kind: HighlightSourceKind) -> String {
-        switch kind {
-        case .article: return "doc.text"
-        case .web:     return "globe"
-        case .podcast: return "waveform"
-        case .book:    return "book.closed"
-        case .video:   return "play.rectangle"
-        case .paper:   return "doc.richtext"
-        case .unknown: return "quote.bubble"
-        }
     }
 
     // MARK: - Profile helpers

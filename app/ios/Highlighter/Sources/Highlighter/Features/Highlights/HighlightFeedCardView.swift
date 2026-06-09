@@ -149,7 +149,7 @@ struct HighlightFeedCardView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: kindIconName(resource.sourceKind))
+            Image(systemName: resource.iconSystemName)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.highlighterInkStrong.opacity(0.55))
         }
@@ -341,20 +341,6 @@ struct HighlightFeedCardView: View {
         }
         .task(id: h.highlight.pubkey) {
             await app.requestProfile(pubkeyHex: h.highlight.pubkey)
-        }
-    }
-
-    // MARK: - Derived: artifact kind
-
-    private func kindIconName(_ kind: HighlightSourceKind) -> String {
-        switch kind {
-        case .article: return "doc.text"
-        case .web:     return "globe"
-        case .podcast: return "waveform"
-        case .book:    return "book.closed"
-        case .video:   return "play.rectangle"
-        case .paper:   return "doc.richtext"
-        case .unknown: return "quote.bubble"
         }
     }
 

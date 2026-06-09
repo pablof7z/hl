@@ -17373,6 +17373,7 @@ public func FfiConverterTypeHighlightDetailContentProjectionInput_lower(_ value:
 public struct HighlightDetailResourceProjection {
     public var sourceKind: HighlightSourceKind
     public var kindLabel: String
+    public var iconSystemName: String
     public var title: String
     public var author: String
     public var coverUrl: String?
@@ -17382,9 +17383,10 @@ public struct HighlightDetailResourceProjection {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(sourceKind: HighlightSourceKind, kindLabel: String, title: String, author: String, coverUrl: String?, articleRoute: ArticleReaderRoute?, bookCatalogId: String?, webUrl: String?) {
+    public init(sourceKind: HighlightSourceKind, kindLabel: String, iconSystemName: String, title: String, author: String, coverUrl: String?, articleRoute: ArticleReaderRoute?, bookCatalogId: String?, webUrl: String?) {
         self.sourceKind = sourceKind
         self.kindLabel = kindLabel
+        self.iconSystemName = iconSystemName
         self.title = title
         self.author = author
         self.coverUrl = coverUrl
@@ -17405,6 +17407,9 @@ extension HighlightDetailResourceProjection: Equatable, Hashable {
             return false
         }
         if lhs.kindLabel != rhs.kindLabel {
+            return false
+        }
+        if lhs.iconSystemName != rhs.iconSystemName {
             return false
         }
         if lhs.title != rhs.title {
@@ -17431,6 +17436,7 @@ extension HighlightDetailResourceProjection: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(sourceKind)
         hasher.combine(kindLabel)
+        hasher.combine(iconSystemName)
         hasher.combine(title)
         hasher.combine(author)
         hasher.combine(coverUrl)
@@ -17451,6 +17457,7 @@ public struct FfiConverterTypeHighlightDetailResourceProjection: FfiConverterRus
             try HighlightDetailResourceProjection(
                 sourceKind: FfiConverterTypeHighlightSourceKind.read(from: &buf),
                 kindLabel: FfiConverterString.read(from: &buf),
+                iconSystemName: FfiConverterString.read(from: &buf),
                 title: FfiConverterString.read(from: &buf),
                 author: FfiConverterString.read(from: &buf),
                 coverUrl: FfiConverterOptionString.read(from: &buf),
@@ -17463,6 +17470,7 @@ public struct FfiConverterTypeHighlightDetailResourceProjection: FfiConverterRus
     public static func write(_ value: HighlightDetailResourceProjection, into buf: inout [UInt8]) {
         FfiConverterTypeHighlightSourceKind.write(value.sourceKind, into: &buf)
         FfiConverterString.write(value.kindLabel, into: &buf)
+        FfiConverterString.write(value.iconSystemName, into: &buf)
         FfiConverterString.write(value.title, into: &buf)
         FfiConverterString.write(value.author, into: &buf)
         FfiConverterOptionString.write(value.coverUrl, into: &buf)
@@ -18790,6 +18798,7 @@ public func FfiConverterTypeHighlightResourceAuthorProfile_lower(_ value: Highli
 
 public struct HighlightResourceHeaderProjection {
     public var sourceKind: HighlightSourceKind
+    public var iconSystemName: String
     public var title: String
     public var authorOrDomain: String
     public var timeLabel: String?
@@ -18801,8 +18810,9 @@ public struct HighlightResourceHeaderProjection {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(sourceKind: HighlightSourceKind, title: String, authorOrDomain: String, timeLabel: String?, coverUrl: String?, bookIsbn: String?, articleAddress: String?, articleAuthorPubkey: String, webMetadataUrl: String?) {
+    public init(sourceKind: HighlightSourceKind, iconSystemName: String, title: String, authorOrDomain: String, timeLabel: String?, coverUrl: String?, bookIsbn: String?, articleAddress: String?, articleAuthorPubkey: String, webMetadataUrl: String?) {
         self.sourceKind = sourceKind
+        self.iconSystemName = iconSystemName
         self.title = title
         self.authorOrDomain = authorOrDomain
         self.timeLabel = timeLabel
@@ -18822,6 +18832,9 @@ extension HighlightResourceHeaderProjection: Sendable {}
 extension HighlightResourceHeaderProjection: Equatable, Hashable {
     public static func ==(lhs: HighlightResourceHeaderProjection, rhs: HighlightResourceHeaderProjection) -> Bool {
         if lhs.sourceKind != rhs.sourceKind {
+            return false
+        }
+        if lhs.iconSystemName != rhs.iconSystemName {
             return false
         }
         if lhs.title != rhs.title {
@@ -18853,6 +18866,7 @@ extension HighlightResourceHeaderProjection: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(sourceKind)
+        hasher.combine(iconSystemName)
         hasher.combine(title)
         hasher.combine(authorOrDomain)
         hasher.combine(timeLabel)
@@ -18874,6 +18888,7 @@ public struct FfiConverterTypeHighlightResourceHeaderProjection: FfiConverterRus
         return
             try HighlightResourceHeaderProjection(
                 sourceKind: FfiConverterTypeHighlightSourceKind.read(from: &buf),
+                iconSystemName: FfiConverterString.read(from: &buf),
                 title: FfiConverterString.read(from: &buf),
                 authorOrDomain: FfiConverterString.read(from: &buf),
                 timeLabel: FfiConverterOptionString.read(from: &buf),
@@ -18887,6 +18902,7 @@ public struct FfiConverterTypeHighlightResourceHeaderProjection: FfiConverterRus
 
     public static func write(_ value: HighlightResourceHeaderProjection, into buf: inout [UInt8]) {
         FfiConverterTypeHighlightSourceKind.write(value.sourceKind, into: &buf)
+        FfiConverterString.write(value.iconSystemName, into: &buf)
         FfiConverterString.write(value.title, into: &buf)
         FfiConverterString.write(value.authorOrDomain, into: &buf)
         FfiConverterOptionString.write(value.timeLabel, into: &buf)
