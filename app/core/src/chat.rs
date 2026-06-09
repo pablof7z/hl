@@ -40,7 +40,7 @@ pub struct ChatPresenceSnapshot {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct ChatPublishSnapshotOutcome {
+pub struct ChatPublishSnapshot {
     pub snapshot: ChatSnapshot,
     pub error: String,
 }
@@ -169,14 +169,14 @@ pub async fn publish_chat_message_snapshot(
     content: &str,
     reply_to_event_id: Option<&str>,
     page_count: u32,
-) -> ChatPublishSnapshotOutcome {
+) -> ChatPublishSnapshot {
     let base_snapshot = query_chat_snapshot(ndb, group_id, page_count);
     match publish_chat_message(runtime, group_id, content, reply_to_event_id).await {
-        Ok(message) => ChatPublishSnapshotOutcome {
+        Ok(message) => ChatPublishSnapshot {
             snapshot: snapshot_with_message(base_snapshot, message),
             error: String::new(),
         },
-        Err(error) => ChatPublishSnapshotOutcome {
+        Err(error) => ChatPublishSnapshot {
             snapshot: base_snapshot,
             error: error.to_string(),
         },

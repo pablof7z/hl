@@ -1520,7 +1520,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * chat snapshot. Rust owns the optimistic merge of the signed record so
      * native shells never fabricate chat rows.
      */
-    func publishChatMessageSnapshot(groupId: String, content: String, replyToEventId: String?, pageCount: UInt32) async  -> ChatPublishSnapshotOutcome
+    func publishChatMessageSnapshot(groupId: String, content: String, replyToEventId: String?, pageCount: UInt32) async  -> ChatPublishSnapshot
 
     /**
      * Publish a NIP-22 comment and return the refreshed comments sheet
@@ -4394,7 +4394,7 @@ open func publishCapture(input: CapturePublishInput)async  -> CapturePublishSnap
      * chat snapshot. Rust owns the optimistic merge of the signed record so
      * native shells never fabricate chat rows.
      */
-open func publishChatMessageSnapshot(groupId: String, content: String, replyToEventId: String?, pageCount: UInt32)async  -> ChatPublishSnapshotOutcome  {
+open func publishChatMessageSnapshot(groupId: String, content: String, replyToEventId: String?, pageCount: UInt32)async  -> ChatPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4406,7 +4406,7 @@ open func publishChatMessageSnapshot(groupId: String, content: String, replyToEv
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeChatPublishSnapshotOutcome_lift,
+            liftFunc: FfiConverterTypeChatPublishSnapshot_lift,
             errorHandler: nil
 
         )
@@ -11647,7 +11647,7 @@ public func FfiConverterTypeChatPresenceSnapshot_lower(_ value: ChatPresenceSnap
 }
 
 
-public struct ChatPublishSnapshotOutcome {
+public struct ChatPublishSnapshot {
     public var snapshot: ChatSnapshot
     public var error: String
 
@@ -11660,12 +11660,12 @@ public struct ChatPublishSnapshotOutcome {
 }
 
 #if compiler(>=6)
-extension ChatPublishSnapshotOutcome: Sendable {}
+extension ChatPublishSnapshot: Sendable {}
 #endif
 
 
-extension ChatPublishSnapshotOutcome: Equatable, Hashable {
-    public static func ==(lhs: ChatPublishSnapshotOutcome, rhs: ChatPublishSnapshotOutcome) -> Bool {
+extension ChatPublishSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ChatPublishSnapshot, rhs: ChatPublishSnapshot) -> Bool {
         if lhs.snapshot != rhs.snapshot {
             return false
         }
@@ -11686,16 +11686,16 @@ extension ChatPublishSnapshotOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeChatPublishSnapshotOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatPublishSnapshotOutcome {
+public struct FfiConverterTypeChatPublishSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatPublishSnapshot {
         return
-            try ChatPublishSnapshotOutcome(
+            try ChatPublishSnapshot(
                 snapshot: FfiConverterTypeChatSnapshot.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: ChatPublishSnapshotOutcome, into buf: inout [UInt8]) {
+    public static func write(_ value: ChatPublishSnapshot, into buf: inout [UInt8]) {
         FfiConverterTypeChatSnapshot.write(value.snapshot, into: &buf)
         FfiConverterString.write(value.error, into: &buf)
     }
@@ -11705,15 +11705,15 @@ public struct FfiConverterTypeChatPublishSnapshotOutcome: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeChatPublishSnapshotOutcome_lift(_ buf: RustBuffer) throws -> ChatPublishSnapshotOutcome {
-    return try FfiConverterTypeChatPublishSnapshotOutcome.lift(buf)
+public func FfiConverterTypeChatPublishSnapshot_lift(_ buf: RustBuffer) throws -> ChatPublishSnapshot {
+    return try FfiConverterTypeChatPublishSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeChatPublishSnapshotOutcome_lower(_ value: ChatPublishSnapshotOutcome) -> RustBuffer {
-    return FfiConverterTypeChatPublishSnapshotOutcome.lower(value)
+public func FfiConverterTypeChatPublishSnapshot_lower(_ value: ChatPublishSnapshot) -> RustBuffer {
+    return FfiConverterTypeChatPublishSnapshot.lower(value)
 }
 
 
@@ -39100,7 +39100,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_capture() != 12749) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message_snapshot() != 49134) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message_snapshot() != 19370) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment_for_scope_snapshot() != 49852) {

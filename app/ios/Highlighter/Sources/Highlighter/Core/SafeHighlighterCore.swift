@@ -559,7 +559,7 @@ actor SafeHighlighterCore {
         content: String,
         replyToEventId: String? = nil,
         pageCount: UInt32
-    ) async -> ChatPublishSnapshotOutcome {
+    ) async -> ChatPublishSnapshot {
         await core.publishChatMessageSnapshot(
             groupId: groupId,
             content: content,

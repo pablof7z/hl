@@ -2597,9 +2597,9 @@ impl HighlighterCore {
         content: String,
         reply_to_event_id: Option<String>,
         page_count: u32,
-    ) -> crate::chat::ChatPublishSnapshotOutcome {
+    ) -> crate::chat::ChatPublishSnapshot {
         if let Err(error) = self.require_user_pubkey() {
-            return crate::chat::ChatPublishSnapshotOutcome {
+            return crate::chat::ChatPublishSnapshot {
                 snapshot: crate::chat::query_chat_snapshot(
                     self.runtime.ndb(),
                     &group_id,

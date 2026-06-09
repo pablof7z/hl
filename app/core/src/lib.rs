@@ -89,7 +89,7 @@ pub use capture::{
 };
 pub use chat::{
     ChatComposerProjection, ChatComposerProjectionInput, ChatMessageRowProjection,
-    ChatPresenceSnapshot, ChatPublishSnapshotOutcome, ChatSnapshot,
+    ChatPresenceSnapshot, ChatPublishSnapshot, ChatSnapshot,
 };
 pub use client::HighlighterCore;
 pub use comments::{
