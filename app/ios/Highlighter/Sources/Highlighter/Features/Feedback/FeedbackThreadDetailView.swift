@@ -21,11 +21,9 @@ struct FeedbackThreadDetailView: View {
         .navigationTitle(threadPresentation.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            let agentPubkey = await listStore.resolveAgentPubkey()
             await detailStore.start(
                 rootEventId: thread.rootEventId,
                 coordinate: FeedbackProject.coordinate,
-                agentPubkey: agentPubkey,
                 core: app.safeCore,
                 bridge: app.eventBridge
             )

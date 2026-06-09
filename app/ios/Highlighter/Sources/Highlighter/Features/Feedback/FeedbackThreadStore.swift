@@ -14,7 +14,6 @@ final class FeedbackThreadStore {
 
     @ObservationIgnored private var rootEventId: String?
     @ObservationIgnored private var coordinate: String?
-    @ObservationIgnored private var agentPubkey: String?
     @ObservationIgnored private var core: SafeHighlighterCore?
     @ObservationIgnored private weak var bridge: EventBridge?
     @ObservationIgnored private var subscriptionHandle: UInt64?
@@ -22,13 +21,11 @@ final class FeedbackThreadStore {
     func start(
         rootEventId: String,
         coordinate: String,
-        agentPubkey: String?,
         core: SafeHighlighterCore,
         bridge: EventBridge?
     ) async {
         self.rootEventId = rootEventId
         self.coordinate = coordinate
-        self.agentPubkey = agentPubkey
         self.core = core
         self.bridge = bridge
         isLoading = true
@@ -69,20 +66,16 @@ final class FeedbackThreadStore {
         )
     }
 
-    /// Send a reply into the open thread. Resolves the agent pubkey lazily
-    /// if not already cached; publishes without a `p` tag when the project
-    /// event isn't available.
+    /// Send a reply into the open thread. Rust/nostrdb resolves the current
+    /// agent pubkey at send time; replies publish without a `p` tag when the
+    /// project event isn't available.
     @discardableResult
     func sendReply(body: String) async -> FeedbackEventOutcome {
         guard let core, let coordinate, let rootEventId else {
             return FeedbackEventOutcome(value: nil, error: FeedbackError.notReady.localizedDescription)
         }
-        var agent = agentPubkey
-        if agent == nil {
-            let outcome = await core.getProjectFirstAgentPubkey(coordinate: coordinate)
-            agent = outcome.error.isEmpty ? outcome.value : nil
-            agentPubkey = agent
-        }
+        let agentOutcome = await core.getProjectFirstAgentPubkey(coordinate: coordinate)
+        let agent = agentOutcome.error.isEmpty ? agentOutcome.value : nil
 
         isPublishing = true
         defer { isPublishing = false }
