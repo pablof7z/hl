@@ -72,6 +72,12 @@ pub struct BlossomServerSettingsMutationSnapshot {
     pub error_message: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BlossomUploadSnapshot {
+    pub upload: Option<BlossomUpload>,
+    pub error: String,
+}
+
 // -- Reads --
 
 /// Return the newest kind:10063 event for `user_hex` from nostrdb.
@@ -466,6 +472,19 @@ pub async fn upload_blob(
     })
 }
 
+pub fn upload_snapshot(result: Result<BlossomUpload, CoreError>) -> BlossomUploadSnapshot {
+    match result {
+        Ok(upload) => BlossomUploadSnapshot {
+            upload: Some(upload),
+            error: String::new(),
+        },
+        Err(error) => BlossomUploadSnapshot {
+            upload: None,
+            error: error.to_string(),
+        },
+    }
+}
+
 // -- Tests --
 
 #[cfg(test)]
@@ -484,6 +503,32 @@ mod tests {
             .custom_created_at(Timestamp::from(ts))
             .sign_with_keys(keys)
             .expect("sign")
+    }
+
+    fn sample_upload() -> BlossomUpload {
+        BlossomUpload {
+            url: "https://blossom.example/blob".into(),
+            sha256_hex: "abc123".into(),
+            mime: "image/jpeg".into(),
+            size_bytes: 42,
+            width: 10,
+            height: 20,
+            alt: "cover".into(),
+        }
+    }
+
+    #[test]
+    fn upload_snapshot_projects_upload_or_error_state() {
+        let ok = upload_snapshot(Ok(sample_upload()));
+        assert_eq!(
+            ok.upload.as_ref().map(|upload| upload.url.as_str()),
+            Some("https://blossom.example/blob")
+        );
+        assert!(ok.error.is_empty());
+
+        let err = upload_snapshot(Err(CoreError::Network("offline".into())));
+        assert!(err.upload.is_none());
+        assert_eq!(err.error, "network error: offline");
     }
 
     #[test]

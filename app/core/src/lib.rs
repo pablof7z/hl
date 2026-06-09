@@ -72,7 +72,7 @@ pub use artifact_detail::ArtifactDetailProjection;
 pub use blossom::{
     BlossomServerEntryProjection, BlossomServerEntryProjectionInput, BlossomServerListProjection,
     BlossomServerListProjectionInput, BlossomServerSettingsMutationSnapshot,
-    BlossomServerSettingsSnapshot,
+    BlossomServerSettingsSnapshot, BlossomUploadSnapshot,
 };
 pub use book_detail::BookDetailSnapshot;
 pub use bookmarks::{
@@ -145,17 +145,17 @@ pub use lists::{
 };
 pub use models::{
     ArticleReaderRoute, ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactOutcome,
-    ArtifactPreview, ArtifactRecord, ArtifactReferenceTarget, BlossomUpload, BlossomUploadOutcome,
-    BookRoute, BookmarkSetRecord, ChatMessageRecord, CommentRecord, CommentReferenceBucket,
-    CommentThreadNode, CommentThreadProjection, CommunityListOutcome, CommunitySummary,
-    CurationMenuItem, CurrentUser, DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome,
-    DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount,
-    HighlightOutcome, HighlightRecord, HighlightReferenceBucket, HighlightReferenceTarget,
-    HighlightSourceKind, HomeFeedItem, HydratedHighlight, LoginInputAction, MutationOutcome,
-    OnboardingInterest, OnboardingInterestChip, OnboardingInterestProjection,
-    OnboardingInterestSelection, PodcastPositionRecord, ProfileListOutcome, ProfileMetadata,
-    ProfileOutcome, ProfileUpdateDraft, ReadingFeedItem, RoomLane, RoomRecommendation,
-    RoomRecommendationReason, SubscriptionOutcome, WebBookmarkRecord,
+    ArtifactPreview, ArtifactRecord, ArtifactReferenceTarget, BlossomUpload, BookRoute,
+    BookmarkSetRecord, ChatMessageRecord, CommentRecord, CommentReferenceBucket, CommentThreadNode,
+    CommentThreadProjection, CommunityListOutcome, CommunitySummary, CurationMenuItem, CurrentUser,
+    DiscussionAttachment, DiscussionListOutcome, DiscussionOutcome, DiscussionRecord,
+    FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightOutcome, HighlightRecord,
+    HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem,
+    HydratedHighlight, LoginInputAction, MutationOutcome, OnboardingInterest,
+    OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
+    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
+    ReadingFeedItem, RoomLane, RoomRecommendation, RoomRecommendationReason, SubscriptionOutcome,
+    WebBookmarkRecord,
 };
 pub use nip05::{
     Nip05Availability, Nip05AvailabilitySnapshot, Nip05AvailabilityState,

@@ -26,13 +26,13 @@ use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactOutcome, ArtifactPreview, ArtifactRecord,
-    BlossomUpload, BlossomUploadOutcome, BookRoute, BookmarkSetRecord, CommentRecord,
-    CommentReferenceBucket, CommentScope, CommunityListOutcome, CommunitySummary, CurrentUser,
-    DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord, HighlightOutcome, HighlightRecord,
-    HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
-    OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
-    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, RelayDiagnostic, SubscriptionOutcome,
+    BlossomUpload, BookRoute, BookmarkSetRecord, CommentRecord, CommentReferenceBucket,
+    CommentScope, CommunityListOutcome, CommunitySummary, CurrentUser, DiscussionOutcome,
+    DiscussionRecord, FeedbackThreadRecord, HighlightOutcome, HighlightRecord, HighlightSourceKind,
+    LoginInputAction, MutationOutcome, NostrConnectOptions, OnboardingInterest,
+    OnboardingInterestProjection, OnboardingInterestSelection, PodcastPositionRecord,
+    ProfileMetadata, ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic,
+    SubscriptionOutcome,
 };
 use crate::network_preferences;
 use crate::nip05;
@@ -136,19 +136,6 @@ fn artifact_outcome(result: Result<ArtifactRecord, CoreError>) -> ArtifactOutcom
             error: String::new(),
         },
         Err(error) => ArtifactOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn blossom_upload_outcome(result: Result<BlossomUpload, CoreError>) -> BlossomUploadOutcome {
-    match result {
-        Ok(value) => BlossomUploadOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => BlossomUploadOutcome {
             value: None,
             error: error.to_string(),
         },
@@ -3442,7 +3429,7 @@ impl HighlighterCore {
         width: u32,
         height: u32,
         alt: String,
-    ) -> BlossomUploadOutcome {
+    ) -> blossom::BlossomUploadSnapshot {
         let result: Result<BlossomUpload, CoreError> = async {
             let _ = self.require_user_pubkey()?;
             blossom::upload_blob(
@@ -3457,7 +3444,7 @@ impl HighlighterCore {
             .await
         }
         .await;
-        blossom_upload_outcome(result)
+        blossom::upload_snapshot(result)
     }
 
     // -- Relay config (NIP-65 read/write + NIP-78 rooms/indexer) --

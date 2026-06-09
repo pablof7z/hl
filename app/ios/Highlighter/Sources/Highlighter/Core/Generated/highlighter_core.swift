@@ -1875,7 +1875,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * descriptor for use in the publishing event's `imeta` tag.
      * `alt` is the recognized OCR text, or empty if none.
      */
-    func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async  -> BlossomUploadOutcome
+    func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async  -> BlossomUploadSnapshot
 
     /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
@@ -5650,7 +5650,7 @@ open func updateProfile(draft: ProfileUpdateDraft)async  -> ProfileOutcome  {
      * descriptor for use in the publishing event's `imeta` tag.
      * `alt` is the recognized OCR text, or empty if none.
      */
-open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String)async  -> BlossomUploadOutcome  {
+open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String)async  -> BlossomUploadSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5662,7 +5662,7 @@ open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, 
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBlossomUploadOutcome_lift,
+            liftFunc: FfiConverterTypeBlossomUploadSnapshot_lift,
             errorHandler: nil
 
         )
@@ -8936,26 +8936,26 @@ public func FfiConverterTypeBlossomUpload_lower(_ value: BlossomUpload) -> RustB
 }
 
 
-public struct BlossomUploadOutcome {
-    public var value: BlossomUpload?
+public struct BlossomUploadSnapshot {
+    public var upload: BlossomUpload?
     public var error: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(value: BlossomUpload?, error: String) {
-        self.value = value
+    public init(upload: BlossomUpload?, error: String) {
+        self.upload = upload
         self.error = error
     }
 }
 
 #if compiler(>=6)
-extension BlossomUploadOutcome: Sendable {}
+extension BlossomUploadSnapshot: Sendable {}
 #endif
 
 
-extension BlossomUploadOutcome: Equatable, Hashable {
-    public static func ==(lhs: BlossomUploadOutcome, rhs: BlossomUploadOutcome) -> Bool {
-        if lhs.value != rhs.value {
+extension BlossomUploadSnapshot: Equatable, Hashable {
+    public static func ==(lhs: BlossomUploadSnapshot, rhs: BlossomUploadSnapshot) -> Bool {
+        if lhs.upload != rhs.upload {
             return false
         }
         if lhs.error != rhs.error {
@@ -8965,7 +8965,7 @@ extension BlossomUploadOutcome: Equatable, Hashable {
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
+        hasher.combine(upload)
         hasher.combine(error)
     }
 }
@@ -8975,17 +8975,17 @@ extension BlossomUploadOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeBlossomUploadOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomUploadOutcome {
+public struct FfiConverterTypeBlossomUploadSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomUploadSnapshot {
         return
-            try BlossomUploadOutcome(
-                value: FfiConverterOptionTypeBlossomUpload.read(from: &buf),
+            try BlossomUploadSnapshot(
+                upload: FfiConverterOptionTypeBlossomUpload.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: BlossomUploadOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeBlossomUpload.write(value.value, into: &buf)
+    public static func write(_ value: BlossomUploadSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeBlossomUpload.write(value.upload, into: &buf)
         FfiConverterString.write(value.error, into: &buf)
     }
 }
@@ -8994,15 +8994,15 @@ public struct FfiConverterTypeBlossomUploadOutcome: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeBlossomUploadOutcome_lift(_ buf: RustBuffer) throws -> BlossomUploadOutcome {
-    return try FfiConverterTypeBlossomUploadOutcome.lift(buf)
+public func FfiConverterTypeBlossomUploadSnapshot_lift(_ buf: RustBuffer) throws -> BlossomUploadSnapshot {
+    return try FfiConverterTypeBlossomUploadSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeBlossomUploadOutcome_lower(_ value: BlossomUploadOutcome) -> RustBuffer {
-    return FfiConverterTypeBlossomUploadOutcome.lower(value)
+public func FfiConverterTypeBlossomUploadSnapshot_lower(_ value: BlossomUploadSnapshot) -> RustBuffer {
+    return FfiConverterTypeBlossomUploadSnapshot.lower(value)
 }
 
 
@@ -39438,7 +39438,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_update_profile() != 24760) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 28046) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 12404) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 45711) {

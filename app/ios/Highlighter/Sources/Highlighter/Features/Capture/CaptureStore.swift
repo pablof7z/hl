@@ -137,7 +137,7 @@ final class CaptureStore {
             // for it (paragraph breaks → spaces).
             let altText = safeCore.ocrAltText(from: markdown)
             let uploadOutcome = await upload(processed: processed, alt: altText)
-            if uploadOutcome.error.isEmpty, let uploaded = uploadOutcome.value {
+            if uploadOutcome.error.isEmpty, let uploaded = uploadOutcome.upload {
                 self.upload = BlossomUpload(
                     url: uploaded.url,
                     sha256Hex: uploaded.sha256Hex,
@@ -322,7 +322,7 @@ final class CaptureStore {
     private func upload(
         processed: ImageProcessing.Result,
         alt: String
-    ) async -> BlossomUploadOutcome {
+    ) async -> BlossomUploadSnapshot {
         await safeCore.uploadPhoto(
             bytes: processed.data,
             mime: processed.mime,
@@ -373,7 +373,7 @@ final class CaptureStore {
             let altText = safeCore.ocrAltText(from: ocrMarkdown)
             let outcome = await upload(processed: processed, alt: altText)
             guard generation == self.uploadGeneration else { return }
-            guard outcome.error.isEmpty, let uploaded = outcome.value else {
+            guard outcome.error.isEmpty, let uploaded = outcome.upload else {
                 self.uploadError = outcome.error
                 return
             }

@@ -1351,7 +1351,7 @@ actor SafeHighlighterCore {
         width: UInt32,
         height: UInt32,
         alt: String
-    ) async -> BlossomUploadOutcome {
+    ) async -> BlossomUploadSnapshot {
         await core.uploadPhoto(
             bytes: bytes,
             mime: mime,

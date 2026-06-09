@@ -410,7 +410,7 @@ struct EditProfileSheet: View {
                 height: UInt32(prepared.height),
                 alt: ""
             )
-            guard outcome.error.isEmpty, let upload = outcome.value else {
+            guard outcome.error.isEmpty, let upload = outcome.upload else {
                 error = "Upload failed: \(outcome.error)"
                 return
             }

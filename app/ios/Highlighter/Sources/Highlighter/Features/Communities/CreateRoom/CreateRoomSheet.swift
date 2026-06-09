@@ -273,7 +273,7 @@ struct CreateRoomSheet: View {
                 height: UInt32(prepared.height),
                 alt: ""
             )
-            guard outcome.error.isEmpty, let upload = outcome.value else {
+            guard outcome.error.isEmpty, let upload = outcome.upload else {
                 self.error = "Couldn't upload cover: \(outcome.error)"
                 return
             }
