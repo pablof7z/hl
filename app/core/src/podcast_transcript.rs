@@ -20,13 +20,27 @@ const MAX_TRANSCRIPT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ARTWORK_BYTES: usize = 10 * 1024 * 1024;
 const HTTP_TIMEOUT: Duration = Duration::from_secs(20);
 
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct TranscriptSegment {
     pub id: String,
     pub start: f64,
     pub end: f64,
     pub speaker: String,
     pub text: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PodcastTranscriptAvailability {
+    Loading,
+    Available,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastTranscriptLoadSnapshot {
+    pub segments: Vec<TranscriptSegment>,
+    pub availability: PodcastTranscriptAvailability,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -215,6 +229,30 @@ pub async fn fetch_transcript(url: &str) -> Result<Vec<TranscriptSegment>, CoreE
         content_type.as_deref(),
         file_extension.as_deref(),
     ))
+}
+
+pub fn transcript_load_snapshot(
+    result: Result<Vec<TranscriptSegment>, CoreError>,
+) -> PodcastTranscriptLoadSnapshot {
+    match result {
+        Ok(segments) => {
+            let availability = if segments.is_empty() {
+                PodcastTranscriptAvailability::Unavailable
+            } else {
+                PodcastTranscriptAvailability::Available
+            };
+            PodcastTranscriptLoadSnapshot {
+                segments,
+                availability,
+                error: String::new(),
+            }
+        }
+        Err(error) => PodcastTranscriptLoadSnapshot {
+            segments: Vec::new(),
+            availability: PodcastTranscriptAvailability::Unavailable,
+            error: error.to_string(),
+        },
+    }
 }
 
 pub async fn download_artwork(url: &str) -> Result<Vec<u8>, CoreError> {
@@ -1191,6 +1229,45 @@ fn normalize_whitespace(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn transcript_load_snapshot_projects_available_segments() {
+        let segment = TranscriptSegment {
+            id: "s1".to_string(),
+            start: 1.0,
+            end: 2.0,
+            speaker: "Ada".to_string(),
+            text: "A useful point.".to_string(),
+        };
+
+        let snapshot = transcript_load_snapshot(Ok(vec![segment.clone()]));
+
+        assert_eq!(
+            snapshot.availability,
+            PodcastTranscriptAvailability::Available
+        );
+        assert!(snapshot.error.is_empty());
+        assert_eq!(snapshot.segments, vec![segment]);
+    }
+
+    #[test]
+    fn transcript_load_snapshot_projects_empty_and_error_as_unavailable() {
+        let empty = transcript_load_snapshot(Ok(Vec::new()));
+        assert_eq!(
+            empty.availability,
+            PodcastTranscriptAvailability::Unavailable
+        );
+        assert!(empty.segments.is_empty());
+        assert!(empty.error.is_empty());
+
+        let failed = transcript_load_snapshot(Err(CoreError::Network("offline".to_string())));
+        assert_eq!(
+            failed.availability,
+            PodcastTranscriptAvailability::Unavailable
+        );
+        assert!(failed.segments.is_empty());
+        assert_eq!(failed.error, "network error: offline");
+    }
 
     #[test]
     fn parses_vtt_with_voice_tags() {

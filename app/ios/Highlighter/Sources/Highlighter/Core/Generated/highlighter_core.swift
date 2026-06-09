@@ -1154,7 +1154,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func joinOcrQuote(words: [OcrWord])  -> String
 
-    func loadPodcastTranscript(url: String) async  -> TranscriptSegmentListOutcome
+    func loadPodcastTranscript(url: String) async  -> PodcastTranscriptLoadSnapshot
 
     func loginNsec(nsec: String)  -> AuthSessionSnapshot
 
@@ -3334,7 +3334,7 @@ open func joinOcrQuote(words: [OcrWord]) -> String  {
 })
 }
 
-open func loadPodcastTranscript(url: String)async  -> TranscriptSegmentListOutcome  {
+open func loadPodcastTranscript(url: String)async  -> PodcastTranscriptLoadSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -3346,7 +3346,7 @@ open func loadPodcastTranscript(url: String)async  -> TranscriptSegmentListOutco
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeTranscriptSegmentListOutcome_lift,
+            liftFunc: FfiConverterTypePodcastTranscriptLoadSnapshot_lift,
             errorHandler: nil
 
         )
@@ -22901,6 +22901,84 @@ public func FfiConverterTypePodcastTimelineRow_lower(_ value: PodcastTimelineRow
 }
 
 
+public struct PodcastTranscriptLoadSnapshot {
+    public var segments: [TranscriptSegment]
+    public var availability: PodcastTranscriptAvailability
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(segments: [TranscriptSegment], availability: PodcastTranscriptAvailability, error: String) {
+        self.segments = segments
+        self.availability = availability
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension PodcastTranscriptLoadSnapshot: Sendable {}
+#endif
+
+
+extension PodcastTranscriptLoadSnapshot: Equatable, Hashable {
+    public static func ==(lhs: PodcastTranscriptLoadSnapshot, rhs: PodcastTranscriptLoadSnapshot) -> Bool {
+        if lhs.segments != rhs.segments {
+            return false
+        }
+        if lhs.availability != rhs.availability {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(segments)
+        hasher.combine(availability)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastTranscriptLoadSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastTranscriptLoadSnapshot {
+        return
+            try PodcastTranscriptLoadSnapshot(
+                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                availability: FfiConverterTypePodcastTranscriptAvailability.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastTranscriptLoadSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeTranscriptSegment.write(value.segments, into: &buf)
+        FfiConverterTypePodcastTranscriptAvailability.write(value.availability, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastTranscriptLoadSnapshot_lift(_ buf: RustBuffer) throws -> PodcastTranscriptLoadSnapshot {
+    return try FfiConverterTypePodcastTranscriptLoadSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastTranscriptLoadSnapshot_lower(_ value: PodcastTranscriptLoadSnapshot) -> RustBuffer {
+    return FfiConverterTypePodcastTranscriptLoadSnapshot.lower(value)
+}
+
+
 public struct ProfileDisplayProjection {
     public var displayName: String
     public var displayInitial: String
@@ -32290,76 +32368,6 @@ public func FfiConverterTypeTranscriptSegment_lower(_ value: TranscriptSegment) 
 }
 
 
-public struct TranscriptSegmentListOutcome {
-    public var values: [TranscriptSegment]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(values: [TranscriptSegment], error: String) {
-        self.values = values
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension TranscriptSegmentListOutcome: Sendable {}
-#endif
-
-
-extension TranscriptSegmentListOutcome: Equatable, Hashable {
-    public static func ==(lhs: TranscriptSegmentListOutcome, rhs: TranscriptSegmentListOutcome) -> Bool {
-        if lhs.values != rhs.values {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(values)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeTranscriptSegmentListOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TranscriptSegmentListOutcome {
-        return
-            try TranscriptSegmentListOutcome(
-                values: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: TranscriptSegmentListOutcome, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeTranscriptSegment.write(value.values, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTranscriptSegmentListOutcome_lift(_ buf: RustBuffer) throws -> TranscriptSegmentListOutcome {
-    return try FfiConverterTypeTranscriptSegmentListOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTranscriptSegmentListOutcome_lower(_ value: TranscriptSegmentListOutcome) -> RustBuffer {
-    return FfiConverterTypeTranscriptSegmentListOutcome.lower(value)
-}
-
-
 /**
  * One NIP-B0 web bookmark (kind:39701). The `d` tag is the URL without
  * scheme; we always prepend `https://` when surfacing it to Swift.
@@ -35117,6 +35125,83 @@ public func FfiConverterTypePodcastTimelineRowState_lower(_ value: PodcastTimeli
 
 
 extension PodcastTimelineRowState: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum PodcastTranscriptAvailability {
+
+    case loading
+    case available
+    case unavailable
+}
+
+
+#if compiler(>=6)
+extension PodcastTranscriptAvailability: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastTranscriptAvailability: FfiConverterRustBuffer {
+    typealias SwiftType = PodcastTranscriptAvailability
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastTranscriptAvailability {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .loading
+
+        case 2: return .available
+
+        case 3: return .unavailable
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PodcastTranscriptAvailability, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .loading:
+            writeInt(&buf, Int32(1))
+
+
+        case .available:
+            writeInt(&buf, Int32(2))
+
+
+        case .unavailable:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastTranscriptAvailability_lift(_ buf: RustBuffer) throws -> PodcastTranscriptAvailability {
+    return try FfiConverterTypePodcastTranscriptAvailability.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastTranscriptAvailability_lower(_ value: PodcastTranscriptAvailability) -> RustBuffer {
+    return FfiConverterTypePodcastTranscriptAvailability.lower(value)
+}
+
+
+extension PodcastTranscriptAvailability: Equatable, Hashable {}
 
 
 
@@ -38726,7 +38811,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_join_ocr_quote() != 34615) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_load_podcast_transcript() != 42829) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_load_podcast_transcript() != 54914) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_login_nsec() != 1483) {

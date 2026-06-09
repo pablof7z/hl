@@ -27,7 +27,7 @@ final class PodcastPlayerStore {
 
     // Global transcript state
     private(set) var transcriptSegments: [TranscriptSegment] = []
-    private(set) var transcriptAvailability: TranscriptAvailability = .unavailable
+    private(set) var transcriptAvailability: PodcastTranscriptAvailability = .unavailable
 
     // Clip comment cache keyed by clip event id
     var comments: [String: [CommentRecord]] = [:]
@@ -330,14 +330,12 @@ final class PodcastPlayerStore {
 
     func loadTranscript(from url: String) async {
         transcriptAvailability = .loading
-        let outcome = await core.loadPodcastTranscript(url: url)
-        guard outcome.error.isEmpty else {
-            logger.error("transcript load failed: \(outcome.error, privacy: .public)")
-            transcriptAvailability = .unavailable
-            return
+        let snapshot = await core.loadPodcastTranscript(url: url)
+        if !snapshot.error.isEmpty {
+            logger.error("transcript load failed: \(snapshot.error, privacy: .public)")
         }
-        transcriptSegments = outcome.values
-        transcriptAvailability = outcome.values.isEmpty ? .unavailable : .available
+        transcriptSegments = snapshot.segments
+        transcriptAvailability = snapshot.availability
     }
 
     // MARK: - Position persistence
@@ -653,8 +651,4 @@ final class PodcastPlayerStore {
         tearDownRemoteCommandCenter()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
-}
-
-enum TranscriptAvailability {
-    case loading, available, unavailable
 }

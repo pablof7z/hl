@@ -91,7 +91,7 @@ actor SafeHighlighterCore {
         )
     }
 
-    func loadPodcastTranscript(url: String) async -> TranscriptSegmentListOutcome {
+    func loadPodcastTranscript(url: String) async -> PodcastTranscriptLoadSnapshot {
         await core.loadPodcastTranscript(url: url)
     }
 

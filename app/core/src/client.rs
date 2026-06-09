@@ -32,8 +32,7 @@ use crate::models::{
     HighlightRecord, HighlightSourceKind, LoginInputAction, MutationOutcome, NostrConnectOptions,
     OnboardingInterest, OnboardingInterestProjection, OnboardingInterestSelection,
     PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome,
-    TranscriptSegmentListOutcome, WebMetadataOutcome,
+    ProfileUpdateDraft, RelayDiagnostic, StringOutcome, SubscriptionOutcome, WebMetadataOutcome,
 };
 use crate::network_preferences;
 use crate::nip05;
@@ -127,21 +126,6 @@ fn join_room_display_name(room_name: &str) -> String {
         "this room".to_string()
     } else {
         trimmed.to_string()
-    }
-}
-
-fn transcript_segment_list_outcome(
-    result: Result<Vec<TranscriptSegment>, CoreError>,
-) -> TranscriptSegmentListOutcome {
-    match result {
-        Ok(values) => TranscriptSegmentListOutcome {
-            values,
-            error: String::new(),
-        },
-        Err(error) => TranscriptSegmentListOutcome {
-            values: Vec::new(),
-            error: error.to_string(),
-        },
     }
 }
 
@@ -626,8 +610,13 @@ impl HighlighterCore {
         mutation_outcome(self.podcast_position.save(guid, position_seconds, artifact))
     }
 
-    pub async fn load_podcast_transcript(&self, url: String) -> TranscriptSegmentListOutcome {
-        transcript_segment_list_outcome(podcast_transcript::fetch_transcript(&url).await)
+    pub async fn load_podcast_transcript(
+        &self,
+        url: String,
+    ) -> podcast_transcript::PodcastTranscriptLoadSnapshot {
+        podcast_transcript::transcript_load_snapshot(
+            podcast_transcript::fetch_transcript(&url).await,
+        )
     }
 
     pub fn get_podcast_clip_composer_projection(

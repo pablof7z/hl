@@ -155,7 +155,7 @@ pub use models::{
     OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
     PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
     ReadingFeedItem, RoomLane, RoomRecommendation, RoomRecommendationReason, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebBookmarkRecord, WebMetadataOutcome,
+    SubscriptionOutcome, WebBookmarkRecord, WebMetadataOutcome,
 };
 pub use nip05::{
     Nip05Availability, Nip05AvailabilitySnapshot, Nip05AvailabilityState,
@@ -173,7 +173,8 @@ pub use podcast_transcript::{
     PodcastClipPublishInput, PodcastClipSelection, PodcastListeningClipsSnapshot,
     PodcastListeningProjection, PodcastListeningProjectionInput, PodcastNowPlayingProjection,
     PodcastNowPlayingProjectionInput, PodcastTimelineRow, PodcastTimelineRowKind,
-    PodcastTimelineRowState, TranscriptSegment,
+    PodcastTimelineRowState, PodcastTranscriptAvailability, PodcastTranscriptLoadSnapshot,
+    TranscriptSegment,
 };
 pub use profile::{
     ProfileDisplayFallback, ProfileDisplayProjection, ProfileDisplayProjectionInput,
