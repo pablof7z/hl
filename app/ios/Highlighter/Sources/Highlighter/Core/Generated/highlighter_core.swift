@@ -793,7 +793,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func clearRecentSearchesSnapshot() async  -> SearchChromeSnapshot
 
-    func completeOnboardingInterests(selectedIds: [String]) async  -> MutationOutcome
+    func completeOnboardingInterests(selectedIds: [String]) async  -> MutationSnapshot
 
     /**
      * Consume a pending join when a matching NIP-29 membership delta arrives.
@@ -1140,7 +1140,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Publish the default Blossom server list only if the user has no cached
      * kind:10063. Called once after login; no-op when the list already exists.
      */
-    func initDefaultBlossomServers() async  -> MutationOutcome
+    func initDefaultBlossomServers() async  -> MutationSnapshot
 
     func isNip05UsernameValid(input: String)  -> Bool
 
@@ -1160,7 +1160,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func markPodcastClipOut(selection: PodcastClipSelection, currentTime: Double)  -> PodcastClipSelection
 
-    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async  -> MutationOutcome
+    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async  -> MutationSnapshot
 
     /**
      * Normalize user-entered or scanned ISBN input. Native shells use this
@@ -1611,7 +1611,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?)  -> OcrRect
 
-    func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)  -> MutationOutcome
+    func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)  -> MutationSnapshot
 
     func selectableOcrWords(lines: [OcrLine])  -> [OcrWord]
 
@@ -1626,7 +1626,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func setEventCallback(callback: EventCallback)
 
-    func setOnboardingComplete(complete: Bool)  -> MutationOutcome
+    func setOnboardingComplete(complete: Bool)  -> MutationSnapshot
 
     func setPodcastClipEnd(selection: PodcastClipSelection, value: Double, durationSeconds: Double)  -> PodcastClipSelection
 
@@ -1650,7 +1650,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
      * to the Highlighter relay as the e-tag relay hint.
      */
-    func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async  -> MutationOutcome
+    func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async  -> MutationSnapshot
 
     func standaloneNostrEntity(content: String)  -> NostrEntityRef?
 
@@ -1669,7 +1669,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * No-op if the user isn't logged in or has no follows cached yet.
      * Idempotent; both subs ride until logout.
      */
-    func startFriendsRoomsDiscovery() async  -> MutationOutcome
+    func startFriendsRoomsDiscovery() async  -> MutationSnapshot
 
     /**
      * Install (if not already installed) a long-lived relay sub for every
@@ -1678,7 +1678,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func startRoomDiscovery() async
 
-    func startRoomExplorerFeaturedRooms() async  -> MutationOutcome
+    func startRoomExplorerFeaturedRooms() async  -> MutationSnapshot
 
     /**
      * Article-reader view-scope subscription. Fires `ArticleUpdated` deltas
@@ -2083,7 +2083,7 @@ open func clearRecentSearchesSnapshot()async  -> SearchChromeSnapshot  {
         )
 }
 
-open func completeOnboardingInterests(selectedIds: [String])async  -> MutationOutcome  {
+open func completeOnboardingInterests(selectedIds: [String])async  -> MutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -2095,7 +2095,7 @@ open func completeOnboardingInterests(selectedIds: [String])async  -> MutationOu
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -3265,7 +3265,7 @@ open func importRelaysFromNpubSnapshot(npub: String)async  -> ImportRelaysFetchS
      * Publish the default Blossom server list only if the user has no cached
      * kind:10063. Called once after login; no-op when the list already exists.
      */
-open func initDefaultBlossomServers()async  -> MutationOutcome  {
+open func initDefaultBlossomServers()async  -> MutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -3277,7 +3277,7 @@ open func initDefaultBlossomServers()async  -> MutationOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -3374,7 +3374,7 @@ open func markPodcastClipOut(selection: PodcastClipSelection, currentTime: Doubl
 })
 }
 
-open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async  -> MutationOutcome  {
+open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async  -> MutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -3386,7 +3386,7 @@ open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async  -> MutationOutcom
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -4754,8 +4754,8 @@ open func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?) -> OcrR
 })
 }
 
-open func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord) -> MutationOutcome  {
-    return try!  FfiConverterTypeMutationOutcome_lift(try! rustCall() {
+open func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord) -> MutationSnapshot  {
+    return try!  FfiConverterTypeMutationSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_save_podcast_position(self.uniffiClonePointer(),
         FfiConverterString.lower(guid),
         FfiConverterDouble.lower(positionSeconds),
@@ -4820,8 +4820,8 @@ open func setEventCallback(callback: EventCallback)  {try! rustCall() {
 }
 }
 
-open func setOnboardingComplete(complete: Bool) -> MutationOutcome  {
-    return try!  FfiConverterTypeMutationOutcome_lift(try! rustCall() {
+open func setOnboardingComplete(complete: Bool) -> MutationSnapshot  {
+    return try!  FfiConverterTypeMutationSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_set_onboarding_complete(self.uniffiClonePointer(),
         FfiConverterBool.lower(complete),$0
     )
@@ -4903,7 +4903,7 @@ open func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary]) -> 
      * per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
      * to the Highlighter relay as the e-tag relay hint.
      */
-open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String)async  -> MutationOutcome  {
+open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String)async  -> MutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4915,7 +4915,7 @@ open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: St
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -4960,7 +4960,7 @@ open func startDefaultNostrConnect(callback: String)async  -> NostrConnectStartS
      * No-op if the user isn't logged in or has no follows cached yet.
      * Idempotent; both subs ride until logout.
      */
-open func startFriendsRoomsDiscovery()async  -> MutationOutcome  {
+open func startFriendsRoomsDiscovery()async  -> MutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -4972,7 +4972,7 @@ open func startFriendsRoomsDiscovery()async  -> MutationOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5001,7 +5001,7 @@ open func startRoomDiscovery()async   {
         )
 }
 
-open func startRoomExplorerFeaturedRooms()async  -> MutationOutcome  {
+open func startRoomExplorerFeaturedRooms()async  -> MutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5013,7 +5013,7 @@ open func startRoomExplorerFeaturedRooms()async  -> MutationOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationOutcome_lift,
+            liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -19372,7 +19372,7 @@ public func FfiConverterTypeJoinedCommunitiesSnapshot_lower(_ value: JoinedCommu
 }
 
 
-public struct MutationOutcome {
+public struct MutationSnapshot {
     public var applied: Bool
     public var error: String
 
@@ -19385,12 +19385,12 @@ public struct MutationOutcome {
 }
 
 #if compiler(>=6)
-extension MutationOutcome: Sendable {}
+extension MutationSnapshot: Sendable {}
 #endif
 
 
-extension MutationOutcome: Equatable, Hashable {
-    public static func ==(lhs: MutationOutcome, rhs: MutationOutcome) -> Bool {
+extension MutationSnapshot: Equatable, Hashable {
+    public static func ==(lhs: MutationSnapshot, rhs: MutationSnapshot) -> Bool {
         if lhs.applied != rhs.applied {
             return false
         }
@@ -19411,16 +19411,16 @@ extension MutationOutcome: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeMutationOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MutationOutcome {
+public struct FfiConverterTypeMutationSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MutationSnapshot {
         return
-            try MutationOutcome(
+            try MutationSnapshot(
                 applied: FfiConverterBool.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
 
-    public static func write(_ value: MutationOutcome, into buf: inout [UInt8]) {
+    public static func write(_ value: MutationSnapshot, into buf: inout [UInt8]) {
         FfiConverterBool.write(value.applied, into: &buf)
         FfiConverterString.write(value.error, into: &buf)
     }
@@ -19430,15 +19430,15 @@ public struct FfiConverterTypeMutationOutcome: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeMutationOutcome_lift(_ buf: RustBuffer) throws -> MutationOutcome {
-    return try FfiConverterTypeMutationOutcome.lift(buf)
+public func FfiConverterTypeMutationSnapshot_lift(_ buf: RustBuffer) throws -> MutationSnapshot {
+    return try FfiConverterTypeMutationSnapshot.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeMutationOutcome_lower(_ value: MutationOutcome) -> RustBuffer {
-    return FfiConverterTypeMutationOutcome.lower(value)
+public func FfiConverterTypeMutationSnapshot_lower(_ value: MutationSnapshot) -> RustBuffer {
+    return FfiConverterTypeMutationSnapshot.lower(value)
 }
 
 
@@ -38557,7 +38557,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches_snapshot() != 16414) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_complete_onboarding_interests() != 32350) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_complete_onboarding_interests() != 49785) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_confirm_pending_join() != 50218) {
@@ -38776,7 +38776,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_import_relays_from_npub_snapshot() != 45090) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 36336) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 33982) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_nip05_username_valid() != 33870) {
@@ -38806,7 +38806,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_mark_podcast_clip_out() != 19205) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_mark_whats_new_seen() != 22420) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_mark_whats_new_seen() != 62998) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_normalize_isbn_input() != 8882) {
@@ -39154,7 +39154,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_sanitize_highlight_crop_box() != 64518) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_save_podcast_position() != 15916) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_save_podcast_position() != 57580) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_selectable_ocr_words() != 2832) {
@@ -39169,7 +39169,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_event_callback() != 16901) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_onboarding_complete() != 42515) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_set_onboarding_complete() != 23393) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_podcast_clip_end() != 59200) {
@@ -39187,7 +39187,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_extension_communities_snapshot() != 38830) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 49295) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 38928) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_standalone_nostr_entity() != 64485) {
@@ -39196,13 +39196,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_default_nostr_connect() != 32804) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_start_friends_rooms_discovery() != 44697) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_start_friends_rooms_discovery() != 52923) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_discovery() != 41569) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_explorer_featured_rooms() != 63111) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_explorer_featured_rooms() != 13434) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 30320) {

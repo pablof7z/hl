@@ -28,7 +28,7 @@ use crate::models::{
     ArticleRecord, ArtifactDetailRoute, ArtifactPreview, ArtifactRecord, BlossomUpload, BookRoute,
     BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommunitySummary,
     CurrentUser, DiscussionRecord, FeedbackThreadRecord, HighlightRecord, HighlightSourceKind,
-    LoginInputAction, MutationOutcome, NostrConnectOptions, OnboardingInterest,
+    LoginInputAction, MutationSnapshot, NostrConnectOptions, OnboardingInterest,
     OnboardingInterestProjection, OnboardingInterestSelection, PodcastPositionRecord,
     ProfileMetadata, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic,
     SubscriptionStartSnapshot,
@@ -93,13 +93,13 @@ struct Inner {
     pending_joins: BTreeMap<String, String>,
 }
 
-fn mutation_outcome(result: Result<(), CoreError>) -> MutationOutcome {
+fn mutation_snapshot(result: Result<(), CoreError>) -> MutationSnapshot {
     match result {
-        Ok(()) => MutationOutcome {
+        Ok(()) => MutationSnapshot {
             applied: true,
             error: String::new(),
         },
-        Err(error) => MutationOutcome {
+        Err(error) => MutationSnapshot {
             applied: false,
             error: error.to_string(),
         },
@@ -386,8 +386,8 @@ impl HighlighterCore {
         self.onboarding.is_complete()
     }
 
-    pub fn set_onboarding_complete(&self, complete: bool) -> MutationOutcome {
-        mutation_outcome(self.onboarding.set_complete(complete))
+    pub fn set_onboarding_complete(&self, complete: bool) -> MutationSnapshot {
+        mutation_snapshot(self.onboarding.set_complete(complete))
     }
 
     pub fn get_onboarding_interests(&self) -> Vec<OnboardingInterest> {
@@ -419,7 +419,7 @@ impl HighlighterCore {
     pub async fn complete_onboarding_interests(
         &self,
         selected_ids: Vec<String>,
-    ) -> MutationOutcome {
+    ) -> MutationSnapshot {
         let result: Result<(), CoreError> = async {
             let selection = onboarding::interest_selection(selected_ids);
             if !selection.can_continue {
@@ -441,7 +441,7 @@ impl HighlighterCore {
             Ok(())
         }
         .await;
-        mutation_outcome(result)
+        mutation_snapshot(result)
     }
 
     pub async fn set_wifi_only_enabled(
@@ -473,8 +473,8 @@ impl HighlighterCore {
         guid: String,
         position_seconds: f64,
         artifact: ArtifactRecord,
-    ) -> MutationOutcome {
-        mutation_outcome(self.podcast_position.save(guid, position_seconds, artifact))
+    ) -> MutationSnapshot {
+        mutation_snapshot(self.podcast_position.save(guid, position_seconds, artifact))
     }
 
     pub async fn load_podcast_transcript(
@@ -611,8 +611,8 @@ impl HighlighterCore {
         whats_new::presentation_snapshot(self.whats_new.prepare().await)
     }
 
-    pub async fn mark_whats_new_seen(&self, shipped_at_unix_seconds: u64) -> MutationOutcome {
-        mutation_outcome(self.whats_new.mark_seen(shipped_at_unix_seconds).await)
+    pub async fn mark_whats_new_seen(&self, shipped_at_unix_seconds: u64) -> MutationSnapshot {
+        mutation_snapshot(self.whats_new.mark_seen(shipped_at_unix_seconds).await)
     }
 
     // -- Auth (async) --
@@ -2778,7 +2778,7 @@ impl HighlighterCore {
         highlight_author_pubkey_hex: String,
         highlight_relay_url: String,
         target_group_id: String,
-    ) -> MutationOutcome {
+    ) -> MutationSnapshot {
         let result: Result<(), CoreError> = async {
             let _ = self.require_user_pubkey()?;
             crate::highlights::share_to_community(
@@ -2791,7 +2791,7 @@ impl HighlighterCore {
             .await
         }
         .await;
-        mutation_outcome(result)
+        mutation_snapshot(result)
     }
 
     /// Publish a solo NIP-84 highlight from an article reader selection and
@@ -2867,8 +2867,8 @@ impl HighlighterCore {
     ///
     /// No-op if the user isn't logged in or has no follows cached yet.
     /// Idempotent; both subs ride until logout.
-    pub async fn start_friends_rooms_discovery(&self) -> MutationOutcome {
-        mutation_outcome((|| {
+    pub async fn start_friends_rooms_discovery(&self) -> MutationSnapshot {
+        mutation_snapshot((|| {
             let (have_memberships, have_groups_list) = {
                 let guard = self.inner.read();
                 (
@@ -2915,7 +2915,7 @@ impl HighlighterCore {
         })())
     }
 
-    pub async fn start_room_explorer_featured_rooms(&self) -> MutationOutcome {
+    pub async fn start_room_explorer_featured_rooms(&self) -> MutationSnapshot {
         let result: Result<(), CoreError> = async {
             let curator_pubkey = self.room_explorer_config.refresh_curator_pubkey().await?;
             let outcome = self.start_featured_rooms(curator_pubkey).await;
@@ -2926,7 +2926,7 @@ impl HighlighterCore {
             }
         }
         .await;
-        mutation_outcome(result)
+        mutation_snapshot(result)
     }
 
     /// Snapshot for the room explorer shelves. Rust owns curator lookup,
@@ -3341,7 +3341,7 @@ impl HighlighterCore {
 
     /// Publish the default Blossom server list only if the user has no cached
     /// kind:10063. Called once after login; no-op when the list already exists.
-    pub async fn init_default_blossom_servers(&self) -> MutationOutcome {
+    pub async fn init_default_blossom_servers(&self) -> MutationSnapshot {
         let result: Result<(), CoreError> = async {
             let user = self
                 .inner
@@ -3352,7 +3352,7 @@ impl HighlighterCore {
             blossom::init_default_blossom_servers(&self.runtime, &user.pubkey).await
         }
         .await;
-        mutation_outcome(result)
+        mutation_snapshot(result)
     }
 
     // -- Capture flow (BUD-01 upload + kind:20 picture publish) --
@@ -3691,8 +3691,8 @@ impl HighlighterCore {
     /// spawns a metadata backfill for every group the list references, so a
     /// subsequent room explorer snapshot returns rich summaries rather than
     /// bare ids. Idempotent; the sub rides until logout.
-    async fn start_featured_rooms(&self, curator_pubkey_hex: String) -> MutationOutcome {
-        mutation_outcome((|| {
+    async fn start_featured_rooms(&self, curator_pubkey_hex: String) -> MutationSnapshot {
+        mutation_snapshot((|| {
             let curator = PublicKey::from_hex(curator_pubkey_hex.trim())
                 .map_err(|e| CoreError::InvalidInput(format!("invalid curator pubkey: {e}")))?;
 

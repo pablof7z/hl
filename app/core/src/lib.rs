@@ -152,7 +152,7 @@ pub use models::{
     CommentThreadProjection, CommunitySummary, CurationMenuItem, CurrentUser, DiscussionAttachment,
     DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightRecord,
     HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem,
-    HydratedHighlight, LoginInputAction, MutationOutcome, OnboardingInterest,
+    HydratedHighlight, LoginInputAction, MutationSnapshot, OnboardingInterest,
     OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
     PodcastPositionRecord, ProfileMetadata, ProfileUpdateDraft, ReadingFeedItem, RoomLane,
     RoomRecommendation, RoomRecommendationReason, SubscriptionStartSnapshot, WebBookmarkRecord,

@@ -47,7 +47,7 @@ pub struct OnboardingInterestProjection {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct MutationOutcome {
+pub struct MutationSnapshot {
     pub applied: bool,
     pub error: String,
 }

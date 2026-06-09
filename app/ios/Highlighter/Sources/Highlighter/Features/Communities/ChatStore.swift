@@ -36,14 +36,14 @@ final class ChatPresenceProbe {
             onActivity()
         }
 
-        let presenceOutcome = await core.subscribeRoomChat(groupId: groupId)
-        guard presenceOutcome.error.isEmpty else {
+        let presenceStart = await core.subscribeRoomChat(groupId: groupId)
+        guard presenceStart.error.isEmpty else {
             // No live promotion if the subscription failed; the cache peek
             // result still applies.
             return
         }
-        subscriptionHandle = presenceOutcome.handle
-        bridge?.registerChatPresence(self, handle: presenceOutcome.handle)
+        subscriptionHandle = presenceStart.handle
+        bridge?.registerChatPresence(self, handle: presenceStart.handle)
     }
 
     func stop() {

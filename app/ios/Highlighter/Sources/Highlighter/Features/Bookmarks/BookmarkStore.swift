@@ -26,20 +26,20 @@ final class BookmarkStore {
         self.core = core
         self.bridge = bridge
 
-        let setsOutcome = await core.subscribeBookmarkSets()
-        if setsOutcome.error.isEmpty {
-            setsHandle = setsOutcome.handle
-            bridge.registerBookmarkStore(self, handle: setsOutcome.handle)
+        let setsStart = await core.subscribeBookmarkSets()
+        if setsStart.error.isEmpty {
+            setsHandle = setsStart.handle
+            bridge.registerBookmarkStore(self, handle: setsStart.handle)
         }
-        let followingOutcome = await core.subscribeFollowingCurationSets()
-        if followingOutcome.error.isEmpty {
-            followingHandle = followingOutcome.handle
-            bridge.registerBookmarkStore(self, handle: followingOutcome.handle)
+        let followingStart = await core.subscribeFollowingCurationSets()
+        if followingStart.error.isEmpty {
+            followingHandle = followingStart.handle
+            bridge.registerBookmarkStore(self, handle: followingStart.handle)
         }
-        let webOutcome = await core.subscribeWebBookmarks()
-        if webOutcome.error.isEmpty {
-            webHandle = webOutcome.handle
-            bridge.registerBookmarkStore(self, handle: webOutcome.handle)
+        let webStart = await core.subscribeWebBookmarks()
+        if webStart.error.isEmpty {
+            webHandle = webStart.handle
+            bridge.registerBookmarkStore(self, handle: webStart.handle)
         }
 
         await reload()

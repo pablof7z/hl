@@ -139,7 +139,7 @@ final class HighlighterStore {
         SharedCommunitiesSnapshot.clear()
     }
 
-    func markOnboardingComplete() -> MutationOutcome {
+    func markOnboardingComplete() -> MutationSnapshot {
         let outcome = core.setOnboardingComplete(complete: true)
         if outcome.applied {
             isOnboardingComplete = true
@@ -147,7 +147,7 @@ final class HighlighterStore {
         return outcome
     }
 
-    func completeOnboardingInterests(selectedIds: [String]) async -> MutationOutcome {
+    func completeOnboardingInterests(selectedIds: [String]) async -> MutationSnapshot {
         let outcome = await safeCore.completeOnboardingInterests(selectedIds: selectedIds)
         if outcome.applied {
             isOnboardingComplete = true
@@ -204,10 +204,10 @@ final class HighlighterStore {
             }
         }
         guard profileSnapshotHandles[pubkeyHex] == nil else { return }
-        let profileOutcome = await safeCore.subscribeUserProfile(pubkeyHex: pubkeyHex)
-        if profileOutcome.error.isEmpty {
-            profileSnapshotHandles[pubkeyHex] = profileOutcome.handle
-            eventBridge?.registerProfileSnapshot(pubkeyHex: pubkeyHex, handle: profileOutcome.handle)
+        let profileStart = await safeCore.subscribeUserProfile(pubkeyHex: pubkeyHex)
+        if profileStart.error.isEmpty {
+            profileSnapshotHandles[pubkeyHex] = profileStart.handle
+            eventBridge?.registerProfileSnapshot(pubkeyHex: pubkeyHex, handle: profileStart.handle)
         }
     }
 
@@ -329,9 +329,9 @@ final class HighlighterStore {
     private func loadAppScopeData() async {
         // Immediate read from nostrdb via the Rust core. Non-blocking on
         // relays — the cache answers first, subscriptions catch up later.
-        let communitiesOutcome = await safeCore.getJoinedCommunities()
-        if communitiesOutcome.error.isEmpty {
-            joinedCommunities = communitiesOutcome.communities
+        let communitiesSnapshot = await safeCore.getJoinedCommunities()
+        if communitiesSnapshot.error.isEmpty {
+            joinedCommunities = communitiesSnapshot.communities
         }
 
         // Fetch the user's own kind:0 so the top-bar avatar shows their real
@@ -352,9 +352,9 @@ final class HighlighterStore {
         // MembershipChanged deltas (subscription_id == new handle, routed
         // by EventBridge).
         if joinedCommunitiesHandle == nil {
-            let joinedOutcome = await safeCore.subscribeJoinedCommunities()
-            if joinedOutcome.error.isEmpty {
-                joinedCommunitiesHandle = joinedOutcome.handle
+            let joinedStart = await safeCore.subscribeJoinedCommunities()
+            if joinedStart.error.isEmpty {
+                joinedCommunitiesHandle = joinedStart.handle
                 // Joined-communities deltas are dispatched via the appStore
                 // path in EventBridge (not per-view). No store registration
                 // needed; we only hold the handle so logout can unsubscribe.
@@ -366,9 +366,9 @@ final class HighlighterStore {
         // `BookmarksUpdated` delta that refreshes the set.
         await refreshBookmarks()
         if bookmarksHandle == nil {
-            let bookmarksOutcome = await safeCore.subscribeBookmarks()
-            if bookmarksOutcome.error.isEmpty {
-                bookmarksHandle = bookmarksOutcome.handle
+            let bookmarksStart = await safeCore.subscribeBookmarks()
+            if bookmarksStart.error.isEmpty {
+                bookmarksHandle = bookmarksStart.handle
             }
         }
     }

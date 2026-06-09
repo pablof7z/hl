@@ -40,7 +40,7 @@ actor SafeHighlighterCore {
         core.isOnboardingComplete()
     }
 
-    func setOnboardingComplete(_ complete: Bool) -> MutationOutcome {
+    func setOnboardingComplete(_ complete: Bool) -> MutationSnapshot {
         core.setOnboardingComplete(complete: complete)
     }
 
@@ -63,7 +63,7 @@ actor SafeHighlighterCore {
         core.toggleOnboardingInterestSelection(selectedIds: selectedIds, interestId: interestId)
     }
 
-    func completeOnboardingInterests(selectedIds: [String]) async -> MutationOutcome {
+    func completeOnboardingInterests(selectedIds: [String]) async -> MutationSnapshot {
         await core.completeOnboardingInterests(selectedIds: selectedIds)
     }
 
@@ -83,7 +83,7 @@ actor SafeHighlighterCore {
         guid: String,
         positionSeconds: Double,
         artifact: ArtifactRecord
-    ) -> MutationOutcome {
+    ) -> MutationSnapshot {
         core.savePodcastPosition(
             guid: guid,
             positionSeconds: positionSeconds,
@@ -200,7 +200,7 @@ actor SafeHighlighterCore {
         await core.prepareWhatsNew()
     }
 
-    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async -> MutationOutcome {
+    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async -> MutationSnapshot {
         await core.markWhatsNewSeen(shippedAtUnixSeconds: shippedAtUnixSeconds)
     }
 
@@ -1006,11 +1006,11 @@ actor SafeHighlighterCore {
         await core.startRoomDiscovery()
     }
 
-    func startFriendsRoomsDiscovery() async -> MutationOutcome {
+    func startFriendsRoomsDiscovery() async -> MutationSnapshot {
         await core.startFriendsRoomsDiscovery()
     }
 
-    func startRoomExplorerFeaturedRooms() async -> MutationOutcome {
+    func startRoomExplorerFeaturedRooms() async -> MutationSnapshot {
         await core.startRoomExplorerFeaturedRooms()
     }
 
@@ -1308,7 +1308,7 @@ actor SafeHighlighterCore {
         highlightAuthorPubkeyHex: String,
         highlightRelayUrl: String,
         targetGroupId: String
-    ) async -> MutationOutcome {
+    ) async -> MutationSnapshot {
         await core.shareHighlightToRoom(
             highlightId: highlightId,
             highlightAuthorPubkeyHex: highlightAuthorPubkeyHex,
@@ -1339,7 +1339,7 @@ actor SafeHighlighterCore {
         await core.setBlossomServerSettings(servers: servers)
     }
 
-    func initDefaultBlossomServers() async -> MutationOutcome {
+    func initDefaultBlossomServers() async -> MutationSnapshot {
         await core.initDefaultBlossomServers()
     }
 

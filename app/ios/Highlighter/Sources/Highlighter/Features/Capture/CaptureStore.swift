@@ -136,8 +136,8 @@ final class CaptureStore {
             // The imeta alt is a one-line summary; flatten the markdown
             // for it (paragraph breaks → spaces).
             let altText = safeCore.ocrAltText(from: markdown)
-            let uploadOutcome = await upload(processed: processed, alt: altText)
-            if uploadOutcome.error.isEmpty, let uploaded = uploadOutcome.upload {
+            let uploadSnapshot = await upload(processed: processed, alt: altText)
+            if uploadSnapshot.error.isEmpty, let uploaded = uploadSnapshot.upload {
                 self.upload = BlossomUpload(
                     url: uploaded.url,
                     sha256Hex: uploaded.sha256Hex,
@@ -148,7 +148,7 @@ final class CaptureStore {
                     alt: altText
                 )
             } else {
-                self.uploadError = uploadOutcome.error
+                self.uploadError = uploadSnapshot.error
             }
             self.phase = .reviewing
         }
