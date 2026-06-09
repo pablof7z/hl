@@ -265,6 +265,19 @@ pub struct AddRelaySheetProjectionInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RelayNip11ProbePlan {
+    pub urls_to_probe: Vec<String>,
+    pub in_flight_urls: Vec<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RelayNip11ProbePlanInput {
+    pub relays: Vec<RelayConfig>,
+    pub cached_urls: Vec<String>,
+    pub in_flight_urls: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ImportRelayRow {
     pub config: RelayConfig,
     pub display_url: String,
@@ -517,6 +530,46 @@ pub fn add_relay_sheet_projection(input: AddRelaySheetProjectionInput) -> AddRel
     }
 }
 
+pub fn plan_relay_nip11_probes(input: RelayNip11ProbePlanInput) -> RelayNip11ProbePlan {
+    let cached_urls = input
+        .cached_urls
+        .into_iter()
+        .filter_map(|url| canonical_probe_url(&url))
+        .collect::<BTreeSet<_>>();
+    let mut in_flight_urls = input
+        .in_flight_urls
+        .into_iter()
+        .filter_map(|url| canonical_probe_url(&url))
+        .collect::<BTreeSet<_>>();
+    let mut urls_to_probe = Vec::new();
+    for relay in input.relays {
+        let Some(url) = canonical_probe_url(&relay.url) else {
+            continue;
+        };
+        if cached_urls.contains(&url) {
+            continue;
+        }
+        if in_flight_urls.insert(url.clone()) {
+            urls_to_probe.push(url);
+        }
+    }
+    RelayNip11ProbePlan {
+        urls_to_probe,
+        in_flight_urls: in_flight_urls.into_iter().collect(),
+    }
+}
+
+pub fn finish_relay_nip11_probe(in_flight_urls: Vec<String>, url: String) -> Vec<String> {
+    let mut in_flight_urls = in_flight_urls
+        .into_iter()
+        .filter_map(|url| canonical_probe_url(&url))
+        .collect::<BTreeSet<_>>();
+    if let Some(url) = canonical_probe_url(&url) {
+        in_flight_urls.remove(&url);
+    }
+    in_flight_urls.into_iter().collect()
+}
+
 pub fn default_import_relay_selection(relays: Vec<RelayConfig>) -> Vec<String> {
     relays.into_iter().map(|relay| relay.url).collect()
 }
@@ -675,6 +728,11 @@ fn trimmed_non_empty(value: Option<&str>) -> Option<String> {
         let trimmed = raw.trim();
         (!trimmed.is_empty()).then(|| trimmed.to_string())
     })
+}
+
+fn canonical_probe_url(raw: &str) -> Option<String> {
+    let url = normalize_relay_url_input(raw);
+    (!url.is_empty()).then_some(url)
 }
 
 fn normalize_relay_url_input(input: &str) -> String {
@@ -1478,6 +1536,40 @@ mod tests {
             unreachable.probe_text,
             "Couldn't reach the relay — you can still add it."
         );
+    }
+
+    #[test]
+    fn plan_relay_nip11_probes_skips_cached_and_in_flight_urls() {
+        let plan = plan_relay_nip11_probes(RelayNip11ProbePlanInput {
+            relays: vec![
+                RelayConfig::read_write(" wss://one.example "),
+                RelayConfig::read_write("wss://two.example"),
+                RelayConfig::read_write("wss://three.example"),
+                RelayConfig::read_write("wss://two.example"),
+            ],
+            cached_urls: vec!["wss://one.example".into()],
+            in_flight_urls: vec!["wss://three.example".into(), " ".into()],
+        });
+
+        assert_eq!(plan.urls_to_probe, vec!["wss://two.example"]);
+        assert_eq!(
+            plan.in_flight_urls,
+            vec!["wss://three.example", "wss://two.example"]
+        );
+    }
+
+    #[test]
+    fn finish_relay_nip11_probe_canonicalizes_and_removes_url() {
+        let remaining = finish_relay_nip11_probe(
+            vec![
+                "wss://one.example".into(),
+                " wss://two.example ".into(),
+                " ".into(),
+            ],
+            "wss://two.example".into(),
+        );
+
+        assert_eq!(remaining, vec!["wss://one.example"]);
     }
 
     #[test]

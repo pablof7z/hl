@@ -4283,6 +4283,21 @@ impl HighlighterCore {
         crate::relays::add_relay_sheet_projection(input)
     }
 
+    pub fn plan_relay_nip11_probes(
+        &self,
+        input: crate::relays::RelayNip11ProbePlanInput,
+    ) -> crate::relays::RelayNip11ProbePlan {
+        crate::relays::plan_relay_nip11_probes(input)
+    }
+
+    pub fn finish_relay_nip11_probe(
+        &self,
+        in_flight_urls: Vec<String>,
+        url: String,
+    ) -> Vec<String> {
+        crate::relays::finish_relay_nip11_probe(in_flight_urls, url)
+    }
+
     pub fn default_import_relay_selection(
         &self,
         relays: Vec<crate::relays::RelayConfig>,

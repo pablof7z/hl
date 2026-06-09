@@ -907,6 +907,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func findExistingBookForIsbn(isbn: String, recents: [ArtifactRecord])  -> ArtifactRecord?
 
+    func finishRelayNip11Probe(inFlightUrls: [String], url: String)  -> [String]
+
     func generateAccount()  -> GeneratedAccountOutcome
 
     /**
@@ -1396,6 +1398,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func optimisticallyInsertFeedbackRootThread(threads: [FeedbackThreadRecord], rootEvent: FeedbackEventRecord)  -> [FeedbackThreadRecord]
 
     func pairBunker(uri: String) async  -> CurrentUserOutcome
+
+    func planRelayNip11Probes(input: RelayNip11ProbePlanInput)  -> RelayNip11ProbePlan
 
     func prepareWhatsNew() async  -> WhatsNewEntriesOutcome
 
@@ -2612,6 +2616,15 @@ open func findExistingBookForIsbn(isbn: String, recents: [ArtifactRecord]) -> Ar
     uniffi_highlighter_core_fn_method_highlightercore_find_existing_book_for_isbn(self.uniffiClonePointer(),
         FfiConverterString.lower(isbn),
         FfiConverterSequenceTypeArtifactRecord.lower(recents),$0
+    )
+})
+}
+
+open func finishRelayNip11Probe(inFlightUrls: [String], url: String) -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_finish_relay_nip11_probe(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(inFlightUrls),
+        FfiConverterString.lower(url),$0
     )
 })
 }
@@ -4334,6 +4347,14 @@ open func pairBunker(uri: String)async  -> CurrentUserOutcome  {
             errorHandler: nil
 
         )
+}
+
+open func planRelayNip11Probes(input: RelayNip11ProbePlanInput) -> RelayNip11ProbePlan  {
+    return try!  FfiConverterTypeRelayNip11ProbePlan_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_plan_relay_nip11_probes(self.uniffiClonePointer(),
+        FfiConverterTypeRelayNip11ProbePlanInput_lower(input),$0
+    )
+})
 }
 
 open func prepareWhatsNew()async  -> WhatsNewEntriesOutcome  {
@@ -24580,6 +24601,154 @@ public func FfiConverterTypeRelayDiagnosticListOutcome_lower(_ value: RelayDiagn
 }
 
 
+public struct RelayNip11ProbePlan {
+    public var urlsToProbe: [String]
+    public var inFlightUrls: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(urlsToProbe: [String], inFlightUrls: [String]) {
+        self.urlsToProbe = urlsToProbe
+        self.inFlightUrls = inFlightUrls
+    }
+}
+
+#if compiler(>=6)
+extension RelayNip11ProbePlan: Sendable {}
+#endif
+
+
+extension RelayNip11ProbePlan: Equatable, Hashable {
+    public static func ==(lhs: RelayNip11ProbePlan, rhs: RelayNip11ProbePlan) -> Bool {
+        if lhs.urlsToProbe != rhs.urlsToProbe {
+            return false
+        }
+        if lhs.inFlightUrls != rhs.inFlightUrls {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(urlsToProbe)
+        hasher.combine(inFlightUrls)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayNip11ProbePlan: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayNip11ProbePlan {
+        return
+            try RelayNip11ProbePlan(
+                urlsToProbe: FfiConverterSequenceString.read(from: &buf),
+                inFlightUrls: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayNip11ProbePlan, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.urlsToProbe, into: &buf)
+        FfiConverterSequenceString.write(value.inFlightUrls, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayNip11ProbePlan_lift(_ buf: RustBuffer) throws -> RelayNip11ProbePlan {
+    return try FfiConverterTypeRelayNip11ProbePlan.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayNip11ProbePlan_lower(_ value: RelayNip11ProbePlan) -> RustBuffer {
+    return FfiConverterTypeRelayNip11ProbePlan.lower(value)
+}
+
+
+public struct RelayNip11ProbePlanInput {
+    public var relays: [RelayConfig]
+    public var cachedUrls: [String]
+    public var inFlightUrls: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(relays: [RelayConfig], cachedUrls: [String], inFlightUrls: [String]) {
+        self.relays = relays
+        self.cachedUrls = cachedUrls
+        self.inFlightUrls = inFlightUrls
+    }
+}
+
+#if compiler(>=6)
+extension RelayNip11ProbePlanInput: Sendable {}
+#endif
+
+
+extension RelayNip11ProbePlanInput: Equatable, Hashable {
+    public static func ==(lhs: RelayNip11ProbePlanInput, rhs: RelayNip11ProbePlanInput) -> Bool {
+        if lhs.relays != rhs.relays {
+            return false
+        }
+        if lhs.cachedUrls != rhs.cachedUrls {
+            return false
+        }
+        if lhs.inFlightUrls != rhs.inFlightUrls {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(relays)
+        hasher.combine(cachedUrls)
+        hasher.combine(inFlightUrls)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayNip11ProbePlanInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayNip11ProbePlanInput {
+        return
+            try RelayNip11ProbePlanInput(
+                relays: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                cachedUrls: FfiConverterSequenceString.read(from: &buf),
+                inFlightUrls: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayNip11ProbePlanInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRelayConfig.write(value.relays, into: &buf)
+        FfiConverterSequenceString.write(value.cachedUrls, into: &buf)
+        FfiConverterSequenceString.write(value.inFlightUrls, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayNip11ProbePlanInput_lift(_ buf: RustBuffer) throws -> RelayNip11ProbePlanInput {
+    return try FfiConverterTypeRelayNip11ProbePlanInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayNip11ProbePlanInput_lower(_ value: RelayNip11ProbePlanInput) -> RustBuffer {
+    return FfiConverterTypeRelayNip11ProbePlanInput.lower(value)
+}
+
+
 public struct RelayRemoveProjection {
     public var title: String
     public var message: String
@@ -34932,6 +35101,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_find_existing_book_for_isbn() != 23084) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_finish_relay_nip11_probe() != 14293) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 356) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -35257,6 +35429,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 14588) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_plan_relay_nip11_probes() != 54478) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_prepare_whats_new() != 21865) {

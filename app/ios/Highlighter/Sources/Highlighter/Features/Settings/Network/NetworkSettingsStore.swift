@@ -31,7 +31,7 @@ final class NetworkSettingsStore {
 
     @ObservationIgnored private let core: SafeHighlighterCore
     @ObservationIgnored private var pathMonitor: NWPathMonitor?
-    @ObservationIgnored private var inFlightNip11: Set<String> = []
+    @ObservationIgnored private var inFlightNip11: [String] = []
 
     init(core: SafeHighlighterCore) {
         self.core = core
@@ -118,12 +118,24 @@ final class NetworkSettingsStore {
         // have cached. Each probe updates `nip11ByUrl` as it resolves, so
         // the rows progressively fill in their icons and names. Fails are
         // silent — a row without a NIP-11 doc just keeps its URL fallback.
-        for row in relays where nip11ByUrl[row.url] == nil && !inFlightNip11.contains(row.url) {
-            inFlightNip11.insert(row.url)
+        let probePlan = core.planRelayNip11Probes(input: RelayNip11ProbePlanInput(
+            relays: relays,
+            cachedUrls: Array(nip11ByUrl.keys),
+            inFlightUrls: inFlightNip11
+        ))
+        inFlightNip11 = probePlan.inFlightUrls
+        for url in probePlan.urlsToProbe {
             let core = self.core
-            let url = row.url
             Task { [weak self] in
-                defer { Task { @MainActor [weak self] in self?.inFlightNip11.remove(url) } }
+                defer {
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        self.inFlightNip11 = self.core.finishRelayNip11Probe(
+                            inFlightUrls: self.inFlightNip11,
+                            url: url
+                        )
+                    }
+                }
                 let outcome = await core.probeRelayNip11(url)
                 guard outcome.error.isEmpty, let doc = outcome.value else { return }
                 await MainActor.run { self?.nip11ByUrl[url] = doc }

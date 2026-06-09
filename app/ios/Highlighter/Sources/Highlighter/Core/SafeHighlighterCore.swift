@@ -1655,6 +1655,14 @@ actor SafeHighlighterCore {
         core.projectAddRelaySheet(input: input)
     }
 
+    nonisolated func planRelayNip11Probes(input: RelayNip11ProbePlanInput) -> RelayNip11ProbePlan {
+        core.planRelayNip11Probes(input: input)
+    }
+
+    nonisolated func finishRelayNip11Probe(inFlightUrls: [String], url: String) -> [String] {
+        core.finishRelayNip11Probe(inFlightUrls: inFlightUrls, url: url)
+    }
+
     nonisolated func defaultImportRelaySelection(relays: [RelayConfig]) -> [String] {
         core.defaultImportRelaySelection(relays: relays)
     }
