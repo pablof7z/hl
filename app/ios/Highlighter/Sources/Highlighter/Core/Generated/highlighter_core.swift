@@ -1418,6 +1418,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectCaptureCommunitySelection(input: CaptureCommunitySelectionProjectionInput)  -> CaptureCommunitySelectionProjection
 
+    func projectCommunityRow(input: CommunityRowProjectionInput)  -> CommunityRowProjection
+
     /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
      * kind:9002 (edit-metadata) signed by the current user. Returns the
@@ -1521,8 +1523,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectShareArticleTarget(input: ShareArticleTargetProjectionInput)  -> ShareArtifactTargetProjection
 
     func projectShareArtifactTarget(input: ShareArtifactTargetProjectionInput)  -> ShareArtifactTargetProjection
-
-    func projectShareCommunityRow(input: ShareCommunityRowProjectionInput)  -> ShareCommunityRowProjection
 
     func projectShareHighlightArticleTarget(input: ShareHighlightArticleTargetProjectionInput)  -> ShareArtifactTargetProjection?
 
@@ -4291,6 +4291,14 @@ open func projectCaptureCommunitySelection(input: CaptureCommunitySelectionProje
 })
 }
 
+open func projectCommunityRow(input: CommunityRowProjectionInput) -> CommunityRowProjection  {
+    return try!  FfiConverterTypeCommunityRowProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_community_row(self.uniffiClonePointer(),
+        FfiConverterTypeCommunityRowProjectionInput_lower(input),$0
+    )
+})
+}
+
     /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
      * kind:9002 (edit-metadata) signed by the current user. Returns the
@@ -4590,14 +4598,6 @@ open func projectShareArtifactTarget(input: ShareArtifactTargetProjectionInput) 
     return try!  FfiConverterTypeShareArtifactTargetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_artifact_target(self.uniffiClonePointer(),
         FfiConverterTypeShareArtifactTargetProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func projectShareCommunityRow(input: ShareCommunityRowProjectionInput) -> ShareCommunityRowProjection  {
-    return try!  FfiConverterTypeShareCommunityRowProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_share_community_row(self.uniffiClonePointer(),
-        FfiConverterTypeShareCommunityRowProjectionInput_lower(input),$0
     )
 })
 }
@@ -10640,6 +10640,138 @@ public func FfiConverterTypeCommunityListOutcome_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeCommunityListOutcome_lower(_ value: CommunityListOutcome) -> RustBuffer {
     return FfiConverterTypeCommunityListOutcome.lower(value)
+}
+
+
+public struct CommunityRowProjection {
+    public var displayName: String
+    public var pictureUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayName: String, pictureUrl: String?) {
+        self.displayName = displayName
+        self.pictureUrl = pictureUrl
+    }
+}
+
+#if compiler(>=6)
+extension CommunityRowProjection: Sendable {}
+#endif
+
+
+extension CommunityRowProjection: Equatable, Hashable {
+    public static func ==(lhs: CommunityRowProjection, rhs: CommunityRowProjection) -> Bool {
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.pictureUrl != rhs.pictureUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayName)
+        hasher.combine(pictureUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommunityRowProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommunityRowProjection {
+        return
+            try CommunityRowProjection(
+                displayName: FfiConverterString.read(from: &buf),
+                pictureUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommunityRowProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterOptionString.write(value.pictureUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunityRowProjection_lift(_ buf: RustBuffer) throws -> CommunityRowProjection {
+    return try FfiConverterTypeCommunityRowProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunityRowProjection_lower(_ value: CommunityRowProjection) -> RustBuffer {
+    return FfiConverterTypeCommunityRowProjection.lower(value)
+}
+
+
+public struct CommunityRowProjectionInput {
+    public var community: CommunitySummary
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(community: CommunitySummary) {
+        self.community = community
+    }
+}
+
+#if compiler(>=6)
+extension CommunityRowProjectionInput: Sendable {}
+#endif
+
+
+extension CommunityRowProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CommunityRowProjectionInput, rhs: CommunityRowProjectionInput) -> Bool {
+        if lhs.community != rhs.community {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(community)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommunityRowProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommunityRowProjectionInput {
+        return
+            try CommunityRowProjectionInput(
+                community: FfiConverterTypeCommunitySummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommunityRowProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeCommunitySummary.write(value.community, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunityRowProjectionInput_lift(_ buf: RustBuffer) throws -> CommunityRowProjectionInput {
+    return try FfiConverterTypeCommunityRowProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunityRowProjectionInput_lower(_ value: CommunityRowProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCommunityRowProjectionInput.lower(value)
 }
 
 
@@ -24082,138 +24214,6 @@ public func FfiConverterTypeShareArtifactTargetProjectionInput_lower(_ value: Sh
 }
 
 
-public struct ShareCommunityRowProjection {
-    public var displayName: String
-    public var pictureUrl: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(displayName: String, pictureUrl: String?) {
-        self.displayName = displayName
-        self.pictureUrl = pictureUrl
-    }
-}
-
-#if compiler(>=6)
-extension ShareCommunityRowProjection: Sendable {}
-#endif
-
-
-extension ShareCommunityRowProjection: Equatable, Hashable {
-    public static func ==(lhs: ShareCommunityRowProjection, rhs: ShareCommunityRowProjection) -> Bool {
-        if lhs.displayName != rhs.displayName {
-            return false
-        }
-        if lhs.pictureUrl != rhs.pictureUrl {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(displayName)
-        hasher.combine(pictureUrl)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeShareCommunityRowProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareCommunityRowProjection {
-        return
-            try ShareCommunityRowProjection(
-                displayName: FfiConverterString.read(from: &buf),
-                pictureUrl: FfiConverterOptionString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ShareCommunityRowProjection, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.displayName, into: &buf)
-        FfiConverterOptionString.write(value.pictureUrl, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeShareCommunityRowProjection_lift(_ buf: RustBuffer) throws -> ShareCommunityRowProjection {
-    return try FfiConverterTypeShareCommunityRowProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeShareCommunityRowProjection_lower(_ value: ShareCommunityRowProjection) -> RustBuffer {
-    return FfiConverterTypeShareCommunityRowProjection.lower(value)
-}
-
-
-public struct ShareCommunityRowProjectionInput {
-    public var community: CommunitySummary
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(community: CommunitySummary) {
-        self.community = community
-    }
-}
-
-#if compiler(>=6)
-extension ShareCommunityRowProjectionInput: Sendable {}
-#endif
-
-
-extension ShareCommunityRowProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: ShareCommunityRowProjectionInput, rhs: ShareCommunityRowProjectionInput) -> Bool {
-        if lhs.community != rhs.community {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(community)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeShareCommunityRowProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareCommunityRowProjectionInput {
-        return
-            try ShareCommunityRowProjectionInput(
-                community: FfiConverterTypeCommunitySummary.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ShareCommunityRowProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterTypeCommunitySummary.write(value.community, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeShareCommunityRowProjectionInput_lift(_ buf: RustBuffer) throws -> ShareCommunityRowProjectionInput {
-    return try FfiConverterTypeShareCommunityRowProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeShareCommunityRowProjectionInput_lower(_ value: ShareCommunityRowProjectionInput) -> RustBuffer {
-    return FfiConverterTypeShareCommunityRowProjectionInput.lower(value)
-}
-
-
 public struct ShareHighlightArticleTargetProjectionInput {
     public var highlight: HighlightRecord
 
@@ -30735,6 +30735,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_community_selection() != 38232) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_community_row() != 45428) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room() != 12904) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -30832,9 +30835,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_artifact_target() != 15214) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_community_row() != 28913) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_highlight_article_target() != 58694) {

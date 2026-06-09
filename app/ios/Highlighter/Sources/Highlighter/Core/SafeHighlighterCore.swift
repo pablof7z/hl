@@ -824,10 +824,10 @@ actor SafeHighlighterCore {
         core.projectShareHighlightArticleTarget(input: input)
     }
 
-    nonisolated func projectShareCommunityRow(
-        input: ShareCommunityRowProjectionInput
-    ) -> ShareCommunityRowProjection {
-        core.projectShareCommunityRow(input: input)
+    nonisolated func projectCommunityRow(
+        input: CommunityRowProjectionInput
+    ) -> CommunityRowProjection {
+        core.projectCommunityRow(input: input)
     }
 
     nonisolated func getArticleArtifactPreview(article: ArticleRecord) -> ArtifactPreviewOutcome {

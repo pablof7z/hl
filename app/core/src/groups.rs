@@ -55,6 +55,17 @@ pub struct RoomAvatarProjection {
     pub display_initial: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommunityRowProjectionInput {
+    pub community: CommunitySummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommunityRowProjection {
+    pub display_name: String,
+    pub picture_url: Option<String>,
+}
+
 /// Room cover/avatar projection. Rust owns room-picture fallback identity;
 /// native shells render the returned fields with platform-native image views.
 pub fn room_avatar_projection(input: RoomAvatarProjectionInput) -> RoomAvatarProjection {
@@ -73,6 +84,28 @@ pub fn room_avatar_projection(input: RoomAvatarProjectionInput) -> RoomAvatarPro
     RoomAvatarProjection {
         picture_url: input.picture_url,
         display_initial,
+    }
+}
+
+/// Generic community row projection. Rust owns room-name/id fallback and
+/// optional picture presence; native shells render row layout and images.
+pub fn community_row_projection(input: CommunityRowProjectionInput) -> CommunityRowProjection {
+    let community = input.community;
+    CommunityRowProjection {
+        display_name: if community.name.is_empty() {
+            community.id
+        } else {
+            community.name
+        },
+        picture_url: non_empty_string(&community.picture),
+    }
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
     }
 }
 
@@ -893,6 +926,28 @@ mod tests {
         });
 
         assert_eq!(projection.display_initial, "a");
+    }
+
+    #[test]
+    fn community_row_projection_uses_name_or_group_id_and_picture_presence() {
+        let mut community = summary("group", "Readers", "");
+        community.picture = "https://example.com/room.jpg".into();
+
+        let projection = community_row_projection(CommunityRowProjectionInput { community });
+
+        assert_eq!(projection.display_name, "Readers");
+        assert_eq!(
+            projection.picture_url,
+            Some("https://example.com/room.jpg".into())
+        );
+
+        let mut community = summary("group", "", "");
+        community.picture.clear();
+
+        let projection = community_row_projection(CommunityRowProjectionInput { community });
+
+        assert_eq!(projection.display_name, "group");
+        assert_eq!(projection.picture_url, None);
     }
 
     #[test]

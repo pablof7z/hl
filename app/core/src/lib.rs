@@ -76,8 +76,9 @@ pub use feedback::{
     FeedbackMessagePresentationProjection, FeedbackThreadPresentationProjection,
 };
 pub use groups::{
-    CreateRoomProjection, CreateRoomProjectionInput, CreateRoomVisibilityOption, RoomAccess,
-    RoomAvatarProjection, RoomAvatarProjectionInput, RoomVisibility,
+    CommunityRowProjection, CommunityRowProjectionInput, CreateRoomProjection,
+    CreateRoomProjectionInput, CreateRoomVisibilityOption, RoomAccess, RoomAvatarProjection,
+    RoomAvatarProjectionInput, RoomVisibility,
 };
 pub use highlights::{
     HighlightDetailContentProjection, HighlightDetailContentProjectionInput,
@@ -169,8 +170,7 @@ pub use session::{
 };
 pub use share_targets::{
     ShareArticleTargetProjectionInput, ShareArtifactTargetProjection,
-    ShareArtifactTargetProjectionInput, ShareCommunityRowProjection,
-    ShareCommunityRowProjectionInput, ShareHighlightArticleTargetProjectionInput,
+    ShareArtifactTargetProjectionInput, ShareHighlightArticleTargetProjectionInput,
     ShareHighlightTargetProjection, ShareHighlightTargetProjectionInput,
     ShareWebReaderTargetProjectionInput,
 };

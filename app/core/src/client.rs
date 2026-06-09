@@ -1976,11 +1976,11 @@ impl HighlighterCore {
         share_targets::highlight_article_target_projection(input)
     }
 
-    pub fn project_share_community_row(
+    pub fn project_community_row(
         &self,
-        input: share_targets::ShareCommunityRowProjectionInput,
-    ) -> share_targets::ShareCommunityRowProjection {
-        share_targets::community_row_projection(input)
+        input: groups::CommunityRowProjectionInput,
+    ) -> groups::CommunityRowProjection {
+        groups::community_row_projection(input)
     }
 
     /// Project a cached NIP-23 article into the artifact preview shape used by

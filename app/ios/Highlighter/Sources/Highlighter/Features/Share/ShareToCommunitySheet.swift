@@ -168,8 +168,8 @@ struct ShareToCommunitySheet: View {
     // MARK: - Community row
 
     private func communityRow(_ community: CommunitySummary) -> some View {
-        let projection = app.safeCore.projectShareCommunityRow(
-            input: ShareCommunityRowProjectionInput(community: community)
+        let projection = app.safeCore.projectCommunityRow(
+            input: CommunityRowProjectionInput(community: community)
         )
 
         return HStack(spacing: 12) {
