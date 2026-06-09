@@ -268,13 +268,15 @@ struct SearchView: View {
     }
 
     private var loadingSkeleton: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(0..<3, id: \.self) { _ in
+        let trailingPadding: [CGFloat] = [96, 148, 64]
+
+        return VStack(alignment: .leading, spacing: 16) {
+            ForEach(Array(trailingPadding.enumerated()), id: \.offset) { _, padding in
                 RoundedRectangle(cornerRadius: 4)
                     .fill(Color.highlighterRule.opacity(0.5))
                     .frame(height: 14)
                     .frame(maxWidth: .infinity)
-                    .padding(.trailing, CGFloat.random(in: 40...160))
+                    .padding(.trailing, padding)
             }
         }
         .padding(.vertical, 20)
