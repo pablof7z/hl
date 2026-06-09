@@ -898,7 +898,7 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
         }
         SubscriptionKind::FollowingReads { follows, .. } => {
             if follows.is_empty() {
-                // Pump won't receive anything; still build a stub so the
+                // Pump won't receive anything; still build an inert filter so the
                 // SubscriptionRegistry bookkeeping is consistent.
                 return vec![NdbFilter::new().kinds([KIND_LONG_FORM as u64]).build()];
             }

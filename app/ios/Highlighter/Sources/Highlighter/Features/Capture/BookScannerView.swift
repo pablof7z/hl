@@ -264,11 +264,18 @@ struct CameraPreviewLayer: UIViewRepresentable {
 
         override init(frame: CGRect) {
             super.init(frame: frame)
+            configure()
+        }
+
+        required init?(coder: NSCoder) {
+            super.init(coder: coder)
+            configure()
+        }
+
+        private func configure() {
             let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
             addGestureRecognizer(tap)
         }
-
-        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
         @objc private func handleTap(_ gr: UITapGestureRecognizer) {
             let point = gr.location(in: self)
