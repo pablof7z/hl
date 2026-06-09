@@ -15,17 +15,15 @@ struct CommentsAttachment: ViewModifier {
     @State private var didStart = false
 
     func body(content: Content) -> some View {
+        let projection = toolbarProjection
+
         content
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showComments = true } label: {
-                        commentsLabel
+                        commentsLabel(projection)
                     }
-                    .accessibilityLabel(
-                        store.totalCount == 0
-                            ? "Start the thread"
-                            : "\(store.totalCount) comments"
-                    )
+                    .accessibilityLabel(projection.accessibilityLabel)
                 }
             }
             .navigationDestination(isPresented: $showComments) {
@@ -46,16 +44,22 @@ struct CommentsAttachment: ViewModifier {
             }
     }
 
-    private var commentsLabel: some View {
+    private func commentsLabel(_ projection: CommentToolbarProjection) -> some View {
         HStack(spacing: 4) {
             Image(systemName: "bubble.left")
                 .font(.system(size: 15, weight: .medium))
-            if store.totalCount > 0 {
-                Text("\(store.totalCount)")
+            if projection.showsCount {
+                Text(projection.countLabel)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .monospacedDigit()
             }
         }
+    }
+
+    private var toolbarProjection: CommentToolbarProjection {
+        app.safeCore.projectCommentToolbar(
+            input: CommentToolbarProjectionInput(records: store.records)
+        )
     }
 }
 

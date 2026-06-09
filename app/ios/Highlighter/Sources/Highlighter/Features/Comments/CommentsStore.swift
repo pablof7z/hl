@@ -255,13 +255,3 @@ final class CommentsStore {
         ))
     }
 }
-
-// MARK: - Convenience accessors
-
-extension CommentsStore {
-    /// Total comment count across the whole tree (top-level + replies).
-    var totalCount: Int {
-        records.count
-    }
-
-}

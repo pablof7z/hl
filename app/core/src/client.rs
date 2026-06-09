@@ -2389,6 +2389,15 @@ impl HighlighterCore {
         comments::comment_node_chrome_projection(input)
     }
 
+    /// Project the comments toolbar badge. Rust owns count formatting and
+    /// accessibility copy.
+    pub fn project_comment_toolbar(
+        &self,
+        input: comments::CommentToolbarProjectionInput,
+    ) -> comments::CommentToolbarProjection {
+        comments::comment_toolbar_projection(input)
+    }
+
     /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
     pub async fn get_comments_for_scope(
         &self,

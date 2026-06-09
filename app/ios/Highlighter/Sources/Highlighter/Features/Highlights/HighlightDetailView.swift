@@ -301,25 +301,25 @@ struct HighlightDetailView: View {
     }
 
     private var commentsButton: some View {
-        Button {
+        let projection = app.safeCore.projectCommentToolbar(
+            input: CommentToolbarProjectionInput(records: commentsStore.records)
+        )
+
+        return Button {
             showComments = true
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "bubble.left")
                     .font(.system(size: 20, weight: .medium))
-                if commentsStore.totalCount > 0 {
-                    Text("\(commentsStore.totalCount)")
+                if projection.showsCount {
+                    Text(projection.countLabel)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
             }
             .foregroundStyle(Color.highlighterInkStrong)
         }
-        .accessibilityLabel(
-            commentsStore.totalCount == 0
-                ? "Start the thread"
-                : "\(commentsStore.totalCount) comments"
-        )
+        .accessibilityLabel(projection.accessibilityLabel)
     }
 
     private func actionIcon(systemName: String) -> some View {

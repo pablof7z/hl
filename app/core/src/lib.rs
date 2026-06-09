@@ -83,7 +83,7 @@ pub use client::HighlighterCore;
 pub use comments::{
     CommentComposerProjection, CommentComposerProjectionInput, CommentNodeChromeProjection,
     CommentNodeChromeProjectionInput, CommentThreadViewProjection,
-    CommentThreadViewProjectionInput,
+    CommentThreadViewProjectionInput, CommentToolbarProjection, CommentToolbarProjectionInput,
 };
 pub use discussions::{
     DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput,

@@ -1486,6 +1486,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectCommentThreadView(input: CommentThreadViewProjectionInput)  -> CommentThreadViewProjection
 
+    /**
+     * Project the comments toolbar badge. Rust owns count formatting and
+     * accessibility copy.
+     */
+    func projectCommentToolbar(input: CommentToolbarProjectionInput)  -> CommentToolbarProjection
+
     func projectCommunityRow(input: CommunityRowProjectionInput)  -> CommunityRowProjection
 
     /**
@@ -4620,6 +4626,18 @@ open func projectCommentThreadView(input: CommentThreadViewProjectionInput) -> C
     return try!  FfiConverterTypeCommentThreadViewProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_comment_thread_view(self.uniffiClonePointer(),
         FfiConverterTypeCommentThreadViewProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Project the comments toolbar badge. Rust owns count formatting and
+     * accessibility copy.
+     */
+open func projectCommentToolbar(input: CommentToolbarProjectionInput) -> CommentToolbarProjection  {
+    return try!  FfiConverterTypeCommentToolbarProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_comment_toolbar(self.uniffiClonePointer(),
+        FfiConverterTypeCommentToolbarProjectionInput_lower(input),$0
     )
 })
 }
@@ -13420,6 +13438,154 @@ public func FfiConverterTypeCommentThreadViewProjectionInput_lift(_ buf: RustBuf
 #endif
 public func FfiConverterTypeCommentThreadViewProjectionInput_lower(_ value: CommentThreadViewProjectionInput) -> RustBuffer {
     return FfiConverterTypeCommentThreadViewProjectionInput.lower(value)
+}
+
+
+public struct CommentToolbarProjection {
+    public var count: UInt32
+    public var showsCount: Bool
+    public var countLabel: String
+    public var accessibilityLabel: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(count: UInt32, showsCount: Bool, countLabel: String, accessibilityLabel: String) {
+        self.count = count
+        self.showsCount = showsCount
+        self.countLabel = countLabel
+        self.accessibilityLabel = accessibilityLabel
+    }
+}
+
+#if compiler(>=6)
+extension CommentToolbarProjection: Sendable {}
+#endif
+
+
+extension CommentToolbarProjection: Equatable, Hashable {
+    public static func ==(lhs: CommentToolbarProjection, rhs: CommentToolbarProjection) -> Bool {
+        if lhs.count != rhs.count {
+            return false
+        }
+        if lhs.showsCount != rhs.showsCount {
+            return false
+        }
+        if lhs.countLabel != rhs.countLabel {
+            return false
+        }
+        if lhs.accessibilityLabel != rhs.accessibilityLabel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(count)
+        hasher.combine(showsCount)
+        hasher.combine(countLabel)
+        hasher.combine(accessibilityLabel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentToolbarProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentToolbarProjection {
+        return
+            try CommentToolbarProjection(
+                count: FfiConverterUInt32.read(from: &buf),
+                showsCount: FfiConverterBool.read(from: &buf),
+                countLabel: FfiConverterString.read(from: &buf),
+                accessibilityLabel: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentToolbarProjection, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.count, into: &buf)
+        FfiConverterBool.write(value.showsCount, into: &buf)
+        FfiConverterString.write(value.countLabel, into: &buf)
+        FfiConverterString.write(value.accessibilityLabel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentToolbarProjection_lift(_ buf: RustBuffer) throws -> CommentToolbarProjection {
+    return try FfiConverterTypeCommentToolbarProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentToolbarProjection_lower(_ value: CommentToolbarProjection) -> RustBuffer {
+    return FfiConverterTypeCommentToolbarProjection.lower(value)
+}
+
+
+public struct CommentToolbarProjectionInput {
+    public var records: [CommentRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(records: [CommentRecord]) {
+        self.records = records
+    }
+}
+
+#if compiler(>=6)
+extension CommentToolbarProjectionInput: Sendable {}
+#endif
+
+
+extension CommentToolbarProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CommentToolbarProjectionInput, rhs: CommentToolbarProjectionInput) -> Bool {
+        if lhs.records != rhs.records {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(records)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentToolbarProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentToolbarProjectionInput {
+        return
+            try CommentToolbarProjectionInput(
+                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentToolbarProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommentRecord.write(value.records, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentToolbarProjectionInput_lift(_ buf: RustBuffer) throws -> CommentToolbarProjectionInput {
+    return try FfiConverterTypeCommentToolbarProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentToolbarProjectionInput_lower(_ value: CommentToolbarProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCommentToolbarProjectionInput.lower(value)
 }
 
 
@@ -37131,6 +37297,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_thread_view() != 58541) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_toolbar() != 20137) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_community_row() != 45428) {

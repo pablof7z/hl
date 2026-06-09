@@ -65,6 +65,19 @@ pub struct CommentNodeChromeProjection {
     pub is_most_recent_author_reply: bool,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentToolbarProjectionInput {
+    pub records: Vec<CommentRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentToolbarProjection {
+    pub count: u32,
+    pub shows_count: bool,
+    pub count_label: String,
+    pub accessibility_label: String,
+}
+
 /// Comment composer projection. Rust owns draft normalization and submit
 /// eligibility; native shells render the composer affordance.
 pub fn comment_composer_projection(
@@ -74,6 +87,29 @@ pub fn comment_composer_projection(
     CommentComposerProjection {
         can_submit: !submit_body.is_empty() && !input.is_publishing,
         submit_body,
+    }
+}
+
+/// Project the comments toolbar badge from the bounded visible record list.
+/// Native shells render the icon; Rust owns count formatting and accessibility
+/// copy.
+pub fn comment_toolbar_projection(
+    input: CommentToolbarProjectionInput,
+) -> CommentToolbarProjection {
+    let count = input.records.len().min(u32::MAX as usize) as u32;
+    CommentToolbarProjection {
+        count,
+        shows_count: count > 0,
+        count_label: if count > 0 {
+            count.to_string()
+        } else {
+            String::new()
+        },
+        accessibility_label: if count == 0 {
+            "Start the thread".into()
+        } else {
+            format!("{count} comments")
+        },
     }
 }
 
@@ -859,6 +895,38 @@ mod tests {
         assert!(!projection.has_more_replies);
         assert_eq!(projection.more_replies_label, "");
         assert!(!projection.is_most_recent_author_reply);
+    }
+
+    #[test]
+    fn comment_toolbar_projection_formats_count_and_accessibility_label() {
+        let empty = comment_toolbar_projection(CommentToolbarProjectionInput {
+            records: Vec::new(),
+        });
+        assert_eq!(
+            empty,
+            CommentToolbarProjection {
+                count: 0,
+                shows_count: false,
+                count_label: String::new(),
+                accessibility_label: "Start the thread".into(),
+            }
+        );
+
+        let populated = comment_toolbar_projection(CommentToolbarProjectionInput {
+            records: vec![
+                comment("one", "root", Some(1)),
+                comment("two", "one", Some(2)),
+            ],
+        });
+        assert_eq!(
+            populated,
+            CommentToolbarProjection {
+                count: 2,
+                shows_count: true,
+                count_label: "2".into(),
+                accessibility_label: "2 comments".into(),
+            }
+        );
     }
 
     #[test]
