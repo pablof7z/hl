@@ -2301,33 +2301,22 @@ impl HighlighterCore {
         crate::search::search_article_results_snapshot(self.runtime.ndb(), &query)
     }
 
-    /// Resolve the merged set of NIP-50 search relays for the current user —
-    /// always includes `wss://relay.highlighter.com`, plus every `relay` tag
-    /// from the newest cached kind:10007 (NIP-51 search relay list).
-    pub async fn get_search_relays(&self) -> StringListOutcome {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .unwrap_or_default();
-        string_list_outcome(crate::search::query_search_relays(
-            self.runtime.ndb(),
-            &user_hex,
-        ))
+    /// Search screen chrome snapshot: recent query history plus resolved
+    /// NIP-50 relays. Rust owns persistence, de-dupe, relay defaults, and
+    /// error semantics.
+    pub async fn get_search_chrome_snapshot(&self) -> crate::search::SearchChromeSnapshot {
+        self.search_chrome_snapshot_from_recent(self.recent_searches.all().await)
     }
 
-    pub async fn get_recent_searches(&self) -> StringListOutcome {
-        string_list_outcome(self.recent_searches.all().await)
+    pub async fn record_recent_search_snapshot(
+        &self,
+        query: String,
+    ) -> crate::search::SearchChromeSnapshot {
+        self.search_chrome_snapshot_from_recent(self.recent_searches.record(&query).await)
     }
 
-    pub async fn record_recent_search(&self, query: String) -> StringListOutcome {
-        string_list_outcome(self.recent_searches.record(&query).await)
-    }
-
-    pub async fn clear_recent_searches(&self) -> StringListOutcome {
-        string_list_outcome(self.recent_searches.clear().await)
+    pub async fn clear_recent_searches_snapshot(&self) -> crate::search::SearchChromeSnapshot {
+        self.search_chrome_snapshot_from_recent(self.recent_searches.clear().await)
     }
 
     /// Open a NIP-50 relay subscription for kind:30023 against the user's
@@ -4306,6 +4295,33 @@ impl HighlighterCore {
             .session
             .current_user()
             .map(|user| user.pubkey)
+    }
+
+    fn search_chrome_snapshot_from_recent(
+        &self,
+        recent_result: Result<Vec<String>, CoreError>,
+    ) -> crate::search::SearchChromeSnapshot {
+        let mut error = String::new();
+        let recent_queries = match recent_result {
+            Ok(values) => values,
+            Err(err) => {
+                error = err.to_string();
+                Vec::new()
+            }
+        };
+        let user_hex = self.current_user_pubkey_hex().unwrap_or_default();
+        let search_relays = match crate::search::query_search_relays(self.runtime.ndb(), &user_hex)
+        {
+            Ok(values) => values,
+            Err(err) => {
+                if !error.is_empty() {
+                    error.push('\n');
+                }
+                error.push_str(&err.to_string());
+                Vec::new()
+            }
+        };
+        crate::search::search_chrome_snapshot(recent_queries, search_relays, error)
     }
 
     fn curation_menu_snapshot_for_user(

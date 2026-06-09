@@ -274,20 +274,16 @@ actor SafeHighlighterCore {
         await core.getSearchArticleResultsSnapshot(query: query)
     }
 
-    func getSearchRelays() async -> StringListOutcome {
-        await core.getSearchRelays()
+    func getSearchChromeSnapshot() async -> SearchChromeSnapshot {
+        await core.getSearchChromeSnapshot()
     }
 
-    func getRecentSearches() async -> StringListOutcome {
-        await core.getRecentSearches()
+    func recordRecentSearchSnapshot(_ query: String) async -> SearchChromeSnapshot {
+        await core.recordRecentSearchSnapshot(query: query)
     }
 
-    func recordRecentSearch(_ query: String) async -> StringListOutcome {
-        await core.recordRecentSearch(query: query)
-    }
-
-    func clearRecentSearches() async -> StringListOutcome {
-        await core.clearRecentSearches()
+    func clearRecentSearchesSnapshot() async -> SearchChromeSnapshot {
+        await core.clearRecentSearchesSnapshot()
     }
 
     func subscribeArticleSearch(query: String) async -> SubscriptionOutcome {

@@ -69,10 +69,8 @@ final class SearchStore {
     // MARK: - Lifecycle
 
     func start() async {
-        let outcome = await safeCore.getSearchRelays()
-        if outcome.error.isEmpty {
-            searchRelays = outcome.values
-        }
+        let snapshot = await safeCore.getSearchChromeSnapshot()
+        searchRelays = snapshot.searchRelays
     }
 
     func stop() {

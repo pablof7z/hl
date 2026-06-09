@@ -789,7 +789,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func clearPodcastClipSelection()  -> PodcastClipSelection
 
-    func clearRecentSearches() async  -> StringListOutcome
+    func clearRecentSearchesSnapshot() async  -> SearchChromeSnapshot
 
     func completeOnboardingInterests(selectedIds: [String]) async  -> MutationOutcome
 
@@ -1117,8 +1117,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getProfileUpdateAction(kind: UInt32)  -> ProfileUpdateAction
 
-    func getRecentSearches() async  -> StringListOutcome
-
     /**
      * Snapshot of the live per-relay diagnostics map. One row per URL
      * currently in the client's pool. Refreshed by the background
@@ -1169,11 +1167,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getSearchArticleResultsSnapshot(query: String) async  -> SearchArticleResultsSnapshot
 
     /**
-     * Resolve the merged set of NIP-50 search relays for the current user —
-     * always includes `wss://relay.highlighter.com`, plus every `relay` tag
-     * from the newest cached kind:10007 (NIP-51 search relay list).
+     * Search screen chrome snapshot: recent query history plus resolved
+     * NIP-50 relays. Rust owns persistence, de-dupe, relay defaults, and
+     * error semantics.
      */
-    func getSearchRelays() async  -> StringListOutcome
+    func getSearchChromeSnapshot() async  -> SearchChromeSnapshot
 
     /**
      * Local search snapshot for the main search screen. Rust owns section
@@ -1657,7 +1655,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func reconstructOcrMarkdown(lines: [OcrLine])  -> String
 
-    func recordRecentSearch(query: String) async  -> StringListOutcome
+    func recordRecentSearchSnapshot(query: String) async  -> SearchChromeSnapshot
 
     func registerNip05(name: String, domain: String) async  -> StringOutcome
 
@@ -2124,11 +2122,11 @@ open func clearPodcastClipSelection() -> PodcastClipSelection  {
 })
 }
 
-open func clearRecentSearches()async  -> StringListOutcome  {
+open func clearRecentSearchesSnapshot()async  -> SearchChromeSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_clear_recent_searches(
+                uniffi_highlighter_core_fn_method_highlightercore_clear_recent_searches_snapshot(
                     self.uniffiClonePointer()
 
                 )
@@ -2136,7 +2134,7 @@ open func clearRecentSearches()async  -> StringListOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringListOutcome_lift,
+            liftFunc: FfiConverterTypeSearchChromeSnapshot_lift,
             errorHandler: nil
 
         )
@@ -3206,24 +3204,6 @@ open func getProfileUpdateAction(kind: UInt32) -> ProfileUpdateAction  {
 })
 }
 
-open func getRecentSearches()async  -> StringListOutcome  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_recent_searches(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringListOutcome_lift,
-            errorHandler: nil
-
-        )
-}
-
     /**
      * Snapshot of the live per-relay diagnostics map. One row per URL
      * currently in the client's pool. Refreshed by the background
@@ -3405,15 +3385,15 @@ open func getSearchArticleResultsSnapshot(query: String)async  -> SearchArticleR
 }
 
     /**
-     * Resolve the merged set of NIP-50 search relays for the current user —
-     * always includes `wss://relay.highlighter.com`, plus every `relay` tag
-     * from the newest cached kind:10007 (NIP-51 search relay list).
+     * Search screen chrome snapshot: recent query history plus resolved
+     * NIP-50 relays. Rust owns persistence, de-dupe, relay defaults, and
+     * error semantics.
      */
-open func getSearchRelays()async  -> StringListOutcome  {
+open func getSearchChromeSnapshot()async  -> SearchChromeSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_search_relays(
+                uniffi_highlighter_core_fn_method_highlightercore_get_search_chrome_snapshot(
                     self.uniffiClonePointer()
 
                 )
@@ -3421,7 +3401,7 @@ open func getSearchRelays()async  -> StringListOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringListOutcome_lift,
+            liftFunc: FfiConverterTypeSearchChromeSnapshot_lift,
             errorHandler: nil
 
         )
@@ -4962,11 +4942,11 @@ open func reconstructOcrMarkdown(lines: [OcrLine]) -> String  {
 })
 }
 
-open func recordRecentSearch(query: String)async  -> StringListOutcome  {
+open func recordRecentSearchSnapshot(query: String)async  -> SearchChromeSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_record_recent_search(
+                uniffi_highlighter_core_fn_method_highlightercore_record_recent_search_snapshot(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(query)
                 )
@@ -4974,7 +4954,7 @@ open func recordRecentSearch(query: String)async  -> StringListOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeStringListOutcome_lift,
+            liftFunc: FfiConverterTypeSearchChromeSnapshot_lift,
             errorHandler: nil
 
         )
@@ -29560,6 +29540,84 @@ public func FfiConverterTypeSearchArticleResultsSnapshot_lower(_ value: SearchAr
 }
 
 
+public struct SearchChromeSnapshot {
+    public var recentQueries: [String]
+    public var searchRelays: [String]
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(recentQueries: [String], searchRelays: [String], error: String) {
+        self.recentQueries = recentQueries
+        self.searchRelays = searchRelays
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension SearchChromeSnapshot: Sendable {}
+#endif
+
+
+extension SearchChromeSnapshot: Equatable, Hashable {
+    public static func ==(lhs: SearchChromeSnapshot, rhs: SearchChromeSnapshot) -> Bool {
+        if lhs.recentQueries != rhs.recentQueries {
+            return false
+        }
+        if lhs.searchRelays != rhs.searchRelays {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(recentQueries)
+        hasher.combine(searchRelays)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchChromeSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchChromeSnapshot {
+        return
+            try SearchChromeSnapshot(
+                recentQueries: FfiConverterSequenceString.read(from: &buf),
+                searchRelays: FfiConverterSequenceString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchChromeSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.recentQueries, into: &buf)
+        FfiConverterSequenceString.write(value.searchRelays, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchChromeSnapshot_lift(_ buf: RustBuffer) throws -> SearchChromeSnapshot {
+    return try FfiConverterTypeSearchChromeSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchChromeSnapshot_lower(_ value: SearchChromeSnapshot) -> RustBuffer {
+    return FfiConverterTypeSearchChromeSnapshot.lower(value)
+}
+
+
 public struct SearchCommunityRowProjection {
     public var displayName: String
     public var about: String?
@@ -37657,7 +37715,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_clear_podcast_clip_selection() != 42605) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches() != 18871) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches_snapshot() != 16414) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_complete_onboarding_interests() != 32350) {
@@ -37870,9 +37928,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_profile_update_action() != 16735) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_searches() != 49802) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relay_diagnostics() != 36575) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -37903,7 +37958,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_article_results_snapshot() != 52032) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_relays() != 44280) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_chrome_snapshot() != 48174) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_results_snapshot() != 55653) {
@@ -38293,7 +38348,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconstruct_ocr_markdown() != 15497) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_record_recent_search() != 32384) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_record_recent_search_snapshot() != 36017) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_register_nip05() != 29734) {

@@ -67,6 +67,13 @@ pub struct SearchArticleResultsSnapshot {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchChromeSnapshot {
+    pub recent_queries: Vec<String>,
+    pub search_relays: Vec<String>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct SearchQueryProjectionInput {
     pub query: String,
 }
@@ -538,6 +545,18 @@ pub fn search_article_results_snapshot(ndb: &Ndb, query: &str) -> SearchArticleR
     }
 }
 
+pub fn search_chrome_snapshot(
+    recent_queries: Vec<String>,
+    search_relays: Vec<String>,
+    error: impl ToString,
+) -> SearchChromeSnapshot {
+    SearchChromeSnapshot {
+        recent_queries,
+        search_relays,
+        error: error.to_string(),
+    }
+}
+
 fn search_section_or_empty<T>(section: &'static str, result: Result<Vec<T>, CoreError>) -> Vec<T> {
     match result {
         Ok(values) => values,
@@ -793,6 +812,19 @@ mod tests {
         assert!(ready.has_query);
         assert_eq!(blank.search_query, "");
         assert!(!blank.has_query);
+    }
+
+    #[test]
+    fn search_chrome_snapshot_preserves_recent_queries_relays_and_error() {
+        let snapshot = search_chrome_snapshot(
+            vec!["nostr".into(), "books".into()],
+            vec!["wss://relay.highlighter.com".into()],
+            "cache unavailable",
+        );
+
+        assert_eq!(snapshot.recent_queries, vec!["nostr", "books"]);
+        assert_eq!(snapshot.search_relays, vec!["wss://relay.highlighter.com"]);
+        assert_eq!(snapshot.error, "cache unavailable");
     }
 
     #[test]

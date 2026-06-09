@@ -217,11 +217,11 @@ pub use room_preview::{
     RoomPreviewHeaderProjectionInput, RoomPreviewSecondaryAction,
 };
 pub use search::{
-    SearchArticleResultsSnapshot, SearchCommunityRowProjection, SearchCommunityRowProjectionInput,
-    SearchHighlightRowProjection, SearchHighlightRowProjectionInput, SearchQueryProjection,
-    SearchQueryProjectionInput, SearchResultsSnapshot, SearchSuggestionsProjection,
-    SearchSuggestionsProjectionInput, SearchTextMatchSpan, SearchTextMatchesProjection,
-    SearchTextMatchesProjectionInput,
+    SearchArticleResultsSnapshot, SearchChromeSnapshot, SearchCommunityRowProjection,
+    SearchCommunityRowProjectionInput, SearchHighlightRowProjection,
+    SearchHighlightRowProjectionInput, SearchQueryProjection, SearchQueryProjectionInput,
+    SearchResultsSnapshot, SearchSuggestionsProjection, SearchSuggestionsProjectionInput,
+    SearchTextMatchSpan, SearchTextMatchesProjection, SearchTextMatchesProjectionInput,
 };
 pub use session::{
     PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,

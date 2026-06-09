@@ -73,8 +73,8 @@ struct SearchView: View {
                 store = s
                 await s.start()
             }
-            let outcome = await app.safeCore.getRecentSearches()
-            recentQueries = outcome.error.isEmpty ? outcome.values : []
+            let snapshot = await app.safeCore.getSearchChromeSnapshot()
+            recentQueries = snapshot.recentQueries
         }
         .onDisappear {
             store?.stop()
@@ -447,19 +447,15 @@ struct SearchView: View {
         )
         guard projection.hasQuery else { return }
         Task { @MainActor in
-            let outcome = await app.safeCore.recordRecentSearch(projection.searchQuery)
-            if outcome.error.isEmpty {
-                recentQueries = outcome.values
-            }
+            let snapshot = await app.safeCore.recordRecentSearchSnapshot(projection.searchQuery)
+            recentQueries = snapshot.recentQueries
         }
     }
 
     private func clearRecentQueries() {
         Task { @MainActor in
-            let outcome = await app.safeCore.clearRecentSearches()
-            if outcome.error.isEmpty {
-                recentQueries = outcome.values
-            }
+            let snapshot = await app.safeCore.clearRecentSearchesSnapshot()
+            recentQueries = snapshot.recentQueries
         }
     }
 
