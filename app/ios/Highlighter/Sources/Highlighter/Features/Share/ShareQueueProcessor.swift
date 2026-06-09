@@ -30,7 +30,7 @@ enum ShareQueueProcessor {
             let outcome = await app.safeCore.publishArtifact(
                 preview: preview,
                 groupId: share.groupId,
-                note: share.note.isEmpty ? nil : share.note
+                note: share.note
             )
             guard outcome.error.isEmpty else {
                 requeue.append(share)

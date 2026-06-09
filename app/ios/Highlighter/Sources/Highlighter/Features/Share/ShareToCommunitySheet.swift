@@ -168,8 +168,12 @@ struct ShareToCommunitySheet: View {
     // MARK: - Community row
 
     private func communityRow(_ community: CommunitySummary) -> some View {
-        HStack(spacing: 12) {
-            if let url = URL(string: community.picture), !community.picture.isEmpty {
+        let projection = app.safeCore.projectShareCommunityRow(
+            input: ShareCommunityRowProjectionInput(community: community)
+        )
+
+        return HStack(spacing: 12) {
+            if let picture = projection.pictureUrl, let url = URL(string: picture) {
                 KFImage(url)
                     .placeholder { Color.highlighterRule.opacity(0.4) }
                     .fade(duration: 0.15)
@@ -183,7 +187,7 @@ struct ShareToCommunitySheet: View {
                     .foregroundStyle(Color.highlighterInkMuted)
             }
 
-            Text(community.name.isEmpty ? community.id : community.name)
+            Text(projection.displayName)
                 .foregroundStyle(Color.highlighterInkStrong)
 
             Spacer()
@@ -206,7 +210,7 @@ struct ShareToCommunitySheet: View {
     private func publish(to groupId: String) {
         guard publishingId == nil else { return }
         publishingId = groupId
-        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawNote = note
         Task {
             let publishError: String?
             switch target.payload {
@@ -214,7 +218,7 @@ struct ShareToCommunitySheet: View {
                 let outcome = await app.safeCore.publishArtifact(
                     preview: preview,
                     groupId: groupId,
-                    note: trimmedNote.isEmpty ? nil : trimmedNote
+                    note: rawNote
                 )
                 publishError = outcome.error.isEmpty ? nil : outcome.error
             case .highlightRepost(let eventId, let authorPubkey, let relayHint):

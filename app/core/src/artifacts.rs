@@ -197,7 +197,8 @@ pub async fn publish(
     group_id: &str,
     note: Option<&str>,
 ) -> Result<ArtifactRecord, CoreError> {
-    if group_id.trim().is_empty() {
+    let group_id = group_id.trim();
+    if group_id.is_empty() {
         return Err(CoreError::InvalidInput("group_id must not be empty".into()));
     }
 
@@ -1017,6 +1018,24 @@ mod tests {
         assert!(has("i", "https://example.com/post"));
         assert!(has("k", "web"));
         assert!(has("r", "https://example.com/post"));
+    }
+
+    #[test]
+    fn build_share_event_trims_note_content() {
+        let preview = build_preview("https://example.com/post").unwrap();
+        let keys = Keys::generate();
+
+        let event = build_share_event("room-a", &preview, Some("  hello\n"))
+            .unwrap()
+            .sign_with_keys(&keys)
+            .expect("sign");
+        assert_eq!(event.content, "hello");
+
+        let event = build_share_event("room-a", &preview, Some(" \n\t"))
+            .unwrap()
+            .sign_with_keys(&keys)
+            .expect("sign");
+        assert!(event.content.is_empty());
     }
 
     #[test]

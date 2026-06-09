@@ -1,5 +1,7 @@
 use crate::articles;
-use crate::models::{ArticleRecord, ArtifactPreview, ArtifactRecord, HighlightRecord};
+use crate::models::{
+    ArticleRecord, ArtifactPreview, ArtifactRecord, CommunitySummary, HighlightRecord,
+};
 
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ShareArticleTargetProjectionInput {
@@ -38,6 +40,17 @@ pub struct ShareHighlightTargetProjection {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ShareHighlightArticleTargetProjectionInput {
     pub highlight: HighlightRecord,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ShareCommunityRowProjectionInput {
+    pub community: CommunitySummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ShareCommunityRowProjection {
+    pub display_name: String,
+    pub picture_url: Option<String>,
 }
 
 pub fn article_target_projection(
@@ -98,6 +111,20 @@ pub fn highlight_article_target_projection(
         display_subtitle: highlight.quote,
         image_url: None,
     })
+}
+
+pub fn community_row_projection(
+    input: ShareCommunityRowProjectionInput,
+) -> ShareCommunityRowProjection {
+    let community = input.community;
+    ShareCommunityRowProjection {
+        display_name: if community.name.is_empty() {
+            community.id
+        } else {
+            community.name
+        },
+        picture_url: non_empty_string(&community.picture),
+    }
 }
 
 fn title_or_fallback(title: &str) -> String {
@@ -242,6 +269,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn community_row_projection_uses_name_or_group_id_and_picture_presence() {
+        let mut community = community_summary();
+        community.name = "Readers".into();
+        community.picture = "https://example.com/room.jpg".into();
+
+        let projection = community_row_projection(ShareCommunityRowProjectionInput { community });
+
+        assert_eq!(projection.display_name, "Readers");
+        assert_eq!(
+            projection.picture_url,
+            Some("https://example.com/room.jpg".into())
+        );
+
+        let mut community = community_summary();
+        community.name.clear();
+        community.picture.clear();
+
+        let projection = community_row_projection(ShareCommunityRowProjectionInput { community });
+
+        assert_eq!(projection.display_name, "group");
+        assert_eq!(projection.picture_url, None);
+    }
+
     fn article_record() -> ArticleRecord {
         ArticleRecord {
             event_id: "article-event".into(),
@@ -314,6 +365,22 @@ mod tests {
             clip_transcript_segment_ids: Vec::new(),
             image_url: String::new(),
             created_at: Some(123),
+        }
+    }
+
+    fn community_summary() -> CommunitySummary {
+        CommunitySummary {
+            id: "group".into(),
+            name: "Group".into(),
+            about: String::new(),
+            picture: String::new(),
+            access: "open".into(),
+            visibility: "public".into(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: "wss://relay.example".into(),
+            metadata_event_id: "metadata".into(),
+            created_at: Some(1_000),
         }
     }
 }

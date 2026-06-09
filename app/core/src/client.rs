@@ -1941,6 +1941,13 @@ impl HighlighterCore {
         share_targets::highlight_article_target_projection(input)
     }
 
+    pub fn project_share_community_row(
+        &self,
+        input: share_targets::ShareCommunityRowProjectionInput,
+    ) -> share_targets::ShareCommunityRowProjection {
+        share_targets::community_row_projection(input)
+    }
+
     /// Project a cached NIP-23 article into the artifact preview shape used by
     /// kind:11 sharing. Rust owns the `a`/`k`/highlight reference fields.
     pub fn get_article_artifact_preview(&self, article: ArticleRecord) -> ArtifactPreviewOutcome {
@@ -3097,7 +3104,18 @@ impl HighlighterCore {
     ) -> ArtifactOutcome {
         let result: Result<ArtifactRecord, CoreError> = async {
             let _ = self.require_user_pubkey()?;
-            crate::artifacts::publish(&self.runtime, preview, &group_id, note.as_deref()).await
+            let normalized_note = note
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            crate::artifacts::publish(
+                &self.runtime,
+                preview,
+                &group_id,
+                normalized_note.as_deref(),
+            )
+            .await
         }
         .await;
         artifact_outcome(result)

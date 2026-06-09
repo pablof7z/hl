@@ -153,7 +153,8 @@ pub use session::{
 };
 pub use share_targets::{
     ShareArticleTargetProjectionInput, ShareArtifactTargetProjection,
-    ShareArtifactTargetProjectionInput, ShareHighlightArticleTargetProjectionInput,
+    ShareArtifactTargetProjectionInput, ShareCommunityRowProjection,
+    ShareCommunityRowProjectionInput, ShareHighlightArticleTargetProjectionInput,
     ShareHighlightTargetProjection, ShareHighlightTargetProjectionInput,
 };
 pub use time_labels::{
