@@ -31,8 +31,7 @@ use crate::models::{
     DiscussionRecord, FeedbackThreadRecord, HighlightOutcome, HighlightRecord, HighlightSourceKind,
     LoginInputAction, MutationOutcome, NostrConnectOptions, OnboardingInterest,
     OnboardingInterestProjection, OnboardingInterestSelection, PodcastPositionRecord,
-    ProfileMetadata, ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic,
-    SubscriptionOutcome,
+    ProfileMetadata, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, SubscriptionOutcome,
 };
 use crate::network_preferences;
 use crate::nip05;
@@ -184,19 +183,6 @@ fn highlight_outcome(result: Result<HighlightRecord, CoreError>) -> HighlightOut
             error: String::new(),
         },
         Err(error) => HighlightOutcome {
-            value: None,
-            error: error.to_string(),
-        },
-    }
-}
-
-fn profile_outcome(result: Result<ProfileMetadata, CoreError>) -> ProfileOutcome {
-    match result {
-        Ok(value) => ProfileOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => ProfileOutcome {
             value: None,
             error: error.to_string(),
         },
@@ -1222,13 +1208,16 @@ impl HighlighterCore {
     /// Empty strings clear the corresponding field. Returns the parsed
     /// metadata so the caller's UI can swap to the new state without
     /// waiting for the relay echo.
-    pub async fn update_profile(&self, draft: ProfileUpdateDraft) -> ProfileOutcome {
+    pub async fn update_profile(
+        &self,
+        draft: ProfileUpdateDraft,
+    ) -> profile::ProfileUpdateSnapshot {
         let result: Result<ProfileMetadata, CoreError> = async {
             let _ = self.require_user_pubkey()?;
             profile::publish_profile(&self.runtime, &draft).await
         }
         .await;
-        profile_outcome(result)
+        profile::profile_update_snapshot(result)
     }
 
     pub fn normalize_nip05_username(&self, input: String) -> String {

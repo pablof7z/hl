@@ -121,12 +121,6 @@ pub struct ProfileListOutcome {
     pub error: String,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct ProfileOutcome {
-    pub value: Option<ProfileMetadata>,
-    pub error: String,
-}
-
 /// Mirrors `CommunitySummary` in `web/src/lib/ndk/groups.ts:23-35`.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CommunitySummary {

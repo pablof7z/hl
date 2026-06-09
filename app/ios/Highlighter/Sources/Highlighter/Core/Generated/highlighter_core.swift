@@ -1865,7 +1865,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * metadata so the caller's UI can swap to the new state without
      * waiting for the relay echo.
      */
-    func updateProfile(draft: ProfileUpdateDraft) async  -> ProfileOutcome
+    func updateProfile(draft: ProfileUpdateDraft) async  -> ProfileUpdateSnapshot
 
     /**
      * Upload a photo to the default Blossom server (`blossom.primal.net`)
@@ -5624,7 +5624,7 @@ open func unsubscribe(handle: UInt64)  {try! rustCall() {
      * metadata so the caller's UI can swap to the new state without
      * waiting for the relay echo.
      */
-open func updateProfile(draft: ProfileUpdateDraft)async  -> ProfileOutcome  {
+open func updateProfile(draft: ProfileUpdateDraft)async  -> ProfileUpdateSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -5636,7 +5636,7 @@ open func updateProfile(draft: ProfileUpdateDraft)async  -> ProfileOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeProfileOutcome_lift,
+            liftFunc: FfiConverterTypeProfileUpdateSnapshot_lift,
             errorHandler: nil
 
         )
@@ -24180,76 +24180,6 @@ public func FfiConverterTypeProfileMetadata_lower(_ value: ProfileMetadata) -> R
 }
 
 
-public struct ProfileOutcome {
-    public var value: ProfileMetadata?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: ProfileMetadata?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension ProfileOutcome: Sendable {}
-#endif
-
-
-extension ProfileOutcome: Equatable, Hashable {
-    public static func ==(lhs: ProfileOutcome, rhs: ProfileOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeProfileOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileOutcome {
-        return
-            try ProfileOutcome(
-                value: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ProfileOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeProfileMetadata.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeProfileOutcome_lift(_ buf: RustBuffer) throws -> ProfileOutcome {
-    return try FfiConverterTypeProfileOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeProfileOutcome_lower(_ value: ProfileOutcome) -> RustBuffer {
-    return FfiConverterTypeProfileOutcome.lower(value)
-}
-
-
 public struct ProfilePageSnapshot {
     public var profile: ProfileMetadata?
     public var articles: [ArticleRecord]
@@ -24847,6 +24777,76 @@ public func FfiConverterTypeProfileUpdateProjectionInput_lift(_ buf: RustBuffer)
 #endif
 public func FfiConverterTypeProfileUpdateProjectionInput_lower(_ value: ProfileUpdateProjectionInput) -> RustBuffer {
     return FfiConverterTypeProfileUpdateProjectionInput.lower(value)
+}
+
+
+public struct ProfileUpdateSnapshot {
+    public var profile: ProfileMetadata?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(profile: ProfileMetadata?, error: String) {
+        self.profile = profile
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ProfileUpdateSnapshot: Sendable {}
+#endif
+
+
+extension ProfileUpdateSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ProfileUpdateSnapshot, rhs: ProfileUpdateSnapshot) -> Bool {
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(profile)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileUpdateSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateSnapshot {
+        return
+            try ProfileUpdateSnapshot(
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileUpdateSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateSnapshot_lift(_ buf: RustBuffer) throws -> ProfileUpdateSnapshot {
+    return try FfiConverterTypeProfileUpdateSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateSnapshot_lower(_ value: ProfileUpdateSnapshot) -> RustBuffer {
+    return FfiConverterTypeProfileUpdateSnapshot.lower(value)
 }
 
 
@@ -39435,7 +39435,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_unsubscribe() != 55013) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_update_profile() != 24760) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_update_profile() != 2730) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 12404) {

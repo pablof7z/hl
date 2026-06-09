@@ -439,7 +439,7 @@ struct EditProfileSheet: View {
         Task {
             defer { Task { @MainActor in saving = false } }
             let outcome = await appStore.safeCore.updateProfile(draft: projection.draft)
-            guard outcome.error.isEmpty, let updated = outcome.value else {
+            guard outcome.error.isEmpty, let updated = outcome.profile else {
                 await MainActor.run {
                     self.error = outcome.error.isEmpty ? "Unable to update profile." : outcome.error
                 }

@@ -225,6 +225,12 @@ pub struct ProfileUpdateProjection {
     pub can_save: bool,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileUpdateSnapshot {
+    pub profile: Option<ProfileMetadata>,
+    pub error: String,
+}
+
 /// Pure profile presentation projection. Rust owns profile-name precedence,
 /// pubkey fallback, and avatar source selection; native shells only render.
 pub fn profile_display_projection(
@@ -470,6 +476,21 @@ pub fn profile_update_projection(input: ProfileUpdateProjectionInput) -> Profile
         draft,
         is_dirty,
         can_save,
+    }
+}
+
+pub fn profile_update_snapshot(
+    result: Result<ProfileMetadata, CoreError>,
+) -> ProfileUpdateSnapshot {
+    match result {
+        Ok(profile) => ProfileUpdateSnapshot {
+            profile: Some(profile),
+            error: String::new(),
+        },
+        Err(error) => ProfileUpdateSnapshot {
+            profile: None,
+            error: error.to_string(),
+        },
     }
 }
 
@@ -1167,5 +1188,34 @@ mod tests {
         assert!(!busy.can_save);
         assert!(uploading.is_dirty);
         assert!(!uploading.can_save);
+    }
+
+    #[test]
+    fn profile_update_snapshot_projects_profile_or_error_state() {
+        let profile = ProfileMetadata {
+            pubkey: "abcdef123456".to_string(),
+            name: "alice".to_string(),
+            display_name: "Alice".to_string(),
+            about: String::new(),
+            picture: String::new(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            created_at: None,
+        };
+
+        let ok = profile_update_snapshot(Ok(profile));
+        assert_eq!(
+            ok.profile
+                .as_ref()
+                .map(|profile| profile.display_name.as_str()),
+            Some("Alice")
+        );
+        assert!(ok.error.is_empty());
+
+        let err = profile_update_snapshot(Err(CoreError::Signer("locked".into())));
+        assert!(err.profile.is_none());
+        assert_eq!(err.error, "signer error: locked");
     }
 }

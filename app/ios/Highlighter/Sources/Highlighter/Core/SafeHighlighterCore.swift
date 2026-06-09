@@ -761,7 +761,7 @@ actor SafeHighlighterCore {
         await core.subscribeNostrEntity(entity: entity)
     }
 
-    func updateProfile(draft: ProfileUpdateDraft) async -> ProfileOutcome {
+    func updateProfile(draft: ProfileUpdateDraft) async -> ProfileUpdateSnapshot {
         await core.updateProfile(draft: draft)
     }
 
@@ -774,7 +774,7 @@ actor SafeHighlighterCore {
         nip05: String,
         website: String,
         lud16: String
-    ) async -> ProfileOutcome {
+    ) async -> ProfileUpdateSnapshot {
         let draft = ProfileUpdateDraft(
             name: name,
             displayName: displayName,

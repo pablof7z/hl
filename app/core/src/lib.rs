@@ -153,7 +153,7 @@ pub use models::{
     HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem,
     HydratedHighlight, LoginInputAction, MutationOutcome, OnboardingInterest,
     OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
-    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
+    PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileUpdateDraft,
     ReadingFeedItem, RoomLane, RoomRecommendation, RoomRecommendationReason, SubscriptionOutcome,
     WebBookmarkRecord,
 };
@@ -182,6 +182,7 @@ pub use profile::{
     ProfileFollowActionProjection, ProfileFollowMutationInput, ProfileFollowMutationSnapshot,
     ProfileIdentityProjection, ProfileIdentityProjectionInput, ProfileRelationshipProjection,
     ProfileRelationshipProjectionInput, ProfileUpdateProjection, ProfileUpdateProjectionInput,
+    ProfileUpdateSnapshot,
 };
 pub use profile_page::ProfilePageSnapshot;
 pub use reads::{
