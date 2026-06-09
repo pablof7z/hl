@@ -1517,8 +1517,8 @@ actor SafeHighlighterCore {
         await core.disconnectAll()
     }
 
-    func probeRelayNip11(_ url: String) async -> Nip11DocumentOutcome {
-        await core.probeRelayNip11(url: url)
+    func probeRelayNip11Snapshot(_ url: String) async -> RelayNip11ProbeSnapshot {
+        await core.probeRelayNip11Snapshot(url: url)
     }
 
     func importRelaysFromNpub(_ npub: String) async -> RelayConfigListOutcome {

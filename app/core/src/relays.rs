@@ -305,6 +305,13 @@ pub struct RelayNip11ProbePlan {
     pub in_flight_urls: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RelayNip11ProbeSnapshot {
+    pub document: Option<Nip11Document>,
+    pub probe_failed: bool,
+    pub error_message: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct RelayNip11ProbePlanInput {
     pub relays: Vec<RelayConfig>,
@@ -684,6 +691,23 @@ pub fn finish_relay_nip11_probe(in_flight_urls: Vec<String>, url: String) -> Vec
         in_flight_urls.remove(&url);
     }
     in_flight_urls.into_iter().collect()
+}
+
+pub fn relay_nip11_probe_snapshot(
+    result: Result<Nip11Document, CoreError>,
+) -> RelayNip11ProbeSnapshot {
+    match result {
+        Ok(document) => RelayNip11ProbeSnapshot {
+            document: Some(document),
+            probe_failed: false,
+            error_message: String::new(),
+        },
+        Err(error) => RelayNip11ProbeSnapshot {
+            document: None,
+            probe_failed: true,
+            error_message: error.to_string(),
+        },
+    }
 }
 
 pub fn default_import_relay_selection(relays: Vec<RelayConfig>) -> Vec<String> {
@@ -1778,6 +1802,20 @@ mod tests {
         );
 
         assert_eq!(remaining, vec!["wss://one.example"]);
+    }
+
+    #[test]
+    fn relay_nip11_probe_snapshot_surfaces_document_and_failure_state() {
+        let doc = nip11_doc(Some("Example Relay"), None, None);
+        let success = relay_nip11_probe_snapshot(Ok(doc.clone()));
+        assert_eq!(success.document, Some(doc));
+        assert!(!success.probe_failed);
+        assert!(success.error_message.is_empty());
+
+        let failure = relay_nip11_probe_snapshot(Err(CoreError::Network("timeout".into())));
+        assert!(failure.document.is_none());
+        assert!(failure.probe_failed);
+        assert_eq!(failure.error_message, "network error: timeout");
     }
 
     #[test]

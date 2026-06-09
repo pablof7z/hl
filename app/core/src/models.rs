@@ -183,12 +183,6 @@ pub struct RelayConfigListOutcome {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct Nip11DocumentOutcome {
-    pub value: Option<Nip11Document>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct DiscussionOutcome {
     pub value: Option<DiscussionRecord>,
     pub error: String,
@@ -823,10 +817,10 @@ pub struct RelayDiagnostic {
 }
 
 /// Minimal projection of a relay's NIP-11 information document. Populated
-/// by `probe_relay_nip11` via a one-shot HTTPS GET to the relay's base URL
+/// by `probe_relay_nip11_snapshot` via a one-shot HTTPS GET to the relay's base URL
 /// with `Accept: application/nostr+json`. All fields are optional because
 /// relay operators configure NIP-11 loosely — many skip most fields.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Nip11Document {
     pub url: String,
     pub name: Option<String>,

@@ -128,8 +128,8 @@ final class NetworkSettingsStore {
                         )
                     }
                 }
-                let outcome = await core.probeRelayNip11(url)
-                guard outcome.error.isEmpty, let doc = outcome.value else { return }
+                let snapshot = await core.probeRelayNip11Snapshot(url)
+                guard let doc = snapshot.document else { return }
                 await MainActor.run { self?.nip11ByUrl[url] = doc }
             }
         }

@@ -152,8 +152,8 @@ pub use models::{
     FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, GeneratedAccountOutcome,
     HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightReferenceBucket,
     HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem, HydratedHighlight,
-    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome,
-    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
+    LoginInputAction, MutationOutcome, Nip05AvailabilityOutcome, NostrEntityEventOutcome,
+    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestChip,
     OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
     PodcastPositionRecord, ProfileListOutcome, ProfileMetadata, ProfileOutcome, ProfileUpdateDraft,
     ReadingFeedItem, RelayConfigListOutcome, RoomLane, RoomRecommendation,
@@ -194,8 +194,8 @@ pub use relays::{
     ImportRelaysSourceProjectionInput, NetworkCacheStatsSnapshot, NetworkDiagnosticsSnapshot,
     NetworkSettingsMutationSnapshot, NetworkSettingsSnapshot, RelayAvatarProjection, RelayConfig,
     RelayDetailProjection, RelayDetailProjectionInput, RelayHostedRoomsSnapshot,
-    RelayRemoveProjection, RelayRemoveProjectionInput, RelayRowProjection, RelayRowProjectionInput,
-    RelaySettingsProjection, RelayStatusTone,
+    RelayNip11ProbeSnapshot, RelayRemoveProjection, RelayRemoveProjectionInput, RelayRowProjection,
+    RelayRowProjectionInput, RelaySettingsProjection, RelayStatusTone,
 };
 pub use room_explorer::{RoomBrowseSnapshot, RoomExplorerSnapshot};
 pub use room_home::RoomHomeSnapshot;

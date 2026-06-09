@@ -165,16 +165,10 @@ struct AddRelaySheet: View {
             guard !Task.isCancelled else { return }
             probeInFlight = true
             defer { probeInFlight = false }
-            let outcome = await core.probeRelayNip11(url)
+            let snapshot = await core.probeRelayNip11Snapshot(url)
             guard !Task.isCancelled else { return }
-            if outcome.error.isEmpty, let doc = outcome.value {
-                probeResult = doc
-                probeFailed = false
-            } else {
-                guard !Task.isCancelled else { return }
-                probeResult = nil
-                probeFailed = true
-            }
+            probeResult = snapshot.document
+            probeFailed = snapshot.probeFailed
         }
     }
 }

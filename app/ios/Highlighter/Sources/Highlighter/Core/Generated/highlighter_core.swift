@@ -1255,7 +1255,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * GET to the `ws[s]://` URL's HTTP equivalent with
      * `Accept: application/nostr+json`. Fails fast on timeout.
      */
-    func probeRelayNip11(url: String) async  -> Nip11DocumentOutcome
+    func probeRelayNip11Snapshot(url: String) async  -> RelayNip11ProbeSnapshot
 
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
 
@@ -3738,11 +3738,11 @@ open func prepareWhatsNew()async  -> WhatsNewEntriesOutcome  {
      * GET to the `ws[s]://` URL's HTTP equivalent with
      * `Accept: application/nostr+json`. Fails fast on timeout.
      */
-open func probeRelayNip11(url: String)async  -> Nip11DocumentOutcome  {
+open func probeRelayNip11Snapshot(url: String)async  -> RelayNip11ProbeSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_probe_relay_nip11(
+                uniffi_highlighter_core_fn_method_highlightercore_probe_relay_nip11_snapshot(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(url)
                 )
@@ -3750,7 +3750,7 @@ open func probeRelayNip11(url: String)async  -> Nip11DocumentOutcome  {
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeNip11DocumentOutcome_lift,
+            liftFunc: FfiConverterTypeRelayNip11ProbeSnapshot_lift,
             errorHandler: nil
 
         )
@@ -20199,7 +20199,7 @@ public func FfiConverterTypeNip05AvailabilityOutcome_lower(_ value: Nip05Availab
 
 /**
  * Minimal projection of a relay's NIP-11 information document. Populated
- * by `probe_relay_nip11` via a one-shot HTTPS GET to the relay's base URL
+ * by `probe_relay_nip11_snapshot` via a one-shot HTTPS GET to the relay's base URL
  * with `Accept: application/nostr+json`. All fields are optional because
  * relay operators configure NIP-11 loosely — many skip most fields.
  */
@@ -20334,76 +20334,6 @@ public func FfiConverterTypeNip11Document_lift(_ buf: RustBuffer) throws -> Nip1
 #endif
 public func FfiConverterTypeNip11Document_lower(_ value: Nip11Document) -> RustBuffer {
     return FfiConverterTypeNip11Document.lower(value)
-}
-
-
-public struct Nip11DocumentOutcome {
-    public var value: Nip11Document?
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(value: Nip11Document?, error: String) {
-        self.value = value
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension Nip11DocumentOutcome: Sendable {}
-#endif
-
-
-extension Nip11DocumentOutcome: Equatable, Hashable {
-    public static func ==(lhs: Nip11DocumentOutcome, rhs: Nip11DocumentOutcome) -> Bool {
-        if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNip11DocumentOutcome: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip11DocumentOutcome {
-        return
-            try Nip11DocumentOutcome(
-                value: FfiConverterOptionTypeNip11Document.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: Nip11DocumentOutcome, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeNip11Document.write(value.value, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNip11DocumentOutcome_lift(_ buf: RustBuffer) throws -> Nip11DocumentOutcome {
-    return try FfiConverterTypeNip11DocumentOutcome.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNip11DocumentOutcome_lower(_ value: Nip11DocumentOutcome) -> RustBuffer {
-    return FfiConverterTypeNip11DocumentOutcome.lower(value)
 }
 
 
@@ -26116,6 +26046,84 @@ public func FfiConverterTypeRelayNip11ProbePlanInput_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeRelayNip11ProbePlanInput_lower(_ value: RelayNip11ProbePlanInput) -> RustBuffer {
     return FfiConverterTypeRelayNip11ProbePlanInput.lower(value)
+}
+
+
+public struct RelayNip11ProbeSnapshot {
+    public var document: Nip11Document?
+    public var probeFailed: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(document: Nip11Document?, probeFailed: Bool, errorMessage: String) {
+        self.document = document
+        self.probeFailed = probeFailed
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension RelayNip11ProbeSnapshot: Sendable {}
+#endif
+
+
+extension RelayNip11ProbeSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RelayNip11ProbeSnapshot, rhs: RelayNip11ProbeSnapshot) -> Bool {
+        if lhs.document != rhs.document {
+            return false
+        }
+        if lhs.probeFailed != rhs.probeFailed {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(document)
+        hasher.combine(probeFailed)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayNip11ProbeSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayNip11ProbeSnapshot {
+        return
+            try RelayNip11ProbeSnapshot(
+                document: FfiConverterOptionTypeNip11Document.read(from: &buf),
+                probeFailed: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayNip11ProbeSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeNip11Document.write(value.document, into: &buf)
+        FfiConverterBool.write(value.probeFailed, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayNip11ProbeSnapshot_lift(_ buf: RustBuffer) throws -> RelayNip11ProbeSnapshot {
+    return try FfiConverterTypeRelayNip11ProbeSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayNip11ProbeSnapshot_lower(_ value: RelayNip11ProbeSnapshot) -> RustBuffer {
+    return FfiConverterTypeRelayNip11ProbeSnapshot.lower(value)
 }
 
 
@@ -38726,7 +38734,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_prepare_whats_new() != 21865) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_probe_relay_nip11() != 13896) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_probe_relay_nip11_snapshot() != 46156) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_add_relay_sheet() != 14886) {

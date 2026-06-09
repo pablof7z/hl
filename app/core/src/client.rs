@@ -32,12 +32,12 @@ use crate::models::{
     CommunityListOutcome, CommunitySummary, CurrentUser, CurrentUserOutcome, DataOutcome,
     DiscussionOutcome, DiscussionRecord, FeedbackThreadRecord, GeneratedAccountOutcome,
     HighlightListOutcome, HighlightOutcome, HighlightRecord, HighlightSourceKind, LoginInputAction,
-    MutationOutcome, Nip05AvailabilityOutcome, Nip11DocumentOutcome, NostrConnectOptions,
-    NostrEntityEventOutcome, NostrEntityRefOutcome, OnboardingInterest,
-    OnboardingInterestProjection, OnboardingInterestSelection, OptionalStringOutcome,
-    PodcastPositionRecord, ProfileMetadata, ProfileOutcome, ProfileUpdateAction,
-    ProfileUpdateDraft, RelayConfigListOutcome, RelayDiagnostic, StringOutcome,
-    SubscriptionOutcome, TranscriptSegmentListOutcome, WebMetadataOutcome, WhatsNewEntriesOutcome,
+    MutationOutcome, Nip05AvailabilityOutcome, NostrConnectOptions, NostrEntityEventOutcome,
+    NostrEntityRefOutcome, OnboardingInterest, OnboardingInterestProjection,
+    OnboardingInterestSelection, OptionalStringOutcome, PodcastPositionRecord, ProfileMetadata,
+    ProfileOutcome, ProfileUpdateAction, ProfileUpdateDraft, RelayConfigListOutcome,
+    RelayDiagnostic, StringOutcome, SubscriptionOutcome, TranscriptSegmentListOutcome,
+    WebMetadataOutcome, WhatsNewEntriesOutcome,
 };
 use crate::network_preferences;
 use crate::nip05::{self, Nip05Availability};
@@ -375,21 +375,6 @@ fn relay_config_list_outcome(
         },
         Err(error) => RelayConfigListOutcome {
             values: Vec::new(),
-            error: error.to_string(),
-        },
-    }
-}
-
-fn nip11_document_outcome(
-    result: Result<crate::models::Nip11Document, CoreError>,
-) -> Nip11DocumentOutcome {
-    match result {
-        Ok(value) => Nip11DocumentOutcome {
-            value: Some(value),
-            error: String::new(),
-        },
-        Err(error) => Nip11DocumentOutcome {
-            value: None,
             error: error.to_string(),
         },
     }
@@ -4065,8 +4050,11 @@ impl HighlighterCore {
     /// Fetch the target relay's NIP-11 information document via an HTTPS
     /// GET to the `ws[s]://` URL's HTTP equivalent with
     /// `Accept: application/nostr+json`. Fails fast on timeout.
-    pub async fn probe_relay_nip11(&self, url: String) -> Nip11DocumentOutcome {
-        nip11_document_outcome(crate::relay_polish::probe_nip11(&url).await)
+    pub async fn probe_relay_nip11_snapshot(
+        &self,
+        url: String,
+    ) -> crate::relays::RelayNip11ProbeSnapshot {
+        crate::relays::relay_nip11_probe_snapshot(crate::relay_polish::probe_nip11(&url).await)
     }
 
     /// Fetch another user's kind:10002 via the indexer pool and return the
