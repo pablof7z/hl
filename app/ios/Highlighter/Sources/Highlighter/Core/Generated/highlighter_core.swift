@@ -1424,6 +1424,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectChatComposer(input: ChatComposerProjectionInput)  -> ChatComposerProjection
 
+    /**
+     * Comment composer projection. Rust owns draft normalization and submit
+     * eligibility; native shells render the composer affordance.
+     */
+    func projectCommentComposer(input: CommentComposerProjectionInput)  -> CommentComposerProjection
+
     func projectCommunityRow(input: CommunityRowProjectionInput)  -> CommunityRowProjection
 
     /**
@@ -4305,6 +4311,18 @@ open func projectChatComposer(input: ChatComposerProjectionInput) -> ChatCompose
     return try!  FfiConverterTypeChatComposerProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_chat_composer(self.uniffiClonePointer(),
         FfiConverterTypeChatComposerProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Comment composer projection. Rust owns draft normalization and submit
+     * eligibility; native shells render the composer affordance.
+     */
+open func projectCommentComposer(input: CommentComposerProjectionInput) -> CommentComposerProjection  {
+    return try!  FfiConverterTypeCommentComposerProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_comment_composer(self.uniffiClonePointer(),
+        FfiConverterTypeCommentComposerProjectionInput_lower(input),$0
     )
 })
 }
@@ -10078,6 +10096,146 @@ public func FfiConverterTypeChatMessageRecord_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeChatMessageRecord_lower(_ value: ChatMessageRecord) -> RustBuffer {
     return FfiConverterTypeChatMessageRecord.lower(value)
+}
+
+
+public struct CommentComposerProjection {
+    public var submitBody: String
+    public var canSubmit: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(submitBody: String, canSubmit: Bool) {
+        self.submitBody = submitBody
+        self.canSubmit = canSubmit
+    }
+}
+
+#if compiler(>=6)
+extension CommentComposerProjection: Sendable {}
+#endif
+
+
+extension CommentComposerProjection: Equatable, Hashable {
+    public static func ==(lhs: CommentComposerProjection, rhs: CommentComposerProjection) -> Bool {
+        if lhs.submitBody != rhs.submitBody {
+            return false
+        }
+        if lhs.canSubmit != rhs.canSubmit {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(submitBody)
+        hasher.combine(canSubmit)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentComposerProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentComposerProjection {
+        return
+            try CommentComposerProjection(
+                submitBody: FfiConverterString.read(from: &buf),
+                canSubmit: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentComposerProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.submitBody, into: &buf)
+        FfiConverterBool.write(value.canSubmit, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentComposerProjection_lift(_ buf: RustBuffer) throws -> CommentComposerProjection {
+    return try FfiConverterTypeCommentComposerProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentComposerProjection_lower(_ value: CommentComposerProjection) -> RustBuffer {
+    return FfiConverterTypeCommentComposerProjection.lower(value)
+}
+
+
+public struct CommentComposerProjectionInput {
+    public var body: String
+    public var isPublishing: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(body: String, isPublishing: Bool) {
+        self.body = body
+        self.isPublishing = isPublishing
+    }
+}
+
+#if compiler(>=6)
+extension CommentComposerProjectionInput: Sendable {}
+#endif
+
+
+extension CommentComposerProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CommentComposerProjectionInput, rhs: CommentComposerProjectionInput) -> Bool {
+        if lhs.body != rhs.body {
+            return false
+        }
+        if lhs.isPublishing != rhs.isPublishing {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(body)
+        hasher.combine(isPublishing)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentComposerProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentComposerProjectionInput {
+        return
+            try CommentComposerProjectionInput(
+                body: FfiConverterString.read(from: &buf),
+                isPublishing: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentComposerProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.body, into: &buf)
+        FfiConverterBool.write(value.isPublishing, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentComposerProjectionInput_lift(_ buf: RustBuffer) throws -> CommentComposerProjectionInput {
+    return try FfiConverterTypeCommentComposerProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentComposerProjectionInput_lower(_ value: CommentComposerProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCommentComposerProjectionInput.lower(value)
 }
 
 
@@ -30886,6 +31044,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_chat_composer() != 32840) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_composer() != 35257) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_community_row() != 45428) {

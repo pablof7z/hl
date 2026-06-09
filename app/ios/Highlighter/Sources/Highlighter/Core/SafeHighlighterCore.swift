@@ -1016,6 +1016,12 @@ actor SafeHighlighterCore {
         )
     }
 
+    nonisolated func projectCommentComposer(
+        input: CommentComposerProjectionInput
+    ) -> CommentComposerProjection {
+        core.projectCommentComposer(input: input)
+    }
+
     nonisolated func getHighlightCommentScope(eventIdHex: String) -> CommentScopeOutcome {
         core.getHighlightCommentScope(eventIdHex: eventIdHex)
     }

@@ -2284,6 +2284,15 @@ impl HighlighterCore {
         room_state::upsert_chat_message(&messages, &message)
     }
 
+    /// Comment composer projection. Rust owns draft normalization and submit
+    /// eligibility; native shells render the composer affordance.
+    pub fn project_comment_composer(
+        &self,
+        input: comments::CommentComposerProjectionInput,
+    ) -> comments::CommentComposerProjection {
+        comments::comment_composer_projection(input)
+    }
+
     /// Read NIP-22 comments (kind:1111) rooted at a Rust-owned scope.
     pub async fn get_comments_for_scope(
         &self,

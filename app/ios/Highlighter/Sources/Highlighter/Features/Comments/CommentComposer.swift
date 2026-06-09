@@ -13,6 +13,7 @@ struct CommentComposer: View {
 
     let store: CommentsStore
 
+    @Environment(HighlighterStore.self) private var app
     @FocusState private var focused: Bool
     @State private var isPublishing: Bool = false
     @State private var errorMessage: String?
@@ -70,7 +71,11 @@ struct CommentComposer: View {
         Button(action: submit) {
             ZStack {
                 Circle()
-                    .fill(canSubmit ? Color.highlighterAccent : Color.highlighterInkMuted.opacity(0.35))
+                    .fill(
+                        composerProjection.canSubmit
+                            ? Color.highlighterAccent
+                            : Color.highlighterInkMuted.opacity(0.35)
+                    )
                 if isPublishing {
                     ProgressView()
                         .progressViewStyle(.circular)
@@ -84,21 +89,29 @@ struct CommentComposer: View {
             .frame(width: 36, height: 36)
         }
         .buttonStyle(.plain)
-        .disabled(!canSubmit || isPublishing)
-        .animation(.easeInOut(duration: 0.18), value: canSubmit)
+        .disabled(!composerProjection.canSubmit)
+        .animation(.easeInOut(duration: 0.18), value: composerProjection.canSubmit)
     }
 
-    private var canSubmit: Bool {
-        !draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var composerProjection: CommentComposerProjection {
+        app.safeCore.projectCommentComposer(
+            input: CommentComposerProjectionInput(
+                body: draft.wrappedValue,
+                isPublishing: isPublishing
+            )
+        )
     }
 
     private func submit() {
-        guard canSubmit, !isPublishing else { return }
+        let projection = composerProjection
+        guard projection.canSubmit else { return }
         isPublishing = true
         errorMessage = nil
-        let text = draft.wrappedValue
         Task {
-            let outcome = await store.publish(content: text, parentEventId: parentEventId)
+            let outcome = await store.publish(
+                content: projection.submitBody,
+                parentEventId: parentEventId
+            )
             if outcome.error.isEmpty {
                 isPublishing = false
                 focused = false

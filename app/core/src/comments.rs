@@ -21,6 +21,30 @@ const KIND_HIGHLIGHT: u16 = 9802;
 const KIND_NIP23_ARTICLE: u16 = 30023;
 const KIND_WEB_EXTERNAL: u16 = 0;
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentComposerProjectionInput {
+    pub body: String,
+    pub is_publishing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentComposerProjection {
+    pub submit_body: String,
+    pub can_submit: bool,
+}
+
+/// Comment composer projection. Rust owns draft normalization and submit
+/// eligibility; native shells render the composer affordance.
+pub fn comment_composer_projection(
+    input: CommentComposerProjectionInput,
+) -> CommentComposerProjection {
+    let submit_body = input.body.trim().to_string();
+    CommentComposerProjection {
+        can_submit: !submit_body.is_empty() && !input.is_publishing,
+        submit_body,
+    }
+}
+
 /// Project a NIP-23 address into the NIP-22 root scope used for comment
 /// reads/writes. The shell passes addresses; Rust owns the tag/kind mapping.
 pub fn article_scope(address: &str) -> Result<CommentScope, CoreError> {
@@ -617,6 +641,31 @@ mod tests {
         assert_eq!(projection.records[0].created_at, Some(1));
         assert_eq!(projection.tree.len(), 1);
         assert_eq!(projection.tree[0].record.event_id, "top");
+    }
+
+    #[test]
+    fn comment_composer_projection_trims_and_blocks_blank_or_publishing_body() {
+        let projection = comment_composer_projection(CommentComposerProjectionInput {
+            body: "  hello thread  ".into(),
+            is_publishing: false,
+        });
+
+        assert_eq!(projection.submit_body, "hello thread");
+        assert!(projection.can_submit);
+
+        let blank = comment_composer_projection(CommentComposerProjectionInput {
+            body: " \n\t ".into(),
+            is_publishing: false,
+        });
+        let publishing = comment_composer_projection(CommentComposerProjectionInput {
+            body: "hello".into(),
+            is_publishing: true,
+        });
+
+        assert_eq!(blank.submit_body, "");
+        assert!(!blank.can_submit);
+        assert_eq!(publishing.submit_body, "hello");
+        assert!(!publishing.can_submit);
     }
 
     fn comment(event_id: &str, parent_tag_value: &str, created_at: Option<u64>) -> CommentRecord {

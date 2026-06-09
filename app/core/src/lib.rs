@@ -69,6 +69,7 @@ pub use capture::{
 };
 pub use chat::{ChatComposerProjection, ChatComposerProjectionInput};
 pub use client::HighlighterCore;
+pub use comments::{CommentComposerProjection, CommentComposerProjectionInput};
 pub use discussions::{DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput};
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};

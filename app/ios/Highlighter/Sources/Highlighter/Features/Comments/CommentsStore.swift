@@ -124,15 +124,11 @@ final class CommentsStore {
         guard let core, let scope else {
             return CommentOutcome(value: nil, error: "store not started")
         }
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return CommentOutcome(value: nil, error: "comment body must not be empty")
-        }
 
         let outcome = await core.publishCommentForScope(
             scope: scope,
             parentEventId: parentEventId,
-            content: trimmed
+            content: content
         )
         guard outcome.error.isEmpty, let record = outcome.value else { return outcome }
 
