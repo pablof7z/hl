@@ -30,6 +30,12 @@ struct RoomPreviewSheet: View {
         )
     }
 
+    private var headerProjection: RoomPreviewHeaderProjection {
+        appStore.safeCore.projectRoomPreviewHeader(
+            input: RoomPreviewHeaderProjectionInput(room: room)
+        )
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
@@ -103,11 +109,12 @@ struct RoomPreviewSheet: View {
     }
 
     private var meta: some View {
-        HStack(spacing: 10) {
-            accessBadge
-            if let count = room.memberCount, count > 0 {
+        let projection = headerProjection
+        return HStack(spacing: 10) {
+            accessBadge(projection)
+            if let memberCountLabel = projection.memberCountLabel {
                 Label {
-                    Text(count == 1 ? "1 member" : "\(count) members")
+                    Text(memberCountLabel)
                 } icon: {
                     Image(systemName: "person.2")
                 }
@@ -118,12 +125,12 @@ struct RoomPreviewSheet: View {
         }
     }
 
-    private var accessBadge: some View {
-        let isOpen = room.access == "open"
+    private func accessBadge(_ projection: RoomPreviewHeaderProjection) -> some View {
+        let isOpen = projection.accessIsOpen
         return HStack(spacing: 4) {
-            Image(systemName: isOpen ? "lock.open" : "lock")
+            Image(systemName: projection.accessIconSystemName)
                 .font(.caption2.weight(.semibold))
-            Text(isOpen ? "Open" : "Closed")
+            Text(projection.accessLabel)
                 .font(.caption.weight(.semibold))
         }
         .foregroundStyle(Color.highlighterInkStrong)

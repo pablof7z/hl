@@ -25,15 +25,11 @@ struct CommunityRowView: View {
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
 
-                if !community.about.isEmpty {
-                    Text(community.about)
+                if let subtitle = projection.subtitle {
+                    Text(subtitle)
                         .font(.footnote)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(2)
-                } else if let count = community.memberCount {
-                    Text("\(count) member\(count == 1 ? "" : "s")")
-                        .font(.footnote)
-                        .foregroundStyle(Color.highlighterInkMuted)
                 }
             }
 

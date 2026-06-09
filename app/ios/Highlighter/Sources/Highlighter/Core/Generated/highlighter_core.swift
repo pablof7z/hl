@@ -1644,6 +1644,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomAvatar(input: RoomAvatarProjectionInput)  -> RoomAvatarProjection
 
+    func projectRoomCoverCard(input: RoomCoverCardProjectionInput)  -> RoomCoverCardProjection
+
     func projectRoomInviteSelection(input: RoomInviteSelectionInput)  -> RoomInviteSelectionProjection
 
     func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput)  -> RoomLibraryArticleCardProjection
@@ -1659,6 +1661,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectRoomPreviewAction(input: RoomPreviewActionProjectionInput)  -> RoomPreviewActionProjection
 
     func projectRoomPreviewArtifacts(input: RoomPreviewArtifactsProjectionInput)  -> RoomPreviewArtifactsProjection
+
+    func projectRoomPreviewHeader(input: RoomPreviewHeaderProjectionInput)  -> RoomPreviewHeaderProjection
 
     func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput)  -> RoomRecommendationCardProjection
 
@@ -5037,6 +5041,14 @@ open func projectRoomAvatar(input: RoomAvatarProjectionInput) -> RoomAvatarProje
 })
 }
 
+open func projectRoomCoverCard(input: RoomCoverCardProjectionInput) -> RoomCoverCardProjection  {
+    return try!  FfiConverterTypeRoomCoverCardProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_cover_card(self.uniffiClonePointer(),
+        FfiConverterTypeRoomCoverCardProjectionInput_lower(input),$0
+    )
+})
+}
+
 open func projectRoomInviteSelection(input: RoomInviteSelectionInput) -> RoomInviteSelectionProjection  {
     return try!  FfiConverterTypeRoomInviteSelectionProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_invite_selection(self.uniffiClonePointer(),
@@ -5097,6 +5109,14 @@ open func projectRoomPreviewArtifacts(input: RoomPreviewArtifactsProjectionInput
     return try!  FfiConverterTypeRoomPreviewArtifactsProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_preview_artifacts(self.uniffiClonePointer(),
         FfiConverterTypeRoomPreviewArtifactsProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomPreviewHeader(input: RoomPreviewHeaderProjectionInput) -> RoomPreviewHeaderProjection  {
+    return try!  FfiConverterTypeRoomPreviewHeaderProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_preview_header(self.uniffiClonePointer(),
+        FfiConverterTypeRoomPreviewHeaderProjectionInput_lower(input),$0
     )
 })
 }
@@ -14450,12 +14470,14 @@ public func FfiConverterTypeCommunityListOutcome_lower(_ value: CommunityListOut
 public struct CommunityRowProjection {
     public var displayName: String
     public var pictureUrl: String?
+    public var subtitle: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(displayName: String, pictureUrl: String?) {
+    public init(displayName: String, pictureUrl: String?, subtitle: String?) {
         self.displayName = displayName
         self.pictureUrl = pictureUrl
+        self.subtitle = subtitle
     }
 }
 
@@ -14472,12 +14494,16 @@ extension CommunityRowProjection: Equatable, Hashable {
         if lhs.pictureUrl != rhs.pictureUrl {
             return false
         }
+        if lhs.subtitle != rhs.subtitle {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(displayName)
         hasher.combine(pictureUrl)
+        hasher.combine(subtitle)
     }
 }
 
@@ -14491,13 +14517,15 @@ public struct FfiConverterTypeCommunityRowProjection: FfiConverterRustBuffer {
         return
             try CommunityRowProjection(
                 displayName: FfiConverterString.read(from: &buf),
-                pictureUrl: FfiConverterOptionString.read(from: &buf)
+                pictureUrl: FfiConverterOptionString.read(from: &buf),
+                subtitle: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: CommunityRowProjection, into buf: inout [UInt8]) {
         FfiConverterString.write(value.displayName, into: &buf)
         FfiConverterOptionString.write(value.pictureUrl, into: &buf)
+        FfiConverterOptionString.write(value.subtitle, into: &buf)
     }
 }
 
@@ -27219,6 +27247,130 @@ public func FfiConverterTypeRoomAvatarProjectionInput_lower(_ value: RoomAvatarP
 }
 
 
+public struct RoomCoverCardProjection {
+    public var subtitle: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(subtitle: String) {
+        self.subtitle = subtitle
+    }
+}
+
+#if compiler(>=6)
+extension RoomCoverCardProjection: Sendable {}
+#endif
+
+
+extension RoomCoverCardProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomCoverCardProjection, rhs: RoomCoverCardProjection) -> Bool {
+        if lhs.subtitle != rhs.subtitle {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(subtitle)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomCoverCardProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomCoverCardProjection {
+        return
+            try RoomCoverCardProjection(
+                subtitle: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomCoverCardProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.subtitle, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomCoverCardProjection_lift(_ buf: RustBuffer) throws -> RoomCoverCardProjection {
+    return try FfiConverterTypeRoomCoverCardProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomCoverCardProjection_lower(_ value: RoomCoverCardProjection) -> RustBuffer {
+    return FfiConverterTypeRoomCoverCardProjection.lower(value)
+}
+
+
+public struct RoomCoverCardProjectionInput {
+    public var room: CommunitySummary
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(room: CommunitySummary) {
+        self.room = room
+    }
+}
+
+#if compiler(>=6)
+extension RoomCoverCardProjectionInput: Sendable {}
+#endif
+
+
+extension RoomCoverCardProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomCoverCardProjectionInput, rhs: RoomCoverCardProjectionInput) -> Bool {
+        if lhs.room != rhs.room {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(room)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomCoverCardProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomCoverCardProjectionInput {
+        return
+            try RoomCoverCardProjectionInput(
+                room: FfiConverterTypeCommunitySummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomCoverCardProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeCommunitySummary.write(value.room, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomCoverCardProjectionInput_lift(_ buf: RustBuffer) throws -> RoomCoverCardProjectionInput {
+    return try FfiConverterTypeRoomCoverCardProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomCoverCardProjectionInput_lower(_ value: RoomCoverCardProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomCoverCardProjectionInput.lower(value)
+}
+
+
 public struct RoomInviteAvatarProjection {
     public var pictureUrl: String
     public var displayInitial: String
@@ -29431,6 +29583,154 @@ public func FfiConverterTypeRoomPreviewArtifactsProjectionInput_lift(_ buf: Rust
 #endif
 public func FfiConverterTypeRoomPreviewArtifactsProjectionInput_lower(_ value: RoomPreviewArtifactsProjectionInput) -> RustBuffer {
     return FfiConverterTypeRoomPreviewArtifactsProjectionInput.lower(value)
+}
+
+
+public struct RoomPreviewHeaderProjection {
+    public var accessLabel: String
+    public var accessIconSystemName: String
+    public var accessIsOpen: Bool
+    public var memberCountLabel: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(accessLabel: String, accessIconSystemName: String, accessIsOpen: Bool, memberCountLabel: String?) {
+        self.accessLabel = accessLabel
+        self.accessIconSystemName = accessIconSystemName
+        self.accessIsOpen = accessIsOpen
+        self.memberCountLabel = memberCountLabel
+    }
+}
+
+#if compiler(>=6)
+extension RoomPreviewHeaderProjection: Sendable {}
+#endif
+
+
+extension RoomPreviewHeaderProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomPreviewHeaderProjection, rhs: RoomPreviewHeaderProjection) -> Bool {
+        if lhs.accessLabel != rhs.accessLabel {
+            return false
+        }
+        if lhs.accessIconSystemName != rhs.accessIconSystemName {
+            return false
+        }
+        if lhs.accessIsOpen != rhs.accessIsOpen {
+            return false
+        }
+        if lhs.memberCountLabel != rhs.memberCountLabel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(accessLabel)
+        hasher.combine(accessIconSystemName)
+        hasher.combine(accessIsOpen)
+        hasher.combine(memberCountLabel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomPreviewHeaderProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewHeaderProjection {
+        return
+            try RoomPreviewHeaderProjection(
+                accessLabel: FfiConverterString.read(from: &buf),
+                accessIconSystemName: FfiConverterString.read(from: &buf),
+                accessIsOpen: FfiConverterBool.read(from: &buf),
+                memberCountLabel: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomPreviewHeaderProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.accessLabel, into: &buf)
+        FfiConverterString.write(value.accessIconSystemName, into: &buf)
+        FfiConverterBool.write(value.accessIsOpen, into: &buf)
+        FfiConverterOptionString.write(value.memberCountLabel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomPreviewHeaderProjection_lift(_ buf: RustBuffer) throws -> RoomPreviewHeaderProjection {
+    return try FfiConverterTypeRoomPreviewHeaderProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomPreviewHeaderProjection_lower(_ value: RoomPreviewHeaderProjection) -> RustBuffer {
+    return FfiConverterTypeRoomPreviewHeaderProjection.lower(value)
+}
+
+
+public struct RoomPreviewHeaderProjectionInput {
+    public var room: CommunitySummary
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(room: CommunitySummary) {
+        self.room = room
+    }
+}
+
+#if compiler(>=6)
+extension RoomPreviewHeaderProjectionInput: Sendable {}
+#endif
+
+
+extension RoomPreviewHeaderProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: RoomPreviewHeaderProjectionInput, rhs: RoomPreviewHeaderProjectionInput) -> Bool {
+        if lhs.room != rhs.room {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(room)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomPreviewHeaderProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewHeaderProjectionInput {
+        return
+            try RoomPreviewHeaderProjectionInput(
+                room: FfiConverterTypeCommunitySummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomPreviewHeaderProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeCommunitySummary.write(value.room, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomPreviewHeaderProjectionInput_lift(_ buf: RustBuffer) throws -> RoomPreviewHeaderProjectionInput {
+    return try FfiConverterTypeRoomPreviewHeaderProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomPreviewHeaderProjectionInput_lower(_ value: RoomPreviewHeaderProjectionInput) -> RustBuffer {
+    return FfiConverterTypeRoomPreviewHeaderProjectionInput.lower(value)
 }
 
 
@@ -38765,6 +39065,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_avatar() != 27524) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_cover_card() != 60263) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_invite_selection() != 36933) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -38787,6 +39090,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_preview_artifacts() != 32023) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_preview_header() != 41801) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_recommendation_card() != 50552) {

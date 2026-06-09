@@ -1323,6 +1323,12 @@ actor SafeHighlighterCore {
         core.projectRoomAvatar(input: input)
     }
 
+    nonisolated func projectRoomCoverCard(
+        input: RoomCoverCardProjectionInput
+    ) -> RoomCoverCardProjection {
+        core.projectRoomCoverCard(input: input)
+    }
+
     nonisolated func projectRoomRecommendationCard(
         input: RoomRecommendationCardProjectionInput
     ) -> RoomRecommendationCardProjection {
@@ -1333,6 +1339,12 @@ actor SafeHighlighterCore {
         input: RoomPreviewArtifactsProjectionInput
     ) -> RoomPreviewArtifactsProjection {
         core.projectRoomPreviewArtifacts(input: input)
+    }
+
+    nonisolated func projectRoomPreviewHeader(
+        input: RoomPreviewHeaderProjectionInput
+    ) -> RoomPreviewHeaderProjection {
+        core.projectRoomPreviewHeader(input: input)
     }
 
     nonisolated func projectRoomPreviewAction(

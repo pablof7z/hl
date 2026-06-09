@@ -64,6 +64,17 @@ pub struct CommunityRowProjectionInput {
 pub struct CommunityRowProjection {
     pub display_name: String,
     pub picture_url: Option<String>,
+    pub subtitle: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomCoverCardProjectionInput {
+    pub room: CommunitySummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomCoverCardProjection {
+    pub subtitle: String,
 }
 
 /// Room cover/avatar projection. Rust owns room-picture fallback identity;
@@ -91,13 +102,41 @@ pub fn room_avatar_projection(input: RoomAvatarProjectionInput) -> RoomAvatarPro
 /// optional picture presence; native shells render row layout and images.
 pub fn community_row_projection(input: CommunityRowProjectionInput) -> CommunityRowProjection {
     let community = input.community;
+    let subtitle = if let Some(about) = non_empty_string(&community.about) {
+        Some(about)
+    } else {
+        community.member_count.map(member_count_label)
+    };
+
     CommunityRowProjection {
         display_name: if community.name.is_empty() {
-            community.id
+            community.id.clone()
         } else {
-            community.name
+            community.name.clone()
         },
         picture_url: non_empty_string(&community.picture),
+        subtitle,
+    }
+}
+
+/// Projection for portrait room cover cards. Rust owns membership/access
+/// fallback labels; native shells render the returned text.
+pub fn room_cover_card_projection(input: RoomCoverCardProjectionInput) -> RoomCoverCardProjection {
+    let room = input.room;
+    let subtitle = match room.member_count {
+        Some(count) if count > 0 => member_count_label(count),
+        _ if room.access == "open" => "Open room".to_string(),
+        _ => "Closed room".to_string(),
+    };
+
+    RoomCoverCardProjection { subtitle }
+}
+
+fn member_count_label(count: u64) -> String {
+    if count == 1 {
+        "1 member".to_string()
+    } else {
+        format!("{count} members")
     }
 }
 
@@ -932,6 +971,8 @@ mod tests {
     fn community_row_projection_uses_name_or_group_id_and_picture_presence() {
         let mut community = summary("group", "Readers", "");
         community.picture = "https://example.com/room.jpg".into();
+        community.about = "Books and essays".into();
+        community.member_count = Some(12);
 
         let projection = community_row_projection(CommunityRowProjectionInput { community });
 
@@ -940,14 +981,44 @@ mod tests {
             projection.picture_url,
             Some("https://example.com/room.jpg".into())
         );
+        assert_eq!(projection.subtitle, Some("Books and essays".into()));
 
         let mut community = summary("group", "", "");
         community.picture.clear();
+        community.member_count = Some(0);
 
         let projection = community_row_projection(CommunityRowProjectionInput { community });
 
         assert_eq!(projection.display_name, "group");
         assert_eq!(projection.picture_url, None);
+        assert_eq!(projection.subtitle, Some("0 members".into()));
+    }
+
+    #[test]
+    fn room_cover_card_projection_matches_member_and_access_fallbacks() {
+        let mut room = summary("group", "Readers", "");
+        room.member_count = Some(1);
+
+        let projection = room_cover_card_projection(RoomCoverCardProjectionInput { room });
+        assert_eq!(projection.subtitle, "1 member");
+
+        let mut room = summary("group", "Readers", "");
+        room.member_count = Some(22);
+
+        let projection = room_cover_card_projection(RoomCoverCardProjectionInput { room });
+        assert_eq!(projection.subtitle, "22 members");
+
+        let mut room = summary("group", "Readers", "");
+        room.member_count = Some(0);
+
+        let projection = room_cover_card_projection(RoomCoverCardProjectionInput { room });
+        assert_eq!(projection.subtitle, "Open room");
+
+        let mut room = summary("group", "Readers", "");
+        room.access = "closed".into();
+
+        let projection = room_cover_card_projection(RoomCoverCardProjectionInput { room });
+        assert_eq!(projection.subtitle, "Closed room");
     }
 
     #[test]

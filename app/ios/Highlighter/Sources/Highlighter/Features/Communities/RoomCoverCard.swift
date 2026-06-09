@@ -17,6 +17,7 @@ struct RoomCoverCard: View {
     }
 
     var body: some View {
+        let projection = cardProjection
         VStack(alignment: .leading, spacing: 8) {
             Color.clear
                 .aspectRatio(3 / 4, contentMode: .fit)
@@ -34,7 +35,7 @@ struct RoomCoverCard: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
-                Text(memberSubtitle)
+                Text(projection.subtitle)
                     .font(.caption)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(1)
@@ -44,12 +45,10 @@ struct RoomCoverCard: View {
         .frame(width: fixedWidth)
     }
 
-    private var memberSubtitle: String {
-        if let count = room.memberCount, count > 0 {
-            if count == 1 { return "1 member" }
-            return "\(count) members"
-        }
-        return room.access == "open" ? "Open room" : "Closed room"
+    private var cardProjection: RoomCoverCardProjection {
+        store.safeCore.projectRoomCoverCard(
+            input: RoomCoverCardProjectionInput(room: room)
+        )
     }
 
     @ViewBuilder

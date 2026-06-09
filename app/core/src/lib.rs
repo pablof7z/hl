@@ -101,7 +101,8 @@ pub use feedback::{
 pub use groups::{
     CommunityRowProjection, CommunityRowProjectionInput, CreateRoomProjection,
     CreateRoomProjectionInput, CreateRoomVisibilityOption, RoomAccess, RoomAvatarProjection,
-    RoomAvatarProjectionInput, RoomVisibility,
+    RoomAvatarProjectionInput, RoomCoverCardProjection, RoomCoverCardProjectionInput,
+    RoomVisibility,
 };
 pub use highlights::{
     ArticleHighlightPublishProjection, ArticleHighlightPublishProjectionInput,
@@ -203,7 +204,8 @@ pub use room_library::{
 pub use room_preview::{
     RoomPreviewActionProjection, RoomPreviewActionProjectionInput,
     RoomPreviewArtifactRowProjection, RoomPreviewArtifactsProjection,
-    RoomPreviewArtifactsProjectionInput, RoomPreviewSecondaryAction,
+    RoomPreviewArtifactsProjectionInput, RoomPreviewHeaderProjection,
+    RoomPreviewHeaderProjectionInput, RoomPreviewSecondaryAction,
 };
 pub use search::{
     SearchHighlightRowProjection, SearchHighlightRowProjectionInput, SearchQueryProjection,

@@ -1,4 +1,4 @@
-use crate::models::ArtifactRecord;
+use crate::models::{ArtifactRecord, CommunitySummary};
 
 const ROOM_PREVIEW_ARTIFACT_LIMIT: usize = 8;
 
@@ -18,6 +18,19 @@ pub struct RoomPreviewArtifactRowProjection {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct RoomPreviewArtifactsProjection {
     pub rows: Vec<RoomPreviewArtifactRowProjection>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomPreviewHeaderProjectionInput {
+    pub room: CommunitySummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomPreviewHeaderProjection {
+    pub access_label: String,
+    pub access_icon_system_name: String,
+    pub access_is_open: bool,
+    pub member_count_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -71,6 +84,33 @@ pub fn room_preview_artifacts_projection(
     RoomPreviewArtifactsProjection { rows }
 }
 
+/// Projection for the room preview sheet header. Rust owns access semantics
+/// and member-count label policy; native shells render badge appearance.
+pub fn room_preview_header_projection(
+    input: RoomPreviewHeaderProjectionInput,
+) -> RoomPreviewHeaderProjection {
+    let room = input.room;
+    let access_is_open = room.access == "open";
+
+    RoomPreviewHeaderProjection {
+        access_label: if access_is_open {
+            "Open".to_string()
+        } else {
+            "Closed".to_string()
+        },
+        access_icon_system_name: if access_is_open {
+            "lock.open".to_string()
+        } else {
+            "lock".to_string()
+        },
+        access_is_open,
+        member_count_label: match room.member_count {
+            Some(count) if count > 0 => Some(member_count_label(count)),
+            _ => None,
+        },
+    }
+}
+
 /// Projection for the room preview sheet's action buttons. Rust owns joined
 /// membership, access-mode labels, and whether the secondary action peeks or
 /// opens the full room.
@@ -100,6 +140,14 @@ pub fn room_preview_action_projection(
             "Join room".into()
         },
         secondary_action,
+    }
+}
+
+fn member_count_label(count: u64) -> String {
+    if count == 1 {
+        "1 member".to_string()
+    } else {
+        format!("{count} members")
     }
 }
 
@@ -165,6 +213,30 @@ mod tests {
     }
 
     #[test]
+    fn room_preview_header_projects_access_and_member_labels() {
+        let mut room = room_summary("room-a");
+        room.member_count = Some(1);
+
+        let projection = room_preview_header_projection(RoomPreviewHeaderProjectionInput { room });
+
+        assert_eq!(projection.access_label, "Open");
+        assert_eq!(projection.access_icon_system_name, "lock.open");
+        assert!(projection.access_is_open);
+        assert_eq!(projection.member_count_label, Some("1 member".into()));
+
+        let mut room = room_summary("room-a");
+        room.access = "closed".into();
+        room.member_count = Some(0);
+
+        let projection = room_preview_header_projection(RoomPreviewHeaderProjectionInput { room });
+
+        assert_eq!(projection.access_label, "Closed");
+        assert_eq!(projection.access_icon_system_name, "lock");
+        assert!(!projection.access_is_open);
+        assert_eq!(projection.member_count_label, None);
+    }
+
+    #[test]
     fn room_preview_action_projects_membership_and_access_labels() {
         let joined = room_preview_action_projection(RoomPreviewActionProjectionInput {
             room_access: "open".into(),
@@ -207,6 +279,22 @@ mod tests {
             open.secondary_action,
             RoomPreviewSecondaryAction::OpenFullRoom
         );
+    }
+
+    fn room_summary(id: &str) -> CommunitySummary {
+        CommunitySummary {
+            id: id.into(),
+            name: "Readers".into(),
+            about: String::new(),
+            picture: String::new(),
+            access: "open".into(),
+            visibility: "public".into(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: String::new(),
+            metadata_event_id: String::new(),
+            created_at: None,
+        }
     }
 
     fn artifact(id: &str, title: &str, author: &str, domain: &str) -> ArtifactRecord {

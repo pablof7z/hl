@@ -3924,6 +3924,13 @@ impl HighlighterCore {
         groups::room_avatar_projection(input)
     }
 
+    pub fn project_room_cover_card(
+        &self,
+        input: groups::RoomCoverCardProjectionInput,
+    ) -> groups::RoomCoverCardProjection {
+        groups::room_cover_card_projection(input)
+    }
+
     pub fn project_room_recommendation_card(
         &self,
         input: recommendations::RoomRecommendationCardProjectionInput,
@@ -3936,6 +3943,13 @@ impl HighlighterCore {
         input: crate::room_preview::RoomPreviewArtifactsProjectionInput,
     ) -> crate::room_preview::RoomPreviewArtifactsProjection {
         crate::room_preview::room_preview_artifacts_projection(input)
+    }
+
+    pub fn project_room_preview_header(
+        &self,
+        input: crate::room_preview::RoomPreviewHeaderProjectionInput,
+    ) -> crate::room_preview::RoomPreviewHeaderProjection {
+        crate::room_preview::room_preview_header_projection(input)
     }
 
     pub fn project_room_preview_action(
