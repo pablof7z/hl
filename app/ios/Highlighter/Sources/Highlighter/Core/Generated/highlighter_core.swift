@@ -1433,7 +1433,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectFeedbackThreadPresentation(thread: FeedbackThreadRecord)  -> FeedbackThreadPresentationProjection
 
+    func projectHighlightDetailContent(input: HighlightDetailContentProjectionInput)  -> HighlightDetailContentProjection
+
     func projectHighlightDetailResource(input: HighlightDetailResourceProjectionInput)  -> HighlightDetailResourceProjection
+
+    func projectHighlightFeedContent(input: HighlightFeedContentProjectionInput)  -> HighlightFeedContentProjection
 
     func projectHighlightGroupCard(input: HighlightGroupCardProjectionInput)  -> HighlightGroupCardProjection
 
@@ -4262,10 +4266,26 @@ open func projectFeedbackThreadPresentation(thread: FeedbackThreadRecord) -> Fee
 })
 }
 
+open func projectHighlightDetailContent(input: HighlightDetailContentProjectionInput) -> HighlightDetailContentProjection  {
+    return try!  FfiConverterTypeHighlightDetailContentProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_highlight_detail_content(self.uniffiClonePointer(),
+        FfiConverterTypeHighlightDetailContentProjectionInput_lower(input),$0
+    )
+})
+}
+
 open func projectHighlightDetailResource(input: HighlightDetailResourceProjectionInput) -> HighlightDetailResourceProjection  {
     return try!  FfiConverterTypeHighlightDetailResourceProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_highlight_detail_resource(self.uniffiClonePointer(),
         FfiConverterTypeHighlightDetailResourceProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectHighlightFeedContent(input: HighlightFeedContentProjectionInput) -> HighlightFeedContentProjection  {
+    return try!  FfiConverterTypeHighlightFeedContentProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_highlight_feed_content(self.uniffiClonePointer(),
+        FfiConverterTypeHighlightFeedContentProjectionInput_lower(input),$0
     )
 })
 }
@@ -12074,6 +12094,154 @@ public func FfiConverterTypeGeneratedAccountOutcome_lower(_ value: GeneratedAcco
 }
 
 
+public struct HighlightDetailContentProjection {
+    public var quoteText: String
+    public var noteText: String?
+    public var pageImageUrl: String?
+    public var shareMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(quoteText: String, noteText: String?, pageImageUrl: String?, shareMessage: String) {
+        self.quoteText = quoteText
+        self.noteText = noteText
+        self.pageImageUrl = pageImageUrl
+        self.shareMessage = shareMessage
+    }
+}
+
+#if compiler(>=6)
+extension HighlightDetailContentProjection: Sendable {}
+#endif
+
+
+extension HighlightDetailContentProjection: Equatable, Hashable {
+    public static func ==(lhs: HighlightDetailContentProjection, rhs: HighlightDetailContentProjection) -> Bool {
+        if lhs.quoteText != rhs.quoteText {
+            return false
+        }
+        if lhs.noteText != rhs.noteText {
+            return false
+        }
+        if lhs.pageImageUrl != rhs.pageImageUrl {
+            return false
+        }
+        if lhs.shareMessage != rhs.shareMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(quoteText)
+        hasher.combine(noteText)
+        hasher.combine(pageImageUrl)
+        hasher.combine(shareMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightDetailContentProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightDetailContentProjection {
+        return
+            try HighlightDetailContentProjection(
+                quoteText: FfiConverterString.read(from: &buf),
+                noteText: FfiConverterOptionString.read(from: &buf),
+                pageImageUrl: FfiConverterOptionString.read(from: &buf),
+                shareMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightDetailContentProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.quoteText, into: &buf)
+        FfiConverterOptionString.write(value.noteText, into: &buf)
+        FfiConverterOptionString.write(value.pageImageUrl, into: &buf)
+        FfiConverterString.write(value.shareMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightDetailContentProjection_lift(_ buf: RustBuffer) throws -> HighlightDetailContentProjection {
+    return try FfiConverterTypeHighlightDetailContentProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightDetailContentProjection_lower(_ value: HighlightDetailContentProjection) -> RustBuffer {
+    return FfiConverterTypeHighlightDetailContentProjection.lower(value)
+}
+
+
+public struct HighlightDetailContentProjectionInput {
+    public var highlight: HighlightRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(highlight: HighlightRecord) {
+        self.highlight = highlight
+    }
+}
+
+#if compiler(>=6)
+extension HighlightDetailContentProjectionInput: Sendable {}
+#endif
+
+
+extension HighlightDetailContentProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: HighlightDetailContentProjectionInput, rhs: HighlightDetailContentProjectionInput) -> Bool {
+        if lhs.highlight != rhs.highlight {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(highlight)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightDetailContentProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightDetailContentProjectionInput {
+        return
+            try HighlightDetailContentProjectionInput(
+                highlight: FfiConverterTypeHighlightRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightDetailContentProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeHighlightRecord.write(value.highlight, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightDetailContentProjectionInput_lift(_ buf: RustBuffer) throws -> HighlightDetailContentProjectionInput {
+    return try FfiConverterTypeHighlightDetailContentProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightDetailContentProjectionInput_lower(_ value: HighlightDetailContentProjectionInput) -> RustBuffer {
+    return FfiConverterTypeHighlightDetailContentProjectionInput.lower(value)
+}
+
+
 public struct HighlightDetailResourceProjection {
     public var sourceKind: HighlightSourceKind
     public var kindLabel: String
@@ -12400,6 +12568,146 @@ public func FfiConverterTypeHighlightDraft_lift(_ buf: RustBuffer) throws -> Hig
 #endif
 public func FfiConverterTypeHighlightDraft_lower(_ value: HighlightDraft) -> RustBuffer {
     return FfiConverterTypeHighlightDraft.lower(value)
+}
+
+
+public struct HighlightFeedContentProjection {
+    public var quoteText: String
+    public var noteText: String?
+    public var pageImageUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(quoteText: String, noteText: String?, pageImageUrl: String?) {
+        self.quoteText = quoteText
+        self.noteText = noteText
+        self.pageImageUrl = pageImageUrl
+    }
+}
+
+#if compiler(>=6)
+extension HighlightFeedContentProjection: Sendable {}
+#endif
+
+
+extension HighlightFeedContentProjection: Equatable, Hashable {
+    public static func ==(lhs: HighlightFeedContentProjection, rhs: HighlightFeedContentProjection) -> Bool {
+        if lhs.quoteText != rhs.quoteText {
+            return false
+        }
+        if lhs.noteText != rhs.noteText {
+            return false
+        }
+        if lhs.pageImageUrl != rhs.pageImageUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(quoteText)
+        hasher.combine(noteText)
+        hasher.combine(pageImageUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightFeedContentProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightFeedContentProjection {
+        return
+            try HighlightFeedContentProjection(
+                quoteText: FfiConverterString.read(from: &buf),
+                noteText: FfiConverterOptionString.read(from: &buf),
+                pageImageUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightFeedContentProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.quoteText, into: &buf)
+        FfiConverterOptionString.write(value.noteText, into: &buf)
+        FfiConverterOptionString.write(value.pageImageUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightFeedContentProjection_lift(_ buf: RustBuffer) throws -> HighlightFeedContentProjection {
+    return try FfiConverterTypeHighlightFeedContentProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightFeedContentProjection_lower(_ value: HighlightFeedContentProjection) -> RustBuffer {
+    return FfiConverterTypeHighlightFeedContentProjection.lower(value)
+}
+
+
+public struct HighlightFeedContentProjectionInput {
+    public var highlight: HighlightRecord
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(highlight: HighlightRecord) {
+        self.highlight = highlight
+    }
+}
+
+#if compiler(>=6)
+extension HighlightFeedContentProjectionInput: Sendable {}
+#endif
+
+
+extension HighlightFeedContentProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: HighlightFeedContentProjectionInput, rhs: HighlightFeedContentProjectionInput) -> Bool {
+        if lhs.highlight != rhs.highlight {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(highlight)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightFeedContentProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightFeedContentProjectionInput {
+        return
+            try HighlightFeedContentProjectionInput(
+                highlight: FfiConverterTypeHighlightRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightFeedContentProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeHighlightRecord.write(value.highlight, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightFeedContentProjectionInput_lift(_ buf: RustBuffer) throws -> HighlightFeedContentProjectionInput {
+    return try FfiConverterTypeHighlightFeedContentProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightFeedContentProjectionInput_lower(_ value: HighlightFeedContentProjectionInput) -> RustBuffer {
+    return FfiConverterTypeHighlightFeedContentProjectionInput.lower(value)
 }
 
 
@@ -28836,7 +29144,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_thread_presentation() != 19722) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_highlight_detail_content() != 38114) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_highlight_detail_resource() != 10751) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_highlight_feed_content() != 63608) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_highlight_group_card() != 49051) {

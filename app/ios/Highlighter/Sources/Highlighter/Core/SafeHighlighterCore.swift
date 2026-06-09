@@ -1206,6 +1206,18 @@ actor SafeHighlighterCore {
         core.projectHighlightDetailResource(input: input)
     }
 
+    nonisolated func projectHighlightFeedContent(
+        input: HighlightFeedContentProjectionInput
+    ) -> HighlightFeedContentProjection {
+        core.projectHighlightFeedContent(input: input)
+    }
+
+    nonisolated func projectHighlightDetailContent(
+        input: HighlightDetailContentProjectionInput
+    ) -> HighlightDetailContentProjection {
+        core.projectHighlightDetailContent(input: input)
+    }
+
     nonisolated func buildHomeFeedItems(
         highlights: [HydratedHighlight],
         reads: [ReadingFeedItem]

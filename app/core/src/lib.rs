@@ -73,7 +73,9 @@ pub use groups::{
     RoomAvatarProjection, RoomAvatarProjectionInput, RoomVisibility,
 };
 pub use highlights::{
+    HighlightDetailContentProjection, HighlightDetailContentProjectionInput,
     HighlightDetailResourceProjection, HighlightDetailResourceProjectionInput,
+    HighlightFeedContentProjection, HighlightFeedContentProjectionInput,
     HighlightGroupCardProjection, HighlightGroupCardProjectionInput,
     HighlightGroupHighlighterProfile, HighlightGroupHighlighterProjection,
     HighlightGroupLabelSegment, HighlightResourceAuthorProfile, HighlightResourceHeaderProjection,

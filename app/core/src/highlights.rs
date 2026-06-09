@@ -106,6 +106,31 @@ pub struct HighlightDetailResourceProjection {
     pub web_url: Option<String>,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightFeedContentProjectionInput {
+    pub highlight: HighlightRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HighlightFeedContentProjection {
+    pub quote_text: String,
+    pub note_text: Option<String>,
+    pub page_image_url: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightDetailContentProjectionInput {
+    pub highlight: HighlightRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HighlightDetailContentProjection {
+    pub quote_text: String,
+    pub note_text: Option<String>,
+    pub page_image_url: Option<String>,
+    pub share_message: String,
+}
+
 /// Presentation projection for a grouped highlight card. Rust owns unique
 /// highlighter order, strip visibility, avatar cap, overflow count, and the
 /// social byline text sequence; native shells only style the segments.
@@ -352,6 +377,39 @@ pub fn highlight_detail_resource_projection(
         article_route,
         book_catalog_id,
         web_url,
+    }
+}
+
+/// Project highlight quote/note/image content for feed cards. Rust owns text
+/// trimming and optional page image presence while the native shell keeps the
+/// existing visual treatment.
+pub fn highlight_feed_content_projection(
+    input: HighlightFeedContentProjectionInput,
+) -> HighlightFeedContentProjection {
+    let highlight = input.highlight;
+    HighlightFeedContentProjection {
+        quote_text: highlight.quote.trim().to_string(),
+        note_text: non_empty(&highlight.note),
+        page_image_url: non_empty_trimmed(&highlight.image_url),
+    }
+}
+
+/// Project highlight quote/note/image/share-message content for the detail
+/// screen. Rust owns the detail-specific blank-note rule and share message.
+pub fn highlight_detail_content_projection(
+    input: HighlightDetailContentProjectionInput,
+) -> HighlightDetailContentProjection {
+    let highlight = input.highlight;
+    let quote_text = highlight.quote.trim().to_string();
+    HighlightDetailContentProjection {
+        quote_text: quote_text.clone(),
+        note_text: if highlight.note.trim().is_empty() {
+            None
+        } else {
+            Some(highlight.note)
+        },
+        page_image_url: non_empty_trimmed(&highlight.image_url),
+        share_message: quote_text,
     }
 }
 
@@ -2222,6 +2280,64 @@ mod tests {
                 label_segment("2 others", true),
             ]
         );
+    }
+
+    #[test]
+    fn highlight_feed_content_projection_preserves_feed_note_policy() {
+        let mut highlight = highlight_for_source_key("event", "r:https://example.com", 1_000);
+        highlight.quote = "  Quote\n".into();
+        highlight.note = " \n ".into();
+        highlight.image_url = " https://example.com/page.jpg\n".into();
+
+        let projection =
+            highlight_feed_content_projection(HighlightFeedContentProjectionInput { highlight });
+
+        assert_eq!(projection.quote_text, "Quote");
+        assert_eq!(projection.note_text, Some(" \n ".into()));
+        assert_eq!(
+            projection.page_image_url,
+            Some("https://example.com/page.jpg".into())
+        );
+
+        let mut highlight = highlight_for_source_key("event", "r:https://example.com", 1_000);
+        highlight.image_url = " \n ".into();
+
+        let projection =
+            highlight_feed_content_projection(HighlightFeedContentProjectionInput { highlight });
+
+        assert_eq!(projection.note_text, None);
+        assert_eq!(projection.page_image_url, None);
+    }
+
+    #[test]
+    fn highlight_detail_content_projection_hides_blank_notes_and_projects_share_message() {
+        let mut highlight = highlight_for_source_key("event", "r:https://example.com", 1_000);
+        highlight.quote = "  Quote\n".into();
+        highlight.note = " \n ".into();
+        highlight.image_url = " https://example.com/page.jpg\n".into();
+
+        let projection =
+            highlight_detail_content_projection(HighlightDetailContentProjectionInput {
+                highlight,
+            });
+
+        assert_eq!(projection.quote_text, "Quote");
+        assert_eq!(projection.share_message, "Quote");
+        assert_eq!(projection.note_text, None);
+        assert_eq!(
+            projection.page_image_url,
+            Some("https://example.com/page.jpg".into())
+        );
+
+        let mut highlight = highlight_for_source_key("event", "r:https://example.com", 1_000);
+        highlight.note = " Keep ".into();
+
+        let projection =
+            highlight_detail_content_projection(HighlightDetailContentProjectionInput {
+                highlight,
+            });
+
+        assert_eq!(projection.note_text, Some(" Keep ".into()));
     }
 
     #[test]

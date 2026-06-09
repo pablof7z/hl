@@ -33,15 +33,17 @@ struct HighlightDetailView: View {
     private var highlight: HighlightRecord { item.highlight }
 
     var body: some View {
+        let content = contentProjection
+
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 resourceHeader
                 bylineRow
-                quoteBlock
-                if !highlight.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    noteBlock
+                quoteBlock(content)
+                if let note = content.noteText {
+                    noteBlock(note)
                 }
-                actionBar
+                actionBar(content)
                     .padding(.top, 4)
             }
             .padding(.horizontal, 20)
@@ -213,11 +215,11 @@ struct HighlightDetailView: View {
     // MARK: - Quote
 
     @ViewBuilder
-    private var quoteBlock: some View {
-        if let pageURL = pageImageURL {
+    private func quoteBlock(_ content: HighlightDetailContentProjection) -> some View {
+        if let pageURL = pageImageURL(content) {
             VStack(alignment: .leading, spacing: 14) {
                 HighlightPageImage(url: pageURL, treatment: .feature)
-                quoteText
+                quoteText(content)
             }
         } else {
             HStack(alignment: .top, spacing: 14) {
@@ -225,13 +227,13 @@ struct HighlightDetailView: View {
                     .fill(Color.highlighterAccent)
                     .frame(width: 3)
                     .clipShape(RoundedRectangle(cornerRadius: 1.5))
-                quoteText
+                quoteText(content)
             }
         }
     }
 
-    private var quoteText: some View {
-        Text(highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+    private func quoteText(_ content: HighlightDetailContentProjection) -> some View {
+        Text(content.quoteText)
             .font(.system(size: 21, design: .default).italic())
             .foregroundStyle(Color.highlighterInkStrong)
             .lineSpacing(5)
@@ -240,13 +242,13 @@ struct HighlightDetailView: View {
             .textSelection(.enabled)
     }
 
-    private var noteBlock: some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func noteBlock(_ note: String) -> some View {
+        return VStack(alignment: .leading, spacing: 6) {
             Text("NOTE")
                 .font(.caption2.weight(.bold))
                 .tracking(0.6)
                 .foregroundStyle(Color.highlighterInkMuted)
-            Text(highlight.note)
+            Text(note)
                 .font(.system(.body, design: .default))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineSpacing(3)
@@ -259,8 +261,8 @@ struct HighlightDetailView: View {
 
     // MARK: - Action bar
 
-    private var actionBar: some View {
-        HStack(spacing: 22) {
+    private func actionBar(_ content: HighlightDetailContentProjection) -> some View {
+        return HStack(spacing: 22) {
             if let articleAddress = articleAddressForBookmark {
                 BookmarkMenuButton(articleAddress: articleAddress)
                     .font(.system(size: 20, weight: .medium))
@@ -272,7 +274,7 @@ struct HighlightDetailView: View {
                 ShareLink(
                     item: url,
                     subject: Text("Highlight"),
-                    message: Text(highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                    message: Text(content.shareMessage)
                 ) {
                     actionIcon(systemName: "square.and.arrow.up")
                 }
@@ -356,6 +358,12 @@ struct HighlightDetailView: View {
         )
     }
 
+    private var contentProjection: HighlightDetailContentProjection {
+        app.safeCore.projectHighlightDetailContent(
+            input: HighlightDetailContentProjectionInput(highlight: highlight)
+        )
+    }
+
     /// Article a-tag we can bookmark. Only NIP-23 articles are bookmarkable
     /// today; Rust owns the address interpretation and returns the route.
     private var articleAddressForBookmark: String? {
@@ -369,9 +377,8 @@ struct HighlightDetailView: View {
 
     // MARK: - Resource metadata
 
-    private var pageImageURL: URL? {
-        let raw = highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return nil }
+    private func pageImageURL(_ content: HighlightDetailContentProjection) -> URL? {
+        guard let raw = content.pageImageUrl else { return nil }
         return URL(string: raw)
     }
 

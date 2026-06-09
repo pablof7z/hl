@@ -1747,6 +1747,20 @@ impl HighlighterCore {
         highlights::highlight_detail_resource_projection(input)
     }
 
+    pub fn project_highlight_feed_content(
+        &self,
+        input: highlights::HighlightFeedContentProjectionInput,
+    ) -> highlights::HighlightFeedContentProjection {
+        highlights::highlight_feed_content_projection(input)
+    }
+
+    pub fn project_highlight_detail_content(
+        &self,
+        input: highlights::HighlightDetailContentProjectionInput,
+    ) -> highlights::HighlightDetailContentProjection {
+        highlights::highlight_detail_content_projection(input)
+    }
+
     /// Compose following highlights and following reads into the home feed.
     /// Rust owns grouping, stable identity, duplicate suppression, and merged
     /// ordering; native shells render the returned rows.

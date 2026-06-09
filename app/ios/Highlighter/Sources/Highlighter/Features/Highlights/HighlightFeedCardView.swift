@@ -223,27 +223,29 @@ struct HighlightFeedCardView: View {
     }
 
     private func singleHighlight(_ h: HydratedHighlight) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let content = highlightFeedContent(for: h.highlight)
+
+        return VStack(alignment: .leading, spacing: 12) {
             highlighterByline(for: h)
 
-            if let pageURL = pageImageURL(for: h.highlight) {
-                pageHighlight(h, pageURL: pageURL)
+            if let pageImage = content.pageImageUrl, let pageURL = URL(string: pageImage) {
+                pageHighlight(content: content, pageURL: pageURL)
             } else {
-                textHighlight(h)
+                textHighlight(content)
             }
         }
     }
 
     /// Text-only treatment: accent rail + serif italic pull-quote + note.
-    private func textHighlight(_ h: HydratedHighlight) -> some View {
-        HStack(alignment: .top, spacing: 14) {
+    private func textHighlight(_ content: HighlightFeedContentProjection) -> some View {
+        return HStack(alignment: .top, spacing: 14) {
             Rectangle()
                 .fill(Color.highlighterAccent)
                 .frame(width: 3)
                 .clipShape(RoundedRectangle(cornerRadius: 1.5))
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(h.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                Text(content.quoteText)
                     .font(.system(size: 18, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(4)
@@ -252,8 +254,8 @@ struct HighlightFeedCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if !h.highlight.note.isEmpty {
-                    Text(h.highlight.note)
+                if let note = content.noteText {
+                    Text(note)
                         .font(.system(.subheadline, design: .default))
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineSpacing(2)
@@ -266,12 +268,15 @@ struct HighlightFeedCardView: View {
 
     /// Page-photo treatment: the scan is the centerpiece, with the quote as
     /// a serif pull-quote underneath. No accent rail — let the image breathe.
-    private func pageHighlight(_ h: HydratedHighlight, pageURL: URL) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func pageHighlight(
+        content: HighlightFeedContentProjection,
+        pageURL: URL
+    ) -> some View {
+        return VStack(alignment: .leading, spacing: 12) {
             HighlightPageImage(url: pageURL, treatment: .feature)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(h.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                Text(content.quoteText)
                     .font(.system(size: 18, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(4)
@@ -280,8 +285,8 @@ struct HighlightFeedCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if !h.highlight.note.isEmpty {
-                    Text(h.highlight.note)
+                if let note = content.noteText {
+                    Text(note)
                         .font(.system(.subheadline, design: .default))
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineSpacing(2)
@@ -293,10 +298,10 @@ struct HighlightFeedCardView: View {
         }
     }
 
-    private func pageImageURL(for highlight: HighlightRecord) -> URL? {
-        let raw = highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return nil }
-        return URL(string: raw)
+    private func highlightFeedContent(for highlight: HighlightRecord) -> HighlightFeedContentProjection {
+        app.safeCore.projectHighlightFeedContent(
+            input: HighlightFeedContentProjectionInput(highlight: highlight)
+        )
     }
 
     private var reel: some View {
@@ -481,6 +486,10 @@ private struct HighlightQuoteCard: View {
     let highlight: HydratedHighlight
 
     var body: some View {
+        let content = app.safeCore.projectHighlightFeedContent(
+            input: HighlightFeedContentProjectionInput(highlight: highlight.highlight)
+        )
+
         VStack(alignment: .leading, spacing: 0) {
             byline
                 .padding(12)
@@ -492,10 +501,10 @@ private struct HighlightQuoteCard: View {
                         .padding(.horizontal, 12)
                 }
 
-            if let pageURL = pageImageURL {
+            if let pageImage = content.pageImageUrl, let pageURL = URL(string: pageImage) {
                 VStack(alignment: .leading, spacing: 8) {
                     HighlightPageImage(url: pageURL, treatment: .card)
-                    quoteBlock
+                    quoteBlock(content)
                 }
                 .padding(12)
             } else {
@@ -505,7 +514,7 @@ private struct HighlightQuoteCard: View {
                         .frame(width: 3)
                         .clipShape(RoundedRectangle(cornerRadius: 1.5))
 
-                    quoteBlock
+                    quoteBlock(content)
                 }
                 .padding(12)
             }
@@ -520,9 +529,9 @@ private struct HighlightQuoteCard: View {
         }
     }
 
-    private var quoteBlock: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(highlight.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+    private func quoteBlock(_ content: HighlightFeedContentProjection) -> some View {
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(content.quoteText)
                 .font(.system(size: 14, design: .default).italic())
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineSpacing(3)
@@ -531,8 +540,8 @@ private struct HighlightQuoteCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if !highlight.highlight.note.isEmpty {
-                Text(highlight.highlight.note)
+            if let note = content.noteText {
+                Text(note)
                     .font(.caption)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(2)
@@ -540,12 +549,6 @@ private struct HighlightQuoteCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-    }
-
-    private var pageImageURL: URL? {
-        let raw = highlight.highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return nil }
-        return URL(string: raw)
     }
 
     @ViewBuilder
