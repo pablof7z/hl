@@ -157,24 +157,12 @@ final class ArticleReaderStore {
         guard let article else {
             return HighlightOutcome(value: nil, error: "Article not yet loaded.")
         }
-        let artifactOutcome = safeCore.getArticleArtifactRecord(article: article)
-        guard artifactOutcome.error.isEmpty, let artifact = artifactOutcome.value else {
-            return HighlightOutcome(
-                value: nil,
-                error: artifactOutcome.error.isEmpty ? "Article source is unavailable." : artifactOutcome.error
-            )
-        }
-        let draft = HighlightDraft(
+        let outcome = await safeCore.publishArticleReaderHighlight(
+            article: article,
             quote: quote,
-            context: context,
             note: note,
-            clipStartSeconds: nil,
-            clipEndSeconds: nil,
-            clipSpeaker: "",
-            clipTranscriptSegmentIds: [],
-            image: nil
+            context: context
         )
-        let outcome = await safeCore.publishHighlight(draft: draft, artifact: artifact)
         guard outcome.error.isEmpty, let record = outcome.value else { return outcome }
         highlights = safeCore.insertUniqueHighlightFront(
             highlights: highlights,

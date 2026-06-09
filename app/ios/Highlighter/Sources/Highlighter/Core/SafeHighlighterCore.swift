@@ -1600,6 +1600,20 @@ actor SafeHighlighterCore {
         await core.publishHighlight(draft: draft, artifact: artifact)
     }
 
+    func publishArticleReaderHighlight(
+        article: ArticleRecord,
+        quote: String,
+        note: String,
+        context: String
+    ) async -> HighlightOutcome {
+        await core.publishArticleReaderHighlight(
+            article: article,
+            quote: quote,
+            note: note,
+            context: context
+        )
+    }
+
     /// Re-share an existing highlight into a room as a kind:16 repost.
     /// `relayHint` may be empty — the core falls back to the Highlighter
     /// relay for the e-tag hint when so.

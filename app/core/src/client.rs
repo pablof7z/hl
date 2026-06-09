@@ -3678,6 +3678,26 @@ impl HighlighterCore {
         highlight_outcome(result)
     }
 
+    /// Publish a solo NIP-84 highlight from an article reader selection.
+    /// Rust owns article artifact derivation and draft defaults; native shells
+    /// only provide the raw selected text fields.
+    pub async fn publish_article_reader_highlight(
+        &self,
+        article: ArticleRecord,
+        quote: String,
+        note: String,
+        context: String,
+    ) -> HighlightOutcome {
+        let result: Result<HighlightRecord, CoreError> = async {
+            let _ = self.require_user_pubkey()?;
+            let artifact = articles::article_artifact_record(&article);
+            let draft = highlights::article_reader_highlight_draft(quote, note, context);
+            crate::highlights::publish(&self.runtime, draft, artifact).await
+        }
+        .await;
+        highlight_outcome(result)
+    }
+
     // -- Rooms explorer (discovery + curation + recommendations) --
 
     /// Install (if not already installed) a long-lived relay sub for every

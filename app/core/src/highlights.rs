@@ -1490,6 +1490,25 @@ pub(crate) fn imeta_image_url(event: &Event) -> String {
 
 // -- Builders (pure: no IO, unit-testable) --
 
+/// Build the draft shape used by article-reader text selection. Rust owns the
+/// default clip fields so native shells don't mirror highlight publish policy.
+pub fn article_reader_highlight_draft(
+    quote: String,
+    note: String,
+    context: String,
+) -> HighlightDraft {
+    HighlightDraft {
+        quote,
+        context,
+        note,
+        clip_start_seconds: None,
+        clip_end_seconds: None,
+        clip_speaker: String::new(),
+        clip_transcript_segment_ids: Vec::new(),
+        image: None,
+    }
+}
+
 /// Build the kind:9802 highlight `EventBuilder`. Pure — safe to unit test.
 /// Matches `publishCanonicalHighlight` (highlights.ts:359-423).
 fn build_highlight_event(
@@ -2494,6 +2513,21 @@ mod tests {
         assert_eq!(contextual.quote, "selected");
         assert_eq!(contextual.context, "paragraph with selected text");
         assert!(!blank.has_quote);
+    }
+
+    #[test]
+    fn article_reader_highlight_draft_sets_text_selection_defaults() {
+        let draft =
+            article_reader_highlight_draft("quote".into(), "note".into(), "paragraph".into());
+
+        assert_eq!(draft.quote, "quote");
+        assert_eq!(draft.note, "note");
+        assert_eq!(draft.context, "paragraph");
+        assert_eq!(draft.clip_start_seconds, None);
+        assert_eq!(draft.clip_end_seconds, None);
+        assert!(draft.clip_speaker.is_empty());
+        assert!(draft.clip_transcript_segment_ids.is_empty());
+        assert!(draft.image.is_none());
     }
 
     #[test]
