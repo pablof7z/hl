@@ -41,7 +41,7 @@ pub struct WaveformPeaksPlan {
     pub should_check_wifi_status: bool,
     pub should_extract_peaks: bool,
     pub bucket_count: u32,
-    pub skip_reason: String,
+    pub skip_reason: Option<String>,
 }
 
 pub fn cache_key_projection(input: WaveformCacheKeyProjectionInput) -> WaveformCacheKeyProjection {
@@ -65,7 +65,7 @@ pub fn peaks_plan(input: WaveformPeaksPlanInput) -> WaveformPeaksPlan {
             should_check_wifi_status: false,
             should_extract_peaks: false,
             bucket_count: 0,
-            skip_reason: "missing_audio_url".to_string(),
+            skip_reason: Some("missing_audio_url".to_string()),
         };
     };
 
@@ -77,7 +77,7 @@ pub fn peaks_plan(input: WaveformPeaksPlanInput) -> WaveformPeaksPlan {
             should_check_wifi_status: false,
             should_extract_peaks: false,
             bucket_count,
-            skip_reason: String::new(),
+            skip_reason: None,
         };
     }
 
@@ -88,7 +88,7 @@ pub fn peaks_plan(input: WaveformPeaksPlanInput) -> WaveformPeaksPlan {
             should_check_wifi_status: true,
             should_extract_peaks: false,
             bucket_count,
-            skip_reason: "wifi_status_required".to_string(),
+            skip_reason: Some("wifi_status_required".to_string()),
         },
         WaveformWifiStatus::Available => WaveformPeaksPlan {
             cache_key,
@@ -96,7 +96,7 @@ pub fn peaks_plan(input: WaveformPeaksPlanInput) -> WaveformPeaksPlan {
             should_check_wifi_status: false,
             should_extract_peaks: true,
             bucket_count,
-            skip_reason: String::new(),
+            skip_reason: None,
         },
         WaveformWifiStatus::Unavailable => WaveformPeaksPlan {
             cache_key,
@@ -104,7 +104,7 @@ pub fn peaks_plan(input: WaveformPeaksPlanInput) -> WaveformPeaksPlan {
             should_check_wifi_status: false,
             should_extract_peaks: false,
             bucket_count,
-            skip_reason: "wifi_required".to_string(),
+            skip_reason: Some("wifi_required".to_string()),
         },
     }
 }
@@ -163,7 +163,7 @@ mod tests {
 
         assert!(!projection.is_usable);
         assert_eq!(projection.cache_key, "");
-        assert_eq!(plan.skip_reason, "missing_audio_url");
+        assert_eq!(plan.skip_reason.as_deref(), Some("missing_audio_url"));
         assert!(!plan.should_extract_peaks);
     }
 
@@ -209,7 +209,7 @@ mod tests {
         assert!(!plan.should_use_cached_peaks);
         assert!(!plan.should_check_wifi_status);
         assert!(!plan.should_extract_peaks);
-        assert_eq!(plan.skip_reason, "wifi_required");
+        assert_eq!(plan.skip_reason.as_deref(), Some("wifi_required"));
     }
 
     #[test]
@@ -223,7 +223,7 @@ mod tests {
 
         assert!(plan.should_extract_peaks);
         assert_eq!(plan.bucket_count, 3_600);
-        assert_eq!(plan.skip_reason, "");
+        assert_eq!(plan.skip_reason, None);
     }
 
     #[test]

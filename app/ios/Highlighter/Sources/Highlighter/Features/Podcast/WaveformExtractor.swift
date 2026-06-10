@@ -61,8 +61,8 @@ enum WaveformExtractor {
         }
 
         guard plan.shouldExtractPeaks else {
-            if !plan.skipReason.isEmpty {
-                logger.info("waveform extraction skipped: \(plan.skipReason, privacy: .public)")
+            if let skipReason = plan.skipReason {
+                logger.info("waveform extraction skipped: \(skipReason, privacy: .public)")
             }
             return nil
         }

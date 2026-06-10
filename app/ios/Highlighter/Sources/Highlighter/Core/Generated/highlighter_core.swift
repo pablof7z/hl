@@ -40454,11 +40454,11 @@ public struct WaveformPeaksPlan {
     public var shouldCheckWifiStatus: Bool
     public var shouldExtractPeaks: Bool
     public var bucketCount: UInt32
-    public var skipReason: String
+    public var skipReason: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(cacheKey: String, shouldUseCachedPeaks: Bool, shouldCheckWifiStatus: Bool, shouldExtractPeaks: Bool, bucketCount: UInt32, skipReason: String) {
+    public init(cacheKey: String, shouldUseCachedPeaks: Bool, shouldCheckWifiStatus: Bool, shouldExtractPeaks: Bool, bucketCount: UInt32, skipReason: String?) {
         self.cacheKey = cacheKey
         self.shouldUseCachedPeaks = shouldUseCachedPeaks
         self.shouldCheckWifiStatus = shouldCheckWifiStatus
@@ -40520,7 +40520,7 @@ public struct FfiConverterTypeWaveformPeaksPlan: FfiConverterRustBuffer {
                 shouldCheckWifiStatus: FfiConverterBool.read(from: &buf), 
                 shouldExtractPeaks: FfiConverterBool.read(from: &buf), 
                 bucketCount: FfiConverterUInt32.read(from: &buf), 
-                skipReason: FfiConverterString.read(from: &buf)
+                skipReason: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -40530,7 +40530,7 @@ public struct FfiConverterTypeWaveformPeaksPlan: FfiConverterRustBuffer {
         FfiConverterBool.write(value.shouldCheckWifiStatus, into: &buf)
         FfiConverterBool.write(value.shouldExtractPeaks, into: &buf)
         FfiConverterUInt32.write(value.bucketCount, into: &buf)
-        FfiConverterString.write(value.skipReason, into: &buf)
+        FfiConverterOptionString.write(value.skipReason, into: &buf)
     }
 }
 
