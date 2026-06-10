@@ -57,6 +57,18 @@ pub struct CommentSnapshotApplyProjection {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentInlineThreadSnapshotApplyInput {
+    pub records: Vec<CommentRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentInlineThreadSnapshotApplyProjection {
+    pub records: Vec<CommentRecord>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct CommentThreadViewProjectionInput {
     pub tree: Vec<CommentThreadNode>,
     pub focused: Option<CommentThreadNode>,
@@ -197,6 +209,25 @@ pub fn comment_snapshot_apply_projection(
     CommentSnapshotApplyProjection {
         should_apply_snapshot: load_error.is_none(),
         load_error,
+    }
+}
+
+pub fn comment_inline_thread_snapshot_apply_projection(
+    input: CommentInlineThreadSnapshotApplyInput,
+) -> CommentInlineThreadSnapshotApplyProjection {
+    let error_message = input.error.trim().to_string();
+    let error_message = if error_message.is_empty() {
+        None
+    } else {
+        Some(error_message)
+    };
+    CommentInlineThreadSnapshotApplyProjection {
+        records: if error_message.is_none() {
+            input.records
+        } else {
+            Vec::new()
+        },
+        error_message,
     }
 }
 
@@ -1601,6 +1632,30 @@ mod tests {
         });
         assert!(!failed.should_apply_snapshot);
         assert_eq!(failed.load_error.as_deref(), Some("refresh failed"));
+    }
+
+    #[test]
+    fn comment_inline_thread_snapshot_apply_collapses_error_to_empty_records() {
+        let records = vec![comment("reply", "root", Some(1))];
+
+        let success = comment_inline_thread_snapshot_apply_projection(
+            CommentInlineThreadSnapshotApplyInput {
+                records: records.clone(),
+                error: String::new(),
+            },
+        );
+        assert_eq!(success.records.len(), 1);
+        assert_eq!(success.records[0].event_id, "reply");
+        assert_eq!(success.error_message, None);
+
+        let failed = comment_inline_thread_snapshot_apply_projection(
+            CommentInlineThreadSnapshotApplyInput {
+                records,
+                error: " refresh failed ".into(),
+            },
+        );
+        assert!(failed.records.is_empty());
+        assert_eq!(failed.error_message.as_deref(), Some("refresh failed"));
     }
 
     fn comment(event_id: &str, parent_tag_value: &str, created_at: Option<u64>) -> CommentRecord {

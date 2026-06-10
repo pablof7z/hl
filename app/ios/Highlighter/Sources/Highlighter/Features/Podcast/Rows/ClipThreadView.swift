@@ -104,12 +104,22 @@ struct ClipThreadView: View {
                 content: projection.submitBody,
                 limit: 200
             )
-            guard outcome.error.isEmpty else {
-                sendError = outcome.error
+            let result = app.safeCore.projectCommentPublishResult(
+                input: CommentPublishResultInput(error: outcome.error)
+            )
+            guard result.didPublish else {
+                sendError = result.errorMessage
                 isSending = false
                 return
             }
-            app.podcastPlayer.comments[id] = outcome.snapshot.records
+            let applyProjection = app.safeCore.projectCommentInlineThreadSnapshotApply(
+                input: CommentInlineThreadSnapshotApplyInput(
+                    records: outcome.snapshot.records,
+                    error: outcome.snapshot.error
+                )
+            )
+            app.podcastPlayer.comments[id] = applyProjection.records
+            sendError = applyProjection.errorMessage
             replyText = ""
             isSending = false
         }

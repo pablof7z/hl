@@ -106,12 +106,13 @@ pub use chat::{
 pub use client::HighlighterCore;
 pub use comments::{
     CommentActionChromeProjection, CommentActionChromeProjectionInput, CommentComposerProjection,
-    CommentComposerProjectionInput, CommentInteractionMutationSnapshot, CommentInteractionRow,
-    CommentInteractionSnapshot, CommentNodeChromeProjection, CommentNodeChromeProjectionInput,
-    CommentPublishResultInput, CommentPublishResultProjection, CommentPublishSnapshot,
-    CommentScopeSnapshot, CommentSnapshotApplyInput, CommentSnapshotApplyProjection,
-    CommentThreadSnapshot, CommentThreadViewProjection, CommentThreadViewProjectionInput,
-    CommentToolbarProjection, CommentToolbarProjectionInput,
+    CommentComposerProjectionInput, CommentInlineThreadSnapshotApplyInput,
+    CommentInlineThreadSnapshotApplyProjection, CommentInteractionMutationSnapshot,
+    CommentInteractionRow, CommentInteractionSnapshot, CommentNodeChromeProjection,
+    CommentNodeChromeProjectionInput, CommentPublishResultInput, CommentPublishResultProjection,
+    CommentPublishSnapshot, CommentScopeSnapshot, CommentSnapshotApplyInput,
+    CommentSnapshotApplyProjection, CommentThreadSnapshot, CommentThreadViewProjection,
+    CommentThreadViewProjectionInput, CommentToolbarProjection, CommentToolbarProjectionInput,
 };
 pub use discussions::{
     DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput,

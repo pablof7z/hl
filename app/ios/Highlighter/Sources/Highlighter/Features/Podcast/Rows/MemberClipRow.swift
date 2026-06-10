@@ -115,7 +115,13 @@ struct MemberClipRow: View {
                     return
                 }
                 let snapshot = await app.safeCore.getCommentThreadSnapshot(scope: scope, limit: 200)
-                app.podcastPlayer.comments[id] = snapshot.error.isEmpty ? snapshot.records : []
+                let projection = app.safeCore.projectCommentInlineThreadSnapshotApply(
+                    input: CommentInlineThreadSnapshotApplyInput(
+                        records: snapshot.records,
+                        error: snapshot.error
+                    )
+                )
+                app.podcastPlayer.comments[id] = projection.records
             }
         }
     }
