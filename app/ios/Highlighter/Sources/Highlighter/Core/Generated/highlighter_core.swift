@@ -36625,13 +36625,13 @@ public func FfiConverterTypeRoomRecommendationReasonProfile_lower(_ value: RoomR
 
 
 public struct RoomShareLinkSnapshot {
-    public var shareUrl: String
+    public var shareUrl: String?
     public var linkLabel: String
-    public var errorMessage: String
+    public var errorMessage: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(shareUrl: String, linkLabel: String, errorMessage: String) {
+    public init(shareUrl: String?, linkLabel: String, errorMessage: String?) {
         self.shareUrl = shareUrl
         self.linkLabel = linkLabel
         self.errorMessage = errorMessage
@@ -36673,16 +36673,16 @@ public struct FfiConverterTypeRoomShareLinkSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomShareLinkSnapshot {
         return
             try RoomShareLinkSnapshot(
-                shareUrl: FfiConverterString.read(from: &buf), 
+                shareUrl: FfiConverterOptionString.read(from: &buf), 
                 linkLabel: FfiConverterString.read(from: &buf), 
-                errorMessage: FfiConverterString.read(from: &buf)
+                errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: RoomShareLinkSnapshot, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.shareUrl, into: &buf)
+        FfiConverterOptionString.write(value.shareUrl, into: &buf)
         FfiConverterString.write(value.linkLabel, into: &buf)
-        FfiConverterString.write(value.errorMessage, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
     }
 }
 

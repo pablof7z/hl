@@ -98,7 +98,7 @@ struct RoomShareCard: View {
                     .accessibilityLabel(qrShown ? "Hide QR" : "Show QR")
                 }
 
-                if let mintError, !mintError.isEmpty {
+                if let mintError {
                     Text(mintError)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterAccent)
@@ -123,8 +123,7 @@ struct RoomShareCard: View {
     }
 
     private var shareURL: String? {
-        guard let url = linkSnapshot?.shareUrl, !url.isEmpty else { return nil }
-        return url
+        linkSnapshot?.shareUrl
     }
 
     private var linkLabel: String {
