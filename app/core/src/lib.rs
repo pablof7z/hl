@@ -114,7 +114,8 @@ pub use comments::{
 pub use discussions::{
     DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput,
     DiscussionComposerProjection, DiscussionComposerProjectionInput,
-    DiscussionComposerPublishInput, DiscussionPublishSnapshot, RoomDiscussionSnapshot,
+    DiscussionComposerPublishInput, DiscussionPublishResultInput,
+    DiscussionPublishResultProjection, DiscussionPublishSnapshot, RoomDiscussionSnapshot,
 };
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};

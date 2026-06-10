@@ -100,8 +100,14 @@ struct DiscussionComposerView: View {
                 attachmentUrl: projection.submitAttachmentUrl
             )
         )
-        guard outcome.error.isEmpty, outcome.discussion != nil else {
-            errorMessage = outcome.error.isEmpty ? "Failed to publish." : outcome.error
+        let result = app.safeCore.projectDiscussionPublishResult(
+            input: DiscussionPublishResultInput(
+                error: outcome.error,
+                hasDiscussion: outcome.discussion != nil
+            )
+        )
+        guard result.didPublish else {
+            errorMessage = result.errorMessage
             return
         }
         onPublished()

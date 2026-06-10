@@ -1332,6 +1332,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectDiscussionComposer(input: DiscussionComposerProjectionInput)  -> DiscussionComposerProjection
 
+    func projectDiscussionPublishResult(input: DiscussionPublishResultInput)  -> DiscussionPublishResultProjection
+
     /**
      * Feedback composer projection shared by new-thread and reply surfaces.
      * Rust owns submit trimming and send eligibility so each platform shell
@@ -3946,6 +3948,14 @@ open func projectDiscussionComposer(input: DiscussionComposerProjectionInput) ->
     return try!  FfiConverterTypeDiscussionComposerProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_discussion_composer(self.uniffiClonePointer(),
         FfiConverterTypeDiscussionComposerProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectDiscussionPublishResult(input: DiscussionPublishResultInput) -> DiscussionPublishResultProjection  {
+    return try!  FfiConverterTypeDiscussionPublishResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_discussion_publish_result(self.uniffiClonePointer(),
+        FfiConverterTypeDiscussionPublishResultInput_lower(input),$0
     )
 })
 }
@@ -16854,6 +16864,146 @@ public func FfiConverterTypeDiscussionComposerPublishInput_lift(_ buf: RustBuffe
 #endif
 public func FfiConverterTypeDiscussionComposerPublishInput_lower(_ value: DiscussionComposerPublishInput) -> RustBuffer {
     return FfiConverterTypeDiscussionComposerPublishInput.lower(value)
+}
+
+
+public struct DiscussionPublishResultInput {
+    public var error: String
+    public var hasDiscussion: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: String, hasDiscussion: Bool) {
+        self.error = error
+        self.hasDiscussion = hasDiscussion
+    }
+}
+
+#if compiler(>=6)
+extension DiscussionPublishResultInput: Sendable {}
+#endif
+
+
+extension DiscussionPublishResultInput: Equatable, Hashable {
+    public static func ==(lhs: DiscussionPublishResultInput, rhs: DiscussionPublishResultInput) -> Bool {
+        if lhs.error != rhs.error {
+            return false
+        }
+        if lhs.hasDiscussion != rhs.hasDiscussion {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(error)
+        hasher.combine(hasDiscussion)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscussionPublishResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionPublishResultInput {
+        return
+            try DiscussionPublishResultInput(
+                error: FfiConverterString.read(from: &buf),
+                hasDiscussion: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscussionPublishResultInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.error, into: &buf)
+        FfiConverterBool.write(value.hasDiscussion, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionPublishResultInput_lift(_ buf: RustBuffer) throws -> DiscussionPublishResultInput {
+    return try FfiConverterTypeDiscussionPublishResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionPublishResultInput_lower(_ value: DiscussionPublishResultInput) -> RustBuffer {
+    return FfiConverterTypeDiscussionPublishResultInput.lower(value)
+}
+
+
+public struct DiscussionPublishResultProjection {
+    public var didPublish: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(didPublish: Bool, errorMessage: String) {
+        self.didPublish = didPublish
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension DiscussionPublishResultProjection: Sendable {}
+#endif
+
+
+extension DiscussionPublishResultProjection: Equatable, Hashable {
+    public static func ==(lhs: DiscussionPublishResultProjection, rhs: DiscussionPublishResultProjection) -> Bool {
+        if lhs.didPublish != rhs.didPublish {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(didPublish)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscussionPublishResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionPublishResultProjection {
+        return
+            try DiscussionPublishResultProjection(
+                didPublish: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscussionPublishResultProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.didPublish, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionPublishResultProjection_lift(_ buf: RustBuffer) throws -> DiscussionPublishResultProjection {
+    return try FfiConverterTypeDiscussionPublishResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionPublishResultProjection_lower(_ value: DiscussionPublishResultProjection) -> RustBuffer {
+    return FfiConverterTypeDiscussionPublishResultProjection.lower(value)
 }
 
 
@@ -43129,6 +43279,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_discussion_composer() != 16585) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_discussion_publish_result() != 46783) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_composer() != 43880) {

@@ -1632,6 +1632,13 @@ impl HighlighterCore {
         crate::discussions::composer_projection(input)
     }
 
+    pub fn project_discussion_publish_result(
+        &self,
+        input: crate::discussions::DiscussionPublishResultInput,
+    ) -> crate::discussions::DiscussionPublishResultProjection {
+        crate::discussions::publish_result_projection(input)
+    }
+
     /// Comment composer projection. Rust owns draft normalization and submit
     /// eligibility; native shells render the composer affordance.
     pub fn project_comment_composer(

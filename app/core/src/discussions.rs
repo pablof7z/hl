@@ -66,6 +66,18 @@ pub struct DiscussionComposerPublishInput {
     pub attachment_url: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DiscussionPublishResultInput {
+    pub error: String,
+    pub has_discussion: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DiscussionPublishResultProjection {
+    pub did_publish: bool,
+    pub error_message: String,
+}
+
 /// Project a discussion attachment for native list/detail rendering. Rust owns
 /// the title->URL label fallback and optional metadata presence.
 pub fn attachment_projection(
@@ -98,6 +110,23 @@ pub fn composer_projection(
         submit_title,
         submit_body,
         submit_attachment_url,
+    }
+}
+
+pub fn publish_result_projection(
+    input: DiscussionPublishResultInput,
+) -> DiscussionPublishResultProjection {
+    let error_message = input.error.trim().to_string();
+    let did_publish = error_message.is_empty() && input.has_discussion;
+    DiscussionPublishResultProjection {
+        did_publish,
+        error_message: if did_publish {
+            String::new()
+        } else if error_message.is_empty() {
+            "Failed to publish.".to_string()
+        } else {
+            error_message
+        },
     }
 }
 
@@ -584,6 +613,30 @@ mod tests {
         let err = publish_snapshot(Err(CoreError::Signer("missing key".into())));
         assert!(err.discussion.is_none());
         assert_eq!(err.error, "signer error: missing key");
+    }
+
+    #[test]
+    fn publish_result_projection_requires_record_and_empty_error() {
+        let ok = publish_result_projection(DiscussionPublishResultInput {
+            error: String::new(),
+            has_discussion: true,
+        });
+        assert!(ok.did_publish);
+        assert!(ok.error_message.is_empty());
+
+        let missing_record = publish_result_projection(DiscussionPublishResultInput {
+            error: " \n\t ".into(),
+            has_discussion: false,
+        });
+        assert!(!missing_record.did_publish);
+        assert_eq!(missing_record.error_message, "Failed to publish.");
+
+        let failed = publish_result_projection(DiscussionPublishResultInput {
+            error: " relay failed ".into(),
+            has_discussion: true,
+        });
+        assert!(!failed.did_publish);
+        assert_eq!(failed.error_message, "relay failed");
     }
 
     #[test]

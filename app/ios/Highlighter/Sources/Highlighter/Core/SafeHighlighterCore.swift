@@ -1069,6 +1069,12 @@ actor SafeHighlighterCore {
         core.projectDiscussionComposer(input: input)
     }
 
+    nonisolated func projectDiscussionPublishResult(
+        input: DiscussionPublishResultInput
+    ) -> DiscussionPublishResultProjection {
+        core.projectDiscussionPublishResult(input: input)
+    }
+
     nonisolated func projectCommentComposer(
         input: CommentComposerProjectionInput
     ) -> CommentComposerProjection {
