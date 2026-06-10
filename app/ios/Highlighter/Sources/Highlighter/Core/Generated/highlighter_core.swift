@@ -1255,6 +1255,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectCaptureStash(input: CaptureStashProjectionInput)  -> CaptureStashProjection
 
+    func projectCaptureUpload(input: CaptureUploadProjectionInput)  -> CaptureUploadProjection
+
     /**
      * Chat composer projection. Rust owns draft normalization and send
      * eligibility; native shells render the composer affordance.
@@ -3703,6 +3705,14 @@ open func projectCaptureStash(input: CaptureStashProjectionInput) -> CaptureStas
     return try!  FfiConverterTypeCaptureStashProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_capture_stash(self.uniffiClonePointer(),
         FfiConverterTypeCaptureStashProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectCaptureUpload(input: CaptureUploadProjectionInput) -> CaptureUploadProjection  {
+    return try!  FfiConverterTypeCaptureUploadProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_capture_upload(self.uniffiClonePointer(),
+        FfiConverterTypeCaptureUploadProjectionInput_lower(input),$0
     )
 })
 }
@@ -11350,6 +11360,162 @@ public func FfiConverterTypeCaptureStashProjectionInput_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeCaptureStashProjectionInput_lower(_ value: CaptureStashProjectionInput) -> RustBuffer {
     return FfiConverterTypeCaptureStashProjectionInput.lower(value)
+}
+
+
+public struct CaptureUploadProjection {
+    public var shouldApply: Bool
+    public var upload: BlossomUpload?
+    public var uploadError: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldApply: Bool, upload: BlossomUpload?, uploadError: String) {
+        self.shouldApply = shouldApply
+        self.upload = upload
+        self.uploadError = uploadError
+    }
+}
+
+#if compiler(>=6)
+extension CaptureUploadProjection: Sendable {}
+#endif
+
+
+extension CaptureUploadProjection: Equatable, Hashable {
+    public static func ==(lhs: CaptureUploadProjection, rhs: CaptureUploadProjection) -> Bool {
+        if lhs.shouldApply != rhs.shouldApply {
+            return false
+        }
+        if lhs.upload != rhs.upload {
+            return false
+        }
+        if lhs.uploadError != rhs.uploadError {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldApply)
+        hasher.combine(upload)
+        hasher.combine(uploadError)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCaptureUploadProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureUploadProjection {
+        return
+            try CaptureUploadProjection(
+                shouldApply: FfiConverterBool.read(from: &buf),
+                upload: FfiConverterOptionTypeBlossomUpload.read(from: &buf),
+                uploadError: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CaptureUploadProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldApply, into: &buf)
+        FfiConverterOptionTypeBlossomUpload.write(value.upload, into: &buf)
+        FfiConverterString.write(value.uploadError, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureUploadProjection_lift(_ buf: RustBuffer) throws -> CaptureUploadProjection {
+    return try FfiConverterTypeCaptureUploadProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureUploadProjection_lower(_ value: CaptureUploadProjection) -> RustBuffer {
+    return FfiConverterTypeCaptureUploadProjection.lower(value)
+}
+
+
+public struct CaptureUploadProjectionInput {
+    public var snapshot: BlossomUploadSnapshot
+    public var requestGeneration: UInt64
+    public var currentGeneration: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: BlossomUploadSnapshot, requestGeneration: UInt64, currentGeneration: UInt64) {
+        self.snapshot = snapshot
+        self.requestGeneration = requestGeneration
+        self.currentGeneration = currentGeneration
+    }
+}
+
+#if compiler(>=6)
+extension CaptureUploadProjectionInput: Sendable {}
+#endif
+
+
+extension CaptureUploadProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CaptureUploadProjectionInput, rhs: CaptureUploadProjectionInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        if lhs.requestGeneration != rhs.requestGeneration {
+            return false
+        }
+        if lhs.currentGeneration != rhs.currentGeneration {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+        hasher.combine(requestGeneration)
+        hasher.combine(currentGeneration)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCaptureUploadProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureUploadProjectionInput {
+        return
+            try CaptureUploadProjectionInput(
+                snapshot: FfiConverterTypeBlossomUploadSnapshot.read(from: &buf),
+                requestGeneration: FfiConverterUInt64.read(from: &buf),
+                currentGeneration: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CaptureUploadProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeBlossomUploadSnapshot.write(value.snapshot, into: &buf)
+        FfiConverterUInt64.write(value.requestGeneration, into: &buf)
+        FfiConverterUInt64.write(value.currentGeneration, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureUploadProjectionInput_lift(_ buf: RustBuffer) throws -> CaptureUploadProjectionInput {
+    return try FfiConverterTypeCaptureUploadProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCaptureUploadProjectionInput_lower(_ value: CaptureUploadProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCaptureUploadProjectionInput.lower(value)
 }
 
 
@@ -40221,6 +40387,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_stash() != 52039) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_upload() != 64820) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_chat_composer() != 32840) {

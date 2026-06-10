@@ -552,6 +552,12 @@ actor SafeHighlighterCore {
         core.projectCapturePublish(input: input)
     }
 
+    nonisolated func projectCaptureUpload(
+        input: CaptureUploadProjectionInput
+    ) -> CaptureUploadProjection {
+        core.projectCaptureUpload(input: input)
+    }
+
     func publishCapture(input: CapturePublishInput) async -> CapturePublishSnapshot {
         await core.publishCapture(input: input)
     }

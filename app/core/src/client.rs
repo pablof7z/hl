@@ -2360,6 +2360,13 @@ impl HighlighterCore {
         crate::capture::publish_projection(input)
     }
 
+    pub fn project_capture_upload(
+        &self,
+        input: crate::capture::CaptureUploadProjectionInput,
+    ) -> crate::capture::CaptureUploadProjection {
+        crate::capture::upload_projection(input)
+    }
+
     pub async fn publish_capture(
         &self,
         input: crate::capture::CapturePublishInput,

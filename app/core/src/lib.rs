@@ -89,7 +89,7 @@ pub use capture::{
     CaptureCommunitySelectionProjection, CaptureCommunitySelectionProjectionInput,
     CapturePublishInput, CapturePublishPhase, CapturePublishProjection,
     CapturePublishProjectionInput, CapturePublishSnapshot, CaptureStashProjection,
-    CaptureStashProjectionInput,
+    CaptureStashProjectionInput, CaptureUploadProjection, CaptureUploadProjectionInput,
 };
 pub use chat::{
     ChatComposerProjection, ChatComposerProjectionInput, ChatMessageRowProjection,

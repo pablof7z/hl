@@ -1,3 +1,4 @@
+use crate::blossom::BlossomUploadSnapshot;
 use crate::errors::CoreError;
 use crate::models::{
     ArtifactPreview, ArtifactRecord, BlossomUpload, CommunitySummary, HighlightDraft, PictureDraft,
@@ -59,6 +60,20 @@ pub struct CapturePublishProjectionInput {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CapturePublishProjection {
     pub can_publish: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CaptureUploadProjectionInput {
+    pub snapshot: BlossomUploadSnapshot,
+    pub request_generation: u64,
+    pub current_generation: u64,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CaptureUploadProjection {
+    pub should_apply: bool,
+    pub upload: Option<BlossomUpload>,
+    pub upload_error: String,
 }
 
 #[derive(Debug, Clone)]
@@ -158,6 +173,33 @@ pub fn publish_projection(input: CapturePublishProjectionInput) -> CapturePublis
     );
     CapturePublishProjection {
         can_publish: phase_allows_publish && input.has_upload,
+    }
+}
+
+/// Project the result of a native upload capability. Rust owns stale-result
+/// rejection and success/error state; native only executes the upload and
+/// applies the returned projection.
+pub fn upload_projection(input: CaptureUploadProjectionInput) -> CaptureUploadProjection {
+    if input.request_generation != input.current_generation {
+        return CaptureUploadProjection {
+            should_apply: false,
+            upload: None,
+            upload_error: String::new(),
+        };
+    }
+
+    if !input.snapshot.error.is_empty() {
+        return CaptureUploadProjection {
+            should_apply: true,
+            upload: None,
+            upload_error: input.snapshot.error,
+        };
+    }
+
+    CaptureUploadProjection {
+        should_apply: true,
+        upload: input.snapshot.upload,
+        upload_error: String::new(),
     }
 }
 
@@ -336,6 +378,48 @@ mod tests {
         assert!(processing.can_publish);
         assert!(!no_upload.can_publish);
         assert!(!publishing.can_publish);
+    }
+
+    #[test]
+    fn upload_projection_rejects_stale_results_and_projects_error_or_upload() {
+        let stale = upload_projection(CaptureUploadProjectionInput {
+            snapshot: crate::blossom::BlossomUploadSnapshot {
+                upload: Some(upload()),
+                error: String::new(),
+            },
+            request_generation: 1,
+            current_generation: 2,
+        });
+        assert!(!stale.should_apply);
+        assert!(stale.upload.is_none());
+        assert!(stale.upload_error.is_empty());
+
+        let failed = upload_projection(CaptureUploadProjectionInput {
+            snapshot: crate::blossom::BlossomUploadSnapshot {
+                upload: None,
+                error: "network down".into(),
+            },
+            request_generation: 2,
+            current_generation: 2,
+        });
+        assert!(failed.should_apply);
+        assert!(failed.upload.is_none());
+        assert_eq!(failed.upload_error, "network down");
+
+        let ok = upload_projection(CaptureUploadProjectionInput {
+            snapshot: crate::blossom::BlossomUploadSnapshot {
+                upload: Some(upload()),
+                error: String::new(),
+            },
+            request_generation: 3,
+            current_generation: 3,
+        });
+        assert!(ok.should_apply);
+        assert_eq!(
+            ok.upload.as_ref().map(|upload| upload.url.as_str()),
+            Some("https://blossom.example/page.jpg")
+        );
+        assert!(ok.upload_error.is_empty());
     }
 
     #[test]

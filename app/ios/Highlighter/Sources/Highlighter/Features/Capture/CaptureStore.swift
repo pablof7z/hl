@@ -64,7 +64,7 @@ final class CaptureStore {
     private var processedJPEG: ImageProcessing.Result?
     private var preparedUploadJPEG: ImageProcessing.Result?
     private var selectedHighlightBoxes: [CGRect] = []
-    private var uploadGeneration = 0
+    private var uploadGeneration: UInt64 = 0
 
     init(safeCore: SafeHighlighterCore) {
         self.safeCore = safeCore
@@ -136,20 +136,15 @@ final class CaptureStore {
             // The imeta alt is a one-line summary; flatten the markdown
             // for it (paragraph breaks → spaces).
             let altText = safeCore.ocrAltText(from: markdown)
+            let generation = nextUploadGeneration()
             let uploadSnapshot = await upload(processed: processed, alt: altText)
-            if uploadSnapshot.error.isEmpty, let uploaded = uploadSnapshot.upload {
-                self.upload = BlossomUpload(
-                    url: uploaded.url,
-                    sha256Hex: uploaded.sha256Hex,
-                    mime: uploaded.mime,
-                    sizeBytes: uploaded.sizeBytes,
-                    width: uploaded.width,
-                    height: uploaded.height,
-                    alt: altText
+            applyUploadProjection(safeCore.projectCaptureUpload(
+                input: CaptureUploadProjectionInput(
+                    snapshot: uploadSnapshot,
+                    requestGeneration: generation,
+                    currentGeneration: uploadGeneration
                 )
-            } else {
-                self.uploadError = uploadSnapshot.error
-            }
+            ))
             self.phase = .reviewing
         }
     }
@@ -364,29 +359,32 @@ final class CaptureStore {
     }
 
     private func startUpload(processed: ImageProcessing.Result) {
-        uploadGeneration += 1
-        let generation = uploadGeneration
+        let generation = nextUploadGeneration()
         upload = nil
         uploadError = nil
 
         Task {
             let altText = safeCore.ocrAltText(from: ocrMarkdown)
             let outcome = await upload(processed: processed, alt: altText)
-            guard generation == self.uploadGeneration else { return }
-            guard outcome.error.isEmpty, let uploaded = outcome.upload else {
-                self.uploadError = outcome.error
-                return
-            }
-            self.upload = BlossomUpload(
-                url: uploaded.url,
-                sha256Hex: uploaded.sha256Hex,
-                mime: uploaded.mime,
-                sizeBytes: uploaded.sizeBytes,
-                width: uploaded.width,
-                height: uploaded.height,
-                alt: altText
-            )
+            applyUploadProjection(safeCore.projectCaptureUpload(
+                input: CaptureUploadProjectionInput(
+                    snapshot: outcome,
+                    requestGeneration: generation,
+                    currentGeneration: uploadGeneration
+                )
+            ))
         }
+    }
+
+    private func nextUploadGeneration() -> UInt64 {
+        uploadGeneration &+= 1
+        return uploadGeneration
+    }
+
+    private func applyUploadProjection(_ projection: CaptureUploadProjection) {
+        guard projection.shouldApply else { return }
+        upload = projection.upload
+        uploadError = projection.uploadError.isEmpty ? nil : projection.uploadError
     }
 
     private func defaultHighlightCropBox(processed: ImageProcessing.Result) -> CGRect? {
