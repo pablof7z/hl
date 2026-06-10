@@ -155,11 +155,12 @@ pub use lists::{
     CurationSetCreateProjectionInput, WebBookmarkRowProjection, WebBookmarkRowProjectionInput,
 };
 pub use models::{
-    ArticleReaderRoute, ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactPreview,
-    ArtifactRecord, ArtifactReferenceTarget, BlossomUpload, BookRoute, BookmarkSetRecord,
-    ChatMessageRecord, CommentRecord, CommentReferenceBucket, CommentThreadNode,
-    CommentThreadProjection, CommunitySummary, CurationMenuItem, CurrentUser, DiscussionAttachment,
-    DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightRecord,
+    AppSubscriptionStartProjection, AppSubscriptionStartProjectionInput, ArticleReaderRoute,
+    ArticleRecord, ArtifactDetailRoute, ArtifactDetailTarget, ArtifactPreview, ArtifactRecord,
+    ArtifactReferenceTarget, BlossomUpload, BookRoute, BookmarkSetRecord, ChatMessageRecord,
+    CommentRecord, CommentReferenceBucket, CommentThreadNode, CommentThreadProjection,
+    CommunitySummary, CurationMenuItem, CurrentUser, DiscussionAttachment, DiscussionRecord,
+    FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightRecord,
     HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem,
     HydratedHighlight, LoginInputAction, MutationSnapshot, OnboardingInterest,
     OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,

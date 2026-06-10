@@ -85,6 +85,19 @@ pub struct ViewSubscriptionStartProjection {
     pub handle: u64,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct AppSubscriptionStartProjectionInput {
+    pub start: SubscriptionStartSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AppSubscriptionStartProjection {
+    pub should_keep_handle: bool,
+    pub handle: u64,
+    pub has_error: bool,
+    pub error_message: String,
+}
+
 pub fn view_subscription_start_projection(
     input: ViewSubscriptionStartProjectionInput,
 ) -> ViewSubscriptionStartProjection {
@@ -99,8 +112,26 @@ pub fn view_subscription_start_projection(
     }
 }
 
+pub fn app_subscription_start_projection(
+    input: AppSubscriptionStartProjectionInput,
+) -> AppSubscriptionStartProjection {
+    let error_message = input.start.error.trim().to_string();
+    let has_error = !error_message.is_empty();
+    let should_keep_handle = !has_error && input.start.handle != 0;
+    AppSubscriptionStartProjection {
+        should_keep_handle,
+        handle: if should_keep_handle {
+            input.start.handle
+        } else {
+            0
+        },
+        has_error,
+        error_message,
+    }
+}
+
 #[cfg(test)]
-mod view_subscription_start_projection_tests {
+mod subscription_start_projection_tests {
     use super::*;
 
     #[test]
@@ -131,6 +162,42 @@ mod view_subscription_start_projection_tests {
         });
         assert!(!app_scope.should_register);
         assert_eq!(app_scope.handle, 0);
+    }
+
+    #[test]
+    fn app_subscription_start_projection_keeps_handles_and_surfaces_errors() {
+        let success = app_subscription_start_projection(AppSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 17,
+                error: String::new(),
+            },
+        });
+        assert!(success.should_keep_handle);
+        assert_eq!(success.handle, 17);
+        assert!(!success.has_error);
+        assert_eq!(success.error_message, "");
+
+        let zero_handle = app_subscription_start_projection(AppSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 0,
+                error: String::new(),
+            },
+        });
+        assert!(!zero_handle.should_keep_handle);
+        assert_eq!(zero_handle.handle, 0);
+        assert!(!zero_handle.has_error);
+        assert_eq!(zero_handle.error_message, "");
+
+        let failed = app_subscription_start_projection(AppSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 17,
+                error: " subscribe failed ".into(),
+            },
+        });
+        assert!(!failed.should_keep_handle);
+        assert_eq!(failed.handle, 0);
+        assert!(failed.has_error);
+        assert_eq!(failed.error_message, "subscribe failed");
     }
 }
 

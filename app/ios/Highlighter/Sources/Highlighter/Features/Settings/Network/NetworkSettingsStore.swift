@@ -132,8 +132,11 @@ final class NetworkSettingsStore {
     func startLiveUpdates() {
         Task {
             let snapshot = await self.core.subscribeRelayStatus()
-            if !snapshot.error.isEmpty {
-                self.lastError = snapshot.error
+            let projection = self.core.projectAppSubscriptionStart(
+                input: AppSubscriptionStartProjectionInput(start: snapshot)
+            )
+            if projection.hasError {
+                self.lastError = projection.errorMessage
             }
             await self.refreshCacheStats()
         }

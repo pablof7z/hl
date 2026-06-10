@@ -1200,6 +1200,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
 
+    func projectAppSubscriptionStart(input: AppSubscriptionStartProjectionInput)  -> AppSubscriptionStartProjection
+
     /**
      * Project article bookmark affordance copy and SF Symbols.
      */
@@ -3576,6 +3578,14 @@ open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelayS
     return try!  FfiConverterTypeAddRelaySheetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_add_relay_sheet(self.uniffiClonePointer(),
         FfiConverterTypeAddRelaySheetProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectAppSubscriptionStart(input: AppSubscriptionStartProjectionInput) -> AppSubscriptionStartProjection  {
+    return try!  FfiConverterTypeAppSubscriptionStartProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_app_subscription_start(self.uniffiClonePointer(),
+        FfiConverterTypeAppSubscriptionStartProjectionInput_lower(input),$0
     )
 })
 }
@@ -6244,6 +6254,154 @@ public func FfiConverterTypeAddRelaySheetProjectionInput_lift(_ buf: RustBuffer)
 #endif
 public func FfiConverterTypeAddRelaySheetProjectionInput_lower(_ value: AddRelaySheetProjectionInput) -> RustBuffer {
     return FfiConverterTypeAddRelaySheetProjectionInput.lower(value)
+}
+
+
+public struct AppSubscriptionStartProjection {
+    public var shouldKeepHandle: Bool
+    public var handle: UInt64
+    public var hasError: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldKeepHandle: Bool, handle: UInt64, hasError: Bool, errorMessage: String) {
+        self.shouldKeepHandle = shouldKeepHandle
+        self.handle = handle
+        self.hasError = hasError
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension AppSubscriptionStartProjection: Sendable {}
+#endif
+
+
+extension AppSubscriptionStartProjection: Equatable, Hashable {
+    public static func ==(lhs: AppSubscriptionStartProjection, rhs: AppSubscriptionStartProjection) -> Bool {
+        if lhs.shouldKeepHandle != rhs.shouldKeepHandle {
+            return false
+        }
+        if lhs.handle != rhs.handle {
+            return false
+        }
+        if lhs.hasError != rhs.hasError {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldKeepHandle)
+        hasher.combine(handle)
+        hasher.combine(hasError)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAppSubscriptionStartProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppSubscriptionStartProjection {
+        return
+            try AppSubscriptionStartProjection(
+                shouldKeepHandle: FfiConverterBool.read(from: &buf),
+                handle: FfiConverterUInt64.read(from: &buf),
+                hasError: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AppSubscriptionStartProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldKeepHandle, into: &buf)
+        FfiConverterUInt64.write(value.handle, into: &buf)
+        FfiConverterBool.write(value.hasError, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppSubscriptionStartProjection_lift(_ buf: RustBuffer) throws -> AppSubscriptionStartProjection {
+    return try FfiConverterTypeAppSubscriptionStartProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppSubscriptionStartProjection_lower(_ value: AppSubscriptionStartProjection) -> RustBuffer {
+    return FfiConverterTypeAppSubscriptionStartProjection.lower(value)
+}
+
+
+public struct AppSubscriptionStartProjectionInput {
+    public var start: SubscriptionStartSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(start: SubscriptionStartSnapshot) {
+        self.start = start
+    }
+}
+
+#if compiler(>=6)
+extension AppSubscriptionStartProjectionInput: Sendable {}
+#endif
+
+
+extension AppSubscriptionStartProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: AppSubscriptionStartProjectionInput, rhs: AppSubscriptionStartProjectionInput) -> Bool {
+        if lhs.start != rhs.start {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(start)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAppSubscriptionStartProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppSubscriptionStartProjectionInput {
+        return
+            try AppSubscriptionStartProjectionInput(
+                start: FfiConverterTypeSubscriptionStartSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AppSubscriptionStartProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeSubscriptionStartSnapshot.write(value.start, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppSubscriptionStartProjectionInput_lift(_ buf: RustBuffer) throws -> AppSubscriptionStartProjectionInput {
+    return try FfiConverterTypeAppSubscriptionStartProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppSubscriptionStartProjectionInput_lower(_ value: AppSubscriptionStartProjectionInput) -> RustBuffer {
+    return FfiConverterTypeAppSubscriptionStartProjectionInput.lower(value)
 }
 
 
@@ -42133,6 +42291,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_add_relay_sheet() != 14886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_app_subscription_start() != 15378) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_bookmark_chrome() != 29518) {

@@ -865,6 +865,13 @@ impl HighlighterCore {
         crate::models::view_subscription_start_projection(input)
     }
 
+    pub fn project_app_subscription_start(
+        &self,
+        input: crate::models::AppSubscriptionStartProjectionInput,
+    ) -> crate::models::AppSubscriptionStartProjection {
+        crate::models::app_subscription_start_projection(input)
+    }
+
     /// App-scope subscription for the joined-communities view. Returns a
     /// handle; fires CommunityUpserted / MembershipChanged deltas tagged
     /// with that handle. Re-uses the relay sub installed at login; this

@@ -375,8 +375,11 @@ final class HighlighterStore {
         // by EventBridge).
         if joinedCommunitiesHandle == nil {
             let joinedStart = await safeCore.subscribeJoinedCommunities()
-            if joinedStart.error.isEmpty {
-                joinedCommunitiesHandle = joinedStart.handle
+            let joinedProjection = safeCore.projectAppSubscriptionStart(
+                input: AppSubscriptionStartProjectionInput(start: joinedStart)
+            )
+            if joinedProjection.shouldKeepHandle {
+                joinedCommunitiesHandle = joinedProjection.handle
                 // Joined-communities deltas are dispatched via the appStore
                 // path in EventBridge (not per-view). No store registration
                 // needed; we only hold the handle so logout can unsubscribe.
@@ -389,8 +392,11 @@ final class HighlighterStore {
         await refreshBookmarks()
         if bookmarksHandle == nil {
             let bookmarksStart = await safeCore.subscribeBookmarks()
-            if bookmarksStart.error.isEmpty {
-                bookmarksHandle = bookmarksStart.handle
+            let bookmarksProjection = safeCore.projectAppSubscriptionStart(
+                input: AppSubscriptionStartProjectionInput(start: bookmarksStart)
+            )
+            if bookmarksProjection.shouldKeepHandle {
+                bookmarksHandle = bookmarksProjection.handle
             }
         }
     }
