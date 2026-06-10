@@ -260,17 +260,18 @@ struct OnboardingCreateAccountView: View {
             }
 
             let claimedUsername: String
-            if case .available(let identifier, let domain) = usernameState,
+            if case .available(_, let domain) = usernameState,
                !projection.username.isEmpty {
                 let registerSnapshot = await store.safeCore.registerNip05(
                     name: projection.username,
                     domain: domain
                 )
-                guard registerSnapshot.succeeded else {
+                guard registerSnapshot.succeeded,
+                      let registeredIdentifier = registerSnapshot.identifier else {
                     errorMessage = registerSnapshot.errorMessage
                     return
                 }
-                claimedUsername = registerSnapshot.identifier.isEmpty ? identifier : registerSnapshot.identifier
+                claimedUsername = registeredIdentifier
             } else {
                 claimedUsername = ""
             }

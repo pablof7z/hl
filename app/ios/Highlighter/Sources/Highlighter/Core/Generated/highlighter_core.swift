@@ -24605,13 +24605,13 @@ public func FfiConverterTypeNip05AvailabilitySnapshot_lower(_ value: Nip05Availa
 
 
 public struct Nip05RegistrationSnapshot {
-    public var identifier: String
+    public var identifier: String?
     public var succeeded: Bool
-    public var errorMessage: String
+    public var errorMessage: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(identifier: String, succeeded: Bool, errorMessage: String) {
+    public init(identifier: String?, succeeded: Bool, errorMessage: String?) {
         self.identifier = identifier
         self.succeeded = succeeded
         self.errorMessage = errorMessage
@@ -24653,16 +24653,16 @@ public struct FfiConverterTypeNip05RegistrationSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05RegistrationSnapshot {
         return
             try Nip05RegistrationSnapshot(
-                identifier: FfiConverterString.read(from: &buf), 
+                identifier: FfiConverterOptionString.read(from: &buf), 
                 succeeded: FfiConverterBool.read(from: &buf), 
-                errorMessage: FfiConverterString.read(from: &buf)
+                errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: Nip05RegistrationSnapshot, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.identifier, into: &buf)
+        FfiConverterOptionString.write(value.identifier, into: &buf)
         FfiConverterBool.write(value.succeeded, into: &buf)
-        FfiConverterString.write(value.errorMessage, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
     }
 }
 
