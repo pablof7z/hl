@@ -1180,6 +1180,13 @@ impl HighlighterCore {
         result.unwrap_or_else(crate::home_feed::error_snapshot)
     }
 
+    pub fn project_home_feed_snapshot_apply(
+        &self,
+        input: crate::home_feed::HomeFeedSnapshotApplyInput,
+    ) -> crate::home_feed::HomeFeedSnapshotApplyProjection {
+        crate::home_feed::snapshot_apply_projection(input)
+    }
+
     pub fn project_highlight_group_card(
         &self,
         input: highlights::HighlightGroupCardProjectionInput,

@@ -14,6 +14,16 @@ pub struct HomeFeedSnapshot {
     pub error: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HomeFeedSnapshotApplyInput {
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HomeFeedSnapshotApplyProjection {
+    pub load_error: Option<String>,
+}
+
 pub fn snapshot(
     highlights: Vec<HydratedHighlight>,
     reads: Vec<ReadingFeedItem>,
@@ -28,6 +38,19 @@ pub fn error_snapshot(error: impl ToString) -> HomeFeedSnapshot {
     HomeFeedSnapshot {
         items: Vec::new(),
         error: error.to_string(),
+    }
+}
+
+pub fn snapshot_apply_projection(
+    input: HomeFeedSnapshotApplyInput,
+) -> HomeFeedSnapshotApplyProjection {
+    let error_message = input.error.trim().to_string();
+    HomeFeedSnapshotApplyProjection {
+        load_error: if error_message.is_empty() {
+            None
+        } else {
+            Some(error_message)
+        },
     }
 }
 
@@ -156,6 +179,19 @@ mod tests {
         let items = build_items(&[highlight], &[]);
 
         assert_eq!(items[0].stable_id, "h:src:https://example.com");
+    }
+
+    #[test]
+    fn snapshot_apply_projection_normalizes_load_error() {
+        let success = snapshot_apply_projection(HomeFeedSnapshotApplyInput {
+            error: String::new(),
+        });
+        assert_eq!(success.load_error, None);
+
+        let failure = snapshot_apply_projection(HomeFeedSnapshotApplyInput {
+            error: " refresh failed ".into(),
+        });
+        assert_eq!(failure.load_error.as_deref(), Some("refresh failed"));
     }
 
     fn hydrated_highlight(

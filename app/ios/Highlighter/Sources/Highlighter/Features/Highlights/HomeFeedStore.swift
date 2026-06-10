@@ -39,13 +39,11 @@ final class HomeFeedStore {
 
     func refresh() async {
         let snapshot = await core.getHomeFeedSnapshot()
-        if snapshot.error.isEmpty {
-            items = snapshot.items
-            loadError = nil
-        } else {
-            items = snapshot.items
-            loadError = snapshot.error
-        }
+        let projection = core.projectHomeFeedSnapshotApply(
+            input: HomeFeedSnapshotApplyInput(error: snapshot.error)
+        )
+        items = snapshot.items
+        loadError = projection.loadError
     }
 
     private func installSubscriptions() async {

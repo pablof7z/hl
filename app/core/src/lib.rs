@@ -144,7 +144,9 @@ pub use highlights::{
     HighlightGroupLabelSegment, HighlightResourceAuthorProfile, HighlightResourceHeaderProjection,
     HighlightResourceHeaderProjectionInput, HighlightShareUrlSnapshot,
 };
-pub use home_feed::HomeFeedSnapshot;
+pub use home_feed::{
+    HomeFeedSnapshot, HomeFeedSnapshotApplyInput, HomeFeedSnapshotApplyProjection,
+};
 pub use isbn_lookup::{
     BookPickerQueryProjection, BookPickerQueryProjectionInput, BookPickerSnapshot,
     EditedBookPreviewProjection, IsbnManualPreviewProjection, IsbnManualPreviewProjectionInput,

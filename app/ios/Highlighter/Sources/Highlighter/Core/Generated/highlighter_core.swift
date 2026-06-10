@@ -1379,6 +1379,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectHighlightResourceHeader(input: HighlightResourceHeaderProjectionInput)  -> HighlightResourceHeaderProjection
 
+    func projectHomeFeedSnapshotApply(input: HomeFeedSnapshotApplyInput)  -> HomeFeedSnapshotApplyProjection
+
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
     /**
@@ -4063,6 +4065,14 @@ open func projectHighlightResourceHeader(input: HighlightResourceHeaderProjectio
     return try!  FfiConverterTypeHighlightResourceHeaderProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_highlight_resource_header(self.uniffiClonePointer(),
         FfiConverterTypeHighlightResourceHeaderProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectHomeFeedSnapshotApply(input: HomeFeedSnapshotApplyInput) -> HomeFeedSnapshotApplyProjection  {
+    return try!  FfiConverterTypeHomeFeedSnapshotApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_home_feed_snapshot_apply(self.uniffiClonePointer(),
+        FfiConverterTypeHomeFeedSnapshotApplyInput_lower(input),$0
     )
 })
 }
@@ -20395,6 +20405,130 @@ public func FfiConverterTypeHomeFeedSnapshot_lift(_ buf: RustBuffer) throws -> H
 #endif
 public func FfiConverterTypeHomeFeedSnapshot_lower(_ value: HomeFeedSnapshot) -> RustBuffer {
     return FfiConverterTypeHomeFeedSnapshot.lower(value)
+}
+
+
+public struct HomeFeedSnapshotApplyInput {
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: String) {
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension HomeFeedSnapshotApplyInput: Sendable {}
+#endif
+
+
+extension HomeFeedSnapshotApplyInput: Equatable, Hashable {
+    public static func ==(lhs: HomeFeedSnapshotApplyInput, rhs: HomeFeedSnapshotApplyInput) -> Bool {
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHomeFeedSnapshotApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeFeedSnapshotApplyInput {
+        return
+            try HomeFeedSnapshotApplyInput(
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HomeFeedSnapshotApplyInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeFeedSnapshotApplyInput_lift(_ buf: RustBuffer) throws -> HomeFeedSnapshotApplyInput {
+    return try FfiConverterTypeHomeFeedSnapshotApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeFeedSnapshotApplyInput_lower(_ value: HomeFeedSnapshotApplyInput) -> RustBuffer {
+    return FfiConverterTypeHomeFeedSnapshotApplyInput.lower(value)
+}
+
+
+public struct HomeFeedSnapshotApplyProjection {
+    public var loadError: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(loadError: String?) {
+        self.loadError = loadError
+    }
+}
+
+#if compiler(>=6)
+extension HomeFeedSnapshotApplyProjection: Sendable {}
+#endif
+
+
+extension HomeFeedSnapshotApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: HomeFeedSnapshotApplyProjection, rhs: HomeFeedSnapshotApplyProjection) -> Bool {
+        if lhs.loadError != rhs.loadError {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(loadError)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHomeFeedSnapshotApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeFeedSnapshotApplyProjection {
+        return
+            try HomeFeedSnapshotApplyProjection(
+                loadError: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HomeFeedSnapshotApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.loadError, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeFeedSnapshotApplyProjection_lift(_ buf: RustBuffer) throws -> HomeFeedSnapshotApplyProjection {
+    return try FfiConverterTypeHomeFeedSnapshotApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHomeFeedSnapshotApplyProjection_lower(_ value: HomeFeedSnapshotApplyProjection) -> RustBuffer {
+    return FfiConverterTypeHomeFeedSnapshotApplyProjection.lower(value)
 }
 
 
@@ -43454,6 +43588,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_highlight_resource_header() != 61046) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_home_feed_snapshot_apply() != 48171) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {

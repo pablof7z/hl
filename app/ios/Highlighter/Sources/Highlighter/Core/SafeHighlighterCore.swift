@@ -1314,6 +1314,12 @@ actor SafeHighlighterCore {
         await core.getHomeFeedSnapshot(highlightLimit: highlightLimit, readLimit: readLimit)
     }
 
+    nonisolated func projectHomeFeedSnapshotApply(
+        input: HomeFeedSnapshotApplyInput
+    ) -> HomeFeedSnapshotApplyProjection {
+        core.projectHomeFeedSnapshotApply(input: input)
+    }
+
     nonisolated func projectReadingFeedCard(
         input: ReadingFeedCardProjectionInput
     ) -> ReadingFeedCardProjection {
