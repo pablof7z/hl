@@ -169,10 +169,10 @@ final class HighlighterStore {
         bookmarkedArticleAddresses = projection.optimisticAddresses
         // Authoritative toggle + publish.
         let snapshot = await safeCore.toggleArticleBookmarkSnapshot(address: projection.canonicalAddress)
-        if snapshot.error.isEmpty {
-            bookmarkedArticleAddresses = snapshot.addresses
-        } else {
-            // Revert on failure.
+        let apply = articleBookmarksSnapshotApplyProjection(snapshot)
+        if apply.shouldApplyAddresses {
+            bookmarkedArticleAddresses = apply.addresses
+        } else if apply.shouldRefreshAfterFailure {
             await refreshBookmarks()
         }
         // No explicit refresh on success — the pump will deliver
@@ -181,8 +181,9 @@ final class HighlighterStore {
 
     func refreshBookmarks() async {
         let snapshot = await safeCore.getArticleBookmarksSnapshot()
-        if snapshot.error.isEmpty {
-            bookmarkedArticleAddresses = snapshot.addresses
+        let apply = articleBookmarksSnapshotApplyProjection(snapshot)
+        if apply.shouldApplyAddresses {
+            bookmarkedArticleAddresses = apply.addresses
         }
     }
 
@@ -347,9 +348,7 @@ final class HighlighterStore {
     /// Public so `EventBridge` can re-query on a `MembershipChanged` delta.
     func refreshJoinedCommunities() async {
         let outcome = await safeCore.getJoinedCommunities()
-        if outcome.error.isEmpty {
-            joinedCommunities = outcome.communities
-        }
+        applyJoinedCommunitiesSnapshot(outcome)
     }
 
     private func loadAppScopeData() async {
@@ -358,9 +357,7 @@ final class HighlighterStore {
         // Immediate read from nostrdb via the Rust core. Non-blocking on
         // relays — the cache answers first, subscriptions catch up later.
         let communitiesSnapshot = await safeCore.getJoinedCommunities()
-        if communitiesSnapshot.error.isEmpty {
-            joinedCommunities = communitiesSnapshot.communities
-        }
+        applyJoinedCommunitiesSnapshot(communitiesSnapshot)
 
         // Fetch the user's own kind:0 so the top-bar avatar shows their real
         // picture. Cheap — single nostrdb read. Lives on the app-scope store
@@ -423,5 +420,22 @@ final class HighlighterStore {
     private func applyNetworkPathStatus(isWifi: Bool) async {
         let snapshot = await safeCore.applyNetworkPathStatus(isWifi: isWifi)
         applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
+    }
+
+    private func articleBookmarksSnapshotApplyProjection(
+        _ snapshot: ArticleBookmarksSnapshot
+    ) -> ArticleBookmarksSnapshotApplyProjection {
+        safeCore.projectArticleBookmarksSnapshotApply(
+            input: ArticleBookmarksSnapshotApplyInput(snapshot: snapshot)
+        )
+    }
+
+    private func applyJoinedCommunitiesSnapshot(_ snapshot: JoinedCommunitiesSnapshot) {
+        let apply = safeCore.projectJoinedCommunitiesSnapshotApply(
+            input: JoinedCommunitiesSnapshotApplyInput(snapshot: snapshot)
+        )
+        if apply.shouldApplyCommunities {
+            joinedCommunities = apply.communities
+        }
     }
 }

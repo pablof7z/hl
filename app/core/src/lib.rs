@@ -89,6 +89,7 @@ pub use book_detail::{
 pub use bookmarks::{
     ArticleBookmarkChromeProjection, ArticleBookmarkChromeProjectionInput,
     ArticleBookmarkStateProjection, ArticleBookmarkStateProjectionInput, ArticleBookmarksSnapshot,
+    ArticleBookmarksSnapshotApplyInput, ArticleBookmarksSnapshotApplyProjection,
 };
 pub use capture::{
     CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput,
@@ -134,7 +135,8 @@ pub use groups::{
     CommunityRowProjection, CommunityRowProjectionInput, CreateRoomCoverUploadResultInput,
     CreateRoomCoverUploadResultProjection, CreateRoomProjection, CreateRoomProjectionInput,
     CreateRoomPublishResultInput, CreateRoomPublishResultProjection, CreateRoomPublishSnapshot,
-    CreateRoomVisibilityOption, JoinRoomRequestSnapshot, JoinedCommunitiesSnapshot, RoomAccess,
+    CreateRoomVisibilityOption, JoinRoomRequestSnapshot, JoinedCommunitiesSnapshot,
+    JoinedCommunitiesSnapshotApplyInput, JoinedCommunitiesSnapshotApplyProjection, RoomAccess,
     RoomAvatarProjection, RoomAvatarProjectionInput, RoomCoverCardProjection,
     RoomCoverCardProjectionInput, RoomVisibility,
 };

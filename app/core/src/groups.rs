@@ -75,6 +75,17 @@ pub struct JoinedCommunitiesSnapshot {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct JoinedCommunitiesSnapshotApplyInput {
+    pub snapshot: JoinedCommunitiesSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct JoinedCommunitiesSnapshotApplyProjection {
+    pub should_apply_communities: bool,
+    pub communities: Vec<CommunitySummary>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct RoomCoverCardProjectionInput {
     pub room: CommunitySummary,
 }
@@ -352,6 +363,20 @@ pub fn joined_communities_snapshot(
         Err(error) => JoinedCommunitiesSnapshot {
             communities: Vec::new(),
             error: error.to_string(),
+        },
+    }
+}
+
+pub fn joined_communities_snapshot_apply_projection(
+    input: JoinedCommunitiesSnapshotApplyInput,
+) -> JoinedCommunitiesSnapshotApplyProjection {
+    let should_apply_communities = input.snapshot.error.trim().is_empty();
+    JoinedCommunitiesSnapshotApplyProjection {
+        should_apply_communities,
+        communities: if should_apply_communities {
+            input.snapshot.communities
+        } else {
+            Vec::new()
         },
     }
 }
@@ -1052,6 +1077,24 @@ mod tests {
         let err = joined_communities_snapshot(Err(CoreError::NotAuthenticated));
         assert!(err.communities.is_empty());
         assert_eq!(err.error, "not authenticated");
+    }
+
+    #[test]
+    fn joined_communities_snapshot_apply_projection_applies_only_success() {
+        let ok =
+            joined_communities_snapshot_apply_projection(JoinedCommunitiesSnapshotApplyInput {
+                snapshot: joined_communities_snapshot(Ok(vec![summary("alpha", "Alpha", "")])),
+            });
+        assert!(ok.should_apply_communities);
+        assert_eq!(ok.communities.len(), 1);
+        assert_eq!(ok.communities[0].id, "alpha");
+
+        let failed =
+            joined_communities_snapshot_apply_projection(JoinedCommunitiesSnapshotApplyInput {
+                snapshot: joined_communities_snapshot(Err(CoreError::NotAuthenticated)),
+            });
+        assert!(!failed.should_apply_communities);
+        assert!(failed.communities.is_empty());
     }
 
     #[test]

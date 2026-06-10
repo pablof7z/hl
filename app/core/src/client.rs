@@ -1116,6 +1116,13 @@ impl HighlighterCore {
         })())
     }
 
+    pub fn project_joined_communities_snapshot_apply(
+        &self,
+        input: groups::JoinedCommunitiesSnapshotApplyInput,
+    ) -> groups::JoinedCommunitiesSnapshotApplyProjection {
+        groups::joined_communities_snapshot_apply_projection(input)
+    }
+
     pub async fn get_relay_hosted_rooms_snapshot(
         &self,
         url: String,
@@ -2186,6 +2193,13 @@ impl HighlighterCore {
             Ok(addresses) => crate::bookmarks::article_bookmarks_snapshot(addresses, ""),
             Err(error) => crate::bookmarks::article_bookmarks_snapshot(Vec::new(), error),
         }
+    }
+
+    pub fn project_article_bookmarks_snapshot_apply(
+        &self,
+        input: crate::bookmarks::ArticleBookmarksSnapshotApplyInput,
+    ) -> crate::bookmarks::ArticleBookmarksSnapshotApplyProjection {
+        crate::bookmarks::article_bookmarks_snapshot_apply_projection(input)
     }
 
     /// Open a live subscription on the current user's kind:10003 bookmark

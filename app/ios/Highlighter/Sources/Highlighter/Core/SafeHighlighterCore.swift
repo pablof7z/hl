@@ -258,6 +258,12 @@ actor SafeHighlighterCore {
         await core.getJoinedCommunities()
     }
 
+    nonisolated func projectJoinedCommunitiesSnapshotApply(
+        input: JoinedCommunitiesSnapshotApplyInput
+    ) -> JoinedCommunitiesSnapshotApplyProjection {
+        core.projectJoinedCommunitiesSnapshotApply(input: input)
+    }
+
     func getRelayHostedRoomsSnapshot(hostedOnRelay url: String) async -> RelayHostedRoomsSnapshot {
         await core.getRelayHostedRoomsSnapshot(url: url)
     }
@@ -390,6 +396,12 @@ actor SafeHighlighterCore {
 
     func toggleArticleBookmarkSnapshot(address: String) async -> ArticleBookmarksSnapshot {
         await core.toggleArticleBookmarkSnapshot(address: address)
+    }
+
+    nonisolated func projectArticleBookmarksSnapshotApply(
+        input: ArticleBookmarksSnapshotApplyInput
+    ) -> ArticleBookmarksSnapshotApplyProjection {
+        core.projectArticleBookmarksSnapshotApply(input: input)
     }
 
     func subscribeBookmarks() async -> SubscriptionStartSnapshot {

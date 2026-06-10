@@ -1213,6 +1213,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectArticleBookmarkState(input: ArticleBookmarkStateProjectionInput)  -> ArticleBookmarkStateProjection
 
+    func projectArticleBookmarksSnapshotApply(input: ArticleBookmarksSnapshotApplyInput)  -> ArticleBookmarksSnapshotApplyProjection
+
     /**
      * Project article-reader highlight publish state. Rust owns note
      * normalization and success/failure toast semantics.
@@ -1406,6 +1408,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectIsbnPreviewLookupApply(input: IsbnPreviewLookupApplyInput)  -> IsbnPreviewLookupApplyProjection
 
     func projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput)  -> IsbnPreviewRequestProjection
+
+    func projectJoinedCommunitiesSnapshotApply(input: JoinedCommunitiesSnapshotApplyInput)  -> JoinedCommunitiesSnapshotApplyProjection
 
     /**
      * Project a live diagnostics payload plus the derived Network Settings
@@ -3671,6 +3675,14 @@ open func projectArticleBookmarkState(input: ArticleBookmarkStateProjectionInput
 })
 }
 
+open func projectArticleBookmarksSnapshotApply(input: ArticleBookmarksSnapshotApplyInput) -> ArticleBookmarksSnapshotApplyProjection  {
+    return try!  FfiConverterTypeArticleBookmarksSnapshotApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_article_bookmarks_snapshot_apply(self.uniffiClonePointer(),
+        FfiConverterTypeArticleBookmarksSnapshotApplyInput_lower(input),$0
+    )
+})
+}
+
     /**
      * Project article-reader highlight publish state. Rust owns note
      * normalization and success/failure toast semantics.
@@ -4197,6 +4209,14 @@ open func projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput) ->
     return try!  FfiConverterTypeIsbnPreviewRequestProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_isbn_preview_request(self.uniffiClonePointer(),
         FfiConverterTypeIsbnPreviewRequestProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectJoinedCommunitiesSnapshotApply(input: JoinedCommunitiesSnapshotApplyInput) -> JoinedCommunitiesSnapshotApplyProjection  {
+    return try!  FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_joined_communities_snapshot_apply(self.uniffiClonePointer(),
+        FfiConverterTypeJoinedCommunitiesSnapshotApplyInput_lower(input),$0
     )
 })
 }
@@ -7059,6 +7079,146 @@ public func FfiConverterTypeArticleBookmarksSnapshot_lift(_ buf: RustBuffer) thr
 #endif
 public func FfiConverterTypeArticleBookmarksSnapshot_lower(_ value: ArticleBookmarksSnapshot) -> RustBuffer {
     return FfiConverterTypeArticleBookmarksSnapshot.lower(value)
+}
+
+
+public struct ArticleBookmarksSnapshotApplyInput {
+    public var snapshot: ArticleBookmarksSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: ArticleBookmarksSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension ArticleBookmarksSnapshotApplyInput: Sendable {}
+#endif
+
+
+extension ArticleBookmarksSnapshotApplyInput: Equatable, Hashable {
+    public static func ==(lhs: ArticleBookmarksSnapshotApplyInput, rhs: ArticleBookmarksSnapshotApplyInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleBookmarksSnapshotApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarksSnapshotApplyInput {
+        return
+            try ArticleBookmarksSnapshotApplyInput(
+                snapshot: FfiConverterTypeArticleBookmarksSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleBookmarksSnapshotApplyInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArticleBookmarksSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarksSnapshotApplyInput_lift(_ buf: RustBuffer) throws -> ArticleBookmarksSnapshotApplyInput {
+    return try FfiConverterTypeArticleBookmarksSnapshotApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarksSnapshotApplyInput_lower(_ value: ArticleBookmarksSnapshotApplyInput) -> RustBuffer {
+    return FfiConverterTypeArticleBookmarksSnapshotApplyInput.lower(value)
+}
+
+
+public struct ArticleBookmarksSnapshotApplyProjection {
+    public var shouldApplyAddresses: Bool
+    public var addresses: [String]
+    public var shouldRefreshAfterFailure: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldApplyAddresses: Bool, addresses: [String], shouldRefreshAfterFailure: Bool) {
+        self.shouldApplyAddresses = shouldApplyAddresses
+        self.addresses = addresses
+        self.shouldRefreshAfterFailure = shouldRefreshAfterFailure
+    }
+}
+
+#if compiler(>=6)
+extension ArticleBookmarksSnapshotApplyProjection: Sendable {}
+#endif
+
+
+extension ArticleBookmarksSnapshotApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: ArticleBookmarksSnapshotApplyProjection, rhs: ArticleBookmarksSnapshotApplyProjection) -> Bool {
+        if lhs.shouldApplyAddresses != rhs.shouldApplyAddresses {
+            return false
+        }
+        if lhs.addresses != rhs.addresses {
+            return false
+        }
+        if lhs.shouldRefreshAfterFailure != rhs.shouldRefreshAfterFailure {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldApplyAddresses)
+        hasher.combine(addresses)
+        hasher.combine(shouldRefreshAfterFailure)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleBookmarksSnapshotApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarksSnapshotApplyProjection {
+        return
+            try ArticleBookmarksSnapshotApplyProjection(
+                shouldApplyAddresses: FfiConverterBool.read(from: &buf),
+                addresses: FfiConverterSequenceString.read(from: &buf),
+                shouldRefreshAfterFailure: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleBookmarksSnapshotApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldApplyAddresses, into: &buf)
+        FfiConverterSequenceString.write(value.addresses, into: &buf)
+        FfiConverterBool.write(value.shouldRefreshAfterFailure, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarksSnapshotApplyProjection_lift(_ buf: RustBuffer) throws -> ArticleBookmarksSnapshotApplyProjection {
+    return try FfiConverterTypeArticleBookmarksSnapshotApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleBookmarksSnapshotApplyProjection_lower(_ value: ArticleBookmarksSnapshotApplyProjection) -> RustBuffer {
+    return FfiConverterTypeArticleBookmarksSnapshotApplyProjection.lower(value)
 }
 
 
@@ -22791,6 +22951,138 @@ public func FfiConverterTypeJoinedCommunitiesSnapshot_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeJoinedCommunitiesSnapshot_lower(_ value: JoinedCommunitiesSnapshot) -> RustBuffer {
     return FfiConverterTypeJoinedCommunitiesSnapshot.lower(value)
+}
+
+
+public struct JoinedCommunitiesSnapshotApplyInput {
+    public var snapshot: JoinedCommunitiesSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: JoinedCommunitiesSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension JoinedCommunitiesSnapshotApplyInput: Sendable {}
+#endif
+
+
+extension JoinedCommunitiesSnapshotApplyInput: Equatable, Hashable {
+    public static func ==(lhs: JoinedCommunitiesSnapshotApplyInput, rhs: JoinedCommunitiesSnapshotApplyInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeJoinedCommunitiesSnapshotApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JoinedCommunitiesSnapshotApplyInput {
+        return
+            try JoinedCommunitiesSnapshotApplyInput(
+                snapshot: FfiConverterTypeJoinedCommunitiesSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: JoinedCommunitiesSnapshotApplyInput, into buf: inout [UInt8]) {
+        FfiConverterTypeJoinedCommunitiesSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinedCommunitiesSnapshotApplyInput_lift(_ buf: RustBuffer) throws -> JoinedCommunitiesSnapshotApplyInput {
+    return try FfiConverterTypeJoinedCommunitiesSnapshotApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinedCommunitiesSnapshotApplyInput_lower(_ value: JoinedCommunitiesSnapshotApplyInput) -> RustBuffer {
+    return FfiConverterTypeJoinedCommunitiesSnapshotApplyInput.lower(value)
+}
+
+
+public struct JoinedCommunitiesSnapshotApplyProjection {
+    public var shouldApplyCommunities: Bool
+    public var communities: [CommunitySummary]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldApplyCommunities: Bool, communities: [CommunitySummary]) {
+        self.shouldApplyCommunities = shouldApplyCommunities
+        self.communities = communities
+    }
+}
+
+#if compiler(>=6)
+extension JoinedCommunitiesSnapshotApplyProjection: Sendable {}
+#endif
+
+
+extension JoinedCommunitiesSnapshotApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: JoinedCommunitiesSnapshotApplyProjection, rhs: JoinedCommunitiesSnapshotApplyProjection) -> Bool {
+        if lhs.shouldApplyCommunities != rhs.shouldApplyCommunities {
+            return false
+        }
+        if lhs.communities != rhs.communities {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldApplyCommunities)
+        hasher.combine(communities)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JoinedCommunitiesSnapshotApplyProjection {
+        return
+            try JoinedCommunitiesSnapshotApplyProjection(
+                shouldApplyCommunities: FfiConverterBool.read(from: &buf),
+                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: JoinedCommunitiesSnapshotApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldApplyCommunities, into: &buf)
+        FfiConverterSequenceTypeCommunitySummary.write(value.communities, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection_lift(_ buf: RustBuffer) throws -> JoinedCommunitiesSnapshotApplyProjection {
+    return try FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection_lower(_ value: JoinedCommunitiesSnapshotApplyProjection) -> RustBuffer {
+    return FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection.lower(value)
 }
 
 
@@ -45946,6 +46238,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_bookmark_state() != 14884) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_bookmarks_snapshot_apply() != 24633) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_highlight_publish() != 64360) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -46112,6 +46407,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_isbn_preview_request() != 19235) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_joined_communities_snapshot_apply() != 45141) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_network_diagnostics_snapshot() != 27417) {

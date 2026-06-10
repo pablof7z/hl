@@ -62,6 +62,18 @@ pub struct ArticleBookmarksSnapshot {
     pub error: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleBookmarksSnapshotApplyInput {
+    pub snapshot: ArticleBookmarksSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleBookmarksSnapshotApplyProjection {
+    pub should_apply_addresses: bool,
+    pub addresses: Vec<String>,
+    pub should_refresh_after_failure: bool,
+}
+
 /// Native event bookmark state projection. Used for comment bookmarks and
 /// other event-id-addressed NIP-51 entries.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,6 +144,22 @@ pub fn article_bookmarks_snapshot(
     ArticleBookmarksSnapshot {
         addresses,
         error: error.to_string(),
+    }
+}
+
+pub fn article_bookmarks_snapshot_apply_projection(
+    input: ArticleBookmarksSnapshotApplyInput,
+) -> ArticleBookmarksSnapshotApplyProjection {
+    let error = input.snapshot.error.trim();
+    let should_apply_addresses = error.is_empty();
+    ArticleBookmarksSnapshotApplyProjection {
+        should_apply_addresses,
+        addresses: if should_apply_addresses {
+            input.snapshot.addresses
+        } else {
+            Vec::new()
+        },
+        should_refresh_after_failure: !should_apply_addresses,
     }
 }
 
@@ -467,6 +495,24 @@ mod tests {
             vec!["30023:aa:essay", "30023:bb:letter"]
         );
         assert_eq!(snapshot.error, "cache unavailable");
+    }
+
+    #[test]
+    fn article_bookmarks_snapshot_apply_projection_applies_only_success() {
+        let ok = article_bookmarks_snapshot_apply_projection(ArticleBookmarksSnapshotApplyInput {
+            snapshot: article_bookmarks_snapshot(vec!["30023:aa:essay".into()], " "),
+        });
+        assert!(ok.should_apply_addresses);
+        assert_eq!(ok.addresses, vec!["30023:aa:essay"]);
+        assert!(!ok.should_refresh_after_failure);
+
+        let failed =
+            article_bookmarks_snapshot_apply_projection(ArticleBookmarksSnapshotApplyInput {
+                snapshot: article_bookmarks_snapshot(vec!["stale".into()], "relay error"),
+            });
+        assert!(!failed.should_apply_addresses);
+        assert!(failed.addresses.is_empty());
+        assert!(failed.should_refresh_after_failure);
     }
 
     #[test]
